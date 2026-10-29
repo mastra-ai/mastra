@@ -52,6 +52,7 @@ The workflow automatically validates:
 
 - Input data matches the workflow's input schema
 - Each step's output matches the next step's input schema
-- Final output matches the workflow's output schema
+
+When the last step is a linear `.then()` step, its output also matches the workflow's output schema. Branching changes the result shape: `.branch()` returns an object keyed by the ID of the step that ran, such as `{ 'quick-processing': result }`, and that keyed object is not validated against a flat workflow output schema. Add a `.then()` step after `.branch()` to reshape the branch output before the workflow ends.
 
 Your workflow is now ready to run! Next, you'll test the complete workflow.

@@ -3,6 +3,8 @@
 Next, let's update your agent's instructions to include information about the Filesystem tools:
 
 ```typescript
+const notesDir = process.env.NOTES_DIR
+
 export const personalAssistantAgent = new Agent({
   name: 'Personal Assistant',
   instructions: `
@@ -30,7 +32,7 @@ export const personalAssistantAgent = new Agent({
        - You also have filesystem read/write access to a notes directory. 
        - You can use that to store info for later use or organize info for the user.
        - You can use this notes directory to keep track of to-do list items for the user.
-       - Notes dir: ${path.join(process.cwd(), 'notes')}
+       - Notes dir: ${notesDir}
     
     Keep your responses concise and friendly.
   `,
