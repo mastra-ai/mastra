@@ -182,6 +182,7 @@ function matchPattern(pattern: KnowledgeScopePattern, address: string): Record<s
   const prefix = `${pattern.type}:`;
   if (!address.startsWith(prefix)) return null;
   const parts = address.slice(prefix.length).split(':');
+  if (parts.some(part => part.includes('/'))) return null;
   const params: Record<string, string> = {};
   for (let i = 0; i < pattern.segments.length; i++) {
     const segment = pattern.segments[i]!;
@@ -198,27 +199,46 @@ function matchPattern(pattern: KnowledgeScopePattern, address: string): Record<s
   return params;
 }
 
-/** Fills a pattern's params; returns null when one isn't in `params`. */
+/**
+ * Whether `value` can fill a segment: never empty or holding `/`, and holding `:` only in the last
+ * segment. A value like `a:b` bound into a middle segment would shift every later segment and
+ * reach another tenant's scopes.
+ */
+function fitsSegment(value: string, last: boolean): boolean {
+  return value !== '' && !value.includes('/') && (last || !value.includes(':'));
+}
+
+/** Fills a pattern's params; returns null when one is missing or can't fill its segment. */
 export function bindKnowledgePattern(pattern: KnowledgeScopePattern, params: Record<string, string>): string | null {
   const values: string[] = [];
-  for (const segment of pattern.segments) {
-    if ('literal' in segment) values.push(segment.literal);
-    else if (params[segment.param] === undefined) return null;
-    else values.push(params[segment.param]!);
+  for (const [i, segment] of pattern.segments.entries()) {
+    if ('literal' in segment) {
+      values.push(segment.literal);
+      continue;
+    }
+    const value = params[segment.param];
+    if (value === undefined || !fitsSegment(value, i === pattern.segments.length - 1)) return null;
+    values.push(value);
   }
   return `${pattern.type}:${values.join(':')}`;
 }
 
 /**
  * The address prefix a partial binding reaches: segments up to the last bound param, ending at a
- * segment boundary. Only valid for a leading run of bound params.
+ * segment boundary. Only valid for a leading run of bound params. Returns null when a bound value
+ * can't fill its segment (a prefix always ends before the last segment, so no `:` is allowed).
  */
-export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: Record<string, string>): string {
+export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: Record<string, string>): string | null {
   let prefix = `${pattern.type}:`;
   for (const segment of pattern.segments) {
-    if ('literal' in segment) prefix += `${segment.literal}:`;
-    else if (params[segment.param] === undefined) break;
-    else prefix += `${params[segment.param]}:`;
+    if ('literal' in segment) {
+      prefix += `${segment.literal}:`;
+      continue;
+    }
+    const value = params[segment.param];
+    if (value === undefined) break;
+    if (!fitsSegment(value, false)) return null;
+    prefix += `${value}:`;
   }
   return prefix;
 }
@@ -266,7 +286,16 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
         `Knowledge scope "${address}" doesn't fit its type's pattern "${owner.key}".`,
       );
     }
-    if (!owner) {
+    if (owner) {
+      const unsupported = (['belongsTo', 'children', 'pages'] as const).filter(
+        field => declaration[field] !== undefined,
+      );
+      if (unsupported.length) {
+        throw new KnowledgeDeclarationError(
+          `Knowledge scope "${address}" is an address of "${owner.key}" and can only add description, access, pins and pinPriority; declare ${unsupported.join(', ')} on "${owner.key}".`,
+        );
+      }
+    } else {
       const compiled: CompiledKnowledgeDeclaration = { key: address, pattern, declaration, rules: [], children: [] };
       all.set(address, compiled);
     }
@@ -274,7 +303,14 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
   }
 
   for (const compiled of [...all.values()]) {
+    const names = new Set<string>();
     for (const child of compiled.declaration.children ?? []) {
+      if (names.has(child.name)) {
+        throw new KnowledgeDeclarationError(
+          `Knowledge child scope "${child.name}" of "${compiled.key}" is declared twice.`,
+        );
+      }
+      names.add(child.name);
       if (!CHILD_NAME_PATTERN.test(child.name)) {
         throw new KnowledgeDeclarationError(
           `Knowledge child scope "${child.name}" of "${compiled.key}" must be lowercase letters, digits, - or _.`,
