@@ -43,8 +43,9 @@ const makeWorkflow = (engine: 'default' | 'evented' = 'default', options?: Workf
     outputSchema: z.object({ approved: z.boolean() }),
     suspendSchema: empty,
     resumeSchema: z.object({ approved: z.boolean() }),
+    // A rejected approval asks again.
     execute: async ({ resumeData, suspend }) => {
-      if (!resumeData) {
+      if (!resumeData?.approved) {
         await suspend({});
         return { approved: false };
       }
@@ -186,6 +187,37 @@ describe('workflow resume span linkage', () => {
           .filter(span => span.type === SpanType.WORKFLOW_RUN);
         expect(started.map(span => span.outcome)).toEqual([null, null]);
         expectNoOrphans();
+      } finally {
+        await host.shutdown();
+      }
+    },
+  );
+
+  it.each(['default', 'evented'] as const)(
+    '%s resumes of a run suspended twice both continue its first execution',
+    async engine => {
+      const workflow = makeWorkflow(engine);
+      const host = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        workflows: { [workflow.id]: workflow },
+        observability: new Observability({
+          configs: { default: { serviceName: 'workflow-resume-lineage', exporters: [exporter] } },
+        }),
+      });
+      try {
+        if (engine === 'evented') await host.startWorkers();
+        const run = await workflow.createRun();
+        expect((await run.start({ inputData: {} })).status).toBe('suspended');
+        const rejected = await workflow.createRun({ runId: run.runId });
+        expect((await rejected.resume({ resumeData: { approved: false } })).status).toBe('suspended');
+        const approved = await workflow.createRun({ runId: run.runId });
+        expect((await approved.resume({ resumeData: { approved: true } })).status).toBe('success');
+
+        const executions = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+        const ids = executions.map(span => span.id);
+        expect(executions.map(span => span.parentSpanId ?? null)).toEqual([null, ids[0], ids[1]]);
+        expect(executions.map(span => span.resumedFromSpanId ?? null)).toEqual([null, ids[0], ids[0]]);
       } finally {
         await host.shutdown();
       }

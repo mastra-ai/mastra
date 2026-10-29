@@ -7,7 +7,7 @@ import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
-import { createObservabilityContext, resolveExportedSpanId } from '../observability';
+import { createObservabilityContext, getResumeTracingContext } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
@@ -1171,15 +1171,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // correctly makes those children trace roots instead.
         let persistTracingContext: WorkflowStateTracingContext = {};
         if (result.status === 'suspended') {
-          if (this.options.resumeTracingContext) {
-            persistTracingContext = this.options.resumeTracingContext;
-          } else if (workflowSpan) {
-            persistTracingContext = {
-              traceId: workflowSpan.traceId,
-              spanId: resolveExportedSpanId(workflowSpan),
-              parentSpanId: workflowSpan.getParentSpanId(),
-            };
-          }
+          persistTracingContext = this.options.resumeTracingContext ?? getResumeTracingContext(workflowSpan) ?? {};
         }
 
         await this.persistStepUpdate({

@@ -289,7 +289,7 @@ describe('DurableAgent observability tracing', () => {
       const [original] = agentSpans;
       const resumedOpts = agentSpanOpts[1];
       expect(resumedOpts.name).toContain('(resumed)');
-      expect(resumedOpts.resumedFromSpanId).toBe(original.id);
+      expect(resumedOpts.resumeFrom).toMatchObject({ traceId: original.traceId, spanId: original.id });
       expect(resumedOpts.tracingOptions?.traceId).toBe(original.traceId);
       expect(resumedOpts.metadata?.resumedFromSpanId).toBe(original.id);
     } finally {

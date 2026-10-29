@@ -86,6 +86,7 @@ import type {
   DefinitionSource,
   TracingProperties,
   ObservabilityContext,
+  ResumeTracingContext,
   TracingContext,
   TracingPolicy,
 } from '../observability';
@@ -8870,35 +8871,8 @@ export class Agent<
       ? this.#getSuspendedToolInfo(resumeContext?.snapshot, options.toolCallId)
       : undefined;
     const persistedTracingContext = isResume
-      ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
-          | undefined)
+      ? (resumeContext?.snapshot?.tracingContext as ResumeTracingContext | undefined)
       : undefined;
-
-    // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
-    // their own. This prevents cross-trace parentage if the caller is explicit.
-    const userProvidedTraceId = options.tracingOptions?.traceId;
-    const userProvidedParentSpanId = options.tracingOptions?.parentSpanId;
-    const effectiveTraceId =
-      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
-    const shouldUsePersistedParentSpan =
-      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
-
-    const resumeTracingOptions =
-      isResume && persistedTracingContext?.traceId
-        ? {
-            ...options.tracingOptions,
-            traceId: effectiveTraceId,
-          }
-        : options.tracingOptions;
-
-    // The persisted resume link travels separately from tracingOptions:
-    // tracingOptions.parentSpanId is reserved for external correlation ids,
-    // while the suspended span's id is a Mastra span present in storage.
-    const resumedFromSpanId =
-      isResume && persistedTracingContext?.traceId && shouldUsePersistedParentSpan
-        ? persistedTracingContext.spanId
-        : undefined;
 
     const spanInput = isResume ? buildResumeSpanInput(resumeContext.resumeData, suspendedToolInfo) : options.messages;
     const startingSignal = isResume ? undefined : signalSpanAttributes(options.messages);
@@ -8932,11 +8906,11 @@ export class Agent<
           : {}),
       },
       tracingPolicy: this.#options?.tracingPolicy,
-      tracingOptions: resumeTracingOptions,
+      tracingOptions: options.tracingOptions,
       tracingContext: options.tracingContext,
       requestContext,
       mastra: this.#mastra,
-      resumedFromSpanId,
+      resumeFrom: persistedTracingContext,
     });
 
     const memory = await this.getMemory({ requestContext });
