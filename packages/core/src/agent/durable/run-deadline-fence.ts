@@ -60,7 +60,9 @@ export async function armRunDeadline(args: {
     expire: async () => {
       const expired: RunFence = {
         runId,
-        generation: Math.max(Date.now() * 2, fence.generation + 1),
+        // Just above this session: a later session (a higher odd generation)
+        // already outranks it, so a stale timer cannot fence that session out.
+        generation: fence.generation + 1,
         ownerId: 'deadline:expired',
       };
       // On failure, writes are still refused by the deadline check.

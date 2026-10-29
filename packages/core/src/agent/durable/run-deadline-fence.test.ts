@@ -108,6 +108,19 @@ describe('run deadline fence', () => {
     ).rejects.toSatisfy(isRunFenceConflictError);
   });
 
+  it('does not fence out a resumed session when the earlier session timer fires late', async () => {
+    const { mastra, memoryStore } = await setup();
+    const first = await arm(mastra);
+    await new Promise(resolve => setTimeout(resolve, 2));
+    const resumed = await arm(mastra);
+    await new Promise(resolve => setTimeout(resolve, 2));
+    await first.expire();
+
+    await expect(resumed.inScope(() => memoryStore.saveThread({ thread: thread() }))).resolves.toMatchObject({
+      id: 't-1',
+    });
+  });
+
   it('retires the session fence so retention can prune it', async () => {
     const { mastra, memoryStore } = await setup();
     const retire = vi.spyOn(memoryStore, 'retireRunFence');
