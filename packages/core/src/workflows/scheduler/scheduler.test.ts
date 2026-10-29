@@ -834,12 +834,17 @@ describe('Scheduler', () => {
         config: { tickIntervalMs: 20, maxIdleIntervalMs: 10 },
       });
 
-      await scheduler.start();
-      await store.createSchedule(row('sched-small-cap', Date.now() - 1));
-      await wait(150);
-      expect(events).toHaveLength(1);
+      const listDue = vi.spyOn(store, 'listDueSchedules');
 
-      await scheduler.stop();
+      await scheduler.start();
+      try {
+        await store.createSchedule(row('sched-small-cap', Date.now() - 1));
+        await vi.waitFor(() => expect(events).toHaveLength(1));
+        // The earliest-fire lookup can't change a tick-sized delay, so it is skipped.
+        expect(listDue.mock.calls.every(([now]) => now !== Number.MAX_SAFE_INTEGER)).toBe(true);
+      } finally {
+        await scheduler.stop();
+      }
     });
 
     it('clamps a cap beyond the largest timer delay instead of polling in a hot loop', async () => {

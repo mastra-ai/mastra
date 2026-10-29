@@ -297,6 +297,33 @@ describe('Agent schedules — scheduler integration', () => {
       expect(wakeCalls(unsubscribe)).toHaveLength(1);
     }, 10_000);
 
+    it("re-subscribes to wake events when the scheduler is restarted with startWorkers('scheduler')", async () => {
+      const pubsub = new EventEmitterPubSub();
+      const subscribe = vi.spyOn(pubsub, 'subscribe');
+      const agent = makeAgent('beat-named');
+      const mastra = track(
+        new Mastra({
+          logger: false,
+          storage: new MockStore(),
+          pubsub,
+          agents: { 'beat-named': agent },
+          notifications: { dispatch: { enabled: false } },
+          scheduler: { tickIntervalMs: 50 },
+        }),
+      );
+      const wakeCalls = () => subscribe.mock.calls.filter(([topic]) => topic === SCHEDULER_WAKE_TOPIC);
+
+      await mastra.startWorkers();
+      await mastra.schedules.create({ cron: '0 0 1 1 *', prompt: 'ping', agentId: agent.id });
+      await waitForScheduler(mastra);
+      await mastra.stopWorkers();
+
+      // An idle scheduler sleeps until a wake event, so restarting it by name
+      // without the subscription would leave new schedules unnoticed.
+      await mastra.startWorkers('scheduler');
+      expect(wakeCalls()).toHaveLength(2);
+    }, 10_000);
+
     it('still boots the other workers and the boot probe when the wake subscribe fails', async () => {
       const pubsub = new EventEmitterPubSub();
       const originalSubscribe = pubsub.subscribe.bind(pubsub);

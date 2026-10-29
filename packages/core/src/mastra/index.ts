@@ -7213,8 +7213,14 @@ export class Mastra<
     const schedulerForcedByFilter = schedulerSelected && (this.#workerFilter?.has('scheduler') ?? false);
 
     // Subscribe before probing so a schedule committed during boot cannot fall
-    // between the probe and subscription.
-    if (!name && schedulerSelected && this.#storage && !this.#findSchedulerWorker()?.isRunning) {
+    // between the probe and subscription. A scheduler restarted by name needs
+    // it too: an idle scheduler sleeps until a wake event arrives.
+    if (
+      (!name || name === 'scheduler') &&
+      schedulerSelected &&
+      this.#storage &&
+      !this.#findSchedulerWorker()?.isRunning
+    ) {
       try {
         await this.#wireSchedulerWakeSubscription();
       } catch (err) {

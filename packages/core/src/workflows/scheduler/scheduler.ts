@@ -225,7 +225,9 @@ export class Scheduler extends MastraBase {
     const maxIdle = this.#config.maxIdleIntervalMs;
     // A cap at or below the tick interval means "check every tick", never "sleep forever".
     const idleCap = maxIdle !== undefined ? Math.min(Math.max(maxIdle, interval), MAX_TIMER_DELAY_MS) : undefined;
-    if (this.#lastTickBusy || (this.#config.enabled === true && idleCap === undefined)) return interval;
+    if (this.#lastTickBusy || idleCap === interval || (this.#config.enabled === true && idleCap === undefined)) {
+      return interval;
+    }
     let next: Schedule[];
     try {
       // Every adapter returns due rows ordered by nextFireAt, so asking for one
