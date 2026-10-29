@@ -400,7 +400,7 @@ const notesBoard = defineBoard({
 const factory = new MastraFactory({ ...config, boards: [notesBoard], skills: [releaseNotes] });
 ```
 
-The same skill as a folder skill is `factory-skills/release-notes/SKILL.md`:
+The same skill as a folder skill is `src/mastra/factory-skills/release-notes/SKILL.md`:
 
 ```markdown
 ---
