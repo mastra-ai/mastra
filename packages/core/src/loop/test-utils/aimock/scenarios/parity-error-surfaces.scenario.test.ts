@@ -586,6 +586,57 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS + 5_000,
   );
 
+  // The up-front input save writes, but settles only after the deadline. The deadline then saves the input
+  // again under its replacement claim, so both saves succeed and each one would follow up with a notice.
+  it.skipIf(engine !== 'durable' && engine !== 'evented').each([0, 50, 500])(
+    'an input saved twice around the deadline gets one timeout notice (save settles %ims late)',
+    async extraMs => {
+      const memory = new MockMemory();
+      const saveMessages = memory.saveMessages.bind(memory);
+      const lateSaves: Promise<unknown>[] = [];
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
+        if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        const late = saveMessages(args).then(async saved => {
+          await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + extraMs));
+          return saved;
+        });
+        lateSaves.push(late.catch(() => {}));
+        return late;
+      });
+      const threadId = `twice-saved-input-${engine}-${extraMs}`;
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Save me twice.',
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+        expect(result.chunks!.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+        for (let drained = 0; drained < lateSaves.length;) {
+          const late = lateSaves.slice(drained);
+          drained = lateSaves.length;
+          await Promise.all(late);
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        // Past the last save, so a second notice has had the chance to land.
+        await new Promise(resolve => setTimeout(resolve, 200));
+        expect(lateSaves.length).toBeGreaterThan(1);
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      } finally {
+        saveSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
   // Only an execution that still owns the run may keep its input at the deadline. Inngest takes no claim.
   it.skipIf(engine !== 'durable' && engine !== 'evented')(
     'a deadline does not save the input of a run another execution took over during the input save',
