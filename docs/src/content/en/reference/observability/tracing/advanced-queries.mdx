@@ -910,7 +910,9 @@ On ClickHouse, a request whose `where` limits `spanType` to agent, workflow, pro
 
 `countDistinct.<field>` accepts these dimensions and `traceId`, so `countDistinct.traceId` counts the traces the selected spans belong to. Span aggregation can't group by `metadata.<key>` or identity fields such as `traceId`, `spanId`, or `runId`.
 
-Like the `model` and `provider` filters, the `model` and `provider` dimensions read only the span's columns, not its attributes. Spans exported before `@mastra/observability` filled the columns group under `null`, and `countDistinct.model` doesn't count them, because existing spans aren't backfilled. With an adapter that doesn't declare the capability, requests that group by or count distinct `model` or `provider` return `501`.
+Like the `model` and `provider` filters, the `model` and `provider` dimensions read only the span's columns, not its attributes. Existing spans aren't backfilled, so spans exported before `@mastra/observability` filled the columns group under `null`, and `countDistinct.model` doesn't count them.
+
+Adapters that don't declare the `spanAggregateModelDimensions` capability return `501` for any request that groups by `model` or `provider` or counts their distinct values.
 
 ### Span tokens and cost
 
