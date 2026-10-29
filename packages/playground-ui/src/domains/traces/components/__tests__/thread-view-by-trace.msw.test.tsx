@@ -884,11 +884,11 @@ describe('ThreadViewByTrace', () => {
       expect(rowIds()).toEqual(['trace-a', 'trace-b']);
     });
 
-    it('loads 10 turns per page by default, or the given pageSize', async () => {
+    it('loads 3 turns per page by default, or the given pageSize', async () => {
       const requests = installPagedHandlers();
       const { unmount } = renderView({ withQueryTrace });
       await screen.findByText('Chef agent follow-up');
-      expect(requests[0]?.size).toBe(10);
+      expect(requests[0]?.size).toBe(3);
       unmount();
 
       renderView({ withQueryTrace, pageSize: 4 });

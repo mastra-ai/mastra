@@ -157,12 +157,96 @@ describe('FactorySkillsSection', () => {
     const release = screen.getByRole('region', { name: 'Release Preview board' });
     expect(within(release).getByText('release-preparer')).toBeInTheDocument();
     expect(within(release).getByText('release-publisher')).toBeInTheDocument();
-    expect(within(release).getByText(/defined in code by its board definition/)).toBeInTheDocument();
+    expect(within(release).getByText(/defined in code by the board definition/)).toBeInTheDocument();
     expect(within(release).queryByText(/factory-/)).not.toBeInTheDocument();
 
     // Built-ins come first regardless of registry order.
     const regions = screen.getAllByRole('region', { name: / board$/ }).map(region => region.getAttribute('aria-label'));
     expect(regions).toEqual(['Work board', 'Review board', 'Release Preview board']);
+  });
+
+  it('shows the app skill each custom phase runs, flags a missing one, and lists unused app skills', async () => {
+    const notesBoard: BoardCatalogResponse['boards'][number] = {
+      id: 'notes',
+      name: 'Notes',
+      title: 'Notes',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'drafting' }] },
+        {
+          id: 'drafting',
+          name: 'Drafting',
+          title: 'Drafting',
+          kind: 'working',
+          context: 'build',
+          skill: 'release-notes',
+          transitions: [{ outcome: null, to: 'publishing' }],
+        },
+        {
+          id: 'publishing',
+          name: 'Publishing',
+          title: 'Publishing',
+          kind: 'working',
+          context: 'build',
+          skill: 'publish-notes',
+          transitions: [{ outcome: null, to: 'linting' }],
+        },
+        { id: 'linting', title: 'Linting', kind: 'working', context: 'lint', transitions: [] },
+      ],
+    };
+    server.use(
+      http.get(SKILLS_URL, () =>
+        HttpResponse.json({
+          skills: [
+            ...catalog.skills.map(skill =>
+              skill.name === 'factory-plan'
+                ? { ...skill, content: '# Our plan', origin: 'folder' as const, builtIn: true }
+                : { ...skill, origin: 'bundled' as const, builtIn: true },
+            ),
+            {
+              name: 'release-notes',
+              description: 'Draft the release notes',
+              content: '# Release notes\n\nGroup changes by package.',
+              origin: 'code',
+              builtIn: false,
+            },
+            {
+              name: 'changelog-lint',
+              description: 'Lint changelogs',
+              content: '# Lint',
+              origin: 'folder',
+              builtIn: false,
+            },
+          ],
+        } satisfies FactorySkillsResponse),
+      ),
+      http.get(BOARDS_URL, () =>
+        HttpResponse.json({ boards: [notesBoard, ...builtinBoardCatalog.boards] } satisfies BoardCatalogResponse),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+    const notes = await screen.findByRole('region', { name: 'Notes board' });
+    const drafting = within(notes).getByRole('button', { name: /Drafting/ });
+    expect(within(drafting).getByText('release-notes')).toBeInTheDocument();
+    expect(within(drafting).getByText('Draft the release notes')).toBeInTheDocument();
+    await user.click(drafting);
+    expect(await within(notes).findByText(/Group changes by package/)).toBeInTheDocument();
+
+    expect(within(notes).getByText('publish-notes')).toBeInTheDocument();
+    expect(within(notes).getByText('Not found')).toBeInTheDocument();
+    // The phase without a skill still lists its role.
+    expect(within(notes).getByText('lint')).toBeInTheDocument();
+
+    const work = screen.getByRole('region', { name: 'Work board' });
+    expect(within(work).getByRole('button', { name: /Planning/ })).toHaveTextContent('Overridden by app');
+    expect(within(work).getByRole('button', { name: /Triage/ })).not.toHaveTextContent('Overridden by app');
+
+    const appSkills = screen.getByRole('region', { name: 'App skills' });
+    expect(within(appSkills).getAllByText('changelog-lint').length).toBeGreaterThan(0);
+    expect(within(appSkills).queryByText('release-notes')).not.toBeInTheDocument();
   });
 
   it('says so when a custom-only deployment has no board skills to show', async () => {
@@ -178,9 +262,22 @@ describe('FactorySkillsSection', () => {
     expect(screen.queryByRole('region', { name: 'Work board' })).not.toBeInTheDocument();
   });
 
-  it('reports an empty catalog instead of pretending built-in boards exist', async () => {
+  it('reports an empty catalog instead of pretending built-in boards exist, and still lists app skills', async () => {
     server.use(
-      http.get(SKILLS_URL, () => HttpResponse.json(catalog)),
+      http.get(SKILLS_URL, () =>
+        HttpResponse.json({
+          skills: [
+            ...catalog.skills,
+            {
+              name: 'changelog-lint',
+              description: 'Lint changelogs',
+              content: '# Lint',
+              origin: 'folder',
+              builtIn: false,
+            },
+          ],
+        } satisfies FactorySkillsResponse),
+      ),
       http.get(BOARDS_URL, () => HttpResponse.json({ boards: [] } satisfies BoardCatalogResponse)),
     );
 
@@ -188,6 +285,8 @@ describe('FactorySkillsSection', () => {
 
     expect(await screen.findByText('No boards are installed, so no board skills apply.')).toBeInTheDocument();
     expect(screen.queryByText('factory-triage')).not.toBeInTheDocument();
+    const appSkills = await screen.findByRole('region', { name: 'App skills' });
+    expect(within(appSkills).getAllByText('changelog-lint').length).toBeGreaterThan(0);
   });
 
   it('falls back to the ungrouped list and says why when the catalog fails', async () => {
@@ -201,6 +300,38 @@ describe('FactorySkillsSection', () => {
     expect(await screen.findByText(/Installed boards could not be loaded/)).toBeInTheDocument();
     expect(screen.getByText('factory-triage')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: / board$/ })).not.toBeInTheDocument();
+  });
+
+  it('does not call a phase skill missing when the skills catalog failed to load', async () => {
+    const notesBoard: BoardCatalogResponse['boards'][number] = {
+      id: 'notes',
+      name: 'Notes',
+      title: 'Notes',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'drafting' }] },
+        {
+          id: 'drafting',
+          name: 'Drafting',
+          title: 'Drafting',
+          kind: 'working',
+          context: 'build',
+          skill: 'release-notes',
+          transitions: [],
+        },
+      ],
+    };
+    server.use(
+      http.get(SKILLS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+      http.get(BOARDS_URL, () => HttpResponse.json({ boards: [notesBoard] } satisfies BoardCatalogResponse)),
+    );
+
+    renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+    expect(await screen.findByText(/boom|Failed to load skills/)).toBeInTheDocument();
+    const notes = await screen.findByRole('region', { name: 'Notes board' });
+    expect(within(notes).getByText('release-notes')).toBeInTheDocument();
+    expect(within(notes).queryByText('Not found')).not.toBeInTheDocument();
   });
 
   describe('when a skill is opened in the editor', () => {

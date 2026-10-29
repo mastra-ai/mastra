@@ -21,6 +21,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
@@ -660,9 +661,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The original caller keeps reading: it follows the run across the takeover.
         const startedStream = collect(started.fullStream);
         const events: Array<{ type: string; generation?: number }> = [];
-        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        // A frame reaches the transport only after it is in the run log, so a reader
+        // that attaches after stream() started reads the log (which is what replay
+        // from an offset does) instead of racing the live publish of frame 0.
+        await (agentA.pubsub as unknown as CachingPubSub).subscribeWithReplay(AGENT_STREAM_TOPIC(runId), event => {
           events.push({
-            type: event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type,
+            type: event.type === 'chunk' ? `chunk:${(event.data as any)?.type}` : event.type,
             generation: event.generation,
           });
         });
@@ -672,7 +676,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
         // The original execution's events so far carry its claim.
-        expect(events.length).toBeGreaterThan(0);
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
         expect(events.every(event => event.generation === originalGeneration)).toBe(true);
 
         // ---- This process forgets it drives the run, as a restarted process would, and takes it over.

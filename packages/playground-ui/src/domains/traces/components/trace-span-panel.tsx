@@ -7,7 +7,6 @@ import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-
 import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
-import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
 import { Button } from '@/ds/components/Button';
 import { useLinkComponent } from '@/lib/framework';
 import type { LinkComponentPaths } from '@/lib/framework';
@@ -40,6 +39,7 @@ export interface TraceSpanPanelProps {
 
   // Trace-panel pass-through.
   anchorSpanId?: string;
+  entityType?: TraceDataPanelViewProps['entityType'];
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -100,6 +100,7 @@ export function TraceSpanPanel({
   onSpanSelect,
   onClose,
   anchorSpanId,
+  entityType,
   initialSpanId,
   onPrevious,
   onNext,
@@ -136,7 +137,6 @@ export function TraceSpanPanel({
     spanId: selectedSpanId ?? '',
     queryOptions: { enabled: !!traceId && !!selectedSpanId },
   });
-  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
   const { Link, paths } = useLinkComponent();
 
   // The trace summary links the entity to its page; the app's link provider owns the routes.
@@ -159,6 +159,7 @@ export function TraceSpanPanel({
         traceId={traceId}
         spans={spans}
         anchorSpanId={anchorSpanId}
+        entityType={entityType}
         entityHref={entityHref}
         usage={usage}
         isLoading={isLoadingSpans}
@@ -212,8 +213,6 @@ export function TraceSpanPanel({
               span={spanDetailData?.span}
               isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
               isLoading={isLoadingSpanDetail}
-              onPrevious={handlePreviousSpan}
-              onNext={handleNextSpan}
               onClose={() => onSpanSelect(undefined)}
               activeTab={spanActiveTab}
               onTabChange={onSpanTabChange}

@@ -51,6 +51,17 @@ function runtimeConfigPlugin(): Plugin {
   };
 }
 
+/** Green mark while developing Factory itself, so the dev tab is easy to tell apart from a deployed one. */
+function devFaviconPlugin(): Plugin {
+  return {
+    name: 'mastracode-dev-favicon',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace('href="/mastra.svg"', 'href="/mastra-dev.svg"');
+    },
+  };
+}
+
 /**
  * Emit `routes-manifest.json` alongside the built SPA — a sorted array of the
  * SPA's top-level URL segments (e.g. `factories`, `signin`). Deployers that
@@ -283,7 +294,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(here, 'ui'),
     envDir,
-    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
+    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), devFaviconPlugin(), routesManifestPlugin()],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single
@@ -328,6 +339,12 @@ export default defineConfig(({ mode }) => {
         // server after the `/api/web` → `/web` path migration. Proxy them so the
         // configured dev UI server can reach the configured API server.
         '/web': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        // MCP clients follow the Factory MCP endpoint's `WWW-Authenticate` challenge
+        // to this RFC 9728 metadata to find where to sign in.
+        '/.well-known/oauth-protected-resource': {
           target: apiTarget,
           changeOrigin: true,
         },

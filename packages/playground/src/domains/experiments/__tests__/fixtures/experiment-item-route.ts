@@ -29,13 +29,13 @@ const baseSpan = {
 
 export const experimentTraceRootSpan = {
   ...baseSpan,
-  spanId: 'span-root',
+  spanId: 'root01',
   name: 'Experiment agent run',
   parentSpanId: null,
 };
 export const experimentTraceChildSpan = {
   ...baseSpan,
-  spanId: 'span-child',
+  spanId: 'child1',
   name: 'Experiment tool call',
   spanType: SpanType.TOOL_CALL,
   parentSpanId: experimentTraceRootSpan.spanId,

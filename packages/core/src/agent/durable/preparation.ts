@@ -6,6 +6,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
@@ -39,9 +40,10 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
-import type { CreatedAgentSignal } from '../signals';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
@@ -196,7 +198,11 @@ interface DurablePreparationAgent {
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
-  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void;
+  __getSubscribePendingSignals(): (runId: string, listener: PendingSignalListener) => () => void;
+  __getEnqueuePendingSignal(): (
+    target: { runId: string; resourceId?: string; threadId?: string },
+    signalInput: AgentSignalInput,
+  ) => Promise<CreatedAgentSignal>;
   __getGoalConfig(): GoalConfig | undefined;
   __hasFixedMemory(): boolean;
   __getMaxRetriesConfigured?(): boolean;
@@ -582,6 +588,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const startingSignal = signalSpanAttributes(messages);
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
+    outcome: null,
     name: `agent run: '${publicAgentId}'`,
     entityType: EntityType.AGENT,
     entityId: publicAgentId,
@@ -590,6 +597,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     attributes: {
       conversationId: threadId,
       instructions: convertInstructionsToString(instructions),
+      ...modelSpanAttributes(model),
       ...(startingSignal ? { signal: startingSignal } : {}),
       // @deprecated — use entityVersionId (top-level span context field) instead.
       // Kept for backward compatibility during migration.
@@ -654,7 +662,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           },
           error,
         );
-        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        agentSpan?.error({
+          error: inputProcessorError,
+          ...executionFailureTermination(inputProcessorError),
+          endTree: true,
+        });
         throw inputProcessorError;
       }
     }
@@ -829,6 +841,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // observability is off.
   const modelSpan = agentSpan?.createChildSpan({
     type: SpanType.MODEL_GENERATION,
+    outcome: null,
     name: `llm: '${model.modelId}'`,
     attributes: {
       model: model.modelId,
@@ -918,8 +931,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,
-    agentSpanData: agentSpan?.exportSpan(),
-    modelSpanData: modelSpan?.exportSpan(),
+    agentSpanData: agentSpan?.snapshot?.() ?? agentSpan?.exportSpan(),
+    modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
     requestContextEntries: requestContextEntriesSnapshot,
     inputTripwire: tripwireData,
   });
@@ -950,6 +963,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     outputProcessors,
     errorProcessors,
     processorStates,
+    agent: agent as unknown as Agent<any, any, any, any>,
     backgroundTaskManager,
     backgroundTasksConfig,
     agentSpan,
@@ -968,10 +982,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // real (toolName, args) on each call. The boolean shadow on the
     // serialized workflow input is the cross-process fallback.
     requireToolApproval: execOptions?.requireToolApproval,
+    // Park the per-call delegation config so a warm resume that rebuilds tools
+    // keeps the original delegation callbacks when the resume supplies none.
+    delegation: execOptions?.delegation,
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
     subscribePendingSignals: listener => typedAgent.__getSubscribePendingSignals()(runId, listener),
+    enqueuePendingSignal: signalInput =>
+      typedAgent.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
     // which was never ported to the durable finish step (so `generateTitle` never
     // fired for durable/evented agents). Parked here because the agent instance is

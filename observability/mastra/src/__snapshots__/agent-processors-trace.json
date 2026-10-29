@@ -38,7 +38,10 @@
         "entityId": "test-agent",
         "attributes": {
           "instructions": "You are a helpful assistant",
-          "completionStartTime": "<date>"
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -116,7 +119,10 @@
                 "entityId": "validator-agent",
                 "attributes": {
                   "instructions": "You validate input messages",
-                  "completionStartTime": "<date>"
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -147,6 +153,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
@@ -205,8 +212,11 @@
                         "entityId": "validator-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
                           "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -358,6 +368,7 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
+                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,
@@ -446,6 +457,7 @@
               "streaming": true,
               "parameters": {},
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-2>",
               "responseModel": "mock-model-id",
@@ -504,8 +516,11 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-2>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -656,6 +671,7 @@
                       },
                       "availableTools": [],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -790,7 +806,10 @@
                 "entityId": "summarizer-agent",
                 "attributes": {
                   "instructions": "You summarize text concisely",
-                  "completionStartTime": "<date>"
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-3>",
@@ -821,6 +840,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "<responseId-3>",
                       "responseModel": "mock-model-id",
@@ -879,8 +899,11 @@
                         "entityId": "summarizer-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-3>",
                           "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -1032,6 +1055,7 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
+                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,

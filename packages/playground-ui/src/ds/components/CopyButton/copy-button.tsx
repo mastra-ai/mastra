@@ -1,6 +1,6 @@
 import { CopyIcon, CheckIcon } from 'lucide-react';
 
-import type { ButtonProps } from '../Button';
+import type { ButtonProps, IconButtonSize } from '../Button';
 import { Button } from '../Button';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
@@ -10,7 +10,7 @@ export type CopyButtonProps = {
   showToast?: boolean;
   tooltip?: string;
   className?: string;
-  size?: ButtonProps['size'];
+  size?: IconButtonSize;
   variant?: ButtonProps['variant'];
 };
 
@@ -19,7 +19,7 @@ export function CopyButton({
   copyMessage,
   showToast,
   tooltip = 'Copy to clipboard',
-  size = 'sm',
+  size = 'icon-sm',
   variant,
   className,
 }: CopyButtonProps) {

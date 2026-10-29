@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import type { ToolKind } from './tool-phrases';
+
 export interface ToolPresentation {
   icon: LucideIcon;
   /** Stable name of the kind of tool, e.g. "Run"; also groups calls by kind. */
@@ -62,7 +64,7 @@ function firstStringArg(args: unknown, keys: string[]): string | undefined {
 
 interface ToolStyle {
   icon: LucideIcon;
-  label: string;
+  label: ToolKind;
   detailKeys?: string[];
   isCommand?: boolean;
 }

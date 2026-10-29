@@ -2,14 +2,16 @@
 
 Use this file as the default writing guide for Mastra documentation. Read the page-specific guide after this one
 
-## Core rules
+## Plain language
 
-- Write clearly and directly
-- Prefer short sentences, short paragraphs, simple words, and low jargon
-- Break up dense text with useful headings, lists, tables, diagrams, or examples
-- Write for readers who may be rushed, reading in a non-native language, or new to the ecosystem
-- Structure the page around the reader's question or task, not a mandatory template
-- Match the established terminology and useful conventions of neighboring pages
+Apply ISO 24495-1's reader-centered principles as editorial guidance, not a claim of conformance. Optimize for reader success, not word count.
+
+- **Relevant:** Identify the reader's task and existing knowledge. Include what they need to proceed, including constraints.
+- **Findable:** Use the page-type patterns in the page guides so similar pages have familiar structures. Adapt sections to the reader's questions and task. Use headings, links, and visual structure to make answers easy to locate.
+- **Understandable:** Define concepts before use cases or mechanics. Use familiar words, consistent terminology, enough context, and natural sentence variety.
+- **Usable:** Follow the task sequence below. Check that readers can act without guessing and verify success.
+
+Review from the reader's starting point, including readers who are rushed or reading in a non-native language. When the user provides reader feedback, use it to guide revisions.
 
 ## Accuracy
 
@@ -30,7 +32,6 @@ Use this file as the default writing guide for Mastra documentation. Read the pa
 
 Vary prose naturally:
 
-- Mix sentence and paragraph lengths
 - Avoid the "topic sentence, three supporting points, conclusion" formula
 - Don't start consecutive paragraphs or sentences with the same word
 - Skip conclusion wrappers. End when the page has completed its job
@@ -39,8 +40,7 @@ Vary prose naturally:
 - Remove filler such as "It's important to note" and "in order to."
 - Use commas or periods instead of em dashes
 - Prefer simple words: "use" instead of "utilize," and "help" instead of "facilitate."
-- Use a neutral, factual tone
-- Do not be funny, whimsical, sycophantic, or story-driven
+- Use a neutral, factual tone. Avoid forced humor, flattery, or storytelling
 - Keep each page self-contained
 - Refer to the reader as `you` when needed
 - Refer to the product as `Mastra`, not `we`, `us`, `our`, or `ours`
@@ -66,7 +66,7 @@ Vary prose naturally:
 ## Openings and endings
 
 - Open with what the subject does, what the reader can accomplish, or the decision the page helps them make
-- Keep the opening short, but use more than two sentences when the page needs scope or prerequisites
+- Give the opening enough room to establish context, scope, and prerequisites
 - Do not begin every page with "In this guide" or another fixed formula
 - Add `Next steps`, `Related`, or another final section only when the links help readers continue
 - Do not add congratulations text

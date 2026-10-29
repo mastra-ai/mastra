@@ -2,7 +2,7 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MASTRA_USER_KEY } from '../constants';
+import { MASTRA_AUTH_MODE_KEY, MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 
 import {
@@ -1153,6 +1153,52 @@ describe('auth helpers', () => {
 
       expect(result).toEqual({ action: 'next' });
       expect(result).not.toHaveProperty('headers');
+    });
+  });
+
+  describe('coreAuthMiddleware - deny-by-default with studio-only RBAC', () => {
+    // RBAC configured only under `studio`, auth config has no authorize/authorizeUser/rules.
+    const rbac = {
+      getRoles: async () => ['viewer'],
+      getPermissions: async () => ['agents:read'],
+      hasPermission: async () => false,
+      hasAllPermissions: async () => false,
+      hasAnyPermission: async () => false,
+    };
+    const mastra = {
+      getServer: () => ({}),
+      getStudio: () => ({ rbac }),
+      getLogger: () => null,
+    } as any;
+
+    const run = (authMode: string | undefined, user: Record<string, unknown>) => {
+      const store = new Map<string, unknown>([[MASTRA_AUTH_MODE_KEY, authMode]]);
+      return coreAuthMiddleware({
+        path: '/api/agents',
+        method: 'GET',
+        getHeader: () => undefined,
+        mastra,
+        authConfig: { protected: ['/api/*'], authenticateToken: async () => user },
+        requestContext: { get: k => store.get(k), set: (k, v) => store.set(k, v) },
+        rawRequest: {} as any,
+        token: 'valid-token',
+        buildAuthorizeContext: () => null,
+      });
+    };
+
+    it('denies a non-admin studio user', async () => {
+      const result = await run('studio', { id: 'u1', role: 'viewer' });
+      expect(result).toMatchObject({ action: 'error', status: 403 });
+    });
+
+    it('allows an admin studio user via default rules', async () => {
+      const result = await run('studio', { id: 'u1', role: 'admin' });
+      expect(result.action).toBe('next');
+    });
+
+    it('does not apply studio RBAC to non-studio requests', async () => {
+      const result = await run(undefined, { id: 'u1', role: 'viewer' });
+      expect(result.action).toBe('next');
     });
   });
 });

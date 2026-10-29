@@ -139,13 +139,13 @@ function RefBlockCopyContent({ promptBlockId }: { promptBlockId: string }) {
   });
   const content = promptBlock?.content ?? '';
   if (!content) return null;
-  return <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />;
+  return <CopyButton content={content} tooltip="Copy prompt block text" />;
 }
 
 function BlockCopyButton({ block }: { block: Record<string, unknown> }) {
   const rawContent = getRawBlockContent(block);
   if (rawContent) {
-    return <CopyButton content={rawContent} tooltip="Copy prompt text" size="sm" />;
+    return <CopyButton content={rawContent} tooltip="Copy prompt text" />;
   }
   if (block.type === 'prompt_block_ref' && (typeof block.promptBlockId === 'string' || typeof block.id === 'string')) {
     return <RefBlockCopyContent promptBlockId={(block.promptBlockId as string) ?? (block.id as string)} />;
@@ -318,7 +318,7 @@ function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
     <div className="relative rounded-md border border-border bg-background p-3">
       {content && (
         <div className="absolute top-2 right-2">
-          <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />
+          <CopyButton content={content} tooltip="Copy prompt block text" />
         </div>
       )}
       {promptBlock?.name && (
@@ -357,7 +357,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
           <div key={(block.id as string) ?? idx} className="relative rounded-md border border-border bg-background p-3">
             {content && (
               <div className="absolute top-2 right-2">
-                <CopyButton content={content} tooltip="Copy prompt text" size="sm" />
+                <CopyButton content={content} tooltip="Copy prompt text" />
               </div>
             )}
             <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">

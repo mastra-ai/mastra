@@ -897,6 +897,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        agentModel,
         maxConcurrency,
         provenance,
         grouping,
@@ -913,6 +914,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        agentModel?: { provider: string; modelId: string };
         maxConcurrency?: number;
         provenance?: {
           source?: string;
@@ -970,6 +972,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
         maxConcurrency,
         provenance,
         grouping,

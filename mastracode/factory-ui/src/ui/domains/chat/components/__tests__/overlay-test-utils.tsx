@@ -125,7 +125,9 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:sessionId/state`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`, () =>
       HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'medium' } }),
     ),
@@ -134,19 +136,24 @@ export function useOverlayControllerHandlers() {
 
 /** Renders where a command navigated and the location it carries back, so tests can assert both. */
 function NavigatedPath() {
-  const { pathname, state } = useLocation();
+  const { pathname, hash, state } = useLocation();
   return (
     <span data-testid="navigated-path" data-return-to={JSON.stringify(state)}>
       {pathname}
+      {hash}
     </span>
   );
 }
 
-export function OverlayTestProviders({ children }: { children: ReactNode }) {
+export function OverlayTestProviders({
+  children,
+  initialEntry = `/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`,
+}: {
+  children: ReactNode;
+  initialEntry?: string;
+}) {
   return (
-    <MemoryRouter
-      initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`]}
-    >
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"

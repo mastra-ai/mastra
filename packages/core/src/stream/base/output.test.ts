@@ -143,6 +143,84 @@ function createToolResultChunk(runId: string, toolCallId: string): ChunkType {
 }
 
 describe('MastraModelOutput', () => {
+  it('completes finish hooks after a non-structured error with an early result promise', async () => {
+    const runId = 'non-structured-error';
+    const error = new Error('boom');
+    const onFinish = vi.fn();
+    const onFinishComplete = vi.fn();
+    const output = new MastraModelOutput({
+      model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+      stream: createChunkStream([
+        createTextDeltaChunk(runId, 'hello'),
+        createStepFinishChunk(runId),
+        { type: 'error', runId, from: ChunkFrom.AGENT, payload: { error } },
+        createFinishChunk(runId),
+      ]),
+      messageList: new MessageList({ threadId: 'test-thread' }),
+      messageId: 'msg-1',
+      options: { runId, onFinish },
+      onFinishComplete,
+    });
+    const request = output.request.catch(error => error);
+    const chunks = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.map(chunk => chunk.type)).toEqual(['text-delta', 'step-finish', 'error', 'finish']);
+    expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([expect.objectContaining({ payload: { error } })]);
+    expect(await request).toBe(error);
+    expect(onFinish).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ finishReason: 'error', error, object: undefined }),
+      expect.anything(),
+    );
+    expect(onFinishComplete).toHaveBeenCalledOnce();
+  });
+
+  it.each(['stop', 'length', 'content-filter'] as const)(
+    'completes finish hooks after a structured error with an early result promise (%s)',
+    async reason => {
+      const runId = `structured-error-${reason}`;
+      const onFinish = vi.fn();
+      const onFinishComplete = vi.fn();
+      const finish = createFinishChunk(runId);
+      if (finish.type === 'finish') finish.payload.stepResult.reason = reason;
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([createTextDeltaChunk(runId, 'not JSON'), createStepFinishChunk(runId), finish]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          isLLMExecutionStep: true,
+          resolveFinalPromises: true,
+          structuredOutput: { schema: z.object({ name: z.string() }) },
+          onFinish,
+        },
+        onFinishComplete,
+      });
+      const request = output.request.catch(error => error);
+      const object = output.object.catch(error => error);
+      const chunks = [];
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+
+      const errorId = reason === 'stop' ? 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' : 'STRUCTURED_OUTPUT_TRUNCATED';
+      expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([
+        expect.objectContaining({ payload: { error: expect.objectContaining({ id: errorId }) } }),
+      ]);
+      expect(chunks.at(-1)?.type).toBe('finish');
+      expect(await request).toBeInstanceOf(Error);
+      expect(await object).toMatchObject({ id: errorId });
+      expect(onFinish).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          finishReason: 'error',
+          error: expect.objectContaining({ id: errorId }),
+          object: undefined,
+        }),
+        expect.anything(),
+      );
+      expect(onFinishComplete).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each([true, false])('uses the configured logger or preserves the default (injected: %s)', async injectLogger => {
     const logger = new ConsoleLogger({ level: 'debug' });
     vi.spyOn(logger, 'child').mockReturnValue(logger);
@@ -2135,6 +2213,30 @@ describe('MastraModelOutput', () => {
         createFinishChunk(runId),
       ];
     }
+
+    it('drops restored prior text at a continuing goal boundary', async () => {
+      const runId = 'resumed-goal-run';
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createTextDeltaChunk(runId, 'first answer'),
+          createStepFinishChunk(runId),
+          createGoalChunk(runId, { shouldContinue: true }),
+          createTextDeltaChunk(runId, 'final answer'),
+          createStepFinishChunk(runId),
+          createGoalChunk(runId, { shouldContinue: false }),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+        resumedText: { priorText: 'before approval ', stepText: '' },
+      });
+
+      const fullOutput = await output.getFullOutput();
+      expect(fullOutput.steps).toHaveLength(1);
+      expect(fullOutput.text).toBe('final answer');
+    });
 
     it('bounds buffering across continuing evaluations but preserves the terminal turn in getFullOutput()', async () => {
       const runId = 'test-run';

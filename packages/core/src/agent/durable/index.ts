@@ -79,6 +79,7 @@ export {
 // DurableAgent class (base class for durable agents)
 export {
   DurableAgent,
+  applyReservedMemoryContextKeys,
   type DurableAgentConfig,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
@@ -96,9 +97,11 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
+export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
+export { persistDurableRunInput } from './persist-run-input';
 export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state
@@ -131,6 +134,7 @@ export {
   emitStepFinishEvent,
   emitFinishEvent,
   emitErrorEvent,
+  emitAbortEvent,
   emitSuspendedEvent,
   type DurableAgentStreamOptions as StreamAdapterOptions,
   type DurableAgentStreamResult as StreamAdapterResult,
@@ -214,6 +218,8 @@ export {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableIsTaskCompleteStep,
+  createDurableGoalStep,
 } from './workflows/steps';
 
 // Shared workflow utilities
@@ -246,3 +252,8 @@ export type { ToolExecutionContext, ToolExecutionError } from './workflows/depre
 
 // Snapshot pruning hook shared with external durable engines (e.g. Inngest)
 export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
+
+// Shared runtime outcome classification for external durable engines.
+export { endRunSpansWithError } from './run-registry';
+/** @internal Runtime instrumentation helpers. */
+export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

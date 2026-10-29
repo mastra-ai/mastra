@@ -602,7 +602,6 @@ export class OnboardingInlineComponent extends Box implements Focusable {
 
     if (this.selectList) {
       this.selectList.handleInput(data);
-      return;
     }
   }
 }

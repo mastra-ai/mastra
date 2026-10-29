@@ -3,7 +3,6 @@ import type { UISpan } from '../types';
 import { getOverallLatency } from '../utils/span-timing';
 import { SpanRows } from './span-rows';
 import { SpanTimelineRow } from './span-timeline-row';
-import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeLoading } from './trace-span-tree';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
@@ -20,7 +19,7 @@ export type TraceSpanTimelineProps = {
   featuredSpanIds?: string[];
   /** Row scrolled into view once it is mounted (ancestors auto-expand when the span is featured). */
   revealSpanId?: string;
-  /** Rendered full-width above the span type legend row. */
+  /** Rendered full-width above the span rows. */
   leadingSlot?: ReactNode;
 };
 
@@ -50,7 +49,6 @@ export function TraceSpanTimeline({
   return (
     <>
       {leadingSlot}
-      <SpanTypeLegend spans={hierarchicalSpans} />
       <div className="grid grid-cols-[minmax(10rem,2fr)_minmax(12rem,3fr)] content-start gap-y-px overflow-hidden py-1">
         {/* Header row: empty name cell, then the axis aligned with the bars (same horizontal padding, minus the duration label). */}
         <div />

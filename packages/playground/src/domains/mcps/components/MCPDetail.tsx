@@ -81,7 +81,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       label: 'CLI',
       description: 'Use for local command-line access via npx and mcp-remote.',
       content: commandLineConfig,
-      tooltip: 'Copy Command Line Config',
+      tooltip: 'Copy command line config',
     },
   ];
 

@@ -99,6 +99,33 @@ export async function hasFinalReport(
   return false;
 }
 
+/** The newest report `senderSessionId` put on the recipient thread. */
+async function lastReport(
+  notifications: FactoryReporting['notifications'],
+  { senderSessionId, recipientThreadId }: { senderSessionId: string; recipientThreadId: string },
+) {
+  const records = await notifications.listNotifications({
+    threadId: recipientThreadId,
+    source: FACTORY_SESSION_NOTIFICATION_SOURCE,
+    limit: FINAL_REPORT_SCAN,
+  });
+  return records
+    .filter(record => record.attributes?.['from-session'] === senderSessionId)
+    .reduce<(typeof records)[number] | undefined>(
+      (newest, record) => (!newest || reportedAt(record) > reportedAt(newest) ? record : newest),
+      undefined,
+    );
+}
+
+/**
+ * When a report last said something. `updatedAt` also moves when a report is
+ * read, so it only counts once a later report has coalesced into this one;
+ * otherwise the report says what it said when it was created.
+ */
+function reportedAt(record: { createdAt: Date; updatedAt: Date; coalescedCount?: number }): Date {
+  return (record.coalescedCount ?? 1) > 1 ? record.updatedAt : record.createdAt;
+}
+
 /**
  * Whether the newest report `senderSessionId` put on the recipient thread is
  * already this exact `failed` backstop. A session stuck failing the same way
@@ -113,20 +140,22 @@ export async function repeatsLastFailure(
     summary,
   }: { senderSessionId: string; recipientThreadId: string; summary: string },
 ): Promise<boolean> {
-  const records = await notifications.listNotifications({
-    threadId: recipientThreadId,
-    source: FACTORY_SESSION_NOTIFICATION_SOURCE,
-    limit: FINAL_REPORT_SCAN,
-  });
-  // Storage orders by `updatedAt`, which moves when a report is read; the
-  // newest report is the one created last.
-  const last = records
-    .filter(record => record.attributes?.['from-session'] === senderSessionId)
-    .reduce<(typeof records)[number] | undefined>(
-      (newest, record) => (!newest || record.createdAt > newest.createdAt ? record : newest),
-      undefined,
-    );
+  const last = await lastReport(notifications, { senderSessionId, recipientThreadId });
   return last?.kind === 'failed' && last.attributes?.backstop === 'true' && last.summary === summary;
+}
+
+/**
+ * Whether the newest report `senderSessionId` put on the recipient thread
+ * already says it is done. A session woken again after it finished (a PR it
+ * subscribed to gets comments, reviews and CI results) ends each of those runs
+ * with nothing new to say, so the follower hears "finished" once, not per wake.
+ */
+async function alreadyReportedDone(
+  notifications: FactoryReporting['notifications'],
+  target: { senderSessionId: string; recipientThreadId: string },
+): Promise<boolean> {
+  const last = await lastReport(notifications, target);
+  return last?.kind === 'done' || (last?.kind === 'reply' && last.attributes?.status === 'done');
 }
 
 export function reportNotification({
@@ -273,6 +302,15 @@ export async function sendRunEndReport(
     // Only the agent's own `blocked` means it ended its turn to wait; a backstop `blocked` from a parked run doesn't.
     if (outcome.status === 'done' && (await report(recipient, ['blocked'], true))) {
       waiting = true;
+      continue;
+    }
+    if (
+      outcome.status === 'done' &&
+      (await alreadyReportedDone(reporting.notifications, {
+        senderSessionId: sender.sessionId,
+        recipientThreadId: recipient.threadId,
+      }))
+    ) {
       continue;
     }
     if (

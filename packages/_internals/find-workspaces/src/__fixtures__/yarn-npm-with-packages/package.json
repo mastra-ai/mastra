@@ -1,0 +1,9 @@
+{
+  "name": "yarn-npm-with-packages",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ]
+  }
+}

@@ -8,6 +8,7 @@ import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 
 import { createSignalsPubSub } from '../../../utils/signals-pubsub.js';
 import { createThreadOwnershipManager } from '../../ownership.js';
+import { AgentConnectionRegistry, stablePeerId } from '../../registry.js';
 import { createSessionThreadAdvertisement } from '../../session-advertisement.js';
 
 const [role, resourceIdArg, scenario = 'request-reply', startAtArg] = process.argv.slice(2);
@@ -194,6 +195,68 @@ async function runDiscoveryProbe() {
 }
 
 const HAMMER_ROUNDS = 100;
+
+/** Keeps this process's event loop busy, as a long tool result, a big parse or a render does. */
+function busyFor(ms: number) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    // spin
+  }
+}
+
+/**
+ * Owner: claims its thread and waits. Sender: for each `probe <threadId> <busyMs>` command, checks
+ * whether the saved peer on that thread is currently advertised, the way `agent_signal_send` does
+ * before sending. Its event loop is kept busy for `busyMs` right after it asks.
+ */
+async function runBusyPresence() {
+  if (role === 'owner') {
+    const claim = await claimThread(ownerThreadId);
+    emit('thread-owned', { threadId: ownerThreadId });
+    await waitForCommand('close');
+    claim.unsubscribe();
+    return;
+  }
+
+  const registry = new AgentConnectionRegistry();
+  const context = { agent: { resourceId, threadId: senderThreadId }, runtimeAgent: agent };
+  emit('ready');
+  for await (const line of commandLines) {
+    if (line === 'close') break;
+    const [command, targetThreadId, busyMs] = line.split(' ');
+    if (command !== 'probe' || !targetThreadId) continue;
+    const now = Date.now();
+    const saved = {
+      id: stablePeerId({ agentId: agent.id, resourceId, threadId: targetThreadId }),
+      agentId: agent.id,
+      resourceId,
+      threadId: targetThreadId,
+      connectedAt: now,
+      lastSeenAt: now,
+    };
+    const startedAt = Date.now();
+    // Start the busy block only once the discovery request is out, so the replies arrive while
+    // this process is blocked, which is what a busy sender meets.
+    const publish = pubsub.publish;
+    pubsub.publish = async (topic, event, options) => {
+      await publish.call(pubsub, topic, event, options);
+      if (topic === 'agent.thread-peer-discovery') {
+        pubsub.publish = publish;
+        busyFor(Number(busyMs));
+      }
+    };
+    const peers = registry.connectedPeers(context, [saved]);
+    const target = (await peers).find(peer => peer.id === saved.id);
+    pubsub.publish = publish;
+    emit('probed', {
+      threadId: targetThreadId,
+      busyMs: Number(busyMs),
+      presence: target?.presence,
+      canAttemptSend: target?.canAttemptSend,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }
+}
 
 async function runDiscoveryHammer() {
   if (role === 'owner') {
@@ -605,6 +668,7 @@ async function main() {
   else if (scenario === 'managed-claim') await runManagedClaim();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
   else if (scenario === 'discovery-hammer') await runDiscoveryHammer();
+  else if (scenario === 'busy-presence') await runBusyPresence();
   else if (scenario === 'gated-owner') await runGatedOwner();
   else if (scenario === 'ownership-contention') await runOwnershipContention();
   else if (scenario === 'simultaneous-owner-wake') await runSimultaneousOwnerWake();

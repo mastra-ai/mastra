@@ -1,11 +1,12 @@
 import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
-import { NEW_CHANNEL_SESSION_KEY } from '../../session/channel-session-link-processor.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
+import { NEW_CHANNEL_SESSION_KEY } from './channel-session-link-processor.js';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.
@@ -2351,5 +2352,132 @@ describe('Slack aside ingest', () => {
     ).resolves.toBeUndefined();
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
     expect(thread.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('@bot mute / unmute', () => {
+  async function fixture({ linked = true } = {}) {
+    const storage = new InMemoryStore();
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'channel:slack-thread-1',
+        title: 'slack thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          channel_platform: 'slack',
+          channel_externalThreadId: 'slack:C-1:1700.42',
+          channel_externalChannelId: 'C-1',
+          channel_subscribed: 'true',
+        },
+      },
+    });
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.adapter.addReaction = vi.fn().mockResolvedValue(undefined);
+    // Gate reached = the sender's link was looked up.
+    const accountLinks = {
+      getAccountLink: vi
+        .fn()
+        .mockResolvedValue(linked ? { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' } : null),
+    };
+    const defaultHandler = vi.fn().mockResolvedValue(undefined);
+    const handlers = createHandlers({ accountLinks: accountLinks as any, projects: makeProjects([{ id: 'fp-1' }]) });
+    const ctx = handlerCtx({ getStorage: () => storage, getLogger: () => ({ error: vi.fn() }) });
+    let n = 0;
+    const send = (
+      text: string,
+      {
+        isMention = false,
+        slot = 'onSubscribedMessage' as 'onSubscribedMessage' | 'onMention',
+        rawText = undefined as string | undefined,
+      } = {},
+    ) => {
+      const base = makeMessage('T-1');
+      const raw = rawText === undefined ? base.raw : { ...(base.raw as object), text: rawText };
+      const message = { ...base, id: `1700.${++n}`, text, isMention, raw };
+      return handlers[slot]!(thread, message, defaultHandler, ctx).then(() => message);
+    };
+    const muted = async () => (await memory.getThreadById({ threadId: 'thread-1' }))?.metadata?.factory_muted;
+    return { thread, accountLinks, defaultHandler, send, muted, memory };
+  }
+
+  it('mutes on a tagged `mute`, confirms with a reaction, and starts no run', async () => {
+    const f = await fixture();
+    const message = await f.send('@shipyard mute', { isMention: true });
+
+    expect(await f.muted()).toBe('true');
+    expect(f.thread.adapter.addReaction).toHaveBeenCalledWith('slack:C-1:1700.42', message.id, 'mute');
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(f.thread.post).not.toHaveBeenCalled();
+  });
+
+  it('looks the thread up once per message for the mute check and the access gate', async () => {
+    const f = await fixture();
+    const listThreads = vi.spyOn(f.memory, 'listThreads');
+
+    await f.send('just chatting among ourselves');
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(listThreads).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets only a sender who passes the link gate mute the thread', async () => {
+    const f = await fixture({ linked: false });
+    await f.send('@shipyard mute', { isMention: true });
+
+    expect(f.accountLinks.getAccountLink).toHaveBeenCalledTimes(1);
+    expect(await f.muted()).toBeUndefined();
+    expect(f.thread.adapter.addReaction).not.toHaveBeenCalled();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+  });
+
+  it('ignores untagged messages while muted, but still answers a tag', async () => {
+    const f = await fixture();
+    await f.send('<@U-BOT> mute', { isMention: true });
+
+    await f.send('just chatting among ourselves');
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+
+    await f.send('@shipyard can you check the build?', { isMention: true });
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognizes `mute` after a bot display name with spaces and punctuation', async () => {
+    // What Slack actually delivers: the raw event keeps `<@U…>`, while the
+    // normalized text spells the mention as the bot's display name.
+    const f = await fixture();
+    await f.send('@Mastra Factory(Caleb) mute', { isMention: true, rawText: '<@U-BOT> mute' });
+    expect(await f.muted()).toBe('true');
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+  });
+
+  it('listens again after a tagged `unmute`', async () => {
+    const f = await fixture();
+    await f.send('@shipyard mute', { isMention: true });
+    const unmute = await f.send('@shipyard unmute!', { isMention: true });
+
+    expect(await f.muted()).toBe('false');
+    expect(f.thread.adapter.addReaction).toHaveBeenLastCalledWith('slack:C-1:1700.42', unmute.id, 'loud_sound');
+    await f.send('back to you');
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a message that only contains the word as a normal message', async () => {
+    const f = await fixture();
+    await f.send('@shipyard mute the flaky alerts', { isMention: true });
+    expect(await f.muted()).toBeUndefined();
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+
+    await f.send('mute');
+    expect(await f.muted()).toBeUndefined();
+  });
+
+  it('does not start a session about `mute` in a thread the bot never joined', async () => {
+    const f = await fixture();
+    await f.send('@shipyard mute', { isMention: true, slot: 'onMention' });
+    expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
   });
 });

@@ -205,7 +205,7 @@ export const agent = new Agent({
 
 ### As a per-step processor (limit multi-step token growth)
 
-When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. `TokenLimiterProcessor` applies its limit at every step, measuring the prompt that's about to be sent after any earlier prompt processors have run. Register prompt-shrinking processors such as `ToolCallFilter` before it, so the limiter counts the prompt the model actually receives:
+When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. `TokenLimiterProcessor` applies its limit at every step, measuring the prompt that's about to be sent after any earlier prompt processors have run. To count the prompt the model actually receives, register the limiter after prompt-shrinking processors such as `ToolCallFilter`:
 
 ```typescript title="src/mastra/agents/multi-step-agent.ts"
 import { Agent } from '@mastra/core/agent'

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.7.23",
+  "version": "1.7.24",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -27,13 +27,13 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.2.2",
+    "@fastify/busboy": "^3.2.4",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.135",
+    "@ai-sdk/openai": "^2.0.136",
+    "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
-    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -41,18 +41,19 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
-    "@types/koa": "^2.15.0",
+    "@mastra/server-adapters-test-suite": "workspace:*",
+    "@types/koa": "^2.15.2",
     "@types/koa-bodyparser": "^4.3.13",
-    "@types/node": "22.20.1",
-    "koa": "^3.1.2",
+    "@types/node": "22.19.15",
+    "koa": "^3.2.1",
     "koa-bodyparser": "^4.4.1",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.58.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
     "koa": "^3.0.0"
   },
   "engines": {

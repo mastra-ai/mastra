@@ -1457,11 +1457,15 @@ describe('DurableAgent.recover(runId)', () => {
 describe('DurableAgent.recover(runId) tracing', () => {
   const runId = 'run-traced';
 
-  async function recoverTraced(contextExtras: Record<string, unknown> = {}) {
+  async function recoverTraced(
+    contextExtras: Record<string, unknown> = {},
+    run: { agent?: Agent; modelList?: SerializableModelListEntry[] } = {},
+  ) {
     const endedSpans: Array<{ id: string; output: unknown }> = [];
     const recordedSpan = (id: string): any => ({
       id,
       exportSpan: () => ({ id }),
+      snapshot: () => ({ id }),
       createChildSpan: () => recordedSpan(`${id}-model`),
       end: (opts?: { output?: unknown }) => endedSpans.push({ id, output: opts?.output }),
     });
@@ -1494,13 +1498,14 @@ describe('DurableAgent.recover(runId) tracing', () => {
     };
     const store = new InMemoryStore();
     const agent = createDurableAgent({
-      agent: new Agent({ id: 'agent-traced', name: 'agent-traced', instructions: 'x', model: makeMockModel() }),
+      agent:
+        run.agent ?? new Agent({ id: 'agent-traced', name: 'agent-traced', instructions: 'x', model: makeMockModel() }),
     });
     void new Mastra({ agents: { 'agent-traced': agent as any }, storage: store, observability, logger: false });
 
     const workflows = (await store.getStore('workflows'))!;
     for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-      const snapshot = makeSnapshot(runId, 'running', 'agent-traced');
+      const snapshot = makeSnapshot(runId, 'running', 'agent-traced', undefined, run.modelList);
       Object.assign(snapshot.context.input as any, {
         agentSpanData: { traceId: 'trace-orig', id: 'span-orig' },
         modelSpanData: { traceId: 'trace-orig', id: 'model-orig' },
@@ -1528,6 +1533,77 @@ describe('DurableAgent.recover(runId) tracing', () => {
     expect(recoveredCall.parentSpanId).toBe('span-orig');
     expect(recoveredCall.traceId).toBe('trace-orig');
     expect(recoveredCall.metadata?.recoveredFromSpanId).toBe('span-orig');
+  });
+
+  it('names the model the recovered run continues with on the recovered span', async () => {
+    const { instance } = await recoverTraced();
+
+    const recoveredCall = vi
+      .mocked(instance.startSpan)
+      .mock.calls.map(([opts]) => opts as any)
+      .find(opts => opts.name?.includes('(recovered)'));
+    expect(recoveredCall.attributes).toMatchObject({ model: 'mock-model-id', provider: 'mock-provider' });
+  });
+
+  it('names the live model bound to the first persisted candidate on the recovered span, even when the resolver reorders the list', async () => {
+    // The recovered step tries the persisted list in its persisted order, with
+    // the live model rebound to each id, so the span must name the recovery-time
+    // model behind that head, not the stale persisted one and not whichever
+    // model the reordered resolver returned first.
+    let reordered = false;
+    let resolveCount = 0;
+    const baseAgent = new Agent({
+      id: 'agent-traced',
+      name: 'agent-traced',
+      instructions: 'x',
+      model: (() => {
+        const call = ++resolveCount;
+        const a = { id: 'exp-a', model: makeMockModel(`model-a-${call}`) };
+        const b = { id: 'exp-b', model: makeMockModel(`model-b-${call}`) };
+        return reordered ? [b, a] : [a, b];
+      }) as any,
+    });
+    const modelList = serializeModelList((await baseAgent.getModelList())!);
+    expect(modelList.map(m => m.id)).toEqual(['exp-a', 'exp-b']);
+
+    reordered = true;
+    const { instance } = await recoverTraced({}, { agent: baseAgent, modelList });
+
+    const recoveredCall = vi
+      .mocked(instance.startSpan)
+      .mock.calls.map(([opts]) => opts as any)
+      .find(opts => opts.name?.includes('(recovered)'));
+    // The prepare-time model was `model-a-1`; recovery rebinds the id to a fresh live instance.
+    expect(recoveredCall.attributes.model).toMatch(/^model-a-/);
+    expect(recoveredCall.attributes.model).not.toBe('model-a-1');
+    expect(recoveredCall.attributes.provider).toBe('mock-provider');
+  });
+
+  it('names the persisted first candidate on the recovered span when the live resolver no longer returns it', async () => {
+    // The recovered step still tries the persisted head first, rebuilt from its
+    // serialized config, so the span must name it rather than the live head.
+    let dropped = false;
+    const baseAgent = new Agent({
+      id: 'agent-traced',
+      name: 'agent-traced',
+      instructions: 'x',
+      model: (() => {
+        const a = { id: 'exp-a', model: makeMockModel('model-a') };
+        const b = { id: 'exp-b', model: makeMockModel('model-b') };
+        return dropped ? [b] : [a, b];
+      }) as any,
+    });
+    const modelList = serializeModelList((await baseAgent.getModelList())!);
+    expect(modelList.map(m => m.id)).toEqual(['exp-a', 'exp-b']);
+
+    dropped = true;
+    const { instance } = await recoverTraced({}, { agent: baseAgent, modelList });
+
+    const recoveredCall = vi
+      .mocked(instance.startSpan)
+      .mock.calls.map(([opts]) => opts as any)
+      .find(opts => opts.name?.includes('(recovered)'));
+    expect(recoveredCall.attributes).toMatchObject({ model: 'model-a', provider: 'mock-provider' });
   });
 
   // Stores persist only span-end events, so the crashed process's spans must be

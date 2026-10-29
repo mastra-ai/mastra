@@ -9,6 +9,7 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { z } from 'zod';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 
@@ -28,15 +29,17 @@ import type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
   WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
@@ -46,15 +49,17 @@ export type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
   WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
@@ -71,18 +76,23 @@ export interface CustomProvidersResponse {
 
 export interface DefaultModelResponse {
   modelId: string | null;
+  thinkingLevel: ThinkingLevelSetting | null;
 }
 
 export interface OMResponse {
   config: OMConfigInfo;
 }
 
-/** A bundled Factory skill (`GET /web/factory/skills`). */
+/** A skill the Factory skill mount serves (`GET /web/factory/skills`). */
 export interface FactorySkillInfo {
   name: string;
   description: string;
   /** SKILL.md body with the frontmatter removed. */
   content: string;
+  /** Shipped with Factory, the app's `factory-skills/` folder, or `MastraFactory({ skills })`. Absent from older servers. */
+  origin?: 'bundled' | 'folder' | 'code';
+  /** True for a skill Factory ships, including when the app overrides it. Absent from older servers. */
+  builtIn?: boolean;
   /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
   error?: string;
 }

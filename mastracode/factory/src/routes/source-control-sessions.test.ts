@@ -637,15 +637,18 @@ describe('source-control session routes', () => {
       workosId: 'user-2',
       organizationId: 'org-1',
     });
-    const offersTakeover = async (app: Hono, sessionId: string) => {
+    const capabilities = async (app: Hono, sessionId: string) => {
       const body = (await (await app.request(`/web/user-sessions/${sessionId}`)).json()) as {
-        session: { capabilities: { takeOwnership: boolean } };
+        session: { capabilities: { takeOwnership: boolean; switchModel: boolean } };
       };
-      return body.session.capabilities.takeOwnership;
+      return body.session.capabilities;
     };
+    const offersTakeover = async (app: Hono, sessionId: string) => (await capabilities(app, sessionId)).takeOwnership;
 
     expect(await offersTakeover(teammate, 'user-session')).toBe(true);
     expect(await offersTakeover(owner, 'user-session')).toBe(false);
+    await expect(capabilities(teammate, 'user-session')).resolves.toMatchObject({ switchModel: false });
+    await expect(capabilities(owner, 'user-session')).resolves.toMatchObject({ switchModel: true });
     for (const sessionId of ['slack-thread', 'factory-run', 'side-session']) {
       expect(await offersTakeover(teammate, sessionId)).toBe(false);
       const refused = await takeOwnership(teammate, sessionId, 'user-1');
@@ -1631,7 +1634,7 @@ describe('session sandbox recreate', () => {
 
     const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
     const body = (await opened.json()) as { session: { capabilities: { recreateSandbox: boolean } } };
-    expect(body.session.capabilities).toEqual({ recreateSandbox: false, takeOwnership: false });
+    expect(body.session.capabilities).toEqual({ recreateSandbox: false, takeOwnership: false, switchModel: true });
   });
 
   it('returns 503 when the server has no retirement coordinator', async () => {
@@ -1734,7 +1737,11 @@ describe('session sandbox recreate', () => {
       };
       expect(body).not.toHaveProperty('capabilities');
       expect(body.session.sessionId).toBe(session.sessionId);
-      expect(body.session.capabilities).toEqual({ recreateSandbox: expected, takeOwnership: false });
+      expect(body.session.capabilities).toEqual({
+        recreateSandbox: expected,
+        takeOwnership: false,
+        switchModel: owner === 'user-1',
+      });
     },
   );
 

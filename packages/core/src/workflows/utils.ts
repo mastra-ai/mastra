@@ -218,13 +218,10 @@ export function getResumeLabelsByStepId(
 ) {
   return Object.entries(resumeLabels)
     .filter(([_, value]) => value.stepId === stepId)
-    .reduce(
-      (acc, [key, value]) => {
-        acc[key] = value;
-        return acc;
-      },
-      {} as Record<string, { stepId: string; foreachIndex?: number }>,
-    );
+    .reduce<Record<string, { stepId: string; foreachIndex?: number }>>((acc, [key, value]) => {
+      acc[key] = value;
+      return acc;
+    }, {});
 }
 
 export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
@@ -479,13 +476,10 @@ export const createTimeTravelExecutionParams = (params: {
         if (prevStepIds.length === 1) {
           stepPayload = (stepResults?.[prevStepIds[0]!] as any)?.output ?? {};
         } else {
-          stepPayload = prevStepIds.reduce(
-            (acc, stepId) => {
-              acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
-              return acc;
-            },
-            {} as Record<string, any>,
-          );
+          stepPayload = prevStepIds.reduce<Record<string, any>>((acc, stepId) => {
+            acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
+            return acc;
+          }, {});
         }
       }
     }
@@ -629,13 +623,10 @@ export const createRestartExecutionParams = ({
       [firstEntry.id]: [0],
     };
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-    firstEntryActiveStepsPath = firstEntry.steps.reduce(
-      (acc, step) => {
-        acc[getSingleStepEntryId(step)] = [0];
-        return acc;
-      },
-      {} as Record<string, number[]>,
-    );
+    firstEntryActiveStepsPath = firstEntry.steps.reduce<Record<string, number[]>>((acc, step) => {
+      acc[getSingleStepEntryId(step)] = [0];
+      return acc;
+    }, {});
   }
 
   const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>

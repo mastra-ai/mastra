@@ -128,15 +128,15 @@
     "build:lib": "tsdown --config tsdown.config.ts"
   },
   "dependencies": {
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.20.1",
-    "tsdown": "0.22.9",
+    "@types/node": "22.19.15",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "zod": "catalog:"
   },

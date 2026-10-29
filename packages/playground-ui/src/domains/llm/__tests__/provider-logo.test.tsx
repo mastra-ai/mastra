@@ -26,6 +26,7 @@ describe('ProviderLogo', () => {
     'moonshotai',
     'xai',
     'x-ai',
+    'typesafe',
   ])('draws the bundled %s mark without fetching a remote logo', providerId => {
     render(<ProviderLogo providerId={providerId} size="md" />);
     const mark = screen.getByRole('img', { name: `${providerId} logo` });
@@ -44,6 +45,11 @@ describe('ProviderLogo', () => {
     const markup = screen.getByRole('img').outerHTML;
     expect(markup).toContain('currentColor');
     expect(markup).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  });
+
+  it('draws the Typesafe mark in its brand magenta', () => {
+    render(<ProviderLogo providerId="typesafe" />);
+    expect(screen.getByRole('img').getAttribute('fill')).toBe('#E551BA');
   });
 
   it.each(['google', 'qwen', 'minimax', 'meta'])('gives each %s mark its own gradient ids', providerId => {

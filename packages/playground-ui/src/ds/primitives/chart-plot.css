@@ -1,0 +1,32 @@
+/*
+ * The plot box is a size container; the chart inside is drawn at `--chart-drawn-w/h` and scaled to
+ * the box's live size, so between redraws it moves with its card. `tan(atan2(a, b))` is a / b as a
+ * plain number, which `scale()` needs. At rest the drawn size is the box size and the scale is 1.
+ */
+.chart-plot-box {
+  container-type: size;
+}
+
+.chart-plot-stretch {
+  transform-origin: 0 0;
+  transform: scale(tan(atan2(100cqw, var(--chart-drawn-w))), tan(atan2(100cqh, var(--chart-drawn-h))));
+}
+
+/*
+ * Scale each label back so its text keeps its shape and only moves with the chart, around the edge
+ * it's anchored to. Text with its own SVG `transform` (a rotated label) is left alone: a CSS
+ * transform would replace it.
+ */
+.chart-plot-stretch .recharts-surface text:not([transform]) {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(tan(atan2(var(--chart-drawn-w), 100cqw)), tan(atan2(var(--chart-drawn-h), 100cqh)));
+}
+
+.chart-plot-stretch .recharts-surface text[text-anchor='start']:not([transform]) {
+  transform-origin: left center;
+}
+
+.chart-plot-stretch .recharts-surface text[text-anchor='end']:not([transform]) {
+  transform-origin: right center;
+}

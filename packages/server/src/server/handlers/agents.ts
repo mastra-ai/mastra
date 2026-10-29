@@ -34,6 +34,7 @@ import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
+  agentRunPathParams,
   agentSkillPathParams,
   agentVersionQuerySchema,
   listAgentsResponseSchema,
@@ -83,6 +84,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { toSlug } from '../utils';
+import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
@@ -96,6 +98,7 @@ import {
   getEffectiveThreadId,
   applyEffectiveThreadId,
   enforceThreadAccess,
+  getHandlerFGAProvider,
   mergeBodyRequestContext,
   validateThreadOwnership,
   validateRunOwnership,
@@ -271,7 +274,7 @@ async function validateDurableToolCallAccess({
       if (!ready || input?.agentId !== agent.id) {
         throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
       }
-      await validateRunOwnership({ resourceId: persistedResourceId }, contextResourceId, mastra);
+      await validateRunOwnership({ resourceId: persistedResourceId }, contextResourceId, mastra, requestContext);
       return;
     }
 
@@ -1365,7 +1368,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
       }
 
       // Filter agents by FGA if configured
-      const fgaProvider = mastra.getServer?.()?.fga;
+      const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
       const user = requestContext?.get('user');
       if (fgaProvider && user) {
         const agentList = Object.values(serializedAgents) as unknown as Array<{ id: string }>;
@@ -1813,6 +1816,7 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
       models: [...provider.models],
+      modelReleaseDates: provider.modelReleaseDates,
     };
   });
 }
@@ -1956,7 +1960,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       // Support `untilIdle` option on the /stream endpoint — delegates to
@@ -2293,6 +2299,77 @@ export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
   },
 });
 
+export const ABORT_AGENT_RUN_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/runs/:runId/abort',
+  responseType: 'json',
+  pathParamSchema: agentRunPathParams,
+  responseSchema: abortAgentThreadResponseSchema,
+  summary: 'Abort an agent run',
+  description: 'Explicitly stop a durable run, including runs without a memory thread',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  handler: async ({ mastra, agentId, runId, requestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      if (!isDurableAgentLike(agent)) {
+        throw new HTTPException(501, { message: 'Run-scoped cancellation requires a durable agent' });
+      }
+      const workflows = await mastra.getStorage()?.getStore('workflows');
+      const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
+      if (!run) return { aborted: false };
+      await validateRunOwnership(run, getContextResourceId(requestContext), mastra, requestContext);
+      const ownershipSchema = z.object({
+        context: z.object({
+          input: z.object({
+            agentId: z.string(),
+            state: z.object({ threadId: z.string().optional() }).optional(),
+          }),
+        }),
+      });
+      let parsed = ownershipSchema.safeParse(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
+      );
+      if (!parsed.success) {
+        // Active local runs may not checkpoint the outer input until the segment finishes.
+        const execution = await workflows?.getWorkflowRunById({
+          workflowName: getDurableLoopWorkflowName(agent).replace(
+            DurableStepIds.AGENTIC_LOOP,
+            DurableStepIds.AGENTIC_EXECUTION,
+          ),
+          runId,
+        });
+        await validateRunOwnership(execution, getContextResourceId(requestContext), mastra, requestContext);
+        parsed = ownershipSchema.safeParse(
+          typeof execution?.snapshot === 'string' ? JSON.parse(execution.snapshot) : execution?.snapshot,
+        );
+      }
+      // Stop can arrive before either workflow has checkpointed its input. Do not cancel an unverified run.
+      if (!parsed.success) return { aborted: false };
+      if (parsed.data.context.input.agentId !== agent.id) {
+        throw new HTTPException(403, { message: 'Access denied: run does not belong to this agent' });
+      }
+      const threadId = parsed.data.context.input.state?.threadId;
+      if (threadId) {
+        const memory = await agent.getMemory({ requestContext });
+        const thread = await memory?.getThreadById({ threadId });
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId,
+          thread,
+          effectiveResourceId: getContextResourceId(requestContext),
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
+      }
+      return { aborted: await agent.abortRunStream(runId) };
+    } catch (error) {
+      return handleError(error, 'error aborting agent run');
+    }
+  },
+});
+
 export const ABORT_AGENT_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/threads/abort',
@@ -2423,6 +2500,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
     resourceId,
     threadId,
     withInitialHistory,
+    withRunStatus,
     abortSignal,
     requestContext: serverRequestContext,
   }) => {
@@ -2466,6 +2544,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(withInitialHistory ? { withInitialHistory, requestContext: serverRequestContext } : {}),
+        ...(withRunStatus ? { withRunStatus } : {}),
       });
 
       let cleanedUp = false;
@@ -2605,7 +2684,9 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       const streamResult = structuredOutput
@@ -2672,6 +2753,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       };
 
       let closed = false;
+      let pendingRejection: Error | undefined;
       let unsubscribe: (() => Promise<void>) | undefined;
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
       let onAbort: (() => void) | undefined;
@@ -2736,8 +2818,18 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                 event => {
                   if (closed) return;
                   const type = event.type === 'chunk' ? event.data?.type : event.type;
-                  controller.enqueue(event);
-                  if (type === 'finish' || type === 'error' || type === 'abort') {
+                  if (event.type === 'error' && event.data?.delivery === 'reject') {
+                    const error = Object.assign(new Error(event.data.error.message), event.data.error);
+                    stop();
+                    // Erroring immediately discards queued replay chunks. Drain them first.
+                    if ((controller.desiredSize ?? 0) > 0) controller.error(error);
+                    else pendingRejection = error;
+                    return;
+                  }
+                  for (const chunk of toAgentStreamChunks(event)) {
+                    controller.enqueue(chunk);
+                  }
+                  if (type === 'finish' || event.type === 'error' || type === 'abort') {
                     cleanup(controller);
                   } else {
                     resetIdleTimer(controller);
@@ -2761,7 +2853,14 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
               },
             );
         },
+        pull(controller) {
+          if (pendingRejection) {
+            controller.error(pendingRejection);
+            pendingRejection = undefined;
+          }
+        },
         cancel() {
+          pendingRejection = undefined;
           stop();
         },
       });
@@ -2818,7 +2917,8 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.approveToolCall({
         ...params,
         requestContext,
-        abortSignal,
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
       return streamResult.fullStream;
@@ -3022,7 +3122,8 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.declineToolCall({
         ...params,
         requestContext,
-        abortSignal,
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
       return streamResult.fullStream;
@@ -3126,7 +3227,12 @@ export const RESUME_STREAM_ROUTE = createRoute({
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined), mastra);
+      await validateRunOwnership(
+        workflowRun,
+        getEffectiveResourceId(serverRequestContext, undefined),
+        mastra,
+        serverRequestContext,
+      );
 
       const { structuredOutput, untilIdle, ...restOptions } = rest;
 
@@ -3136,7 +3242,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       // Support `untilIdle` option on the /resume-stream endpoint — delegates
@@ -3214,14 +3322,17 @@ export const RECOVER_ROUTE = createRoute({
         workflowName: getDurableLoopWorkflowName(agent),
         runId,
       });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined), mastra);
+      await validateRunOwnership(
+        workflowRun,
+        getEffectiveResourceId(serverRequestContext, undefined),
+        mastra,
+        serverRequestContext,
+      );
 
       // NOTE: DurableAgent.recover() reads the workflow's requestContext from
       // the persisted snapshot. serverRequestContext is only used above for
       // ownership checks and version resolution.
-      const streamResult = await (agent as any).recover(runId, {
-        abortSignal,
-      });
+      const streamResult = await (agent as any).recover(runId);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -3331,7 +3442,12 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined), mastra);
+      await validateRunOwnership(
+        workflowRun,
+        getEffectiveResourceId(serverRequestContext, undefined),
+        mastra,
+        serverRequestContext,
+      );
 
       const { structuredOutput, ...restOptions } = rest;
 
@@ -3343,7 +3459,9 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       const streamResult = structuredOutput

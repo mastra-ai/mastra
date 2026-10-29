@@ -33,7 +33,7 @@ const agent = new Agent({
 
 The Agent automatically merges the four task tools into its toolset and registers the processor on its input-processor chain. No other wiring is required.
 
-Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Without memory the task tools no-op and return a result explaining that task tracking requires agent memory. The `tasks` storage domain is wired in-memory by default, so task tracking works without configuring a storage backend.
+Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Without memory the task tools no-op and return a result explaining that task tracking requires agent memory. The `threadState` storage domain is wired in-memory by default, so task tracking works without configuring a storage backend.
 
 ## Constructor parameters
 
@@ -70,7 +70,7 @@ Returns: `Record<string, Tool>`
 
 #### `getInputProcessors()`
 
-Returns the provider's `TaskStateProcessor` instance. The Agent registers it on the input-processor chain, which propagates the Mastra instance so the processor can resolve the `tasks` store.
+Returns the provider's `TaskStateProcessor` instance. The Agent registers it on the input-processor chain, which propagates the Mastra instance so the processor can resolve the `threadState` store.
 
 ```typescript
 const [processor] = new TaskSignalProvider().getInputProcessors()

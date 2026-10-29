@@ -652,20 +652,23 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         // The error in storage should be in the steps record
         const storedStepResult = workflowRun?.steps?.['failing-step'];
         expect(storedStepResult).toBeDefined();
-        expect(storedStepResult?.status).toBe('failed');
+        // A step that runs once (not inside foreach) stores a single result, not an array
+        expect(Array.isArray(storedStepResult)).toBe(false);
+        const singleStepResult = Array.isArray(storedStepResult) ? undefined : storedStepResult;
+        expect(singleStepResult?.status).toBe('failed');
 
         // Verify the stored error contains the serialized properties
-        const storedError = (storedStepResult as any)?.error;
+        const storedError = singleStepResult?.error;
         expect(storedError).toBeDefined();
 
         // The stored error should have message and custom properties
-        expect(storedError.message).toBe(errorMessage);
-        expect(storedError.name).toBe('Error');
-        expect(storedError.statusCode).toBe(500);
-        expect(storedError.errorCode).toBe('INTERNAL_ERROR');
+        expect(storedError?.message).toBe(errorMessage);
+        expect(storedError?.name).toBe('Error');
+        expect(storedError?.statusCode).toBe(500);
+        expect(storedError?.errorCode).toBe('INTERNAL_ERROR');
 
         // Stack should NOT be in the serialized output (per serializeStack: false)
-        expect(storedError.stack).toBeUndefined();
+        expect(storedError?.stack).toBeUndefined();
       },
     );
 

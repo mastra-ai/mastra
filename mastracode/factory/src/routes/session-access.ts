@@ -28,6 +28,14 @@ export function canViewSourceControlSession(
   return session.visibility !== 'private' || session.userId === viewer.userId;
 }
 
+/** A teammate steers a shared session; only its owner changes the model and thinking level its turns run on. */
+export function canSwitchSessionModel(
+  session: Pick<SourceControlSession, 'userId'>,
+  viewer: { userId: string },
+): boolean {
+  return session.userId === viewer.userId;
+}
+
 /** The controller reads the guard needs to find which resource a session runs on. */
 export interface SessionResourceLookup {
   getSession(sessionId: string): Promise<{ identity: { getResourceId(): string } } | undefined>;
@@ -42,16 +50,47 @@ const SET_RESOURCE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/resource\
 const OM_CONFIG_PATH = /^\/web\/config\/om(\/|$)/;
 const MEMORY_PATH = /^\/api\/memory(\/|$)/;
 const ACTIVE_RUNS_PATH = /\/agent-controller\/[^/]+\/active-runs\/?$/;
+const SWITCH_MODEL_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/model\/?$/;
+const SET_STATE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/state\/?$/;
 
-async function bodyField(c: Context, field: string): Promise<string | undefined> {
+/** A form field as the server adapter reads it: JSON when it parses, else the raw text. */
+function parseFormField(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+/** The body a handler can see: a multipart form parsed field by field as the server adapter does, else JSON. */
+async function requestBody(c: Context): Promise<unknown> {
   // Read a clone: the Mastra adapter clones `c.req.raw` again to parse params,
   // which throws once anything has consumed the original body.
-  const body = await c.req.raw
-    .clone()
-    .json()
-    .catch(() => undefined);
-  const value = (body as Record<string, unknown> | undefined)?.[field];
+  const request = c.req.raw.clone();
+  if (!c.req.header('content-type')?.includes('multipart/form-data')) return request.json().catch(() => undefined);
+  const form = await request.formData().catch(() => undefined);
+  if (!form) return undefined;
+  return Object.fromEntries(
+    [...form].map(([name, value]) => [name, typeof value === 'string' ? parseFormField(value) : value]),
+  );
+}
+
+async function bodyValue(c: Context, field: string): Promise<unknown> {
+  const body = await requestBody(c);
+  return (body as Record<string, unknown> | undefined)?.[field];
+}
+
+async function bodyField(c: Context, field: string): Promise<string | undefined> {
+  const value = await bodyValue(c, field);
   return typeof value === 'string' && value ? value : undefined;
+}
+
+async function switchesModel(c: Context): Promise<boolean> {
+  const { method, path } = c.req;
+  if (method === 'POST' && SWITCH_MODEL_PATH.test(path)) return true;
+  if (method !== 'PUT' || !SET_STATE_PATH.test(path)) return false;
+  const state = await bodyValue(c, 'state');
+  return typeof state === 'object' && state !== null && 'thinkingLevel' in state;
 }
 
 function decodeSegment(segment: string): string {
@@ -114,8 +153,9 @@ async function addressed(c: Context): Promise<{ sessionIds: string[]; resourceId
  * routes trust a client-supplied resourceId or threadId, so they are bound to
  * the authorized resource, or the caller's own user id when none is named. The
  * controller-wide active-runs list drops runs on unreachable resources.
- * Denials answer 404 so ids do not leak existence. With auth disabled there is
- * no tenant to protect and everything passes through.
+ * Denials answer 404 so ids do not leak existence. A teammate who can see a
+ * session but tries to change its model or thinking level gets 403. With auth
+ * disabled there is no tenant to protect and everything passes through.
  */
 export function createSessionAccessGuard({
   auth,
@@ -171,6 +211,14 @@ export function createSessionAccessGuard({
     }
     for (const resourceId of target.resourceIds) {
       if (!(await canReachResource(resourceId, viewer))) return c.json({ error: 'Session not found' }, 404);
+    }
+    if (await switchesModel(ctx)) {
+      for (const sessionId of target.sessionIds) {
+        const session = await sessions.getBySessionId(sessionId);
+        if (session && !canSwitchSessionModel(session, viewer)) {
+          return c.json({ error: 'Only the session’s owner can change its model' }, 403);
+        }
+      }
     }
 
     if (isMemory) {

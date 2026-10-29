@@ -112,7 +112,7 @@ await pubsub.close()
 
 ## Broker election
 
-The broker is the first process to link its socket into place at the shared path. It routes events between all connected clients, and other processes connect to it as clients. Each candidate binds a socket at a private name and hard-links it to the shared path. The link fails if a socket is already there, so a candidate never replaces a live broker by accident.
+The broker is the first process to link its socket into place at the shared path. It routes events between all connected clients, and other processes connect to it as clients. Each candidate binds a socket at a private name and hard-links it to the shared path. The link fails if a socket is already there, preventing a candidate from accidentally replacing a live broker.
 
 When the broker exits cleanly, it removes the shared path. Clients then reconnect, and the first to link its socket into place becomes the new broker. The remaining clients resubscribe to it.
 

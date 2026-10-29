@@ -5,7 +5,7 @@
  * This is the default filesystem for development and local agents.
  */
 
-import { constants as fsConstants, realpathSync } from 'node:fs';
+import { constants as fsConstants, lstatSync, readlinkSync, realpathSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
@@ -237,35 +237,58 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private _resolvePathForContainment(absolutePath: string): string | undefined {
-    let currentPath = absolutePath;
-
-    while (true) {
-      try {
-        const realPath = realpathSync(currentPath);
-        if (currentPath === absolutePath) {
-          return realPath;
-        }
-
-        const remainder = nodePath.relative(currentPath, absolutePath);
-        return nodePath.join(realPath, remainder);
-      } catch (error: unknown) {
-        if (!isEnoentError(error)) return undefined;
-      }
-
-      const parentPath = nodePath.dirname(currentPath);
-      if (parentPath === currentPath) {
-        return undefined;
-      }
-      currentPath = parentPath;
+    try {
+      return realpathSync.native(absolutePath);
+    } catch (error: unknown) {
+      if (!isEnoentError(error)) throw error;
     }
+
+    // Missing targets need component-wise resolution: normalizing a symlink's
+    // target before following its links would give `..` the wrong parent.
+    let currentPath = nodePath.parse(absolutePath).root;
+    const pending = absolutePath.slice(currentPath.length).split(nodePath.sep);
+    let symlinkDepth = 0;
+    let currentIsDirectory: boolean | undefined = true;
+
+    while (pending.length > 0) {
+      const component = pending.shift();
+      if (!component) continue;
+      if (currentIsDirectory === false) {
+        // Preserve the native ENOTDIR error, including for `file/..`.
+        realpathSync.native(`${currentPath}${nodePath.sep}${component}`);
+      }
+      if (component === '.') continue;
+      if (component === '..') {
+        currentPath = nodePath.dirname(currentPath);
+        currentIsDirectory = undefined;
+        continue;
+      }
+
+      const candidate = nodePath.join(currentPath, component);
+      try {
+        const stat = lstatSync(candidate);
+        if (stat.isSymbolicLink()) {
+          if (++symlinkDepth > 40) return undefined;
+          const target = readlinkSync(candidate);
+          const root = nodePath.parse(target).root;
+          if (root) currentPath = root;
+          pending.unshift(...target.slice(root.length).split(nodePath.sep));
+          currentIsDirectory = undefined;
+          continue;
+        }
+        currentIsDirectory = stat.isDirectory();
+      } catch (error: unknown) {
+        if (!isEnoentError(error)) throw error;
+        currentIsDirectory = undefined;
+      }
+      currentPath = candidate;
+    }
+
+    return currentPath;
   }
 
   private _isWithinAnyRoot(absolutePath: string): boolean {
     const roots = [this._basePath, ...this._allowedPaths];
-    if (roots.some(root => this._isWithinRoot(absolutePath, root))) {
-      return true;
-    }
-
     const resolvedPath = this._resolvePathForContainment(absolutePath);
     if (!resolvedPath) {
       return false;
@@ -354,43 +377,11 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   /**
-   * Verify that the resolved path doesn't escape basePath via symlinks.
-   * Uses realpath to resolve symlinks and check the actual target.
+   * Check canonical roots even when the target does not exist yet: the nearest
+   * existing ancestor may be a symlink outside the workspace.
    */
   private async assertPathContained(absolutePath: string): Promise<void> {
-    if (!this._contained) return;
-
-    if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
-      return;
-    }
-
-    // Resolve symlinks for the target path. If it doesn't exist,
-    // there are no symlinks to escape through — nothing to check.
-    let targetReal: string;
-    try {
-      targetReal = await fs.realpath(absolutePath);
-    } catch (error: unknown) {
-      if (isEnoentError(error)) return; // path doesn't exist yet — safe
-      throw error;
-    }
-
-    // Resolve real paths for roots, skipping any that don't exist
-    const roots = [this._basePath, ...this._allowedPaths];
-    const rootReals: string[] = [];
-    for (const root of roots) {
-      try {
-        rootReals.push(await fs.realpath(root));
-      } catch (error: unknown) {
-        if (isEnoentError(error)) continue;
-        throw error;
-      }
-    }
-
-    const isWithinRoot = rootReals.some(
-      rootReal => targetReal === rootReal || targetReal.startsWith(rootReal + nodePath.sep),
-    );
-
-    if (!isWithinRoot) {
+    if (this._contained && !this._isWithinAnyRoot(absolutePath)) {
       throw new PermissionError(absolutePath, 'access');
     }
   }

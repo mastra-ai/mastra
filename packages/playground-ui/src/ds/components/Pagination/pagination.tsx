@@ -125,7 +125,7 @@ export function PaginationLink({ isActive, disabled, render, className, onClick,
 
 export type PaginationPreviousProps = PaginationLinkProps & { text?: string };
 
-export function PaginationPrevious({ text = 'Previous', ...props }: PaginationPreviousProps) {
+export function PaginationPrevious({ text = 'Prev', ...props }: PaginationPreviousProps) {
   return (
     <PaginationLink {...props}>
       <Icon size="sm" aria-hidden>

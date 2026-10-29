@@ -53,7 +53,7 @@ export const AuthHeadersForm = () => {
 
         <Button type="submit" className="ml-auto">
           <SaveIcon />
-          Save Headers
+          Save headers
         </Button>
       </Form>
     </TooltipProvider>

@@ -65,7 +65,7 @@ export function PropertyFilterCreator({
   fields,
   tokens,
   onTokensChange,
-  label = 'Add Filter',
+  label = 'Add filter',
   disabled,
   size,
   onStartTextFilter,

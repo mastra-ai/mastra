@@ -4,7 +4,13 @@ import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import type { OutputProcessor } from '../../../../processors/index';
 import { createTool } from '../../../../tools/tool';
-import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  runLoopScenario,
+  useLoopScenarioAimock,
+  anyToolResult,
+} from '../aimock-scenario';
 
 /**
  * Story: a guard rejects the model's reply in processOutputStep, either without retry or after
@@ -112,10 +118,10 @@ describeForAllEngines('A rejected processOutputStep reply is dropped and not sav
       onFinish,
       fixtures: llm => {
         llm.on(
-          { endpoint: 'chat', hasToolResult: false },
+          { endpoint: 'chat', predicate: req => !anyToolResult(req) },
           { content: accepted, toolCalls: [{ name: 'lookup', arguments: '{"q":"x"}' }] },
         );
-        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: REJECTED });
+        llm.on({ endpoint: 'chat', predicate: anyToolResult }, { content: REJECTED });
       },
     });
 
@@ -185,8 +191,11 @@ describe('A rejected processOutputStep reply is dropped through generate() (#260
 
   it('generate(): keeps an accepted tool step when a later text step is rejected after retries', async () => {
     const llm = getMock();
-    llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [{ name: 'lookup', arguments: '{"q":"x"}' }] });
-    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: REJECTED });
+    llm.on(
+      { endpoint: 'chat', predicate: req => !anyToolResult(req) },
+      { toolCalls: [{ name: 'lookup', arguments: '{"q":"x"}' }] },
+    );
+    llm.on({ endpoint: 'chat', predicate: anyToolResult }, { content: REJECTED });
     const memory = await newMemory();
     const { agent } = await createSharedAgent(llm, { memory, tools: { lookup } });
 

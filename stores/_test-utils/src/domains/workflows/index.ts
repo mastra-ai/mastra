@@ -1,6 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { MastraStorage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleSuspendedSnapshotWithThread, createSampleWorkflowSnapshot } from './data';
 
@@ -538,6 +538,72 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       });
 
       expect(result).toBeNull();
+    });
+
+    it('should load only the run status', async () => {
+      const workflowName = 'test-workflow';
+      const { snapshot, runId } = createSampleWorkflowSnapshot('canceled');
+
+      await workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+      await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe('canceled');
+      await expect(
+        workflowsStorage.loadWorkflowRunStatus({ workflowName, runId: `run-${randomUUID()}` }),
+      ).resolves.toBeNull();
+    });
+
+    it('should write every concurrent first guarded write of a run', async () => {
+      if (!workflowsStorage.supportsGuardedSnapshotWrites()) return;
+      const workflowName = 'test-workflow';
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
+
+      const results = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          workflowsStorage.persistWorkflowSnapshot({
+            workflowName,
+            runId,
+            snapshot,
+            expectedStatus: ['running', 'success'],
+          }),
+        ),
+      );
+
+      expect(results).toEqual([true, true, true]);
+      await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe('running');
+    });
+
+    it('should guard snapshot writes on the stored status', async () => {
+      if (!workflowsStorage.supportsGuardedSnapshotWrites()) return;
+      const workflowName = 'test-workflow';
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
+      const canceled = { ...snapshot, status: 'canceled' as const };
+      const succeeded = { ...snapshot, status: 'success' as const };
+
+      // A missing row is always written.
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot, expectedStatus: ['running'] }),
+      ).resolves.toBe(true);
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: canceled,
+          expectedStatus: 'running',
+        }),
+      ).resolves.toBe(true);
+
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: succeeded,
+          expectedStatus: ['running', 'success'],
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot: succeeded, expectedStatus: [] }),
+      ).resolves.toBe(false);
+      await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe('canceled');
     });
 
     it('should update existing workflow snapshot', async () => {

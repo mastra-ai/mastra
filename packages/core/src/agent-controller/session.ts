@@ -4362,8 +4362,9 @@ export class Session<TState = unknown> {
   /** Await terminal hooks, then emit the terminal event to subscribers. */
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
+    { abortReason }: { abortReason?: string } = {},
   ): Promise<void> {
-    const event = { type: 'agent_end', reason } as const;
+    const event = { type: 'agent_end', reason, ...(abortReason ? { abortReason } : {}) } as const;
     const runId = this.run.getRunId();
     for (const listener of this.#beforeAgentEndListeners) {
       try {
@@ -5287,14 +5288,7 @@ export class Session<TState = unknown> {
           action: settled.action,
         };
       }
-      try {
-        await Promise.race([
-          result.accepted.then(() => undefined),
-          new Promise<void>(resolve => setTimeout(resolve, 0)),
-        ]);
-      } catch (error) {
-        throw error;
-      }
+      await Promise.race([result.accepted.then(() => undefined), new Promise<void>(resolve => setTimeout(resolve, 0))]);
       void result.accepted.catch(() => {});
       if (ifIdle?.behavior === 'persist') {
         await result.persisted;

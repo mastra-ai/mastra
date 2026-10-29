@@ -1782,6 +1782,7 @@ export class SessionRunEngine {
     resourceId,
     threadId,
     terminalError,
+    abortReason,
   }: {
     suspended?: boolean;
     error?: boolean;
@@ -1789,6 +1790,7 @@ export class SessionRunEngine {
     resourceId?: string;
     threadId?: string;
     terminalError?: string;
+    abortReason?: string;
   }): Promise<void> {
     const reason = error
       ? 'error'
@@ -1818,7 +1820,7 @@ export class SessionRunEngine {
     } else if (reason === 'error' && terminalError) {
       this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: terminalError });
     }
-    await this.#session.finishAgentRun(reason);
+    await this.#session.finishAgentRun(reason, reason === 'aborted' ? { abortReason } : undefined);
     this.#session.run.reset();
   }
 
@@ -1954,6 +1956,7 @@ export class SessionRunEngine {
               resourceId: currentRun.resourceId,
               threadId: currentRun.threadId,
               terminalError,
+              abortReason: aborted ? getString(getRecord(chunk.payload)?.reason) : undefined,
             });
             currentRun = undefined;
             if (aborted) {

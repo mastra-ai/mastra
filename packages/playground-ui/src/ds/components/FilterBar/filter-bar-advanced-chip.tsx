@@ -1,5 +1,5 @@
 import { BracesIcon, XIcon } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { chipClass, editableSegmentClass } from './filter-bar-chip';
 import { FILTER_BAR_SCOPE_ATTR, useFilterBarContext } from './filter-bar-context';
@@ -23,6 +23,7 @@ export type FilterBarAdvancedChipProps = {
  */
 export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChipProps) {
   const ctx = useFilterBarContext();
+  const [initial] = useState(() => !ctx.mounted);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const leaving = ctx.leaving.has(group.id);
@@ -57,7 +58,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
       case 'Backspace':
         event.preventDefault();
         remove();
-        return;
+        break;
       default:
     }
   };
@@ -75,6 +76,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         aria-label={`Advanced filter, ${count} ${count === 1 ? 'condition' : 'conditions'}`}
         aria-hidden={leaving || undefined}
         data-slot="filter-bar-advanced"
+        data-initial={initial || undefined}
         data-leaving={leaving || undefined}
         className={cn('filter-bar-advanced', chipClass, leaving && 'pointer-events-none', className)}
         onKeyDown={handleKeyDown}

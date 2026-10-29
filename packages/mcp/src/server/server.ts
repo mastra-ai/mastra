@@ -113,6 +113,16 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    * @experimental SEP-3415 is a draft; this API may change.
    */
   eventsOptions?: MCPServerEventsOptions;
+  /**
+   * How requests from 2025-era clients (those that open with `initialize`) are served
+   * over HTTP.
+   *
+   * - `'reject'` (default): they get the unsupported-protocol-version error.
+   * - `'stateless'`: each one is answered by a fresh server instance without a session.
+   *   `GET` and `DELETE` session operations get `405`. Features that need 2026-07-28
+   *   (suspend/resume, `subscriptions/listen`, events) are not available to these clients.
+   */
+  legacy?: 'reject' | 'stateless';
 }
 
 export interface MCPServerHTTPOptions {
@@ -204,6 +214,7 @@ export class MCPServer extends MCPServerBase {
   private readonly eventsOptions: MCPServerEventsOptions;
   private eventsInspector: MCPServerEventsInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
+  private readonly legacy: 'reject' | 'stateless';
 
   private httpHandler?: McpHttpHandler;
   private nodeHandler?: NodeMcpRequestHandler;
@@ -221,6 +232,7 @@ export class MCPServer extends MCPServerBase {
     this.loadAppResources(config.appResources);
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
+    this.legacy = config.legacy ?? 'reject';
     const webhook = this.eventsOptions.webhook;
     this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
     if (webhook && this.eventRegistry.size > 0) {
@@ -869,7 +881,11 @@ export class MCPServer extends MCPServerBase {
             resumeSchema: execution.resumeSchema,
           });
         }
-        const result = this.toCallToolResult(name, tool, execution.output);
+        // 2025-era clients need non-object structured results wrapped as `{ result }`; the codec decides per era.
+        const result = server.projectCallToolResult(
+          this.toCallToolResult(name, tool, execution.output),
+          this.toolInfo(name, tool).outputSchema,
+        );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
         return result;
       } catch (error) {
@@ -951,19 +967,23 @@ export class MCPServer extends MCPServerBase {
     // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
     const resourceUri = uiResourceUri(tool.mcp?._meta);
     const meta = resourceUri ? { _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri } } : {};
+    // `JSON.stringify` yields `undefined` for a void return (and for functions or symbols). That has
+    // no text form, so the call succeeded with no content rather than with a text block missing `text`.
     if (!tool.outputSchema) {
-      return {
-        isError: false,
-        content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
-        ...meta,
-      };
+      const text = typeof value === 'string' ? value : JSON.stringify(value);
+      return { isError: false, content: text === undefined ? [] : [{ type: 'text', text }], ...meta };
     }
-    // Tools with an output schema already validated `value` against it.
-    const structuredContent = value as Record<string, unknown>;
+    // Tools with an output schema already validated `value` against it; an optional schema can let `undefined` through.
+    // A success result must then carry `structuredContent`, so report the missing output in-band instead.
+    const text = JSON.stringify(value);
+    if (text === undefined) {
+      this.logger.warn(`Tool '${name}' declares an outputSchema but returned no structured output.`);
+      return { ...errorResult(`Tool '${name}' declares an outputSchema but returned no output.`), ...meta };
+    }
     return {
       isError: false,
-      structuredContent,
-      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      structuredContent: value as Record<string, unknown>,
+      content: [{ type: 'text', text }],
       ...meta,
     };
   }
@@ -1192,7 +1212,7 @@ export class MCPServer extends MCPServerBase {
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
       this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
-        legacy: 'reject',
+        legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
       this.nodeHandler = toNodeHandler(this.httpHandler, {
@@ -1219,7 +1239,8 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Handles one Streamable HTTP request at `httpPath`. Every request is
-   * self-contained; requests without a 2026-07-28 envelope are rejected.
+   * self-contained; requests without a 2026-07-28 envelope are rejected unless
+   * `legacy: 'stateless'` is configured.
    */
   async startHTTP({ url, httpPath, req, res, options }: MCPServerHTTPOptions): Promise<void> {
     if (url.pathname !== httpPath) {

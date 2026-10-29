@@ -341,8 +341,8 @@ test.describe('CMS create agent page', () => {
       // Navigate to tools page via sidebar
       await clickSidebarLink(page, 'Tools');
 
-      // Click "Add Tools" to open popover and select weatherInfo
-      await page.getByRole('button', { name: 'Add Tools' }).click({ timeout: 10000 });
+      // Click "Add tools" to open popover and select weatherInfo
+      await page.getByRole('button', { name: 'Add tools' }).click({ timeout: 10000 });
       await page.getByText('weatherInfo').click();
 
       // Verify it appears in the selected list
@@ -374,8 +374,8 @@ test.describe('CMS create agent page', () => {
       // Navigate to tools page via sidebar
       await clickSidebarLink(page, 'Tools');
 
-      // Click "Add MCP Client" button
-      await page.getByRole('button', { name: 'Add MCP Client' }).first().click();
+      // Click "Add MCP client" button
+      await page.getByRole('button', { name: 'Add MCP client' }).first().click();
 
       // Wait for the side dialog to open
       await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
@@ -552,8 +552,8 @@ test.describe('CMS create agent page', () => {
       // Navigate to memory page via sidebar
       await clickSidebarLink(page, 'Memory');
 
-      // Memory is disabled by default — click "Enable Memory" button (not a switch)
-      await page.getByRole('button', { name: 'Enable Memory' }).click();
+      // Memory is disabled by default — click "Enable memory" button (not a switch)
+      await page.getByRole('button', { name: 'Enable memory' }).click();
 
       // Wait for memory fields to appear
       await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
@@ -584,8 +584,8 @@ test.describe('CMS create agent page', () => {
       // Navigate to memory page via sidebar
       await clickSidebarLink(page, 'Memory');
 
-      // Memory is disabled by default — click "Enable Memory" button (not a switch)
-      await page.getByRole('button', { name: 'Enable Memory' }).click();
+      // Memory is disabled by default — click "Enable memory" button (not a switch)
+      await page.getByRole('button', { name: 'Enable memory' }).click();
       await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
       // The switches after memory enabled are: main=0, OM=1, LastMessages=2, SemanticRecall=3, ReadOnly=4
@@ -614,8 +614,8 @@ test.describe('CMS create agent page', () => {
       // Navigate to memory page via sidebar
       await clickSidebarLink(page, 'Memory');
 
-      // Memory is disabled by default — click "Enable Memory" button (not a switch)
-      await page.getByRole('button', { name: 'Enable Memory' }).click();
+      // Memory is disabled by default — click "Enable memory" button (not a switch)
+      await page.getByRole('button', { name: 'Enable memory' }).click();
       await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
       // Enable Observational Memory (2nd switch: main=0, OM=1, LastMessages=2, SemanticRecall=3, ReadOnly=4)
@@ -727,7 +727,7 @@ test.describe('CMS create agent page', () => {
 
       // === Tools ===
       await clickSidebarLink(page, 'Tools');
-      await page.getByRole('button', { name: 'Add Tools' }).click({ timeout: 10000 });
+      await page.getByRole('button', { name: 'Add tools' }).click({ timeout: 10000 });
       const firstToolOption = page.locator('[data-slot="popover-content"] button').first();
       await firstToolOption.waitFor({ state: 'visible', timeout: 5000 });
       await firstToolOption.click();
@@ -743,8 +743,8 @@ test.describe('CMS create agent page', () => {
 
       // === Memory ===
       await clickSidebarLink(page, 'Memory');
-      // Memory is disabled by default — click "Enable Memory" button (not a switch)
-      await page.getByRole('button', { name: 'Enable Memory' }).click();
+      // Memory is disabled by default — click "Enable memory" button (not a switch)
+      await page.getByRole('button', { name: 'Enable memory' }).click();
       await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
       const lastMsgInput = page.locator('#memory-last-messages');
       await lastMsgInput.fill('25');

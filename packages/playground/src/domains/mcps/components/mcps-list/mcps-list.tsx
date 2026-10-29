@@ -89,12 +89,12 @@ export function McpServersList({ mcpServers, isLoading, search = '', sort, onSor
           <DataList.TopCell>Name</DataList.TopCell>
         )}
         <DataList.TopCell>URL</DataList.TopCell>
-        <DataList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
+        <DataList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent tools" className="text-center" />
         <DataList.TopCellSmart long="Tools" short={<ToolsIcon />} tooltip="Tools" className="text-center" />
         <DataList.TopCellSmart
           long="Workflows"
           short={<WorkflowIcon />}
-          tooltip="Workflow Tools"
+          tooltip="Workflow tools"
           className="text-center"
         />
       </DataList.Top>

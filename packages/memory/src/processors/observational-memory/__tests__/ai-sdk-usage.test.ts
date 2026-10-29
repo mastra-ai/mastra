@@ -464,7 +464,8 @@ describe('AI SDK: buffer in one turn, activate + generateText in next', () => {
   });
 
   it('observes a later revision of a message saved under an id that was activated', async () => {
-    const messages = createMessagesExceedingThreshold(5, threadId);
+    // Six messages, so the last one is the activated assistant message revised below.
+    const messages = createMessagesExceedingThreshold(6, threadId);
     await storage.saveMessages({ messages });
     expect((await om.buffer({ threadId })).buffered).toBe(true);
     expect((await om.activate({ threadId })).activated).toBe(true);

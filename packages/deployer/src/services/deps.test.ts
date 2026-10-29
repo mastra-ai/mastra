@@ -610,6 +610,52 @@ describe('DepsService lockfile installation', () => {
     expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('bun install');
   });
 
+  it('drops workspace links for packed workspace tarballs from a copied pnpm lockfile', async () => {
+    // The app is the workspace root, so the lockfile's root importer is the app and links its
+    // workspace dependency. pnpm keeps a `link:` version even when an override points elsewhere.
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pnpm-root-app-'));
+    tempDirs.push(root);
+    const outputDir = join(root, '.mastra', 'output');
+    await mkdir(outputDir, { recursive: true });
+    const sourceLock = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      '@inner/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      zod:
+        specifier: ^4.0.0
+        version: 4.1.0
+
+  packages/shared:
+    devDependencies:
+      '@inner/shared':
+        specifier: workspace:*
+        version: link:.
+
+packages:
+
+  zod@4.1.0:
+    resolution: {integrity: sha512-abc}
+`;
+    await writeFile(join(root, 'pnpm-lock.yaml'), sourceLock);
+    await writeFile(join(outputDir, 'package.json'), '{"dependencies":{}}');
+
+    await new DepsService(root).install({
+      dir: outputDir,
+      pnpmOverrides: { '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz' },
+    });
+
+    const outputLock = parse(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8'));
+    expect(outputLock.importers['.'].dependencies).toEqual({ zod: { specifier: '^4.0.0', version: '4.1.0' } });
+    expect(outputLock.importers['packages/shared'].devDependencies).toEqual({});
+    expect(outputLock.packages).toEqual({ 'zod@4.1.0': { resolution: { integrity: 'sha512-abc' } } });
+    expect(await readFile(join(root, 'pnpm-lock.yaml'), 'utf-8')).toBe(sourceLock);
+  });
+
   it('updates Yarn Classic lockfiles while installing without a Berry-only flag', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mastra-deps-yarn-classic-'));
     tempDirs.push(root);

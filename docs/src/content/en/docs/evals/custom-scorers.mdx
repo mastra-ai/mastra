@@ -78,7 +78,7 @@ const quoteSourcesScorer = createScorer({
   id: 'quote-sources',
   description: 'Check if the response includes sources',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: 'You are a strict evaluator.',
   },
 })
@@ -355,7 +355,7 @@ export const refundJudge = createScorer({
   description: 'Judges how well refund requests were handled',
   type: 'agent',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: 'You are a strict QA reviewer for customer-support refund handling.',
   },
 })
@@ -445,7 +445,7 @@ export const glutenCheckerScorer = createScorer({
   id: 'gluten-checker',
   description: 'Check if the output contains any gluten',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -480,7 +480,7 @@ Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript oxfmt:false
 judge: {
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```

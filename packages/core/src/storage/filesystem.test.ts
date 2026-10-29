@@ -570,6 +570,30 @@ describe('FilesystemStore', () => {
       expect(agentRaw).not.toHaveProperty('model');
     });
 
+    it('writes file-based agent overrides to per-agent files without code-owned fields', async () => {
+      store.__registerMastra({
+        getAgentById: (id: string) =>
+          id === 'fsAgent' ? { source: 'fs', __getEditorConfig: () => ({ tools: { description: true } }) } : undefined,
+      });
+      const agents = await store.getStore('agents');
+      await agents!.create({
+        agent: {
+          id: 'fsAgent',
+          name: 'FS Agent',
+          instructions: 'The agent folder owns these instructions.',
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: { getWeather: { description: 'Fetch weather' } },
+        },
+      });
+
+      const v1 = await agents!.getLatestVersion('fsAgent');
+      await agents!.update({ id: 'fsAgent', activeVersionId: v1!.id, status: 'published' });
+
+      expect(existsSync(join(dir, 'agents.json'))).toBe(false);
+      const agentRaw = JSON.parse(readFileSync(join(dir, 'agents', 'fsAgent.json'), 'utf-8'));
+      expect(agentRaw).toEqual({ tools: { getWeather: { description: 'Fetch weather' } } });
+    });
+
     it('hydrates code-mode agent overrides from per-agent files', async () => {
       store.__registerMastra({
         getAgentById: (id: string) =>

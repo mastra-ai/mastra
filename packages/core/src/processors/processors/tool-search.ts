@@ -4,7 +4,7 @@ import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
-import { BM25Index } from '../../workspace/search/bm25';
+import { BM25Index, tokenize } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
 import type { LoadedToolStore, LoadedToolStoreContext } from './tool-search-stores';
@@ -520,37 +520,46 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   ): Promise<SearchResult[]> {
     if (catalog.index.size === 0) return [];
 
-    // Get BM25 results (request more than topK to allow for re-ranking after boosting).
-    // When filtering is enabled, inspect every BM25 match so denied high-ranking tools
-    // do not prevent lower-ranking allowed tools from filling the result set.
-    const searchLimit = this.filter ? catalog.index.size : this.searchConfig.topK * 2;
-    const bm25Results = catalog.index.search(query, searchLimit, 0);
-
-    if (bm25Results.length === 0) return [];
-
-    // Apply name-match boosting on top of BM25 scores
-    const queryTokens = query
-      .toLowerCase()
-      .split(/[\s\-_.,;:!?()[\]{}'"]+/)
-      .filter(t => t.length > 1);
-
-    const boostedResults = bm25Results.map(result => {
-      let score = result.score;
-      const nameLower = result.id.toLowerCase();
-
-      for (const term of queryTokens) {
-        if (nameLower === term) {
-          score += 5;
-        } else if (nameLower.includes(term)) {
-          score += 2;
-        }
+    // Deduplicate only this search query; document term frequency and generic
+    // workspace BM25 query-frequency semantics remain unchanged.
+    const queryTokens = [...new Set(tokenize(query, TOOL_SEARCH_TOKENIZE_OPTIONS))];
+    const queryLower = query.toLowerCase();
+    const exactNames = new Set<string>();
+    for (const name of catalog.descriptions.keys()) {
+      const nameLower = name.toLowerCase();
+      if (!queryLower.includes(nameLower)) continue;
+      const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Hyphens and underscores belong to IDs: do not match a suffix or prefix
+      // of another identifier. Punctuation around a complete ID is allowed.
+      if (new RegExp(`(?:^|[^\\p{L}\\p{N}_-])${escapedName}(?=$|[^\\p{L}\\p{N}_-])`, 'u').test(queryLower)) {
+        exactNames.add(name);
       }
+    }
 
-      return { id: result.id, score };
+    // Retrieve all matches for exact names and filters so named tools retain their
+    // BM25 score and denied tools cannot crowd out allowed ones. Bound ordinary searches.
+    const searchLimit = this.filter || exactNames.size > 0 ? catalog.index.size : this.searchConfig.topK * 2;
+    const candidates = new Map(
+      catalog.index.search(queryTokens.join(' '), searchLimit, 0).map(result => [result.id, result.score]),
+    );
+    // A complete ID may have no indexed tokens (for example, a one-letter ID).
+    for (const name of exactNames) {
+      if (!candidates.has(name)) candidates.set(name, 0);
+    }
+
+    const boostedResults = [...candidates].map(([id, bm25Score]) => {
+      let score = bm25Score + (exactNames.has(id) ? 5 : 0);
+      const nameLower = id.toLowerCase();
+      for (const term of queryTokens) {
+        if (nameLower !== term && nameLower.includes(term)) score += 2;
+      }
+      return { id, score };
     });
 
     const filteredResults: typeof boostedResults = [];
-    for (const result of boostedResults.sort((a, b) => b.score - a.score)) {
+    for (const result of boostedResults.sort(
+      (a, b) => Number(exactNames.has(b.id)) - Number(exactNames.has(a.id)) || b.score - a.score,
+    )) {
       if (result.score <= this.searchConfig.minScore) continue;
 
       const tool = this.findToolById(catalog, result.id);
