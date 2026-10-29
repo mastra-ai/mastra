@@ -1,10 +1,9 @@
-import type { DashboardWidget } from '@mastra/client-js';
+import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import { OpenErrorsInLogsButton, OpenInTracesButton } from '../../metrics/components/card-action-buttons';
 import type { Views } from '../hooks/use-widget-views';
 import { viewDrilldown, targetScope } from '../lib/definition';
 import type { OnDashboardDrilldown } from '../lib/definition';
 import { tabValue } from '../lib/tabs';
-import type { ResolvedView } from '../widget-kind';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 
 /** The tab list for a widget's toolbar; nothing for a single view. */
@@ -31,13 +30,13 @@ export function ViewTabs<Options>({
 }
 
 /** The view's action button: open in Traces, or errors in Logs. */
-export function DrilldownAction<Options>({
+export function DrilldownAction({
   widget,
   view,
   onDrilldown,
 }: {
   widget: DashboardWidget;
-  view: ResolvedView<Options>;
+  view: DashboardWidgetView;
   onDrilldown: OnDashboardDrilldown | undefined;
 }) {
   const { action } = viewDrilldown(widget, view);

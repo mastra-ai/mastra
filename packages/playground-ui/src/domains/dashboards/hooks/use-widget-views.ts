@@ -1,4 +1,4 @@
-import type { DashboardWidget } from '@mastra/client-js';
+import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import { useState } from 'react';
 import type { DrilldownScope } from '../../metrics/drilldown';
 import { viewDrilldown, targetScope } from '../lib/definition';
@@ -16,9 +16,9 @@ export function useViewTabs<Options>(views: Views<Options>, defaultIndex = 0) {
 }
 
 /** What clicking a bucket or row opens, with what was clicked; `undefined` when the view has no click target. */
-export function useDrilldown<Options>(
+export function useDrilldown(
   widget: DashboardWidget,
-  view: ResolvedView<Options>,
+  view: DashboardWidgetView,
   onDrilldown: OnDashboardDrilldown | undefined,
 ) {
   const { click } = viewDrilldown(widget, view);
@@ -27,8 +27,8 @@ export function useDrilldown<Options>(
 }
 
 /** Whether the view has an action button to show (`DrilldownAction`). */
-export const hasDrilldownAction = <Options>(
+export const hasDrilldownAction = (
   widget: DashboardWidget,
-  view: ResolvedView<Options>,
+  view: DashboardWidgetView,
   onDrilldown: OnDashboardDrilldown | undefined,
 ) => onDrilldown !== undefined && viewDrilldown(widget, view).action !== undefined;
