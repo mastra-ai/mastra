@@ -406,8 +406,15 @@ export interface KnowledgePageStore {
   materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult>;
   /** Scope pages by address, unfiltered (names and descriptions are not secret to the host). */
   getScopesByAddress(addresses: string[]): Promise<KnowledgePage[]>;
-  /** Scope pages directly under a page, unfiltered; core decides which to list and which as restricted. */
-  listChildScopes(input: { parentId: string }): Promise<KnowledgePage[]>;
+  /**
+   * Scope pages directly under a page (`parentId: null` lists root scopes), unfiltered, by position
+   * then id; core decides which to list and which as restricted.
+   */
+  listChildScopes(input: {
+    parentId: string | null;
+    cursor?: string;
+    limit?: number;
+  }): Promise<KnowledgePageListOutput>;
 
   // Pages
   getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null>;
@@ -490,6 +497,13 @@ export interface KnowledgePageStore {
   addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin>;
   /** Removes audience entries; the pin is deleted when none remain. Returns null when no pin is left. */
   removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null>;
-  /** Pins whose audience intersects `audience` and whose page is readable and live, newest first. */
-  listPins(input: { audience: string[]; read: KnowledgeReadScope }): Promise<KnowledgePin[]>;
+  /**
+   * Pins on readable live pages, newest first: those whose audience intersects `audience`, or every
+   * pin for `'all'` (host surfaces). `pageIds` narrows to those pages.
+   */
+  listPins(input: {
+    audience: string[] | 'all';
+    read: KnowledgeReadScope;
+    pageIds?: string[];
+  }): Promise<KnowledgePin[]>;
 }
