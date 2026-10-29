@@ -147,10 +147,12 @@ export async function waitForTask(
         }
       }
 
-      if (now() > ttlEndOf(task)) {
+      // The last poll lands on the TTL deadline, so a result that arrives right at it still counts.
+      const ttlLeft = ttlEndOf(task) - now();
+      if (ttlLeft <= 0) {
         throw new TaskWaitError('expired', `MCP task ${task.taskId} outlived its ${task.ttlMs}ms TTL`, task);
       }
-      let interval = pollIntervalOf(task);
+      let interval = Math.min(pollIntervalOf(task), ttlLeft);
       if (deadline !== undefined) {
         const remaining = deadline - now();
         if (remaining <= 0) {
