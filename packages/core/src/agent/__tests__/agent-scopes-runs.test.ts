@@ -161,17 +161,44 @@ describe('agent scopes on runs', () => {
     expect(requestContext.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme', 'resource:u1', 'thread:t1']);
   });
 
-  it('unions the Agent resolver, defaultOptions and per-call scopes', async () => {
+  it('adds a static scopes list to defaultOptions and per-call scopes', async () => {
+    const { agent, memory, seen } = setup({ scopes: ['org:acme'], defaultOptions: { scopes: ['team:core'] } });
+    await agent.generate('hello', { scopes: ['resource:u1', 'thread:t1', 'project:p1'] });
+
+    expect(seen).toEqual([['project:p1', 'team:core', 'org:acme']]);
+    expect((await threadMessages(memory, 't1', 'u1')).messages.length).toBeGreaterThan(0);
+  });
+
+  it('a scopes function receives the incoming scopes and its result replaces them', async () => {
+    const received: unknown[] = [];
     const { agent, memory, seen } = setup({
-      scopes: ({ requestContext }: { requestContext: RequestContext }) => [`org:${requestContext.get('tenant')}`],
+      scopes: ({ scopes, requestContext }: { scopes: unknown[]; requestContext: RequestContext }) => {
+        received.push(scopes);
+        return [...scopes.filter(scope => typeof scope === 'string'), `org:${requestContext.get('tenant')}`];
+      },
       defaultOptions: { scopes: ['team:core'] },
     });
     const requestContext = new RequestContext([['tenant', 'acme']]);
-    await agent.generate('hello', { requestContext, scopes: ['resource:u1', 'thread:t1'] });
+    await agent.generate('hello', { requestContext, scopes: ['resource:u1', 'thread:t1', 'project:p1'] });
 
-    expect(seen).toEqual([['org:acme', 'team:core']]);
+    expect(received).toEqual([
+      ['resource:u1', 'thread:t1', { scope: 'project:p1', access: 'read' }, { scope: 'team:core', access: 'read' }],
+    ]);
+    // project:p1 and team:core were dropped by the function; org:acme was added.
+    expect(seen).toEqual([['org:acme']]);
     expect((await threadMessages(memory, 't1', 'u1')).messages.length).toBeGreaterThan(0);
-    await expect(agent.getScopes({ requestContext })).resolves.toEqual(['org:acme']);
+    await expect(agent.getScopes({ requestContext, scopes: ['resource:u1'] })).resolves.toEqual([
+      'resource:u1',
+      'org:acme',
+    ]);
+  });
+
+  it('refuses a run whose scopes function drops the resource: or thread: scope it was given', async () => {
+    const { agent } = setup({ scopes: () => ['org:acme'] });
+    await expect(conflictOf(agent.generate('x', { scopes: ['resource:u1', 'thread:t1'] }))).resolves.toEqual({
+      id: 'AGENT_SCOPES_INVALID',
+      status: 400,
+    });
   });
 
   it('resolves resource and thread independently', async () => {

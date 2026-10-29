@@ -11,7 +11,7 @@ import type { AgentScopeEntry } from '../../agent/scopes';
  * - A `buildResult` callback to construct the caller-specific return value
  * - Optional `postPipeInner` hooks for durable-specific cleanup/abort tracking
  */
-import { resolveAgentScopes } from '../../agent/scopes';
+import { incomingAgentScopes, resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { MastraMemory } from '../../memory/memory';
 import {
@@ -65,7 +65,7 @@ export interface ResolvedScope {
 export async function resolveScope(
   agent: {
     getMemory: (opts?: any) => Promise<MastraMemory | undefined>;
-    getScopes?: (opts?: any) => Promise<AgentScopeEntry[] | undefined>;
+    getScopes?: (opts?: any) => Promise<AgentScopeEntry[]>;
   },
   mergedOptions: Record<string, any>,
 ): Promise<ResolvedScope | null> {
@@ -74,8 +74,9 @@ export async function resolveScope(
   if (!memory) return null;
 
   // With agent scopes, the run's thread/resource come from the same resolver stream() uses.
-  const agentScopes = (await agent.getScopes?.({ requestContext })) ?? [];
-  const callScopes = mergedOptions?.scopes as string[] | undefined;
+  const callScopes = mergedOptions?.scopes as AgentScopeEntry[] | undefined;
+  const incoming = incomingAgentScopes({ requestContext, callScopes });
+  const agentScopes = agent.getScopes ? await agent.getScopes({ requestContext, scopes: incoming }) : incoming;
   if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
     const { threadId, resourceId } = resolveAgentScopes({
       requestContext,

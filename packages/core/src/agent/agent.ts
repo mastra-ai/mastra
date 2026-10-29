@@ -216,7 +216,9 @@ import { modelSpanAttributes } from './model-span-attributes';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import {
+  applyAgentScopesConfig,
   applyResolvedAgentScopes,
+  incomingAgentScopes,
   parseAgentScope,
   resolveAgentScopes,
   getRunAgentScopes,
@@ -225,7 +227,7 @@ import {
   setRunAgentScopes,
   withoutIdentityAgentScopes,
 } from './scopes';
-import type { AgentScopeEntry, AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
+import type { AgentScopeEntry, AgentScopesConfig, AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -887,7 +889,7 @@ export class Agent<
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
-  #scopes?: DynamicArgument<AgentScopeEntry[], TRequestContext>;
+  #scopes?: AgentScopesConfig<TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
@@ -3138,16 +3140,16 @@ export class Agent<
   }
 
   /**
-   * Resolves the agent's configured `scopes` for a request.
-   * Per-call `scopes` and the reserved `mastra__scopes` request-context key are not included.
+   * Applies the agent's `scopes` option to a run's incoming scopes and returns the run's scopes:
+   * the incoming ones when the option is unset, the incoming ones plus the static list, or what
+   * the function returns for them. `scopes` defaults to none.
    */
-  async getScopes({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
-    AgentScopeEntry[] | undefined
-  > {
-    if (typeof this.#scopes !== 'function') {
-      return this.#scopes;
-    }
-    return this.#scopes({
+  async getScopes({
+    requestContext = new RequestContext(),
+    scopes = [],
+  }: { requestContext?: RequestContext; scopes?: AgentScopeEntry[] } = {}): Promise<AgentScopeEntry[]> {
+    return applyAgentScopesConfig(this.#scopes, {
+      scopes,
       requestContext: requestContext as RequestContext<TRequestContext>,
       mastra: this.#mastra,
     });
@@ -8634,8 +8636,11 @@ export class Agent<
         : undefined);
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
     const agentScopes = resumeSnapshot?.scopes
-      ? []
-      : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
+      ? undefined
+      : await this.getScopes({
+          requestContext,
+          scopes: incomingAgentScopes({ requestContext, callScopes, defaultScopes, mastra: this.#mastra }),
+        });
     const resolved = resolveAgentScopes({
       requestContext,
       agentScopes,
