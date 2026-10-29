@@ -409,7 +409,7 @@ describe('ModelCredentialsStorage account pools', () => {
     expect(d.active).toBe(true);
   });
 
-  it('setCredential replaces the active account and removeCredential drops the whole pool', async () => {
+  it('setCredential replaces the active account in place', async () => {
     const store = await makeStore();
     const a = await store.addAccount(alice, 'openai', { credential: apiKey('sk-a') });
     const b = await store.addAccount(alice, 'openai', { credential: apiKey('sk-b'), activate: true });
@@ -421,9 +421,34 @@ describe('ModelCredentialsStorage account pools', () => {
       expect.objectContaining({ id: b.id, active: true, status: 'ok' }),
     ]);
     expect(await store.getAccountCredential(alice, b.id)).toEqual(apiKey('sk-b2'));
+  });
+
+  it('removeCredential signs out of the active account only, promoting the next by priority', async () => {
+    const store = await makeStore();
+    const a = await store.addAccount(alice, 'openai', { credential: apiKey('sk-a') });
+    const b = await store.addAccount(alice, 'openai', { credential: apiKey('sk-b') });
+    const c = await store.addAccount(alice, 'openai', { credential: apiKey('sk-c'), activate: true });
+    await store.reorderAccounts(alice, 'openai', [c.id, b.id, a.id]);
+    const other = await store.addAccount(alice, 'anthropic', { credential: apiKey('sk-anthropic') });
+    const org = await store.addAccount({ orgId: 'org1' }, 'openai', { credential: apiKey('sk-org') });
 
     expect(await store.removeCredential(alice, 'openai')).toBe(true);
-    expect(await store.listAccounts(alice)).toEqual([]);
+    expect(await store.listAccounts(alice, 'openai')).toEqual([
+      expect.objectContaining({ id: b.id, active: true }),
+      expect.objectContaining({ id: a.id, active: false }),
+    ]);
+    expect(await store.getCredential(alice, 'openai')).toEqual(apiKey('sk-b'));
+    expect(await store.getAccountCredential(alice, a.id)).toEqual(apiKey('sk-a'));
+    // Other providers and the Factory-wide pool are untouched.
+    expect((await store.listAccounts(alice, 'anthropic')).map(row => row.id)).toEqual([other.id]);
+    expect((await store.listAccounts({ orgId: 'org1' }, 'openai')).map(row => row.id)).toEqual([org.id]);
+
+    expect(await store.removeCredential(alice, 'openai')).toBe(true);
+    expect(await store.listAccounts(alice, 'openai')).toEqual([expect.objectContaining({ id: a.id, active: true })]);
+    expect(await store.removeCredential(alice, 'openai')).toBe(true);
+    expect(await store.listAccounts(alice, 'openai')).toEqual([]);
+    expect(await store.getCredential(alice, 'openai')).toBeUndefined();
+    expect(await store.removeCredential(alice, 'openai')).toBe(false);
   });
 
   it('serializes per-account refreshes and honours force for the 401 path', async () => {
@@ -510,6 +535,29 @@ describe('ModelCredentialsStorage account priority', () => {
     expect(await store.getCredential(org, 'openai')).toEqual(apiKey('sk-3'));
   });
 
+  it('moves a partial reorder list to the front and keeps the rest in their current order', async () => {
+    const store = await makeStore();
+    const ids: string[] = [];
+    for (const key of ['a', 'b', 'c', 'd']) {
+      ids.push((await store.addAccount(org, 'openai', { credential: apiKey(`sk-${key}`) })).id);
+    }
+    const [ia, ib, ic, id] = ids as [string, string, string, string];
+    // Current order differs from creation order, so "the rest" must follow priority, not createdAt.
+    await store.reorderAccounts(org, 'openai', [id, ib, ia, ic]);
+
+    await store.reorderAccounts(org, 'openai', [ic, ia]);
+    expect((await store.listAccounts(org, 'openai')).map(acc => [acc.id, acc.priority])).toEqual([
+      [ic, 0],
+      [ia, 1],
+      [id, 2],
+      [ib, 3],
+    ]);
+
+    // An empty list just renumbers the pool in its current order.
+    await store.reorderAccounts(org, 'openai', []);
+    expect((await store.listAccounts(org, 'openai')).map(acc => acc.id)).toEqual([ic, ia, id, ib]);
+  });
+
   it('breaks priority ties by creation time', async () => {
     const backend = new LibSQLFactoryStorage({ id: 'credentials-test', url: ':memory:' });
     const store = backend.registerDomain(new ModelCredentialsStorage());
@@ -556,7 +604,10 @@ describe('ModelCredentialsStorage account priority', () => {
       /not in this pool/,
     );
     await expect(store.reorderAccounts(alice, 'anthropic', [two.id, two.id, one.id])).rejects.toThrow(/duplicate/);
-    await expect(store.reorderAccounts(alice, 'anthropic', [two.id])).rejects.toThrow(/every account/);
+    // A partial list with one bad id is rejected whole.
+    await expect(store.reorderAccounts(alice, 'anthropic', [two.id, 'anthropic:nope'])).rejects.toThrow(
+      /not in this pool/,
+    );
     expect((await store.listAccounts(alice, 'anthropic')).map(acc => [acc.id, acc.priority])).toEqual([
       [one.id, 0],
       [two.id, 1],
@@ -674,6 +725,34 @@ describe('ModelCredentialsStorage legacy migration', () => {
       access: 'at-legacy-org-rotated',
     });
     expect(await store.listAccounts({ orgId: 'org1' }, 'anthropic')).toHaveLength(1);
+    await backend.close();
+  });
+
+  it('signing out of a migrated account keeps the rest of the pool across reboots', async () => {
+    const url = tmpUrl('legacy-signout.db');
+    await seedLegacy(url);
+    const org = { orgId: 'org1' };
+    let added: string;
+    {
+      const { backend, store } = await bootFile(url);
+      // Signing out of a newer active account leaves the migrated account and its source row.
+      const extra = await store.addAccount(org, 'openai', { credential: apiKey('sk-extra'), activate: true });
+      expect(await store.removeCredential(org, 'openai')).toBe(true);
+      expect((await store.listAccounts(org, 'openai')).map(row => row.id)).not.toContain(extra.id);
+      expect(
+        await backend.ops.findMany('model_provider_credentials', { user_id: null, provider: 'openai' }),
+      ).toHaveLength(1);
+      added = (await store.addAccount(org, 'openai', { credential: apiKey('sk-second') })).id;
+      expect(await store.removeCredential(org, 'openai')).toBe(true);
+      expect(await backend.ops.findMany('model_provider_credentials', { user_id: null, provider: 'openai' })).toEqual(
+        [],
+      );
+      await backend.close();
+    }
+
+    const { backend, store } = await bootFile(url);
+    expect(await store.listAccounts(org, 'openai')).toEqual([expect.objectContaining({ id: added, active: true })]);
+    expect(await store.getCredential(org, 'openai')).toEqual(apiKey('sk-second'));
     await backend.close();
   });
 

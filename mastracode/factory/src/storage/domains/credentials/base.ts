@@ -703,10 +703,10 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Rewrite the pool's priorities to follow `orderedIds` (first = tried
-   * first), atomically. `orderedIds` must name every account in the scope's
-   * pool for `provider` exactly once; unknown, foreign-scope or duplicate ids
-   * are rejected with an error and nothing changes.
+   * Rewrite the pool's priorities atomically: `orderedIds` go first, in the
+   * order given, and every account left out follows in its current pool
+   * order. The pool is renumbered 0..n-1. Unknown, foreign-scope or
+   * duplicate ids are rejected with an error and nothing changes.
    */
   async reorderAccounts(tenant: CredentialTenant, provider: string, orderedIds: string[]): Promise<void> {
     if (new Set(orderedIds).size !== orderedIds.length) {
@@ -720,11 +720,13 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         if (unknown.length > 0) {
           throw new Error(`reorderAccounts: accounts not in this pool: ${unknown.join(', ')}`);
         }
-        if (orderedIds.length !== pool.length) {
-          throw new Error('reorderAccounts: every account in the pool must be listed');
-        }
+        const listed = new Set(orderedIds);
+        const rest = pool
+          .filter(row => !listed.has(row.id))
+          .sort(byPriority)
+          .map(row => row.id);
         const now = new Date();
-        for (const [priority, id] of orderedIds.entries()) {
+        for (const [priority, id] of [...orderedIds, ...rest].entries()) {
           await ops.updateMany('model_provider_accounts', { id }, { priority, updated_at: now });
         }
       },
@@ -842,12 +844,19 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     await this.#setActive(tenant, provider, active.id);
   }
 
-  /** Delete the scope's whole pool for a provider. True when anything was removed. */
+  /**
+   * Sign out of the scope's active account for a provider, leaving the
+   * pool's other accounts in place; the next account in pool order becomes
+   * active (as `removeAccount`). Once the pool is empty the deprecated row is
+   * dropped too, so the provider reads as signed out everywhere. True when
+   * anything was removed.
+   */
   async removeCredential(tenant: CredentialTenant, provider: string): Promise<boolean> {
-    const deleted = await this.#db.deleteMany('model_provider_accounts', poolWhere(tenant, provider));
-    await this.#db.deleteMany('model_provider_account_pools', poolWhere(tenant, provider));
+    const active = await this.#activeAccount(tenant, provider);
+    const removed = active ? await this.removeAccount(tenant, active.id) : false;
+    if ((await this.#listPool(tenant, provider)).length > 0) return removed;
     const legacyDeleted = await this.#db.deleteMany('model_provider_credentials', legacyTenantWhere(tenant, provider));
-    return deleted > 0 || legacyDeleted > 0;
+    return removed || legacyDeleted > 0;
   }
 
   /**
