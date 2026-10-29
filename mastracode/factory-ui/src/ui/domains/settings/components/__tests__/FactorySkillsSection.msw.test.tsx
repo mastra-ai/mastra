@@ -262,9 +262,22 @@ describe('FactorySkillsSection', () => {
     expect(screen.queryByRole('region', { name: 'Work board' })).not.toBeInTheDocument();
   });
 
-  it('reports an empty catalog instead of pretending built-in boards exist', async () => {
+  it('reports an empty catalog instead of pretending built-in boards exist, and still lists app skills', async () => {
     server.use(
-      http.get(SKILLS_URL, () => HttpResponse.json(catalog)),
+      http.get(SKILLS_URL, () =>
+        HttpResponse.json({
+          skills: [
+            ...catalog.skills,
+            {
+              name: 'changelog-lint',
+              description: 'Lint changelogs',
+              content: '# Lint',
+              origin: 'folder',
+              builtIn: false,
+            },
+          ],
+        } satisfies FactorySkillsResponse),
+      ),
       http.get(BOARDS_URL, () => HttpResponse.json({ boards: [] } satisfies BoardCatalogResponse)),
     );
 
@@ -272,6 +285,8 @@ describe('FactorySkillsSection', () => {
 
     expect(await screen.findByText('No boards are installed, so no board skills apply.')).toBeInTheDocument();
     expect(screen.queryByText('factory-triage')).not.toBeInTheDocument();
+    const appSkills = await screen.findByRole('region', { name: 'App skills' });
+    expect(within(appSkills).getAllByText('changelog-lint').length).toBeGreaterThan(0);
   });
 
   it('falls back to the ungrouped list and says why when the catalog fails', async () => {

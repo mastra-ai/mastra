@@ -282,9 +282,12 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
       {boards === undefined ? (
         <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
       ) : boards.length === 0 ? (
-        <Txt tone="muted" as="p" variant="caption">
-          No boards are installed, so no board skills apply.
-        </Txt>
+        <div className="flex flex-col gap-5">
+          <Txt tone="muted" as="p" variant="caption">
+            No boards are installed, so no board skills apply.
+          </Txt>
+          <OtherAppSkills skills={skills} boards={boards} />
+        </div>
       ) : (
         <div className="flex flex-col gap-5">
           {boards.map(board => (
