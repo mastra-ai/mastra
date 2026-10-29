@@ -2,13 +2,20 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { execa } = vi.hoisted(() => ({ execa: vi.fn() }));
+const { execa, existsSync } = vi.hoisted(() => ({ execa: vi.fn(), existsSync: vi.fn((_path: string) => false) }));
 vi.mock('./execa', () => ({ getExeca: async () => execa }));
+vi.mock('node:fs', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
+  existsSync: (p: string) => existsSync(p),
+}));
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
+  vi.unstubAllEnvs();
   execa.mockReset();
+  existsSync.mockReset();
+  existsSync.mockReturnValue(false);
 });
 
 describe('LocalProcessManager Windows argv boundary', () => {
@@ -45,7 +52,7 @@ describe('LocalProcessManager Windows argv boundary', () => {
     { command: 'cmd.exe', args: ['/c', 'echo hello'] },
     { command: 'sh', args: ['script.sh'] },
     { command: 'sh', args: ['-c'] },
-  ])('retains cmd.exe interpretation for other invocations: %s', async originalInvocation => {
+  ])('falls back to cmd.exe when no POSIX shell is found: %s', async originalInvocation => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     const { LocalSandbox } = await import('./local-sandbox');
     const sandbox = new LocalSandbox({ workingDirectory: process.cwd(), isolation: 'none' });
@@ -101,6 +108,83 @@ describe('LocalProcessManager Windows argv boundary', () => {
     subprocess.emit('close', 0, null);
     expect((await handle.wait()).exitCode).toBe(0);
     sandbox.processes.release(handle.pid);
+  });
+});
+
+// https://github.com/mastra-ai/mastra/issues/28866
+describe('LocalProcessManager Windows POSIX shell for argv commands', () => {
+  const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
+
+  const setup = async (existing: string[]) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    vi.stubEnv('PATH', '');
+    vi.stubEnv('ProgramFiles', 'C:\\Program Files');
+    vi.stubEnv('MASTRA_WINDOWS_SHELL', '');
+    existsSync.mockImplementation((p: string) => existing.includes(p));
+    const { LocalSandbox } = await import('./local-sandbox');
+    const sandbox = new LocalSandbox({ workingDirectory: process.cwd(), isolation: 'none' });
+    vi.spyOn(sandbox, 'ensureRunning').mockResolvedValue();
+    execa.mockImplementation(() => {
+      const subprocess = Object.assign(new EventEmitter(), {
+        pid: 12345,
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        catch: vi.fn(),
+      });
+      queueMicrotask(() => subprocess.emit('close', 0, null));
+      return subprocess;
+    });
+    return sandbox;
+  };
+
+  it('runs POSIX-quoted argv commands through Git Bash instead of cmd.exe', async () => {
+    const sandbox = await setup([gitBash]);
+
+    await sandbox.executeCommand!('mkdir', ['-p', 'C:\\Users\\First Last\\repo']);
+
+    expect(execa).toHaveBeenCalledWith(
+      "mkdir -p 'C:\\Users\\First Last\\repo'",
+      [],
+      expect.objectContaining({ shell: gitBash, windowsHide: true }),
+    );
+  });
+
+  it('finds Git Bash next to git.exe on PATH (Git\\cmd install layout)', async () => {
+    const sandbox = await setup(['D:\\Tools\\Git\\cmd\\git.exe', 'D:\\Tools\\Git\\bin\\bash.exe', gitBash]);
+    vi.stubEnv('PATH', 'C:\\Windows\\System32;D:\\Tools\\Git\\cmd');
+
+    await sandbox.executeCommand!('git', ['clone', '--', 'https://x/y.git', 'C:\\x\\repo']);
+
+    expect(execa.mock.calls[0]?.[2]).toMatchObject({ shell: 'D:\\Tools\\Git\\bin\\bash.exe' });
+  });
+
+  it('prefers MASTRA_WINDOWS_SHELL', async () => {
+    const sandbox = await setup(['E:\\msys64\\usr\\bin\\bash.exe', gitBash]);
+    vi.stubEnv('MASTRA_WINDOWS_SHELL', 'E:\\msys64\\usr\\bin\\bash.exe');
+
+    await sandbox.executeCommand!('find', ['C:\\x', '-mindepth', '1']);
+
+    expect(execa.mock.calls[0]?.[2]).toMatchObject({ shell: 'E:\\msys64\\usr\\bin\\bash.exe' });
+  });
+
+  it('runs bare `sh -c` scripts with Git Bash when sh is not on PATH', async () => {
+    const sandbox = await setup([gitBash]);
+
+    await sandbox.executeCommand!('sh', ['-c', 'echo ok && echo done']);
+
+    expect(execa).toHaveBeenCalledWith(
+      gitBash,
+      ['-c', 'echo ok && echo done'],
+      expect.objectContaining({ shell: false }),
+    );
+  });
+
+  it('keeps cmd.exe for plain string commands', async () => {
+    const sandbox = await setup([gitBash]);
+
+    await sandbox.executeCommand!('dir /b');
+
+    expect(execa).toHaveBeenCalledWith('dir /b', [], expect.objectContaining({ shell: true }));
   });
 });
 
