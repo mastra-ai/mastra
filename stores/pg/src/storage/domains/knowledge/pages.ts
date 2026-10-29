@@ -1,4 +1,8 @@
-import { createKnowledgePagesCoreLoader, knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import {
+  createKnowledgePagesCoreLoader,
+  knowledgePageKeyProblem,
+  knowledgeSearchWords,
+} from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
@@ -11,6 +15,7 @@ import type {
   KnowledgePageActivityEvent,
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
+  KnowledgePageTemplateInput,
   KnowledgePageStore,
   KnowledgePin,
   KnowledgeProvenance,
@@ -128,9 +133,9 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     )`,
     index('mastra_knowledge_pages_address_uq', t.pages, '"address"', '"isScope"', true),
     index(
-      'mastra_knowledge_pages_key_uq',
+      'mastra_knowledge_pages_parent_key_uq',
       t.pages,
-      '"scopeId","key"',
+      '"parentId","key"',
       '"key" IS NOT NULL AND "deletedAt" IS NULL',
       true,
     ),
@@ -447,20 +452,22 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return { live: Number(rows[0]?.live ?? 0), maxDepth: Number(rows[0]?.maxDepth ?? 0) };
   }
 
-  /** Refuses before any write when a live carried page's key is already live in the destination scope. */
-  async #assertNoKeyConflicts(db: Queryable, rootId: string, scopeId: string, includeRoot: boolean): Promise<void> {
+  /**
+   * Refuses before any write when a live page arriving under `parentId` has a key a live child of
+   * `parentId` already uses: the moved root itself, or, for a merge, the source's live children.
+   */
+  async #assertNoKeyConflicts(db: Queryable, arriving: { rootId?: string; childrenOf?: string }, parentId: string) {
     const core = await loadPagesCore();
+    const arrivingWhere = arriving.rootId ? `c."id" = $1` : `c."parentId" = $1 AND NOT c."isScope"`;
     const rows = await this.#rows(
       db,
-      `${this.#subtree('$1')}
-       SELECT c."key" FROM ${this.#pages} c
-       JOIN ${this.#pages} t ON t."scopeId" = $2 AND t."key" = c."key" AND t."deletedAt" IS NULL
-       WHERE c."key" IS NOT NULL AND c."deletedAt" IS NULL AND c."scopeId" <> $2
-         AND (c."id" IN (SELECT "id" FROM sub)${includeRoot ? ' OR c."id" = $1' : ''})
+      `SELECT c."key" FROM ${this.#pages} c
+       JOIN ${this.#pages} t ON t."parentId" = $2 AND t."key" = c."key" AND t."deletedAt" IS NULL AND t."id" <> c."id"
+       WHERE ${arrivingWhere} AND c."key" IS NOT NULL AND c."deletedAt" IS NULL
        LIMIT 1`,
-      [rootId, scopeId],
+      [arriving.rootId ?? arriving.childrenOf, parentId],
     );
-    if (rows[0]) throw new core.KnowledgePageKeyConflictError(String(rows[0].key), scopeId);
+    if (rows[0]) throw new core.KnowledgePageKeyConflictError(String(rows[0].key), parentId);
   }
 
   async #isInSubtree(db: Queryable, rootId: string, candidateId: string): Promise<boolean> {
@@ -477,7 +484,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const bounds = await this.#bounds();
     bounds.assertKnowledgePageDescriptionWithinBound(input.description);
     for (const child of input.children ?? []) bounds.assertKnowledgePageDescriptionWithinBound(child.description);
-    for (const page of input.pages ?? []) bounds.assertKnowledgePageDescriptionWithinBound(page.description);
+    const checkTemplates = (templates: KnowledgePageTemplateInput[]) => {
+      for (const template of templates) {
+        bounds.assertKnowledgePageDescriptionWithinBound(template.description);
+        checkTemplates(template.pages ?? []);
+      }
+    };
+    checkTemplates(input.pages ?? []);
 
     return this.#tx(async tx => {
       await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
@@ -530,25 +543,41 @@ export class PgKnowledgePages implements KnowledgePageStore {
         });
       }
 
-      for (const page of input.pages ?? []) {
-        const rows = await this.#rows(
-          tx,
-          `SELECT 1 FROM ${this.#pages} WHERE "scopeId" = $1 AND "key" = $2 AND "deletedAt" IS NULL`,
-          [scope.id, page.key],
-        );
-        if (rows.length) continue;
-        await this.#insertPage(tx, {
-          parent: scope,
-          key: page.key,
-          name: page.name,
-          description: page.description,
-          provenance: input.provenance,
-          at: now,
-        });
-      }
+      await this.#materializeTemplates(tx, scope, input.pages ?? [], input.provenance, now);
 
       return { scope, created, ...(parentConflict ? { parentConflict } : {}) };
     });
+  }
+
+  async #materializeTemplates(
+    db: Queryable,
+    parent: KnowledgePage,
+    templates: KnowledgePageTemplateInput[],
+    provenance: KnowledgeProvenance,
+    at: Date,
+  ): Promise<void> {
+    const core = await loadPagesCore();
+    for (const template of templates) {
+      const problem = knowledgePageKeyProblem(template.key);
+      if (problem) throw new Error(problem);
+      const rows = await this.#rows(
+        db,
+        `SELECT * FROM ${this.#pages} WHERE "parentId" = $1 AND "key" = $2 AND "deletedAt" IS NULL`,
+        [parent.id, template.key],
+      );
+      const page =
+        rows[0] === undefined
+          ? await this.#insertPage(db, {
+              parent,
+              key: template.key,
+              name: template.name,
+              description: template.description,
+              provenance,
+              at,
+            })
+          : toPage(rows[0]);
+      if (template.pages?.length) await this.#materializeTemplates(db, page, template.pages, provenance, at);
+    }
   }
 
   async #scopeByAddress(db: Queryable, address: string): Promise<KnowledgePage | null> {
@@ -651,18 +680,28 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return rows[0] ? toPage(rows[0]) : null;
   }
 
-  async getPageByKey(input: { scopeId: string; key: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
-    const params = new Params();
-    const scopeId = params.add(input.scopeId);
-    const key = params.add(input.key);
-    const filter = new ReadFilter(input.read, params);
-    const rows = await this.#rows(
-      this.#client,
-      `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
-       WHERE p."scopeId" = ${scopeId} AND p."key" = ${key} AND p."deletedAt" IS NULL AND ${filter.readable('s')}`,
-      params.values,
-    );
-    return rows[0] ? toPage(rows[0]) : null;
+  async getPageByPath(input: {
+    scopeId: string;
+    path: string[];
+    read: KnowledgeReadScope;
+  }): Promise<KnowledgePage | null> {
+    if (!input.path.length) return null;
+    let page: KnowledgePage | undefined;
+    let parentId = input.scopeId;
+    for (const key of input.path) {
+      const params = new Params();
+      const filter = new ReadFilter(input.read, params);
+      const rows = await this.#rows(
+        this.#client,
+        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
+         WHERE p."parentId" = ${params.add(parentId)} AND p."key" = ${params.add(key)} AND p."deletedAt" IS NULL AND NOT p."isScope" AND ${filter.readable('s')}`,
+        params.values,
+      );
+      if (!rows[0]) return null;
+      page = toPage(rows[0]);
+      parentId = page.id;
+    }
+    return page ?? null;
   }
 
   async findPagesByName(input: {
@@ -747,6 +786,11 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async createPage(input: CreateKnowledgePageInput): Promise<KnowledgePage> {
     const bounds = await this.#bounds();
     bounds.assertKnowledgePageDescriptionWithinBound(input.description);
+    const core = await loadPagesCore();
+    if (input.key !== undefined) {
+      const problem = knowledgePageKeyProblem(input.key);
+      if (problem) throw new Error(problem);
+    }
     return this.#tx(async tx => {
       const parent = await this.#requireLivePage(tx, input.parentId);
       return this.#insertPage(tx, {
@@ -813,7 +857,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       return toPage(rows[0]!);
     } catch (error) {
       if (isUniqueViolation(error)) {
-        if (input.key) throw new core.KnowledgePageKeyConflictError(input.key, scopeId);
+        if (input.key) throw new core.KnowledgePageKeyConflictError(input.key, input.parent.id);
         throw new KnowledgeConflictError(id);
       }
       throw error;
@@ -880,7 +924,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const newScopeId = parent.isScope ? parent.id : parent.scopeId;
       const newDepth = parent.isScope ? 1 : (await this.#depthOf(tx, parent.id)) + 1;
       const delta = newDepth - (await this.#depthOf(tx, page.id));
-      await this.#assertNoKeyConflicts(tx, input.id, newScopeId, true);
+      await this.#assertNoKeyConflicts(tx, { rootId: input.id }, parent.id);
       if (stats.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new core.KnowledgePageDepthError(input.id);
       }
@@ -932,7 +976,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       if (stats.live > core.MAX_KNOWLEDGE_MOVE_PAGES) throw new core.KnowledgeMoveTooLargeError(source.id, stats.live);
       // Source's children become target's children, one level below the target.
       const delta = (await this.#depthOf(tx, target.id)) - (await this.#depthOf(tx, source.id));
-      await this.#assertNoKeyConflicts(tx, source.id, target.scopeId, false);
+      await this.#assertNoKeyConflicts(tx, { childrenOf: source.id }, target.id);
       if (stats.maxDepth > 0 && stats.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new core.KnowledgePageDepthError(source.id);
       }
@@ -1314,17 +1358,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
        WHERE ${where.join(' AND ')} ORDER BY a."createdAt" DESC, a."id" DESC LIMIT ${limit + 1}`,
       params.values,
     );
-    const events = rows.slice(0, limit).map(
-      (row): KnowledgePageActivityEvent => ({
-        id: String(row.id),
-        action: String(row.action) as KnowledgePageActivityAction,
-        scopeId: String(row.scopeId),
-        pageId: String(row.pageId),
-        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-        provenance: parseJson<KnowledgeProvenance>(row.provenance),
-        createdAt: new Date(row.createdAt as string | Date),
-      }),
-    );
+    const events = rows.slice(0, limit).map((row): KnowledgePageActivityEvent => ({
+      id: String(row.id),
+      action: String(row.action) as KnowledgePageActivityAction,
+      scopeId: String(row.scopeId),
+      pageId: String(row.pageId),
+      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+      provenance: parseJson<KnowledgeProvenance>(row.provenance),
+      createdAt: new Date(row.createdAt as string | Date),
+    }));
     const last = events[events.length - 1];
     return {
       events,

@@ -47,7 +47,7 @@ describe('MongoKnowledgePages (schema 4)', () => {
       name: 'Acme',
       provenance,
       children: [{ address: 'org:acme/internal', declaration: 'org:$orgId/internal', name: 'Internal' }],
-      pages: [{ key: 'org:acme#policy', name: 'Policy' }],
+      pages: [{ key: 'policy', name: 'Policy' }],
     });
     expect(org.created).toBe(true);
     expect(org.scope.scopeId).toBe(org.scope.id);
@@ -61,7 +61,7 @@ describe('MongoKnowledgePages (schema 4)', () => {
     expect(again.parentConflict).toBeUndefined();
     const children = await store.listChildScopes({ parentId: org.scope.id });
     expect(children.pages.map(page => page.address)).toEqual(['org:acme/internal']);
-    expect(await store.getPageByKey({ scopeId: org.scope.id, key: 'org:acme#policy', read: 'all' })).not.toBeNull();
+    expect(await store.getPageByPath({ scopeId: org.scope.id, path: ['policy'], read: 'all' })).not.toBeNull();
   });
 
   it('filters reads by scope before ordering and cursors', async () => {
@@ -280,10 +280,15 @@ describe('MongoKnowledgePages (schema 4)', () => {
     const y = (await store.materializeScope({ address: 'team:y', declaration: 'team:$t', name: 'Y', provenance }))
       .scope;
     const a = await store.createPage({ parentId: x.id, name: 'a', key: 'dup', provenance });
-    await store.createPage({ parentId: y.id, name: 'b', key: 'dup', provenance });
+    const sameKeyElsewhere = await store.createPage({ parentId: y.id, name: 'b', key: 'dup', provenance });
+    await expect(store.movePage({ id: a.id, expectedVersion: 1, parentId: y.id, provenance })).rejects.toMatchObject({
+      key: 'dup',
+      parentId: y.id,
+    });
     await expect(store.movePage({ id: a.id, expectedVersion: 1, parentId: y.id, provenance })).rejects.toBeInstanceOf(
       KnowledgePageKeyConflictError,
     );
+    expect(sameKeyElsewhere.key).toBe('dup');
     const src = await store.createPage({ parentId: x.id, name: 'src2', provenance });
     await store.createPage({ parentId: src.id, name: 'kid', key: 'dup2', provenance });
     const tgt = await store.createPage({ parentId: y.id, name: 'tgt2', provenance });

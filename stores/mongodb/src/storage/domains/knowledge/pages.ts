@@ -4,6 +4,7 @@ import {
   knowledgeSearchWords,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
+  knowledgePageKeyProblem,
   knowledgePagesResetMessage,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgePagesSchemaInspection } from '@internal/core/knowledge-compat';
@@ -19,6 +20,7 @@ import type {
   KnowledgePageActivityEvent,
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
+  KnowledgePageTemplateInput,
   KnowledgePageStore,
   KnowledgePin,
   KnowledgeProvenance,
@@ -99,19 +101,19 @@ function clampLimit(limit: number | undefined, max: number): number {
 const live = { deletedAt: { $exists: false } } as const;
 const notScope = { isScope: { $ne: true } } as const;
 
-/** Unique-while-live page key per home scope; unset on delete so the key can be reused. */
-function activeKeyOf(scopeId: string, key: string): string {
-  return `${scopeId}\u0000${key}`;
+/** Unique-while-live page key per parent; unset on delete so the key can be reused. */
+function activeKeyOf(parentId: string, key: string): string {
+  return `${parentId}\u0000${key}`;
 }
 
-/** Pipeline stage recomputing `activeKey` for pages that have a live key after their scope changed. */
-function recomputeActiveKey(scopeId: string): Document {
+/** Pipeline stage recomputing `activeKey` for pages that have a live key after their parent changed. */
+function recomputeActiveKey(parentId: string): Document {
   return {
     $set: {
       activeKey: {
         $cond: [
           { $and: [{ $eq: [{ $type: '$key' }, 'string'] }, { $eq: [{ $type: '$deletedAt' }, 'missing'] }] },
-          { $concat: [scopeId, '\u0000', '$key'] },
+          { $concat: [parentId, '\u0000', '$key'] },
           '$$REMOVE',
         ],
       },
@@ -367,7 +369,6 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     ids: string[];
     live: number;
     maxDepth: number;
-    liveKeys: string[];
     found: boolean;
     truncated: boolean;
   }> {
@@ -376,42 +377,42 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const ids: string[] = [];
     let liveCount = 0;
     let maxDepth = 0;
-    const liveKeys: string[] = [];
     let frontier = [rootId];
     while (frontier.length) {
       const rows = await pages
         .find(
           { parentId: { $in: frontier }, ...notScope },
-          { projection: { _id: 0, id: 1, depth: 1, key: 1, deletedAt: 1 }, session },
+          { projection: { _id: 0, id: 1, depth: 1, deletedAt: 1 }, session },
         )
         .toArray();
       frontier = [];
       for (const row of rows) {
         const id = String(row.id);
-        if (find !== undefined && id === find)
-          return { ids, live: liveCount, maxDepth, liveKeys, found: true, truncated: false };
+        if (find !== undefined && id === find) return { ids, live: liveCount, maxDepth, found: true, truncated: false };
         ids.push(id);
         frontier.push(id);
         if (row.deletedAt == null) {
           liveCount++;
           maxDepth = Math.max(maxDepth, Number(row.depth));
-          if (row.key != null) liveKeys.push(String(row.key));
         }
       }
       if (liveCount > core.MAX_KNOWLEDGE_MOVE_PAGES)
-        return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: true };
+        return { ids, live: liveCount, maxDepth, found: false, truncated: true };
     }
-    return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: false };
+    return { ids, live: liveCount, maxDepth, found: false, truncated: false };
   }
 
-  /** Refuses before any write when a live carried page's key is already live in the destination scope. */
-  async #assertNoKeyConflicts(keys: string[], scopeId: string, session?: Session): Promise<void> {
+  /** Refuses before any write when a live arriving page's key is already live under `parentId`. */
+  async #assertNoKeyConflicts(keys: string[], parentId: string, session?: Session, exceptId?: string): Promise<void> {
     const core = await loadPagesCore();
     if (!keys.length) return;
     const clash = await (
       await this.#c('pages')
-    ).findOne({ ...live, scopeId, key: { $in: keys } }, { projection: { _id: 0, key: 1 }, session });
-    if (clash) throw new core.KnowledgePageKeyConflictError(String(clash.key), scopeId);
+    ).findOne(
+      { ...live, parentId, key: { $in: keys }, ...(exceptId ? { id: { $ne: exceptId } } : {}) },
+      { projection: { _id: 0, key: 1 }, session },
+    );
+    if (clash) throw new core.KnowledgePageKeyConflictError(String(clash.key), parentId);
   }
 
   /** Recomputes the denormalized scope of every page a note mentions, for notes touching `pageIds`. */
@@ -440,7 +441,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const bounds = await this.#bounds();
     bounds.assertKnowledgePageDescriptionWithinBound(input.description);
     for (const child of input.children ?? []) bounds.assertKnowledgePageDescriptionWithinBound(child.description);
-    for (const page of input.pages ?? []) bounds.assertKnowledgePageDescriptionWithinBound(page.description);
+    const checkTemplates = (templates: KnowledgePageTemplateInput[]) => {
+      for (const template of templates) {
+        bounds.assertKnowledgePageDescriptionWithinBound(template.description);
+        checkTemplates(template.pages ?? []);
+      }
+    };
+    checkTemplates(input.pages ?? []);
 
     return this.#tx(async session => {
       const now = new Date();
@@ -492,25 +499,39 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         });
       }
 
-      const pages = await this.#c('pages');
-      for (const page of input.pages ?? []) {
-        const existing = await pages.findOne(
-          { scopeId: scope.id, key: page.key, ...live },
-          { projection: { id: 1 }, session },
-        );
-        if (existing) continue;
-        await this.#insertPage(session, {
-          parent: scope,
-          key: page.key,
-          name: page.name,
-          description: page.description,
-          provenance: input.provenance,
-          at: now,
-        });
-      }
+      await this.#materializeTemplates(session, scope, input.pages ?? [], input.provenance, now);
 
       return { scope, created, ...(parentConflict ? { parentConflict } : {}) };
     });
+  }
+
+  async #materializeTemplates(
+    session: Session,
+    parent: KnowledgePage,
+    templates: KnowledgePageTemplateInput[],
+    provenance: KnowledgeProvenance,
+    at: Date,
+  ): Promise<void> {
+    const pages = await this.#c('pages');
+    for (const template of templates) {
+      const problem = knowledgePageKeyProblem(template.key);
+      if (problem) throw new Error(problem);
+      const existing = await pages.findOne(
+        { parentId: parent.id, key: template.key, ...live },
+        { ...noProjection, session },
+      );
+      const page = existing
+        ? toPage(existing)
+        : await this.#insertPage(session, {
+            parent,
+            key: template.key,
+            name: template.name,
+            description: template.description,
+            provenance,
+            at,
+          });
+      if (template.pages?.length) await this.#materializeTemplates(session, page, template.pages, provenance, at);
+    }
   }
 
   async #scopeByAddress(address: string, session?: Session): Promise<KnowledgePage | null> {
@@ -615,12 +636,24 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return row ? toPage(row) : null;
   }
 
-  async getPageByKey(input: { scopeId: string; key: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
+  async getPageByPath(input: {
+    scopeId: string;
+    path: string[];
+    read: KnowledgeReadScope;
+  }): Promise<KnowledgePage | null> {
+    if (!input.path.length) return null;
     const ids = await this.#readable(input.read);
-    const filter: Filter<Document> = { key: input.key, ...live };
-    this.#scopeFilter(filter, input.scopeId, ids);
-    const row = await (await this.#c('pages')).findOne(filter, noProjection);
-    return row ? toPage(row) : null;
+    const pages = await this.#c('pages');
+    let page: KnowledgePage | undefined;
+    let parentId = input.scopeId;
+    for (const key of input.path) {
+      const filter: Filter<Document> = { parentId, key, ...live, ...notScope, ...this.#inScopes('scopeId', ids) };
+      const row = await pages.findOne(filter, noProjection);
+      if (!row) return null;
+      page = toPage(row);
+      parentId = page.id;
+    }
+    return page ?? null;
   }
 
   async findPagesByName(input: {
@@ -715,6 +748,10 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   async createPage(input: CreateKnowledgePageInput): Promise<KnowledgePage> {
     const bounds = await this.#bounds();
     bounds.assertKnowledgePageDescriptionWithinBound(input.description);
+    if (input.key !== undefined) {
+      const problem = knowledgePageKeyProblem(input.key);
+      if (problem) throw new Error(problem);
+    }
     return this.#tx(async session => {
       const parent = await this.#requireLivePage(input.parentId, session);
       return this.#insertPage(session, {
@@ -755,7 +792,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       scopeId,
       parentId: input.parent.id,
       isScope: false,
-      ...(input.key === undefined ? {} : { key: input.key, activeKey: activeKeyOf(scopeId, input.key) }),
+      ...(input.key === undefined ? {} : { key: input.key, activeKey: activeKeyOf(input.parent.id, input.key) }),
       position: input.position ?? core.knowledgePositionBetween(await this.#lastPosition(input.parent.id, session)),
       name: input.name,
       canonicalName: core.canonicalKnowledgeName(input.name),
@@ -772,7 +809,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       await (await this.#c('pages')).insertOne({ ...doc }, { session });
     } catch (error) {
       if (isDuplicateKey(error)) {
-        if (input.key) throw new core.KnowledgePageKeyConflictError(input.key, scopeId);
+        if (input.key) throw new core.KnowledgePageKeyConflictError(input.key, input.parent.id);
         throw new KnowledgeConflictError(id);
       }
       throw error;
@@ -837,7 +874,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     if (descendants.length) {
       await pages.updateMany(
         { id: { $in: descendants } },
-        [{ $set: { scopeId, depth: { $add: ['$depth', depthDelta] } } }, recomputeActiveKey(scopeId)],
+        [{ $set: { scopeId, depth: { $add: ['$depth', depthDelta] } } }],
         { session },
       );
     }
@@ -865,9 +902,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const newScopeId = parent.isScope ? parent.id : parent.scopeId;
       const newDepth = parent.isScope ? 1 : (await this.#depthOf(parent.id, session)) + 1;
       const delta = newDepth - (await this.#depthOf(page.id, session));
-      if (page.scopeId !== newScopeId) {
-        await this.#assertNoKeyConflicts(page.key ? [page.key, ...tree.liveKeys] : tree.liveKeys, newScopeId, session);
-      }
+      if (page.key) await this.#assertNoKeyConflicts([page.key], parent.id, session, page.id);
       if (tree.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new core.KnowledgePageDepthError(input.id);
       }
@@ -884,7 +919,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
             $set: {
               parentId: parent.id,
               scopeId: newScopeId,
-              ...(page.key ? { activeKey: activeKeyOf(newScopeId, page.key) } : {}),
+              ...(page.key ? { activeKey: activeKeyOf(parent.id, page.key) } : {}),
               depth: newDepth,
               position,
               updatedAt: now,
@@ -895,7 +930,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           { returnDocument: 'after', projection: { _id: 0 }, session },
         );
       } catch (error) {
-        if (isDuplicateKey(error)) throw new KnowledgeConflictError(page.key ? `${newScopeId}#${page.key}` : input.id);
+        if (isDuplicateKey(error)) throw new KnowledgeConflictError(page.key ? `${parent.id}#${page.key}` : input.id);
         throw error;
       }
       if (!updated) throw new KnowledgeConflictError(input.id);
@@ -927,7 +962,19 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       if (tree.live > core.MAX_KNOWLEDGE_MOVE_PAGES) throw new core.KnowledgeMoveTooLargeError(source.id, tree.live);
       // Source's children become target's children, one level below the target.
       const delta = (await this.#depthOf(target.id, session)) - (await this.#depthOf(source.id, session));
-      if (source.scopeId !== target.scopeId) await this.#assertNoKeyConflicts(tree.liveKeys, target.scopeId, session);
+      const arriving = await (
+        await this.#c('pages')
+      )
+        .find(
+          { parentId: source.id, ...live, ...notScope, key: { $type: 'string' } },
+          { projection: { _id: 0, key: 1 }, session },
+        )
+        .toArray();
+      await this.#assertNoKeyConflicts(
+        arriving.map(row => String(row.key)),
+        target.id,
+        session,
+      );
       if (tree.maxDepth > 0 && tree.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new core.KnowledgePageDepthError(source.id);
       }
@@ -938,10 +985,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         if (tree.ids.length) {
           await pages.updateMany(
             { id: { $in: tree.ids } },
-            [
-              { $set: { scopeId: target.scopeId, depth: { $add: ['$depth', delta] } } },
-              recomputeActiveKey(target.scopeId),
-            ],
+            [{ $set: { scopeId: target.scopeId, depth: { $add: ['$depth', delta] } } }],
             { session },
           );
           await notes.updateMany({ pageId: { $in: tree.ids } }, { $set: { pageScopeId: target.scopeId } }, { session });
@@ -949,7 +993,11 @@ export class MongoKnowledgePages implements KnowledgePageStore {
             await this.#c('activity')
           ).updateMany({ pageId: { $in: tree.ids } }, { $set: { pageScopeId: target.scopeId } }, { session });
         }
-        await pages.updateMany({ parentId: source.id, ...notScope }, { $set: { parentId: target.id } }, { session });
+        await pages.updateMany(
+          { parentId: source.id, ...notScope },
+          [{ $set: { parentId: target.id } }, recomputeActiveKey(target.id)],
+          { session },
+        );
       } catch (error) {
         if (isDuplicateKey(error)) throw new KnowledgeConflictError(source.id);
         throw error;
@@ -1323,7 +1371,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       ...live,
       ...notScope,
       ...inScope('scopeId'),
-      $and: words.map(word => ({ $or: [{ name: matcher(word) }, { description: matcher(word) }, { body: matcher(word) }] })),
+      $and: words.map(word => ({
+        $or: [{ name: matcher(word) }, { description: matcher(word) }, { body: matcher(word) }],
+      })),
     };
     const rows = await pages
       .aggregate([
@@ -1445,17 +1495,15 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       };
     }
 
-    const page = events.slice(0, limit).map(
-      (row): KnowledgePageActivityEvent => ({
-        id: String(row.id),
-        action: String(row.action) as KnowledgePageActivityAction,
-        scopeId: String(row.scopeId),
-        pageId: String(row.pageId),
-        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-        provenance: row.provenance as KnowledgeProvenance,
-        createdAt: new Date(row.createdAt),
-      }),
-    );
+    const page = events.slice(0, limit).map((row): KnowledgePageActivityEvent => ({
+      id: String(row.id),
+      action: String(row.action) as KnowledgePageActivityAction,
+      scopeId: String(row.scopeId),
+      pageId: String(row.pageId),
+      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+      provenance: row.provenance as KnowledgeProvenance,
+      createdAt: new Date(row.createdAt),
+    }));
     const last = page[page.length - 1];
     return {
       events: page,

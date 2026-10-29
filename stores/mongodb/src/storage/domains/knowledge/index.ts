@@ -79,10 +79,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return this.#pages.getPage(input);
   }
 
-  override getPageByKey(
-    input: Parameters<KnowledgePageStore['getPageByKey']>[0],
-  ): ReturnType<KnowledgePageStore['getPageByKey']> {
-    return this.#pages.getPageByKey(input);
+  override getPageByPath(
+    input: Parameters<KnowledgePageStore['getPageByPath']>[0],
+  ): ReturnType<KnowledgePageStore['getPageByPath']> {
+    return this.#pages.getPageByPath(input);
   }
 
   override findPagesByName(
