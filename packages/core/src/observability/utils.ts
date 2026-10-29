@@ -7,7 +7,15 @@
  */
 
 import { EntityType, SpanType } from './types';
-import type { Span, GetOrCreateSpanOptions, AnySpan, TracingOptions, TracingProperties } from './types';
+import type {
+  Span,
+  GetOrCreateSpanOptions,
+  AnySpan,
+  AnyExportedSpan,
+  ResumeTracingContext,
+  TracingOptions,
+  TracingProperties,
+} from './types';
 
 const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
 let currentSpanResolver: (() => AnySpan | undefined) | undefined;
@@ -126,6 +134,41 @@ export function resolveExportedSpanId(
 }
 
 /**
+ * The context a suspending run saves so that its resume continues it (see `resumeFrom`).
+ * Takes the run's live span, or its exported span when another process persisted it.
+ */
+export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefined): ResumeTracingContext | undefined {
+  if (!span) return undefined;
+  const live = 'exportSpan' in span;
+  // The values exporters see. An unsampled span exports nothing, so it anchors nothing.
+  const exported = live ? (span.isValid ? span.exportSpan() : undefined) : span;
+  return {
+    traceId: span.traceId,
+    spanId: live ? resolveExportedSpanId(span) : span.id,
+    parentSpanId: exported?.parentSpanId,
+    // The span's own id, never an exported ancestor's: an internal run is not its outer run's origin.
+    resumedFromSpanId: exported && (exported.resumedFromSpanId ?? exported.id),
+    externalParentSpanId: exported?.externalParentSpanId,
+  };
+}
+
+/**
+ * A resume continues the saved run only in the saved trace, so `resumedFromSpanId`
+ * always names a span in the resumed span's own trace. A resume into another trace
+ * starts a new run. The caller's `tracingOptions.parentSpanId` is an external parent,
+ * so on its own it keeps the resume in the saved trace.
+ */
+function continuedRun(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {
+  if (!saved?.traceId || (targetTraceId ?? saved.traceId) !== saved.traceId) return undefined;
+  return {
+    traceId: saved.traceId,
+    parentSpanId: saved.spanId,
+    resumedFromSpanId: saved.resumedFromSpanId ?? saved.spanId,
+    externalParentSpanId: saved.externalParentSpanId,
+  };
+}
+
+/**
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
  * 1. Children of an existing span (when tracingContext.currentSpan exists)
@@ -135,7 +178,8 @@ export function resolveExportedSpanId(
  * @returns The created Span or undefined if tracing is disabled
  */
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
-  const { type, attributes, tracingContext, requestContext, tracingOptions, resumedFromSpanId, ...rest } = options;
+  const { type, attributes, tracingContext, requestContext, tracingOptions, resumeFrom, resumedFromSpanId, ...rest } =
+    options;
 
   // tracingOptions.metadata takes precedence, but a key it merely names with
   // an `undefined` value must not erase the span's own metadata value.
@@ -143,8 +187,9 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     ...(rest.metadata ?? {}),
     ...Object.fromEntries(Object.entries(tracingOptions?.metadata ?? {}).filter(([, value]) => value !== undefined)),
   };
+  const resumed = continuedRun(resumeFrom, tracingContext?.currentSpan?.traceId ?? tracingOptions?.traceId);
 
-  // If we have a current span, create a child span
+  // If we have a current span, create a child span. It never takes an external parent.
   if (tracingContext?.currentSpan) {
     return tracingContext.currentSpan.createChildSpan({
       type,
@@ -152,11 +197,13 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
       ...rest,
       metadata,
       requestContext,
+      resumedFromSpanId: resumed?.resumedFromSpanId,
     });
   }
 
   // Otherwise, try to create a new root span
   const instance = options.mastra?.observability?.getSelectedInstance({ requestContext });
+  const rootTracingOptions = resumed ? { ...tracingOptions, traceId: resumed.traceId } : tracingOptions;
 
   return instance?.startSpan<T>({
     type,
@@ -164,13 +211,14 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     ...rest,
     metadata,
     requestContext,
-    tracingOptions,
-    traceId: tracingOptions?.traceId,
+    tracingOptions: rootTracingOptions,
+    traceId: rootTracingOptions?.traceId,
     // A resumed run's parent is the suspended span, a Mastra span in the trace.
-    parentSpanId: resumedFromSpanId,
+    parentSpanId: resumed ? resumed.parentSpanId : resumedFromSpanId,
+    resumedFromSpanId: resumed?.resumedFromSpanId,
     // tracingOptions.parentSpanId is the public external-correlation channel;
     // the id belongs to the caller's tracing system, not Mastra's own parentage.
-    externalParentSpanId: tracingOptions?.parentSpanId,
+    externalParentSpanId: tracingOptions?.parentSpanId ?? resumed?.externalParentSpanId,
     customSamplerOptions: {
       requestContext,
       metadata,

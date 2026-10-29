@@ -2023,6 +2023,8 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
   input?: SpanInput<TType>;
+  /** Span id of the initial invocation this resumed execution continues */
+  resumedFromSpanId?: string;
   /**
    * Start time for this span.
    * Used when a span is created after the work it represents began
@@ -2084,6 +2086,21 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
   endTree?: boolean;
 }
 
+/** What a suspending run saves so that its resume continues the same invocation. Persisted in workflow snapshots. */
+export interface ResumeTracingContext {
+  traceId?: string;
+  /** Span the resumed root span attaches under (its parentSpanId) */
+  spanId?: string;
+  parentSpanId?: string;
+  /**
+   * Initial invocation of this run, exported by each resume as `resumedFromSpanId`.
+   * Snapshots from older versions lack it, so readers fall back to `spanId`.
+   */
+  resumedFromSpanId?: string;
+  /** External parent of the suspended invocation, kept by a resume that gives none of its own */
+  externalParentSpanId?: string;
+}
+
 /** Options for retrieving an existing span or creating a new one from a tracing context. */
 export interface GetOrCreateSpanOptions<TType extends SpanType> extends SpanOutcomeFields {
   /** @internal Original trace state and sampling decision for a resumed execution. */
@@ -2105,8 +2122,14 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> extends SpanOutc
   /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
   links?: SpanLink[];
   /**
+   * Saved context of the run this call resumes. Together with `tracingOptions`
+   * it decides the trace, the parent, `resumedFromSpanId` and `externalParentSpanId`.
+   */
+  resumeFrom?: ResumeTracingContext;
+  /**
    * Span id of the suspended span a resumed run links back to. It is a Mastra
    * span within the trace, so it becomes the new root span's parent.
+   * @deprecated Use `resumeFrom`, which also sets the resumed span's `resumedFromSpanId` and external parent.
    */
   resumedFromSpanId?: string;
 }
