@@ -256,6 +256,34 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       await expect.poll(() => received, { timeout: 5000 }).toEqual([2]);
     }, 15_000);
 
+    it('retains final outcomes but removes saved output and answered suspensions when requested (COR-1500)', async () => {
+      const ps = createPubSub();
+      const topic = `trim-outcomes-${randomUUID()}`;
+      for (const data of [
+        { type: 'stream-part' },
+        { type: 'run-registered' },
+        { type: 'run-completed', status: 'suspended' },
+        { type: 'run-completed', status: 'success' },
+        { type: 'run-failed', error: 'failed' },
+        { type: 'run-aborted' },
+      ])
+        await ps.publish(topic, makeEvent({ runId: 'a', data }));
+      await ps.publish(topic, makeEvent({ runId: 'b', data: { type: 'stream-part' } }));
+      await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });
+      await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });
+      const inspector = await createInspector();
+      const entries = await inspector.xRange(`mastra:topic:${topic}`, '-', '+');
+      expect(entries.map(entry => JSON.parse(entry.message.event).data.type)).toEqual([
+        'run-registered',
+        'run-completed',
+        'run-failed',
+        'run-aborted',
+        'stream-part',
+      ]);
+      await ps.trimTopic(topic, { runId: 'a' });
+      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(1);
+    }, 15_000);
+
     it('pages through streams longer than one XRANGE page', async () => {
       const ps = createPubSub();
       const topic = `trim-paged-${randomUUID()}`;

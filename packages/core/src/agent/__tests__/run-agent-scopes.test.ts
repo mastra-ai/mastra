@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import {
+  incomingAgentScopes,
   getRunAgentScopes,
   MASTRA_SCOPE_ACCESS_KEY,
   resolveAgentScopes,
@@ -31,14 +32,19 @@ describe('getRunAgentScopes', () => {
 });
 
 describe('read-only scope entries', () => {
-  it('holds plain scopes read-only and { scope, access: "write" } writable; any source holding one read-only wins', () => {
+  it('holds plain scopes read-only and { scope, access: "write" } writable; a static list adds to the incoming entries', () => {
+    const callScopes = [
+      { scope: 'org:self', access: 'write' } as const,
+      { scope: 'agent:alex', access: 'read' } as const,
+      'resource:u1',
+    ];
     const resolved = resolveAgentScopes({
-      agentScopes: ['org:self', { scope: 'team:self:x', access: 'write' }],
-      callScopes: [{ scope: 'org:self', access: 'write' }, { scope: 'agent:alex', access: 'read' }, 'resource:u1'],
+      agentScopes: [...incomingAgentScopes({ callScopes }), 'org:self', { scope: 'team:self:x', access: 'write' }],
+      callScopes,
     });
-    expect(resolved.scopes).toEqual(['org:self', 'team:self:x', 'agent:alex', 'resource:u1']);
+    expect(resolved.scopes).toEqual(['org:self', 'agent:alex', 'resource:u1', 'team:self:x']);
     // resource:/thread: are the run's Memory identity: always writable, even as plain strings.
-    expect(resolved.readOnly).toEqual(['org:self', 'agent:alex']);
+    expect(resolved.readOnly).toEqual(['agent:alex', 'org:self']);
   });
 
   it('refuses entries with another access or the old { tag } shape', () => {
@@ -102,9 +108,9 @@ describe('read-only scope entries', () => {
   it("refuses another run's marked access map", () => {
     const member = new RequestContext();
     setRunAgentScopes(member, ['org:self'], ['org:self']);
-    const director = new RequestContext();
-    setRunAgentScopes(director, ['org:self']);
-    member.set(MASTRA_SCOPE_ACCESS_KEY, director.get(MASTRA_SCOPE_ACCESS_KEY));
+    const lead = new RequestContext();
+    setRunAgentScopes(lead, ['org:self']);
+    member.set(MASTRA_SCOPE_ACCESS_KEY, lead.get(MASTRA_SCOPE_ACCESS_KEY));
     expect(getRunAgentScopes(member)).toEqual([]);
   });
 

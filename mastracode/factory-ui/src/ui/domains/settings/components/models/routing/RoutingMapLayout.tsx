@@ -9,6 +9,9 @@ export type ConnectorAnchors = Record<ModelLane, RefObject<HTMLDivElement | null
 
 type ConnectorLayout = { width: number; y: Record<ModelLane | ModelDefaults, number | undefined> };
 
+export const ROUTING_MAP_GRID_CLASS =
+  'grid grid-cols-1 gap-3 @min-[44rem]:grid-cols-[13rem_minmax(4rem,1fr)_minmax(0,26rem)] @min-[44rem]:gap-0';
+
 export function createConnectorAnchors(): ConnectorAnchors {
   return {
     chats: createRef<HTMLDivElement>(),
@@ -68,7 +71,7 @@ export function RoutingMapLayout({
 
   return (
     <div className="@container">
-      <div className="grid grid-cols-1 gap-3 @min-[44rem]:grid-cols-[13rem_minmax(4rem,1fr)_minmax(0,26rem)] @min-[44rem]:gap-0">
+      <div className={ROUTING_MAP_GRID_CLASS}>
         <div ref={lanesRef} className="flex flex-col gap-3 self-center">
           {lanes}
         </div>

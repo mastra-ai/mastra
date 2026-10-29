@@ -22,10 +22,9 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "openai/gpt-5.5": [
+    "moonshotai/kimi-k2.5": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "anthropic/claude-opus-4.7": [
@@ -46,11 +45,6 @@
         "values": ["high", "max"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "zai-org/glm-5.2": [
       {
         "type": "effort",
@@ -60,6 +54,12 @@
     "zai-org/glm-5.1": [
       {
         "type": "toggle"
+      }
+    ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ]
   }

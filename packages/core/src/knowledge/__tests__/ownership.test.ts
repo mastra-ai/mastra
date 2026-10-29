@@ -90,16 +90,16 @@ describe('Knowledge ownership computed from the structure', () => {
       [
         {
           toolName: 'knowledge_record',
-          input: { op: 'add', node: 'Plan', kind: 'doc', text: 'ship it', scope: ['team:acme:director'] },
+          input: { op: 'add', node: 'Plan', kind: 'doc', text: 'ship it', scope: ['team:acme:lead'] },
         },
         {
           toolName: 'knowledge_record',
-          input: { op: 'add', node: 'Theirs', kind: 'doc', text: 'x', scope: ['team:other:director'] },
+          input: { op: 'add', node: 'Theirs', kind: 'doc', text: 'x', scope: ['team:other:lead'] },
         },
       ],
     );
-    expect(toolResults(wrote)[0].record.scope).toEqual(['team:acme:director']);
-    expect(toolErrors(wrote)).toEqual(['This run does not hold scope "team:other:director".']);
+    expect(toolResults(wrote)[0].record.scope).toEqual(['team:acme:lead']);
+    expect(toolErrors(wrote)).toEqual(['This run does not hold scope "team:other:lead".']);
 
     const unnamed = await run(knowledge, ['org:acme'], [{ toolName: 'knowledge_search', input: { query: 'ship' } }]);
     expect(toolResults(unnamed)[0].results).toEqual([]);
@@ -107,13 +107,13 @@ describe('Knowledge ownership computed from the structure', () => {
     const named = await run(
       knowledge,
       ['org:acme'],
-      [{ toolName: 'knowledge_search', input: { query: 'ship', scope: ['team:acme:director'] } }],
+      [{ toolName: 'knowledge_search', input: { query: 'ship', scope: ['team:acme:lead'] } }],
     );
     expect(toolResults(named)[0].results.map((hit: any) => hit.text)).toContain('ship it');
   });
 
-  it("shows a member team write to the director through ownership, but not the member's private default write", async () => {
-    const knowledge = companyKnowledge('own-director');
+  it("shows a member team write to the lead through ownership, but not the member's private default write", async () => {
+    const knowledge = companyKnowledge('own-lead');
     await run(
       knowledge,
       [{ scope: 'org:acme', access: 'read' }, 'team:acme:x', 'agent:alex'],
@@ -127,12 +127,12 @@ describe('Knowledge ownership computed from the structure', () => {
       'member-thread',
     );
 
-    const director = await run(
+    const lead = await run(
       knowledge,
-      ['org:acme', 'team:acme:director'],
+      ['org:acme', 'team:acme:lead'],
       [{ toolName: 'knowledge_search', input: { query: 'fact', scope: ['team:acme:x'] } }],
     );
-    const texts = toolResults(director)[0].results.map((hit: any) => hit.text);
+    const texts = toolResults(lead)[0].results.map((hit: any) => hit.text);
     expect(texts).toContain('shared fact');
     expect(texts).not.toContain('private fact');
   });

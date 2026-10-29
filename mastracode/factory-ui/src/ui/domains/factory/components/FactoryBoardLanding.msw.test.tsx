@@ -67,7 +67,7 @@ describe('installed board landing', () => {
       }),
     );
     renderLanding();
-    expect(screen.getByRole('status').textContent).toBe('Loading boards…');
+    expect(screen.getByRole('status', { name: 'Loading boards' })).toBeInTheDocument();
     release();
     expect((await screen.findByRole('alert')).textContent).toBe('Unable to load boards.');
   });

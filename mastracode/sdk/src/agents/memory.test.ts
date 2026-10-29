@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { OBSERVATION_ACTIVATION_TOKENS } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
 
 const memoryConstructorMock = vi.fn();
@@ -393,6 +394,48 @@ describe('getDynamicMemory', () => {
     // stale values from session state must not override the settings UI.
     expect(observation.messageTokens).toBe(30_000);
     expect(observation.observeAttachments).toBe('auto');
+  });
+
+  it('reads a stored threshold below the activation buffer up to one the observer can run with', async () => {
+    // A row written before the thresholds route enforced the floor can still hold
+    // this value. `@mastra/memory` rejects the config at init and the rejection is
+    // unhandled, so the process exits rather than one run failing: neither the
+    // Factory row nor session state is trusted for this.
+    const build = async (state: Record<string, unknown>, factoryRow?: Record<string, unknown>) => {
+      vi.resetModules();
+      memoryConstructorMock.mockClear();
+      getOmScopeMock.mockReturnValue('thread');
+      const { getDynamicMemory } = await import('./memory.js');
+      const requestContext = createRequestContext(state);
+      if (factoryRow) {
+        const contextGet = requestContext.get;
+        requestContext.get = vi.fn(key => (key === 'mastra__factoryMemorySettings' ? factoryRow : contextGet(key)));
+      }
+      const memory = getDynamicMemory(
+        { storage: true } as never,
+        undefined as never,
+      )({
+        requestContext: requestContext as never,
+      }) as unknown as { config: MemoryConfig };
+      return memory.config.options.observationalMemory.observation;
+    };
+
+    const fromFactoryRow = await build({}, { observationThreshold: 1, observeAttachments: null });
+    expect(fromFactoryRow.messageTokens).toBe(OBSERVATION_ACTIVATION_TOKENS + 1);
+    expect(fromFactoryRow.messageTokens).toBeGreaterThan(fromFactoryRow.bufferActivation as number);
+
+    const fromSessionState = await build({ observationThreshold: 500 });
+    expect(fromSessionState.messageTokens).toBe(OBSERVATION_ACTIVATION_TOKENS + 1);
+
+    // A threshold that is already usable is left alone.
+    const usable = await build({}, { observationThreshold: 12_000 });
+    expect(usable.messageTokens).toBe(12_000);
+
+    // Resource scope configures no activation buffer, so lower thresholds are
+    // valid there and the clamp must not raise them.
+    const resourceScope = await build({ omScope: 'resource', observationThreshold: 500 });
+    expect(resourceScope.messageTokens).toBe(500);
+    expect(resourceScope.bufferActivation).toBeUndefined();
   });
 
   it('hands auto roles to Memory and reports the effective model on every invocation', async () => {

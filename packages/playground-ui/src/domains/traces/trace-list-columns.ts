@@ -3,6 +3,7 @@ export const TRACE_OPTIONAL_COLUMNS = [
   'input',
   'output',
   'duration',
+  'traceCount',
   'timeToFirstChunk',
   'endTime',
   'environment',
@@ -48,6 +49,12 @@ export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
   visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
   customColumns: [],
   metadataKeys: [],
+};
+
+/** The Threads list: the trace defaults plus each thread's trace count. Not offered in any column picker. */
+export const THREAD_LIST_COLUMN_PREFERENCES: TraceColumnPreferences = {
+  ...DEFAULT_TRACE_COLUMN_PREFERENCES,
+  visibleColumns: [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns, 'traceCount'],
 };
 
 /** A list a column selection belongs to. Each list only offers the columns its rows carry. */
@@ -163,6 +170,7 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   keys.push('status');
   for (const column of [
     'duration',
+    'traceCount',
     'timeToFirstChunk',
     'endTime',
     'environment',
@@ -192,6 +200,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   columns.push('6rem');
 
   if (visible.has('duration')) columns.push('7rem');
+  if (visible.has('traceCount')) columns.push('6rem');
   if (visible.has('timeToFirstChunk')) columns.push('7rem');
   if (visible.has('endTime')) columns.push('11rem');
   if (visible.has('environment')) columns.push('8rem');

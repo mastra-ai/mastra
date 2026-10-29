@@ -5572,6 +5572,8 @@ export type PostAgentsAgentIdThreadsSubscribe_PathParams = GetAgentsAgentId_Path
 export type PostAgentsAgentIdThreadsSubscribe_Body = {
   resourceId?: string | undefined;
   threadId: string;
+  /** Emit thread-run-status chunks, including retained outcomes */
+  withRunStatus?: boolean | undefined;
   /** Emit one thread-history chunk with stored messages before live parts */
   withInitialHistory?:
     | (
@@ -10863,8 +10865,6 @@ export type PostObservabilityThreadsQuery_Response =
         outputPreview: string | null;
         errorPreview: string | null;
         traceCount: number;
-        model: string | null;
-        provider: string | null;
       }[];
       page: {
         next: string | null;

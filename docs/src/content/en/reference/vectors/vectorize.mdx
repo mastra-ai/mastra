@@ -14,6 +14,11 @@ The CloudflareVector class provides vector search using [Cloudflare Vectorize](h
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance.',
+  },
+  {
     name: 'accountId',
     type: 'string',
     description: 'Cloudflare account ID',
@@ -140,7 +145,7 @@ Returns:
 interface IndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric?: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -291,7 +296,7 @@ Query results are returned in this format:
 interface QueryResult {
   id: string
   score: number
-  metadata: Record<string, any>
+  metadata?: Record<string, any>
   vector?: number[]
 }
 ```

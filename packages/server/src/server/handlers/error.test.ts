@@ -214,6 +214,30 @@ describe('handleError', () => {
       expect(caught!.message).toBe('run is busy');
     });
 
+    it.each([
+      ['DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE', 'pending', 500],
+      ['DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE', 'paused', 409],
+    ])('returns a numeric HTTP failure for %s', async (id, snapshotStatus, status) => {
+      const err = new MastraError({
+        id,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'No restartable checkpoint is available',
+        details: { agentName: 'agent', runId: 'run', snapshotStatus },
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'Recovery failed');
+      } catch (error) {
+        caught = error as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      const response = caught!.getResponse();
+      expect(response.status).toBe(status);
+      expect(response.ok).toBe(false);
+      expect(await response.text()).toBe(err.message);
+    });
+
     it('does not treat a superseded execution as a request conflict', () => {
       const err = Object.assign(new Error('superseded'), { id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
       let caught: HTTPException | undefined;

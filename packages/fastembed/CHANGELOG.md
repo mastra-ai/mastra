@@ -1,5 +1,11 @@
 # @mastra/fastembed
 
+## 1.3.5-alpha.3
+
+### Patch Changes
+
+- Report missing model outputs and reject invalid numeric values from custom FastEmbed models instead of returning invalid embeddings. ([#28613](https://github.com/mastra-ai/mastra/pull/28613))
+
 ## 1.3.5-alpha.2
 
 ### Patch Changes

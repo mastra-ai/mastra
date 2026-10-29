@@ -50,10 +50,48 @@ export type AgentScopesSnapshot = {
   readOnly?: readonly string[];
 };
 
+/**
+ * The Agent `scopes` option: a static list added to the run's incoming scopes, or a function that
+ * receives the incoming scopes and returns the run's final set.
+ * @experimental
+ */
+export type AgentScopesConfig<TRequestContext = unknown> =
+  | AgentScopeEntry[]
+  | ((args: {
+      /** The run's incoming scopes: the call's `scopes`, `defaultOptions.scopes` and `mastra__scopes`. */
+      scopes: AgentScopeEntry[];
+      requestContext: RequestContext<TRequestContext>;
+      mastra?: any;
+    }) => AgentScopeEntry[] | Promise<AgentScopeEntry[]>);
+
+/**
+ * Applies an Agent's `scopes` option to a run's incoming scopes: no option keeps them, a static
+ * list adds to them, a function replaces them with what it returns.
+ */
+export async function applyAgentScopesConfig<TRequestContext>(
+  config: AgentScopesConfig<TRequestContext> | undefined,
+  args: { scopes: AgentScopeEntry[]; requestContext: RequestContext<TRequestContext>; mastra?: unknown },
+): Promise<AgentScopeEntry[]> {
+  if (config === undefined) return args.scopes;
+  if (typeof config !== 'function') return [...args.scopes, ...config];
+  return config(args);
+}
+
 export type ResolveAgentScopesInput = {
   requestContext?: RequestContext;
-  /** Scopes from the Agent config resolver and `defaultOptions.scopes`. */
+  /**
+   * The run's scopes after the Agent's `scopes` option ran on the incoming scopes (see
+   * `incomingAgentScopes`). When given, it is the run's final set: request-context and call scopes
+   * are not added again, but every `resource:`/`thread:` scope among them must still be in it.
+   * Ignored on resume.
+   */
   agentScopes?: readonly AgentScopeEntry[];
+  /**
+   * The incoming scopes `agentScopes` was computed from (see {@link incomingAgentScopes}), including
+   * `defaultOptions.scopes`. Every `resource:`/`thread:` scope in it must survive the Agent's
+   * function, and every read-only scope in it stays read-only.
+   */
+  incomingScopes?: readonly AgentScopeEntry[];
   /** Scopes passed on the call. */
   callScopes?: readonly AgentScopeEntry[];
   memory?: { resource?: string; thread?: string | { id: string } };
@@ -170,7 +208,9 @@ function hasOutdatedScopesServer(mastra: ResolveAgentScopesInput['mastra']): boo
   return !!server && server.reservesAgentScopes !== true;
 }
 
-function assertCallerScopesAllowed(input: ResolveAgentScopesInput): void {
+function assertCallerScopesAllowed(
+  input: Pick<ResolveAgentScopesInput, 'mastra' | 'requestContext' | 'callScopes'>,
+): void {
   if (!hasOutdatedScopesServer(input.mastra)) return;
   const fromContext = input.requestContext?.get(MASTRA_SCOPES_KEY);
   const contextSupplied =
@@ -253,6 +293,47 @@ function validateScopes(source: string, scopes: unknown): { tags: string[]; read
   return { tags, readOnly };
 }
 
+/**
+ * The scopes a run starts from before the Agent's `scopes` option: the reserved `mastra__scopes`
+ * request-context key, the call's `scopes` and `defaultOptions.scopes`. Read-only entries keep
+ * their access, so a function sees what it is given.
+ */
+export function incomingAgentScopes(input: {
+  requestContext?: RequestContext;
+  callScopes?: readonly AgentScopeEntry[];
+  defaultScopes?: readonly AgentScopeEntry[];
+  mastra?: ResolveAgentScopesInput['mastra'];
+}): AgentScopeEntry[] {
+  assertCallerScopesAllowed(input);
+  const fromContext = contextScopes(input.requestContext);
+  const call = validateScopes('option "scopes"', input.callScopes);
+  const defaults = validateScopes('default option "scopes"', input.defaultScopes);
+  const tags = [...new Set([...fromContext.tags, ...call.tags, ...defaults.tags])];
+  const readOnly = new Set([...fromContext.readOnly, ...call.readOnly, ...defaults.readOnly]);
+  return tags.map(tag =>
+    isIdentityAgentScope(tag)
+      ? tag
+      : { scope: tag, access: readOnly.has(tag) ? ('read' as const) : ('write' as const) },
+  );
+}
+
+/** Scopes on the request context's `mastra__scopes` key, with the read-only ones. */
+function contextScopes(requestContext: RequestContext | undefined): { tags: string[]; readOnly: string[] } {
+  const fromContext = validateScopes(`request context "${MASTRA_SCOPES_KEY}"`, requestContext?.get(MASTRA_SCOPES_KEY));
+  // Core writes resolved tags with an access map beside them (an empty one when nothing is
+  // read-only). A host that sets the key itself writes entries, which read like any others:
+  // plain strings read-only, `{ scope, access: 'write' }` writable.
+  const accessMap = requestContext?.get(MASTRA_SCOPE_ACCESS_KEY);
+  const readOnly = accessMap === undefined || accessMap === null ? fromContext.readOnly : accessMapTags(accessMap);
+  if (!readOnly) {
+    throw scopesError(
+      'AGENT_SCOPES_INVALID',
+      `Agent request context "${MASTRA_SCOPE_ACCESS_KEY}" must map tags to "read".`,
+    );
+  }
+  return { tags: fromContext.tags, readOnly };
+}
+
 function identityFromScopes(scopes: readonly string[], type: 'resource' | 'thread'): string | undefined {
   let found: string | undefined;
   for (const scope of scopes) {
@@ -293,8 +374,9 @@ function memoryThreadId(memory: ResolveAgentScopesInput['memory']): string | und
 /**
  * Resolves the scopes an agent run acts with, and the Memory resource/thread they imply.
  *
- * Scopes from the reserved `mastra__scopes` request-context key, the Agent's `scopes`
- * resolver, and the call's `scopes` are unioned. `resource:` and `thread:` scopes set the
+ * The incoming scopes (the reserved `mastra__scopes` request-context key and the call's `scopes`)
+ * go through the Agent's `scopes` option first (`agentScopes`): a static list adds to them, a
+ * function replaces them. `resource:` and `thread:` scopes set the
  * run's Memory identity; every other source of resource/thread must agree with them or the
  * call throws. Resource and thread resolve independently: when scopes carry neither, the
  * existing precedence applies (reserved ID key, then options, then memory, then snapshot).
@@ -307,28 +389,37 @@ export function resolveAgentScopes(input: ResolveAgentScopesInput): ResolvedAgen
   const { requestContext, memory, snapshot } = input;
   assertCallerScopesAllowed(input);
   const agentScopes = validateScopes('config "scopes"', input.agentScopes);
-  const fromContext = validateScopes(`request context "${MASTRA_SCOPES_KEY}"`, requestContext?.get(MASTRA_SCOPES_KEY));
-  const contextScopes = fromContext.tags;
-  // Core writes resolved tags with an access map beside them (an empty one when nothing is
-  // read-only). A host that sets the key itself writes entries, which read like any others:
-  // plain strings read-only, `{ scope, access: 'write' }` writable.
-  const accessMap = requestContext?.get(MASTRA_SCOPE_ACCESS_KEY);
-  const contextReadOnly =
-    accessMap === undefined || accessMap === null ? fromContext.readOnly : accessMapTags(accessMap);
-  if (!contextReadOnly) {
-    throw scopesError(
-      'AGENT_SCOPES_INVALID',
-      `Agent request context "${MASTRA_SCOPE_ACCESS_KEY}" must map tags to "read".`,
-    );
-  }
+  const { tags: fromContextTags, readOnly: contextReadOnly } = contextScopes(requestContext);
   const callScopes = validateScopes('option "scopes"', input.callScopes);
-  // On resume the Agent's own configuration is not re-supplied by the caller: the suspended run
-  // keeps its scopes, so an agent that adds or changes its resolver can still resume older runs.
-  const fromAgent = snapshot?.scopes ? { tags: [], readOnly: [] } : agentScopes;
-  const supplied = new Set<string>([...contextScopes, ...fromAgent.tags, ...callScopes.tags]);
-  // Union by tag: any source holding a tag read-only (a plain string included) makes it read-only.
-  // Nothing widens it back.
-  const suppliedReadOnly = new Set<string>([...contextReadOnly, ...fromAgent.readOnly, ...callScopes.readOnly]);
+  let supplied: Set<string>;
+  let suppliedReadOnly: Set<string>;
+  if (input.agentScopes !== undefined && !snapshot?.scopes) {
+    // The Agent's `scopes` option already ran on the incoming scopes; its result is the run's set.
+    supplied = new Set(agentScopes.tags);
+    const incoming = validateScopes('incoming scopes', input.incomingScopes);
+    for (const scope of [...fromContextTags, ...callScopes.tags, ...incoming.tags]) {
+      if (isIdentityAgentScope(scope) && !supplied.has(scope)) {
+        throw scopesError(
+          'AGENT_SCOPES_INVALID',
+          `The agent's scopes function dropped "${scope}". A run keeps the "resource:" and "thread:" scopes it was given.`,
+        );
+      }
+    }
+    // A tag a parent run held read-only stays read-only; the function can't widen it.
+    suppliedReadOnly = new Set([
+      ...agentScopes.readOnly,
+      ...contextReadOnly,
+      ...callScopes.readOnly,
+      ...incoming.readOnly,
+    ]);
+  } else {
+    // On resume the Agent's own configuration is not re-supplied by the caller: the suspended run
+    // keeps its scopes, so an agent that adds or changes its resolver can still resume older runs.
+    supplied = new Set<string>([...fromContextTags, ...callScopes.tags]);
+    // Union by tag: any source holding a tag read-only (a plain string included) makes it read-only.
+    // Nothing widens it back.
+    suppliedReadOnly = new Set<string>([...contextReadOnly, ...callScopes.readOnly]);
+  }
 
   let scopes: string[];
   let readOnly: Set<string>;

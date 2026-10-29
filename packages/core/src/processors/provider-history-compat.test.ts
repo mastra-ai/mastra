@@ -1,6 +1,8 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import {
@@ -186,9 +188,9 @@ describe('ProviderHistoryCompat', () => {
     expect(result).toBeUndefined();
   });
 
-  it('should return undefined when retryCount > 0', async () => {
+  it('should return undefined once two repair passes have been spent (retryCount >= 2)', async () => {
     const handler = new ProviderHistoryCompat();
-    const args = makeArgs({ retryCount: 1 });
+    const args = makeArgs({ retryCount: 2 });
 
     const result = await handler.processAPIError(args);
 
@@ -801,6 +803,115 @@ describe('stripForeignProviderExecutedTools', () => {
   });
 });
 
+// #28190: hosted results live inside assistant messages after MessageList conversion.
+describe('model switches after hosted tool results', () => {
+  it.each([
+    ['openai', 'anthropic', false],
+    ['anthropic', 'openai', false],
+    ['openai', 'openai', false],
+    ['anthropic', 'anthropic', false],
+    ['openai', 'anthropic', true],
+    ['anthropic', 'openai', true],
+  ] as const)(
+    'replays complete tool pairs when switching from %s to %s (mixed history: %s) (#28190)',
+    async (source, destination, mixedHistory) => {
+      const sourceModel = new MockLanguageModelV2({
+        provider: 'vercel',
+        modelId: `${source}/source-model`,
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            ...['page-1', 'page-2'].flatMap((toolCallId, index) => [
+              {
+                type: 'tool-call' as const,
+                toolCallId,
+                toolName: 'web_fetch',
+                input: JSON.stringify({ url: `https://example.com/${toolCallId}` }),
+                providerExecuted: true,
+                providerMetadata: { [mixedHistory && index === 1 ? destination : source]: { itemId: toolCallId } },
+              },
+              {
+                type: 'tool-result' as const,
+                toolCallId,
+                toolName: 'web_fetch',
+                result: `Content of ${toolCallId}`,
+                providerExecuted: true,
+              },
+            ]),
+            { type: 'text-start', id: 'summary' },
+            { type: 'text-delta', id: 'summary', delta: 'Fetched both pages.' },
+            { type: 'text-end', id: 'summary' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      });
+      const firstAgent = new Agent({
+        id: 'hosted-tools',
+        name: 'Hosted tools',
+        instructions: 'Fetch both pages.',
+        model: sourceModel,
+      });
+      const firstStream = await firstAgent.stream('Fetch two pages.', { maxSteps: 1 });
+      const first = await firstStream.getFullOutput();
+      expect(first.text).toBe('Fetched both pages.');
+      const history = first.messages;
+      const before = structuredClone(history);
+      const storedCalls = history
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation');
+      expect(storedCalls).toHaveLength(2);
+      expect(storedCalls.every(part => part.toolInvocation.state === 'result')).toBe(true);
+
+      const prompts: LanguageModelV2Prompt[] = [];
+      const secondModel = new MockLanguageModelV2({
+        provider: 'vercel',
+        modelId: `${destination}/destination-model`,
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'answer' },
+              { type: 'text-delta', id: 'answer', delta: 'Follow-up accepted.' },
+              { type: 'text-end', id: 'answer' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      });
+      const secondAgent = new Agent({
+        id: 'hosted-tools',
+        name: 'Hosted tools',
+        instructions: 'Answer the follow-up.',
+        model: secondModel,
+      });
+      const secondStream = await secondAgent.stream([...history, { role: 'user', content: 'Summarize the pages.' }]);
+      const second = await secondStream.getFullOutput();
+      expect(second.text).toBe('Follow-up accepted.');
+      expect(prompts).toHaveLength(1);
+      for (const prompt of prompts) {
+        // Hosted pairs must stay embedded in the assistant message, not move to standalone tool messages.
+        expect(prompt.filter(message => message.role === 'tool')).toEqual([]);
+        const parts = prompt.flatMap(message => (message.role === 'assistant' ? message.content : []));
+        const calls = parts.filter(part => part.type === 'tool-call');
+        const results = parts.filter(part => part.type === 'tool-result');
+        // Every result crossing the provider boundary must still have its call.
+        expect(results.map(part => part.toolCallId)).toEqual(calls.map(part => part.toolCallId));
+        const expectedIds = source === destination ? ['page-1', 'page-2'] : mixedHistory ? ['page-2'] : [];
+        expect(calls.map(part => part.toolCallId)).toEqual(expectedIds);
+        expect(results.map(part => part.toolCallId)).toEqual(expectedIds);
+        if (mixedHistory) {
+          expect(results).toContainEqual(
+            expect.objectContaining({ toolCallId: 'page-2', output: { type: 'text', value: 'Content of page-2' } }),
+          );
+        }
+        expect(parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'Fetched both pages.' }));
+      }
+      expect(history).toEqual(before);
+    },
+  );
+});
+
 describe('anthropicStripForeignReasoningContent', () => {
   it('strips foreign reasoning parts from assistant messages when model is Anthropic', () => {
     const result = anthropicStripForeignReasoningContent.applyToPrompt!({
@@ -933,27 +1044,6 @@ describe('trailing assistant message protection', () => {
 
     expect(result).toBeDefined();
     expect((result![1].content as any[]).map(p => p.type)).toEqual(['tool-call']);
-  });
-
-  it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
-    const prompt = toolContinuationPrompt();
-    // Give the historical assistant an empty signed block so the rule has
-    // something to strip outside the protected message.
-    (prompt[1].content as any[]).unshift({
-      type: 'reasoning',
-      text: '',
-      providerOptions: { anthropic: { signature: 'sig-legacy' } },
-    });
-
-    const result = anthropicStripEmptySignedReasoningContent.applyToPrompt!({
-      prompt,
-      model: anthropicModel,
-    });
-
-    expect(result).toBeDefined();
-    expect((result![1].content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
-    // Trailing assistant keeps its empty signed block untouched
-    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
   });
 
   it('still strips the last assistant message when a new user turn follows it', () => {
@@ -1191,6 +1281,46 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(result).toEqual({ prompt: expect.any(Array) });
     const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
+  });
+
+  it('keeps Claude 5.x signed thinking blocks with omitted (empty) text on every request (#28309)', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'roll' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-1' } } },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'roll', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'roll', output: { type: 'text', value: '4' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-2' } } },
+          { type: 'tool-call', toolCallId: 'call-2', toolName: 'roll', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-2', toolName: 'roll', output: { type: 'text', value: '5' } },
+        ],
+      },
+    ];
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(prompt, { provider: 'anthropic.messages', modelId: 'claude-sonnet-5-5' }),
+    );
+
+    // Any rewrite would change the cached prefix; the prompt must go out untouched.
+    expect(result).toBeUndefined();
   });
 
   it('strips foreign reasoning parts from the prompt on Anthropic', async () => {
@@ -2574,5 +2704,180 @@ describe('anthropicToolIdFormat is prompt-scoped, not persisted', () => {
       .filter(part => part.type === 'tool-invocation')
       .map(part => (part as any).toolInvocation.toolCallId);
     expect(persistedIds).toEqual(['call.abc:1']);
+  });
+});
+
+describe('anthropicStripEmptySignedReasoningContent (reactive)', () => {
+  const thinkingModifiedError = () => {
+    const message =
+      'messages.1.content.0: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.';
+    return new APICallError({
+      message,
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
+      isRetryable: false,
+    });
+  };
+
+  const reasoning = (signature: string, text: string) => ({
+    type: 'reasoning' as const,
+    reasoning: text,
+    details: text ? [{ type: 'text' as const, text, signature }] : [],
+    providerMetadata: { anthropic: { signature } },
+  });
+
+  const assistant = (id: string, parts: MastraDBMessage['content']['parts']) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(),
+    content: { format: 2 as const, parts },
+  });
+
+  const signatures = (list: MessageList) =>
+    list.get.all
+      .db()
+      .flatMap(m =>
+        m.role === 'assistant'
+          ? [
+              m.content.parts
+                .filter(p => p.type === 'reasoning')
+                .map(p => (p as any).providerMetadata.anthropic.signature),
+            ]
+          : [],
+      );
+
+  function argsFor(build: (list: MessageList) => void) {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: thinkingModifiedError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+    } satisfies ProcessAPIErrorArgs;
+  }
+
+  it('repairs an orphaned thinking step without dropping a valid empty signed block from an earlier message', async () => {
+    // Both rules match this 400 and the first one that changes history wins, so the orphaned-step
+    // repair has to run first: otherwise the strip rule removes the valid Claude 5.x block, the retry
+    // still fails on the orphaned step, and the retryCount guard turns it into a hard failure.
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('VALID_EMPTY', ''), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [
+          assistant('a2', [
+            { type: 'step-start' },
+            reasoning('ORPHANED', 'lost step thinking'),
+            { type: 'step-start' },
+            reasoning('NEXT', 'next step thinking'),
+            { type: 'text', text: 'two' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([['VALID_EMPTY'], ['NEXT']]);
+  });
+
+  it('recovers a history that needs both the orphaned-step repair and the empty-signed strip, within a bounded second pass', async () => {
+    // One legacy thread can hold an orphaned thinking step and a corrupted empty signed block. They
+    // raise the same 400, only the first repair that changes history runs per pass, so the retry
+    // fails again and needs a second pass. The pass count stays bounded.
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('LEGACY_EMPTY', ''), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [
+          assistant('a2', [
+            { type: 'step-start' },
+            reasoning('ORPHANED', 'lost step thinking'),
+            { type: 'step-start' },
+            reasoning('NEXT', 'next step thinking'),
+            { type: 'text', text: 'two' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+    const compat = new ProviderHistoryCompat();
+
+    expect(await compat.processAPIError({ ...args, retryCount: 0 })).toEqual({ retry: true });
+    expect(await compat.processAPIError({ ...args, retryCount: 1 })).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([[], ['NEXT']]);
+    expect(await compat.processAPIError({ ...args, retryCount: 2 })).toBeUndefined();
+  });
+
+  it('drops legacy empty signed blocks from earlier messages after the 400, keeping valid ones and the trailing assistant', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [
+          assistant('a1', [
+            { type: 'step-start' },
+            reasoning('LEGACY', ''),
+            reasoning('VALID', 'real thinking'),
+            { type: 'text', text: 'one' },
+          ]),
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [assistant('a2', [{ type: 'step-start' }, reasoning('TRAILING', ''), { type: 'text', text: 'two' }])],
+        'memory',
+      );
+    });
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([['VALID'], ['TRAILING']]);
+  });
+
+  it('does nothing when the history has no empty signed blocks', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('VALID', 'thinking'), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+  });
+
+  it('is not triggered by unrelated errors', async () => {
+    const args = {
+      ...argsFor(list => {
+        list.add([createUserMessage('q1')], 'input');
+        list.add([assistant('a1', [reasoning('LEGACY', ''), { type: 'text', text: 'one' }])], 'memory');
+        list.add([createUserMessage('q2')], 'input');
+      }),
+      error: new Error('rate limited'),
+    };
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(signatures(args.messageList)).toEqual([['LEGACY']]);
   });
 });

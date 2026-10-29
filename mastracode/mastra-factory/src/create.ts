@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as p from '@clack/prompts';
@@ -23,9 +24,16 @@ import {
 import { cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
+export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
+export const SELF_HOSTED_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory-self-hosted';
+
 export interface CreateArgs {
   projectName?: string;
-  template: string;
+  /**
+   * Public GitHub URL of the template to scaffold. Omitted → the platform
+   * template, or the self-hosted template with `noPlatform`.
+   */
+  template?: string;
   /**
    * Skip the platform round-trip (auth, project, sk_ key, Neon). Useful for
    * offline scaffold testing. `.env` is left as-is from the template's
@@ -99,7 +107,10 @@ export async function create(args: CreateArgs): Promise<void> {
   const spinner = p.spinner();
   spinner.start('Downloading the Mastra Factory template...');
   try {
-    await cloneTemplate(args.template, projectPath);
+    await cloneTemplate(
+      args.template ?? (args.noPlatform ? SELF_HOSTED_TEMPLATE_REPO : PLATFORM_TEMPLATE_REPO),
+      projectPath,
+    );
     await renameProject(projectPath, projectName);
     // Seed .env from the example. Platform-provisioning below rewrites the
     // handful of platform keys idempotently; other keys stay as-is so the
@@ -112,6 +123,7 @@ export async function create(args: CreateArgs): Promise<void> {
     } catch {
       // Best-effort on Unix; no-op or unsupported on Windows.
     }
+    seedCredentialEncryptionKey(envPath);
     spinner.stop('Template downloaded.');
   } catch (err) {
     spinner.stop('Template download failed.');
@@ -415,6 +427,18 @@ function sanitizeDatabaseName(projectName: string): string {
   const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
   const truncated = (cleaned || 'factory').slice(0, 64);
   return truncated;
+}
+
+/**
+ * Fill the template's empty `FACTORY_CREDENTIAL_ENCRYPTION_KEY` placeholder
+ * with a fresh AES-256 key so stored credentials are encrypted from the first
+ * boot. Templates that don't declare the key, or that already set one, are
+ * left alone.
+ */
+function seedCredentialEncryptionKey(envPath: string): void {
+  const env = fs.readFileSync(envPath, 'utf8');
+  if (!/^\s*(#\s*)?FACTORY_CREDENTIAL_ENCRYPTION_KEY\s*=\s*$/m.test(env)) return;
+  upsertEnvFile(envPath, { FACTORY_CREDENTIAL_ENCRYPTION_KEY: randomBytes(32).toString('base64') });
 }
 
 /**

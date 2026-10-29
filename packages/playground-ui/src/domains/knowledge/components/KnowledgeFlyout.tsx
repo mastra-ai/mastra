@@ -6,6 +6,7 @@ import { knowledgeScopes } from '../lib/knowledgeScope';
 import { getRecordBorderClass, getRecordRingClass } from '../lib/knowledgeStyles';
 import { parseRecordSegments } from '../lib/recordText';
 import type { KnowledgeNodeRecord, KnowledgeRung } from '../types';
+import { KnowledgeFlyoutHeaderSkeleton, KnowledgeFlyoutSkeleton } from './KnowledgeSkeletons';
 
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -259,33 +260,34 @@ export function KnowledgeFlyout({
       className="fixed inset-x-0 bottom-0 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-t-xl border-t border-border bg-card shadow-overlay md:static md:z-auto md:max-h-none md:w-[380px] md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
       aria-label="Knowledge node details"
     >
+      <header className="flex items-start gap-2 px-4 py-3">
+        {nodeQuery.data ? (
+          <div className="min-w-0">
+            <Txt as="h2" variant="subheading" tone="ink" className="truncate">
+              {nodeQuery.data.node.name}
+            </Txt>
+            <div className="mt-1 flex items-center gap-2">
+              <Txt as="span" variant="meta" tone="muted" className="rounded bg-fill px-1.5 py-0.5">
+                {nodeQuery.data.node.kind}
+              </Txt>
+              <RungBadge rung={nodeQuery.data.node.rung} />
+            </div>
+          </div>
+        ) : (
+          <KnowledgeFlyoutHeaderSkeleton />
+        )}
+        <Button variant="ghost" size="icon-sm" aria-label="Close details" className="ml-auto" onClick={onClose}>
+          <X />
+        </Button>
+      </header>
       {nodeQuery.isPending ? (
-        <Txt as="p" variant="body" tone="muted" className="p-4">
-          Loading knowledge node…
-        </Txt>
+        <KnowledgeFlyoutSkeleton />
       ) : nodeQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this knowledge node.</Notice>
         </div>
       ) : (
         <>
-          <header className="flex items-start gap-2 px-4 py-3">
-            <div className="min-w-0">
-              <Txt as="h2" variant="subheading" tone="ink" className="truncate">
-                {nodeQuery.data.node.name}
-              </Txt>
-              <div className="mt-1 flex items-center gap-2">
-                <Txt as="span" variant="meta" tone="muted" className="rounded bg-fill px-1.5 py-0.5">
-                  {nodeQuery.data.node.kind}
-                </Txt>
-                <RungBadge rung={nodeQuery.data.node.rung} />
-              </div>
-            </div>
-            <Button variant="ghost" size="icon-sm" aria-label="Close details" className="ml-auto" onClick={onClose}>
-              <X />
-            </Button>
-          </header>
-
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
             {nodeQuery.data.node.description?.trim() ? (
               <p className="px-4 pb-3 text-body leading-relaxed text-foreground">{nodeQuery.data.node.description}</p>

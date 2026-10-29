@@ -1424,7 +1424,9 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
+        // Factory owns Knowledge: without its own config, Knowledge stays off
+        // rather than following the host's Mastra Code settings toggle.
+        knowledge: this.#config.knowledge ?? false,
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.

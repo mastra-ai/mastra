@@ -143,7 +143,9 @@ export function MetricsTable<Row>({
               onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
               onMouseLeave={onRowHover ? () => onRowHover(undefined) : undefined}
               className={cn(
-                'relative grid items-center gap-3 rounded px-3 py-2 text-body-sm text-foreground transition-opacity duration-150',
+                // The separator is drawn inside the row's bottom edge; one more pixel below keeps the
+                // content centered between the lines above and below it.
+                'relative grid items-center gap-3 rounded px-3 pt-2 pb-2.25 text-body-sm text-foreground transition-opacity duration-150',
                 ROW_LINE,
                 onRowClick && cn('cursor-pointer', FOCUS),
                 isRowDimmed?.(row) && 'opacity-40',

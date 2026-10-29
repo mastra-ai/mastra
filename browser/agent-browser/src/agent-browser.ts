@@ -1281,14 +1281,13 @@ export class AgentBrowser extends MastraBrowser {
           success: true,
           hint: `Element is now ${state}. Take a snapshot to continue.`,
         };
-      } else {
-        const page = await this.getPage(threadId);
-        await page.waitForTimeout(timeout);
-        return {
-          success: true,
-          hint: 'Wait complete. Take a snapshot to see current state.',
-        };
       }
+      const page = await this.getPage(threadId);
+      await page.waitForTimeout(timeout);
+      return {
+        success: true,
+        hint: 'Wait complete. Take a snapshot to see current state.',
+      };
     } catch (error) {
       return this.createErrorFromException(error, 'Wait');
     }

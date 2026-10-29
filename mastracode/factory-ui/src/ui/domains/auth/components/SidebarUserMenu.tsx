@@ -29,10 +29,21 @@ export function SidebarUserMenu() {
 
   if (auth.isLoading) {
     return (
-      <li role="status" aria-label="Checking sign-in" className="flex h-9 items-center gap-2 px-3">
-        <Skeleton className="size-4 rounded-full" />
-        <Skeleton className="h-3 w-24" />
-      </li>
+      <Sidebar.NavLink
+        role="status"
+        aria-label="Checking sign-in"
+        render={
+          <div aria-hidden className="pointer-events-none h-auto min-h-10 py-1.5">
+            <Skeleton className="size-avatar-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
+            <Sidebar.NavLabel>
+              <span className="flex min-w-0 flex-col gap-1.5">
+                <Skeleton className="h-3 w-24 max-w-full motion-reduce:before:animate-none" />
+                <Skeleton className="h-2.5 w-32 max-w-full motion-reduce:before:animate-none" />
+              </span>
+            </Sidebar.NavLabel>
+          </div>
+        }
+      />
     );
   }
 

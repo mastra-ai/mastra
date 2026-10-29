@@ -1,9 +1,14 @@
-import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import { getSettingsPath, loadSettings } from '@mastra/code-sdk/onboarding/settings';
 
-let knowledgeEnabled: boolean | undefined;
+const knowledgeEnabled = new Map<string, boolean>();
 
-/** The /settings Knowledge toggle, read once: like the agent, it changes on restart. */
+/** The /settings Knowledge toggle, read once per settings file: it changes on restart. */
 export function isKnowledgeEnabled(): boolean {
-  knowledgeEnabled ??= loadSettings().signals.experimentalKnowledge;
-  return knowledgeEnabled;
+  const settingsPath = getSettingsPath();
+  let enabled = knowledgeEnabled.get(settingsPath);
+  if (enabled === undefined) {
+    enabled = loadSettings().signals.experimentalKnowledge;
+    knowledgeEnabled.set(settingsPath, enabled);
+  }
+  return enabled;
 }

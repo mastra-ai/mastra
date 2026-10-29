@@ -1,3 +1,4 @@
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -160,7 +161,15 @@ export function CustomProvidersSection() {
       )}
 
       {loading ? (
-        <SkeletonRows label="Loading custom providers" rows={3} rowClassName="h-9 w-full" />
+        <SkeletonRows label="Loading custom providers" rows={3} className="divide-border gap-0 divide-y">
+          <div aria-hidden className="flex items-center justify-between gap-3 py-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <SkeletonText line="text-body" className="w-40 max-w-full motion-reduce:before:animate-none" />
+              <SkeletonText line="text-meta" className="w-56 max-w-full motion-reduce:before:animate-none" />
+            </div>
+            <Skeleton className="size-control-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
+          </div>
+        </SkeletonRows>
       ) : providers.length === 0 ? null : (
         <ul role="list" className="divide-border flex flex-col divide-y">
           {providers.map(p => (

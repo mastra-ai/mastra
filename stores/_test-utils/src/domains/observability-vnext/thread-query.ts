@@ -1,5 +1,10 @@
 import { SpanType } from '@mastra/core/observability';
-import { planThreadRowsQuery, threadQueryResponseSchema } from '@mastra/core/storage';
+import {
+  parseTraceAggregateRequest,
+  planThreadRowsQuery,
+  planTraceAggregate,
+  threadQueryResponseSchema,
+} from '@mastra/core/storage';
 import type { CreateSpanRecord, ObservabilityStorage, ThreadQueryRequest, ThreadQueryRow } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeSpan } from './data';
@@ -73,6 +78,42 @@ export function createThreadQueryTests(
       expect(
         (await query({ where: { op: 'gte', left: { path: 'traceCount' }, right: { literal: 3 } } })).threads,
       ).toHaveLength(1);
+    });
+
+    it('counts each thread the way aggregateTraces counts it over the full retained history', async () => {
+      const done = (traceId: string, seconds: number, endSeconds: number, extra: Partial<CreateSpanRecord> = {}) =>
+        root(traceId, seconds, { endedAt: at(endSeconds), ...extra });
+      // Stored versions of one root with different end times (and so different dedupe keys)
+      // must count once, in both APIs.
+      await getStorage().batchCreateSpans({ records: [done('copied', 15, 16)] });
+      await getStorage().batchCreateSpans({ records: [done('copied', 15, 400)] });
+      await getStorage().batchCreateSpans({
+        records: [
+          done('before-window', -300, -299),
+          done('after-window', 300, 301),
+          done('copied', 15, 16, { spanId: 'child', parentSpanId: 'root-copied' }),
+          done('other-thread', 12, 13, { threadId: 'thread-b' }),
+          done('other-thread-history', -120, -119, { threadId: 'thread-b' }),
+          done('outside-scope', 14, 15, { resourceId: 'resource-b' }),
+        ],
+      });
+      const rows = (await query({}, scope)).threads;
+      expect(Object.fromEntries(rows.map(row => [row.threadId, row.traceCount]))).toEqual({
+        'thread-a': 3,
+        'thread-b': 2,
+      });
+      const aggregate = await getStorage().aggregateTraces(
+        planTraceAggregate(
+          parseTraceAggregateRequest({
+            timeRange: { from: at(-3600).toISOString(), to: at(3600).toISOString() },
+            groupBy: ['threadId'],
+            measures: ['count'],
+          }),
+          { scope },
+        ),
+      );
+      const counts = new Map(aggregate.rows.map(row => [row.dimensions?.threadId, row.measures.count]));
+      for (const row of rows) expect(row.traceCount, row.threadId).toBe(counts.get(row.threadId));
     });
 
     it('distinguishes trace starts, thread starts and maximum thread end time', async () => {
@@ -201,10 +242,9 @@ export function createThreadQueryTests(
           root('same', 15.1, {
             organizationId: null,
             resourceId: null,
-            spanId: 'null-tenant-model',
+            spanId: 'null-tenant-child',
             parentSpanId: 'root-same',
             spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'gpt-4o', provider: 'openai' },
           }),
           root('same', 16, { organizationId: 'org-a', threadId: 'same', input: 'named tenant' }),
         ],
@@ -215,8 +255,6 @@ export function createThreadQueryTests(
         traceCount: 1,
         inputPreview: 'null tenant',
         resourceId: null,
-        model: 'gpt-4o',
-        provider: 'openai',
       });
       expect(rows.find(row => row.organizationId === 'org-a')).toMatchObject({
         traceCount: 1,
@@ -249,7 +287,7 @@ export function createThreadQueryTests(
       });
     });
 
-    it('returns null root-agent fields for a non-agent first trace', async () => {
+    it('returns null time to first chunk for a non-agent first trace and no model or provider', async () => {
       await getStorage().batchCreateSpans({
         records: [
           root('a', 15, { spanType: SpanType.WORKFLOW_RUN, timeToFirstChunkMs: 100 }),
@@ -258,24 +296,32 @@ export function createThreadQueryTests(
             spanId: 'model',
             parentSpanId: 'root-a',
             spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'not-root-agent' },
+            attributes: { model: 'gpt-4o', provider: 'openai' },
           }),
         ],
       });
-      expect((await query()).threads[0]).toMatchObject({ model: null, provider: null, timeToFirstChunkMs: null });
+      // Read the store's own rows: the response schema would drop extra keys.
+      const { threads } = (await getStorage().queryThreads(planThreadRowsQuery({ timeRange: { traces: range } }))) as {
+        threads: Record<string, unknown>[];
+      };
+      expect(threads[0]).toMatchObject({ timeToFirstChunkMs: null });
+      expect(threads[0]).not.toHaveProperty('model');
+      expect(threads[0]).not.toHaveProperty('provider');
     });
 
-    it('hydrates the maximum page and keeps the continuation', async () => {
+    it('hydrates the maximum page, defaults to 25 rows and keeps the continuation', async () => {
       await getStorage().batchCreateSpans({
-        records: Array.from({ length: 1001 }, (_, index) =>
-          root(`trace-${index}`, 15, { threadId: `thread-${String(index).padStart(4, '0')}` }),
+        records: Array.from({ length: 101 }, (_, index) =>
+          root(`trace-${index}`, 15, { threadId: `thread-${String(index).padStart(3, '0')}` }),
         ),
       });
-      const first = await query({ page: { limit: 1000 } });
-      expect(first.threads).toHaveLength(1000);
+      expect((await query()).threads).toHaveLength(25);
+      expect(() => planThreadRowsQuery({ timeRange: { traces: range }, page: { limit: 101 } })).toThrow();
+      const first = await query({ page: { limit: 100 } });
+      expect(first.threads).toHaveLength(100);
       expect(first.page.next).not.toBeNull();
       const next = await query({ page: { after: first.page.next! } });
-      expect(next.threads.map(row => row.threadId)).toEqual(['thread-1000']);
+      expect(next.threads.map(row => row.threadId)).toEqual(['thread-100']);
       expect(next.page.next).toBeNull();
     });
 
@@ -300,34 +346,6 @@ export function createThreadQueryTests(
       expect(next.threads).toHaveLength(1);
       expect(next.threads[0]).toMatchObject({ inputPreview: 'input 35', outputPreview: 'output 35', traceCount: 2 });
       expect(next.page.next).toBeNull();
-    });
-
-    it('uses the root agent own model generation instead of a nested processor model', async () => {
-      await getStorage().batchCreateSpans({
-        records: [
-          root('a', 15),
-          root('a', 15.1, { spanId: 'processor', parentSpanId: 'root-a' }),
-          root('a', 15.2, {
-            spanId: 'nested-model',
-            parentSpanId: 'processor',
-            spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'wrong', provider: 'wrong' },
-          }),
-          root('a', 15.3, {
-            spanId: 'own-model',
-            parentSpanId: 'root-a',
-            spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'first-model', provider: 'first-provider' },
-          }),
-          root('a', 15.4, {
-            spanId: 'later-model',
-            parentSpanId: 'root-a',
-            spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'later-model' },
-          }),
-        ],
-      });
-      expect((await query()).threads[0]).toMatchObject({ model: 'first-model', provider: 'first-provider' });
     });
   });
 }
