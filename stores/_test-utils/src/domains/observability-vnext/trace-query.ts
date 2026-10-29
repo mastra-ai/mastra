@@ -74,6 +74,9 @@ export interface RawTraceQuerySpan {
   rootEntityType?: string | null;
   rootEntityId?: string | null;
   rootEntityName?: string | null;
+  /** Dedicated span columns; predicates never read `attributes.model` / `attributes.provider`. */
+  model?: string | null;
+  provider?: string | null;
 }
 
 export interface RawTraceQueryScore {
@@ -717,7 +720,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-a',
       name: 'superseded_lookup',
       spanType: 'tool_call',
-      attributes: { provider: 'superseded-provider' },
+      provider: 'superseded-provider',
       entityType: 'tool',
       entityId: 'medication_lookup',
       entityName: 'Medication lookup',
@@ -743,7 +746,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-a',
       name: "llm: 'claude-sonnet-4-6'",
       spanType: 'model_generation',
-      attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      model: 'claude-sonnet-4-6',
+      provider: 'anthropic',
       startedAt: '2026-07-15T10:00:00.000Z',
       endedAt: '2026-07-15T10:00:06.250Z',
     }),
@@ -770,7 +774,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-b',
       name: "llm: 'gpt-5'",
       spanType: 'model_generation',
-      attributes: { model: 'gpt-5', provider: 'openai' },
+      model: 'gpt-5',
+      provider: 'openai',
       startedAt: '2026-08-05T10:00:00.250Z',
       endedAt: '2026-08-05T10:00:02.250Z',
     }),
@@ -786,7 +791,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-c',
       name: 'retrieve_medications',
       spanType: 'rag_action',
-      attributes: { model: 42, provider: { name: 'not-a-string' } },
+      // Written before the dedicated columns existed: predicates must not read these.
+      attributes: { model: 'attribute-only-model', provider: 'attribute-only-provider' },
       entityType: 'rag_ingestion',
       entityId: 'medication-index',
       entityName: 'Medication index',
@@ -823,7 +829,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'other-root',
       name: 'medication_lookup',
       spanType: 'tool_call',
-      attributes: { model: 'uncorrelated-model', provider: 'uncorrelated-provider' },
+      model: 'uncorrelated-model',
+      provider: 'uncorrelated-provider',
       error: { message: 'must not correlate' },
     }),
     // Tenant-scoped roots live in September so the unscoped August cases stay untouched.
@@ -1737,7 +1744,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-a' }],
   },
   {
-    name: 'normalizes non-string model and provider attributes as missing',
+    name: 'treats model and provider stored only in span attributes as missing',
     request: {
       timeRange: fullRange,
       where: {
@@ -1757,6 +1764,24 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'never matches model or provider values stored only in span attributes',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'or',
+            args: [
+              { op: 'eq', left: { path: 'model' }, right: { literal: 'attribute-only-model' } },
+              { op: 'in', value: { path: 'provider' }, set: ['attribute-only-provider'] },
+            ],
+          },
+        },
+      },
+    },
+    expected: [],
   },
   {
     name: 'applies nullable negative membership semantics to current spans',
@@ -2806,11 +2831,7 @@ export function selectSpanQuerySpans(data: TraceQueryFixtureData, selection: Spa
     .filter(span => !selection.where || evaluateScalarPredicate(selection.where, spanQueryValues(span)));
 }
 
-/**
- * Every value a direct span query or span aggregate can filter or group on. `model` and
- * `provider` come through `spanValues` but are not yet filterable or groupable here
- * (OBS-693); `queryTraces()` filters on them via `spans.some`.
- */
+/** Every value a direct span query or span aggregate can filter or group on. */
 function spanQueryValues(span: RawTraceQuerySpan): Record<string, unknown> {
   return {
     ...spanValues(span),
@@ -3171,13 +3192,11 @@ function durationMsBetween(startedAt: string, endedAt: string | null): number | 
 }
 
 function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
-  const model = typeof span.attributes?.model === 'string' ? span.attributes.model : null;
-  const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : null;
   return {
     name: span.name,
     spanType: span.spanType,
-    model,
-    provider,
+    model: span.model ?? null,
+    provider: span.provider ?? null,
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     durationMs: durationMsBetween(span.startedAt, span.endedAt),

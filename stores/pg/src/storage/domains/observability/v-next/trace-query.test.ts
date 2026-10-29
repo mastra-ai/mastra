@@ -177,8 +177,11 @@ describe('Postgres advanced trace query', () => {
     );
 
     expect(compiled.text.match(/FROM current_spans s/g)).toHaveLength(1);
-    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'model') = 'string'`);
-    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
+    // Model and provider predicates read only their columns, never span attributes.
+    expect(compiled.text).not.toContain(`"attributes" -> 'model'`);
+    expect(compiled.text).not.toContain(`"attributes" -> 'provider'`);
+    expect(compiled.text).toMatch(/s\."model" = \$\d+/);
+    expect(compiled.text).toMatch(/s\."provider" = \$\d+/);
     expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt"))::numeric * 1000`);
     expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
     expect(compiled.text).toContain('s."name" IS NOT NULL AND s."name" =');

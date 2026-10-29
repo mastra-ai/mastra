@@ -633,8 +633,8 @@ function compilePostgresTraceScope(
       s."traceId",
       s."name",
       s."spanType",
-      CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END AS "model",
-      CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END AS "provider",
+      s."model",
+      s."provider",
       s."startedAt",
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE

@@ -559,12 +559,8 @@ function compileDuckDBTraceScope(
         traceId,
         name,
         spanType,
-        CASE
-          WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model')
-        END AS model,
-        CASE
-          WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider')
-        END AS provider,
+        model,
+        provider,
         startedAt,
         endedAt,
         ${durationMsSql('startedAt', 'endedAt')} AS durationMs,

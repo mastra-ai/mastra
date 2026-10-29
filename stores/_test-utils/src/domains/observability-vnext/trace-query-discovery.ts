@@ -131,13 +131,15 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       endedAt: null,
       name: 'old-model-call',
       spanType: 'model_generation',
-      attributes: { model: 'superseded-model', provider: 'old-provider' },
+      model: 'superseded-model',
+      provider: 'old-provider',
     }),
     span(12, 'trace-a', 'span-model-a', {
       parentSpanId: 'root-a',
       name: 'model-call',
       spanType: 'model_generation',
-      attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      model: 'claude-sonnet-4-6',
+      provider: 'anthropic',
     }),
     span(20, 'trace-b', 'root-b', {
       startedAt: '2026-08-11T10:00:00.000Z',
@@ -156,7 +158,8 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-b',
       name: 'model-call',
       spanType: 'model_generation',
-      attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      model: 'claude-sonnet-4-6',
+      provider: 'anthropic',
     }),
     span(30, 'trace-c', 'root-c', {
       name: 'nightly-sync',
@@ -170,7 +173,8 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-c',
       name: 'fallback-call',
       spanType: 'model_generation',
-      attributes: { model: 'gpt-5', provider: 'openai' },
+      model: 'gpt-5',
+      provider: 'openai',
     }),
     span(40, 'trace-pending', 'root-pending', {
       name: 'pending-root',
