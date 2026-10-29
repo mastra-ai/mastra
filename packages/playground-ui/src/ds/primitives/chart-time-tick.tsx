@@ -11,6 +11,8 @@ export type ChartTimeTickProps = {
   payload?: { value: string; index: number; offset?: number };
   /** Buckets that print a label (from `pickTimeTicks`). */
   picked: Set<number>;
+  /** Labels that replace the bucket's own text, by index (e.g. date-only ends). */
+  labels?: Map<number, string>;
   count: number;
 };
 
@@ -18,9 +20,9 @@ export type ChartTimeTickProps = {
  * An x label on picked buckets only, centred on its bucket and pinned inside the plot at its
  * edges, so the chart needs no side margin.
  */
-export function ChartTimeTick({ x = 0, y = 0, width, payload, picked, count }: ChartTimeTickProps) {
+export function ChartTimeTick({ x = 0, y = 0, width, payload, picked, labels, count }: ChartTimeTickProps) {
   if (!payload || !width || !picked.has(payload.index)) return null;
-  const text = String(payload.value);
+  const text = labels?.get(payload.index) ?? String(payload.value);
   const placed = placeTimeTick({
     x,
     index: payload.index,

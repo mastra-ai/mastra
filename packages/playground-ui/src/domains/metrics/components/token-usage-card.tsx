@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
-import { BUCKET_AXIS } from '../lib/chart-axis';
+import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { formatAxisCount, formatAxisUsd, formatCount, formatUsd } from '../lib/chart-format';
 import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
@@ -78,12 +78,13 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
           data={data}
           series={series}
           height="fill"
+          xLabels="edges"
           showLegend={false}
           valueFormatter={isTokens ? formatCount : formatUsd}
           axisFormatter={isTokens ? formatAxisCount : formatAxisUsd}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
           isLoading={isLoading}
-          {...BUCKET_AXIS}
+          {...EDGE_BUCKET_AXIS}
         />
       </ChartArea>
     </ChartCard>

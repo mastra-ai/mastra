@@ -1,7 +1,7 @@
 import { Maximize2Icon } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsCardTitleMenuProps } from '@/ds/components/MetricsCard';
+import type { MetricsCardTitleMenuProps, MetricsCardTotalPart } from '@/ds/components/MetricsCard';
 import type { LinkComponentProps } from '@/lib/framework';
 
 /** What `LinkComponent` gets: anchor props, with `href` always set. */
@@ -32,8 +32,11 @@ export type ChartCardProps = {
    * place of tabs. `title` is the picked view's label. Ignored on `hero` cards.
    */
   titleMenu?: Omit<MetricsCardTitleMenuProps<string>, 'title' | 'className'>;
-  /** The card's headline number: right of the title, or the large value on `hero` cards. */
-  total?: string;
+  /**
+   * The card's headline number: right of the title, or the large value on `hero` cards. A card
+   * charting a few different things can pass one total each, marked with its series' color.
+   */
+  total?: string | readonly MetricsCardTotalPart[];
   /** `hero` cards: the change against the previous period, e.g. "+71.4%". */
   change?: string;
   /** A skeleton in place of `total`. */
@@ -45,8 +48,9 @@ export type ChartCardProps = {
   /** Previous data stays on screen, dimmed, while a new range or filter loads. */
   isUpdating?: boolean;
   /**
-   * `default` cards. `fixed` (default): the body is one chart high in every state. `fit`: at
-   * least that high, and taller when the content needs it, for lists that grow with "Show more".
+   * `default` cards. `fixed` (default): a chart, at least 240px high in every state and filling
+   * the card when the card is taller (a grid row). `fit`: at least that high, and as tall as the
+   * content needs, for lists that grow with "Show more".
    */
   bodyHeight?: 'fixed' | 'fit';
   className?: string;
@@ -76,13 +80,14 @@ export function ChartCard({
   const fade = cn('transition-opacity duration-200', isUpdating && 'opacity-50');
   const compact = variant === 'compact';
   const hero = variant === 'hero';
+  const chart = !hero && bodyHeight === 'fixed';
   return (
     <MetricsCard className={cn('min-h-0! min-w-0! grid-cols-1', compact && 'h-84', className)}>
       <MetricsCard.TopBar>
         {hero ? (
           <MetricsCard.Headline
             label={title}
-            value={total ?? '—'}
+            value={typeof total === 'string' ? total : '—'}
             change={change}
             isLoading={isLoading}
             className={fade}
@@ -98,11 +103,14 @@ export function ChartCard({
         {!hero && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
-        {toolbar}
+        {/* A chart keeps its legend row while it has no legend yet (loading, empty, error), so its
+            plot starts where its neighbours' do. */}
+        {toolbar || (chart && <div aria-hidden className="min-h-6" />)}
         <div
           className={cn(
             'relative flex min-h-0 min-w-0 flex-col',
-            compact ? 'flex-1' : hero ? undefined : bodyHeight === 'fit' ? 'min-h-60' : 'h-60',
+            // A chart fills the card, so a card stretched to its row's height draws a taller chart, not a gap.
+            compact ? 'flex-1' : hero ? undefined : bodyHeight === 'fit' ? 'min-h-60' : 'min-h-60 flex-1',
             fade,
           )}
         >

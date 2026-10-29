@@ -81,6 +81,15 @@ describe('when the server answers aggregateTraces()', () => {
     expect(legendEntry('Threads')).toBe('Threads');
   });
 
+  it("shows each id's range total top right, from the range request", async () => {
+    serveCard();
+    render(<DistinctIdsCard />);
+
+    // 5 and 14 for the range, not the sum of the hourly counts.
+    expect(await screen.findByLabelText('Resources 5')).toBeDefined();
+    expect(screen.getByLabelText('Threads 14')).toBeDefined();
+  });
+
   it('asks for all four distinct ids once per hour and once for the range', async () => {
     serveCard();
     render(<DistinctIdsCard />);

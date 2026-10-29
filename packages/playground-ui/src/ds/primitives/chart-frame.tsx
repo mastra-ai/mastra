@@ -1,5 +1,5 @@
 import { XAxis, YAxis } from 'recharts';
-import { chartYTickCount, niceYTicks, pickTimeTicks } from './chart-axes';
+import { chartYTickCount, edgeDateLabels, niceYTicks, pickTimeTicks } from './chart-axes';
 import type { ChartSize, ChartXLabels } from './chart-axes';
 import { CHART_AXIS_FONT_SIZE, X_AXIS_HEIGHT } from './chart-layout';
 import { ChartTimeTick } from './chart-time-tick';
@@ -33,12 +33,13 @@ export function timeXAxis({
     return typeof t === 'number' ? t : undefined;
   });
   const picked = pickTimeTicks(timestamps, labels, plotWidth, xLabels);
+  const edgeLabels = edgeDateLabels(timestamps, xLabels);
   return (
     <XAxis
       dataKey={xKey}
       height={X_AXIS_HEIGHT}
-      tick={(props: Omit<ChartTimeTickProps, 'picked' | 'count'>) => (
-        <ChartTimeTick {...props} picked={picked} count={data.length} />
+      tick={(props: Omit<ChartTimeTickProps, 'picked' | 'labels' | 'count'>) => (
+        <ChartTimeTick {...props} picked={picked} labels={edgeLabels} count={data.length} />
       )}
       tickLine={false}
       axisLine={false}

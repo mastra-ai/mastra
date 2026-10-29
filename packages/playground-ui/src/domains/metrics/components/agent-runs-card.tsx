@@ -1,4 +1,5 @@
 import { EntityType } from '@mastra/core/observability';
+import { useState } from 'react';
 import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
@@ -8,7 +9,9 @@ import { formatCount } from '../lib/chart-format';
 import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import type { ChartCardProps } from './chart-card';
 import { ChartCardError } from './chart-card-error';
+import { FailureRateCard } from './failure-rate-card';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
@@ -18,13 +21,41 @@ const SERIES = [
   { dataKey: 'failed', label: 'Failed', color: CHART_COLORS.error },
 ];
 
-/** Completed and failed agent runs per bucket; a column opens its agent traces. */
+type View = 'runs' | 'failure';
+
+const VIEWS = [
+  { value: 'runs', label: 'Agent runs' },
+  { value: 'failure', label: 'Failure rate' },
+] as const satisfies readonly { value: View; label: string }[];
+
+/**
+ * Completed and failed agent runs per bucket, or the share that failed; the title switches between
+ * them. A column or point opens its agent traces.
+ */
 export type AgentRunsCardProps = {
-  /** Called with the time range of the clicked bar or point. */
+  /** Called with the time range of the clicked column (Agent runs). */
   onTimeRangeClick?: (range: TimeRange) => void;
+  /** Called with the time range of the clicked point (Failure rate), for its failed runs. */
+  onFailureTimeRangeClick?: (range: TimeRange) => void;
+  /** Called from the "View errors in logs" button (Failure rate). */
+  onViewErrors?: () => void;
 };
 
-export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
+export function AgentRunsCard({ onTimeRangeClick, onFailureTimeRangeClick, onViewErrors }: AgentRunsCardProps) {
+  const [view, setView] = useState<View>('runs');
+  const titleMenu = { value: view, onValueChange: (v: string) => setView(v as View), options: VIEWS };
+  if (view === 'failure') {
+    return (
+      <FailureRateCard titleMenu={titleMenu} onViewErrors={onViewErrors} onTimeRangeClick={onFailureTimeRangeClick} />
+    );
+  }
+  return <AgentRunsChart titleMenu={titleMenu} onTimeRangeClick={onTimeRangeClick} />;
+}
+
+function AgentRunsChart({
+  onTimeRangeClick,
+  titleMenu,
+}: Pick<AgentRunsCardProps, 'onTimeRangeClick'> & { titleMenu: ChartCardProps['titleMenu'] }) {
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsActivity();
   const { timestamp } = useMetricsFilters();
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
@@ -32,6 +63,7 @@ export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
 
   const layout = {
     title: 'Agent runs',
+    titleMenu,
     toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={SERIES} />

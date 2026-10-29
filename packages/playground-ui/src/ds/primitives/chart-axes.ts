@@ -194,3 +194,27 @@ export function pickTimeTicks(
 function isFiniteNumber(value: number | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
+
+const fmtDay = (ts: number) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+/**
+ * Date-only labels for the two ends of an `edges` axis when the hour on them says nothing: buckets
+ * shorter than a day whose first and last start at the same clock time on different days, as on
+ * rolling ranges (last 24 hours, 3 days, 7 days). Same-day or uneven ends keep their labels.
+ */
+export function edgeDateLabels(timestamps: Array<number | undefined>, mode: ChartXLabels): Map<number, string> {
+  const last = timestamps.length - 1;
+  const [first, second] = timestamps;
+  const end = timestamps[last];
+  if (mode !== 'edges' || last < 1 || !isFiniteNumber(first) || !isFiniteNumber(end)) return new Map();
+  // Daily buckets are already labelled by date.
+  if (isFiniteNumber(second) && second - first >= DAY) return new Map();
+  const a = new Date(first);
+  const b = new Date(end);
+  const sameClock = a.getHours() === b.getHours() && a.getMinutes() === b.getMinutes();
+  if (!sameClock || a.toDateString() === b.toDateString()) return new Map();
+  return new Map([
+    [0, fmtDay(first)],
+    [last, fmtDay(end)],
+  ]);
+}

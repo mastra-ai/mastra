@@ -9,6 +9,7 @@ import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { OpenErrorsInLogsButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import type { ChartCardProps } from './chart-card';
 import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
@@ -23,9 +24,11 @@ export type FailureRateCardProps = {
   onViewErrors?: () => void;
   /** Called with the time range of the clicked bar or point. */
   onTimeRangeClick?: (range: TimeRange) => void;
+  /** Switches to a sibling view from the title (Agent runs uses it). */
+  titleMenu?: ChartCardProps['titleMenu'];
 };
 
-export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateCardProps) {
+export function FailureRateCard({ onViewErrors, onTimeRangeClick, titleMenu }: FailureRateCardProps) {
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsActivity();
   const { timestamp } = useMetricsFilters();
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
@@ -36,6 +39,7 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
 
   const layout = {
     title: 'Failure rate',
+    titleMenu,
     actions: onViewErrors && <OpenErrorsInLogsButton onClick={onViewErrors} />,
     toolbar: (
       <MetricsCard.Toolbar>

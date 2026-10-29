@@ -74,6 +74,17 @@ describe('ChartCard', () => {
     });
   });
 
+  it('keeps the legend row while a chart has no legend yet, so its plot lines up with its neighbours', () => {
+    const { container } = render(
+      <ChartCard title="Resources and threads">
+        <div data-testid="body" />
+      </ChartCard>,
+    );
+    const body = screen.getByTestId('body').parentElement;
+    expect(body?.previousElementSibling?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelectorAll('[aria-hidden="true"].min-h-6')).toHaveLength(1);
+  });
+
   describe('hero', () => {
     it('shows the title as a label over the total, with the change against the previous period', () => {
       render(

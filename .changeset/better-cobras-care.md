@@ -24,7 +24,14 @@ Unified metrics chart card headers on one style: a medium-weight title with the 
 **Added**
 
 - `ChartCard` `variant="hero"` and `MetricsCard.Headline`, for one large chart that is the page's subject: a label over a large total, the change against the previous period beside it, and controls on the right.
+- `total` can take one value per series (`[{ label, value, color }]`), each after a marker in its series' color, for a card charting a few different things. Resources and threads uses it.
+- `AgentRunsCard` switches to Failure rate from its title (`onViewErrors`, `onFailureTimeRangeClick`).
 
 **Changed**
 
-- "View in traces" buttons use the Traces icon, and card action buttons are smaller.
+- The Metrics page shows four charts in two rows (Token usage, Agent runs, Latency, Resources and threads), then the breakdown. Scores and the separate Failure rate card are off it.
+- Chart cards in a grid row end at the same height, and their charts line up in every state (loading, empty, error).
+- On ranges that start and end at the same time of day (last 24 hours, 3 days, 7 days), small charts label their ends by date alone ("Oct 28", "Oct 29"), and those labels reach the plot's edges.
+- A chart's tooltip stays above the chart cards that follow it on the page.
+- "View in traces" buttons use the Traces icon, card action buttons are smaller and line up with the title, and a card's title menu closes once a view is picked.
+- A series with a single point gets a dot; other series draw lines only.

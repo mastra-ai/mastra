@@ -70,6 +70,9 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
 
   const layout = {
     title: DISTINCT_IDS_TITLE,
+    // Each id's range total, marked like its line: they count different things, so no one sum.
+    total: shown.map(id => ({ label: id.label, value: formatCount(count(total, id)), color: id.color })),
+    isLoading: totals.isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={lines} />
