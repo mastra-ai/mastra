@@ -1,4 +1,4 @@
-import { createKnowledgePagesCoreLoader, knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import { createKnowledgePagesCoreLoader, knowledgePageKeyProblem, knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
@@ -84,7 +84,7 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     updatedAt VARCHAR(32) NOT NULL,
     deletedAt VARCHAR(32) NULL,
     deletedBy VARCHAR(255) NULL,
-    liveKey VARCHAR(768) ${BIN} AS (IF(deletedAt IS NULL AND \`key\` IS NOT NULL, CONCAT(scopeId, '#', \`key\`), NULL)) STORED,
+    liveKey VARCHAR(768) ${BIN} AS (IF(deletedAt IS NULL AND \`key\` IS NOT NULL, CONCAT(parentId, '#', \`key\`), NULL)) STORED,
     UNIQUE KEY idx_kpages_address (address),
     UNIQUE KEY idx_kpages_live_key (liveKey),
     KEY idx_kpages_scope (scopeId),
@@ -425,22 +425,35 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
         parentConflict = { existingParentId: str(row.parentId) ?? null, requestedParentId: input.parentId };
       }
       for (const child of input.children ?? []) await ensureScope(child, scopeId);
-      for (const page of input.pages ?? []) {
-        const existing = (
-          await this.#query(tx, `SELECT id FROM ${T.pages} WHERE scopeId = ? AND ${KEY} = ? AND deletedAt IS NULL`, [
-            scopeId,
-            page.key,
-          ])
-        )[0];
-        if (existing) continue;
-        await this.#insertPage(tx, {
-          parentId: scopeId,
-          key: page.key,
-          name: page.name,
-          description: page.description,
-          provenance: input.provenance,
-        });
-      }
+      const ensureTemplates = async (
+        templates: NonNullable<MaterializeKnowledgeScopeInput['pages']>,
+        parentId: string,
+      ): Promise<void> => {
+        for (const template of templates) {
+          const problem = knowledgePageKeyProblem(template.key);
+          if (problem) throw new Error(problem);
+          const existing = (
+            await this.#query(
+              tx,
+              `SELECT id FROM ${T.pages} WHERE parentId = ? AND isScope = 0 AND ${KEY} = ? AND deletedAt IS NULL`,
+              [parentId, template.key],
+            )
+          )[0];
+          const id = existing
+            ? String(existing.id)
+            : (
+                await this.#insertPage(tx, {
+                  parentId,
+                  key: template.key,
+                  name: template.name,
+                  description: template.description,
+                  provenance: input.provenance,
+                })
+              ).id;
+          if (template.pages?.length) await ensureTemplates(template.pages, id);
+        }
+      };
+      await ensureTemplates(input.pages ?? [], scopeId);
       return {
         scope: toPage((await this.#pageRow(tx, scopeId))!),
         created,
@@ -499,14 +512,26 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     return rows[0] ? toPage(rows[0]) : null;
   }
 
-  async getPageByKey(input: { scopeId: string; key: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
+  async getPageByPath(input: {
+    scopeId: string;
+    path: string[];
+    read: KnowledgeReadScope;
+  }): Promise<KnowledgePage | null> {
     const readable = pageReadable('p', input.read);
-    const rows = await this.#query(
-      this.#read,
-      `SELECT p.* FROM ${T.pages} p WHERE p.scopeId = ? AND p.${KEY} = ? AND p.deletedAt IS NULL AND ${readable.sql}`,
-      [input.scopeId, input.key, ...readable.args],
-    );
-    return rows[0] ? toPage(rows[0]) : null;
+    let parentId = input.scopeId;
+    let row: Row | undefined;
+    for (const key of input.path) {
+      row = (
+        await this.#query(
+          this.#read,
+          `SELECT p.* FROM ${T.pages} p WHERE p.parentId = ? AND p.isScope = 0 AND p.${KEY} = ? AND p.deletedAt IS NULL AND ${readable.sql}`,
+          [parentId, key, ...readable.args],
+        )
+      )[0];
+      if (!row) return null;
+      parentId = String(row.id);
+    }
+    return row ? toPage(row) : null;
   }
 
   async findPagesByName(input: {
@@ -603,12 +628,14 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const id = input.id ?? createKnowledgeUlid();
     if (await this.#pageRow(tx, id)) throw new KnowledgeConflictError(id);
     if (input.key !== undefined) {
+      const problem = knowledgePageKeyProblem(input.key);
+      if (problem) throw new Error(problem);
       const clash = await this.#query(
         tx,
-        `SELECT id FROM ${T.pages} WHERE scopeId = ? AND ${KEY} = ? AND deletedAt IS NULL`,
-        [scopeId, input.key],
+        `SELECT id FROM ${T.pages} WHERE parentId = ? AND isScope = 0 AND ${KEY} = ? AND deletedAt IS NULL`,
+        [String(parent.id), input.key],
       );
-      if (clash.length > 0) throw new core.KnowledgePageKeyConflictError(input.key, scopeId);
+      if (clash.length > 0) throw new core.KnowledgePageKeyConflictError(input.key, String(parent.id));
     }
     const position =
       input.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
@@ -677,7 +704,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
 
   /**
    * Rehomes `root` (and its subtree) under `parent`: new path prefix, scope and depth in one go.
-   * Throws when the subtree is too large, too deep, or has a key that clashes in the new scope.
+   * Throws when the subtree is too large, too deep, or the root's key clashes with a live child of `parent`.
    */
   async #rehome(
     tx: PageExecutor,
@@ -701,16 +728,13 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const shift = newDepth - Number(root.depth);
     const deepest = Math.max(...live.map(row => Number(row.depth)));
     if (deepest + shift > core.MAX_KNOWLEDGE_PAGE_DEPTH) throw new core.KnowledgePageDepthError(String(root.id));
-    if (newScopeId !== String(root.scopeId)) {
-      const keys = live.filter(row => row.key !== null).map(row => String(row.key));
-      if (keys.length > 0) {
-        const clash = await this.#query(
-          tx,
-          `SELECT ${KEY} FROM ${T.pages} WHERE scopeId = ? AND deletedAt IS NULL AND ${KEY} IN ${JV} AND LEFT(path, CHAR_LENGTH(?)) <> ?`,
-          [newScopeId, jsonList(keys), oldPath, oldPath],
-        );
-        if (clash.length > 0) throw new core.KnowledgePageKeyConflictError(String(clash[0]!.key), newScopeId);
-      }
+    if (!root.deletedAt && root.key !== null) {
+      const clash = await this.#query(
+        tx,
+        `SELECT id FROM ${T.pages} WHERE parentId = ? AND isScope = 0 AND ${KEY} = ? AND deletedAt IS NULL AND id <> ?`,
+        [String(parent.id), String(root.key), String(root.id)],
+      );
+      if (clash.length > 0) throw new core.KnowledgePageKeyConflictError(String(root.key), String(parent.id));
     }
     const newPath = `${String(parent.path)}${String(root.id)}/`;
     const position =
@@ -774,6 +798,19 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
         throw new core.KnowledgeMoveTooLargeError(input.sourceId, Number(carried[0]!.n));
       }
       const now = new Date().toISOString();
+      // The source goes first so its own key never clashes with a child that takes the same parent.
+      await tx.execute({
+        sql: `UPDATE ${T.pages} SET deletedAt = ?, deletedBy = ?, mergedInto = ?, scopeId = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
+        args: [
+          now,
+          input.provenance.author,
+          input.targetId,
+          String(target.scopeId),
+          JSON.stringify(input.provenance),
+          now,
+          input.sourceId,
+        ],
+      });
       const children = await this.#query(tx, `SELECT * FROM ${T.pages} WHERE parentId = ? AND isScope = 0`, [
         input.sourceId,
       ]);
@@ -814,18 +851,6 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
           });
         }
       }
-      await tx.execute({
-        sql: `UPDATE ${T.pages} SET deletedAt = ?, deletedBy = ?, mergedInto = ?, scopeId = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
-        args: [
-          now,
-          input.provenance.author,
-          input.targetId,
-          String(target.scopeId),
-          JSON.stringify(input.provenance),
-          now,
-          input.sourceId,
-        ],
-      });
       await this.#logActivity(
         tx,
         'page-merged',
