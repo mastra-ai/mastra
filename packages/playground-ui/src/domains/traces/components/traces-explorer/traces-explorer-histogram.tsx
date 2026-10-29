@@ -11,6 +11,7 @@ import {
   exceedsAggregateWindow,
   HISTOGRAM_MEASURES,
   histogramPlan,
+  zoomWindow,
 } from '@/domains/observability/lib/histogram-buckets';
 
 /** Compares selections, not instants: only filter or date changes move the chart's `now`. */
@@ -20,10 +21,11 @@ const SELECTION_CLOCK = new Date(0);
  * Trace and error counts over the list's time range, built from the same filters as the list query.
  * Renders nothing when the server can't aggregate traces, the window is wider than it aggregates,
  * or the filters ask for `running` traces (the query drops that status, so the counts wouldn't match).
+ * Dragging across bars narrows the list to their time span as a custom range.
  */
 export function TracesExplorerHistogram() {
   const { withQueryTrace, withRootDuration } = useTracesConfig();
-  const { filters, dateFrom, dateTo, runningSelected } = useTracesFilters();
+  const { filters, dateFrom, dateTo, runningSelected, setDatePreset, setDateRange } = useTracesFilters();
   const aggregateAvailable = useTraceAggregateAvailable();
 
   const selectionKey = JSON.stringify(
@@ -65,6 +67,11 @@ export function TracesExplorerHistogram() {
       isLoading={isLoading}
       isError={isError}
       isUpdating={isPlaceholderData}
+      onZoom={range => {
+        const { from, to } = zoomWindow(buckets, range, request.timeRange);
+        setDatePreset('custom');
+        setDateRange(from, to);
+      }}
     />
   );
 }

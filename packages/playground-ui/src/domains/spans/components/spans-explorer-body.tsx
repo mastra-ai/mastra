@@ -99,7 +99,16 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
             </ActionRow.Start>
           </ActionRow>
         }
-        chart={<SpansExplorerHistogram timeRange={timeRange} where={where} />}
+        chart={
+          <SpansExplorerHistogram
+            timeRange={timeRange}
+            where={where}
+            onZoom={({ from, to }) => {
+              filters.onDatePresetChange('custom');
+              filters.onDateRangeChange(from, to);
+            }}
+          />
+        }
         error={
           isError ? <TracesErrorContent error={error} resource="spans" errorTitle="Failed to load spans" /> : undefined
         }

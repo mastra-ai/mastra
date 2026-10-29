@@ -11,6 +11,7 @@ import {
   exceedsAggregateWindow,
   HISTOGRAM_MEASURES,
   histogramPlan,
+  zoomWindow,
 } from '@/domains/observability/lib/histogram-buckets';
 
 export type SpansExplorerHistogramProps = {
@@ -18,13 +19,15 @@ export type SpansExplorerHistogramProps = {
   timeRange: SpanQueryArgs['timeRange'];
   /** The span list's filter predicate, from `buildSpanQueryWhere`. */
   where?: TraceQueryScalarPredicate;
+  /** Called with the time span of the bars the user drags across. */
+  onZoom?: (window: { from: Date; to: Date }) => void;
 };
 
 /**
  * Span and error counts over the span list's time range and filters.
  * Renders nothing when the server can't aggregate spans or the window is wider than it aggregates.
  */
-export function SpansExplorerHistogram({ timeRange, where }: SpansExplorerHistogramProps) {
+export function SpansExplorerHistogram({ timeRange, where, onZoom }: SpansExplorerHistogramProps) {
   const aggregateAvailable = useSpanAggregateAvailable();
 
   const request = useMemo<AggregateSpansArgs>(
@@ -59,6 +62,7 @@ export function SpansExplorerHistogram({ timeRange, where }: SpansExplorerHistog
       isLoading={isLoading}
       isError={isError}
       isUpdating={isPlaceholderData}
+      onZoom={onZoom && (range => onZoom(zoomWindow(buckets, range, timeRange)))}
     />
   );
 }

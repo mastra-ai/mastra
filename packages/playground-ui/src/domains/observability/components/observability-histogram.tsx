@@ -4,6 +4,7 @@ import { BUCKET_AXIS } from '@/domains/metrics/lib/chart-axis';
 import { CHART_COLORS } from '@/domains/metrics/lib/chart-colors';
 import { formatCount } from '@/domains/metrics/lib/chart-format';
 import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
+import type { MetricsStackedBarChartRange } from '@/ds/components/MetricsStackedBarChart';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +26,8 @@ export type ObservabilityHistogramProps = {
   isError?: boolean;
   /** Previous buckets stay on screen, dimmed, while a new selection loads. */
   isUpdating?: boolean;
+  /** Dragging across bars reports the first and last selected bar; turn it into a window with `zoomWindow`. */
+  onZoom?: (range: MetricsStackedBarChartRange) => void;
 };
 
 /**
@@ -38,6 +41,7 @@ export function ObservabilityHistogram({
   isLoading = false,
   isError = false,
   isUpdating = false,
+  onZoom,
 }: ObservabilityHistogramProps) {
   const series = useMemo(
     () => [{ dataKey: 'ok', label: resourceLabel, color: VOLUME_COLOR }, ERRORS_SERIES],
@@ -74,6 +78,7 @@ export function ObservabilityHistogram({
             maxBarSize={MAX_BAR_SIZE}
             valueFormatter={formatCount}
             isLoading={isLoading}
+            onZoom={onZoom}
             {...BUCKET_AXIS}
           />
         </div>

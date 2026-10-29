@@ -4,6 +4,10 @@
 
 Added a full-width histogram of counts and errors over time to the Traces and Spans pages, between the filter bar and the list. It follows the list's filters and time range, and only appears when the server supports trace or span aggregates.
 
+Drag across the histogram to zoom in: the list and the chart switch to a custom time range covering the selected bars. `MetricsStackedBarChart` exposes this as an opt-in `onZoom({ start, end })` prop that reports the first and last selected column.
+
+When the Traces, Spans, or Threads time range differs from the default, the Time chip shows a × that resets it to the last 7 days. `TraceTimeRangeChip` exposes this as an opt-in `defaultPreset` prop.
+
 The Columns picker is now an icon button with a "Columns" tooltip, placed before the filters.
 
 ```tsx

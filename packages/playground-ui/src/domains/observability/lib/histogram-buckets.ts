@@ -141,3 +141,19 @@ export function bucketCountRows(rows: CountRow[], timeRange: TimeRange): Histogr
   }
   return buckets;
 }
+
+/**
+ * The time span of the bars `start` to `end` (inclusive): from the first bar's start to the next
+ * bar's start, kept inside `timeRange` since the edge bars can stick out of it.
+ */
+export function zoomWindow(
+  buckets: HistogramBucket[],
+  { start, end }: { start: number; end: number },
+  timeRange: TimeRange,
+): { from: Date; to: Date } {
+  const fromMs = Date.parse(timeRange.from);
+  const toMs = Date.parse(timeRange.to);
+  const first = buckets[start]?.ts ?? fromMs;
+  const after = buckets[end + 1]?.ts ?? toMs;
+  return { from: new Date(Math.max(first, fromMs)), to: new Date(Math.min(after, toMs)) };
+}

@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { bucketCountRows, exceedsAggregateWindow, histogramPlan, MAX_HISTOGRAM_BARS } from './histogram-buckets';
+import {
+  bucketCountRows,
+  exceedsAggregateWindow,
+  histogramPlan,
+  MAX_HISTOGRAM_BARS,
+  zoomWindow,
+} from './histogram-buckets';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -154,5 +160,34 @@ describe('exceedsAggregateWindow', () => {
     it('exceeds the server limit', () => {
       expect(exceedsAggregateWindow(range(new Date(end.getTime() - 366 * DAY), end))).toBe(true);
     });
+  });
+});
+
+describe('zoomWindow', () => {
+  // A rolling 7-day window that doesn't start on a bar boundary: 2h bars, the first one partial.
+  const window = lastDays(7);
+  const buckets = bucketCountRows([], window);
+  const barStart = (index: number) => {
+    const bucket = buckets[index];
+    if (!bucket) throw new Error(`no bar ${index}`);
+    return bucket.ts;
+  };
+
+  it('spans from the start of the first selected bar to the start of the bar after the last', () => {
+    expect(zoomWindow(buckets, { start: 3, end: 5 }, window)).toEqual({
+      from: new Date(barStart(3)),
+      to: new Date(barStart(6)),
+    });
+  });
+
+  it('starts at the window start when the first bar is only partly inside it', () => {
+    expect(barStart(0)).toBeLessThan(Date.parse(window.from));
+    expect(zoomWindow(buckets, { start: 0, end: 1 }, window).from).toEqual(new Date(window.from));
+  });
+
+  it('ends at the window end when the selection reaches the last bar', () => {
+    expect(zoomWindow(buckets, { start: buckets.length - 2, end: buckets.length - 1 }, window).to).toEqual(
+      new Date(window.to),
+    );
   });
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { planTraceAggregate, traceAggregateRequestSchema } from '@mastra/core/storage';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -143,6 +143,23 @@ const settle = async (queryClient: { isFetching: () => number }) => {
 };
 
 const chart = () => screen.queryByRole('region', { name: 'Traces over time' });
+
+// ONE_WEEK in UTC is 84 two-hour bars from Oct 20 00:00, sharing the 1200px plot.
+const BAR_WIDTH = 1200 / 84;
+const atBar = (bar: number) => ({ clientX: (bar + 0.5) * BAR_WIDTH, clientY: 20 });
+/** Recharts applies pointer moves on the next animation frame. */
+const moveTo = async (plot: Element, bar: number) => {
+  fireEvent.mouseMove(plot, atBar(bar));
+  await act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+};
+const dragAcross = async (from: number, to: number) => {
+  const plot = (await screen.findByRole('region', { name: 'Traces over time' })).querySelector('.recharts-wrapper');
+  if (!plot) throw new Error('chart did not render');
+  await moveTo(plot, from);
+  fireEvent.mouseDown(plot, atBar(from));
+  await moveTo(plot, to);
+  fireEvent.mouseUp(window);
+};
 const lastBody = (spy: typeof onAggregate) => spy.mock.calls.at(-1)?.[0];
 
 beforeAll(() => {
@@ -218,6 +235,21 @@ describe('TracesExplorer.Histogram', () => {
 
       expect(lastBody(onAggregate)?.where).toBeDefined();
       expect(lastBody(onAggregate)?.where).toEqual(lastBody(onTraceQuery)?.where);
+    });
+  });
+
+  describe('when the user drags across bars', () => {
+    it('narrows the list and the chart to the dragged bars', async () => {
+      setHandlers();
+      const { queryClient } = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...ONE_WEEK } });
+
+      // Bars 12 to 23 are Oct 21, 00:00 to 22:00, so the window runs to the next bar at Oct 22 00:00.
+      await dragAcross(12, 23);
+      await settle(queryClient);
+
+      const zoomed = { from: '2026-10-21T00:00:00.000Z', to: '2026-10-22T00:00:00.000Z' };
+      expect(lastBody(onTraceQuery)?.timeRange).toEqual(zoomed);
+      expect(lastBody(onAggregate)?.timeRange).toEqual(zoomed);
     });
   });
 

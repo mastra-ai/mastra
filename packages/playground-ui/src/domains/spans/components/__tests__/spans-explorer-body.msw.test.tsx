@@ -361,6 +361,51 @@ describe('SpansExplorerBody histogram', () => {
     });
   });
 
+  describe('when the user drags across bars', () => {
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    /** Recharts applies pointer moves on the next animation frame. */
+    const moveTo = async (plot: Element, clientX: number) => {
+      fireEvent.mouseMove(plot, { clientX, clientY: 20 });
+      await act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+    };
+
+    it('narrows the list and the chart to the dragged bars', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      const plot = (await screen.findByRole('region', { name: 'Spans over time' })).querySelector('.recharts-wrapper');
+      if (!plot) throw new Error('chart did not render');
+
+      // The rolling week is drawn as two-hour bars (UTC in tests) from the bar holding its start.
+      const week = onAggregate.mock.lastCall?.[0].timeRange;
+      if (!week) throw new Error('no aggregate request');
+      const firstBar = Math.floor(Date.parse(week.from) / TWO_HOURS) * TWO_HOURS;
+      const barWidth = 1200 / Math.ceil((Date.parse(week.to) - firstBar) / TWO_HOURS);
+      const atBar = (bar: number) => (bar + 0.5) * barWidth;
+
+      await moveTo(plot, atBar(12));
+      fireEvent.mouseDown(plot, { clientX: atBar(12), clientY: 20 });
+      await moveTo(plot, atBar(23));
+      fireEvent.mouseUp(window);
+
+      const zoomed = {
+        from: new Date(firstBar + 12 * TWO_HOURS).toISOString(),
+        to: new Date(firstBar + 24 * TWO_HOURS).toISOString(),
+      };
+      await waitFor(() => expect(onAggregate.mock.lastCall?.[0].timeRange).toEqual(zoomed));
+      expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(zoomed);
+
+      // The × next to the time range returns to the rolling week.
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+      await waitFor(() => expect(onAggregate.mock.lastCall?.[0].timeRange).not.toEqual(zoomed));
+      const reset = onAggregate.mock.lastCall?.[0].timeRange;
+      expect(Date.parse(reset.to) - Date.parse(reset.from)).toBe(7 * 24 * 60 * 60 * 1000);
+      expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(reset);
+      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    });
+  });
+
   describe('when the aggregate request fails', () => {
     it('shows an inline error in the chart', async () => {
       setHistogramHandlers({ aggregate: () => HttpResponse.json(spanAggregateError, { status: 400 }) });
