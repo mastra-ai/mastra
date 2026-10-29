@@ -672,7 +672,7 @@ export class FactoryTransitionService {
     if (
       this.#onTerminalStage &&
       result.status === 'accepted' &&
-      this.#boards.forProject(request).get(request.board)?.isTerminal(result.stage) === true
+      (await this.#boards.load(request)).get(request.board)?.isTerminal(result.stage) === true
     ) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {

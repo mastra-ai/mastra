@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { decisionOvertaken, decisionRetryable } from './decision-applicability.js';
 
@@ -72,6 +73,24 @@ describe('decisionOvertaken on the Work board', () => {
   ])('%s (%s, role %s) entering %s is overtaken: %s', async (_label, skillName, role, to, overtaken) => {
     expect(await heldInIntakeThenMoved(skillName, role, to)).toBe(overtaken);
   });
+
+  it.each([
+    ['factory-build', 'work', 'planning', true],
+    ['factory-plan', 'work', 'execute', true],
+    ['factory-plan', 'work', 'planning', false],
+    ['factory-plan', 'plan', 'execute', true],
+  ])(
+    "judges %s (role %s) entering %s the same on a project's stored Work board: %s",
+    async (skillName, role, to, overtaken) => {
+      const { boards } = await createFactoryStorageForTests();
+      const stored = await new ProjectBoardCache({ seedRegistry: createBoardRegistry(), storage: boards }).load({
+        orgId: 'org-1',
+        factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      });
+      expect(stored.get('work')).not.toBe(createBoardRegistry().get('work'));
+      expect(await heldInIntakeThenMoved(skillName, role, to, stored)).toBe(overtaken);
+    },
+  );
 
   it('matches a board installed as work in place of the built-in one by context, not by phase name', async () => {
     const replacement = createBoardRegistry({

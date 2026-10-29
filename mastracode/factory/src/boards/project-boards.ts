@@ -11,7 +11,9 @@ const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
 
 export const DRIFT_PROBLEM = 'Code definition changed since this board was edited. Reset to adopt it.';
-export const ORPHANED_BEHAVIORS_PROBLEM = 'Code behaviors for this board are no longer defined.';
+export const ORPHANED_BEHAVIORS_PROBLEM =
+  'This board is no longer defined in code; any code behaviors it had no longer run.';
+const SNAPSHOT_ATTEMPTS = 3;
 
 /** Where a board in a project's catalog came from. */
 export type BoardSourceKind = 'builtin' | 'app' | 'stored';
@@ -149,6 +151,8 @@ export class ProjectBoardCache implements ProjectBoardSource {
     if (!scope.orgId || !scope.factoryProjectId) return this.seedRegistry;
     const entry = this.#entries.get(scopeKey(scope));
     if (entry) return entry.boards.registry;
+    // Warm the project so the next sync read sees its stored boards.
+    void this.load(scope).catch(() => {});
     this.#warnOnce(
       `cold:${scopeKey(scope)}`,
       `Boards for project ${scope.factoryProjectId} were read before they were loaded; using the code boards.`,
@@ -185,28 +189,48 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   async #refresh(scope: StoredBoardScope, key: string, generation: number): Promise<ProjectBoards> {
+    let seedFailure: string | undefined;
     if (!this.#seeded.has(key)) {
-      const { drifted } = await this.#storage.applySeed(scope, this.#seeds);
-      this.#seeded.add(key);
-      for (const board of drifted) {
-        this.#warnOnce(
-          `drift:${key}:${board}`,
-          `Board '${board}' in project ${scope.factoryProjectId} was edited, so its changed code definition was not applied. Reset the board to adopt it.`,
-        );
+      try {
+        const { drifted } = await this.#storage.applySeed(scope, this.#seeds);
+        this.#seeded.add(key);
+        for (const board of drifted) {
+          this.#warnOnce(
+            `drift:${key}:${board}`,
+            `Board '${board}' in project ${scope.factoryProjectId} was edited, so its changed code definition was not applied. Reset the board to adopt it.`,
+          );
+        }
+      } catch (error) {
+        // The stored boards still serve; seeding is retried on the next recheck.
+        seedFailure = `Writing the code boards failed: ${error instanceof Error ? error.message : String(error)}`;
+        this.#warnOnce(`seed:${key}:${seedFailure}`, `${seedFailure} (project ${scope.factoryProjectId})`);
       }
     }
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
-    if (current && current.version === version) {
+    if (current && current.version === version && !seedFailure) {
       if ((this.#generations.get(key) ?? 0) === generation) current.checkedAt = this.#now();
       return current.boards;
     }
-    const snapshot = await this.#storage.snapshot(scope);
-    const boards = this.#compile(scope, snapshot.boards);
+    const snapshot = await this.#consistentSnapshot(scope);
+    const boards =
+      seedFailure && snapshot.boards.length === 0
+        ? { registry: this.seedRegistry, details: new Map(), problems: [seedFailure] }
+        : this.#compile(scope, snapshot.boards);
     if ((this.#generations.get(key) ?? 0) === generation) {
       this.#entries.set(key, { boards, version: snapshot.version, checkedAt: this.#now() });
     }
     return boards;
+  }
+
+  /** Boards and phases are read in two statements; reread when a write landed between them. */
+  async #consistentSnapshot(scope: StoredBoardScope) {
+    let snapshot = await this.#storage.snapshot(scope);
+    for (let attempt = 1; attempt < SNAPSHOT_ATTEMPTS; attempt++) {
+      if ((await this.#storage.readVersion(scope)) === snapshot.version) break;
+      snapshot = await this.#storage.snapshot(scope);
+    }
+    return snapshot;
   }
 
   #compile(scope: StoredBoardScope, rows: Awaited<ReturnType<StoredBoardsStorage['list']>>): ProjectBoards {
@@ -214,7 +238,9 @@ export class ProjectBoardCache implements ProjectBoardSource {
     const details = new Map<string, StoredBoardDetails>();
     const problems: string[] = [];
     for (const row of rows) {
-      const seed = row.seedSource ? this.#seedsByKey.get(row.key) : undefined;
+      // Behaviors follow the code under the board's key, for boards that were written from code.
+      // A board created through the API keeps none, even when code later uses its key.
+      const seed = row.seedHash ? this.#seedsByKey.get(row.key) : undefined;
       let board: InstalledBoard;
       try {
         board = compileStoredBoard(row, seed?.behaviors);
@@ -230,7 +256,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
       compiled.push(board);
       const boardProblems: string[] = [];
       if (row.driftHash) boardProblems.push(DRIFT_PROBLEM);
-      if (!row.seedSource && row.seedHash) boardProblems.push(ORPHANED_BEHAVIORS_PROBLEM);
+      if (row.seedHash && !seed) boardProblems.push(ORPHANED_BEHAVIORS_PROBLEM);
       boardProblems.push(
         ...findBoardSkillProblems(
           createBoardRegistry({ boards: [board], includeDefaultBoards: false }),

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
@@ -765,6 +766,31 @@ describe('prepareFactoryRuleBinding', () => {
       bindingInput(project.id, ['done'], { role: 'triage' }),
     );
     expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'done' }));
+  });
+
+  it("gives a project's stored copy of Work the built-in Work lanes", async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    // The project's Work board, read back from the database rather than the code board.
+    const stored = new ProjectBoardCache({ seedRegistry: createBoardRegistry(), storage: seeded.boards });
+    expect((await stored.load({ orgId: 'org-1', factoryProjectId: project.id })).get('work')).not.toBe(
+      createBoardRegistry().get('work'),
+    );
+
+    for (const [role, lane] of [
+      ['triage', 'triage'],
+      ['plan', 'planning'],
+      ['work', 'execute'],
+    ] as const) {
+      await prepareFactoryRuleBinding(
+        github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seeded.projects,
+        stored,
+        bindingInput(project.id, ['intake'], { role }),
+      );
+      expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: lane }));
+    }
   });
 
   it('leaves a custom resting phase for the lane its board assigns the role', async () => {
