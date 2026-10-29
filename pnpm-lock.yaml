@@ -4401,6 +4401,9 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
+      fast-string-width:
+        specifier: ^3.0.2
+        version: 3.0.2
       fs-extra:
         specifier: ^11.4.1
         version: 11.4.1

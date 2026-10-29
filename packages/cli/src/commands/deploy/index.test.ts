@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as p from '@clack/prompts';
+import fastStringWidth from 'fast-string-width';
 import pc from 'picocolors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -660,12 +661,15 @@ describe('deploy artifact', () => {
   });
 
   // The deploy note wraps any line wider than the terminal, which scrambled the boxes on narrow terminals.
+  // Wide characters take two terminal cells each.
   it.each([
-    [200, '  │  ┌'],
-    [110, 'production (US West)\n'],
-    [74, '│ Turso · Connect… │'],
-    [56, '└─ ■ Observability  Mastra Platform'],
-  ])('fits the deployment overview into a %i-column note', (width, expectedLayout) => {
+    [200, 'teammate-turso', '  │  ┌'],
+    [110, 'teammate-turso', 'production (US West)\n'],
+    [74, 'teammate-turso', '│ Turso · Connect… │'],
+    [74, 'チームメイトのデータベース', '│ チームメイトの…  │'],
+    [56, 'teammate-turso', '└─ ■ Observability  Mastra Platform'],
+    [56, 'チームメイトのデータベース', '├─ ■ チームメイトのデータベース  Turso · Connected'],
+  ])('fits the deployment overview into a %i-column note with database %s', (width, databaseName, expectedLayout) => {
     const diagram = renderDeploymentArchitecture(
       {
         projectName: 'teammate',
@@ -680,7 +684,7 @@ describe('deploy artifact', () => {
             organizationId: 'org_1',
             environmentId: null,
             kind: 'turso',
-            name: 'teammate-turso',
+            name: databaseName,
             status: 'ready',
             region: null,
             providerResourceId: null,
@@ -698,7 +702,7 @@ describe('deploy artifact', () => {
     );
 
     expect(diagram).toContain(expectedLayout);
-    for (const line of diagram.split('\n')) expect(Array.from(line).length).toBeLessThanOrEqual(width);
+    for (const line of diagram.split('\n')) expect(fastStringWidth(line)).toBeLessThanOrEqual(width);
   });
 
   it.each([

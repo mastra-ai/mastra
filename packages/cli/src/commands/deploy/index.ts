@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { coreFeatures } from '@mastra/core/features';
 import { ZipArchive } from 'archiver';
+import fastStringWidth from 'fast-string-width';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
@@ -277,14 +278,19 @@ const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; to
   redis: { label: 'Redis', tone: 'red' },
 };
 
+// Terminal cells, not characters: wide characters (CJK, emoji) take two, as in p.note's wrapping.
 function architectureTextWidth(value: string): number {
-  return Array.from(value).length;
+  return fastStringWidth(value);
 }
 
 function truncateArchitectureText(value: string, width: number): string {
-  const characters = Array.from(value);
-  if (characters.length <= width) return value;
-  return `${characters.slice(0, width - 1).join('')}…`;
+  if (architectureTextWidth(value) <= width) return value;
+  let truncated = '';
+  for (const character of value) {
+    if (architectureTextWidth(`${truncated}${character}`) > width - 1) break;
+    truncated += character;
+  }
+  return `${truncated}…`;
 }
 
 function architectureDiagramWidth(boxInnerWidth: number): number {
