@@ -1000,7 +1000,7 @@ export class MCPServer extends MCPServerBase {
               rootSpan: trace.requestSpan,
             });
           } catch (error) {
-            if (error instanceof MCPTaskLimitError) return errorResult(openTaskLimitMessage(error));
+            if (error instanceof MCPTaskLimitError) return errorResult(taskLimitMessage(error));
             throw error;
           }
         }
@@ -1137,8 +1137,8 @@ export class MCPServer extends MCPServerBase {
         throw error;
       }
     }
-    // At the open task cap: the tool already started, so answer this call synchronously instead.
-    this.logger.debug(`Tool '${name}' outlived its sync window at the open task cap; answering synchronously.`);
+    // At a task cap: the tool already started, so answer this call synchronously instead.
+    this.logger.debug(`Tool '${name}' outlived its sync window at a task cap; answering synchronously.`);
     if (requestSignal.aborted) followRequest();
     else requestSignal.addEventListener('abort', followRequest, { once: true });
     const outcome = await settled;
@@ -1150,7 +1150,7 @@ export class MCPServer extends MCPServerBase {
   /**
    * Creates the task (durably, before answering) and hands its work to the store. `initialAttempt`
    * builds the run of an execution that already started under the request; it stays in this
-   * process. Rejects with {@link MCPTaskLimitError}, creating nothing, at the open task cap.
+   * process. Rejects with {@link MCPTaskLimitError}, creating nothing, at a task cap.
    */
   private async startToolTask(
     ctx: ServerContext,
@@ -2019,7 +2019,12 @@ function isRegistrableTool(tool: ToolsInput[string]): tool is ToolAction<any, an
   return !!tool && typeof tool === 'object' && 'id' in tool && typeof tool.id === 'string';
 }
 
-function openTaskLimitMessage({ scope, limit }: MCPTaskLimitError): string {
+function taskLimitMessage({ scope, limit, kind }: MCPTaskLimitError): string {
+  if (kind === 'retained') {
+    return scope === 'principal'
+      ? `Too many recent tasks for this client (limit ${limit}). Try again once older tasks expire.`
+      : `Too many recent tasks on this server (limit ${limit}). Try again later.`;
+  }
   return scope === 'principal'
     ? `Too many open tasks for this client (limit ${limit}). Wait for one to finish or cancel one.`
     : `Too many open tasks on this server (limit ${limit}). Try again later.`;
