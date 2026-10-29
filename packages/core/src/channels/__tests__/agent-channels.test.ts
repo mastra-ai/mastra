@@ -3729,6 +3729,52 @@ describe('thread history', () => {
     expect(withGone.contents).toEqual(expect.stringContaining('[Attachment unavailable: gone.jpg'));
   });
 
+  it('truncates large text attachments fetched through the adapter', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const log = 'line\n'.repeat(30_000);
+    const big = {
+      type: 'file',
+      mimeType: 'text/plain',
+      name: 'server.log',
+      url: 'https://files.slack.com/files-pri/T1-F1/server.log',
+      fetchData: vi.fn().mockResolvedValue(Buffer.from(log)),
+    };
+    await t.run(makeChatThread([historyMessage(0, { attachments: [big] })]));
+    const [withLog] = t.signals();
+
+    expect(withLog.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      {
+        type: 'text',
+        text: `[Attached file: server.log (text/plain)]\n${log.slice(0, 128 * 1024)}\n[Truncated: showing the first 131072 of ${log.length} bytes]`,
+      },
+    ]);
+  });
+
+  it('does not download text attachments larger than the download ceiling', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const fetchData = vi.fn().mockResolvedValue(Buffer.from('never read'));
+    const huge = {
+      type: 'file',
+      mimeType: 'text/plain',
+      name: 'huge.log',
+      url: 'https://files.slack.com/files-pri/T1-F1/huge.log',
+      size: 500 * 1024 * 1024,
+      fetchData,
+    };
+    await t.run(makeChatThread([historyMessage(0, { attachments: [huge] })]));
+    const [withLog] = t.signals();
+
+    expect(fetchData).not.toHaveBeenCalled();
+    expect(withLog.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      {
+        type: 'text',
+        text: '[Attached file: huge.log (text/plain) — https://files.slack.com/files-pri/T1-F1/huge.log]',
+      },
+    ]);
+  });
+
   it('skips the history walk for subscribed threads, DMs and maxMessages: 0', async () => {
     const subscribed = await setup();
     await subscribed.run(makeChatThread([historyMessage(0)], { isSubscribed: vi.fn().mockResolvedValue(true) }));
@@ -4342,4 +4388,49 @@ describe('per-sender handler runs end to end', () => {
     expect(followUp).toBeDefined();
     expect(systemText(followUp!)).toContain('tenant=user-a');
   }, 20_000);
+
+  it('gives the model the contents of text attachments that need an authenticated fetch (#28854)', async () => {
+    const h = await createHarness({ hold: false });
+    // Slack hands Core a private URL that only works with a bot token, plus a
+    // fetchData callback that carries the token.
+    const privateUrl = (name: string) => `https://files.slack.com/files-pri/T1-F1/${name}`;
+    const notes = {
+      type: 'file' as const,
+      mimeType: 'text/plain',
+      name: 'notes.txt',
+      url: privateUrl('notes.txt'),
+      fetchData: vi.fn().mockResolvedValue(Buffer.from('deploy window: Friday 14:00 UTC\n')),
+    };
+    const csv = {
+      type: 'file' as const,
+      mimeType: 'text/csv',
+      name: 'metrics.csv',
+      url: privateUrl('metrics.csv'),
+      fetchData: vi.fn().mockResolvedValue(Buffer.from('id,value\nlatency_p99,412\n')),
+    };
+    const deleted = {
+      type: 'file' as const,
+      mimeType: 'application/json',
+      name: 'gone.json',
+      url: privateUrl('gone.json'),
+      fetchData: vi.fn().mockRejectedValue(new Error('file_not_found')),
+    };
+    await h.deliver(
+      makeMessage({
+        id: 'files',
+        threadId: THREAD_ID,
+        text: '@TestBot please read these',
+        author: userA,
+        attachments: [notes, csv, deleted],
+        metadata: { dateSent: new Date(BASE_TIME), edited: false },
+      }),
+    );
+
+    expect(h.prompts).toHaveLength(1);
+    const userTurn = JSON.stringify((h.prompts[0] ?? []).filter(m => m.role === 'user'));
+    expect(userTurn).toContain('[Attached file: notes.txt (text/plain)]\\ndeploy window: Friday 14:00 UTC');
+    expect(userTurn).toContain('[Attached file: metrics.csv (text/csv)]\\nid,value\\nlatency_p99,412');
+    expect(userTurn).toContain('[Attachment unavailable: gone.json (application/json)');
+    expect(userTurn).not.toContain('files.slack.com');
+  });
 });

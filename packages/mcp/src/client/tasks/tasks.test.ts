@@ -189,12 +189,13 @@ describe('MCPClient with MCP Tasks', () => {
 
     const pending = caught(call('gated'));
     await waitFor(() => methods().includes('tasks/get'));
-    const initializes = methods().filter(method => method === 'initialize').length;
     await mcp!.disconnect();
 
     expect(await pending).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_POLL_FAILED' });
+    // Any request after the call ends (server/discover, initialize, tasks/get) would be a reconnect.
+    const seen = methods().length;
     await new Promise(resolve => setTimeout(resolve, 500));
-    expect(methods().filter(method => method === 'initialize')).toHaveLength(initializes);
+    expect(methods().slice(seen)).toEqual([]);
   });
 
   it('keeps waiting for a task while a proxy answers 503 for the server', async () => {

@@ -1031,6 +1031,12 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
 
       case 'tool-result': {
+        // Partial provider results (e.g. OpenAI image_generation partial images) are
+        // streamed as-is; only the final result is processed, saved and ends the span.
+        if (chunk.payload.preliminary) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
         // Patch deferred provider-executed tool results inline.
         // When a provider tool is deferred (e.g., Anthropic web_search called alongside
         // a client tool), the tool-call arrives in step N and is added to messageList as

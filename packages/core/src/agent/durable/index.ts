@@ -102,6 +102,9 @@ export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-u
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
 export { persistDurableRunInput, persistDurableTimeoutNotice } from './persist-run-input';
+export { getRunDeadline, withRunDeadline, MASTRA_DURABLE_DEADLINES_KEY } from './run-deadline';
+export type { DurableRunDeadline } from './run-deadline';
+export { armRunDeadline, runInRunDeadlineScope, withRunDeadlineScope } from './run-deadline-fence';
 export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state
