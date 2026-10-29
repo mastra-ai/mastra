@@ -612,8 +612,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
   const isHttpsEnabled = Boolean(key && cert);
 
-  const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
-  const host = bindHost ?? 'localhost';
+  // Default to localhost so a dev server with no host configured is not exposed
+  // on every interface, matching what the logs advertise. Opt into broader
+  // binding explicitly with MASTRA_HOST=0.0.0.0.
+  const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
+  const host = bindHost;
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
   const protocol = isHttpsEnabled ? 'https' : 'http';
   const studioHost = serverOptions?.studioHost ?? host;
