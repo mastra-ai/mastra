@@ -66,3 +66,29 @@ describe('Codex stateless input', () => {
     expect(JSON.stringify(sentBody.input)).not.toMatch(/rs_expired|msg_expired/);
   });
 });
+
+describe('Codex fetch non-JSON bodies', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('streams non-JSON bodies through byte-for-byte', async () => {
+    let sent: Uint8Array | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        sent = new Uint8Array(await request.arrayBuffer());
+        return new Response('{}', { status: 200 });
+      }),
+    );
+    const bytes = new Uint8Array([0xff, 0x00, 0xfe, 0x7b]);
+
+    await buildOpenAICodexOAuthFetch({ authStorage: storage as any })('https://api.openai.com/v1/files', {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: bytes,
+    });
+
+    expect(sent).toEqual(bytes);
+  });
+});

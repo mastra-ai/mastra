@@ -289,8 +289,15 @@ export function buildOpenAICodexOAuthFetch(
     const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
 
     const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
-    const body = hasBody ? stripCodexInputItemIds(await request.text()) : undefined;
-    headers.delete('content-length');
+    // Only JSON bodies are rewritten; anything else (e.g. multipart uploads) streams through untouched.
+    const isJson = headers.get('content-type')?.includes('application/json') ?? false;
+    let body: RequestInit['body'];
+    if (hasBody && isJson) {
+      body = stripCodexInputItemIds(await request.text());
+      headers.delete('content-length');
+    } else if (hasBody) {
+      body = request.body!;
+    }
     const finalRequest = new Request(finalUrl, {
       method: request.method,
       headers,
@@ -298,6 +305,7 @@ export function buildOpenAICodexOAuthFetch(
       signal: request.signal,
       redirect: request.redirect,
       integrity: request.integrity,
+      ...(body instanceof ReadableStream ? ({ duplex: 'half' } as RequestInit) : {}),
     });
     try {
       return await rejectUnauthorizedResponse(await fetch(finalRequest), {
