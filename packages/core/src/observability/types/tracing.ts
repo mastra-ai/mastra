@@ -1773,6 +1773,13 @@ export interface IModelSpanTracker {
   interruptInference?(): void;
 
   /**
+   * End the open MODEL_INFERENCE span as failed, keeping the MODEL_STEP open.
+   * Called when a model call fails and a retry or fallback model will open its
+   * own inference span under the same step.
+   */
+  failInference?(error: Error): void;
+
+  /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans
    * (parameters, providerOptions, availableTools, tools, toolChoice, responseFormat).
    * Call after input processors have finalised the tool set, just before

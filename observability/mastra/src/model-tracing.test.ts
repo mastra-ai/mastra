@@ -2912,9 +2912,10 @@ describe('ModelSpanTracker', () => {
         const { agentSpan, modelSpan } = startRun();
         const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
         tracker.startStep();
-        tracker.startInference({ request: {}, modelId: 'acme-large', provider: 'acme' }); // fails, no chunk
+        tracker.startInference({ request: {}, modelId: 'acme-large', provider: 'acme' });
         advance(500);
-        tracker.startInference({ request: {}, modelId: 'globex-mini', provider: 'globex' }); // +500 takes over
+        tracker.failInference(new Error('acme-large is unavailable')); // +500 fails, no chunk
+        tracker.startInference({ request: {}, modelId: 'globex-mini', provider: 'globex' }); // takes over
         await consumeStream(
           tracker.wrapStream(
             tickingStream(
@@ -2928,15 +2929,39 @@ describe('ModelSpanTracker', () => {
 
         const inferences = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
         expect(
-          inferences.map(span => [span.attributes?.model, span.attributes?.finishReason, span.timeToFirstTokenMs]),
+          inferences.map(span => [span.attributes?.model, span.errorInfo?.message, span.timeToFirstTokenMs]),
         ).toEqual([
-          ['acme-large', 'error', undefined],
-          ['globex-mini', 'stop', 200],
+          ['acme-large', 'acme-large is unavailable', undefined],
+          ['globex-mini', undefined, 200],
         ]);
         for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
           expect(ttftOf(type)).toEqual([200]);
         }
         expect(testExporter.getSpansByType(SpanType.MODEL_STEP)[0]?.attributes?.model).toBe('globex-mini');
+      });
+
+      it('closes an attempt its caller left open before the next model takes over', async () => {
+        const { agentSpan, modelSpan } = startRun();
+        const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+        tracker.startStep();
+        tracker.startInference({ request: {}, modelId: 'acme-large', provider: 'acme' });
+        tracker.startInference({ request: {}, modelId: 'globex-mini', provider: 'globex' });
+        await consumeStream(
+          tracker.wrapStream(
+            tickingStream(
+              [{ type: 'step-start', payload: {} }, { type: 'text-delta', payload: { text: 'a' } }, stepFinish('stop')],
+              100,
+            ),
+          ),
+        );
+        tracker.endGeneration();
+        agentSpan.end();
+
+        const inferences = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+        expect(inferences.map(span => [span.attributes?.model, span.attributes?.finishReason])).toEqual([
+          ['acme-large', 'error'],
+          ['globex-mini', 'stop'],
+        ]);
       });
     });
   });

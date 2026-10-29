@@ -11,3 +11,5 @@ const page = await storage.queryTraces(
 ```
 
 Durable agents now carry the time to first token of the model call that streamed the run's first chunk across steps, so their generation and agent run spans report it too.
+
+A model call that fails before a retry or a fallback model takes over now ends its model inference span with that error.

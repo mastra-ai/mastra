@@ -513,6 +513,7 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
       expect(inferences.map(span => span.attributes?.model)).toEqual(['acme-large', 'globex-mini']);
       const [failed, streamed] = inferences;
+      expect(failed.errorInfo?.message).toBe('acme-large is unavailable');
       expect(clockOf(failed)).toBeUndefined();
       expect(failed.timeToFirstTokenMs).toBeUndefined();
       expect(streamed.timeToFirstTokenMs).toBeTypeOf('number');

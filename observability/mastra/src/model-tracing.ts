@@ -516,9 +516,10 @@ export class ModelSpanTracker {
     if (spanOptions.attributes) {
       // Durable execution ends the generation from a fresh tracker and passes the
       // clock it carried through the loop state.
-      spanOptions.attributes.completionStartTime =
-        this.#completionStartTime ?? spanOptions.attributes.completionStartTime;
-      spanOptions.attributes.timeToFirstTokenMs = this.#timeToFirstTokenMs ?? spanOptions.attributes.timeToFirstTokenMs;
+      if (this.#completionStartTime) {
+        spanOptions.attributes.completionStartTime = this.#completionStartTime;
+        spanOptions.attributes.timeToFirstTokenMs = this.#timeToFirstTokenMs;
+      }
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
       spanOptions.attributes.costContext = providerCostContext ?? spanOptions.attributes.costContext;
       if (!spanOptions.attributes.costContext) {
@@ -717,6 +718,13 @@ export class ModelSpanTracker {
    */
   interruptInference(): void {
     this.#endOpenInference('interrupted');
+  }
+
+  failInference(error: Error): void {
+    this.#endChunkSpan();
+    if (!this.#currentInferenceSpan) return;
+    this.#currentInferenceSpan.error({ error, endSpan: true, attributes: this.#inferenceStreamAttributes() });
+    this.#currentInferenceSpan = undefined;
   }
 
   /** End the open inference span, if any, with what it streamed before `finishReason`. */

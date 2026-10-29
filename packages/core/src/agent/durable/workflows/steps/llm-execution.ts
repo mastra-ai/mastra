@@ -586,6 +586,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // The attempt's first-chunk clocks. Every step output returned after the model call
       // carries them, since the finalizer ends the rebuilt spans with the loop state's copy.
       let recordClocks: (() => { completionStartTime?: Date; timeToFirstTokenMs?: number }) | undefined;
+      // Ends the attempt's inference span with the error before a retry or fallback opens its own.
+      let failInference: ((error: Error) => void) | undefined;
       const finishInterruptedRequest = async (error: unknown, modelId: string): Promise<DurableLLMStepOutput> => {
         ownership?.throwIfLost();
         stopListening?.();
@@ -812,9 +814,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             recordClocks = () => {
               const completionStartTime = modelSpanTracker?.getCompletionStartTime?.();
               const timeToFirstTokenMs = modelSpanTracker?.getTimeToFirstTokenMs?.();
-              if (resumeRegistry?.resumeModelSpanData) {
-                resumeRegistry.resumeCompletionStartTime ??= completionStartTime;
-                resumeRegistry.resumeTimeToFirstTokenMs ??= timeToFirstTokenMs;
+              if (
+                resumeRegistry?.resumeModelSpanData &&
+                completionStartTime &&
+                !resumeRegistry.resumeCompletionStartTime
+              ) {
+                resumeRegistry.resumeCompletionStartTime = completionStartTime;
+                resumeRegistry.resumeTimeToFirstTokenMs = timeToFirstTokenMs;
               }
               return { completionStartTime, timeToFirstTokenMs };
             };
@@ -834,6 +840,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker({
               agentRunSpan: agentRunSpan as Span<SpanType.AGENT_RUN> | undefined,
             });
+            failInference = error => modelSpanTracker?.failInference?.(error);
             endAttemptSpans = () => {
               modelSpanTracker?.interruptInference?.();
               const stepSpan = modelSpanTracker?.exportCurrentStep();
@@ -2979,6 +2986,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             }
 
             const modelId = modelEntry.config.modelId;
+            failInference?.(lastError);
             logger?.error?.(`Error executing model ${modelId}, attempt ${attempt + 1}/${maxRetries + 1}`, {
               error: lastError,
               runId,

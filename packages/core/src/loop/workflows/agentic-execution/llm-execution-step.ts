@@ -2702,6 +2702,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } else {
             // For non-last models, try processAPIError before falling through to next model
             // This allows error processors to fix the request and retry with the SAME model
+            modelSpanTracker?.failInference?.(error instanceof Error ? error : new Error(String(error)));
             const processorRunner = new ProcessorRunner({
               inputProcessors: inputProcessors || [],
               outputProcessors: outputProcessors || [],
