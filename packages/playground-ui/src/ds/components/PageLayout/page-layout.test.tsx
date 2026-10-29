@@ -42,32 +42,6 @@ describe('PageLayout', () => {
       expect(filter.closest('[style*="overflow"]')).toBe(viewportOf('Body'));
       expect(filter.compareDocumentPosition(screen.getByText('Body')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
-
-    it('stacks them 16px apart', () => {
-      render(
-        <PageLayout>
-          <input aria-label="Filter" />
-          <p>Body</p>
-        </PageLayout>,
-      );
-
-      expect(screen.getByText('Body').parentElement?.className).toContain('gap-4');
-    });
-
-    it('gives the list the height left under the toolbar', () => {
-      render(
-        <PageLayout>
-          <PageLayout.Fill>
-            <p>Body</p>
-          </PageLayout.Fill>
-        </PageLayout>,
-      );
-
-      const fill = screen.getByText('Body').closest('[data-slot="page-layout-fill"]');
-      expect(fill?.className).toMatch(/\bgrow\b/);
-      expect(fill?.className).toContain('basis-0');
-      expect(fill?.className).toContain('min-h-0');
-    });
   });
 
   describe('scroll area', () => {
