@@ -17,7 +17,7 @@ export class DomainStore {
     await this.write(async transaction => {
       await transaction.execute('CREATE TABLE IF NOT EXISTS scanner_migrations (version INTEGER PRIMARY KEY)');
       const versions = await transaction.execute('SELECT version FROM scanner_migrations');
-      if (versions.rows.some(row => Number(row.version) > 1))
+      if (versions.rows.some(row => Number(row.version) > 2))
         throw new ControlPlaneError('DATABASE_VERSION_UNSUPPORTED', 503);
       if (!versions.rows.some(row => Number(row.version) === 1)) {
         await transaction.execute(`CREATE TABLE scanner_records (

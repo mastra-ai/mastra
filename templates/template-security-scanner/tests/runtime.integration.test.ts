@@ -59,6 +59,8 @@ async function isolatedRoot() {
   const root = await mkdtemp(join(tmpdir(), 'security-scanner-runtime-'));
   roots.push(root);
   await cp(join(templateRoot, 'docker'), join(root, 'docker'), { recursive: true });
+  await cp(join(templateRoot, 'src'), join(root, 'src'), { recursive: true });
+  await cp(join(templateRoot, 'scripts/runtime'), join(root, 'scripts/runtime'), { recursive: true });
   return root;
 }
 
@@ -212,6 +214,7 @@ describe('real local runtime', () => {
       expect(await response.json()).toEqual({
         status: 'diagnostics-only',
         scanningEnabled: false,
+        discoveryRequested: false,
         nativeExecutionEnabled: false,
       });
       for (const path of ['/native/agents', '/native/workflows', '/native/openapi.json', '/api/targets']) {

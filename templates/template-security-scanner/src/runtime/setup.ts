@@ -3,6 +3,7 @@ import { buildLocalImage, preflight, reconcileOwnedSandboxes, releaseImage } fro
 import { withSetupLock, writeReceipt } from './files.js';
 import { probeSandbox } from './sandbox.js';
 import { initializeStorage } from '../http/server.js';
+import { prepareDiscoveryCapability } from '../discovery/capability.js';
 
 export async function setup(settings: Settings = loadSettings(), signal?: AbortSignal) {
   const environment = await preflight(settings);
@@ -26,6 +27,7 @@ export async function setup(settings: Settings = loadSettings(), signal?: AbortS
         ...image,
         environment,
         sandbox,
+        discovery: await prepareDiscoveryCapability(settings, signal),
         imageDisposition,
         models: morphModelConfiguration(settings),
         scanningEnabled: false,

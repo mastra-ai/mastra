@@ -1,7 +1,8 @@
 import type { Hono, Context } from 'hono';
 import { z } from 'zod';
 import { ControlPlane } from '../core/control-plane.js';
-import { idSchema, pageSchema, parse, ControlPlaneError } from '../core/contracts.js';
+import { idSchema, pageSchema, parse, ControlPlaneError, bindingSchema } from '../core/contracts.js';
+import type { ScanService } from '../discovery/service.js';
 import type { Policy, Target } from '../core/contracts.js';
 import { OPERATOR_ID, readJson } from './security.js';
 
@@ -17,7 +18,7 @@ function respond(context: Context, value: { revision: number }, created = false)
   context.header('ETag', `"${value.revision}"`);
   return context.json(value, created ? 201 : 200);
 }
-export function registerDomainRoutes(app: Hono, service: ControlPlane) {
+export function registerDomainRoutes(app: Hono, service: ControlPlane, scans?: ScanService) {
   app.onError((error, context) =>
     context.json(
       { code: error instanceof ControlPlaneError ? error.code : 'CONTROL_PLANE_UNAVAILABLE' },
@@ -113,11 +114,42 @@ export function registerDomainRoutes(app: Hono, service: ControlPlane) {
   app.post('/api/targets/:id/profiles/:profileId/check', async context =>
     respond(
       context,
-      await service.checkIdentity(OPERATOR_ID, id(context), id(context, 'profileId'), await readJson(context.req)),
+      await (scans?.enabled
+        ? scans.checkIdentity(OPERATOR_ID, id(context), id(context, 'profileId'), await readJson(context.req))
+        : service.checkIdentity(OPERATOR_ID, id(context), id(context, 'profileId'), await readJson(context.req))),
     ),
   );
   app.post('/api/targets/:id/scans', async context => {
-    await service.admitScan(OPERATOR_ID, id(context), await readJson(context.req));
+    const input = await readJson(context.req);
+    if (scans && (scans.enabled || !bindingSchema.safeParse(input).success))
+      return context.json(await scans.admit(OPERATOR_ID, id(context), input), 202);
+    await service.admitScan(OPERATOR_ID, id(context), input);
     return context.body(null, 503);
   });
+  if (scans) {
+    app.get('/api/scans', async context => {
+      const { limit, offset } = page(context);
+      return context.json({ items: await scans.store.list(OPERATOR_ID, limit, offset), limit, offset });
+    });
+    app.get('/api/targets/:id/scans', async context => {
+      const targetId = id(context);
+      await service.store.get('target', targetId, OPERATOR_ID);
+      const { limit, offset } = page(context);
+      return context.json({ items: await scans.store.list(OPERATOR_ID, limit, offset, targetId), limit, offset });
+    });
+    app.get('/api/scans/:id', async context => context.json(await scans.store.get(id(context), OPERATOR_ID)));
+    app.post('/api/scans/:id/cancel', async context => {
+      parse(z.object({}).strict(), await readJson(context.req));
+      return context.json(await scans.cancel(OPERATOR_ID, id(context)));
+    });
+    for (const collection of ['inventory', 'evidence'])
+      app.get(`/api/scans/:id/${collection}`, async context => {
+        const { limit, offset } = page(context);
+        return context.json({
+          items: await scans.store.evidence(id(context), OPERATOR_ID, limit, offset),
+          limit,
+          offset,
+        });
+      });
+  }
 }

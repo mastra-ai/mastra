@@ -59,7 +59,21 @@ export const originSchema = urlSchema.refine(value => {
 export const pathSchema = z
   .string()
   .max(512)
-  .regex(/^\/(?:[a-zA-Z0-9_~-]+(?:\.[a-zA-Z0-9_~-]+)*\/?)*$/);
+  .refine(value => {
+    // Separators are checked independently: hostile suffixes cannot trigger
+    // backtracking through nested segment repetitions on the parser thread.
+    if (value.length > 512 || !value.startsWith('/') || value.startsWith('//')) return false;
+    if (value === '/') return true;
+    const segments = value.slice(1).replace(/\/$/, '').split('/');
+    return segments.every(
+      segment =>
+        segment.length > 0 &&
+        /^[a-zA-Z0-9_~.-]+$/.test(segment) &&
+        !segment.startsWith('.') &&
+        !segment.endsWith('.') &&
+        !segment.includes('..'),
+    );
+  }, 'Use a canonical ASCII path.');
 const paths = z
   .array(pathSchema)
   .min(1)

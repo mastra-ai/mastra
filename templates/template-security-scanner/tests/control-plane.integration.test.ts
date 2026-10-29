@@ -240,6 +240,7 @@ describe('protected local control plane over real HTTP and libSQL', () => {
     expect(await (await fetch(`${app.url()}/api/runtime`)).json()).toEqual({
       status: 'control-plane',
       scanningEnabled: false,
+      discoveryRequested: false,
       nativeExecutionEnabled: false,
     });
     // Missing/wrong keys leave metadata readable, but invalidate every encrypted identity.

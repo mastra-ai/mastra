@@ -1,7 +1,7 @@
 {
   "name": "template-security-scanner",
   "version": "0.1.0",
-  "description": "Local setup and isolated runtime diagnostics for Security Scanner.",
+  "description": "Authorized website and API discovery with isolated local identities and bounded evidence.",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,10 +15,13 @@
     "format": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
     "build": "tsc --outDir dist",
-    "test:unit": "vitest run tests/settings.test.ts tests/control-plane.test.ts",
+    "test:unit": "vitest run tests/settings.test.ts tests/control-plane.test.ts tests/discovery.test.ts",
     "pretest:integration": "npm run build",
     "test:integration": "vitest run tests/runtime.integration.test.ts",
-    "test:control-plane": "vitest run tests/control-plane.integration.test.ts"
+    "test:control-plane": "vitest run tests/control-plane.integration.test.ts",
+    "test:discovery": "node --import tsx scripts/test-discovery.ts discovery",
+    "test:gateway": "node --import tsx scripts/test-discovery.ts gateway",
+    "check:gateway": "node --import tsx scripts/check-gateway.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",

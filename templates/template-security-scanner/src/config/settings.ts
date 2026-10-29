@@ -31,6 +31,7 @@ const environmentSchema = z.object({
     .default('/var/run/docker.sock'),
   DOCKER_RETAIN_SHARED_BASE_IMAGE: booleanSetting.prefault('false'),
   DOCKER_REMOVE_SCAN_IMAGES: z.literal('true').default('true'),
+  SCANNER_DISCOVERY_ENABLED: booleanSetting.prefault('false'),
   SANDBOX_MEMORY_MIB: integerSetting(512, 2048, '1024'),
   SANDBOX_PIDS: integerSetting(64, 512, '256'),
   COMMAND_TIMEOUT_MS: integerSetting(1000, 60000, '20000'),
