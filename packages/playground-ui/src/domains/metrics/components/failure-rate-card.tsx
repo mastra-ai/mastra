@@ -19,16 +19,20 @@ const SERIES = [{ dataKey: 'failureRate', label: 'Failed runs', color: CHART_COL
 const axisPercent = (ratio: number) => `${Math.round(ratio * 100)}%`;
 
 /** Share of agent runs that failed, per bucket; a point opens the failed runs' traces. */
-export type FailureRateCardProps = {
+export type FailureRateCardProps<V extends string = string> = {
   /** Called from the "View errors in Logs" button. */
   onViewErrors?: () => void;
   /** Called with the time range of the clicked bar or point. */
   onTimeRangeClick?: (range: TimeRange) => void;
   /** Switches to a sibling view from the title (Agent runs uses it). */
-  titleMenu?: ChartCardProps['titleMenu'];
+  titleMenu?: ChartCardProps<V>['titleMenu'];
 };
 
-export function FailureRateCard({ onViewErrors, onTimeRangeClick, titleMenu }: FailureRateCardProps) {
+export function FailureRateCard<V extends string = string>({
+  onViewErrors,
+  onTimeRangeClick,
+  titleMenu,
+}: FailureRateCardProps<V>) {
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsActivity();
   const { timestamp } = useMetricsFilters();
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);

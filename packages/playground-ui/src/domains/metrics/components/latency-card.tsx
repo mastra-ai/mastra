@@ -28,11 +28,17 @@ const SERIES: MetricsLineChartSeries[] = [
   { dataKey: 'p99', label: 'P99', color: CHART_COLORS.violet },
 ];
 
+const TITLE: Record<LatencyEntity, string> = {
+  agents: 'Agent latency',
+  workflows: 'Workflow latency',
+  tools: 'Tool latency',
+};
+
 const VIEWS = [
-  { value: 'agents', label: 'Agent latency' },
-  { value: 'workflows', label: 'Workflow latency' },
-  { value: 'tools', label: 'Tool latency' },
-] as const satisfies readonly { value: LatencyEntity; label: string }[];
+  { value: 'agents', label: TITLE.agents },
+  { value: 'workflows', label: TITLE.workflows },
+  { value: 'tools', label: TITLE.tools },
+] as const;
 
 const EMPTY_NOUN: Record<LatencyEntity, string> = {
   agents: 'agent runs',
@@ -57,8 +63,8 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
   const peak = Math.max(0, ...data.map(b => b.p95 ?? 0));
 
   const layout = {
-    title: VIEWS.find(v => v.value === entity)?.label ?? 'Latency',
-    titleMenu: { value: entity, onValueChange: (v: string) => setEntity(v as LatencyEntity), options: VIEWS },
+    title: TITLE[entity],
+    titleMenu: { value: entity, onValueChange: setEntity, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(ROOT_ENTITY[entity])} />,
     toolbar: (
       <MetricsCard.Toolbar>

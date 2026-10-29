@@ -24,10 +24,15 @@ const TOKEN_SERIES: MetricsLineChartSeries[] = [
 ];
 const COST_SERIES: MetricsLineChartSeries[] = [{ dataKey: 'cost', label: 'Cost', color: CHART_COLORS.green }];
 
+const TITLE: Record<View, string> = {
+  tokens: 'Token usage',
+  cost: 'Model cost',
+};
+
 const VIEWS = [
-  { value: 'tokens', label: 'Token usage' },
-  { value: 'cost', label: 'Model cost' },
-] as const satisfies readonly { value: View; label: string }[];
+  { value: 'tokens', label: TITLE.tokens },
+  { value: 'cost', label: TITLE.cost },
+] as const;
 
 /** Tokens (input, cache reads, output) or model cost per bucket; a bar opens its traces. */
 export type TokenUsageCardProps = {
@@ -48,8 +53,8 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
   const series = isTokens ? TOKEN_SERIES : COST_SERIES;
 
   const layout = {
-    title: isTokens ? 'Token usage' : 'Model cost',
-    titleMenu: { value: view, onValueChange: (v: string) => setView(v as View), options: VIEWS },
+    title: TITLE[view],
+    titleMenu: { value: view, onValueChange: setView, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
     toolbar: (
       <MetricsCard.Toolbar>

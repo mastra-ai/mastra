@@ -43,7 +43,7 @@ export type AgentRunsCardProps = {
 
 export function AgentRunsCard({ onTimeRangeClick, onFailureTimeRangeClick, onViewErrors }: AgentRunsCardProps) {
   const [view, setView] = useState<View>('runs');
-  const titleMenu = { value: view, onValueChange: (v: string) => setView(v as View), options: VIEWS };
+  const titleMenu = { value: view, onValueChange: setView, options: VIEWS };
   if (view === 'failure') {
     return (
       <FailureRateCard titleMenu={titleMenu} onViewErrors={onViewErrors} onTimeRangeClick={onFailureTimeRangeClick} />
@@ -55,7 +55,7 @@ export function AgentRunsCard({ onTimeRangeClick, onFailureTimeRangeClick, onVie
 function AgentRunsChart({
   onTimeRangeClick,
   titleMenu,
-}: Pick<AgentRunsCardProps, 'onTimeRangeClick'> & { titleMenu: ChartCardProps['titleMenu'] }) {
+}: Pick<AgentRunsCardProps, 'onTimeRangeClick'> & { titleMenu: ChartCardProps<View>['titleMenu'] }) {
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsActivity();
   const { timestamp } = useMetricsFilters();
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);

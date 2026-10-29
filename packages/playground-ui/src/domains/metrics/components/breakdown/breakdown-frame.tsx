@@ -38,7 +38,7 @@ export function BreakdownFrame({
         tabs.length > 1
           ? {
               value: tab,
-              onValueChange: v => onTabChange(v as BreakdownTab),
+              onValueChange: onTabChange,
               options: tabs.map(t => ({ value: t, label: TAB_TITLE[t] })),
             }
           : undefined

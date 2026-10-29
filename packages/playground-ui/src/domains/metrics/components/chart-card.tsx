@@ -8,7 +8,7 @@ import type { LinkComponentProps } from '@/lib/framework';
 type ChartCardLinkProps = LinkComponentProps & { href: string };
 import { cn } from '@/lib/utils';
 
-export type ChartCardProps = {
+export type ChartCardProps<V extends string = string> = {
   /**
    * Card layout. `default` and `compact` share one header: the title, and `total` on the right.
    * - `default`: a 240px body.
@@ -31,7 +31,7 @@ export type ChartCardProps = {
    * Makes the title a dropdown of the card's views (e.g. "Agent latency", "Tool latency"), in
    * place of tabs. `title` is the picked view's label. Ignored on `hero` cards.
    */
-  titleMenu?: Omit<MetricsCardTitleMenuProps<string>, 'title' | 'className'>;
+  titleMenu?: Omit<MetricsCardTitleMenuProps<V>, 'title' | 'className'>;
   /**
    * The card's headline number: right of the title, or the large value on `hero` cards. A card
    * charting a few different things can pass one total each, marked with its series' color.
@@ -61,7 +61,7 @@ export type ChartCardProps = {
  * Pure layout for a metrics chart card. The body has a fixed height, so the loading,
  * error, empty and loaded states take the same room and nothing shifts around the card.
  */
-export function ChartCard({
+export function ChartCard<V extends string = string>({
   variant = 'default',
   title,
   href,
@@ -76,7 +76,7 @@ export function ChartCard({
   bodyHeight = 'fixed',
   className,
   children,
-}: ChartCardProps) {
+}: ChartCardProps<V>) {
   const fade = cn('transition-opacity duration-200', isUpdating && 'opacity-50');
   const compact = variant === 'compact';
   const hero = variant === 'hero';
@@ -110,7 +110,7 @@ export function ChartCard({
           className={cn(
             'relative flex min-h-0 min-w-0 flex-col',
             // A chart fills the card, so a card stretched to its row's height draws a taller chart, not a gap.
-            compact ? 'flex-1' : hero ? undefined : bodyHeight === 'fit' ? 'min-h-60' : 'min-h-60 flex-1',
+            bodyClass(variant, bodyHeight),
             fade,
           )}
         >
@@ -121,13 +121,21 @@ export function ChartCard({
   );
 }
 
+/** The body's height: compact cards fill what the toolbar leaves; charts fill the card, at least 240px. */
+function bodyClass(variant: ChartCardProps['variant'], bodyHeight: ChartCardProps['bodyHeight']) {
+  if (variant === 'compact') return 'flex-1';
+  if (variant === 'hero') return undefined;
+  if (bodyHeight === 'fit') return 'min-h-60';
+  return 'min-h-60 flex-1';
+}
+
 /** The title: a view menu, a link to a fuller view, or plain. */
-function ChartCardHeading({
+function ChartCardHeading<V extends string>({
   title,
   href,
   LinkComponent,
   titleMenu,
-}: Pick<ChartCardProps, 'title' | 'href' | 'LinkComponent' | 'titleMenu'>) {
+}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'titleMenu'>) {
   if (titleMenu) return <MetricsCard.TitleMenu title={title} {...titleMenu} />;
   if (href) {
     return (

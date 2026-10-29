@@ -15,11 +15,17 @@ import type { ShareBarRow } from '@/ds/components/ShareBar';
 
 type View = 'agents' | 'models' | 'threads';
 
+const TITLE: Record<View, string> = {
+  agents: 'Usage by agent',
+  models: 'Usage by model',
+  threads: 'Usage by thread',
+};
+
 const VIEWS = [
-  { value: 'agents', label: 'Usage by agent' },
-  { value: 'models', label: 'Usage by model' },
-  { value: 'threads', label: 'Usage by thread' },
-] as const satisfies readonly { value: View; label: string }[];
+  { value: 'agents', label: TITLE.agents },
+  { value: 'models', label: TITLE.models },
+  { value: 'threads', label: TITLE.threads },
+] as const;
 type UsageRow = { key: string; cost: number; tokens: number; onClick?: () => void };
 
 export type UsageCardProps = {
@@ -127,8 +133,8 @@ function UsageFrame({
   }));
 
   const layout = {
-    title: VIEWS.find(v => v.value === view)?.label ?? 'Usage',
-    titleMenu: { value: view, onValueChange: (v: string) => onViewChange(v as View), options: VIEWS },
+    title: TITLE[view],
+    titleMenu: { value: view, onValueChange: onViewChange, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
   };
 

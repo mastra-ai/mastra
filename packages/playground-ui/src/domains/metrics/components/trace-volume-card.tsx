@@ -21,11 +21,17 @@ const ROOT_ENTITY: Record<Entity, EntityType> = {
 };
 const COLUMNS = [{ label: 'Error rate' }];
 
+const TITLE: Record<Entity, string> = {
+  agents: 'Agent runs',
+  workflows: 'Workflow runs',
+  tools: 'Tool calls',
+};
+
 const VIEWS = [
-  { value: 'agents', label: 'Agent runs' },
-  { value: 'workflows', label: 'Workflow runs' },
-  { value: 'tools', label: 'Tool calls' },
-] as const satisfies readonly { value: Entity; label: string }[];
+  { value: 'agents', label: TITLE.agents },
+  { value: 'workflows', label: TITLE.workflows },
+  { value: 'tools', label: TITLE.tools },
+] as const;
 
 const errorRate = (errors: number, runs: number) => formatPercent(runs > 0 ? errors / runs : 0);
 
@@ -64,8 +70,8 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
   const total = source.reduce((sum, r) => sum + r.completed + r.errors, 0);
 
   const layout = {
-    title: VIEWS.find(v => v.value === entity)?.label ?? 'Trace volume',
-    titleMenu: { value: entity, onValueChange: (v: string) => setEntity(v as Entity), options: VIEWS },
+    title: TITLE[entity],
+    titleMenu: { value: entity, onValueChange: setEntity, options: VIEWS },
     actions: (onViewTraces || onViewErrors) && (
       <>
         {onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(rootEntityType)} />}

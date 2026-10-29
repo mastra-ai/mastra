@@ -21,24 +21,24 @@ export function MetricsCardTotal({
 }) {
   return (
     <span className={cn('order-last shrink-0 text-body font-medium text-foreground tabular-nums', className)}>
-      {isLoading ? (
-        <SkeletonText line="text-body" className="h-4 w-14" />
-      ) : typeof value === 'string' ? (
-        value
-      ) : (
-        <span className="inline-flex items-center gap-3">
-          {value.map(part => (
-            <span
-              key={part.label}
-              className="inline-flex items-center gap-1.5"
-              aria-label={`${part.label} ${part.value}`}
-            >
-              <span aria-hidden className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: part.color }} />
-              {part.value}
-            </span>
-          ))}
+      <TotalValue value={value} isLoading={isLoading} />
+    </span>
+  );
+}
+
+function TotalValue({ value, isLoading }: { value: string | readonly MetricsCardTotalPart[]; isLoading: boolean }) {
+  if (isLoading) return <SkeletonText line="text-body" className="h-4 w-14" />;
+  if (typeof value === 'string') return value;
+  return (
+    <span className="inline-flex items-center gap-3">
+      {value.map(part => (
+        <span key={part.label} className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: part.color }} />
+          {/* The marker is decorative; screen readers hear which total this is. */}
+          <span className="sr-only">{part.label} </span>
+          {part.value}
         </span>
-      )}
+      ))}
     </span>
   );
 }
