@@ -54,24 +54,15 @@ export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
   } as WorkflowRunState;
 }
 
-export function mergeWorkflowStepResult({
-  snapshot,
-  stepId,
-  result,
-  requestContext,
-  state,
-}: {
-  snapshot: WorkflowRunState;
-  stepId: string;
-  result: StepResult<any, any, any, any>;
-  requestContext: Record<string, any>;
-  state?: Record<string, any>;
-}): Record<string, StepResult<any, any, any, any>> {
-  if (!snapshot?.context) {
-    throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
-  }
-
-  const existingResult = snapshot.context[stepId];
+/**
+ * A step's stored result with a new write of it merged in: per element when both outputs are
+ * arrays (foreach iterations written one at a time, or pending markers resetting elements),
+ * otherwise the new result.
+ */
+export function mergeStepResult(
+  existingResult: StepResult<any, any, any, any> | undefined,
+  result: StepResult<any, any, any, any>,
+): StepResult<any, any, any, any> {
   if (
     existingResult &&
     'output' in existingResult &&
@@ -99,16 +90,35 @@ export function mergeWorkflowStepResult({
         }
       }
     }
-    snapshot.context[stepId] = {
+    return {
       ...existingResult,
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
       ...(hasPendingMarker ? {} : (result as any)),
       output: mergedOutput,
     };
-  } else {
-    snapshot.context[stepId] = result;
   }
+  return result;
+}
+
+export function mergeWorkflowStepResult({
+  snapshot,
+  stepId,
+  result,
+  requestContext,
+  state,
+}: {
+  snapshot: WorkflowRunState;
+  stepId: string;
+  result: StepResult<any, any, any, any>;
+  requestContext: Record<string, any>;
+  state?: Record<string, any>;
+}): Record<string, StepResult<any, any, any, any>> {
+  if (!snapshot?.context) {
+    throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
+  }
+
+  snapshot.context[stepId] = mergeStepResult(snapshot.context[stepId], result);
 
   if (state !== undefined) {
     (snapshot.context as Record<string, unknown>).__state = state;

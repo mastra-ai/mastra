@@ -791,7 +791,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     /** @experimental */
     storageVersion?: 1 | 2;
     /** @internal */
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; patchCount: number };
     /** @internal */
     inheritedState?: StateBase;
     /** Trace IDs for creating child spans in durable execution */

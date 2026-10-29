@@ -189,8 +189,11 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       header: makeHeader('r1'),
       lastSeq: 4,
       startStateSeq: 4,
-      state: { n: 1 },
+      stateSeq: 4,
+      statePatchCount: 0,
       statePatchBytes: 0,
+      stateBytes: 7,
+      state: { n: 1 },
       steps: { input: { x: 1 }, a: ok(1), b: ok(2) },
       summarizedStepIds: [],
     });
@@ -322,8 +325,11 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       header: makeHeader('r1'),
       lastSeq: 1,
       startStateSeq: 0,
-      state: {},
+      stateSeq: 0,
+      statePatchCount: 0,
       statePatchBytes: 0,
+      stateBytes: null,
+      state: {},
       steps: { a: ok(1) },
       summarizedStepIds: [],
     });
@@ -390,7 +396,15 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     await store.writeWorkflowRunCheckpoint({ ...run, header: makeHeader('r1'), steps: { a: ok(1) }, state: {} });
     await store.persistWorkflowSnapshot({ workflowName: 'wf', runId: 'v1', snapshot: makeSnapshot('v1') });
 
-    expect(await store.loadWorkflowRunHeader(run)).toEqual({ header: makeHeader('r1'), lastSeq: 2, startStateSeq: 2 });
+    expect(await store.loadWorkflowRunHeader(run)).toEqual({
+      header: makeHeader('r1'),
+      lastSeq: 2,
+      startStateSeq: 2,
+      stateSeq: 2,
+      statePatchCount: 0,
+      statePatchBytes: 0,
+      stateBytes: 2,
+    });
     expect(await store.loadWorkflowRunHeader({ workflowName: 'wf', runId: 'v1' })).toBeNull();
     expect(await store.loadWorkflowRunHeader({ workflowName: 'wf', runId: 'nope' })).toBeNull();
     expect(await store.loadWorkflowRun({ workflowName: 'wf', runId: 'v1', successfulSteps: 'full' })).toBeNull();
@@ -414,6 +428,10 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       header: makeHeader('r1', { status: 'canceled', suspendedPaths: { a: [0] } }),
       lastSeq: 2,
       startStateSeq: 2,
+      stateSeq: 2,
+      statePatchCount: 0,
+      statePatchBytes: 0,
+      stateBytes: 2,
     });
     expect(await store.loadWorkflowRunHeader(run)).toEqual(updated);
 
