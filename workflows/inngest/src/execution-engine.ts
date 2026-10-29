@@ -20,7 +20,6 @@ import { NonRetriableError } from 'inngest';
 import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
 import { workflowTermination } from './observability-compat';
-
 import { InngestWorkflow } from './workflow';
 
 function isNonRetryableStepFailure(error: unknown): boolean {
@@ -160,7 +159,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 ...workflowTermination({
                   status: 'failed',
                   error: cause.error,
-                  tripwire: cause.tripwire,
                 }),
                 error: getErrorFromUnknown(e),
                 attributes: { status: 'failed' },

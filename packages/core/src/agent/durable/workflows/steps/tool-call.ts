@@ -1961,6 +1961,8 @@ export function createDurableToolCallStep() {
         let bailed = false;
         for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {
           if (rc?.get('__mastra_delegationBailed')) {
+            // Reset once for this bail, before collecting causes from the live contexts.
+            if (!bailed && registryEntry) registryEntry.tracingDelegationFailure = undefined;
             bailed = true;
             rc.set('__mastra_delegationBailed', false);
             const cause = takeDelegationFailure(rc);

@@ -64,7 +64,7 @@ describe('native execution outcomes (OBS-724)', () => {
     expect(JSON.stringify(exported)).not.toContain('private-processor');
   });
 
-  it('distinguishes an opted-in ongoing execution from an unavailable legacy outcome', () => {
+  it('preserves explicit null and omitted outcomes on newly created spans', () => {
     const { tracing, events } = setup();
     tracing.startSpan({ name: 'ongoing', type: SpanType.AGENT_RUN, outcome: null });
     const legacy = tracing.startSpan({ name: 'legacy', type: SpanType.AGENT_RUN });

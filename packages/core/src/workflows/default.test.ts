@@ -1341,6 +1341,30 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     pubsub = new EventEmitterPubSub();
   });
 
+  it('preserves an already-classified nested tripwire result', async () => {
+    // Nested workflow results include tripwire even though leaf StepResult does not.
+    const lastOutput = {
+      status: 'tripwire',
+      tripwire: { reason: 'Guardrail fired', processorId: 'policy' },
+    } as unknown as StepResult<any, any, any, any>;
+    const result = await engine.fmtReturnValuePublic(pubsub, { step: lastOutput }, lastOutput);
+    expect(result).toMatchObject({
+      status: 'tripwire',
+      tripwire: { reason: 'Guardrail fired', processorId: 'policy' },
+    });
+  });
+
+  it.each(['suspended', 'canceled'] as const)('retains %s when step data also carries a tripwire', async status => {
+    const lastOutput = {
+      status,
+      tripwire: { reason: 'Earlier guardrail', processorId: 'policy' },
+      suspendPayload: { question: 'Which order?' },
+    } as unknown as StepResult<any, any, any, any>;
+    const result = await engine.fmtReturnValuePublic(pubsub, { step: lastOutput }, lastOutput);
+    expect(result.status).toBe(status);
+    if (status === 'suspended') expect(result.suspendPayload).toEqual({ step: { question: 'Which order?' } });
+  });
+
   it('should include stepExecutionPath in the result', async () => {
     const stepResults: Record<string, StepResult<any, any, any, any>> = {
       input: { value: 1 } as any,

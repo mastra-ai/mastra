@@ -746,7 +746,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishUsageIsTotal,
     onFinishComplete,
     getTerminalRequest,
-    getContinuationStopCause,
     onTracingTripwire,
   }: {
     model: {
@@ -772,7 +771,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     getTerminalRequest?: () => LLMStepResult<OUTPUT>['request'] | undefined;
     /** Internal tracing state, never serialized into finish chunks. */
     onTracingTripwire?: import('../../loop/types').LoopOptions['onTracingTripwire'];
-    getContinuationStopCause?: () => import('../../loop/shared/continuation-core').ContinuationStopCause | undefined;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     if (options.logger) {
@@ -2013,7 +2011,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (!self.#finishCallbackSent) {
                   self.#finishCallbackSent = true;
                   await options?.onFinish?.(onFinishPayload, {
-                    continuationStopCause: getContinuationStopCause?.(),
                     writer: outputResultWriter,
                     ...(outputResultTripwire && { outputResultTripwire }),
                   });

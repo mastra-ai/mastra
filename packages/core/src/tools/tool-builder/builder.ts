@@ -25,6 +25,7 @@ import {
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { eagerToolCallSuspensionIntent } from '../../loop/workflows/agentic-execution/eager-tool-execution';
 import type { Mastra } from '../../mastra';
 import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -941,8 +942,8 @@ export class CoreToolBuilder extends MastraBase {
         });
         return result;
       } catch (error) {
-        if (suspensionRequested) {
-          // Some engines implement suspension by unwinding the tool execution.
+        if (suspensionRequested && eagerToolCallSuspensionIntent(error)) {
+          // Eager suspension deliberately unwinds; other errors must retain their details.
           toolSpan?.end({ outcome: 'suspend', stopReason: null, stopReasonContext: null });
         } else {
           toolSpan?.error({

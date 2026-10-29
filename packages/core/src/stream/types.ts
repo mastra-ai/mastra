@@ -24,7 +24,6 @@ import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
-import type { ContinuationStopCause } from '../loop/shared/continuation-core';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -1243,8 +1242,6 @@ export type CustomChunkWriter = {
 
 /** Context passed as the second argument to `MastraOnFinishCallback`. */
 export type MastraOnFinishCallbackContext = {
-  /** @internal Authoritative loop decision, retained separately from provider finishReason. */
-  continuationStopCause?: ContinuationStopCause;
   writer?: CustomChunkWriter;
   /**
    * Set when an output processor aborted the run from `processOutputResult`. The run-level

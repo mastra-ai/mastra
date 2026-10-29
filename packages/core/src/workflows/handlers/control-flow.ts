@@ -850,13 +850,7 @@ export async function executeLoop(
         span: loopSpan,
         operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
         endOptions: {
-          ...workflowTermination(
-            {
-              ...result,
-              status: result.status,
-            },
-            abortController?.signal,
-          ),
+          ...workflowTermination(result, abortController?.signal),
           attributes: {
             totalIterations: iteration,
           },
@@ -1528,10 +1522,7 @@ export async function executeForeach(
       span: loopSpan,
       operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.error`,
       errorOptions: {
-        ...workflowTermination({
-          ...finalErrorResult,
-          status: finalErrorResult.status,
-        }),
+        ...workflowTermination(finalErrorResult),
         error: finalErrorResult.error,
       },
     });

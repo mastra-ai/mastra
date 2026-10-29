@@ -91,6 +91,17 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  it.each(['total', 'step', 'firstChunk'] as const)('preserves the timeout scope on an open step (%s)', timeoutType => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation', outcome: null });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep();
+    tracker.startInference();
+    tracker.endGeneration({ outcome: 'limit', stopReason: 'timeout', stopReasonContext: { timeoutType } });
+    expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toMatchObject([
+      { outcome: timeoutType === 'total' ? 'interrupted' : 'limit', stopReason: 'timeout' },
+    ]);
+  });
+
   it('applies a derived generation failure to the generation and its open children', () => {
     const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation', outcome: null });
     const tracker = new ModelSpanTracker(model);

@@ -4,6 +4,7 @@ import { ModelSpanTracker } from '../../../../../../../observability/mastra/src/
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { createScorer } from '../../../../evals';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { SCENARIO_MODEL_ID } from '../types';
 import { SamplingStrategyType, SpanType, TracingEventType } from '../../../../observability';
 import { createTool } from '../../../../tools';
@@ -626,6 +627,41 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended(SpanType.MODEL_GENERATION)).toMatchObject([{ outcome: 'success', stopReason: null }]);
   });
 
+  if (engine === 'durable' || engine === 'evented') {
+    it('closes root spans when publishing a fatal bail fails before final mapping', async () => {
+      const { observability, ended } = capture();
+      let rejected = false;
+      class FailingBailTransport extends EventEmitterPubSub {
+        override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+          const event = args[1];
+          if (!rejected && event.data?.type === 'error') {
+            rejected = true;
+            throw new Error('Fatal bail transport failed');
+          }
+          return super.publish(...args);
+        }
+      }
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        pubsub: new FailingBailTransport(),
+        prompt: 'Answer briefly',
+        maxRetries: 0,
+        expectStreamError: true,
+        fixtures: llm =>
+          llm.on(
+            { endpoint: 'chat' },
+            { error: { message: 'Provider unavailable', type: 'server_error' }, status: 500 },
+          ),
+      });
+      expect(rejected).toBe(true);
+      for (const type of [SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+        await expect.poll(() => ended(type)).toMatchObject([{ outcome: 'error', endTime: expect.any(Date) }]);
+      }
+    });
+  }
+
   it.each([false, true])('closes tracing after a hard workflow failure (onError throws=%s)', async throwsOnError => {
     const { observability, ended } = capture();
     const errors: Array<{ error: Error | string }> = [];
@@ -754,6 +790,34 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended().at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_INFERENCE).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
+  });
+
+  it('records a real tool error after requesting suspension', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Ask for details',
+      tools: {
+        ask: createTool({
+          id: 'ask',
+          description: 'Ask for missing details',
+          inputSchema: z.object({}),
+          // Declaring the schema excludes eager dispatch, whose suspension intentionally
+          // unwinds before the rest of the tool body executes.
+          suspendSchema: z.object({ question: z.string() }),
+          execute: async (_input, context) => {
+            await context?.agent?.suspend({ question: 'Which order?' });
+            throw new Error('Failed to save approval audit');
+          },
+        }),
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'ask-1', name: 'ask', arguments: {} }] }),
+    });
+    await expect
+      .poll(() => ended(SpanType.TOOL_CALL))
+      .toMatchObject([{ outcome: 'error', errorInfo: { message: 'Failed to save approval audit' } }]);
   });
 
   it('records a tool suspension separately from completion', async () => {

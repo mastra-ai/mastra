@@ -94,7 +94,7 @@ export type SpanTermination = { outcome: SpanOutcome } & (
  * Custom producers retain arbitrary values; framework producers use SpanTermination.
  */
 export interface SpanOutcomeFields {
-  /** Explicit null means ongoing for an adopted producer. Absence means unavailable. */
+  /** Null or absence means no recorded outcome. Use endTime to determine completion. */
   outcome?: string | null;
   /** Nullable machine-readable cause, supplied at the authoritative runtime boundary. */
   stopReason?: string | null;

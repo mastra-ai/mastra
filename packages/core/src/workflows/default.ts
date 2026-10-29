@@ -668,7 +668,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
-    } else if (lastOutput.status === 'failed' || ('tripwire' in lastOutput && lastOutput.tripwire)) {
+    } else if (lastOutput.status === 'failed' || (lastOutput.status as string) === 'tripwire') {
       // Nested engines can return an already-classified tripwire result. Preserve
       // its explicit cause as well as tripwires represented by failed leaf steps.
       const tripwireData = (lastOutput as { tripwire?: StepTripwireInfo | TripWire<Record<string, unknown>> }).tripwire;

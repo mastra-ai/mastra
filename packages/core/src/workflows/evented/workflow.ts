@@ -106,7 +106,6 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
-
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};

@@ -3,7 +3,7 @@ import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
-import { DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
+import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
@@ -380,7 +380,7 @@ export class MastraLLMVNext extends MastraBase {
               ...(props.finishReason === 'error'
                 ? executionFailureTermination(props.error)
                 : agentLoopTermination({
-                    stopCause: context?.continuationStopCause,
+                    stopCause: tracingScope.get(CONTINUATION_STOP_CAUSE_KEY),
                     delegationFailure: tracingScope.get(DELEGATION_FAILURE_KEY),
                     finishReason: props.finishReason,
                     tripwire: context?.outputResultTripwire ?? props.tripwire,

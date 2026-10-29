@@ -55,10 +55,12 @@ describe.each(['esm', 'cjs'] as const)('older core outcome compatibility (%s)', 
         const tracker = new ModelSpanTracker(model);
         tracker.startStep();
         tracker.startInference();
+        tracker.interruptInference();
+        tracker.startInference();
         tracker.reportGenerationError({error: new Error('provider failed')});
         tracker.endGeneration();
         const attempts = events.filter(e => e.type === 'span_ended' && ['model_step', 'model_inference'].includes(e.exportedSpan.type));
-        if (attempts.length !== 2) throw new Error('Expected step and inference exports');
+        if (attempts.length !== 3) throw new Error('Expected step and inference exports');
         for (const event of attempts) {
           if (event.exportedSpan.outcome !== undefined) throw new Error('Older core must not opt into execution outcomes');
         }

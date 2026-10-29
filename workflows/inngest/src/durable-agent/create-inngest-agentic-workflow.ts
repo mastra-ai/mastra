@@ -40,8 +40,8 @@ import { ChunkFrom } from '@mastra/core/stream';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
-import { init } from '../index';
 
+import { init } from '../index';
 import { agentLoopTermination, generationUsage } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
@@ -183,7 +183,6 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     .map(
       async ({ inputData }) => {
         const state = inputData as IterationState;
-
         return {
           runId: state.runId,
           agentId: state.agentId,

@@ -565,7 +565,7 @@ export class ModelSpanTracker {
         stopReasonContext: spanOptions.stopReasonContext,
       };
       this.#endChunkSpan();
-      this.#currentStepSpan?.end({ ...termination, outcome: 'interrupted', endTree: true });
+      this.#currentStepSpan?.end({ ...interruptedByRun(termination), endTree: true });
       this.#currentStepSpan = undefined;
       this.#currentInferenceSpan = undefined;
       this.#currentStepInputIsFinal = false;
@@ -791,14 +791,15 @@ export class ModelSpanTracker {
    * End the open MODEL_INFERENCE span as interrupted while keeping MODEL_STEP open,
    * so a replacement request for the same step gets its own inference span.
    */
-  interruptInference(
-    termination: SpanTermination = { outcome: 'interrupted', stopReason: null, stopReasonContext: null },
-  ): void {
+  interruptInference(termination?: SpanTermination): void {
     this.#endChunkSpan();
     if (!this.#currentInferenceSpan) return;
     this.#currentInferenceSpan.end({
       attributes: { finishReason: 'interrupted', ...this.#inferenceStreamAttributes() },
-      ...termination,
+      ...(termination ??
+        (typeof coreObservability.agentLoopTermination === 'function'
+          ? { outcome: 'interrupted', stopReason: null, stopReasonContext: null }
+          : {})),
     });
     this.#currentInferenceSpan = undefined;
     this.#inferenceCompletionStartTime = undefined;
