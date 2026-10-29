@@ -50,6 +50,8 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { ProjectBoardCache } from './boards/project-boards.js';
+import type { ProjectBoardSource } from './boards/project-boards.js';
 import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
@@ -460,7 +462,10 @@ export class MastraFactory {
   /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
+  /** The compiled code boards: seed input for every project's stored boards. */
   readonly #boards: BoardRegistry;
+  /** Each project's boards, read from the database. Undefined until `prepare()` or when the boards domain is down. */
+  #projectBoards: ProjectBoardCache | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
@@ -627,11 +632,13 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
-    workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
+    workItemsStorage.useTerminalPhasePredicate(item =>
+      isTerminalWorkItem(this.#projectBoards?.forProject(item) ?? this.#boards, item),
+    );
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
-    storage.registerDomain(new StoredBoardsStorage());
+    const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
@@ -717,6 +724,28 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+
+    // Boards live in the database. Seed every project with the code boards and load them before
+    // anything reads a project's boards; without the boards domain the code boards serve directly.
+    if (storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
+      const projectBoards = new ProjectBoardCache({
+        seedRegistry: this.#boards,
+        storage: storedBoardsStorage,
+        projects: factoryProjectsStorage,
+        codeSkills: this.#skills,
+      });
+      this.#projectBoards = projectBoards;
+      await timedPhase('prepare.boards.preload', () =>
+        projectBoards
+          .preload()
+          .catch(error =>
+            console.warn(
+              `[factory] loading project boards at startup failed; each project loads on first use: ${error instanceof Error ? error.message : error}`,
+            ),
+          ),
+      );
+    }
+    const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -981,7 +1010,7 @@ export class MastraFactory {
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
-          boards: this.#boards,
+          boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
           autoApprovePlans: async ({ orgId, factoryProjectId }) => {
@@ -1017,7 +1046,7 @@ export class MastraFactory {
       comments: workItemCommentsStorage,
       feed: commentsDomain,
       audit: auditStorage,
-      boards: this.#boards,
+      boards: boards,
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
@@ -1061,6 +1090,12 @@ export class MastraFactory {
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
       sandbox: this.#sandbox,
+      ...(this.#projectBoards
+        ? {
+            onProjectCreated: (project: { orgId: string; id: string }) =>
+              this.#projectBoards!.load({ orgId: project.orgId, factoryProjectId: project.id }),
+          }
+        : {}),
       ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,
@@ -1214,7 +1249,7 @@ export class MastraFactory {
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
-          boards: this.#boards,
+          boards: boards,
           loadMemorySettings,
           defaultThinkingLevel: resolveDefaultThinkingLevel,
           ...(transitionService ? { transitionService } : {}),
@@ -1458,7 +1493,7 @@ export class MastraFactory {
                     sessions: sourceControlSessions,
                     projects: factoryProjectsStorage,
                     workItems: workItemsStorage,
-                    boards: this.#boards,
+                    boards: boards,
                     isRunning: async sessionId => {
                       const session = await this.#prepared?.base.controller.getSession(sessionId);
                       return session?.stream.isActive() ?? false;
@@ -1567,7 +1602,7 @@ export class MastraFactory {
                 requestContext,
                 storage: workItemsStorage,
                 transitionService,
-                boards: this.#boards,
+                boards: boards,
                 // Heals crash-resumed sessions: recovered addresses re-seed
                 // projectRepositoryId/baseRef from the source session record.
                 // Only offered while the source-control domain is ready — a
@@ -1735,7 +1770,7 @@ export class MastraFactory {
             skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
-            boardRegistry: this.#boards,
+            boardRegistry: boards,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
@@ -1744,7 +1779,7 @@ export class MastraFactory {
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
-                boards: this.#boards,
+                boards: boards,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

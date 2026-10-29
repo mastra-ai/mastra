@@ -187,6 +187,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
    * kicks the initial base-checkpoint build. Must never throw.
    */
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
+  /** Called after a project is created, to write its boards before the first request reads them. */
+  onProjectCreated?: (project: { orgId: string; id: string }) => Promise<unknown>;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain used by session retirement and running-thread model updates. */
@@ -538,6 +540,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          // A failure here leaves the boards to be written on the project's first load.
+          await this.deps
+            .onProjectCreated?.(project)
+            .catch(error =>
+              console.warn(
+                `[factory] boards for new project ${project.id} were not written yet: ${error instanceof Error ? error.message : error}`,
+              ),
+            );
           return context.json({ project }, 201);
         },
       }),

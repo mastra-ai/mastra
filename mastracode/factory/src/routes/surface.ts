@@ -10,6 +10,8 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -135,8 +137,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeKey?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
-  /** Boards installed for this Factory instance. */
-  boardRegistry: BoardRegistry;
+  /** Each project's boards; integrations use the code boards (`seedRegistry`). */
+  boardRegistry: BoardRegistry | ProjectBoardSource;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -277,7 +279,7 @@ export async function prepareFactoryRuleBinding(
   sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
-  boards: BoardRegistry,
+  boards: BoardRegistry | ProjectBoardSource,
   input: FactoryBindingPreparationInput,
   intake?: Pick<IntakeStorage, 'getConfig'>,
 ): Promise<void> {
@@ -293,7 +295,7 @@ export async function prepareFactoryRuleBinding(
     // Both the current phase and the role's lane come from the installed board; an
     // unknown board or phase yields no destination rather than a guessed one.
     const boardId = boardForWorkItem(input.item);
-    const board = boards.get(boardId);
+    const board = (await toBoardSource(boards).load(input.record)).get(boardId);
     const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
     const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
     const destinationStage =
@@ -642,6 +644,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     const context = buildIntegrationContext(
       {
         ...deps,
+        // Integrations evaluate code behaviors and place new cards with the code boards.
+        boardRegistry: toBoardSource(deps.boardRegistry).seedRegistry,
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),

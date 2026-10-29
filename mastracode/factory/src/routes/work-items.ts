@@ -11,8 +11,9 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource, StoredBoardDetails } from '../boards/project-boards.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -59,7 +60,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Work-items domain backing the kanban board. */
   workItems: WorkItemsStorage;
   /** Boards installed for this Factory instance. */
-  boardRegistry?: BoardRegistry;
+  /** A fixed registry, or the per-project boards. Defaults to the built-in boards. */
+  boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** Comments domain — backs the mention attention provider. */
   comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
@@ -202,11 +204,21 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
   };
 }
 
-export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
-  #defaultBoards: BoardRegistry | undefined;
+/** Where a catalog board came from, whether a person edited it, and what is wrong with it. */
+function catalogDetails(details: StoredBoardDetails | undefined) {
+  if (!details) return {};
+  return {
+    source: details.source,
+    customized: details.customized,
+    ...(details.problems.length > 0 ? { problems: details.problems } : {}),
+  };
+}
 
-  get #boards(): BoardRegistry {
-    return this.deps.boardRegistry ?? (this.#defaultBoards ??= createBoardRegistry());
+export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
+  #source: ProjectBoardSource | undefined;
+
+  get #boards(): ProjectBoardSource {
+    return (this.#source ??= toBoardSource(this.deps.boardRegistry));
   }
 
   /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
@@ -313,7 +325,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         });
         if (!settled.ok) return c.json({ error: settled.code }, 409);
         const { decision } = settled;
-        return c.json({ decision: decisionSummary(this.#boards, decision) });
+        return c.json({ decision: decisionSummary(await this.#boards.load(resolved), decision) });
       },
     });
   }
@@ -328,9 +340,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
+          const project = this.#boards.describe
+            ? await this.#boards.describe(resolved)
+            : { registry: await this.#boards.load(resolved), details: undefined, problems: [] };
           return c.json({
-            boards: [...this.#boards].map(([id, board]) => ({
+            boards: [...project.registry].map(([id, board]) => ({
               id,
+              ...catalogDetails(project.details?.get(id)),
               name: board.name,
               title: board.name,
               ...(board.description !== undefined ? { description: board.description } : {}),
@@ -365,6 +381,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
               })),
             })),
+            ...(project.problems.length > 0 ? { problems: [...project.problems] } : {}),
           });
         },
       }),
@@ -455,16 +472,15 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             limit: query.data.limit,
           });
           const last = page.decisions.at(-1);
+          const boards = await this.#boards.load(resolved);
           const overtaken = await overtakenDecisionIds(
             workItems,
-            this.#boards,
+            boards,
             resolved,
             page.decisions.filter(decision => decision.status === 'failed'),
           );
           return c.json({
-            decisions: page.decisions.map(decision =>
-              decisionSummary(this.#boards, decision, overtaken.has(decision.id)),
-            ),
+            decisions: page.decisions.map(decision => decisionSummary(boards, decision, overtaken.has(decision.id))),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
         },
@@ -494,16 +510,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           if (!parsedPath.success) return c.json({ error: 'invalid_decision_id' }, 422);
           const { decisionId } = parsedPath.data;
+          const boards = await this.#boards.load(resolved);
           const retried = await retryFactoryDecision({
             workItems,
-            boards: this.#boards,
+            boards,
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
             decisionId,
           });
           if (!retried.ok) return c.json({ error: retried.code }, 409);
           const { decision } = retried;
-          return c.json({ decision: decisionSummary(this.#boards, decision) });
+          return c.json({ decision: decisionSummary(boards, decision) });
         },
       }),
 
@@ -522,7 +539,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           try {
             const created = await createFactoryWorkItem({
               workItems,
-              boards: this.#boards,
+              boards: await this.#boards.load(resolved),
               transitionService,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
@@ -659,7 +676,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const existing = await workItems.get({ orgId: tenant.orgId, id });
           if (!existing) return c.json({ error: 'Work item not found' }, 404);
           if (patch.board !== undefined) {
-            const board = this.#boards.get(patch.board);
+            const boards = await this.#boards.load({
+              orgId: tenant.orgId,
+              factoryProjectId: existing.factoryProjectId,
+            });
+            const board = boards.get(patch.board);
             const stage = patch.stages?.length === 1 ? patch.stages[0] : undefined;
             if (existing.board !== null) {
               return c.json({ error: 'board_already_assigned' }, 409);

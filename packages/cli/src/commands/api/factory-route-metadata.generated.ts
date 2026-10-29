@@ -844,6 +844,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "description": {
                 "type": "string"
               },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "builtin",
+                  "app",
+                  "stored"
+                ]
+              },
+              "customized": {
+                "type": "boolean"
+              },
+              "problems": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "initialPhase": {
                 "type": "string"
               },
@@ -948,6 +965,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "initialPhase",
               "phases"
             ]
+          }
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       },
