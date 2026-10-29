@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 25 providers (978 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 26 providers (996 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -32,6 +32,7 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg" /> [Microsoft PowerPoint](#microsoft-powerpoint) | `microsoft-powerpoint` | 18 |
 | <ProviderLogo slug="microsoftteams" /> [Microsoft Teams](#microsoft-teams) | `microsoft-teams` | 25 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/microsoft-word.svg" /> [Microsoft Word](#microsoft-word) | `microsoft-word` | 18 |
 | <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
 | [OneDrive](#onedrive) | `one-drive` | 20 |
 | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
@@ -724,6 +725,31 @@ Provider ID: `microsoft-teams` · 25 tools
 | `microsoft_teams_remove_team_member` | Remove a member from a team. |
 | `microsoft_teams_reply_to_channel_message` | Reply to a channel message thread. |
 | `microsoft_teams_update_channel` | Update mutable channel properties. |
+
+## Microsoft Word
+
+Provider ID: `microsoft-word` · 18 tools
+
+| Tool | Description |
+| - | - |
+| `microsoft_word_copy_word_document` | Copy a Word document to a (possibly different) folder, optionally renaming it. |
+| `microsoft_word_create_folder` | Create a folder in a drive to organize Word documents. |
+| `microsoft_word_create_sharing_link` | Create a sharing link for a Word document. |
+| `microsoft_word_create_word_document` | Upload a new Word document to a drive folder |
+| `microsoft_word_delete_word_document` | Delete a Word document. |
+| `microsoft_word_get_site_drive` | Get the default document library (drive) for a SharePoint site. |
+| `microsoft_word_get_user_drive` | Get the connected user's OneDrive, or another user's drive when userId is provided. |
+| `microsoft_word_get_word_document` | Retrieve metadata for a Word document (driveItem). |
+| `microsoft_word_get_word_document_as_pdf` | Download a Word document converted to PDF |
+| `microsoft_word_get_word_document_content` | Download the raw .docx content of a Word document. |
+| `microsoft_word_list_sites` | Search/list SharePoint sites accessible to the app |
+| `microsoft_word_list_users` | List/search tenant users, to resolve a user id for personal OneDrive access. |
+| `microsoft_word_list_word_document_permissions` | List sharing permissions on a Word document. |
+| `microsoft_word_list_word_document_versions` | List the version history of a Word document. |
+| `microsoft_word_list_word_documents` | List/search .docx files within a drive |
+| `microsoft_word_move_word_document` | Move a Word document to a different folder. |
+| `microsoft_word_update_word_document_content` | Replace the content of an existing Word document. |
+| `microsoft_word_update_word_document_metadata` | Rename a Word document or update its description, without touching content. |
 
 ## Notion
 

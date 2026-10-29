@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
-import type { TargetType } from './target-selector';
+
+export type TargetType = 'agent' | 'workflow' | 'scorer';
 
 export interface ExperimentTriggerInitialValues {
   initialDatasetId?: string;

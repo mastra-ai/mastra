@@ -75,11 +75,10 @@ describe('isSelectionEmpty', () => {
 
 describe('selectSpan', () => {
   describe('when another span is selected', () => {
-    it('drops the previous span’s tab and score but keeps the highlight', () => {
+    it('keeps the open tab and the highlight but drops the previous span’s score', () => {
       expect(selectSpan(openTrace, 'span-2')).toEqual({
         ...openTrace,
         spanId: 'span-2',
-        spanTab: undefined,
         scoreId: undefined,
       });
     });
