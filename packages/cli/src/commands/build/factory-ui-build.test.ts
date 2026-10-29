@@ -70,7 +70,7 @@ describe('copyFactorySkills', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('copies src/mastra/factory-skills into the build output, over the public folder copy', async () => {
+  it('copies src/mastra/factory-skills into the build output in place of the public folder copy', async () => {
     await mkdir(join(mastraDir, 'factory-skills', 'release-notes'), { recursive: true });
     await writeFile(join(mastraDir, 'factory-skills', 'release-notes', 'SKILL.md'), 'current');
     // What copyPublic() left from the older src/mastra/public/factory-skills.
@@ -84,7 +84,10 @@ describe('copyFactorySkills', () => {
     await expect(readFile(join(outputDir, 'factory-skills', 'release-notes', 'SKILL.md'), 'utf8')).resolves.toBe(
       'current',
     );
-    await expect(readFile(join(outputDir, 'factory-skills', 'old-skill', 'SKILL.md'), 'utf8')).resolves.toBe('old');
+    // Factory resolves only src/mastra/factory-skills when both exist, so the build must not keep public-only skills.
+    await expect(readFile(join(outputDir, 'factory-skills', 'old-skill', 'SKILL.md'), 'utf8')).rejects.toThrow(
+      'ENOENT',
+    );
   });
 
   it('does nothing when the project has no factory-skills folder', async () => {

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PinoLogger } from '@mastra/loggers';
-import { copy } from 'fs-extra';
+import { copy, remove } from 'fs-extra';
 
 function resolveFactoryUISource(): string {
   const __filename = fileURLToPath(import.meta.url);
@@ -57,12 +57,16 @@ export async function buildFactoryUI(
 /**
  * Copies the project's `<mastraDir>/factory-skills` into the build output, where
  * the deployed Factory looks for app skills. The bundler only copies `public/`,
- * which was the older place for these skills. No-op when the folder is missing.
+ * which was the older place for these skills. The folder replaces that older copy
+ * instead of merging with it, so the build has the same skills `mastra dev` sees.
+ * No-op when the folder is missing.
  */
 export async function copyFactorySkills(mastraDir: string, outputDir: string, logger: PinoLogger): Promise<void> {
   const source = join(mastraDir, 'factory-skills');
   if (!existsSync(source)) return;
 
   logger.info('Copying Factory skills...');
-  await copy(source, join(outputDir, 'factory-skills'), { overwrite: true });
+  const destination = join(outputDir, 'factory-skills');
+  await remove(destination);
+  await copy(source, destination);
 }
