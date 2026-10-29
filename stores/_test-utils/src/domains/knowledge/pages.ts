@@ -647,6 +647,31 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         );
       });
 
+      it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const source = await page(acme.id, 'Source');
+        const target = await page(secret.id, 'Target');
+        const sourceRead = read(['org:acme']);
+        const targetRead = read(['org:secret']);
+        expect(
+          (await store.listPageActivity({ read: sourceRead, pageId: source.id })).events.map(e => e.action),
+        ).toEqual(['page-created']);
+        expect((await store.listPageActivity({ read: targetRead, pageId: source.id })).events).toEqual([]);
+
+        await store.mergePages({ sourceId: source.id, sourceVersion: 1, targetId: target.id, provenance: host });
+
+        expect(await store.getPage({ id: source.id, read: 'all' })).toMatchObject({
+          scopeId: secret.id,
+          mergedInto: target.id,
+        });
+        expect(await store.getPage({ id: source.id, read: sourceRead })).toBeNull();
+        expect((await store.listPageActivity({ read: sourceRead, pageId: source.id })).events).toEqual([]);
+        expect(
+          (await store.listPageActivity({ read: targetRead, pageId: source.id })).events.map(e => e.action),
+        ).toEqual(['page-merged', 'page-created']);
+      });
+
       it('filters activity by the page and note as they are now', async () => {
         const acme = await scope('org:acme', ORG);
         const secret = await scope('org:secret', ORG);

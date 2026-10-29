@@ -1,4 +1,4 @@
-import { createKnowledgeSchemaResetTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgeSchemaResetTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_ACTIVITY_SCHEMA,
   KNOWLEDGE_CURSORS_SCHEMA,
@@ -126,7 +126,7 @@ describe('KnowledgePG storage isolation', () => {
 });
 
 const createStore = (schemaName?: string) => new KnowledgePG({ pool, schemaName });
-createKnowledgeStorageTests(createStore);
+createKnowledgePageStoreTests(createStore);
 
 async function seedPublishedKnowledgeV1(schemaName: string): Promise<void> {
   for (const statement of [
