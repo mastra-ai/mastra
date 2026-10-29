@@ -16,9 +16,10 @@ import { ModelRoutingSwitch } from './ModelRoutingSwitch';
 export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setModelScope = useSetFactoryModelScopeMutation(factoryId);
-  // Keyed to its Factory so a request left open across a Factory switch never saves to the new one.
+  // Keyed to its Factory and dropped on a Factory switch, so an abandoned request never saves or reopens.
   const [request, setRequest] = useState<{ factoryId: string; scope: FactoryModelScope }>();
-  const requestedScope = request?.factoryId === factoryId ? request.scope : undefined;
+  if (request && request.factoryId !== factoryId) setRequest(undefined);
+  const requestedScope = request?.scope;
   const pendingScope = setModelScope.isPending ? setModelScope.variables : undefined;
   const savedScope = projectQuery.data && savedModelScope(projectQuery.data);
   const modelScope = pendingScope ?? savedScope;

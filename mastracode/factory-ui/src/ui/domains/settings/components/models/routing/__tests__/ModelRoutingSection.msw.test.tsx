@@ -145,6 +145,15 @@ describe('ModelRoutingSection', () => {
 
     expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
+        <ModelRoutingSection factoryId="fp-1" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(patchedBodies).toEqual([]);
   });
 
