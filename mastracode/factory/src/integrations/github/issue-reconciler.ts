@@ -173,7 +173,7 @@ export function createGithubIssueReconciler(
             if (
               state.labels !== undefined &&
               items.some(
-                item => Array.isArray(item.metadata?.labels) && !sameStrings(item.metadata.labels, state.labels),
+                item => Array.isArray(item.workItem.metadata?.labels) && !sameStrings(item.workItem.labels, state.labels),
               )
             ) {
               await rules.ingest(reconciledIssueRelabeledEvent(repository, issueNumber, state));
@@ -181,7 +181,7 @@ export function createGithubIssueReconciler(
             }
 
             for (const item of items) {
-              const current = item.metadata ?? {};
+              const current = { ...item.workItem.metadata, ...item.metadata };
               const trustStale = authorTrusted !== undefined && current.authorTrusted !== authorTrusted;
               const metadataChanged =
                 trustStale ||
@@ -194,11 +194,11 @@ export function createGithubIssueReconciler(
 
               if (!metadataChanged) continue;
 
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: item.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...current, ...desiredMetadata, ...(trustStale ? { authorTrusted } : {}) } },
+                patch: { metadata: { ...desiredMetadata, ...(trustStale ? { authorTrusted } : {}) } },
               });
               summary.updated += 1;
             }

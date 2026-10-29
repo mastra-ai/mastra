@@ -557,7 +557,8 @@ describe('work item read wire', () => {
     expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
 
     const [stored] = await listItems();
-    expect(stored?.metadata).toEqual({ number: 42, prNumber: 7 });
+    expect(stored?.metadata).toEqual({ prNumber: 7 });
+    expect(stored?.workItem.metadata).toEqual({ number: 42 });
   });
 });
 

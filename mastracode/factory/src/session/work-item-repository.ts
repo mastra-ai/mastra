@@ -91,13 +91,13 @@ export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  item: Pick<Card, 'metadata'>;
+  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> };
   linearRepositoryMap?: Record<string, string>;
 }): Promise<WorkItemRepositoryResolution> {
   const { sourceControl, item, linearRepositoryMap } = args;
-  const metadata = item.metadata ?? {};
+  const metadata = item.workItem.metadata ?? {};
   const linked = await listLinkedRepositories(args);
-  const repositorySignal = typeof metadata.repository === 'string' ? metadata.repository : undefined;
+  const repositorySignal = typeof item.metadata?.repository === 'string' ? item.metadata.repository : undefined;
   const externalRepositorySignal = getExternalRepositoryId(sourceControl.integrationId, metadata);
   const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
   const mappedRepository = linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined;
