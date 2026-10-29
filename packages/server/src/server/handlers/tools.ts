@@ -312,7 +312,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
       const agentTools = await agent.listTools({ requestContext });
 
@@ -345,7 +345,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       const agentTools = await agent.listTools({ requestContext });
 

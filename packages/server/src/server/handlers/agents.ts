@@ -96,7 +96,15 @@ import type { Context } from '../types';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
-import { assertWriteAccess, getCallerAuthorId } from './authorship';
+import {
+  assertExecuteAccess,
+  assertReadAccess,
+  assertWriteAccess,
+  getCallerAuthorId,
+  matchesAuthorFilter,
+  resolveAuthorFilter,
+} from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -1121,16 +1129,26 @@ export function extractVersionOptions(
   return undefined;
 }
 
+/**
+ * Resolves an agent by id: code-defined agents first (with stored overrides applied), then sub-agents, then stored
+ * agents. Stored agents are owner/visibility scoped like `/stored/agents`: a caller without `access` to a private
+ * stored agent gets the same 404 as for a missing agent. Code agents are visible to every caller.
+ *
+ * Route handlers must pass the caller's `requestContext`; without it there is no caller to check.
+ */
 export async function getAgentFromSystem({
   mastra,
   agentId,
   versionOptions,
   requestContext,
+  access = 'execute',
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
   requestContext?: RequestContext;
+  /** `read` for routes that only describe the agent; `execute` (default) for anything that runs or changes it. */
+  access?: 'read' | 'execute';
 }): Promise<Agent> {
   const logger = mastra.getLogger();
 
@@ -1194,6 +1212,14 @@ export async function getAgentFromSystem({
 
   if (!agent) {
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
+  }
+
+  // Once hydrated, the editor registers stored agents on Mastra (source 'stored'), so they can come back from any
+  // branch above. Their raw config is the storage record, which carries authorId/visibility.
+  if (requestContext && agent.source === 'stored') {
+    const record = (agent.toRawConfig() ?? {}) as OwnedRecord;
+    const assertAccess = access === 'read' ? assertReadAccess : assertExecuteAccess;
+    assertAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
   }
 
   return agent;
@@ -1488,7 +1514,10 @@ export const LIST_AGENTS_ROUTE = createRoute({
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const codeAgents = mastra.listAgents();
+      // Hydrated stored agents are registered on Mastra too; list them through the visibility-filtered stored loop below.
+      const codeAgents = Object.fromEntries(
+        Object.entries(mastra.listAgents()).filter(([, agent]) => agent.source !== 'stored'),
+      );
 
       const isPartial = partial === 'true';
 
@@ -1547,8 +1576,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
         }
 
         if (storedAgentsResult?.agents) {
+          // Same owner/visibility view as GET /stored/agents: own, public and legacy unowned agents.
+          const authorFilter = resolveAuthorFilter({ requestContext, resource: 'stored-agents' });
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            if (!matchesAuthorFilter(storedAgentConfig, authorFilter)) continue;
             // Skip stored configs that overlay an existing code-defined agent.
             // Those are overrides (no standalone model), not standalone stored agents,
             // and trying to hydrate them as standalone would fail model validation.
@@ -1624,7 +1656,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext, access: 'read' });
       const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({
         mastra,
@@ -1669,6 +1701,8 @@ export const CLONE_AGENT_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
@@ -3254,6 +3288,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3395,6 +3430,8 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       // Honor server-enforced thread/resource scoping from the request context
@@ -3459,6 +3496,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3539,6 +3577,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3670,6 +3709,7 @@ export const RECOVER_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       // Durable-agent check via duck-typing to avoid a hard runtime dep on the
@@ -3751,6 +3791,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3856,6 +3897,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3910,6 +3952,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3965,6 +4008,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -4012,6 +4056,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -4052,6 +4097,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -4085,9 +4131,9 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelId, provider }) => {
+  handler: async ({ mastra, requestContext, agentId, modelId, provider }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
@@ -4114,9 +4160,9 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId }) => {
+  handler: async ({ mastra, requestContext, agentId }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       agent.__resetToOriginalModel();
 
@@ -4325,9 +4371,9 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, requestContext, agentId, instructions, comment }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       // Find the first model with a connected provider (similar to how chat works)
       const model = await findConnectedModel(agent);
