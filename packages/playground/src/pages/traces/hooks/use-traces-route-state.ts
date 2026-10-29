@@ -19,6 +19,7 @@ import {
   getTraceFilterGroups,
   getTracePropertyFilterTokens,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
+import { isSpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { SORT_DIR_PARAM, SORT_KEY_PARAM, readUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import type { SetURLSearchParamsLike } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMemo } from 'react';
@@ -81,7 +82,7 @@ function decodeSelection(params: URLSearchParams): TracesSelection {
   return {
     traceId: params.get(TRACE_ID_PARAM) || undefined,
     spanId: params.get(SPAN_ID_PARAM) || undefined,
-    spanTab: tab === 'feedback' || tab === 'details' ? tab : undefined,
+    spanTab: isSpanTab(tab) ? tab : undefined,
     spanView: params.get(SPAN_VIEW_PARAM) === 'timeline' ? 'timeline' : 'tree',
     scoreId: params.get(SCORE_ID_PARAM) || undefined,
     highlightSpanIds: highlight ? highlight.split(',').filter(Boolean) : [],
