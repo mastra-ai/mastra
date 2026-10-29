@@ -14,29 +14,16 @@ import {
   TABLE_KNOWLEDGE_RECORDS,
 } from '@mastra/core/storage';
 import * as coreStorage from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
 import { LibSQLStore } from '../../index';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 const COMPAT_CONSTANTS = [
-  'KNOWLEDGE_ACCESS_STATE_SCHEMA',
-  'KNOWLEDGE_IMPORT_RUNS_SCHEMA',
-  'KNOWLEDGE_IMPORT_STATE_SCHEMA',
-  'KNOWLEDGE_NODE_ADDRESSES_SCHEMA',
-  'KNOWLEDGE_NODE_SCOPES_SCHEMA',
-  'KNOWLEDGE_PROPOSALS_SCHEMA',
-  'KNOWLEDGE_RECORD_SCOPES_SCHEMA',
-  'KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA',
-  'KNOWLEDGE_SCOPE_GRANTS_SCHEMA',
   'KNOWLEDGE_STORAGE_CONTRACT_VERSION',
   'KNOWLEDGE_STORAGE_SCHEMA_VERSION',
   'KNOWLEDGE_TABLE_NAMES',
-  'KNOWLEDGE_V2_ACTIVITY_SCHEMA',
-  'KNOWLEDGE_V2_MENTIONS_SCHEMA',
-  'KNOWLEDGE_V2_NODES_SCHEMA',
-  'KNOWLEDGE_V2_RECORDS_SCHEMA',
   'TABLE_KNOWLEDGE_ACCESS_STATE',
   'TABLE_KNOWLEDGE_IMPORT_RUNS',
   'TABLE_KNOWLEDGE_IMPORT_STATE',
@@ -48,41 +35,11 @@ const COMPAT_CONSTANTS = [
   'TABLE_KNOWLEDGE_SCOPE_GRANTS',
 ] as const;
 
-describe('Knowledge v2 Core compatibility', () => {
+describe('Knowledge Core compatibility', () => {
   it('keeps bundled constants byte-for-byte compatible with current Core', () => {
     for (const name of COMPAT_CONSTANTS) {
       expect(knowledgeCompat[name]).toEqual(coreStorage[name]);
     }
-  });
-
-  it('rejects an old Core before loading its storage module', async () => {
-    const loadStorageModule = vi.fn();
-    const loadCore = knowledgeCompat.createKnowledgeV2CoreLoader(new Set(), loadStorageModule);
-
-    await expect(loadCore()).rejects.toThrow(
-      'Knowledge v2 requires a @mastra/core release with the "knowledge-v2" feature. Upgrade @mastra/core to use Knowledge; other storage domains keep working on this version.',
-    );
-    expect(loadStorageModule).not.toHaveBeenCalled();
-  });
-
-  it('coalesces successful loads and retries a failed load', async () => {
-    const storageModule = {
-      assertKnowledgeDescriptionWithinBound: vi.fn(),
-      assertKnowledgeRecordTextWithinBound: vi.fn(),
-      assertKnowledgeSchemaCompatible: vi.fn(),
-      inspectKnowledgeSchema: vi.fn(() => ({ status: 'uninitialized', schemaVersion: null })),
-    };
-    const loadStorageModule = vi
-      .fn<() => Promise<unknown>>()
-      .mockRejectedValueOnce(new Error('temporary failure'))
-      .mockResolvedValue(storageModule);
-    const loadCore = knowledgeCompat.createKnowledgeV2CoreLoader(new Set(['knowledge-v2']), loadStorageModule);
-
-    await expect(loadCore()).rejects.toThrow('temporary failure');
-    const [first, second] = await Promise.all([loadCore(), loadCore()]);
-
-    expect(first).toBe(second);
-    expect(loadStorageModule).toHaveBeenCalledTimes(2);
   });
 });
 

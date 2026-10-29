@@ -9,11 +9,11 @@ import {
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
   knowledgeVisibleScopeKeys,
-} from '../base';
+} from '../legacy';
 
 const context = ['thread:t1', 'org:o1', 'resource:r1'];
 
-describe('knowledge scopes', () => {
+describe('deprecated schema-2 Knowledge helpers', () => {
   it('canonicalizes and deduplicates ancestor chains', () => {
     expect(canonicalizeKnowledgeScope([...context, 'org:o1'])).toEqual(['org:o1', 'resource:r1', 'thread:t1']);
     expect(knowledgeScopeKey(context)).toBe('org:o1\u001fresource:r1\u001fthread:t1');
@@ -107,14 +107,26 @@ describe('knowledge scopes', () => {
   });
 
   it('keeps every Knowledge @mastra/core/storage export that published memory and store packages import', () => {
-    // Imported by @mastra/memory 1.36.0, @mastra/libsql 1.25.1, @mastra/pg 1.30.0,
-    // @mastra/mysql 0.12.1, and @mastra/mongodb 1.22.0.
+    // Imported by @mastra/memory 1.36.0 and 1.39.1, @mastra/server 1.80.0, @mastra/libsql 1.25.1 and
+    // 1.27.1, @mastra/pg 1.30.0 and 1.33.0, @mastra/mysql 0.12.1 and 0.14.1, and @mastra/mongodb
+    // 1.22.0 and 1.24.1. They resolve these on load whether or not Knowledge is used.
     for (const name of [
       'InMemoryStore',
+      'KNOWLEDGE_ACTIVITY_SCHEMA',
+      'KNOWLEDGE_MENTIONS_SCHEMA',
+      'KNOWLEDGE_NODES_SCHEMA',
+      'KNOWLEDGE_RECORDS_SCHEMA',
+      'KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA',
       'KnowledgeConflictError',
       'KnowledgeNotFoundError',
       'KnowledgeStorage',
       'MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH',
+      'MAX_KNOWLEDGE_RECORD_TEXT_LENGTH',
+      'TABLE_KNOWLEDGE_ACTIVITY',
+      'TABLE_KNOWLEDGE_MENTIONS',
+      'TABLE_KNOWLEDGE_NODES',
+      'TABLE_KNOWLEDGE_RECORDS',
+      'TABLE_KNOWLEDGE_SEMANTIC_OUTBOX',
       'assertKnowledgeCeilingRaised',
       'assertKnowledgeScopeWithinCeiling',
       'canonicalizeKnowledgeScope',
@@ -125,6 +137,7 @@ describe('knowledge scopes', () => {
       'knowledgeScopeKey',
       'knowledgeSemanticDocumentId',
       'knowledgeSemanticIdempotencyKey',
+      'knowledgeVisibleScopeKeys',
       'parseKnowledgeNodeCursor',
       'parseKnowledgeWikilinks',
     ]) {
