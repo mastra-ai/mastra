@@ -550,7 +550,7 @@ describe('work item read wire', () => {
             title,
             stages: [stage],
             sessions: {},
-            metadata: { number: n, githubRepositoryId: 9, labels: ['bug'] },
+            metadata: { number: n, githubRepositoryId: 9, labels: ['bug'], selfReviewFindings: ['finding'] },
           },
         })
       ).item;
@@ -577,6 +577,11 @@ describe('work item read wire', () => {
       'Login is broken',
       'Card 4',
     ]);
+    // Sorting alone keeps the full card shape; only filtered or paged board reads drop review findings.
+    const sortedOnly = await (await json('GET', `${base}?sort=created-oldest`)).json();
+    expect(sortedOnly.workItems[0].metadata.selfReviewFindings).toEqual(['finding']);
+    const pagedOnly = await (await json('GET', `${base}?limit=1`)).json();
+    expect(pagedOnly.workItems[0].metadata.selfReviewFindings).toBeUndefined();
     expect((await titles(`${base}?q=login`)).titles).toEqual(['Login is broken']);
     expect((await titles(base)).titles).toHaveLength(4);
 
