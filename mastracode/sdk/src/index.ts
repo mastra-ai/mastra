@@ -1911,7 +1911,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>, knowledgeKey?: string) =>
       createScopedKnowledgeInspector({
-        storage,
         knowledge: knowledgeKey ?? knowledge,
         mastra: controller.getMastra(),
         session,
@@ -2141,7 +2140,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
     try {
       knowledgeInspector = await base.createKnowledgeInspector(session);
       if (!knowledgeInspector) {
-        knowledgeInspectorUnavailableReason = 'Knowledge inspection requires a configured knowledge storage domain.';
+        knowledgeInspectorUnavailableReason = 'Knowledge inspection requires a configured Knowledge runtime.';
       }
     } catch (error) {
       knowledgeInspectorUnavailableReason = `Knowledge is unavailable: ${error instanceof Error ? error.message : String(error)}`;

@@ -1,15 +1,16 @@
 import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { Session } from '@mastra/core/agent-controller';
+import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
-import { createKnowledgeNodeCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
+import { parseKnowledgeWikilinks } from '@mastra/core/storage';
 import type {
-  KnowledgeActivityEvent,
-  KnowledgeRecord,
-  KnowledgeNode,
-  KnowledgeScope,
+  KnowledgeNote,
+  KnowledgePage,
+  KnowledgePageActivityAction,
+  KnowledgePageActivityEvent,
+  KnowledgeReadScope,
   KnowledgeStorage,
-  MastraCompositeStore,
 } from '@mastra/core/storage';
 
 import { knowledgeSessionTags, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -17,7 +18,8 @@ import type { MastraCodeState } from './schema.js';
 
 export type KnowledgeInspectorScopeLevel = 'org' | 'resource' | 'thread';
 export type KnowledgeInspectorRecordType = 'node';
-export type KnowledgeInspectorNodeSort = 'relevant' | 'recent' | 'connected';
+/** `name`: every readable page, by name. `connected`: the first pages by name, most linked first. */
+export type KnowledgeInspectorNodeSort = 'name' | 'connected';
 
 export interface KnowledgeInspectorScopeRoot {
   level: KnowledgeInspectorScopeLevel;
@@ -33,7 +35,8 @@ export interface KnowledgeInspectorScopeTree {
 }
 
 export interface KnowledgeInspectorScopeBadge {
-  level: KnowledgeInspectorScopeLevel;
+  /** The scope's type, e.g. `org`, `project`, `resource`, `thread`. */
+  level: string;
   id: string;
 }
 
@@ -44,21 +47,22 @@ export interface KnowledgeInspectorRelationshipCounts {
   sampled: boolean;
 }
 
+/** A page. */
 export interface KnowledgeInspectorNodeSummary {
   handle: string;
   type: KnowledgeInspectorRecordType;
   name: string;
-  kind?: string;
   scope: KnowledgeInspectorScopeBadge;
   version: number;
   updatedAt: string;
   relationshipCounts?: KnowledgeInspectorRelationshipCounts;
 }
 
+/** A note. */
 export interface KnowledgeInspectorRecordSummary {
   text: string;
   scope: KnowledgeInspectorScopeBadge;
-  sourceThreadId: string;
+  sourceThreadId?: string;
   capturedAt: string;
   when?: string;
 }
@@ -69,7 +73,7 @@ export interface KnowledgeInspectorNodeList {
   nodes: KnowledgeInspectorNodeSummary[];
   nextCursor?: string;
   sort?: KnowledgeInspectorNodeSort;
-  coverage?: 'exact' | 'recent-window';
+  coverage?: 'exact' | 'window';
 }
 
 export interface KnowledgeInspectorRelationshipPreview {
@@ -81,21 +85,26 @@ export interface KnowledgeInspectorNodeDetail {
   identityKey: string;
   scopeLevel: KnowledgeInspectorScopeLevel;
   node: KnowledgeInspectorNodeSummary;
+  /** Notes on the page. */
   records: KnowledgeInspectorRecordSummary[];
   recordsNextCursor?: string;
+  /** Notes on other pages that mention this page. */
   mentioningRecords: KnowledgeInspectorRecordSummary[];
   mentioningRecordsNextCursor?: string;
+  /** Pages this page's notes and body mention. */
   outgoingTargets: KnowledgeInspectorRelationshipPreview;
+  /** Pages whose notes mention this page. */
   incomingParents: KnowledgeInspectorRelationshipPreview;
   relationshipCounts: KnowledgeInspectorRelationshipCounts;
+  /** The page body. */
   content?: string;
   contentTruncated: boolean;
   links: Array<{ label: string; node?: KnowledgeInspectorNodeSummary }>;
 }
 
 export interface KnowledgeInspectorActivityEvent {
-  action: KnowledgeActivityEvent['action'];
-  recordType: KnowledgeActivityEvent['recordType'];
+  action: KnowledgePageActivityAction;
+  recordType: 'page' | 'note';
   scope: KnowledgeInspectorScopeBadge;
   sourceThreadId?: string;
   createdAt: string;
@@ -114,7 +123,6 @@ export interface KnowledgeInspector {
   listNodes(input: {
     level: KnowledgeInspectorScopeLevel;
     namePrefix?: string;
-    kind?: string;
     sort?: KnowledgeInspectorNodeSort;
     cursor?: string;
     limit?: number;
@@ -152,6 +160,12 @@ interface Binding {
   identityKey: string;
 }
 
+/** What one level reads with: the level's principals' read scope. */
+interface LevelView {
+  level: KnowledgeInspectorScopeLevel;
+  read: KnowledgeReadScope;
+}
+
 interface HandleEntry {
   identityKey: string;
   level: KnowledgeInspectorScopeLevel;
@@ -165,33 +179,32 @@ interface CursorEntry {
   level: KnowledgeInspectorScopeLevel;
   kind: 'node' | 'ranked-node' | 'records' | 'mentioning-records' | 'activity';
   value: string;
-  filters?: { namePrefix?: string; kind?: string; sort?: KnowledgeInspectorNodeSort };
+  filters?: { namePrefix?: string; sort?: KnowledgeInspectorNodeSort };
   expiresAt: number;
 }
 
 interface RankedNodeSnapshot {
   offset: number;
-  entries: { id: string; degree: number; counts: KnowledgeInspectorRelationshipCounts }[];
+  entries: { id: string; counts: KnowledgeInspectorRelationshipCounts }[];
 }
 
-interface RelationshipRecords {
-  nodes: KnowledgeNode[];
+interface Related {
+  pages: KnowledgePage[];
   truncated: boolean;
 }
 
 const HANDLE_TTL_MS = 5 * 60_000;
 const MAX_OPAQUE_ENTRIES = 1_000;
-const DEFAULT_RECORD_LIMIT = 50;
-const MAX_RECORD_LIMIT = 50;
-const DEFAULT_FACT_LIMIT = 25;
-const MAX_FACT_LIMIT = 100;
+const DEFAULT_PAGE_LIMIT = 50;
+const MAX_PAGE_LIMIT = 50;
+const DEFAULT_NOTE_LIMIT = 25;
+const MAX_NOTE_LIMIT = 100;
 const DEFAULT_ACTIVITY_LIMIT = 20;
 const MAX_ACTIVITY_LIMIT = 100;
-const MAX_RELATED_RECORDS = 25;
+const MAX_RELATED_PAGES = 25;
 const MAX_RANK_CANDIDATES = 50;
-const MAX_RANK_FACTS = 100;
-const RRF_K = 60;
-const MAX_NODE_CONTENT_BYTES = 32 * 1024;
+const MAX_RANK_NOTES = 100;
+const MAX_BODY_BYTES = 32 * 1024;
 
 function opaqueToken(): string {
   return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(24))).toString('base64url');
@@ -203,24 +216,16 @@ function boundedLimit(value: number | undefined, fallback: number, maximum: numb
   return Math.min(value, maximum);
 }
 
-function scopeBadge(scope: KnowledgeScope): KnowledgeInspectorScopeBadge {
-  const entry = scope.at(-1);
-  if (!entry) throw new KnowledgeInspectorError('unavailable', 'Knowledge record has no scope.');
-  const separator = entry.indexOf(':');
-  return {
-    level: entry.slice(0, separator) as KnowledgeInspectorScopeLevel,
-    id: entry.slice(separator + 1),
-  };
+function badgeOf(address: string | undefined): KnowledgeInspectorScopeBadge {
+  if (!address) return { level: 'unknown', id: '' };
+  const separator = address.indexOf(':');
+  return { level: address.slice(0, separator), id: address.slice(separator + 1) };
 }
 
-function knowledgeSummary(record: KnowledgeRecord): KnowledgeInspectorRecordSummary {
-  return {
-    text: record.text,
-    scope: scopeBadge(record.scope),
-    sourceThreadId: record.sourceThreadId,
-    capturedAt: record.capturedAt.toISOString(),
-    when: record.when?.toISOString(),
-  };
+/** A session tag in Knowledge's canonical form; every type the session holds has one `$param`. */
+function canonical(tag: string): string {
+  const separator = tag.indexOf(':');
+  return knowledgeScopeAddress(`${tag.slice(0, separator)}:$value`, { value: tag.slice(separator + 1) });
 }
 
 function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
@@ -234,27 +239,36 @@ function truncateUtf8(value: string, maxBytes: number): { value: string; truncat
   return { value: truncated, truncated: true };
 }
 
+/**
+ * The /knowledge inspector: reads the pages and notes a session's code agent can read, one level at a
+ * time (the session's shared tags, then its project resource, then its thread), through the same
+ * Knowledge access rules the agent's runs use.
+ */
 class ScopedKnowledgeInspector implements KnowledgeInspector {
-  readonly #knowledge: KnowledgeStorage;
+  readonly #knowledge: Knowledge;
+  readonly #store: KnowledgeStorage;
   readonly #session: Session<MastraCodeState>;
   readonly #handles = new Map<string, HandleEntry>();
   readonly #cursors = new Map<string, CursorEntry>();
+  readonly #scopeAddresses = new Map<string, string | undefined>();
   #fingerprint?: string;
   #identityKey = opaqueToken();
 
   readonly #hostScopes: readonly AgentScopeEntry[];
 
   constructor(input: {
-    knowledge: KnowledgeStorage;
+    knowledge: Knowledge;
+    store: KnowledgeStorage;
     session: Session<MastraCodeState>;
     hostScopes?: readonly AgentScopeEntry[];
   }) {
     this.#knowledge = input.knowledge;
+    this.#store = input.store;
     this.#session = input.session;
     this.#hostScopes = input.hostScopes ?? [];
     this.#session.subscribe(event => {
       if (event.type === 'thread_changed' || event.type === 'thread_created' || event.type === 'thread_deleted') {
-        this.#invalidateIdnode();
+        this.#invalidate();
       }
     });
   }
@@ -277,32 +291,23 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async listNodes(input: {
     level: KnowledgeInspectorScopeLevel;
     namePrefix?: string;
-    kind?: string;
     sort?: KnowledgeInspectorNodeSort;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgeInspectorNodeList> {
     const binding = await this.#binding();
-    const scope = this.#scope(binding, input.level);
-    const limit = boundedLimit(input.limit, DEFAULT_RECORD_LIMIT, MAX_RECORD_LIMIT);
-    const sort = input.sort ?? 'relevant';
-    if (sort === 'recent') {
-      const cursor = this.#consumeCursor(input.cursor, binding, input.level, 'node', {
-        namePrefix: input.namePrefix,
-        kind: input.kind,
-        sort,
-      });
-      const records = await this.#knowledge.listNodes({
-        scope,
-        namePrefix: input.namePrefix,
-        kind: input.kind,
-        cursor,
-        limit,
-      });
-      const nodes: KnowledgeInspectorNodeSummary[] = await Promise.all(
-        records.map(async record => ({
-          ...this.#recordSummary(record, binding, input.level),
-          relationshipCounts: (await this.#sampledRelationshipCounts(record, scope)).counts,
+    const view = await this.#view(binding, input.level);
+    const limit = boundedLimit(input.limit, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
+    const sort = input.sort ?? 'name';
+    const filters = { namePrefix: input.namePrefix, sort };
+
+    if (sort === 'name') {
+      const cursor = this.#consumeCursor(input.cursor, binding, input.level, 'node', filters);
+      const result = await this.#store.listPages({ read: view.read, namePrefix: input.namePrefix, cursor, limit });
+      const nodes = await Promise.all(
+        result.pages.map(async page => ({
+          ...(await this.#summary(page, binding, view)),
+          relationshipCounts: await this.#counts(page, view),
         })),
       );
       await this.#assertStable(binding);
@@ -310,39 +315,21 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         identityKey: binding.identityKey,
         scopeLevel: input.level,
         nodes,
-        nextCursor:
-          records.length === limit
-            ? this.#mintCursor(
-                binding,
-                input.level,
-                'node',
-                createKnowledgeNodeCursor(records.at(-1)!, {
-                  namePrefix: input.namePrefix,
-                  kind: input.kind,
-                }),
-                {
-                  namePrefix: input.namePrefix,
-                  kind: input.kind,
-                  sort,
-                },
-              )
-            : undefined,
+        nextCursor: result.nextCursor
+          ? this.#mintCursor(binding, input.level, 'node', result.nextCursor, filters)
+          : undefined,
         sort,
         coverage: 'exact',
       };
     }
 
-    const filters = { namePrefix: input.namePrefix, kind: input.kind, sort };
-    const encodedSnapshot = this.#consumeCursor(input.cursor, binding, input.level, 'ranked-node', filters);
-    const snapshot = encodedSnapshot
-      ? (JSON.parse(encodedSnapshot) as RankedNodeSnapshot)
-      : await this.#rankedNodeSnapshot(scope, input.namePrefix, input.kind, sort);
-    const page = snapshot.entries.slice(snapshot.offset, snapshot.offset + limit);
+    const encoded = this.#consumeCursor(input.cursor, binding, input.level, 'ranked-node', filters);
+    const snapshot = encoded ? (JSON.parse(encoded) as RankedNodeSnapshot) : await this.#ranked(view, input.namePrefix);
     const nodes: KnowledgeInspectorNodeSummary[] = [];
-    for (const entry of page) {
-      const node = await this.#knowledge.getNode(entry.id);
-      if (!node || !isKnowledgeScopeVisible(node.scope, scope)) continue;
-      nodes.push({ ...this.#recordSummary(node, binding, input.level), relationshipCounts: entry.counts });
+    for (const entry of snapshot.entries.slice(snapshot.offset, snapshot.offset + limit)) {
+      const page = await this.#store.getPage({ id: entry.id, read: view.read });
+      if (!page || page.deletedAt) continue;
+      nodes.push({ ...(await this.#summary(page, binding, view)), relationshipCounts: entry.counts });
     }
     const nextOffset = snapshot.offset + limit;
     await this.#assertStable(binding);
@@ -361,7 +348,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
             )
           : undefined,
       sort,
-      coverage: 'recent-window',
+      coverage: 'window',
     };
   }
 
@@ -373,65 +360,66 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }): Promise<KnowledgeInspectorNodeDetail> {
     const binding = await this.#binding();
     const handle = this.#readHandle(input.handle, binding, 'node');
-    const scope = this.#scope(binding, handle.level);
-    const node = await this.#knowledge.getNode(handle.recordId);
-    this.#assertVisible(node, scope);
-    const limit = boundedLimit(input.recordLimit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
-    const recordsAfter = this.#consumeCursor(input.recordsCursor, binding, handle.level, 'records');
+    const view = await this.#view(binding, handle.level);
+    const page = await this.#store.getPage({ id: handle.recordId, read: view.read });
+    if (!page || page.deletedAt) {
+      throw new KnowledgeInspectorError('not-visible', 'Knowledge page is not visible in the selected scope.');
+    }
+    const limit = boundedLimit(input.recordLimit, DEFAULT_NOTE_LIMIT, MAX_NOTE_LIMIT);
+    const notesAfter = this.#consumeCursor(input.recordsCursor, binding, handle.level, 'records');
     const mentioningAfter = this.#consumeCursor(
       input.mentioningRecordsCursor,
       binding,
       handle.level,
       'mentioning-records',
     );
-    const [recordsResult, mentioningResult] = await Promise.all([
-      this.#knowledge.listKnowledgeAbout({ node: node.id, scope, after: recordsAfter, limit }),
-      this.#knowledge.listKnowledgeMentioning({ node: node.id, scope, after: mentioningAfter, limit }),
+    const [notes, mentioning] = await Promise.all([
+      this.#store.listNotes({ pageId: page.id, read: view.read, cursor: notesAfter, limit }),
+      this.#store.listNotesMentioning({ pageId: page.id, read: view.read, cursor: mentioningAfter, limit }),
     ]);
-    const mentioningRecords = mentioningResult.records.filter(record => record.node !== node.id);
-    const content = truncateUtf8(node.content ?? '', MAX_NODE_CONTENT_BYTES);
-    const [outgoingTargets, incomingParents, relationship] = await Promise.all([
-      this.#outgoingTargets(node, recordsResult.records, scope, binding, handle.level),
-      this.#incomingParents(node, mentioningRecords, scope, binding, handle.level),
-      this.#sampledRelationshipCounts(node, scope),
+    const body = truncateUtf8(page.body ?? '', MAX_BODY_BYTES);
+    const [outgoing, incoming, counts] = await Promise.all([
+      this.#outgoing(page, notes.notes, view),
+      this.#incoming(mentioning.notes, view),
+      this.#counts(page, view),
     ]);
     const links = await Promise.all(
-      parseKnowledgeWikilinks(content.value)
-        .slice(0, MAX_RELATED_RECORDS)
+      parseKnowledgeWikilinks(body.value)
+        .slice(0, MAX_RELATED_PAGES)
         .map(async label => {
-          const target = await this.#knowledge.resolveNode({ name: label, scope });
-          return {
-            label,
-            node: target ? this.#recordSummary(target, binding, handle.level) : undefined,
-          };
+          const [target] = await this.#store.findPagesByName({ name: label, read: view.read, limit: 1 });
+          return { label, node: target ? await this.#summary(target, binding, view) : undefined };
         }),
     );
-    await this.#assertStable(binding);
-    return {
+    const summaries = (pages: KnowledgePage[]) =>
+      Promise.all(pages.map(related => this.#summary(related, binding, view)));
+    const detail: KnowledgeInspectorNodeDetail = {
       identityKey: binding.identityKey,
       scopeLevel: handle.level,
-      node: { ...this.#recordSummary(node, binding, handle.level), relationshipCounts: relationship.counts },
-      records: recordsResult.records.map(knowledgeSummary),
-      recordsNextCursor: recordsResult.nextCursor
-        ? this.#mintCursor(binding, handle.level, 'records', recordsResult.nextCursor)
+      node: { ...(await this.#summary(page, binding, view)), relationshipCounts: counts },
+      records: await Promise.all(notes.notes.map(note => this.#noteSummary(note))),
+      recordsNextCursor: notes.nextCursor
+        ? this.#mintCursor(binding, handle.level, 'records', notes.nextCursor)
         : undefined,
-      mentioningRecords: mentioningRecords.map(knowledgeSummary),
-      mentioningRecordsNextCursor: mentioningResult.nextCursor
-        ? this.#mintCursor(binding, handle.level, 'mentioning-records', mentioningResult.nextCursor)
+      mentioningRecords: await Promise.all(mentioning.notes.map(note => this.#noteSummary(note))),
+      mentioningRecordsNextCursor: mentioning.nextCursor
+        ? this.#mintCursor(binding, handle.level, 'mentioning-records', mentioning.nextCursor)
         : undefined,
       outgoingTargets: {
-        nodes: outgoingTargets.nodes,
-        partial: outgoingTargets.partial || Boolean(recordsResult.nextCursor),
+        nodes: await summaries(outgoing.pages),
+        partial: outgoing.truncated || Boolean(notes.nextCursor),
       },
       incomingParents: {
-        nodes: incomingParents.nodes,
-        partial: incomingParents.partial || Boolean(mentioningResult.nextCursor),
+        nodes: await summaries(incoming.pages),
+        partial: incoming.truncated || Boolean(mentioning.nextCursor),
       },
-      relationshipCounts: relationship.counts,
-      content: node.content === undefined ? undefined : content.value,
-      contentTruncated: content.truncated,
+      relationshipCounts: counts,
+      content: page.body === undefined ? undefined : body.value,
+      contentTruncated: body.truncated,
       links,
     };
+    await this.#assertStable(binding);
+    return detail;
   }
 
   async listActivity(input: {
@@ -440,29 +428,18 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     limit?: number;
   }): Promise<KnowledgeInspectorActivityList> {
     const binding = await this.#binding();
-    const scope = this.#scope(binding, input.level);
+    const view = await this.#view(binding, input.level);
     const limit = boundedLimit(input.limit, DEFAULT_ACTIVITY_LIMIT, MAX_ACTIVITY_LIMIT);
-    const after = this.#consumeCursor(input.cursor, binding, input.level, 'activity');
-    const events = await this.#knowledge.listActivity({ scope, after, limit });
-    const activityEvents: KnowledgeInspectorActivityEvent[] = [];
-    for (const event of events) {
-      const record = await this.#activityRecord(event, scope, binding, input.level);
-      activityEvents.push({
-        action: event.action,
-        recordType: event.recordType,
-        scope: scopeBadge(event.scope),
-        sourceThreadId: record ? event.sourceThreadId : undefined,
-        createdAt: event.createdAt.toISOString(),
-        record,
-      });
-    }
+    const cursor = this.#consumeCursor(input.cursor, binding, input.level, 'activity');
+    const result = await this.#store.listPageActivity({ read: view.read, cursor, limit });
+    const events: KnowledgeInspectorActivityEvent[] = [];
+    for (const event of result.events) events.push(await this.#activityEvent(event, binding, view));
     await this.#assertStable(binding);
     return {
       identityKey: binding.identityKey,
       scopeLevel: input.level,
-      events: activityEvents,
-      nextCursor:
-        events.length === limit ? this.#mintCursor(binding, input.level, 'activity', events.at(-1)!.id) : undefined,
+      events,
+      nextCursor: result.nextCursor ? this.#mintCursor(binding, input.level, 'activity', result.nextCursor) : undefined,
     };
   }
 
@@ -473,7 +450,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     if (!session.resolved) {
       // An unresolved session is its own identity: handles minted under the
       // previous scope must not survive into whatever resolves next.
-      this.#invalidateIdnode();
+      this.#invalidate();
       throw new KnowledgeInspectorError('unavailable', `Knowledge inspection unavailable: ${session.reason}`);
     }
     if (!sessionResourceId) {
@@ -494,19 +471,31 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     return { sessionTags, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
   }
 
-  #scope(binding: Binding, level: KnowledgeInspectorScopeLevel): KnowledgeScope {
+  /** The principals a level reads with: the session's shared tags, plus its resource, plus its thread. */
+  async #view(binding: Binding, level: KnowledgeInspectorScopeLevel): Promise<LevelView> {
+    let principals: string[];
     if (level === 'org') {
       if (binding.sessionTags.length === 0) {
         throw new KnowledgeInspectorError('unavailable', 'This session holds no shared scope tags.');
       }
-      return [...binding.sessionTags];
+      principals = [...binding.sessionTags];
+    } else {
+      principals = [...binding.sessionTags, `resource:${binding.resourceId}`];
+      if (level === 'thread') {
+        if (!binding.threadId) {
+          throw new KnowledgeInspectorError('unavailable', 'The active thread does not belong to this project.');
+        }
+        principals.push(`thread:${binding.threadId}`);
+      }
     }
-    const scope = [...binding.sessionTags, `resource:${binding.resourceId}`];
-    if (level === 'resource') return scope;
-    if (!binding.threadId) {
-      throw new KnowledgeInspectorError('unavailable', 'The active thread does not belong to this project.');
+    try {
+      return { level, read: await this.#knowledge.readScopeFor(principals.map(canonical)) };
+    } catch (error) {
+      throw new KnowledgeInspectorError(
+        'unavailable',
+        `Knowledge inspection unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-    return [...scope, `thread:${binding.threadId}`];
   }
 
   async #assertStable(binding: Binding): Promise<void> {
@@ -516,178 +505,110 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     }
   }
 
-  #assertVisible<T extends KnowledgeNode>(record: T | null, scope: KnowledgeScope): asserts record is T {
-    if (!record || !isKnowledgeScopeVisible(record.scope, scope)) {
-      throw new KnowledgeInspectorError('not-visible', 'Knowledge record is not visible in the selected scope.');
+  async #scopeAddress(scopeId: string): Promise<string | undefined> {
+    if (!this.#scopeAddresses.has(scopeId)) {
+      // Scope names and addresses aren't secret to the host; the page itself was already read through the view.
+      const page = await this.#store.getPage({ id: scopeId, read: 'all' });
+      this.#scopeAddresses.set(scopeId, page?.address);
     }
+    return this.#scopeAddresses.get(scopeId);
   }
 
-  #recordSummary(
-    record: KnowledgeNode,
-    binding: Binding,
-    level: KnowledgeInspectorScopeLevel,
-  ): KnowledgeInspectorNodeSummary {
-    const type: KnowledgeInspectorRecordType = 'node';
+  async #summary(page: KnowledgePage, binding: Binding, view: LevelView): Promise<KnowledgeInspectorNodeSummary> {
     return {
-      handle: this.#mintHandle(binding, level, type, record.id),
-      type,
-      name: record.name,
-      kind: record.kind,
-      scope: scopeBadge(record.scope),
-      version: record.version,
-      updatedAt: record.updatedAt.toISOString(),
+      handle: this.#mintHandle(binding, view.level, 'node', page.id),
+      type: 'node',
+      name: page.name,
+      scope: badgeOf(await this.#scopeAddress(page.scopeId)),
+      version: page.version,
+      updatedAt: page.updatedAt.toISOString(),
     };
   }
 
-  async #rankedNodeSnapshot(
-    scope: KnowledgeScope,
-    namePrefix: string | undefined,
-    kind: string | undefined,
-    sort: Exclude<KnowledgeInspectorNodeSort, 'recent'>,
-  ): Promise<RankedNodeSnapshot> {
-    const records = await this.#knowledge.listNodes({
-      scope,
-      namePrefix,
-      kind,
-      limit: MAX_RANK_CANDIDATES,
-    });
+  async #noteSummary(note: KnowledgeNote): Promise<KnowledgeInspectorRecordSummary> {
+    return {
+      text: note.text,
+      scope: badgeOf(await this.#scopeAddress(note.stampScopeIds[0]!)),
+      sourceThreadId: note.provenance.sourceThreadId,
+      capturedAt: note.createdAt.toISOString(),
+      when: note.when?.toISOString(),
+    };
+  }
+
+  /** The first pages by name, most linked first; ties keep name order. */
+  async #ranked(view: LevelView, namePrefix: string | undefined): Promise<RankedNodeSnapshot> {
+    const { pages } = await this.#store.listPages({ read: view.read, namePrefix, limit: MAX_RANK_CANDIDATES });
     const ranked = await Promise.all(
-      records.map(async (node, recencyRank) => ({
-        node,
-        recencyRank,
-        ...(await this.#sampledRelationshipCounts(node, scope)),
-      })),
+      pages.map(async (page, order) => {
+        const counts = await this.#counts(page, view);
+        return { id: page.id, order, counts, degree: counts.outgoing + counts.incoming };
+      }),
     );
-    const connected = [...ranked].sort(
-      (a, b) => b.degree - a.degree || a.recencyRank - b.recencyRank || a.node.id.localeCompare(b.node.id),
-    );
-    const connectedRank = new Map(connected.map((entry, index) => [entry.node.id, index]));
-    const ordered =
-      sort === 'connected'
-        ? connected
-        : [...ranked].sort((a, b) => {
-            const aScore = 1 / (RRF_K + a.recencyRank + 1) + 1 / (RRF_K + connectedRank.get(a.node.id)! + 1);
-            const bScore = 1 / (RRF_K + b.recencyRank + 1) + 1 / (RRF_K + connectedRank.get(b.node.id)! + 1);
-            return bScore - aScore || a.recencyRank - b.recencyRank || a.node.id.localeCompare(b.node.id);
-          });
-    return {
-      offset: 0,
-      entries: ordered.map(entry => ({ id: entry.node.id, degree: entry.degree, counts: entry.counts })),
-    };
+    ranked.sort((a, b) => b.degree - a.degree || a.order - b.order);
+    return { offset: 0, entries: ranked.map(({ id, counts }) => ({ id, counts })) };
   }
 
-  async #sampledRelationshipCounts(
-    node: KnowledgeNode,
-    scope: KnowledgeScope,
-  ): Promise<{ degree: number; counts: KnowledgeInspectorRelationshipCounts }> {
-    const [aboutResult, mentioningResult] = await Promise.all([
-      this.#knowledge.listKnowledgeAbout({ node: node.id, scope, limit: MAX_RANK_FACTS }),
-      this.#knowledge.listKnowledgeMentioning({ node: node.id, scope, limit: MAX_RANK_FACTS }),
+  async #counts(page: KnowledgePage, view: LevelView): Promise<KnowledgeInspectorRelationshipCounts> {
+    const [notes, mentioning] = await Promise.all([
+      this.#store.listNotes({ pageId: page.id, read: view.read, limit: MAX_RANK_NOTES }),
+      this.#store.listNotesMentioning({ pageId: page.id, read: view.read, limit: MAX_RANK_NOTES }),
     ]);
     const [outgoing, incoming] = await Promise.all([
-      this.#outgoingNodeRecords(node, aboutResult.records, scope),
-      this.#incomingParentRecords(node, mentioningResult.records, scope),
+      this.#outgoing(page, notes.notes, view),
+      this.#incoming(mentioning.notes, view),
     ]);
-    const mentioningRecords = mentioningResult.records.filter(record => record.node !== node.id);
-    const degree = new Set([...outgoing.nodes, ...incoming.nodes].map(record => record.id)).size;
     return {
-      degree,
-      counts: {
-        records: aboutResult.records.length + mentioningRecords.length,
-        outgoing: outgoing.nodes.length,
-        incoming: incoming.nodes.length,
-        sampled: Boolean(
-          aboutResult.nextCursor || mentioningResult.nextCursor || outgoing.truncated || incoming.truncated,
-        ),
-      },
+      records: notes.notes.length + mentioning.notes.length,
+      outgoing: outgoing.pages.length,
+      incoming: incoming.pages.length,
+      sampled: Boolean(notes.nextCursor || mentioning.nextCursor || outgoing.truncated || incoming.truncated),
     };
   }
 
-  async #outgoingNodeRecords(
-    current: KnowledgeNode,
-    records: KnowledgeRecord[],
-    scope: KnowledgeScope,
-  ): Promise<RelationshipRecords> {
-    const related = new Map<string, KnowledgeNode>();
-    let truncated = false;
-    const sources = [current.content ?? '', ...records.map(record => record.text)];
-    for (const source of sources) {
-      for (const name of parseKnowledgeWikilinks(source)) {
-        if (related.size >= MAX_RELATED_RECORDS) {
-          truncated = true;
-          break;
-        }
-        const node = await this.#knowledge.resolveNode({ name, scope });
-        if (node && node.id !== current.id && isKnowledgeScopeVisible(node.scope, scope)) {
-          related.set(node.id, node);
-        }
-      }
-      if (truncated) break;
-    }
-    return { nodes: [...related.values()], truncated };
-  }
-
-  async #incomingParentRecords(
-    current: KnowledgeNode,
-    records: KnowledgeRecord[],
-    scope: KnowledgeScope,
-  ): Promise<RelationshipRecords> {
-    const related = new Map<string, KnowledgeNode>();
-    let truncated = false;
-    for (const record of records) {
-      if (record.node === current.id || related.has(record.node)) continue;
-      if (related.size >= MAX_RELATED_RECORDS) {
-        truncated = true;
-        break;
-      }
-      const node = await this.#knowledge.getNode(record.node);
-      if (node && isKnowledgeScopeVisible(node.scope, scope)) related.set(node.id, node);
-    }
-    return { nodes: [...related.values()], truncated };
-  }
-
-  async #outgoingTargets(
-    current: KnowledgeNode,
-    records: KnowledgeRecord[],
-    scope: KnowledgeScope,
-    binding: Binding,
-    level: KnowledgeInspectorScopeLevel,
-  ): Promise<KnowledgeInspectorRelationshipPreview> {
-    const related = await this.#outgoingNodeRecords(current, records, scope);
-    return {
-      nodes: related.nodes.map(node => this.#recordSummary(node, binding, level)),
-      partial: related.truncated,
+  /** Readable pages this page's notes mention, then pages its body links to by name. */
+  async #outgoing(page: KnowledgePage, notes: KnowledgeNote[], view: LevelView): Promise<Related> {
+    const related = new Map<string, KnowledgePage>();
+    const add = (target: KnowledgePage | null | undefined) => {
+      if (target && !target.deletedAt && target.id !== page.id) related.set(target.id, target);
     };
-  }
-
-  async #incomingParents(
-    current: KnowledgeNode,
-    records: KnowledgeRecord[],
-    scope: KnowledgeScope,
-    binding: Binding,
-    level: KnowledgeInspectorScopeLevel,
-  ): Promise<KnowledgeInspectorRelationshipPreview> {
-    const related = await this.#incomingParentRecords(current, records, scope);
-    return {
-      nodes: related.nodes.map(node => this.#recordSummary(node, binding, level)),
-      partial: related.truncated,
-    };
-  }
-
-  async #activityRecord(
-    event: KnowledgeActivityEvent,
-    scope: KnowledgeScope,
-    binding: Binding,
-    level: KnowledgeInspectorScopeLevel,
-  ): Promise<KnowledgeInspectorNodeSummary | undefined> {
-    if (event.recordType === 'node') {
-      const node = await this.#knowledge.getNode(event.recordId);
-      return node && isKnowledgeScopeVisible(node.scope, scope) ? this.#recordSummary(node, binding, level) : undefined;
+    for (const id of new Set(notes.flatMap(note => note.mentions))) {
+      if (related.size >= MAX_RELATED_PAGES) return { pages: [...related.values()], truncated: true };
+      add(await this.#store.getPage({ id, read: view.read }));
     }
-    const record = await this.#knowledge.getKnowledge({ id: event.recordId, includeDeleted: true });
-    if (!record || !isKnowledgeScopeVisible(record.scope, scope)) return undefined;
-    const node = await this.#knowledge.getNode(record.node);
-    return node && isKnowledgeScopeVisible(node.scope, scope) ? this.#recordSummary(node, binding, level) : undefined;
+    for (const name of parseKnowledgeWikilinks(page.body ?? '')) {
+      if (related.size >= MAX_RELATED_PAGES) return { pages: [...related.values()], truncated: true };
+      const [target] = await this.#store.findPagesByName({ name, read: view.read, limit: 1 });
+      add(target);
+    }
+    return { pages: [...related.values()], truncated: false };
+  }
+
+  /** Readable pages whose notes mention this page. */
+  async #incoming(mentioning: KnowledgeNote[], view: LevelView): Promise<Related> {
+    const related = new Map<string, KnowledgePage>();
+    for (const pageId of new Set(mentioning.map(note => note.pageId))) {
+      if (related.size >= MAX_RELATED_PAGES) return { pages: [...related.values()], truncated: true };
+      const source = await this.#store.getPage({ id: pageId, read: view.read });
+      if (source && !source.deletedAt) related.set(source.id, source);
+    }
+    return { pages: [...related.values()], truncated: false };
+  }
+
+  async #activityEvent(
+    event: KnowledgePageActivityEvent,
+    binding: Binding,
+    view: LevelView,
+  ): Promise<KnowledgeInspectorActivityEvent> {
+    const page = await this.#store.getPage({ id: event.pageId, read: view.read });
+    const live = page && !page.deletedAt ? page : undefined;
+    return {
+      action: event.action,
+      recordType: event.noteId ? 'note' : 'page',
+      scope: badgeOf(await this.#scopeAddress(event.scopeId)),
+      sourceThreadId: event.provenance.sourceThreadId,
+      createdAt: event.createdAt.toISOString(),
+      record: live ? await this.#summary(live, binding, view) : undefined,
+    };
   }
 
   #mintHandle(
@@ -755,7 +676,6 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       entry.level !== level ||
       entry.kind !== kind ||
       entry.filters?.namePrefix !== filters?.namePrefix ||
-      entry.filters?.kind !== filters?.kind ||
       entry.filters?.sort !== filters?.sort
     ) {
       throw new KnowledgeInspectorError(
@@ -785,7 +705,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     }
   }
 
-  #invalidateIdnode(): void {
+  #invalidate(): void {
     this.#fingerprint = undefined;
     this.#identityKey = opaqueToken();
     this.#handles.clear();
@@ -793,8 +713,12 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }
 }
 
+/**
+ * The /knowledge inspector for a session, reading through the session's Knowledge runtime (a key
+ * resolves through `mastra`). Undefined when there is no Knowledge runtime: access rules live on the
+ * runtime, so a bare storage domain can't be inspected.
+ */
 export async function createKnowledgeInspector(input: {
-  storage: MastraCompositeStore;
   knowledge?: Knowledge | string;
   mastra?: Pick<Mastra, 'getKnowledge'>;
   session: Session<MastraCodeState>;
@@ -814,8 +738,12 @@ export async function createKnowledgeInspector(input: {
   } else {
     selected = input.knowledge;
   }
-  const knowledge = selected ? await selected.getStorage() : await input.storage.getStore('knowledge');
-  return knowledge
-    ? new ScopedKnowledgeInspector({ knowledge, session: input.session, hostScopes: input.hostScopes })
-    : undefined;
+  if (!selected) return undefined;
+  const store = await selected.getStorage();
+  return new ScopedKnowledgeInspector({
+    knowledge: selected,
+    store,
+    session: input.session,
+    hostScopes: input.hostScopes,
+  });
 }

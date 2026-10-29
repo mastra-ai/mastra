@@ -1,26 +1,28 @@
 import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
-import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
+import type { KnowledgePage, KnowledgeStorage } from '@mastra/core/storage';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createKnowledgeInspector, KnowledgeInspectorError } from './knowledge-inspector.js';
 import { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
 // The built-in Knowledge (`knowledge: true`) writes under the fixed local org, which the host
-// passes as its scope; the inspector must read the same rung.
-const LOCAL_ORG = LOCAL_KNOWLEDGE_ORG_ID;
-const LOCAL_HOST: AgentScopeEntry[] = [{ scope: `org:${LOCAL_ORG}`, access: 'write' }];
-const orgScope = [`org:${LOCAL_ORG}`];
-const resourceScope = [...orgScope, 'resource:project-1'];
-const threadScope = [...resourceScope, 'thread:thread-1'];
+// passes as its scope; the inspector must read the same scopes.
+const LOCAL_HOST: AgentScopeEntry[] = [{ scope: `org:${LOCAL_KNOWLEDGE_ORG_ID}`, access: 'write' }];
+const host = { author: 'host' };
+
+const declarations = {
+  ...knowledgeMemoryScopes(),
+  'project:$projectId': { access: [{ principal: 'self' as const, role: 'editor' as const }] },
+};
 
 function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
   let state = initialState;
-  let resourceId = 'project-1';
   let threadId: string | null = 'thread-1';
   const threadResources = new Map([
     ['thread-1', 'project-1'],
@@ -29,24 +31,13 @@ function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
   ]);
   const listeners = new Set<(event: AgentControllerEvent) => void>();
   const session = {
-    identity: {
-      getResourceId: () => resourceId,
-    },
-    state: {
-      get: () => state,
-    },
+    identity: { getResourceId: () => 'project-1' },
+    state: { get: () => state },
     thread: {
       getId: () => threadId,
       getById: async ({ threadId: requestedId }: { threadId: string }) => {
-        const threadResourceId = threadResources.get(requestedId);
-        return threadResourceId
-          ? {
-              id: requestedId,
-              resourceId: threadResourceId,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            }
-          : null;
+        const resourceId = threadResources.get(requestedId);
+        return resourceId ? { id: requestedId, resourceId, createdAt: new Date(), updatedAt: new Date() } : null;
       },
     },
     subscribe: (listener: (event: AgentControllerEvent) => void) => {
@@ -57,9 +48,6 @@ function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
 
   return {
     session,
-    setResourceId(value: string) {
-      resourceId = value;
-    },
     setState(value: Partial<MastraCodeState>) {
       state = value;
     },
@@ -72,14 +60,57 @@ function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
   };
 }
 
-async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes: AgentScopeEntry[] = LOCAL_HOST) {
-  const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-  const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
-  const session = createSessionHarness(state);
-  const inspector = await createKnowledgeInspector({ storage, session: session.session, hostScopes });
-  if (!inspector) throw new Error('Expected knowledge inspector');
-  return { knowledge, storage, inspector, session };
+/** Seeds pages straight into the page store, the way the code agent's tools leave them. */
+function seeder(store: KnowledgeStorage) {
+  const scopes = new Map<string, KnowledgePage>();
+  const scope = async (address: string, declaration: string, parent?: string) => {
+    if (!scopes.has(address)) {
+      const parentId = parent ? (await scopeOf(parent)).id : null;
+      const { scope: page } = await store.materializeScope({
+        address,
+        declaration,
+        name: address,
+        parentId,
+        provenance: host,
+      });
+      scopes.set(address, page);
+    }
+    return scopes.get(address)!;
+  };
+  const scopeOf = (address: string) => {
+    const type = address.slice(0, address.indexOf(':'));
+    if (type === 'org') return scope(address, 'org:$orgId');
+    if (type === 'project') return scope(address, 'project:$projectId');
+    if (type === 'resource') return scope(address, 'resource:$resourceId', `org:${LOCAL_KNOWLEDGE_ORG_ID}`);
+    return scope(address, 'thread:$threadId', 'resource:project-1');
+  };
+  return {
+    scopeOf,
+    async page(address: string, name: string, body?: string) {
+      return store.createPage({ parentId: (await scopeOf(address)).id, name, body, provenance: host });
+    },
+    async note(page: KnowledgePage, text: string, mentions: KnowledgePage[] = [], sourceThreadId = 'thread-1') {
+      return store.addNote({
+        pageId: page.id,
+        text,
+        stampScopeIds: [page.scopeId],
+        mentions: mentions.map(mention => mention.id),
+        provenance: { author: 'agent:code', sourceThreadId },
+      });
+    },
+  };
 }
+
+async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes: AgentScopeEntry[] = LOCAL_HOST) {
+  const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'inspector' }), scopes: declarations });
+  const store = await knowledge.getStorage();
+  const session = createSessionHarness(state);
+  const inspector = await createKnowledgeInspector({ knowledge, session: session.session, hostScopes });
+  if (!inspector) throw new Error('Expected knowledge inspector');
+  return { knowledge, store, seed: seeder(store), inspector, session };
+}
+
+const names = (list: { nodes: { name: string }[] }) => list.nodes.map(node => node.name).sort();
 
 describe('KnowledgeInspector', () => {
   let harness: Awaited<ReturnType<typeof createHarness>>;
@@ -88,463 +119,188 @@ describe('KnowledgeInspector', () => {
     harness = await createHarness();
   });
 
-  it('derives virtual scope roots and isolates ancestor, thread, and sibling records', async () => {
-    await harness.knowledge.createNode({ name: 'Org node', kind: 'concept', scope: orgScope });
-    await harness.knowledge.createNode({ name: 'Resource node', kind: 'project', scope: resourceScope });
-    await harness.knowledge.createNode({ name: 'Thread node', kind: 'note', scope: threadScope });
-    await harness.knowledge.createNode({
-      name: 'Sibling thread node',
-      kind: 'note',
-      scope: [...resourceScope, 'thread:thread-2'],
-    });
-    await harness.knowledge.createNode({
-      name: 'Foreign node',
-      kind: 'secret',
-      scope: [...orgScope, 'resource:other-project'],
-    });
+  it('reads each level with its principals and never shows sibling threads or other projects', async () => {
+    await harness.seed.page('org:local', 'Org page');
+    await harness.seed.page('resource:project-1', 'Resource page');
+    await harness.seed.page('thread:thread-1', 'Thread page');
+    await harness.seed.page('thread:thread-2', 'Sibling thread page');
+    await harness.seed.page('resource:other-project', 'Foreign page');
 
     const tree = await harness.inspector.getScopeTree();
     expect(tree).toMatchObject({
       defaultLevel: 'resource',
       roots: [
-        { level: 'org', id: `org:${LOCAL_ORG}`, available: true },
+        { level: 'org', id: 'org:local', available: true },
         { level: 'resource', id: 'project-1', available: true },
         { level: 'thread', id: 'thread-1', available: true },
       ],
     });
-    expect(tree.identityKey).not.toContain(LOCAL_ORG);
 
-    await expect(harness.inspector.listNodes({ level: 'org' })).resolves.toMatchObject({
-      nodes: [{ name: 'Org node' }],
-    });
-    await expect(harness.inspector.listNodes({ level: 'resource' })).resolves.toMatchObject({
-      nodes: expect.arrayContaining([
-        expect.objectContaining({ name: 'Org node' }),
-        expect.objectContaining({ name: 'Resource node' }),
-      ]),
-    });
-    const threadRecords = await harness.inspector.listNodes({ level: 'thread' });
-    expect(threadRecords.nodes.map(item => item.name).sort()).toEqual(['Org node', 'Resource node', 'Thread node']);
-    expect(JSON.stringify(threadRecords)).not.toContain('Foreign node');
-    expect(JSON.stringify(threadRecords)).not.toContain('Sibling thread node');
+    expect(names(await harness.inspector.listNodes({ level: 'org' }))).toEqual(['Org page']);
+    expect(names(await harness.inspector.listNodes({ level: 'resource' }))).toEqual(['Org page', 'Resource page']);
+    const thread = await harness.inspector.listNodes({ level: 'thread' });
+    expect(names(thread)).toEqual(['Org page', 'Resource page', 'Thread page']);
+    expect(thread.nodes.find(node => node.name === 'Thread page')!.scope).toEqual({ level: 'thread', id: 'thread-1' });
+    expect(JSON.stringify(thread)).not.toMatch(/Sibling thread page|Foreign page/);
   });
 
-  it('ranks a stable recent window by sampled graph degree and preserves exact recent order', async () => {
-    const hub = await harness.knowledge.createNode({ name: 'Hub', kind: 'project', scope: resourceScope });
-    await harness.knowledge.createNode({ name: 'Leaf A', kind: 'service', scope: resourceScope });
-    await harness.knowledge.createNode({ name: 'Leaf B', kind: 'service', scope: resourceScope });
-    await harness.knowledge.appendKnowledge({
-      node: hub.id,
-      text: 'Hub links [[Leaf A]] and [[Leaf B]].',
-      scope: resourceScope,
+  it('opens a page with its notes, mentions both ways, body links and readable-only relations', async () => {
+    const beta = await harness.seed.page('resource:project-1', 'Beta service');
+    const atlas = await harness.seed.page(
+      'resource:project-1',
+      'Atlas launch',
+      'Ships with [[Beta service]]. [[No such page 9fca]] stays unresolved.',
+    );
+    const secret = await harness.seed.page('resource:other-project', 'Foreign secret');
+    await harness.seed.note(atlas, 'Atlas launch depends on [[Beta service]].', [beta]);
+    await harness.seed.note(atlas, 'Atlas launch shares a vendor with [[Foreign secret]].', [secret]);
+    await harness.seed.note(beta, 'Beta service is required by [[Atlas launch]].', [atlas]);
+
+    const list = await harness.inspector.listNodes({ level: 'resource' });
+    const handle = list.nodes.find(node => node.name === 'Atlas launch')!.handle;
+    const detail = await harness.inspector.getNode({ handle });
+
+    // The note mentioning an unreadable page is hidden, so only one note shows.
+    expect(detail.records.map(note => note.text)).toEqual(['Atlas launch depends on [[Beta service]].']);
+    expect(detail.records[0]).toMatchObject({
+      scope: { level: 'resource', id: 'project-1' },
       sourceThreadId: 'thread-1',
-      resolutionScope: resourceScope,
-      defaultScope: resourceScope,
     });
-
-    const connected = await harness.inspector.listNodes({ level: 'resource', sort: 'connected', limit: 1 });
-    expect(connected).toMatchObject({
-      sort: 'connected',
-      coverage: 'recent-window',
-      nodes: [{ name: 'Hub', relationshipCounts: { records: 1, outgoing: 2, incoming: 0, sampled: false } }],
-    });
-    expect(connected.nextCursor).toBeDefined();
-    const next = await harness.inspector.listNodes({
-      level: 'resource',
-      sort: 'connected',
-      limit: 1,
-      cursor: connected.nextCursor,
-    });
-    expect(next.nodes[0]?.name).not.toBe('Hub');
-
-    const recent = await harness.inspector.listNodes({ level: 'resource', sort: 'recent', limit: 3 });
-    expect(recent.coverage).toBe('exact');
-    expect(recent.nodes).toHaveLength(3);
-    expect(recent.nodes.every(item => item.relationshipCounts !== undefined)).toBe(true);
-    expect(recent.nodes.find(item => item.name === 'Hub')?.relationshipCounts).toEqual({
-      records: 1,
-      outgoing: 2,
-      incoming: 0,
-      sampled: false,
-    });
-    expect(recent.nodes.find(item => item.name === 'Leaf A')?.relationshipCounts).toEqual({
-      records: 1,
-      outgoing: 0,
-      incoming: 1,
-      sampled: false,
-    });
-  });
-
-  it('marks bounded outgoing and incoming relationship previews as partial', async () => {
-    const source = await harness.knowledge.createNode({ name: 'Source', kind: 'project', scope: resourceScope });
-    await harness.knowledge.createNode({ name: 'Target', kind: 'project', scope: resourceScope });
-    const outgoingNames: string[] = [];
-    for (let index = 0; index < 26; index++) {
-      const name = `Outgoing ${index}`;
-      outgoingNames.push(name);
-      await harness.knowledge.createNode({ name, kind: 'service', scope: resourceScope });
-      const parent = await harness.knowledge.createNode({
-        name: `Parent ${index}`,
-        kind: 'project',
-        scope: resourceScope,
-      });
-      await harness.knowledge.appendKnowledge({
-        node: parent.id,
-        text: `Parent ${index} references [[Target]].`,
-        scope: resourceScope,
-        sourceThreadId: 'thread-1',
-        resolutionScope: resourceScope,
-        defaultScope: resourceScope,
-      });
-    }
-    await harness.knowledge.appendKnowledge({
-      node: source.id,
-      text: outgoingNames.map(name => `[[${name}]]`).join(' '),
-      scope: resourceScope,
-      sourceThreadId: 'thread-1',
-      resolutionScope: resourceScope,
-      defaultScope: resourceScope,
-    });
-
-    const sourceList = await harness.inspector.listNodes({
-      level: 'resource',
-      sort: 'recent',
-      namePrefix: 'Source',
-    });
-    const targetList = await harness.inspector.listNodes({
-      level: 'resource',
-      sort: 'recent',
-      namePrefix: 'Target',
-    });
-    const sourceDetail = await harness.inspector.getNode({ handle: sourceList.nodes[0]!.handle });
-    const targetDetail = await harness.inspector.getNode({ handle: targetList.nodes[0]!.handle });
-    expect(sourceDetail.outgoingTargets).toMatchObject({ nodes: { length: 25 }, partial: true });
-    expect(targetDetail.incomingParents).toMatchObject({ nodes: { length: 25 }, partial: true });
-    expect(sourceList.nodes[0]?.relationshipCounts).toEqual({ records: 1, outgoing: 25, incoming: 0, sampled: true });
-    expect(targetList.nodes[0]?.relationshipCounts).toEqual({ records: 26, outgoing: 0, incoming: 25, sampled: true });
-    expect(sourceDetail.relationshipCounts).toEqual({ records: 1, outgoing: 25, incoming: 0, sampled: true });
-    expect(targetDetail.relationshipCounts).toEqual({ records: 26, outgoing: 0, incoming: 25, sampled: true });
-  });
-
-  it('returns content-capable node details through opaque handles with bounded relations', async () => {
-    const related = await harness.knowledge.createNode({ name: 'Related', kind: 'service', scope: resourceScope });
-    const node = await harness.knowledge.createNode({ name: 'Atlas', kind: 'project', scope: resourceScope });
-    const parent = await harness.knowledge.createNode({ name: 'Portfolio', kind: 'program', scope: resourceScope });
-    await harness.knowledge.appendKnowledge({
-      node: node.id,
-      text: 'Atlas deploys through [[Related]].',
-      scope: resourceScope,
-      sourceThreadId: 'thread-1',
-      resolutionScope: resourceScope,
-      defaultScope: resourceScope,
-    });
-    await harness.knowledge.appendKnowledge({
-      node: parent.id,
-      text: 'Portfolio includes [[Atlas]].',
-      scope: resourceScope,
-      sourceThreadId: 'thread-1',
-      resolutionScope: resourceScope,
-      defaultScope: resourceScope,
-    });
-    const page = await harness.knowledge.createNode({
-      name: 'Atlas brief',
-      kind: 'document',
-      content: `See [[Related]].\n${'x'.repeat(40 * 1024)}`,
-      scope: resourceScope,
-    });
-
-    const listedEntities = await harness.inspector.listNodes({ level: 'resource' });
-    const atlas = listedEntities.nodes.find(item => item.name === 'Atlas')!;
-    expect(atlas.handle).not.toContain(node.id);
-    expect(atlas).not.toHaveProperty('id');
-
-    const detail = await harness.inspector.getNode({ handle: atlas.handle });
-    expect(detail.records).toEqual([
-      expect.objectContaining({ text: 'Atlas deploys through [[Related]].', sourceThreadId: 'thread-1' }),
+    expect(detail.mentioningRecords.map(note => note.text)).toEqual(['Beta service is required by [[Atlas launch]].']);
+    expect(detail.outgoingTargets.nodes.map(node => node.name)).toEqual(['Beta service']);
+    expect(detail.incomingParents.nodes.map(node => node.name)).toEqual(['Beta service']);
+    expect(detail.content).toContain('Ships with [[Beta service]]');
+    expect(detail.links.map(link => [link.label, link.node?.name])).toEqual([
+      ['Beta service', 'Beta service'],
+      ['No such page 9fca', undefined],
     ]);
-    expect(detail.outgoingTargets).toEqual({
-      nodes: [expect.objectContaining({ name: 'Related' })],
-      partial: false,
-    });
-    expect(detail.incomingParents).toEqual({
-      nodes: [expect.objectContaining({ name: 'Portfolio' })],
-      partial: false,
-    });
     expect(detail.relationshipCounts).toEqual({ records: 2, outgoing: 1, incoming: 1, sampled: false });
-    expect(detail.node.relationshipCounts).toEqual({ records: 2, outgoing: 1, incoming: 1, sampled: false });
-    expect(JSON.stringify(detail)).not.toContain(node.id);
-    expect(JSON.stringify(detail)).not.toContain(related.id);
-    expect(JSON.stringify(detail)).not.toContain(parent.id);
-
-    const contentNode = listedEntities.nodes.find(item => item.name === 'Atlas brief')!;
-    expect(contentNode).toMatchObject({ name: 'Atlas brief', type: 'node', kind: 'document' });
-    expect(listedEntities.nodes.every(item => item.type === 'node')).toBe(true);
-
-    const contentDetail = await harness.inspector.getNode({ handle: contentNode.handle });
-    expect(contentDetail.contentTruncated).toBe(true);
-    expect(new TextEncoder().encode(contentDetail.content!).byteLength).toBeLessThanOrEqual(32 * 1024);
-    expect(contentDetail.links).toEqual([
-      { label: 'Related', node: expect.objectContaining({ name: 'Related', type: 'node' }) },
-    ]);
-    expect(contentDetail.outgoingTargets.nodes).toEqual([expect.objectContaining({ name: 'Related' })]);
-    expect(JSON.stringify(contentDetail)).not.toContain(page.id);
+    expect(JSON.stringify(detail)).not.toContain('Foreign secret');
   });
 
-  it('binds handles and cursors to the current identity, selected scope, and filters', async () => {
-    await harness.knowledge.createNode({ name: 'Alpha', kind: 'note', scope: resourceScope });
-    await harness.knowledge.createNode({ name: 'Beta', kind: 'note', scope: resourceScope });
+  it('pages notes through opaque cursors', async () => {
+    const page = await harness.seed.page('resource:project-1', 'Checkpoints');
+    for (let index = 0; index < 5; index++) await harness.seed.note(page, `Checkpoint ${index + 1} is complete.`);
+    const handle = (await harness.inspector.listNodes({ level: 'resource' })).nodes[0]!.handle;
+    const first = await harness.inspector.getNode({ handle, recordLimit: 3 });
+    expect(first.records).toHaveLength(3);
+    expect(first.recordsNextCursor).toBeDefined();
+    const second = await harness.inspector.getNode({ handle, recordLimit: 3, recordsCursor: first.recordsNextCursor });
+    expect(second.records.map(note => note.text)).toEqual(['Checkpoint 4 is complete.', 'Checkpoint 5 is complete.']);
+    expect(second.recordsNextCursor).toBeUndefined();
+  });
 
-    const firstPage = await harness.inspector.listNodes({ level: 'resource', kind: 'note', limit: 1 });
-    expect(firstPage.nextCursor).toBeDefined();
-    await expect(
-      harness.inspector.listNodes({ level: 'resource', kind: 'other', cursor: firstPage.nextCursor, limit: 1 }),
-    ).rejects.toMatchObject({ code: 'invalid-cursor' });
-    await expect(
-      harness.inspector.listNodes({ level: 'thread', kind: 'note', cursor: firstPage.nextCursor, limit: 1 }),
-    ).rejects.toMatchObject({ code: 'invalid-cursor' });
+  it('lists every page by name exactly, and ranks the first pages by links for the connected sort', async () => {
+    const hub = await harness.seed.page('resource:project-1', 'Zeta hub');
+    const leafA = await harness.seed.page('resource:project-1', 'Leaf A');
+    const leafB = await harness.seed.page('resource:project-1', 'Leaf B');
+    await harness.seed.page('resource:project-1', 'Alone');
+    await harness.seed.note(hub, 'Zeta hub runs [[Leaf A]] and [[Leaf B]].', [leafA, leafB]);
 
-    const secondPage = await harness.inspector.listNodes({
+    const first = await harness.inspector.listNodes({ level: 'resource', sort: 'name', limit: 2 });
+    expect(first).toMatchObject({ coverage: 'exact', sort: 'name' });
+    const second = await harness.inspector.listNodes({
       level: 'resource',
-      kind: 'note',
-      cursor: firstPage.nextCursor,
-      limit: 1,
+      sort: 'name',
+      limit: 2,
+      cursor: first.nextCursor,
     });
-    expect(secondPage.nodes[0]!.name).not.toBe(firstPage.nodes[0]!.name);
+    expect([...first.nodes, ...second.nodes].map(node => node.name)).toEqual(['Alone', 'Leaf A', 'Leaf B', 'Zeta hub']);
+
+    const connected = await harness.inspector.listNodes({ level: 'resource', sort: 'connected' });
+    expect(connected.coverage).toBe('window');
+    expect(connected.nodes[0]).toMatchObject({ name: 'Zeta hub', relationshipCounts: { outgoing: 2, incoming: 0 } });
+
+    await expect(
+      harness.inspector.listNodes({ level: 'resource', sort: 'connected', cursor: first.nextCursor }),
+    ).rejects.toMatchObject({ code: 'invalid-cursor' });
+  });
+
+  it('filters by name prefix', async () => {
+    await harness.seed.page('resource:project-1', 'Deploy policy');
+    await harness.seed.page('resource:project-1', 'Release notes');
+    expect(names(await harness.inspector.listNodes({ level: 'resource', namePrefix: 'Dep' }))).toEqual([
+      'Deploy policy',
+    ]);
+  });
+
+  it('binds handles to the session identity and rotates them when the thread changes', async () => {
+    await harness.seed.page('thread:thread-1', 'Thread page');
+    const handle = (await harness.inspector.listNodes({ level: 'thread' })).nodes[0]!.handle;
+    await expect(harness.inspector.getNode({ handle })).resolves.toMatchObject({ node: { name: 'Thread page' } });
 
     harness.session.setThreadId('thread-2');
     harness.session.emit({ type: 'thread_changed', threadId: 'thread-2' } as AgentControllerEvent);
-    await expect(harness.inspector.getNode({ handle: firstPage.nodes[0]!.handle })).rejects.toMatchObject({
-      code: 'invalid-handle',
-    });
-
-    harness.session.setThreadId('foreign-thread');
-    const tree = await harness.inspector.getScopeTree();
-    expect(tree.roots[2]).toMatchObject({ level: 'thread', available: false });
-    await expect(harness.inspector.listNodes({ level: 'thread' })).rejects.toMatchObject({ code: 'unavailable' });
-  });
-
-  it('rechecks direct-read visibility and enriches activity without exposing storage ids', async () => {
-    const node = await harness.knowledge.createNode({ name: 'Mutable', kind: 'note', scope: resourceScope });
-    const listed = await harness.inspector.listNodes({ level: 'resource' });
-    const handle = listed.nodes.find(item => item.name === 'Mutable')!.handle;
-    await harness.knowledge.updateNode({
-      id: node.id,
-      version: node.version,
-      scope: [...orgScope, 'resource:other-project'],
-    });
-
     await expect(harness.inspector.getNode({ handle })).rejects.toBeInstanceOf(KnowledgeInspectorError);
+    expect(names(await harness.inspector.listNodes({ level: 'thread' }))).toEqual([]);
+  });
+
+  it('reports a page that became unreadable as not visible', async () => {
+    const page = await harness.seed.page('resource:project-1', 'Moving page');
+    const handle = (await harness.inspector.listNodes({ level: 'resource' })).nodes[0]!.handle;
+    const foreign = await harness.seed.scopeOf('resource:other-project');
+    await harness.store.movePage({
+      id: page.id,
+      expectedVersion: page.version,
+      parentId: foreign.id,
+      provenance: host,
+    });
     await expect(harness.inspector.getNode({ handle })).rejects.toMatchObject({ code: 'not-visible' });
-
-    const privateNode = await harness.knowledge.createNode({
-      name: 'Private node',
-      kind: 'note',
-      scope: threadScope,
-    });
-    await harness.knowledge.appendKnowledge({
-      node: privateNode.id,
-      text: 'Private item with a broader activity scope.',
-      scope: resourceScope,
-      sourceThreadId: 'private-source-thread',
-      resolutionScope: threadScope,
-      defaultScope: resourceScope,
-    });
-    await harness.knowledge.createNode({
-      name: 'Visible page',
-      kind: 'document',
-      content: 'Body',
-      scope: resourceScope,
-    });
-    const activity = await harness.inspector.listActivity({ level: 'resource' });
-    expect(activity.events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ action: 'node-created', record: expect.objectContaining({ name: 'Visible page' }) }),
-      ]),
-    );
-    expect(JSON.stringify(activity)).not.toContain(node.id);
-    expect(JSON.stringify(activity)).not.toContain('Private node');
-    expect(JSON.stringify(activity)).not.toContain('private-source-thread');
   });
 
-  it('wraps activity pagination cursors from newest to oldest', async () => {
-    for (let index = 0; index < 5; index++) {
-      await harness.knowledge.createNode({ name: `Activity ${index}`, kind: 'note', scope: resourceScope });
-    }
+  it('lists readable activity newest first with page summaries, and pages through it', async () => {
+    const page = await harness.seed.page('resource:project-1', 'Runbook');
+    await harness.seed.note(page, 'Runbook step one.');
+    await harness.seed.page('resource:other-project', 'Foreign runbook');
 
-    const first = await harness.inspector.listActivity({ level: 'resource', limit: 2 });
-    const second = await harness.inspector.listActivity({ level: 'resource', cursor: first.nextCursor, limit: 2 });
-    const firstNames = first.events.map(item => item.record?.name);
-    const secondNames = second.events.map(item => item.record?.name);
-
-    expect(first.nextCursor).toBeTruthy();
-    expect(secondNames).toHaveLength(2);
-    expect(secondNames.some(name => firstNames.includes(name))).toBe(false);
-    expect([...firstNames, ...secondNames]).toEqual(['Activity 4', 'Activity 3', 'Activity 2', 'Activity 1']);
+    const first = await harness.inspector.listActivity({ level: 'resource', limit: 1 });
+    expect(first.events).toEqual([
+      expect.objectContaining({
+        action: 'note-added',
+        recordType: 'note',
+        record: expect.objectContaining({ name: 'Runbook' }),
+      }),
+    ]);
+    const rest = await harness.inspector.listActivity({ level: 'resource', cursor: first.nextCursor });
+    expect(rest.events.map(event => event.action)).toContain('page-created');
+    expect(JSON.stringify([first, rest])).not.toContain('Foreign runbook');
   });
 
-  it('rejects a response when the session scope changes during a storage read', async () => {
-    await harness.knowledge.createNode({ name: 'Delayed', kind: 'note', scope: resourceScope });
-    const listNodes = harness.knowledge.listNodes.bind(harness.knowledge);
-    let releaseRead!: () => void;
-    const readBlocked = new Promise<void>(resolve => {
-      releaseRead = resolve;
-    });
-    vi.spyOn(harness.knowledge, 'listNodes').mockImplementation(async input => {
-      await readBlocked;
-      return listNodes(input);
-    });
+  it('reads Factory sessions under their org and project, isolated from other projects', async () => {
+    harness = await createHarness({ factoryOrgId: 'acme', factoryProjectId: 'p1' }, []);
+    await harness.seed.page('org:acme', 'Acme handbook');
+    await harness.seed.page('project:p1', 'P1 plan');
+    await harness.seed.page('project:p2', 'P2 plan');
+    await harness.seed.page('org:local', 'Local page');
 
-    const pending = harness.inspector.listNodes({ level: 'resource' });
-    await Promise.resolve();
-    harness.session.setResourceId('other-project');
-    releaseRead();
-
-    await expect(pending).rejects.toMatchObject({ code: 'stale-handle' });
-  });
-
-  it('reads the same org rung Knowledge writes instead of the session owner id', async () => {
-    // Regression: the inspector keyed the org rung on the session owner id
-    // (`mastracode-<hash>`), a scope nothing ever writes to, so /knowledge showed
-    // nothing even though curation had populated `org:local`.
-    await harness.knowledge.createNode({ name: 'Curated', kind: 'concept', scope: orgScope });
-    await harness.knowledge.createNode({ name: 'Orphaned', kind: 'concept', scope: ['org:owner-1'] });
-
-    await expect(harness.inspector.listNodes({ level: 'org' })).resolves.toMatchObject({
-      nodes: [{ name: 'Curated' }],
-    });
-    await expect(harness.inspector.listNodes({ level: 'resource' })).resolves.toMatchObject({
-      nodes: [{ name: 'Curated' }],
-    });
-  });
-
-  it('reads Factory sessions under their org and project tags, isolated from other projects', async () => {
-    const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' }, []);
-    await factory.knowledge.createNode({ name: 'Org node', kind: 'concept', scope: ['org:org-42'] });
-    await factory.knowledge.createNode({
-      name: 'Project node',
-      kind: 'project',
-      scope: ['org:org-42', 'project:proj-7'],
-    });
-    await factory.knowledge.createNode({
-      name: 'Other project node',
-      kind: 'project',
-      scope: ['org:org-42', 'project:proj-8'],
-    });
-    await factory.knowledge.createNode({ name: 'Local node', kind: 'concept', scope: orgScope });
-
-    await expect(factory.inspector.getScopeTree()).resolves.toMatchObject({
-      roots: expect.arrayContaining([
-        { level: 'org', id: 'org:org-42 + project:proj-7', available: true },
-        { level: 'resource', id: 'project-1', available: true },
-      ]),
-    });
-    const names = (await factory.inspector.listNodes({ level: 'resource' })).nodes.map(node => node.name);
-    expect(names).toEqual(expect.arrayContaining(['Org node', 'Project node']));
-    expect(names).not.toContain('Other project node');
-    expect(names).not.toContain('Local node');
-
-    await factory.knowledge.createNode({
-      name: 'Thread node',
-      kind: 'note',
-      scope: ['org:org-42', 'project:proj-7', 'resource:project-1', 'thread:thread-1'],
-    });
-    await expect(factory.inspector.listNodes({ level: 'thread' })).resolves.toMatchObject({
-      nodes: expect.arrayContaining([expect.objectContaining({ name: 'Thread node' })]),
-    });
-  });
-
-  it('rotates handles and cursors when the org is seeded mid-session', async () => {
-    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true }, []);
-    await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
-
-    factory.session.setState({ factoryProjectId: 'proj-7', factoryOrgId: 'org-42' });
-    await factory.knowledge.createNode({ name: 'Seeded', kind: 'concept', scope: ['org:org-42'] });
-    await factory.knowledge.createNode({ name: 'Seeded too', kind: 'concept', scope: ['org:org-42'] });
-    const first = await factory.inspector.listNodes({ level: 'org', limit: 1 });
-    expect(first.nodes).toHaveLength(1);
-    expect(first.nextCursor).toBeDefined();
-    const handle = first.nodes[0]!.handle;
-    await expect(factory.inspector.getNode({ handle })).resolves.toMatchObject({
-      node: { name: first.nodes[0]!.name },
-    });
-    const page2 = await factory.inspector.listNodes({ level: 'org', cursor: first.nextCursor, limit: 1 });
-    expect(page2.nodes).toHaveLength(1);
-    expect(page2.nodes[0]!.name).not.toBe(first.nodes[0]!.name);
-
-    factory.session.setState({ factoryProjectId: 'proj-7', factoryOrgId: 'org-99' });
-    await expect(factory.inspector.getNode({ handle })).rejects.toMatchObject({ code: 'invalid-handle' });
-    await expect(
-      factory.inspector.listNodes({ level: 'org', cursor: first.nextCursor, limit: 1 }),
-    ).rejects.toMatchObject({ code: 'invalid-cursor' });
-    const second = await factory.inspector.listNodes({ level: 'org' });
-    expect(second.identityKey).not.toBe(first.identityKey);
-    expect(second.nodes).toEqual([]);
+    expect((await harness.inspector.getScopeTree()).roots[0]).toMatchObject({ id: 'org:acme + project:p1' });
+    expect(names(await harness.inspector.listNodes({ level: 'org' }))).toEqual(['Acme handbook', 'P1 plan']);
   });
 
   it('fails closed when a Factory-owned session has no resolved org', async () => {
-    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true }, []);
-    await expect(factory.inspector.getScopeTree()).rejects.toMatchObject({ code: 'unavailable' });
-    await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
+    harness = await createHarness({ factoryProjectId: 'p1' }, []);
+    await expect(harness.inspector.getScopeTree()).rejects.toMatchObject({ code: 'unavailable' });
   });
 
-  it('fails closed when a host tag conflicts with the Factory org, or stands in for a missing one', async () => {
-    const conflict = await createHarness({ factoryOrgId: 'o', factoryProjectId: 'p' }, ['org:other']);
-    await expect(conflict.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
-    const noOrg = await createHarness({ factoryProjectId: 'p', factoryOrgUnresolved: true }, ['org:acme']);
-    await expect(noOrg.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
-  });
-
-  it('uses the selected keyed Knowledge runtime instead of the legacy composite domain', async () => {
-    const legacy = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-    const selected = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-    const storage = new MastraCompositeStore({ id: 'legacy', domains: { knowledge: legacy } });
-    const selectedStorage = new MastraCompositeStore({ id: 'selected', domains: { knowledge: selected } });
-    const knowledge = new Knowledge({ id: 'selected', storage: selectedStorage, scopes: {} });
-    await legacy.createNode({ name: 'Legacy only', kind: 'note', scope: resourceScope });
-    await selected.createNode({ name: 'Selected only', kind: 'note', scope: resourceScope });
-
-    const inspector = await createKnowledgeInspector({
-      storage,
-      knowledge,
-      session: createSessionHarness().session,
-      hostScopes: LOCAL_HOST,
-    });
-
-    await expect(inspector?.listNodes({ level: 'resource' })).resolves.toMatchObject({
-      nodes: [expect.objectContaining({ name: 'Selected only' })],
-    });
-  });
-
-  it('selects registered Knowledge keys and never falls back for an unknown key', async () => {
-    const storage = new MastraCompositeStore({ id: 'fallback', default: new InMemoryStore({ id: 'fallback' }) });
-    const first = new Knowledge({ id: 'first', storage: new InMemoryStore({ id: 'first' }), scopes: {} });
-    const second = new Knowledge({ id: 'second', storage: new InMemoryStore({ id: 'second' }), scopes: {} });
-    const mastra = new Mastra({ knowledge: { first, second } });
-    await (await first.getStorage()).createNode({ name: 'First', kind: 'note', scope: resourceScope });
-    await (await second.getStorage()).createNode({ name: 'Second', kind: 'note', scope: resourceScope });
-    const session = createSessionHarness().session;
-    const a = await createKnowledgeInspector({ storage, mastra, knowledge: 'first', session, hostScopes: LOCAL_HOST });
-    const b = await createKnowledgeInspector({ storage, mastra, knowledge: 'second', session, hostScopes: LOCAL_HOST });
-    const firstPage = await a!.listNodes({ level: 'resource' });
-    expect(firstPage.nodes.map(node => node.name)).toEqual(['First']);
-    expect((await b!.listNodes({ level: 'resource' })).nodes.map(node => node.name)).toEqual(['Second']);
-    await expect(b!.getNode({ handle: firstPage.nodes[0]!.handle })).rejects.toMatchObject({ code: 'invalid-handle' });
-    await expect(createKnowledgeInspector({ storage, mastra, knowledge: 'missing', session })).rejects.toMatchObject({
+  it('is unavailable when the session holds a scope Knowledge does not declare', async () => {
+    harness = await createHarness({}, [{ scope: 'team:x', access: 'write' }]);
+    await expect(harness.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({
       code: 'unavailable',
-    });
-    await expect(createKnowledgeInspector({ storage, knowledge: 'first', session })).rejects.toMatchObject({
-      code: 'unavailable',
+      message: expect.stringContaining('team:x'),
     });
   });
 
-  it('returns no capability when the composite has no knowledge domain', async () => {
-    const storage = new MastraCompositeStore({
-      id: 'without-knowledge',
-      default: new InMemoryStore({ id: 'default-without-knowledge' }),
-      domains: { knowledge: false },
-    });
+  it('selects a registered Knowledge by key, refuses an unknown key, and needs a Knowledge runtime', async () => {
+    const keyed = new Knowledge({ id: 'keyed', storage: new InMemoryStore({ id: 'keyed' }), scopes: declarations });
+    const mastra = new Mastra({ knowledge: { keyed }, logger: false });
+    const { session } = createSessionHarness();
+    await seeder(await keyed.getStorage()).page('org:local', 'Keyed page');
+
+    const inspector = await createKnowledgeInspector({ knowledge: 'keyed', mastra, session, hostScopes: LOCAL_HOST });
+    expect(names(await inspector!.listNodes({ level: 'org' }))).toEqual(['Keyed page']);
     await expect(
-      createKnowledgeInspector({ storage, session: createSessionHarness().session }),
-    ).resolves.toBeUndefined();
+      createKnowledgeInspector({ knowledge: 'missing', mastra, session, hostScopes: LOCAL_HOST }),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    await expect(createKnowledgeInspector({ session, hostScopes: LOCAL_HOST })).resolves.toBeUndefined();
   });
 });
