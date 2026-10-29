@@ -306,7 +306,7 @@ type CustomConfig = {
 
 ### Custom signal endpoints
 
-Supply either `endpoint` or `endpoints`, never both. TypeScript rejects configurations with both options. Runtime validation also rejects them and disables the exporter with an error message.
+When configuring URLs in code, supply either `endpoint` or `endpoints`, never both. TypeScript rejects configurations with both options. Runtime validation also rejects them and disables the exporter with an error message.
 
 Use `endpoints` to supply the exact URL for each signal. URLs are passed to the selected exporter without adding, removing, or replacing path segments. Trace and log endpoints can use different hosts and unrelated paths:
 
@@ -329,6 +329,27 @@ const exporter = new OtelExporter({
 Supply at least one signal endpoint. Omit `logs` for trace-only export or `traces` for log-only export. The `signals` toggles can still disable a configured signal. Protocol and headers apply to both endpoints. The selected protocol must support the signal. A custom `exporter` instance overrides trace transport as before.
 
 The singular `endpoint` option retains its existing behavior for compatibility: OTLP signal paths are derived from the collector URL, and Zipkin uses the configured URL directly. For custom paths, use `endpoints` instead.
+
+### Endpoint environment variables
+
+For a custom OTLP provider without `endpoint` or `endpoints`, Mastra reads these standard environment variables:
+
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: Exact trace endpoint URL.
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`: Exact log endpoint URL.
+
+Set one or both variables, then configure the custom provider:
+
+```typescript
+import { OtelExporter } from '@mastra/otel-exporter'
+
+const exporter = new OtelExporter({
+  provider: { custom: { protocol: 'http/protobuf' } },
+})
+```
+
+Environment URLs are used unchanged. A signal with an unset or empty variable isn't exported. The `signals` toggles still apply. If neither variable supplies a URL, runtime validation disables the exporter with an error message.
+
+Explicit `endpoint` or `endpoints` configuration takes precedence over both environment variables. For example, `endpoints: { traces: 'https://example.com/traces' }` doesn't export logs, even when `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` is set. This lookup applies only to the custom OTLP provider, not named providers or Zipkin.
 
 ## Methods
 

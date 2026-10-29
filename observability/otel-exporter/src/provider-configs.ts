@@ -232,19 +232,27 @@ function resolveCustomConfig(config: CustomConfig): ResolvedProviderConfig | nul
     );
     return null;
   }
-  const hasEndpoint = config.endpoints
-    ? Boolean(config.endpoints.traces || config.endpoints.logs)
-    : Boolean(config.endpoint);
+  let endpoints = config.endpoints;
+  // An explicit endpoint mode is authoritative, including intentionally omitted signals.
+  // OTLP environment variables do not configure the Zipkin transport.
+  if (config.endpoint === undefined && endpoints === undefined && config.protocol !== 'zipkin') {
+    const traces = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+    const logs = process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
+    if (traces) endpoints = { traces, ...(logs && { logs }) };
+    else if (logs) endpoints = { logs };
+  }
+
+  const hasEndpoint = endpoints ? Boolean(endpoints.traces || endpoints.logs) : Boolean(config.endpoint);
   if (!hasEndpoint) {
     console.error(
-      '[OtelExporter] Custom configuration requires endpoint or at least one signal in endpoints. Export will be disabled.',
+      '[OtelExporter] Custom configuration requires endpoint, at least one signal in endpoints, or an OTEL_EXPORTER_OTLP_TRACES_ENDPOINT / OTEL_EXPORTER_OTLP_LOGS_ENDPOINT environment variable. Export will be disabled.',
     );
     return null;
   }
 
   return {
     endpoint: config.endpoint,
-    ...(config.endpoints && { endpoints: config.endpoints }),
+    ...(endpoints && { endpoints }),
     headers: config.headers || {},
     protocol: config.protocol || 'http/json',
   };

@@ -41,7 +41,11 @@ export interface LaminarConfig {
   endpoint?: string;
 }
 
-/** Configure either a legacy collector endpoint or exact per-signal endpoints. */
+/**
+ * Configure a legacy collector endpoint or exact per-signal endpoints.
+ * Without either option, OTLP transports read OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+ * and OTEL_EXPORTER_OTLP_LOGS_ENDPOINT from the environment.
+ */
 export type CustomConfig = {
   headers?: Record<string, string>;
   protocol?: ExportProtocol;

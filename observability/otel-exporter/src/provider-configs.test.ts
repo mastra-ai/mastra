@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resolveProviderConfig } from './provider-configs';
 
 describe('Provider Configurations', () => {
@@ -106,6 +106,29 @@ describe('Provider Configurations', () => {
   });
 
   describe('Custom', () => {
+    beforeEach(() => {
+      vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', undefined);
+      vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', undefined);
+    });
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('does not use OTLP environment endpoints for Zipkin', () => {
+      vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'https://collector.example.com/traces');
+      expect(resolveProviderConfig({ custom: { protocol: 'zipkin' } })).toBeNull();
+    });
+
+    it('rejects an empty explicit endpoint map even when environment endpoints exist', () => {
+      vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'https://collector.example.com/traces');
+      // @ts-expect-error Verify invalid JavaScript configuration is not rescued by environment values.
+      expect(resolveProviderConfig({ custom: { endpoints: {} } })).toBeNull();
+    });
+
+    it('treats empty environment variables as unset', () => {
+      vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', '');
+      vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', '');
+      expect(resolveProviderConfig({ custom: {} })).toBeNull();
+    });
+
     it.each(['https://collector.example.com', ''])('rejects both endpoint and endpoints (%s)', endpoint => {
       expect(
         resolveProviderConfig({
