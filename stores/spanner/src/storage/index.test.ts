@@ -39,6 +39,11 @@ import type { SpannerConfig } from '.';
 const PROJECT_ID = process.env.SPANNER_PROJECT_ID || 'test-project';
 const INSTANCE_ID = process.env.SPANNER_INSTANCE_ID || 'test-instance';
 const EMULATOR_HOST = process.env.SPANNER_EMULATOR_HOST || 'localhost:9010';
+// Set before any Spanner client is built: it makes the client use insecure emulator
+// credentials. Without it, every SpannerStore (including the config validation
+// tests below) looks up Google default credentials in the background and rejects
+// unhandled on machines that have none, such as CI.
+process.env.SPANNER_EMULATOR_HOST = EMULATOR_HOST;
 
 // Each invocation creates a fresh database so tests are isolated.
 const sharedSuffix = `mastra${Math.floor(Date.now() / 1000) % 100000}`;
@@ -82,7 +87,6 @@ async function ensureDatabase(client: Spanner, databaseId: string): Promise<void
 }
 
 function makeClient(): Spanner {
-  process.env.SPANNER_EMULATOR_HOST = EMULATOR_HOST;
   return new Spanner({ projectId: PROJECT_ID, ...spannerOptions });
 }
 
