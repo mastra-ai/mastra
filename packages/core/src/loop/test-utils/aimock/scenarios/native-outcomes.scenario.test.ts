@@ -11,6 +11,61 @@ import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   const getMock = useLoopScenarioAimock();
 
+  it('parents buffered reply chunks to a span that is still open', async () => {
+    const { observability, ended } = capture();
+    let bufferedText = '';
+    let releasedAfterInference = false;
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      collectChunks: true,
+      prompt: 'Write a short reply',
+      outputProcessors: [
+        {
+          id: 'buffer-reply',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-start') return null;
+            if (part.type === 'text-delta') {
+              bufferedText += part.payload.text;
+              return null;
+            }
+            if (part.type === 'text-end') {
+              // Hold content until provider completion has been exported. This makes
+              // the delayed-processor boundary deterministic rather than racing clocks.
+              await expect.poll(() => ended(SpanType.MODEL_INFERENCE).length).toBe(1);
+              releasedAfterInference = true;
+              return { ...part, type: 'text-delta', payload: { ...part.payload, text: bufferedText } };
+            }
+            return part;
+          },
+        },
+      ],
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBe(1);
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'Buffered reply' }),
+    });
+    expect(releasedAfterInference).toBe(true);
+    expect(
+      chunks
+        ?.filter(chunk => chunk.type === 'text-delta')
+        .map(chunk => chunk.payload.text)
+        .join(''),
+    ).toBe('Buffered reply');
+    const parents = new Map(
+      [...ended(SpanType.MODEL_INFERENCE), ...ended(SpanType.MODEL_STEP)].map(span => [span.id, span]),
+    );
+    const chunkSpans = ended(SpanType.MODEL_CHUNK);
+    expect(chunkSpans.length).toBeGreaterThan(0);
+    for (const chunk of chunkSpans) {
+      const parent = parents.get(chunk.parentSpanId!);
+      expect(parent).toBeDefined();
+      expect(parent!.endTime).toBeDefined();
+      expect(chunk.startTime.getTime()).toBeLessThanOrEqual(parent!.endTime!.getTime());
+    }
+  });
+
   it.each(['redact', 'block'] as const)(
     'captures only processed model chunks when a processor chooses to %s',
     async mode => {

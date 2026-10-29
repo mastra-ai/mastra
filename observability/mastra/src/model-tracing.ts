@@ -403,7 +403,6 @@ export class ModelSpanTracker {
   #currentInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
   #stepHasInference = false;
   #tracksProviderStream = false;
-  #processedInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
   #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
   #currentChunkType?: string;
   #accumulator: Record<string, any> = {};
@@ -658,7 +657,6 @@ export class ModelSpanTracker {
       tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
     this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
-    this.#processedInferenceSpan = undefined;
     // Reset chunk sequence and first-chunk clock for new step
     this.#chunkSequence = 0;
     this.#inferenceCompletionStartTime = undefined;
@@ -935,12 +933,12 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Returns the parent span for chunks. Chunks parent under MODEL_INFERENCE
-   * (the provider call) when available, falling back to MODEL_STEP only if
-   * startStep() was bypassed.
+   * Parent processed chunks under the live inference, or under the logical step
+   * when the provider has finished but output processors are still releasing content.
    */
   #chunkParent(): Span<SpanType.MODEL_INFERENCE> | Span<SpanType.MODEL_STEP> | undefined {
-    return this.#currentInferenceSpan ?? this.#processedInferenceSpan ?? this.#currentStepSpan;
+    if (this.#currentInferenceSpan && !this.#currentInferenceSpan.endTime) return this.#currentInferenceSpan;
+    return this.#currentStepSpan?.endTime ? undefined : this.#currentStepSpan;
   }
 
   /**
@@ -1217,7 +1215,6 @@ export class ModelSpanTracker {
               // downstream, after output processors have redacted or rejected it.
               if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) this.#captureCompletionStartTime();
               if (chunk.type === 'finish') {
-                this.#processedInferenceSpan = this.#currentInferenceSpan;
                 this.#endInferenceSpan(chunk.payload, false);
               }
             } catch {
