@@ -116,7 +116,7 @@ Check `capabilities.spanQueryModelFields` before filtering on `model` or `provid
 Check `capabilities.spanQueryOutcomeFields` before filtering or grouping spans by `outcome` and `stopReason`. Rows then also include `outcome`, `stopReason` and `stopReasonContext`. These record how the span ended, separately from `status`, and are `null` when the span didn't record them. A missing outcome means "not recorded", not success. `stopReasonContext` is returned only. For traces, `capabilities.traceQueryOutcomeFields` enables the same fields on `queryTraces()` and `aggregateTraces()`, where they read the root span. With an older adapter, requests using these fields return `501`:
 
 ```typescript
-const capabilities = await mastraClient.getObservabilityCapabilities()
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
 
 if (capabilities.spanQueryOutcomeFields) {
   const limited = await mastraClient.querySpans({

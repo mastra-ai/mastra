@@ -285,6 +285,7 @@ describe('AGGREGATE_SPANS', () => {
       expect.objectContaining({
         where: { type: 'comparison', field: 'outcome', operator: 'eq', value: 'limit' },
         dimensions: ['outcome', 'stopReason'],
+        measures: expect.arrayContaining([{ type: 'countDistinct', name: 'countDistinct.outcome', field: 'outcome' }]),
       }),
     );
   });

@@ -23,13 +23,13 @@ const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString(
  * Fixture: four traces whose root and child outcomes differ, so trace-scope predicates (root
  * values) and `spans.some` / `spans.none` (any span) give different answers.
  *
- * | trace       | span          | outcome           | stopReason    | stopReasonContext |
- * |-------------|---------------|-------------------|---------------|-------------------|
- * | out-success | root          | success           | –             | –                 |
- * | out-success | child (tool)  | limit             | max_steps     | { maxSteps: 5 }   |
- * | out-unknown | root          | unknown           | –             | –                 |
- * | out-custom  | root          | my-custom-outcome | custom:reason | –                 |
- * | out-missing | root          | not recorded      | not recorded  | not recorded      |
+ * | trace       | span          | outcome           | stopReason    | stopReasonContext    |
+ * |-------------|---------------|-------------------|---------------|----------------------|
+ * | out-success | root          | success           | –             | –                    |
+ * | out-success | child (tool)  | limit             | max_steps     | { maxSteps: 5 }      |
+ * | out-unknown | root          | unknown           | –             | –                    |
+ * | out-custom  | root          | my-custom-outcome | custom:reason | { reason: 'custom' } |
+ * | out-missing | root          | not recorded      | not recorded  | not recorded         |
  *
  * `out-missing` stands for a span written by an SDK that predates the fields: it must stay
  * "not recorded" and never read as success. Its `status` is still derived from `error`.
@@ -55,6 +55,7 @@ async function writeOutcomeFixture(storage: ObservabilityStorage) {
         startedAt: at(300),
         outcome: 'my-custom-outcome',
         stopReason: 'custom:reason',
+        stopReasonContext: { reason: 'custom' },
       }),
       makeSpan({ traceId: 'out-missing', spanId: 'missing-root', startedAt: at(400) }),
     ],
@@ -144,7 +145,7 @@ export function createOutcomeFieldTests(options: {
         expect(bySpan['custom-root']).toMatchObject({
           outcome: 'my-custom-outcome',
           stopReason: 'custom:reason',
-          stopReasonContext: null,
+          stopReasonContext: { reason: 'custom' },
         });
         expect(bySpan['missing-root']).toMatchObject({
           outcome: null,
@@ -238,7 +239,11 @@ export function createOutcomeFieldTests(options: {
           stopReasonContext: null,
           status: 'success',
         });
-        expect(byTrace['out-custom']).toMatchObject({ outcome: 'my-custom-outcome', stopReason: 'custom:reason' });
+        expect(byTrace['out-custom']).toMatchObject({
+          outcome: 'my-custom-outcome',
+          stopReason: 'custom:reason',
+          stopReasonContext: { reason: 'custom' },
+        });
         expect(byTrace['out-unknown']).toMatchObject({ outcome: 'unknown', status: 'success' });
         expect(byTrace['out-missing']).toMatchObject({
           outcome: null,
