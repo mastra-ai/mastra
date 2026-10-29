@@ -450,6 +450,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     seed: StoredBoardSeed,
     options: { expectedRevision: number; actor: string },
   ): Promise<StoredBoardRecord> {
+    if (seed.key !== key) {
+      throw new Error(`Cannot reset board "${key}" to the code definition of board "${seed.key}".`);
+    }
     await this.#write(scope, async ops => {
       const row = await ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
       if (!row) throw new StoredBoardError('board_not_found', `Board "${key}" does not exist in this project.`);

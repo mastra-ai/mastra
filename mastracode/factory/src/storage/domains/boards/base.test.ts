@@ -395,6 +395,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       expect(reset.revision).toBe(drifted.revision + 1);
       expect(reset.phases.map(phase => phase.key)).toEqual(['intake', 'build', 'done']);
     });
+
+    it('refuses to reset a board to the code definition of another board', async () => {
+      const { boards, scope } = await setup();
+      await boards.applySeed(scope, [seed('work', 'work-1'), seed('review', 'review-1')]);
+      const version = await boards.readVersion(scope);
+
+      await expect(
+        boards.reset(scope, 'work', seed('review', 'review-1'), { expectedRevision: 1, actor: 'user-1' }),
+      ).rejects.toThrow('Cannot reset board "work" to the code definition of board "review".');
+
+      expect(await boards.get(scope, 'work')).toMatchObject({ key: 'work', seedHash: 'work-1', revision: 1 });
+      expect(await boards.readVersion(scope)).toBe(version);
+    });
   });
 
   it('lets a second client see a write through the version and the rows', async () => {
