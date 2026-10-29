@@ -592,6 +592,70 @@ describe('Span', () => {
 
       expect(instance.rebuildSpan(span.exportSpan()).exportSpan().links).toEqual([callerSpan]);
     });
+
+    it('exports native span fields only when set and keeps them when a span is rebuilt', () => {
+      const instance = tracing();
+      const fields = {
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
+      const bare = instance.startSpan({ type: SpanType.GENERIC, name: 'bare' });
+
+      expect(span.exportSpan()).toMatchObject(fields);
+      expect(instance.rebuildSpan(span.snapshot()).exportSpan()).toMatchObject(fields);
+      for (const key of Object.keys(fields)) {
+        expect(bare.exportSpan()).not.toHaveProperty(key);
+      }
+    });
+
+    it('cleans stopReasonContext like metadata so an Error or BigInt inside it serializes', () => {
+      const instance = tracing();
+      const context = { error: new Error('limit hit'), steps: 10n };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'run', stopReasonContext: context });
+      const exported = span.exportSpan();
+
+      expect(() => JSON.stringify(exported.stopReasonContext)).not.toThrow();
+      expect(exported.stopReasonContext).toMatchObject({ error: { name: 'Error', message: 'limit hit' } });
+      expect(exported.stopReasonContext).toMatchObject({ steps: '10n' });
+    });
+  });
+
+  describe('time to first token', () => {
+    const at = (ms: number) => new Date(Date.parse('2026-01-01T00:00:00Z') + ms);
+
+    it('exports the number the tracker stored in the attributes', () => {
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const step = instance.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'step: 0',
+        startTime: at(0),
+        attributes: { timeToFirstTokenMs: 210, completionStartTime: at(250) },
+      });
+      const inference = step.createChildSpan({
+        type: SpanType.MODEL_INFERENCE,
+        name: 'inference: 0',
+        startTime: at(40),
+        attributes: { timeToFirstTokenMs: 210, completionStartTime: at(250) },
+      });
+      const noChunk = instance.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'step: 1',
+        startTime: at(0),
+        attributes: { streaming: true },
+      });
+
+      expect(inference.exportSpan().timeToFirstTokenMs).toBe(210);
+      expect(step.exportSpan().timeToFirstTokenMs).toBe(210);
+      expect(noChunk.exportSpan()).not.toHaveProperty('timeToFirstTokenMs');
+    });
   });
 
   describe('getExternalParentId', () => {

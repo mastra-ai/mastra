@@ -197,6 +197,12 @@ export interface AgentRunAttributes extends AIBaseAttributes {
    * MODEL_GENERATION of the agent's own loop. Absent when no chunk was streamed.
    */
   completionStartTime?: Date;
+  /**
+   * Milliseconds from the start of the MODEL_INFERENCE that streamed the run's first
+   * chunk to that chunk; copied the same way as `completionStartTime`. Absent when no
+   * chunk was streamed.
+   */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -349,6 +355,8 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Time to first token of the MODEL_INFERENCE that streamed the generation's first chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
   /** Actual model used in the response (may differ from request model) */
   responseModel?: string;
   /** Unique identifier for the response */
@@ -383,6 +391,8 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   warnings?: Record<string, any>;
   /** When the step's first inference streamed its first chunk. Absent when no chunk was streamed. */
   completionStartTime?: Date;
+  /** Time to first token of the MODEL_INFERENCE that streamed the step's first chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -415,6 +425,8 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Milliseconds from this inference's start to its first streamed chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
   /** Result warnings */
   warnings?: Record<string, any>;
   /** Actual model used in the response (may differ from request model) */
@@ -1621,6 +1633,26 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace) that Mastra did not create; carried for external correlation, not Mastra's own parentage */
   externalParentSpanId?: string;
+  /**
+   * Native span fields, stored in their own columns alongside `externalParentSpanId`.
+   * An unset field is stored as null.
+   */
+  /** Span id of the initial invocation a resumed execution continues (unset on the initial execution) */
+  resumedFromSpanId?: string;
+  /** Model identity for this span, filled at export from the model-call attributes; the live span does not carry it */
+  model?: string;
+  /** Provider paired with `model`, filled the same way */
+  provider?: string;
+  /** How this execution ended, in the shared outcome contract; unset while it is still running */
+  outcome?: string;
+  /** Machine-readable cause of stopping, when the producer has one */
+  stopReason?: string;
+  /** Structured details behind `stopReason`, such as the limit that was hit; carried as supplied */
+  stopReasonContext?: Record<string, unknown>;
+  /** Milliseconds from the model call to the first token received, filled at export; the live span does not carry it */
+  timeToFirstTokenMs?: number;
+  /** Errors in this span and all nested spans, filled at export; the live span does not carry it */
+  errorCount?: number;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**
@@ -1718,6 +1750,8 @@ export interface IModelSpanTracker {
    * `endGeneration`, since that step uses a fresh tracker.
    */
   getCompletionStartTime?(): Date | undefined;
+  /** Time to first token of the first inference seen by this tracker; carried the same way. */
+  getTimeToFirstTokenMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
@@ -1737,6 +1771,13 @@ export interface IModelSpanTracker {
    * opens its own inference span under the same step.
    */
   interruptInference?(): void;
+
+  /**
+   * End the open MODEL_INFERENCE span as failed, keeping the MODEL_STEP open.
+   * Called when a model call fails and a retry or fallback model will open its
+   * own inference span under the same step.
+   */
+  failInference?(error: Error): void;
 
   /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans
@@ -1942,6 +1983,11 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    * Only used for root spans without a parent.
    */
   externalParentSpanId?: string;
+  /** Native span fields to carry on the span; see {@link SpanData}. Restored by `rebuildSpan()`. */
+  resumedFromSpanId?: string;
+  outcome?: string;
+  stopReason?: string;
+  stopReasonContext?: Record<string, unknown>;
   /**
    * Start time for this span.
    * Used when rebuilding a span from cached data, or when a span is created

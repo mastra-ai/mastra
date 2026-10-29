@@ -90,6 +90,7 @@ export const threadRowsPage: QueryTraceThreadsResult = {
       lastTraceId: 'trace-2b',
       entityId: 'support-agent',
       entityName: 'Support Agent',
+      traceCount: 7,
     }),
   ],
   page: { next: null },

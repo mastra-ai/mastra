@@ -19,13 +19,13 @@ Memory processors are [processors](/docs/agents/processors) that operate specifi
 
 ## Built-in memory processors
 
-Mastra automatically adds these processors when memory is enabled:
+Mastra automatically adds these processors when memory is enabled. `MemoryInputFilter` is added only when a memory store is available and stored history will be loaded:
 
 ### `MemoryInputFilter`
 
-Trims client-echoed history before memory loaders run. For an existing thread, it keeps only the current user turn or new tool results. For an empty thread, it keeps the full initial input and removes provider item metadata from assistant parts that could refer to items that don't exist in storage.
+Trims client-echoed history before memory loaders run. For an existing thread, it keeps only the current user turn or new tool results. For an empty thread, it keeps the full initial input and removes provider item metadata from assistant parts that could refer to items that don't exist in storage. When `retainFullInput: true` is set, it skips both the trim and the metadata strip and processes the input exactly as supplied, while stored history still loads.
 
-This processor runs first so `MessageHistory`, `SemanticRecall`, and Observational Memory receive only the new input they need.
+By default, this processor runs first so `MessageHistory`, `SemanticRecall`, and Observational Memory receive only the new input they need.
 
 ### `MessageHistory`
 

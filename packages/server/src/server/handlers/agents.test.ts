@@ -2668,6 +2668,21 @@ describe('Agent Routes Authorization', () => {
       mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
     });
 
+    it('drains replay before rejecting a superseded observer', async () => {
+      const runId = 'observe-reject';
+      const chunk = { type: 'text-delta', runId, from: 'AGENT', payload: { text: 'before rejection' } };
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'chunk', data: chunk });
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'error',
+        data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
+      });
+      const reader = (await observe(runId)).getReader();
+      expect((await reader.read()).value).toEqual(chunk);
+      await expect(reader.read()).rejects.toThrow('Run superseded');
+      reader.releaseLock();
+    });
+
     it('closes an unknown run within one second', async () => {
       expect(await collectWithDeadline(await observe(crypto.randomUUID()))).toEqual([]);
     });
@@ -2682,7 +2697,7 @@ describe('Agent Routes Authorization', () => {
       expect(await collectWithDeadline(await observe(runId, { offset: 100 }))).toEqual([]);
     });
 
-    it.each(['finish', 'error', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
+    it.each(['finish', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
       const runId = `observe-enveloped-${type}`;
       const event = { runId, type: 'chunk', data: { type }, index: 0 };
       const unsubscribe = vi.fn(async () => {});
@@ -2691,7 +2706,7 @@ describe('Agent Routes Authorization', () => {
         return unsubscribe;
       });
 
-      expect(await collectWithDeadline(await observe(runId))).toEqual([event]);
+      expect(await collectWithDeadline(await observe(runId))).toEqual([event.data]);
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
@@ -2705,7 +2720,18 @@ describe('Agent Routes Authorization', () => {
         return unsubscribe;
       });
 
-      expect(await collectWithDeadline(await observe(runId))).toEqual([event]);
+      expect(await collectWithDeadline(await observe(runId))).toEqual([
+        { type: 'abort', runId, from: 'AGENT', payload: {} },
+        {
+          type: 'finish',
+          runId,
+          from: 'AGENT',
+          payload: {
+            output: { text: undefined, steps: undefined, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            stepResult: { reason: 'abort', warnings: [], isContinued: false },
+          },
+        },
+      ]);
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
@@ -2723,7 +2749,7 @@ describe('Agent Routes Authorization', () => {
       try {
         await vi.waitFor(() => expect(onEvent).toBeDefined());
         onEvent(suspended);
-        expect((await reader.read()).value).toEqual(suspended);
+        if (suspended.type === 'chunk') expect((await reader.read()).value).toEqual(suspended.data);
         await new Promise(resolve => setTimeout(resolve, 50));
         expect(unsubscribe).not.toHaveBeenCalled();
 
@@ -2731,8 +2757,8 @@ describe('Agent Routes Authorization', () => {
         const finish = { type: 'finish', data: {} };
         onEvent(resumed);
         onEvent(finish);
-        expect((await reader.read()).value).toEqual(resumed);
-        expect((await reader.read()).value).toEqual(finish);
+        expect((await reader.read()).value).toEqual(resumed.data);
+        expect((await reader.read()).value).toMatchObject({ type: 'finish', payload: {} });
         expect(await reader.read()).toEqual({ done: true, value: undefined });
         expect(unsubscribe).toHaveBeenCalledTimes(1);
       } finally {
@@ -2751,7 +2777,7 @@ describe('Agent Routes Authorization', () => {
         type: 'chunk',
         data: { type: 'step-finish' },
       } as any);
-      expect((await next).value.data.type).toBe('step-finish');
+      expect((await next).value.type).toBe('step-finish');
       abort.abort();
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
@@ -2866,10 +2892,10 @@ describe('Agent Routes Authorization', () => {
       const events: any[] = [];
       for await (const event of stream as any) events.push(event);
 
-      expect(events.map(event => [event.type, event.data?.payload?.text, event.generation])).toEqual([
-        ['chunk', 'before takeover ', 1],
-        ['chunk', 'recovered', 2],
-        ['finish', undefined, 2],
+      expect(events.map(event => [event.type, event.payload?.text, event.generation])).toEqual([
+        ['text-delta', 'before takeover ', undefined],
+        ['text-delta', 'recovered', undefined],
+        ['finish', undefined, undefined],
       ]);
     });
 
@@ -2910,9 +2936,9 @@ describe('Agent Routes Authorization', () => {
       const events: any[] = [];
       for await (const event of stream as any) events.push(event);
 
-      expect(events.map(event => [event.type, event.data?.payload?.text, event.generation])).toEqual([
-        ['chunk', 'recovered', current],
-        ['finish', undefined, current],
+      expect(events.map(event => [event.type, event.payload?.text, event.generation])).toEqual([
+        ['text-delta', 'recovered', undefined],
+        ['finish', undefined, undefined],
       ]);
     });
 
@@ -2938,8 +2964,8 @@ describe('Agent Routes Authorization', () => {
       for await (const event of stream as any) events.push(event);
 
       expect(subscribeWithReplay).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
-      expect(events.map(event => [event.type, event.data?.payload?.text])).toEqual([
-        ['chunk', 'answer'],
+      expect(events.map(event => [event.type, event.payload?.text])).toEqual([
+        ['text-delta', 'answer'],
         ['finish', undefined],
       ]);
     });

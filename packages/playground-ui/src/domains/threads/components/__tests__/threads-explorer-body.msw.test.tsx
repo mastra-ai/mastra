@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { QueryTraceThreadsResult } from '@mastra/client-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -59,6 +59,24 @@ describe('ThreadsExplorerBody', () => {
 
       expect(await screen.findByText('Weather Agent')).toBeTruthy();
       expect(screen.getByText('Support Agent')).toBeTruthy();
+    });
+
+    it("shows each thread's message count", async () => {
+      setHandlers(threadRowsPage);
+
+      renderBody();
+
+      const weatherRow = await screen.findByRole('button', { name: /Weather Agent/ });
+      const supportRow = screen.getByRole('button', { name: /Support Agent/ });
+      expect(within(weatherRow).getByText('2')).toBeTruthy();
+      expect(within(supportRow).getByText('7')).toBeTruthy();
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Messages' }));
+      expect(
+        await screen.findByText(
+          'Messages sent in this thread, counting the whole thread, not just the selected time range',
+        ),
+      ).toBeTruthy();
     });
   });
 

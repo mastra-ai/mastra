@@ -123,7 +123,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 | Context storage | `res.locals` | `c.get()` / `c.set()` |
 | Middleware signature | `(req, res, next)` | `(c, next)` |
 | Streaming | `res.write()` / `res.end()` | `stream()` helper |
-| AbortSignal | Created from `req.on('close')` | `c.req.raw.signal` |
+| AbortSignal | Created from `res.on('close')`, aborted only when the response didn't finish | `c.req.raw.signal` |
 
 ## Adding custom routes
 
@@ -200,7 +200,7 @@ Available properties on `res.locals`:
 | `mastra` | Mastra instance |
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
-| `tools` | Available tools |
+| `registeredTools` | Tools registered with the adapter |
 | `taskStore` | Task store for A2A operations |
 | `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |

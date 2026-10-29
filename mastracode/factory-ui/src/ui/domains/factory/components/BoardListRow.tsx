@@ -12,6 +12,7 @@ import type { MouseEvent, ReactNode, RefCallback } from 'react';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
+import { BOARD_LIST_ROW_LAYOUT_CLASS } from '../boardLayout';
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
@@ -193,7 +194,8 @@ export function BoardListRow({
       }}
       onSelectRow={onToggleDetails}
       className={cn(
-        'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
+        'group',
+        BOARD_LIST_ROW_LAYOUT_CLASS,
         locked && 'cursor-wait opacity-70',
         highlighted && 'ring-2 ring-warning-indicator/60 ring-offset-2 ring-offset-background',
       )}

@@ -93,15 +93,15 @@ export function SandboxBlock({
       {rows}
       {dockerLowMemory && (
         <Notice variant="warning">
-          Docker is on with {memoryMb} MB of memory. E2B recommends at least 2 GB for Docker; containers may run out of
-          memory.
+          Docker is on with {memoryMb} MB of memory. We recommend at least 2 GB for Docker; with less, containers may
+          run out of memory.
         </Notice>
       )}
     </>
   );
 }
 
-/** E2B's recommended minimum memory for sandboxes that run Docker. */
+/** Recommended minimum memory for sandboxes that run Docker. */
 const DOCKER_MIN_MEMORY_MB = 2048;
 
 function SettingRow({

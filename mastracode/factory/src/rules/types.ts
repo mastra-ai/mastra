@@ -239,8 +239,12 @@ export interface FactoryRuleCausalEntry {
 export interface FactoryRulePhaseContext {
   id: string;
   kind: 'resting' | 'working' | 'terminal';
-  /** Seat carrying a working phase; absent for resting and terminal phases. */
+  /** Session context a working phase runs in; absent for resting and terminal phases. */
+  context?: string;
+  /** @deprecated Use `context`. */
   role?: string;
+  /** Phases the card may move to from here. */
+  nextPhases: readonly string[];
   /** Outcome names the phase declares, e.g. `approved` or `canceled`; empty when it declares none. */
   outcomes: readonly string[];
 }

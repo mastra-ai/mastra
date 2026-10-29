@@ -6,6 +6,12 @@ export const SETUP_LABELS: Record<OnboardingModelScope, string> = {
   user: 'Personal accounts',
 };
 
+export const SETUP_DETAILS: Record<OnboardingModelScope, string> = {
+  factory: 'A shared account and model for Factory work and sessions.',
+  hybrid: 'Factory work uses the company account. Each person uses their own account for sessions.',
+  user: 'Each person uses their own account and default model, for Factory work and sessions.',
+};
+
 export function onboardingSteps(scope?: OnboardingModelScope, local = false): OnboardingStep[] {
   return [
     'initial',

@@ -60,8 +60,8 @@ interface PlatformProvisionResult {
 }
 
 const PROJECT_REGION_OPTIONS = [
-  { value: 'eu', label: '🇪🇺 eu' },
   { value: 'us', label: '🇺🇸 us' },
+  { value: 'eu', label: '🇪🇺 eu' },
 ] as const satisfies ReadonlyArray<{ value: ProjectRegion; label: string }>;
 
 const NEON_REGION_BY_PROJECT_REGION = {
@@ -301,6 +301,7 @@ async function runPlatformProvisioning({
       (await p.select({
         message: 'Where should your Factory project run?',
         options: [...PROJECT_REGION_OPTIONS],
+        initialValue: 'us',
       }));
     if (p.isCancel(projectRegion)) {
       p.cancel('Operation cancelled');

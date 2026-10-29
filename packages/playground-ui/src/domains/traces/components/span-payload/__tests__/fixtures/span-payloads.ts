@@ -7,7 +7,8 @@ export function makeSpan(overrides: Partial<SpanRecord> = {}): SpanRecord {
   return {
     traceId: 'trace-1',
     spanId: 'span-1',
-    parentSpanId: null,
+    // Only an agent run starts a trace; every other span type hangs under one.
+    parentSpanId: overrides.spanType && overrides.spanType !== SpanType.AGENT_RUN ? 'agent-root' : null,
     name: 'agent run',
     entityType: null,
     entityId: null,

@@ -63,6 +63,10 @@ export type ScrollAreaScrollButtons =
 export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   maxHeight?: string;
   autoScroll?: boolean;
+  /** With `autoScroll`, start pinned to the end. `false` resumes where the reader left a remounted area. */
+  autoScrollStartFollowing?: boolean;
+  /** With `autoScroll`, called when the reader scrolls away from the end or back to it. */
+  onAutoScrollFollowingChange?: (following: boolean) => void;
   orientation?: Orientation;
   /** Show left/right controls for horizontal overflow. Only applies to `horizontal` and `both` orientations. */
   scrollButtons?: ScrollAreaScrollButtons;
@@ -299,6 +303,8 @@ function ScrollArea({
   children,
   maxHeight,
   autoScroll = false,
+  autoScrollStartFollowing,
+  onAutoScrollFollowingChange,
   orientation = 'vertical',
   scrollButtons,
   mask,
@@ -306,7 +312,11 @@ function ScrollArea({
   ...props
 }: ScrollAreaProps) {
   const areaRef = React.useRef<HTMLDivElement>(null);
-  useAutoscroll(areaRef, { enabled: autoScroll });
+  useAutoscroll(areaRef, {
+    enabled: autoScroll,
+    startFollowing: autoScrollStartFollowing,
+    onFollowingChange: onAutoScrollFollowingChange,
+  });
 
   const sides = resolveMask(mask, orientation);
   const fadesAnySide = Object.values(sides).some(Boolean);

@@ -81,6 +81,9 @@ interface SparseModelInfo {
 type ModelInput = Record<string, ort.Tensor>;
 
 function normalize(v: number[]): number[] {
+  if (v.some(val => !Number.isFinite(val))) {
+    throw new Error('Model produced a non-finite dense embedding value');
+  }
   const norm = Math.sqrt(v.reduce((acc, val) => acc + val * val, 0));
   const epsilon = 1e-12;
   return v.map(val => val / Math.max(norm, epsilon));
@@ -227,6 +230,16 @@ function assertValidMaxLength(maxLength: number): void {
   if (!Number.isSafeInteger(maxLength) || maxLength <= 0) {
     throw new RangeError(`maxLength must be a positive safe integer, received ${String(maxLength)}`);
   }
+}
+
+function getRequiredOutput(outputs: Record<string, ort.Tensor>, outputName: string): ort.Tensor {
+  const tensor = outputs[outputName];
+  if (!tensor) {
+    throw new Error(
+      `Expected model output "${outputName}" was not found. Available outputs: ${Object.keys(outputs).join(', ') || '(none)'}`,
+    );
+  }
+  return tensor;
 }
 
 // Pooling indexes token-level [batch, sequence, features] output; other ranks would silently yield empty vectors.
@@ -406,7 +419,7 @@ export class FlagEmbedding extends Embedding {
 
       const output = await this.session.run(inputs);
 
-      const lastHiddenState = output.last_hidden_state!;
+      const lastHiddenState = getRequiredOutput(output, 'last_hidden_state');
       const embeddings = getEmbeddings(
         lastHiddenState.data as unknown[] as number[],
         getOutputDimensions('last_hidden_state', lastHiddenState),
@@ -595,7 +608,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
       const output = await this.session.run(inputs);
 
       // SPLADE postprocessing: log(1 + ReLU(logits))
-      const outputTensor = output.output!;
+      const outputTensor = getRequiredOutput(output, 'output');
       // @ts-expect-error cpuData exists at runtime on onnxruntime Tensor
       const logits = outputTensor.cpuData as Float32Array;
       const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions('output', outputTensor);
@@ -612,6 +625,9 @@ export class SparseTextEmbedding extends SparseEmbedding {
             for (let vocabIdx = 0; vocabIdx < currentVocabSize; vocabIdx++) {
               const logitIdx = batchIdx * seqLen * currentVocabSize + seqIdx * currentVocabSize + vocabIdx;
               const logitValue = logits[logitIdx]!;
+              if (!Number.isFinite(logitValue)) {
+                throw new Error(`Model produced a non-finite sparse embedding value at index ${logitIdx}`);
+              }
               const reluValue = Math.max(0, logitValue);
               const logValue = Math.log(1 + reluValue);
               valuesArr[vocabIdx] = Math.max(valuesArr[vocabIdx]!, logValue);
