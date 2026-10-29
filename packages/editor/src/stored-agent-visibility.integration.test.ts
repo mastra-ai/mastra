@@ -345,6 +345,14 @@ describe('stored agent visibility on /api/agents', () => {
     expect(theirs.status).toBe(200);
     expect(theirs.text).not.toContain(PRIVATE_WS);
     expect(theirs.text).not.toContain('alice-secret-workspace');
+
+    // Editing the agent unregisters it from Mastra, but its workspace stays in the workspace registry.
+    expect((await http('alice', 'PATCH', `/stored/agents/${PRIVATE_WS}`, { description: 'edited' })).status).toBe(200);
+    const afterEdit = await http('bob', 'GET', '/workspaces');
+    expect(afterEdit.status).toBe(200);
+    expect(afterEdit.text).not.toContain(PRIVATE_WS);
+    expect(afterEdit.text).not.toContain('alice-secret-workspace');
+    expect((await http('alice', 'GET', '/workspaces')).text).toContain(PRIVATE_WS);
   });
 
   it('without auth configured, every stored agent stays listable and callable', async () => {
