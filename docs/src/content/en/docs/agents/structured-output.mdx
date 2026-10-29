@@ -143,7 +143,7 @@ const response = await testAgent.generate('Help me plan my day.', { structuredOu
 const plan = response.object // typed from the schema you passed in
 ```
 
-The same `response.object` field is what you get from `agent.generate()`. With `agent.stream()` and structured output, read `stream.object` once the stream finishes.
+With `agent.stream()` and structured output, read `stream.object` once the stream finishes.
 
 ## Stream structured output
 
