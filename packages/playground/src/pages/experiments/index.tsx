@@ -1,3 +1,4 @@
+import type { DatasetRecord } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -5,13 +6,15 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useDatasets } from '@mastra/react/hooks/datasets';
-import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
+import { useDatasets, useDatasetsByIds } from '@mastra/react/hooks/datasets';
+import { useExperimentsListMetrics, useInfiniteExperiments } from '@mastra/react/hooks/experiments';
+import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
 import { useReviewSummary } from '@mastra/react/hooks/review';
-import { Play } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import {
   ExperimentsList,
@@ -31,6 +34,7 @@ import {
 
 const crumbs = [navCrumb('/experiments')];
 const EXPERIMENTS_SORT_KEYS = ['createdAt', 'status'] as const;
+const NO_METRICS = new Map<string, ExperimentListMetrics>();
 
 export default function Experiments() {
   const [search, setSearch] = useState('');
@@ -86,10 +90,26 @@ export default function Experiments() {
     orderBy: orderBy,
   });
   const { data: reviewSummary } = useReviewSummary();
+  const { supportsMetrics } = useObservabilityStorageCapabilities();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
   const experiments = useMemo(() => experimentsData ?? [], [experimentsData]);
   const experimentDatasetOptions = useMemo(() => getExperimentDatasetOptions(datasets), [datasets]);
+
+  // The datasets page above only holds the first page; name the datasets of every loaded experiment too.
+  const experimentDatasetIds = useMemo(
+    () => experiments.flatMap(exp => (exp.datasetId ? [exp.datasetId] : [])),
+    [experiments],
+  );
+  const { data: experimentDatasets } = useDatasetsByIds({ datasetIds: experimentDatasetIds });
+  const namedDatasets = useMemo(() => {
+    const byId = new Map<string, DatasetRecord>(datasets.map(dataset => [dataset.id, dataset]));
+    experimentDatasets?.forEach(dataset => byId.set(dataset.id, dataset));
+    return [...byId.values()];
+  }, [datasets, experimentDatasets]);
+
+  const { data: experimentMetrics } = useExperimentsListMetrics({ experiments, supportsMetrics });
+  const metricsByExperiment = supportsMetrics ? (experimentMetrics ?? NO_METRICS) : undefined;
   const reviewByExperiment = useMemo(() => buildReviewByExperimentMap(reviewSummary), [reviewSummary]);
 
   const isLoading = isLoadingDatasets || isLoadingExperiments;
@@ -108,10 +128,16 @@ export default function Experiments() {
     });
   };
 
-  // Any selection clears; otherwise pick the listed experiments, up to the compare cap.
+  // Any selection clears; otherwise pick the listed experiments sharing the first one's dataset, up to the cap.
   const toggleAllExperiments = (visibleExperimentIds: string[]) => {
+    const datasetByExperimentId = new Map(experiments.map(exp => [exp.id, exp.datasetId]));
+    const datasetId = datasetByExperimentId.get(visibleExperimentIds[0]);
     setSelectedExperimentIds(current =>
-      current.length > 0 ? [] : visibleExperimentIds.slice(0, MAX_COMPARED_EXPERIMENTS),
+      current.length > 0
+        ? []
+        : visibleExperimentIds
+            .filter(id => datasetByExperimentId.get(id) === datasetId)
+            .slice(0, MAX_COMPARED_EXPERIMENTS),
     );
   };
 
@@ -121,11 +147,19 @@ export default function Experiments() {
     const ids = selectedExperimentIds.filter(id => datasetByExperimentId.has(id));
     return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
   }, [experiments, selectedExperimentIds]);
+  // The first pick is the baseline, so its dataset decides which experiments can join the comparison.
+  const comparableDatasetId = experiments.find(exp => exp.id === selectedIds[0])?.datasetId ?? undefined;
+  const comparableDataset = comparableDatasetId
+    ? {
+        id: comparableDatasetId,
+        name: namedDatasets.find(ds => ds.id === comparableDatasetId)?.name ?? comparableDatasetId,
+      }
+    : undefined;
   const compareDisabledReason =
     selectedIds.length < 2
       ? 'Select at least two experiments to compare'
       : selectedDatasetIds.size !== 1
-        ? 'Select experiments from the same dataset to compare'
+        ? 'Only experiments from the same dataset can be compared'
         : undefined;
 
   const executeCompare = () => {
@@ -202,14 +236,8 @@ export default function Experiments() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Play />}
-          tooltip="Run an experiment"
-          onClick={() => setRunDialogOpen(true)}
-        >
-          Run Experiment
+        <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setRunDialogOpen(true)}>
+          New experiment
         </Button>
       }
       actionRow={
@@ -222,19 +250,21 @@ export default function Experiments() {
           targetId={targetId}
           onFiltersChange={handleFiltersChange}
           selection={{
-            selectedCount: selectedIds.length,
+            selectedIds,
             onClearSelection: () => setSelectedExperimentIds([]),
             onCompare: executeCompare,
             compareDisabledReason,
           }}
+          comparableDataset={comparableDataset}
         />
       }
     >
       <h1 className="sr-only">Experiments</h1>
       <ExperimentsList
         experiments={experiments}
-        datasets={datasets}
+        datasets={namedDatasets}
         reviewByExperiment={reviewByExperiment}
+        metricsByExperiment={metricsByExperiment}
         isLoading={isLoading}
         search={search}
         statusFilter={statusFilter}
@@ -248,6 +278,7 @@ export default function Experiments() {
           selectedExperimentIds: selectedIds,
           onToggleSelection: toggleExperimentSelection,
           onToggleAll: toggleAllExperiments,
+          comparableDatasetId,
         }}
       />
 

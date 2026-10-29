@@ -39,17 +39,14 @@ export interface SubscribeToMergeRequestInput {
   ownerId: string;
   resourceId: string;
   threadId: string;
-  sessionScope?: string;
   source: GitLabSignalSubscriptionSource;
   subscribedByUserId?: string;
 }
 
-export interface GitLabThreadSubscriptionTarget {
-  orgId: string;
-  resourceId: string;
-  threadId: string;
-  sessionScope?: string;
-}
+/** A thread's subscriptions, found by the session that owns it or (for older callers) by its resource. */
+export type GitLabThreadSubscriptionTarget =
+  | { orgId: string; sessionId: string; threadId: string }
+  | { orgId: string; resourceId: string; threadId: string };
 
 export interface MergeRequestSubscriptionTarget {
   orgId: string;
@@ -77,8 +74,7 @@ function sameSession(row: GitLabSignalSubscriptionRow, input: SubscribeToMergeRe
     row.orgId === input.orgId &&
     row.sessionId === input.sessionId &&
     row.resourceId === input.resourceId &&
-    row.threadId === input.threadId &&
-    (row.sessionScope ?? '') === (input.sessionScope ?? '')
+    row.threadId === input.threadId
   );
 }
 
@@ -99,7 +95,6 @@ export async function subscribeToMergeRequest(
     sessionId: input.sessionId,
     resourceId: input.resourceId,
     threadId: input.threadId,
-    sessionScope: input.sessionScope ?? '',
     status: 'open',
     data: {
       host: normalizeSubscriptionHost(input.host),
@@ -127,19 +122,22 @@ export async function listMergeRequestSubscriptionsForThread(
   input: GitLabThreadSubscriptionTarget,
   storage: GitLabSubscriptionStorage,
 ): Promise<GitLabSignalSubscriptionRow[]> {
+  if ('sessionId' in input) {
+    const owned = await storage.subscriptions.listBySession(input.sessionId);
+    return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId);
+  }
   const rows = await storage.subscriptions.listByThread(input.resourceId, input.threadId);
   const matching = rows.filter(
     row =>
       row.orgId === input.orgId &&
       row.resourceId === input.resourceId &&
-      row.threadId === input.threadId &&
-      (row.sessionScope ?? '') === (input.sessionScope ?? ''),
+      row.threadId === input.threadId,
   );
-  if (matching.length > 0 || input.sessionScope) return matching;
+  if (matching.length > 0) return matching;
   // Same as GitHub: a user session addresses itself by its own id while its
   // rows name the owning Factory project, so fall back to the session's rows.
   const owned = await storage.subscriptions.listBySession(input.resourceId);
-  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId && !row.sessionScope);
+  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId);
 }
 
 export async function listMergeRequestSubscriptions(

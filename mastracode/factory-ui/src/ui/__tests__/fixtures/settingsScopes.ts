@@ -1,5 +1,5 @@
 import type { AgentControllerSessionState } from '@mastra/client-js';
-import type { DefaultModelResponse, OMConfigInfo, ProvidersResponse, ThinkingConfigInfo } from '../../../api/types';
+import type { DefaultModelResponse, OMConfigInfo, ProvidersResponse } from '../../../api/types';
 import type { FactoryProjectPayload } from '../../domains/workspaces/services/github';
 
 export const settingsFactory: FactoryProjectPayload = {
@@ -10,6 +10,7 @@ export const settingsFactory: FactoryProjectPayload = {
 
 export const settingsSession: AgentControllerSessionState = {
   controllerId: 'code',
+  sessionId: 'fp-1',
   resourceId: 'fp-1',
   modeId: 'build',
   modelId: 'openai/gpt-4o-mini',
@@ -24,6 +25,7 @@ export const settingsProviders: ProvidersResponse = {
 
 export const settingsDefaultModel: DefaultModelResponse = {
   modelId: null,
+  thinkingLevel: null,
 };
 
 export const settingsMemory: OMConfigInfo = {
@@ -44,10 +46,4 @@ export const settingsMemory: OMConfigInfo = {
   observationThreshold: 1000,
   reflectionThreshold: 2000,
   observeAttachments: 'auto',
-};
-
-export const settingsThinking: ThinkingConfigInfo = {
-  globalDefault: 'off',
-  levels: ['off', 'low', 'medium', 'high'],
-  editable: false,
 };

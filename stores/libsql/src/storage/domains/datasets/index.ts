@@ -495,6 +495,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
       const filterConditions: string[] = [];
       const filterParams: InValue[] = [];
+      if (args.filters?.datasetIds !== undefined) {
+        // An empty list matches no datasets; `IN ()` is invalid SQL.
+        filterConditions.push(
+          args.filters.datasetIds.length > 0 ? `id IN (${args.filters.datasetIds.map(() => '?').join(',')})` : '1 = 0',
+        );
+        filterParams.push(...args.filters.datasetIds);
+      }
       if (args.filters?.organizationId !== undefined) {
         filterConditions.push('organizationId = ?');
         filterParams.push(args.filters.organizationId);

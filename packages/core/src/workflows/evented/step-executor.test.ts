@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { AGENT_STREAM_TOPIC } from '../../agent/durable/constants';
 import type { ActorSignal } from '../../auth/ee';
+import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
+import { CachingPubSub } from '../../events/caching-pubsub';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import { PubSub } from '../../events/pubsub';
+import type { Event } from '../../events/types';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import { PUBSUB_SYMBOL } from '../constants';
 import type { StepFlowEntry, StepResult } from '../types';
 import { createStep } from '../workflow';
 import { StepExecutor } from './step-executor';
@@ -479,6 +486,127 @@ describe('StepExecutor', () => {
         },
       ]);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('step pubsub numbering', () => {
+    async function captureStepPubsub(target: Mastra): Promise<Record<PropertyKey, any>> {
+      let captured: Record<PropertyKey, any> | undefined;
+      const step = createStep({
+        id: 'capture-pubsub',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async params => {
+          captured = params as unknown as Record<PropertyKey, any>;
+          return {};
+        },
+      });
+
+      const result = await new StepExecutor({ mastra: target }).execute({
+        workflowId: 'test-workflow',
+        entry: { type: 'step', step } as Extract<StepFlowEntry, { type: 'step' }>,
+        runId: 'test-run',
+        input: {},
+        stepResults: {},
+        state: {},
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.status).toBe('success');
+      if (!captured) throw new Error('step did not receive an execution context');
+      return captured;
+    }
+
+    it('numbers agent-stream events published from a step', async () => {
+      const cache = new InMemoryServerCache();
+      const context = await captureStepPubsub(new Mastra({ cache }));
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+
+      // COR-1474: step-published frames used to bypass the agent's
+      // CachingPubSub, so a retaining transport replayed them unnumbered and
+      // `observe({ offset })` could neither skip nor dedupe them.
+      expect(stepPubsub).toBeInstanceOf(CachingPubSub);
+
+      const topic = AGENT_STREAM_TOPIC('run-numbered');
+      for (const n of [0, 1]) {
+        await stepPubsub.publish(topic, {
+          type: 'chunk',
+          runId: 'run-numbered',
+          data: { n },
+        } as any);
+      }
+
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      expect(cached.map(event => event.index)).toEqual([0, 1]);
+    });
+
+    it('reuses a configured caching pubsub so one step frame is cached once', async () => {
+      const cache = new InMemoryServerCache();
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+      const target = new Mastra({ pubsub, cache });
+      const context = await captureStepPubsub(target);
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+      const topic = AGENT_STREAM_TOPIC('run-prewrapped');
+      const live: Event[] = [];
+      await target.pubsub.subscribe(topic, event => {
+        live.push(event);
+      });
+
+      await stepPubsub.publish(topic, {
+        type: 'chunk',
+        runId: 'run-prewrapped',
+        data: { n: 0 },
+      } as any);
+
+      expect(live).toHaveLength(1);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      expect(cached.map(event => event.index)).toEqual([0]);
+      expect(live[0]?.index).toBe(0);
+      expect(stepPubsub).toBe(target.pubsub);
+    });
+
+    it('publishes step frames unnumbered when a process-local cache sits behind a cross-process transport', async () => {
+      // Stands in for a transport that reaches other processes (Redis, Unix socket).
+      class RemoteTransport extends PubSub {
+        readonly bus = new EventEmitterPubSub();
+        publish(...args: Parameters<PubSub['publish']>) {
+          return this.bus.publish(...args);
+        }
+        subscribe(...args: Parameters<PubSub['subscribe']>) {
+          return this.bus.subscribe(...args);
+        }
+        unsubscribe(...args: Parameters<PubSub['unsubscribe']>) {
+          return this.bus.unsubscribe(...args);
+        }
+        flush() {
+          return this.bus.flush();
+        }
+      }
+      const cache = new InMemoryServerCache();
+      const context = await captureStepPubsub(new Mastra({ pubsub: new RemoteTransport(), cache }));
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+      const topic = AGENT_STREAM_TOPIC('run-remote');
+
+      // Each process would number from its own in-memory counter, and the
+      // observer would drop the worker's frames as late duplicates.
+      await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-remote', data: { n: 0 } } as any);
+
+      expect(stepPubsub).not.toBeInstanceOf(CachingPubSub);
+      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
+    });
+
+    it('does not cache run-local step events even when the cache is atomic', async () => {
+      const cache = new InMemoryServerCache();
+      const context = await captureStepPubsub(new Mastra({ cache }));
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+
+      await stepPubsub.publish('workflow.events.v2.run-numbered', {
+        type: 'watch',
+        runId: 'run-numbered',
+        data: {},
+      } as any);
+
+      expect(await cache.listLength('pubsub:workflow.events.v2.run-numbered')).toBe(0);
     });
   });
 });

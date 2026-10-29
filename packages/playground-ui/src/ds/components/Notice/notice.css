@@ -1,3 +1,5 @@
+@import './notice-material.css';
+
 @keyframes notice-enter {
   from {
     opacity: 0;
@@ -7,27 +9,52 @@
 
 @layer components {
   [data-slot='notice'] {
-    box-shadow: var(--elevation-lip), var(--elevation-raised);
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    background: var(--notice-fill);
+    color: var(--notice-ink);
+    box-shadow: var(--notice-shadow);
   }
 
-  /* Play on mount without relying on @starting-style support. Backwards fill
-   * leaves no animation transform or opacity override after the entrance. */
+  [data-slot='notice-icon'] {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  [data-slot='notice-content'] {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  [data-slot='notice-action'] {
+    grid-column: 2;
+    padding-top: calc(var(--spacing) * 2);
+  }
+
+  [data-slot='notice'][data-action-placement='end'] {
+    align-items: center;
+  }
+
+  [data-slot='notice'][data-action-placement='end'] [data-slot='notice-action'] {
+    justify-content: start;
+  }
+
+  @media (min-width: 640px) {
+    [data-slot='notice'][data-action-placement='end'] {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    [data-slot='notice'][data-action-placement='end'] [data-slot='notice-action'] {
+      grid-column: 3;
+      grid-row: 1;
+      justify-content: end;
+      padding-top: 0;
+    }
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     [data-slot='notice'] {
       animation: notice-enter var(--duration-normal) var(--ease-out-custom) backwards;
     }
-  }
-
-  /* This highlight belongs to the frame, not the square background layers.
-   * Match its border box and radius; the transparent border keeps the white
-   * inset rim inside the existing surface border. Paint above the grain. */
-  html.light [data-slot='notice']::after {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border: 1px solid transparent;
-    border-radius: inherit;
-    pointer-events: none;
-    box-shadow: inset 0 0 0 0.5px white;
   }
 }

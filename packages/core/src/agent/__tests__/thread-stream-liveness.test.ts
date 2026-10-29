@@ -23,7 +23,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -58,7 +58,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -124,7 +124,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -153,7 +153,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -209,7 +209,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -278,7 +278,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -352,7 +352,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -422,7 +422,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -461,7 +461,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -480,7 +480,8 @@ describe('thread stream remote-run liveness', () => {
     resolveOwner(undefined);
     await probe;
 
-    expect(collected.map(part => part.type)).toEqual(['start']);
+    expect(collected.map(part => part.type)).toEqual(['start', 'thread-run-status']);
+    expect(collected.at(-1).payload.status).toBe('suspended');
     expect(collected.some(part => part.type === 'error')).toBe(false);
 
     subscription.unsubscribe();
@@ -496,7 +497,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -516,7 +517,8 @@ describe('thread stream remote-run liveness', () => {
     await emit({ type: 'run-completed', runId: harness.runId, streamId: harness.streamId, persisted: true });
     await flush();
 
-    expect(collected.map(part => part.type)).toEqual(['start', 'finish']);
+    expect(collected.map(part => part.type)).toEqual(['start', 'finish', 'thread-run-status']);
+    expect(collected.at(-1).payload.status).toBe('success');
     expect(collected.some(part => part.type === 'error')).toBe(false);
 
     subscription.unsubscribe();
@@ -532,7 +534,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -566,7 +568,7 @@ describe('thread stream remote-run liveness', () => {
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
-      { threadId: harness.threadId, resourceId: harness.resourceId },
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
       pubsub,
     );
     const collected: any[] = [];
@@ -594,7 +596,7 @@ describe('thread stream remote-run liveness', () => {
 
     await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
 
-    expect(collected.map(part => part.type)).toEqual(['finish', 'start']);
+    expect(collected.map(part => part.type)).toEqual(['finish', 'thread-run-status', 'start']);
     expect(subscription.activeRunId()).toBe(nextRunId);
 
     subscription.unsubscribe();

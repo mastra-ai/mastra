@@ -17,6 +17,9 @@ import {
   resolveRunFence,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   RunFence,
@@ -27,6 +30,10 @@ import type {
   StorageListThreadsOutput,
   CreateIndexOptions,
   TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
@@ -74,6 +81,15 @@ export class MemoryDSQL extends MemoryStorage {
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
+
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays NULL until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
 
   constructor(config: DsqlDomainConfig) {
     super();
@@ -156,6 +172,18 @@ export class MemoryDSQL extends MemoryStorage {
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({ policies, descriptor: MemoryDSQL.retentionTables, order: ['runFences'] });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (target, cutoff, limit) =>
+        this.#db.pruneBatch({ tableName: target.table as TABLE_NAMES, column: target.column, cutoff, limit }),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -856,12 +884,14 @@ export class MemoryDSQL extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        conditions.push(`"createdAtZ" >= $${paramIndex++}::timestamptz`);
+        const operator = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAtZ" ${operator} $${paramIndex++}::timestamptz`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
-        conditions.push(`"createdAtZ" <= $${paramIndex++}::timestamptz`);
+        const operator = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAtZ" ${operator} $${paramIndex++}::timestamptz`);
         queryParams.push(filter.dateRange.end);
       }
 

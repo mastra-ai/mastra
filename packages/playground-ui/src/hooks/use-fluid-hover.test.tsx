@@ -5,13 +5,8 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  ACTIVE_ATTR,
-  useFluidHover,
-  useRegisterFluidHoverItem,
-  type UseFluidHoverOptions,
-  type UseFluidHoverReturn,
-} from './use-fluid-hover';
+import { ACTIVE_ATTR, useFluidHover, useRegisterFluidHoverItem } from './use-fluid-hover';
+import type { UseFluidHoverOptions, UseFluidHoverReturn } from './use-fluid-hover';
 import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
 
 const ROW_HEIGHT = 40;
@@ -32,10 +27,12 @@ function Row({
   index,
   registerItem,
   onClick,
+  hidden = false,
 }: {
   index: number;
   registerItem: (index: number, element: HTMLElement | null) => void;
   onClick?: () => void;
+  hidden?: boolean;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   useRegisterFluidHoverItem(registerItem, index, ref);
@@ -43,7 +40,7 @@ function Row({
     <button
       ref={el => {
         ref.current = el;
-        if (el) layoutRow(el, index);
+        if (el && !hidden) layoutRow(el, index);
       }}
       data-testid={`row-${index}`}
       data-index={index}
@@ -57,12 +54,14 @@ function Row({
 function List({
   options,
   rows = 3,
+  hiddenRows = [],
   onRowClick,
   onHover,
   children,
 }: {
   options?: UseFluidHoverOptions;
   rows?: number;
+  hiddenRows?: number[];
   onRowClick?: (index: number) => void;
   onHover?: (hover: UseFluidHoverReturn) => void;
   children?: ReactNode;
@@ -88,7 +87,13 @@ function List({
     >
       <FluidHoverHighlight hover={hover} />
       {Array.from({ length: rows }, (_, index) => (
-        <Row key={index} index={index} registerItem={hover.registerItem} onClick={() => onRowClick?.(index)} />
+        <Row
+          key={index}
+          index={index}
+          registerItem={hover.registerItem}
+          onClick={() => onRowClick?.(index)}
+          hidden={hiddenRows.includes(index)}
+        />
       ))}
       {children}
     </div>
@@ -135,6 +140,18 @@ describe('useFluidHover', () => {
 
       await moveTo(2);
 
+      expect(screen.getByTestId('list').querySelector('[data-slot="fluid-hover-highlight"]')).not.toBeNull();
+    });
+  });
+
+  describe('when some rows have no layout box', () => {
+    it('still tracks the rows that are laid out', async () => {
+      render(<List hiddenRows={[1]} />);
+      await flushFrames();
+
+      await moveTo(2);
+
+      expect(screen.getByTestId('row-2').hasAttribute(ACTIVE_ATTR)).toBe(true);
       expect(screen.getByTestId('list').querySelector('[data-slot="fluid-hover-highlight"]')).not.toBeNull();
     });
   });

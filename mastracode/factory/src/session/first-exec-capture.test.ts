@@ -1,16 +1,13 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  observeSessionFirstExec,
-  type FirstExecCaptureDependencies,
-  type FirstExecCaptureSession,
-} from './first-exec-capture.js';
+import { observeSessionFirstExec } from './first-exec-capture.js';
+import type { FirstExecCaptureDependencies, FirstExecCaptureSession } from './first-exec-capture.js';
 
 function createSession() {
   const listeners: Array<(event: AgentControllerEvent) => void> = [];
   const session: FirstExecCaptureSession = {
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getId: () => 'resource-1' },
     subscribe: listener => {
       listeners.push(listener);
       return () => {

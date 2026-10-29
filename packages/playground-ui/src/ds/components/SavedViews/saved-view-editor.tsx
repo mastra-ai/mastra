@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 export type SavedViewEditorProps<TSettings> = {
   views: SavedViewsController<TSettings>;
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
 };
 

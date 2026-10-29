@@ -47,14 +47,9 @@ describe('ProjectRoutes', () => {
     });
     expect(createdResponse.status).toBe(201);
     const created = (await createdResponse.json()) as {
-      project: { id: string; name: string; description: string; modelScope: string; slackWorkItemsEnabled: boolean };
+      project: { id: string; name: string; description: string; modelScope: string };
     };
-    expect(created.project).toMatchObject({
-      name: 'Platform',
-      description: 'Core services',
-      modelScope: 'factory',
-      slackWorkItemsEnabled: false,
-    });
+    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services', modelScope: 'hybrid' });
 
     const listed = (await (await app.request('/web/factory/projects')).json()) as { projects: Array<{ id: string }> };
     expect(listed.projects.map(project => project.id)).toEqual([created.project.id]);
@@ -67,16 +62,42 @@ describe('ProjectRoutes', () => {
         name: 'Platform engineering',
         description: null,
         modelScope: 'user',
-        slackWorkItemsEnabled: true,
       }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null, modelScope: 'user', slackWorkItemsEnabled: true },
+      project: { name: 'Platform engineering', description: null, modelScope: 'user' },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
+  });
+
+  it('treats the removed slackWorkItemsEnabled setting from an old client as an unknown field', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // Sent alone it is an empty update.
+    expect((await patch({ slackWorkItemsEnabled: true })).status).toBe(400);
+
+    // Sent with other fields it is ignored.
+    const mixed = await patch({ name: 'Renamed', slackWorkItemsEnabled: true });
+    expect(mixed.status).toBe(200);
+    const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+    expect(updated.name).toBe('Renamed');
+    expect(updated).not.toHaveProperty('slackWorkItemsEnabled');
   });
 
   it('requires an organization and scopes project access by organization', async () => {
@@ -105,6 +126,108 @@ describe('ProjectRoutes', () => {
         })
       ).status,
     ).toBe(404);
+  });
+
+  it('requires an organization admin to change the model scope', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
+    const patch = (body: Record<string, unknown>) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const denied = await patch({ modelScope: 'user' });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: 'forbidden' });
+    expect(isOrganizationAdmin).toHaveBeenCalledWith('org-1', 'member');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+
+    expect((await patch({ name: 'Renamed' })).status).toBe(200);
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ modelScope: 'user' })).status).toBe(200);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    isOrganizationAdmin.mockResolvedValue(false);
+    expect((await patch({ modelScope: 'hybrid' })).status).toBe(403);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ modelScope: 'hybrid' })).status).toBe(200);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+  });
+
+  it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
+    expect(project.defaultThinkingLevel).toBe('medium');
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
+    const patch = (body: Record<string, unknown>) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const denied = await patch({ defaultThinkingLevel: 'high' });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: 'forbidden',
+      message: 'Organization administrator access is required to change the thinking default.',
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('medium');
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ defaultThinkingLevel: 'enormous' })).status).toBe(400);
+    const saved = await patch({ defaultThinkingLevel: 'high' });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ project: { defaultThinkingLevel: 'high' } });
+    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
+  });
+
+  it('creates a project in the requested model scope and rejects unknown scopes', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const create = (body: Record<string, unknown>) =>
+      app.request('/web/factory/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const created = await create({ name: 'Personal', modelScope: 'user' });
+    expect(created.status).toBe(201);
+    const { project } = (await created.json()) as { project: { id: string; modelScope: string } };
+    expect(project.modelScope).toBe('user');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    expect((await create({ name: 'Bad', modelScope: 'org' })).status).toBe(400);
   });
 
   describe('apply default model', () => {
@@ -202,7 +325,7 @@ describe('ProjectRoutes', () => {
       const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
       const sessions = new Map([
         [
-          'resource-applied',
+          'session-thread-applied',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -210,10 +333,13 @@ describe('ProjectRoutes', () => {
             },
           },
         ],
-        ['resource-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
-        ['resource-mode-unknown', { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } }],
+        ['session-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
         [
-          'resource-apply-failed',
+          'session-thread-mode-unknown',
+          { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } },
+        ],
+        [
+          'session-thread-apply-failed',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -227,7 +353,7 @@ describe('ProjectRoutes', () => {
         get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
       const controller = {
-        getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId) ?? null),
+        getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null),
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
 
       const response = await mount(seed, { workItems, controller }).request(
@@ -1048,6 +1174,24 @@ describe('ProjectRoutes', () => {
       const invalid = await patch(switched, project.id, { settings: { baseImage: 7 } });
       expect(invalid.status).toBe(400);
       expect(JSON.stringify(await invalid.json())).toContain('baseImage');
+    });
+
+    it('drops a stored value the schema now rejects instead of refusing every later update', async () => {
+      const { seed, project, app } = await seedEnvironment();
+      // Stored under an older, looser schema: below the current 512 minimum.
+      await seed.projects.update({
+        orgId: 'org-1',
+        id: project.id,
+        input: { sandboxSettings: { cpuCount: 4, memoryMb: 256 } },
+      });
+
+      const response = await patch(app, project.id, { settings: { cpuCount: 8 } });
+      expect(response.status).toBe(200);
+      expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ cpuCount: 8 });
+
+      // A patch that sets the rejected value itself is still refused.
+      const refused = await patch(app, project.id, { settings: { memoryMb: 256 } });
+      expect(refused.status).toBe(400);
     });
 
     it('reports no sandbox and refuses settings when the factory has none configured', async () => {

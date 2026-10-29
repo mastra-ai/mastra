@@ -6,6 +6,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SkeletonRows } from '../../../../ui/SkeletonRows';
 
 import type { FactoryEnvironmentBuild } from '../../../workspaces/services/environment';
 import { BUILD_STATUS, formatBuildTime } from './BuildStatusBlock';
@@ -25,7 +26,16 @@ export function BuildHistoryBlock({
       {error ? (
         <Notice variant="destructive">{error}</Notice>
       ) : !builds ? (
-        <Skeleton className="h-12 w-full" />
+        <SettingsContainer>
+          <SkeletonRows label="Loading build history" rows={3} className="divide-border gap-0 divide-y">
+            <div aria-hidden className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="size-3.5 shrink-0 motion-reduce:before:animate-none" />
+              <Skeleton className="h-5 w-16 rounded-full motion-reduce:before:animate-none" />
+              <Skeleton className="h-3 w-20 motion-reduce:before:animate-none" />
+              <Skeleton className="ml-auto h-3 w-28 max-w-full motion-reduce:before:animate-none" />
+            </div>
+          </SkeletonRows>
+        </SettingsContainer>
       ) : builds.length === 0 ? (
         <Txt as="p" variant="meta" tone="muted">
           No builds yet.

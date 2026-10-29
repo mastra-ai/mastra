@@ -11,16 +11,8 @@
  */
 import type { RequestContext } from '@mastra/core/request-context';
 
-import {
-  getConnectionContext,
-  getCredential,
-  proxyRequestWithResponse,
-  resolveClient,
-  type ConnectClientOptions,
-  type ConnectionContext,
-  type ConnectionCredential,
-  type ProxyRequestOptions,
-} from '../client.js';
+import { getConnectionContext, getCredential, proxyRequestWithResponse, resolveClient } from '../client.js';
+import type { ConnectClientOptions, ConnectionContext, ConnectionCredential, ProxyRequestOptions } from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 /**
@@ -30,6 +22,8 @@ import { MastraConnectError } from '../errors.js';
  */
 export interface PlatformProxyRequest {
   endpoint: string;
+  /** Used by the upstream generic `proxy()` helper; verb-specific helpers ignore it. */
+  method?: ProxyRequestOptions['method'];
   params?: NonNullable<ProxyRequestOptions['query']>;
   headers?: Record<string, string>;
   data?: unknown;
@@ -126,6 +120,8 @@ export class ToolActionError extends Error {
  * exec body. Only fields we've seen used are exposed.
  */
 export interface PlatformProxy {
+  /** Mirrors the upstream generic request helper, defaulting to GET when no method is provided. */
+  proxy<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   get<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   post<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   put<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
@@ -278,6 +274,7 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     return { ...connection, credentials: toTemplateCredentials(credential) };
   };
   return {
+    proxy: <T>(config: PlatformProxyRequest) => callProxy<T>(config.method ?? 'GET', context, config),
     get: bind('GET'),
     post: bind('POST'),
     put: bind('PUT'),

@@ -1,210 +1,129 @@
+import type { ReactNode } from 'react';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Building2, MessageSquare, Sparkles, UserRound } from 'lucide-react';
-import { useProvidersQuery } from '../../../../../../hooks/use-providers';
-import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
-import { providerDisplayName } from '../../../../settings/components/provider-display-name';
-import {
-  CONNECTION_METHOD_LABEL,
-  isProviderConnected,
-  providerCredentialMethod,
-} from '../../../hooks/useProviderConnection';
-import { useProviderModels } from '../../../hooks/useProviderModels';
-import { ProviderBrandIcon } from '../../ProviderBrandIcon';
+import { Building2, KeyRound, Sparkles, UserRound } from 'lucide-react';
+import { CONNECTION_METHOD_LABEL } from '../../../hooks/useProviderConnection';
 import type { OnboardingPreviewProps } from './OnboardingPreview';
 import { SketchLabel } from './SketchLabel';
-import type { AccountsMode } from './onboarding-drawing';
+import { OnboardingModelLabel } from './OnboardingModelLabel';
+import { OnboardingPersonalConnectionStatus } from './OnboardingPersonalConnectionStatus';
 
-const SESSION_COLUMN_LEFTS = [28, 148, 268];
-const COLUMN_WIDTH = 104;
-function AccountsScene({ mode }: { mode: AccountsMode }) {
-  const individual = mode === 'individual';
-  const center = individual ? { Icon: UserRound, label: 'Personal' } : { Icon: Building2, label: 'Company' };
+function workAccountLabel(personalWork: boolean, local: boolean) {
+  if (personalWork) return 'Work owner’s account';
+  if (local) return 'Local account';
+  return 'Company account';
+}
+
+function workSourceLabel(personalWork: boolean, local: boolean) {
+  if (personalWork) return 'Work owner';
+  if (local) return 'Local account';
+  return 'Company';
+}
+
+export function OnboardingAccountsPreview({
+  step,
+  modelScope = 'factory',
+  local = false,
+  model,
+  providerId,
+  connectionMethod,
+  personalProviderId,
+  personalConnectionMethod,
+  personalModel,
+}: OnboardingPreviewProps) {
+  const shared = modelScope === 'factory';
+  const personalWork = modelScope === 'user';
+  const setup = step === 'model-setup';
+  const accountLabel = workAccountLabel(personalWork, local);
+  const sourceLabel = workSourceLabel(personalWork, local);
   return (
-    <>
-      <SketchLabel x={158} y={62} width={84}>
-        <div className="flex items-center gap-2">
-          <center.Icon className="text-muted-foreground size-3" />
-          <Txt variant="meta">{center.label}</Txt>
-        </div>
-      </SketchLabel>
-      {individual && (
-        <SketchLabel x={38} y={54} width={84}>
-          <div className="flex items-center gap-2">
-            <UserRound className="text-muted-foreground size-3" />
-            <Txt variant="meta">Run account</Txt>
-          </div>
-          <Txt variant="meta" tone="muted" className="mt-1">
-            Shared → personal
-          </Txt>
-        </SketchLabel>
+    <section key={modelScope} aria-label="Account setup preview" className="onboarding-account-labels relative h-full">
+      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <KeyRound /> : <Building2 />} />
+      {!shared && (
+        <>
+          <AccountSource x={148} label="Personal" icon={<KeyRound />} />
+          <AccountSource x={268} label="Personal" icon={<KeyRound />} />
+        </>
       )}
-      {mode !== 'shared' && (
-        <SketchLabel x={278} y={62} width={84}>
-          <div className="flex items-center gap-2">
-            <UserRound className="text-muted-foreground size-3" />
-            <Txt variant="meta">You</Txt>
-          </div>
-        </SketchLabel>
-      )}
-      {SESSION_COLUMN_LEFTS.map(left => (
-        <SketchLabel key={left} x={left + 10} y={193} width={84}>
-          <div className="flex items-center gap-2">
-            <MessageSquare className="text-muted-foreground size-3" />
-            <Txt variant="meta">Agent</Txt>
-          </div>
-        </SketchLabel>
-      ))}
-      <SketchLabel x={28} y={260} width={COLUMN_WIDTH}>
+      <SessionIllustration x={148} label="Team" />
+      <SessionIllustration x={268} label="You" />
+      <SketchLabel x={28} y={260} width={104}>
         <Txt variant="meta" tone="muted">
           Factory work
         </Txt>
       </SketchLabel>
-      <SketchLabel x={148} y={260} width={COLUMN_WIDTH}>
+      <SketchLabel x={148} y={260} width={104}>
         <Txt variant="meta" tone="muted">
-          {individual ? 'Teammate' : 'Team sessions'}
+          Team sessions
         </Txt>
       </SketchLabel>
-      <SketchLabel x={268} y={260} width={COLUMN_WIDTH}>
+      <SketchLabel x={268} y={260} width={104}>
         <Txt variant="meta" tone="muted">
           Your sessions
         </Txt>
       </SketchLabel>
-    </>
-  );
-}
-
-function SuggestedModelLabel({
-  providerId,
-  model,
-  emptyLabel = 'Your default model',
-}: {
-  providerId?: string;
-  model?: string;
-  emptyLabel?: string;
-}) {
-  const catalog = useProviderModels(providerId);
-  const label = model ?? catalog.suggestedModelId ?? emptyLabel;
-  return (
-    <Txt key={label} variant="meta" tone="muted" className="onboarding-context truncate">
-      {label}
-    </Txt>
-  );
-}
-
-export function OnboardingSharedModelPreview({
-  repository,
-  model,
-  providerId,
-  connectionMethod,
-}: Pick<OnboardingPreviewProps, 'repository' | 'model' | 'providerId' | 'connectionMethod'>) {
-  const provider = providerId ?? model?.split('/')[0];
-  const method = CONNECTION_METHOD_LABEL[connectionMethod ?? 'api_key'];
-  return (
-    <section aria-label="Default model preview" className="relative h-full">
-      <div className="absolute inset-x-8 top-3 flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex size-4 shrink-0">
-            {provider ? (
-              <ProviderBrandIcon provider={provider} />
-            ) : (
-              <Sparkles className="text-muted-foreground size-4" />
-            )}
-          </span>
-          <SuggestedModelLabel providerId={providerId} model={model} />
-        </div>
-        <Txt variant="meta" tone="muted" className="shrink-0">
-          Organization account
-        </Txt>
-      </div>
-      <AccountsScene mode="shared" />
-      <div className="onboarding-scene-detail absolute inset-x-7 top-[89%]">
-        <Txt variant="caption">
-          {repository?.name ? `Power the work in ${repository.name}` : 'Default model for Factory work'}
-        </Txt>
-        <Txt variant="meta" tone="muted" className="mt-2">
-          {provider ? `${method} · shared credentials` : 'Choose a provider to connect your model.'}
-        </Txt>
-        <Txt variant="meta" tone="muted" className="mt-2">
-          Sessions can use this account for the same provider. Personal credentials take priority.
-        </Txt>
-      </div>
-    </section>
-  );
-}
-
-function personalAccessStatus({
-  providerName,
-  connected,
-  sharedModel,
-}: {
-  providerName?: string;
-  connected: boolean;
-  sharedModel?: string;
-}) {
-  if (providerName && connected) return 'Connected · your account';
-  if (providerName) return 'Connect your account';
-  if (sharedModel) return 'Used when no personal credential exists';
-  return 'No shared model set';
-}
-
-export function OnboardingPersonalPreview({
-  model,
-  providerId,
-  personalProviderId,
-  personalConnectionMethod,
-  personalModel,
-}: Pick<
-  OnboardingPreviewProps,
-  'model' | 'providerId' | 'personalProviderId' | 'personalConnectionMethod' | 'personalModel'
->) {
-  const individual = !model;
-  const providers = useProvidersQuery();
-  const personal = providers.data?.find(item => item.provider === personalProviderId);
-  const auth = useFactoryAuth();
-  const scope = auth.data?.authEnabled ? 'user' : undefined;
-  const savedMethod = personal ? providerCredentialMethod(personal, scope) : undefined;
-  const connected = personal ? isProviderConnected(personal, scope, personalConnectionMethod) : false;
-  const providerName = personalProviderId ? providerDisplayName(personalProviderId) : undefined;
-  const method = CONNECTION_METHOD_LABEL[personalConnectionMethod ?? savedMethod ?? 'api_key'];
-  const fallback = model ? 'Shared access available' : 'Connect your own account';
-  return (
-    <section aria-label="Personal access preview" className="relative h-full">
-      <div className="absolute inset-x-8 top-3 flex items-start justify-between gap-4">
-        <Txt variant="caption" tone="muted">
-          {individual ? 'Your account' : 'Factory work + your sessions'}
-        </Txt>
-        <Txt variant="meta" tone="muted">
-          {providerName ? method : 'Personal access'}
-        </Txt>
-      </div>
-      <AccountsScene mode={individual ? 'individual' : 'hybrid'} />
-      <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-8">
-        <div role="group" aria-label="Factory work model" className="min-w-0">
-          <Txt variant="meta" tone="muted" className="mb-2">
-            Factory work
-          </Txt>
-          {individual ? (
-            <SuggestedModelLabel providerId={personalProviderId} model={personalModel} emptyLabel="Choose a model" />
-          ) : (
-            <SuggestedModelLabel providerId={providerId} model={model} emptyLabel="Not configured" />
-          )}
-          {individual && (
-            <Txt variant="meta" tone="muted" className="mt-2">
-              Shared credentials first, then personal.
+      {!setup && (
+        <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
+          <div role="group" aria-label="Factory work model" className="min-w-0">
+            <Txt variant="meta" className="mb-2">
+              {accountLabel}
             </Txt>
-          )}
+            <OnboardingModelLabel
+              scope={personalWork ? 'user' : 'org'}
+              providerId={personalWork ? personalProviderId : providerId}
+              model={personalWork ? personalModel : model}
+            />
+            {connectionMethod && !personalWork && (
+              <Txt variant="meta" tone="muted" className="mt-2">
+                {CONNECTION_METHOD_LABEL[connectionMethod]}
+              </Txt>
+            )}
+          </div>
+          <div role="group" aria-label="Session model" className="min-w-0">
+            <Txt variant="meta" className="mb-2">
+              {shared ? 'Same model for sessions' : 'Your session model'}
+            </Txt>
+            <OnboardingModelLabel
+              scope={shared ? 'org' : 'user'}
+              providerId={shared ? providerId : personalProviderId}
+              model={shared ? model : personalModel}
+            />
+            {!shared && (
+              <OnboardingPersonalConnectionStatus
+                providerId={personalProviderId}
+                method={personalConnectionMethod}
+                local={local}
+              />
+            )}
+          </div>
         </div>
-        <div role="group" aria-label="Personal sessions provider" className="min-w-0">
-          {personalModel && connected ? (
-            <SuggestedModelLabel providerId={personalProviderId} model={personalModel} />
-          ) : (
-            <Txt variant="caption">{providerName ?? fallback}</Txt>
-          )}
-          <Txt variant="meta" tone="muted" className="mt-2">
-            {personalAccessStatus({ providerName, connected, sharedModel: model })}
-          </Txt>
-        </div>
-      </div>
+      )}
     </section>
+  );
+}
+
+function AccountSource({ x, label, icon }: { x: number; label: string; icon: ReactNode }) {
+  return (
+    <SketchLabel x={x + 10} y={62} width={84}>
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:inline [&>svg]:size-3">{icon}</span>
+        <Txt variant="meta">{label}</Txt>
+      </div>
+    </SketchLabel>
+  );
+}
+
+function SessionIllustration({ x, label }: { x: number; label: string }) {
+  return (
+    <SketchLabel x={x + 10} y={169} width={84}>
+      <div className="flex items-center gap-2">
+        <UserRound className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:block" />
+        <Txt variant="meta">{label}</Txt>
+      </div>
+      <div className="bg-fill mt-3 h-1 rounded-full min-[900px]:mt-4 min-[900px]:h-3" />
+      <div className="text-muted-foreground mt-3 hidden items-center gap-2 min-[900px]:flex">
+        <Sparkles className="size-3 shrink-0" />
+        <div className="bg-fill h-1 w-full rounded-full" />
+      </div>
+    </SketchLabel>
   );
 }

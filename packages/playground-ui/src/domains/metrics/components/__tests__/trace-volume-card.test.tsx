@@ -34,8 +34,8 @@ describe('TraceVolumeCard', () => {
     const onViewErrors = vi.fn();
     renderInMetrics(<TraceVolumeCard onViewTraces={onViewTraces} onViewErrors={onViewErrors} />);
     await screen.findByText('Chef Agent');
-    fireEvent.click(screen.getByRole('button', { name: 'View in Traces' }));
-    fireEvent.click(screen.getByRole('button', { name: 'View errors in Logs' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View in traces' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View errors in logs' }));
     expect(onViewTraces).toHaveBeenCalledWith(EntityType.AGENT);
     expect(onViewErrors).toHaveBeenCalledWith(EntityType.AGENT);
   });

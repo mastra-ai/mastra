@@ -5,10 +5,9 @@ import {
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,
-  type UpdateActiveObservationsResult,
-  type UpdateBufferedObservationsResult,
   withObservationalMemoryLifecycleColumns,
 } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
@@ -29,6 +28,9 @@ import {
   validateStorageMetadataFilter,
   createStorageErrorId,
   isRunFenceConflictError,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
@@ -58,6 +60,10 @@ import type {
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
   UpdateBufferedReflectionInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { assertRunFence, claimTransaction, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
@@ -226,6 +232,15 @@ export class MemoryMySQL extends MemoryStorage {
   #indexes?: CreateIndexOptions[];
 
   static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
+
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays NULL until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
 
   constructor({
     pool,
@@ -467,6 +482,22 @@ export class MemoryMySQL extends MemoryStorage {
     for (const indexDef of this.#indexes) {
       await this.operations.createIndex(indexDef);
     }
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemoryMySQL.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (target, cutoff, limit) =>
+        this.operations.pruneBatch({ tableName: target.table as TABLE_NAMES, column: target.column, cutoff, limit }),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -2565,11 +2596,9 @@ export class MemoryMySQL extends MemoryStorage {
               bestOverBoundary = boundary;
               bestOverTokens = cumulativeMessageTokens;
             }
-          } else {
-            if (cumulativeMessageTokens > bestUnderTokens) {
-              bestUnderBoundary = boundary;
-              bestUnderTokens = cumulativeMessageTokens;
-            }
+          } else if (cumulativeMessageTokens > bestUnderTokens) {
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
 

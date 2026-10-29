@@ -36,7 +36,7 @@ Providers expose metadata and the legacy discovery and resolution methods. Agent
   },
   {
     name: 'defaultScope',
-    type: "'per-author' | 'caller-supplied'",
+    type: "'per-author' | 'shared' | 'caller-supplied'",
     description: "Default connection identity scope. Defaults to 'per-author' when omitted.",
     isOptional: true,
   },
@@ -169,7 +169,7 @@ const editor = new MastraEditor({
   },
   {
     name: 'defaultScope',
-    type: "'per-author' | 'caller-supplied'",
+    type: "'per-author' | 'shared' | 'caller-supplied'",
     description: 'Connection identity scope. Defaults to per-author.',
     isOptional: true,
     defaultValue: "'per-author'",

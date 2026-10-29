@@ -1,3 +1,4 @@
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -88,6 +89,23 @@ describe('StreamErrorRetryProcessor', () => {
     await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
   });
 
+  it('never retries an exhausted quota, though the SDK marks every 429 retryable', async () => {
+    const processor = new StreamErrorRetryProcessor();
+    const quota = new APICallError({
+      message: 'You exceeded your current quota, please check your plan and billing details.',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 429,
+      responseBody: JSON.stringify({ error: { type: 'insufficient_quota', code: 'insufficient_quota' } }),
+      isRetryable: true,
+    });
+
+    await expect(processor.processAPIError(makeArgs({ error: quota }))).resolves.toBeUndefined();
+    await expect(processor.processAPIError(makeArgs({ error: makeRetryableError() }))).resolves.toEqual({
+      retry: true,
+    });
+  });
+
   it('does not retry status codes without provider metadata or a matcher', async () => {
     const processor = new StreamErrorRetryProcessor();
     const error = new Error('wrapped', {
@@ -111,6 +129,38 @@ describe('StreamErrorRetryProcessor', () => {
     };
 
     expect(isRetryableOpenAIResponsesStreamError(error)).toBe(true);
+  });
+
+  it('retries a server_error frame whose wording mentions authentication', () => {
+    const frame = {
+      type: 'error',
+      sequence_number: 1,
+      error: { type: 'server_error', code: 'server_error', message: 'Upstream authentication service unavailable' },
+    };
+
+    expect(isRetryableOpenAIResponsesStreamError(frame)).toBe(true);
+  });
+
+  it('retries a rate-limit frame worded as a per-minute quota and never an exhausted quota', () => {
+    const frame = (code: string, message: string) => ({ type: 'error', sequence_number: 1, error: { code, message } });
+
+    expect(
+      isRetryableOpenAIResponsesStreamError(frame('rate_limit_exceeded', 'Quota exceeded for requests per minute.')),
+    ).toBe(true);
+    expect(isRetryableOpenAIResponsesStreamError(frame('insufficient_quota', 'You exceeded your current quota.'))).toBe(
+      false,
+    );
+    expect(
+      isRetryableOpenAIResponsesStreamError(
+        frame('rate_limit_exceeded', 'You exceeded your current quota, please check your plan and billing details.'),
+      ),
+    ).toBe(false);
+  });
+
+  it('retries an uncoded frame whose wording reports a rate limit', () => {
+    const frame = { type: 'error', sequence_number: 1, error: { message: 'Rate limit reached for gpt-4o.' } };
+
+    expect(isRetryableOpenAIResponsesStreamError(frame)).toBe(true);
   });
 
   it('retries OpenAI Responses stream error chunks by default', async () => {
@@ -180,6 +230,24 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isBadRequestError(error)).toBe(true);
   });
 
+  it('isBadRequestError never matches a 400 that refuses a credential or reports an exhausted quota', () => {
+    const anthropicRejection = (message: string) =>
+      new APICallError({
+        message,
+        url: 'https://api.anthropic.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
+        isRetryable: false,
+      });
+
+    expect(isBadRequestError(anthropicRejection('Your credit balance is too low to access the Anthropic API.'))).toBe(
+      false,
+    );
+    expect(isBadRequestError(anthropicRejection('Your weekly limit has been reached, try again later'))).toBe(false);
+    expect(isBadRequestError({ statusCode: 400, message: 'Incorrect API key provided.' })).toBe(false);
+  });
+
   it('isBadRequestError returns false for non-400 errors', () => {
     const error = new APICallError({
       message: 'server failed',
@@ -222,6 +290,62 @@ describe('StreamErrorRetryProcessor', () => {
     });
 
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+  });
+
+  it('does not retry OpenAI Responses invalid_api_key stream errors through isBadRequestError', async () => {
+    // @ai-sdk/openai >=3.0.130 classifies this frame with a derived statusCode of 400.
+    const errorFrame = {
+      type: 'error',
+      code: 'invalid_api_key',
+      message: 'Incorrect API key provided.',
+      param: null,
+      sequence_number: 2,
+    };
+    const deltaFrame = {
+      type: 'response.output_text.delta',
+      content_index: 0,
+      delta: 'Partial output.',
+      item_id: 'msg-1',
+      logprobs: [],
+      output_index: 0,
+      sequence_number: 1,
+    };
+    const streamOpenAIFrames = async (frames: Array<Record<string, unknown>>) => {
+      const openai = createOpenAI({
+        apiKey: 'test-key',
+        fetch: async () =>
+          new Response(frames.map(frame => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(''), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      });
+      try {
+        const { stream } = await openai.responses('gpt-5.4-mini').doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        });
+        for await (const chunk of stream) {
+          if (chunk.type === 'error') return chunk.error;
+        }
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Expected the OpenAI stream to surface an error');
+    };
+
+    // Error after partial output arrives as a stream error chunk; error before output is thrown.
+    const midStreamError = await streamOpenAIFrames([deltaFrame, errorFrame]);
+    const beforeOutputError = await streamOpenAIFrames([errorFrame]);
+    expect(midStreamError).toMatchObject({ code: 'invalid_api_key', statusCode: 400, isRetryable: false });
+    expect(APICallError.isInstance(beforeOutputError)).toBe(true);
+    expect(beforeOutputError).toMatchObject({ statusCode: 400, isRetryable: false });
+
+    const processor = new StreamErrorRetryProcessor({
+      matchers: [{ match: isBadRequestError, maxRetries: 1 }],
+    });
+    for (const error of [midStreamError, beforeOutputError]) {
+      expect(isBadRequestError(error)).toBe(false);
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+    }
   });
 
   it('respects maxRetries', async () => {
@@ -280,6 +404,13 @@ describe('StreamErrorRetryProcessor', () => {
         await expect(processor.processAPIError(makeArgs({ error: { error: { code } } }))).resolves.toBeUndefined();
       },
     );
+
+    it('does not retry an exhausted quota', async () => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+      const error = { error: { type: 'insufficient_quota', message: 'You exceeded your current quota.' } };
+
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+    });
 
     it('detects terminal authorization codes in API call response bodies', async () => {
       const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
@@ -426,6 +557,18 @@ describe('StreamErrorRetryProcessor', () => {
       const processor = new StreamErrorRetryProcessor({
         maxRetries: 1,
         matchers: [{ match: candidate => candidate === error, maxRetries: 3, onRetry }],
+      });
+
+      await expect(processor.processAPIError(args)).resolves.toEqual({ retry: true });
+      expect(onRetry).toHaveBeenCalledWith({ ...args, delayMs: 0 });
+    });
+
+    it('applies a configured matcher policy when the built-in matcher also matches', async () => {
+      const onRetry = vi.fn();
+      const frame = { type: 'error', error: { type: 'server_error', message: 'Internal Server Error' } };
+      const args = makeArgs({ error: frame, retryCount: 1 });
+      const processor = new StreamErrorRetryProcessor({
+        matchers: [{ match: candidate => candidate === frame, maxRetries: 3, onRetry }],
       });
 
       await expect(processor.processAPIError(args)).resolves.toEqual({ retry: true });

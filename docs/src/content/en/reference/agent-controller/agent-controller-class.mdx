@@ -390,17 +390,17 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
 
 #### `createSession(options)`
 
-Get or create the live session registered for the `(resourceId, scope)` pair. Call `init()` before this method.
+Get or create the live session registered under `id`. Call `init()` before this method.
 
 ```typescript
 const session = await controller.createSession({
+  id: 'run-a',
   resourceId: 'project-42',
-  scope: 'editor-window-1',
   threadId: 'thread-7',
 })
 ```
 
-The same `resourceId` and `scope` return the same `Session` instance. A different scope creates an isolated session for the same resource. When `threadId` is supplied, the method switches a cached session to that thread or creates the thread when it doesn't exist.
+The same `id` returns the same `Session` instance. Sessions with different ids are independent even when they share a `resourceId`: each has its own run loop, thread binding, mode, model, and state, while their stored threads and resource-scoped memory belong to the shared resource. When `id` is omitted, it defaults to `resourceId`, so one session per resource needs no id. When `threadId` is supplied, the method switches a cached session to that thread or creates the thread when it doesn't exist.
 
 <PropertiesTable
   content={[
@@ -408,13 +408,7 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
     name: 'resourceId',
     type: 'string',
     description:
-      'Memory resource and live-session registry key. Defaults to the configured `resourceId` or controller `id`.',
-    isOptional: true,
-  },
-  {
-    name: 'scope',
-    type: 'string',
-    description: 'Optional registry namespace that allows multiple live sessions for one resource.',
+      "Memory resource that owns the session's threads and resource-scoped memory. Defaults to the configured `resourceId` or controller `id`.",
     isOptional: true,
   },
   {
@@ -434,7 +428,7 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
   {
     name: 'id',
     type: 'string',
-    description: 'Stable session identifier. Defaults to the controller `id`.',
+    description: 'Session identifier and live-session registry key. Defaults to `resourceId`.',
     isOptional: true,
   },
   {
@@ -463,12 +457,12 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
 
 Returns: `Promise<Session<TState>>`
 
-#### `getSessionByResource(resourceId, scope?)`
+#### `getSession(sessionId, requestContext?)`
 
-Return the live session registered for a resource and optional scope.
+Return the live session registered under `sessionId`, or `undefined` when none is live.
 
 ```typescript
-const session = await controller.getSessionByResource('project-42', 'editor-window-1')
+const session = await controller.getSession('run-a')
 ```
 
 Returns: `Promise<Session<TState> | undefined>`
@@ -477,7 +471,7 @@ Returns: `Promise<Session<TState> | undefined>`
 
 Subscribe to process-local notifications after `createSession()` materializes a new live session, with isolated listener errors prevented from affecting other listeners. Call the returned function to unsubscribe.
 
-By default listeners are fire-and-forget. Pass `{ blocking: true }` to make `createSession()` await the listener before resolving the new session, so the host can prepare session state before the caller can start a run. Blocking listeners run sequentially in registration order, before fire-and-forget listeners are notified. A blocking listener must not call `createSession()` for the same `(resourceId, scope)` pair. That call would await its own hydration and deadlock.
+By default listeners are fire-and-forget. Pass `{ blocking: true }` to make `createSession()` await the listener before resolving the new session, so the host can prepare session state before the caller can start a run. Blocking listeners run sequentially in registration order, before fire-and-forget listeners are notified. A blocking listener must not call `createSession()` for the same session `id`. That call would await its own hydration and deadlock.
 
 ```typescript
 const unsubscribe = controller.onSessionCreated(
@@ -508,7 +502,7 @@ const unsubscribe = controller.onSessionDeleted(session => {
 })
 
 await controller.createSession({ resourceId: 'project-42' })
-await controller.deleteSession({ resourceId: 'project-42' })
+await controller.deleteSession({ sessionId: 'project-42' })
 unsubscribe()
 ```
 
@@ -516,22 +510,19 @@ This listener is best-effort and runs only in the current process. It isn't a pe
 
 Returns: `() => void`
 
-#### `deleteSession({ resourceId, scope? })`
+#### `deleteSession({ sessionId })`
 
-Tear down the materialized session for a resource and optional scope. The method aborts active work, then removes thread subscriptions, the active thread lock, and the live session from the controller registry. It doesn't delete persisted threads or messages.
+Tear down the materialized session registered under `sessionId`. The method aborts active work, then removes thread subscriptions, the active thread lock, and the live session from the controller registry. It doesn't delete persisted threads or messages.
 
 ```typescript
-const deleted = await controller.deleteSession({
-  resourceId: 'project-42',
-  scope: 'editor-window-1',
-})
+const deleted = await controller.deleteSession({ sessionId: 'run-a' })
 ```
 
-Returns: `Promise<boolean>`. The result is `true` when a live session was removed and `false` when no matching live session exists or when another deletion is already in progress for the same resource and scope.
+Returns: `Promise<boolean>`. The result is `true` when a live session was removed and `false` when no matching live session exists or when another deletion is already in progress for the same session.
 
 #### `setResourceId(session, { resourceId })`
 
-Move a live session to another resource and clear its active thread binding.
+Move a live session to another resource and clear its active thread binding. The session stays registered under its id.
 
 ```typescript
 await controller.setResourceId(session, { resourceId: 'project-43' })
@@ -610,12 +601,12 @@ Returns: `Promise<StorageListMessagesOutput>` with controller-format messages.
 
 #### `generateThreadTitle(options)`
 
-Generate and store a title from a thread's conversation without creating a Session. `threadId` is required. `resourceId`, `scope`, `model`, and `requestContext` are optional. The method throws when the thread doesn't exist and returns `undefined` when the model produces no title.
+Generate and store a title from a thread's conversation without creating a Session. `threadId` is required. Optional fields include `sessionId`, `model`, and `requestContext`. Passing `sessionId` borrows a live session's agent and request context. The method throws when the thread doesn't exist and returns `undefined` when the model produces no title.
 
 ```typescript
 const title = await controller.generateThreadTitle({
   threadId: 'thread-7',
-  resourceId: 'project-42',
+  sessionId: 'run-a',
 })
 ```
 

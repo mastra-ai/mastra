@@ -24,6 +24,10 @@ const memory = new Memory({
 });
 ```
 
+### Input length
+
+FastEmbed models embed at most 512 tokens per input (roughly 2,000 to 2,500 characters of English text). Longer inputs are truncated: text past the limit doesn't affect the embedding. The AI SDK v3 models return a warning when this happens. Chunk long documents to fit the window, for example with `maxSize: 1500` in `MDocument.chunk()`.
+
 ## Documentation
 
 - [Use FastEmbed for local semantic recall](https://mastra.ai/docs/memory/semantic-recall#using-fastembed-local)

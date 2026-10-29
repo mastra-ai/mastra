@@ -69,9 +69,9 @@ describe('provider connection recovery', () => {
       const user = userEvent.setup();
       const { client } = renderWithProviders(
         scope === 'org' ? (
-          <ModelProviderFactoryStep onComplete={vi.fn()} />
+          <ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />
         ) : (
-          <PersonalProviderFactoryStep requireModel onContinue={vi.fn()} />
+          <PersonalProviderFactoryStep onContinue={vi.fn()} />
         ),
       );
       await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
@@ -81,7 +81,7 @@ describe('provider connection recovery', () => {
       expect(dialog.queryByRole('textbox', { name: 'Authorization code' })).not.toBeInTheDocument();
       expect(dialog.getByText(scope === 'org' ? /Everyone in your organization/ : /only for you/)).toBeVisible();
       expect(starts).toEqual([{ mode: 'device-code', scope }]);
-      expect(await screen.findByRole('combobox')).toHaveTextContent(models[0].id);
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
       await waitForMutationsIdle(client);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(polls).toBe(2);
@@ -100,7 +100,7 @@ describe('provider connection recovery', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    const { client } = renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
     await user.click(screen.getByRole('button', { name: 'Continue with OpenAI' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Authorization expired');
@@ -124,7 +124,7 @@ describe('provider connection recovery', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     const input = within(screen.getByRole('dialog')).getByLabelText('API key for OpenAI');
     await user.type(input, 'test-key{Enter}');
@@ -146,7 +146,7 @@ describe('provider connection recovery', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Providers unavailable');
     failed = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -165,13 +165,13 @@ describe('provider connection recovery', () => {
       http.get(modelsUrl, () => HttpResponse.json({ models: empty ? [] : models })),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('No models are available');
     expect(screen.getByRole('button', { name: 'Change provider' })).toBeEnabled();
     empty = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent(models[0].id);
+    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
   });
 
   it('does not present deployment-managed access as a personal API key', async () => {
@@ -180,7 +180,7 @@ describe('provider connection recovery', () => {
         HttpResponse.json({ providers: [{ provider: 'amazon-bedrock', source: 'deployment' }], orgKeyAdmin: false }),
       ),
     );
-    renderWithProviders(<PersonalProviderFactoryStep requireModel onContinue={vi.fn()} />);
+    renderWithProviders(<PersonalProviderFactoryStep onContinue={vi.fn()} />);
     expect(await screen.findByText('No API key providers available.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
   });
@@ -203,7 +203,7 @@ describe('provider connection recovery', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     expect(await screen.findByText('No API key providers available.')).toBeVisible();
     await user.click(screen.getByRole('tab', { name: 'Provider sign-in' }));
     expect(screen.getByRole('button', { name: 'Use GitHub Copilot connection' })).toBeEnabled();

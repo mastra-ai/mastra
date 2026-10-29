@@ -124,6 +124,10 @@ describe('createTraceFilterBarFields', () => {
     expect(byId('serviceName')).toBeUndefined();
   });
 
+  it('labels the span model field as Span Model', () => {
+    expect(byId('spans.model')?.label).toBe('Span Model');
+  });
+
   describe('when the server supports root duration predicates', () => {
     const rootDuration = createTraceFilterBarFields({
       availableRootEntityNames: [],
@@ -371,10 +375,10 @@ describe('createTraceFilterBarFields', () => {
       'resourceId',
       'threadId',
       'traceId',
-      'spans.model',
       'spans.provider',
       'spans.durationMs',
       'spans.error',
+      'spans.model',
       'spans.name',
       'spans.spanType',
       'scores.score',

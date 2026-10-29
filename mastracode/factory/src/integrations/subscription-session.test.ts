@@ -68,9 +68,9 @@ describe('resolveSubscriptionSession', () => {
       threadId: 'thread-1',
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: 'session-1' });
+      await controller.deleteSession({ sessionId: 'session-1' });
     });
-    if (cold) await controller.deleteSession({ resourceId: 'session-1' });
+    if (cold) await controller.deleteSession({ sessionId: 'session-1' });
     else {
       await original.thread.create();
       expect(original.thread.getId()).not.toBe('thread-1');
@@ -144,7 +144,7 @@ describe('prepareSessionRunContext', () => {
       prepareSessionRunContext(requestContext, 'channel:slack:C1', {
         sessions: { getBySessionId: async () => null },
       }),
-    ).resolves.toBe('unavailable');
+    ).resolves.toBe('session-not-found');
     expect(requestContext.get('user')).toBeUndefined();
     expect(prime).not.toHaveBeenCalled();
   });
@@ -155,7 +155,7 @@ describe('prepareSessionRunContext', () => {
       prepareSessionRunContext(requestContext, 'session-9', {
         sessions: { getBySessionId: async () => ({ userId: 'user-9', orgId: ' ' }) },
       }),
-    ).resolves.toBe('unavailable');
+    ).resolves.toBe('organization-unresolved');
     expect(requestContext.get('user')).toBeUndefined();
     expect(prime).not.toHaveBeenCalled();
   });

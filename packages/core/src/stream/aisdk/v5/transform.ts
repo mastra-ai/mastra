@@ -494,17 +494,17 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           title: chunk.payload.title,
           providerMetadata: chunk.payload.providerMetadata,
         };
-      } else {
-        return {
-          type: 'source',
-          sourceType: 'document',
-          id: chunk.payload.id,
-          mediaType: chunk.payload.mimeType!,
-          title: chunk.payload.title,
-          filename: chunk.payload.filename,
-          providerMetadata: chunk.payload.providerMetadata,
-        };
       }
+      return {
+        type: 'source',
+        sourceType: 'document',
+        id: chunk.payload.id,
+        mediaType: chunk.payload.mimeType!,
+        title: chunk.payload.title,
+        filename: chunk.payload.filename,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
     case 'file': {
       const filePart =
         mode === 'generate'
@@ -645,7 +645,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           ...(chunk.payload || {}),
         } as OutputChunkType<OUTPUT>;
       }
-      return;
+      return undefined;
   }
 }
 

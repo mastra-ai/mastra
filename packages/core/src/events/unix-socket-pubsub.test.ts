@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { encode } from './codec';
+import { PublisherQueueLimitError } from './publisher-queue-limit-error';
 import type { Event } from './types';
 import { UnixSocketPubSub } from './unix-socket-pubsub';
 
@@ -48,6 +49,100 @@ describe('UnixSocketPubSub', () => {
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
       tempDir = undefined;
+    }
+  });
+
+  it('rejects an oversized publisher frame rather than buffering it against a paused broker', async () => {
+    const path = await socketPath();
+    const connections: net.Socket[] = [];
+    const server = net.createServer(socket => {
+      connections.push(socket);
+      socket.pause();
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, resolve);
+    });
+    try {
+      const client = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 64 * 1024 });
+      pubsubs.push(client);
+      await expect(client.publish('topic-a', makeEvent({ data: { payload: 'x'.repeat(128 * 1024) } }))).rejects.toThrow(
+        /publisher.*(limit|cap|large)/i,
+      );
+    } finally {
+      await Promise.allSettled(pubsubs.splice(0).map(pubsub => pubsub.close()));
+      connections.forEach(socket => socket.destroy());
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects an oversized membership frame while the broker is not reading', async () => {
+    const path = await socketPath();
+    const connections: net.Socket[] = [];
+    const server = net.createServer(socket => {
+      connections.push(socket);
+      socket.pause();
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, resolve);
+    });
+    try {
+      const client = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 64 * 1024 });
+      pubsubs.push(client);
+      await expect(client.subscribe('topic-' + 'x'.repeat(128 * 1024), () => {})).rejects.toThrow(
+        /publisher queue limit exceeded/,
+      );
+    } finally {
+      await Promise.allSettled(pubsubs.splice(0).map(pubsub => pubsub.close()));
+      connections.forEach(socket => socket.destroy());
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
+  it('caps concurrent publisher writes while the broker is not reading', async () => {
+    const path = await socketPath();
+    const connections: net.Socket[] = [];
+    const server = net.createServer(socket => {
+      connections.push(socket);
+      socket.pause();
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, resolve);
+    });
+    try {
+      const client = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 256 * 1024 });
+      pubsubs.push(client);
+      const results: Array<PromiseSettledResult<void>> = [];
+      const writes = Array.from({ length: 48 }, () =>
+        client.publish('topic-a', makeEvent({ data: { payload: 'x'.repeat(128 * 1024) } })).then(
+          () => results.push({ status: 'fulfilled', value: undefined }),
+          reason => results.push({ status: 'rejected', reason }),
+        ),
+      );
+      await waitFor(() => {
+        expect(
+          results.some(result => result.status === 'rejected' && /publisher queue limit/.test(String(result.reason))),
+        ).toBe(true);
+      });
+      const rejection = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected' &&
+          result.reason instanceof PublisherQueueLimitError &&
+          !!result.reason.waitForCapacity,
+      );
+      expect(rejection).toBeDefined();
+      const capacity = rejection!.reason.waitForCapacity();
+      connections.forEach(socket => socket.resume());
+      await capacity;
+      await client.publish('topic-a', makeEvent({ type: 'small-notification' }));
+      await Promise.all(writes);
+      expect(results.some(result => result.status === 'fulfilled')).toBe(true);
+      await client.close();
+    } finally {
+      connections.forEach(socket => socket.destroy());
+      await new Promise<void>(resolve => server.close(() => resolve()));
     }
   });
 

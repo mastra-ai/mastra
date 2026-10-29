@@ -413,7 +413,7 @@ export const GET_WORKSPACE_ROUTE = createRoute({
               path: mountPath,
               provider: info?.provider ?? mountFs.provider ?? 'unknown',
               readOnly: mountFs.readOnly ?? false,
-              displayName: info?.name ?? mountFs.name,
+              displayName: mountFs.displayName ?? info?.name ?? mountFs.name,
               icon: info?.icon,
               name: mountFs.name,
             });

@@ -67,7 +67,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -95,6 +95,19 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      # npm trusted publishing (OIDC) has no token fallback, and npm only
+      # allows a trusted publisher on a package that already exists — a
+      # brand-new package fails mid-publish (E404 PUT /
+      # ERR_PNPM_AUTH_TOKEN_EXCHANGE) after earlier packages have gone out, as
+      # does a package with no trusted publisher for this repo and workflow.
+      # Fail before anything publishes. --oidc runs the same OIDC token
+      # exchange pnpm runs at publish time, per package, and discards the
+      # token. --retry-404 waits out registry propagation lag for a package an
+      # npm org admin fixed minutes ago with scripts/npm-placeholder-publish.mjs
+      # (the recovery flow for this failure).
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000
 
       - name: Run build
         run: pnpm build
@@ -213,65 +226,14 @@ jobs:
         with:
           token: ${{ steps.app-auth.outputs.token }}
           ref: main
-          fetch-depth: 1
+          # Changesets looks up the commit that added each pending changeset (and
+          # its parent) to write changelog links, so it needs main's history back
+          # to the last stable release. Partial clone: full history without every
+          # historical file version.
+          fetch-depth: 0
+          filter: blob:none
           fetch-tags: true
           persist-credentials: true
-
-      - name: Fetch enough history for Changesets
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          DEEPEN_BY=50
-
-          while true; do
-            missing=()
-
-            for f in .changeset/*.md; do
-              [ -e "$f" ] || continue
-
-              # Not an actual changeset
-              [[ "$f" == ".changeset/README.md" ]] && continue
-
-              result=$(
-                git log \
-                  --diff-filter=A \
-                  --follow \
-                  --max-count=1 \
-                  --pretty=format:'%H:%p' \
-                  -- "$f"
-              )
-
-              if [ -z "$result" ]; then
-                missing+=("$f")
-                continue
-              fi
-
-              commit="${result%%:*}"
-              parents="${result#*:}"
-
-              if [ -n "$commit" ] && [ -z "$parents" ]; then
-                missing+=("$f")
-              fi
-            done
-
-            if [ "${#missing[@]}" -eq 0 ]; then
-              echo "Enough history fetched for all changesets."
-              break
-            fi
-
-            echo "Need more history for ${#missing[@]} changeset(s):"
-            printf '  %s\n' "${missing[@]}"
-
-            if [ "$(git rev-parse --is-shallow-repository)" = "false" ]; then
-              echo "Repository is fully unshallow but some changesets still cannot be resolved."
-              exit 1
-            fi
-
-            echo "Deepening by $DEEPEN_BY commits..."
-            # Deepen only main's history (no branches) and skip tags.
-            git fetch --deepen="$DEEPEN_BY" --no-tags origin main
-          done
 
       - name: Check for pre.json file existence
         id: check_files
@@ -291,7 +253,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -301,6 +263,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      # npm trusted publishing (OIDC) has no token fallback, and npm only
+      # allows a trusted publisher on a package that already exists — a
+      # brand-new package fails mid-publish (E404 PUT /
+      # ERR_PNPM_AUTH_TOKEN_EXCHANGE) after earlier packages have gone out, as
+      # does a package with no trusted publisher for this repo and workflow.
+      # Fail before the version commit is pushed to main and before anything
+      # publishes. --oidc runs the same OIDC token exchange pnpm runs at
+      # publish time, per package, and discards the token. --retry-404 waits
+      # out registry propagation lag for a package an npm org admin fixed
+      # minutes ago with scripts/npm-placeholder-publish.mjs (the recovery flow
+      # for this failure).
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000
 
       - name: Exit prerelease mode
         if: steps.check_files.outputs.files_exists == 'true'
@@ -465,7 +441,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -528,7 +504,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -550,6 +526,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      # Same new-package preflight as the other publish jobs, scoped to the
+      # playground subgraph this job publishes. See the prerelease job.
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000 --pnpm-filter '@mastra/playground-ui...'
 
       - name: Build playground UI and dependencies
         run: pnpm turbo build --filter '@mastra/playground-ui...'
@@ -645,7 +626,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -655,6 +636,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      # Same new-package preflight as the prerelease job: snapshot publishes
+      # are unfiltered, so a brand-new package fails them the same way.
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000
 
       - name: Generate slugified branch name
         id: slugify

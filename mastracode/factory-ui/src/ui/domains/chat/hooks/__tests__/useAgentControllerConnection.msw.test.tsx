@@ -10,11 +10,14 @@ import { queryKeys } from '../../../../../api/keys';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
+import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
 
 const controllerId = 'code';
-const resourceId = 'resource-test';
-const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
-const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
+// A Factory session: addressed by its own id, running under its Factory's shared resource.
+const sessionId = 'session-test';
+const resourceId = 'factory-test';
+const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${sessionId}`;
+const hookArgs = { agentControllerId: controllerId, sessionId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('useAgentControllerConnection', () => {
   it('given a session, when the connection is established, then status is ready with session state exposed', async () => {
@@ -122,14 +125,13 @@ describe('useAgentControllerConnection', () => {
     const { result } = renderHookWithProviders(() =>
       useAgentControllerConnection({
         ...hookArgs,
-        scope: '/sandbox/repo',
         factorySessionState,
         onEvent,
       }),
     );
 
     await waitFor(() => expect(result.current.status).toBe('ready'));
-    expect(receivedState).toEqual({ state: { projectPath: '/sandbox/repo', ...factorySessionState } });
+    expect(receivedState).toEqual({ state: factorySessionState });
   });
 
   it('given a workspace session with a conventional thread id, when the connection initializes, then session creation binds that exact thread', async () => {
@@ -144,7 +146,7 @@ describe('useAgentControllerConnection', () => {
     server.use(
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, async ({ request }) => {
         createBody = await request.json();
-        return HttpResponse.json({ controllerId, resourceId, threadId: resourceId });
+        return HttpResponse.json({ controllerId, sessionId, resourceId, threadId: sessionId });
       }),
       http.get(sessionUrl, () =>
         HttpResponse.json({
@@ -152,7 +154,7 @@ describe('useAgentControllerConnection', () => {
           resourceId,
           modeId: 'build',
           modelId: 'openai/gpt-4o-mini',
-          threadId: resourceId,
+          threadId: sessionId,
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         }),
       ),
@@ -168,13 +170,13 @@ describe('useAgentControllerConnection', () => {
     const { result } = renderHookWithProviders(() =>
       useAgentControllerConnection({
         ...hookArgs,
-        sessionThreadId: resourceId,
+        sessionThreadId: sessionId,
         onEvent,
       }),
     );
 
     await waitFor(() => expect(result.current.status).toBe('ready'));
-    expect(createBody).toMatchObject({ resourceId, threadId: resourceId });
+    expect(createBody).toMatchObject({ resourceId, sessionId, threadId: sessionId });
   });
 
   it('given the event callback changes after connection, then the active stream is not resubscribed', async () => {
@@ -320,7 +322,7 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
     void client.invalidateQueries({
-      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, sessionId, 'thread-1'),
       exact: true,
     });
     await waitFor(() => expect(stateReads).toBe(2));
@@ -384,7 +386,7 @@ describe('useAgentControllerConnection', () => {
     expect(result.current.state?.running).toBe(true);
 
     void client.invalidateQueries({
-      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, sessionId, 'thread-1'),
       exact: true,
     });
     await waitFor(() => expect(stateReads).toBe(2));
@@ -540,7 +542,7 @@ describe('useAgentControllerConnection', () => {
     // A refetch bumps dataUpdatedAt (the subscription epoch) — e.g. a mutation
     // invalidating controller state. The established stream must survive it.
     await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined),
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, sessionId),
     });
 
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -683,7 +685,7 @@ describe('useAgentControllerConnection', () => {
 
     const { client, result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
 
-    const messagesKey = queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'thread-x', 100);
+    const messagesKey = queryKeys.agentControllerThreadMessages(controllerId, sessionId, 'thread-x', 100);
     const otherResourceKey = queryKeys.agentControllerThreadMessages(controllerId, 'other-resource', 'thread-y', 100);
     client.setQueryData(messagesKey, []);
     client.setQueryData(otherResourceKey, []);
@@ -767,13 +769,54 @@ describe('useAgentControllerConnection', () => {
 
     const { client, result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
     await waitFor(() => expect(result.current.state?.running).toBe(true));
-    const messagesKey = queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100);
+    const messagesKey = queryKeys.agentControllerThreadMessages(controllerId, sessionId, 'state-thread', 100);
     client.setQueryData(messagesKey, []);
-    const stateKey = queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, undefined);
+    const stateKey = queryKeys.agentControllerConnectionState(controllerId, sessionId);
     running = false;
     await client.invalidateQueries({ queryKey: stateKey, exact: true });
 
     await waitFor(() => expect(result.current.state?.running).toBe(false));
     await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
+  });
+
+  it('reports the thread a switch bound the session to, not the thread its state is read for', async () => {
+    let activeThreadId = 'primary-thread';
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: activeThreadId }),
+      ),
+      http.get(sessionUrl, ({ request }) =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          threadId: new URL(request.url).searchParams.get('threadId') ?? activeThreadId,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.post(`${sessionUrl}/thread`, async ({ request }) => {
+        activeThreadId = ((await request.json()) as { threadId: string }).threadId;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => ({
+      connection: useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'primary-thread', onEvent: vi.fn() }),
+      switchThread: useSwitchAgentControllerThreadMutation(hookArgs),
+    }));
+    await waitFor(() => expect(result.current.connection.status).toBe('ready'), { timeout: 2000 });
+    expect(result.current.connection.threadId).toBe('primary-thread');
+
+    await result.current.switchThread.mutateAsync('secondary-thread');
+    await waitFor(() => expect(result.current.connection.threadId).toBe('secondary-thread'));
+
+    await result.current.switchThread.mutateAsync('primary-thread');
+    await waitFor(() => expect(result.current.connection.threadId).toBe('primary-thread'));
   });
 });

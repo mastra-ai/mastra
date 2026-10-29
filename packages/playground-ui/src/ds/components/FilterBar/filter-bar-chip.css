@@ -71,6 +71,12 @@
     --filter-bar-segment-index: 4;
   }
 
+  /* Chips already on screen when the bar mounts (a page opening with its filters) skip the
+   * entrance: typing them out would slide every control after them across the toolbar. */
+  .filter-bar-chip[data-initial] .filter-bar-segment {
+    animation: none;
+  }
+
   /* Leaving: the whole chip folds shut from its right edge in one move, fading as it
    * goes and swallowing the row gap it leaves. Segments keep their width so the pill
    * clips them instead of restacking. Declared after the entrance rule so it wins on a

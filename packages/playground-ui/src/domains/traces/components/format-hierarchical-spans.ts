@@ -9,6 +9,7 @@ type TimelineSpan = {
   endedAt?: Date | string | null;
   parentSpanId?: string | null;
   matchedInPayloadOnly?: boolean;
+  signalLabel?: string;
 };
 
 /**
@@ -21,14 +22,6 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
   if (!spans || spans.length === 0) {
     return [];
   }
-
-  const overallEndDate = spans.reduce(
-    (latest, span) => {
-      const endDate = span?.endedAt ? new Date(span.endedAt) : undefined;
-      return endDate && (!latest || endDate > latest) ? endDate : latest;
-    },
-    null as Date | null,
-  );
 
   const spanMap = new Map<string, UISpan>();
   const rootSpans: UISpan[] = [];
@@ -47,6 +40,7 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
       spans: [],
       parentSpanId: spanRecord.parentSpanId,
       matchedInPayloadOnly: spanRecord.matchedInPayloadOnly,
+      signalLabel: spanRecord.signalLabel,
     };
 
     spanMap.set(spanRecord.spanId, uiSpan);
@@ -60,12 +54,6 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
     if (!uiSpan) return;
 
     if (isAnchor(spanRecord)) {
-      if (overallEndDate && uiSpan.endTime && overallEndDate > new Date(uiSpan.endTime)) {
-        uiSpan.endTime = overallEndDate.toISOString();
-        const overallEndTime = new Date(overallEndDate).getTime();
-        const spanStartTime = new Date(uiSpan.startTime).getTime();
-        uiSpan.latency = overallEndTime - spanStartTime;
-      }
       rootSpans.push(uiSpan);
     } else {
       const parent = spanRecord.parentSpanId ? spanMap.get(spanRecord.parentSpanId) : undefined;
@@ -97,6 +85,22 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
   };
 
   sortNestedSpans(sortedRootSpans);
+
+  const getLatestEndTime = (span: UISpan): number =>
+    (span.spans ?? []).reduce(
+      (latest, child) => Math.max(latest, getLatestEndTime(child)),
+      span.endTime ? new Date(span.endTime).getTime() : 0,
+    );
+
+  // A root recorded as ending before one of its descendants is widened to cover its own subtree only.
+  sortedRootSpans.forEach(rootSpan => {
+    if (!rootSpan.endTime) return;
+    const latestEndTime = getLatestEndTime(rootSpan);
+    if (latestEndTime > new Date(rootSpan.endTime).getTime()) {
+      rootSpan.endTime = new Date(latestEndTime).toISOString();
+      rootSpan.latency = latestEndTime - new Date(rootSpan.startTime).getTime();
+    }
+  });
 
   return sortedRootSpans;
 };

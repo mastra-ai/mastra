@@ -485,6 +485,8 @@ export interface AvailableModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
+  /** ISO release date, when supplied by the model catalog. */
+  releaseDate?: string;
   /** Whether the provider has valid authentication */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
@@ -845,7 +847,12 @@ export type AgentControllerEvent =
   | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
+  | {
+      type: 'agent_end';
+      reason?: 'complete' | 'aborted' | 'error' | 'suspended';
+      /** Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread lease. */
+      abortReason?: string;
+    }
   | { type: 'message_start'; message: MastraDBMessage }
   | {
       type: 'message_update';
@@ -1162,11 +1169,11 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Thread owner captured once when this run starts. */
   threadOwnerId?: string;
 
-  /** Current resource ID */
+  /** Current resource ID: whose threads and memory this session uses. Several sessions may share it. */
   resourceId: string;
 
-  /** Optional isolation scope used to identify this session within its resource. */
-  scope?: string;
+  /** ID of the session handling this request. Look the session up with `AgentController.getSession(sessionId)`. */
+  sessionId: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

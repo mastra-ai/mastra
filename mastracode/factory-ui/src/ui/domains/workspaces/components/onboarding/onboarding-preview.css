@@ -23,6 +23,9 @@
   .onboarding-reveal {
     animation: onboarding-reveal 240ms ease-out both;
   }
+  .onboarding-account-labels {
+    animation: onboarding-fade 240ms ease-out 540ms backwards;
+  }
   .onboarding-context {
     animation: onboarding-fade 240ms ease-out backwards;
   }
@@ -160,6 +163,10 @@
     max-width: none;
     width: 100%;
   }
+  .onboarding-form[data-step='project-management'] {
+    display: flex;
+    overflow: visible;
+  }
   .onboarding-preview {
     grid-area: visual;
     container-type: size;
@@ -179,6 +186,7 @@
       display: block;
     }
   }
+  .onboarding-intake-detail,
   .onboarding-ticket-title {
     display: none;
   }
@@ -192,8 +200,5 @@
   }
   .onboarding-diagram {
     width: min(100cqw, 125cqh, 500px);
-  }
-  .onboarding-ticket-title {
-    display: block;
   }
 }

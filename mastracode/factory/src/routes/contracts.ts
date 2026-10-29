@@ -1,10 +1,14 @@
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
+import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
+export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -49,6 +53,7 @@ const decisionResponseSchema = z.object({ decision: entitySchema });
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
+  modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
 });
 
 export const updateProjectBodySchema = z
@@ -57,9 +62,11 @@ export const updateProjectBodySchema = z
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
-    slackWorkItemsEnabled: z.boolean().optional(),
+    defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
+    reviewTestChecksEnabled: z.boolean().optional(),
+    selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
 
@@ -381,7 +388,6 @@ const attentionKindSchema = z.enum([
   'automation-proposed',
   'mention',
   'activity',
-  'supervisor-finding',
   'agent-waiting',
 ]);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
@@ -456,13 +462,10 @@ const attentionActionPathSchema = z
         return z.NEVER;
       }),
   })
-  .refine(
-    input =>
-      input.kind === 'supervisor-finding'
-        ? /^[a-z0-9:_-]{1,256}$/i.test(input.sourceId)
-        : new RegExp(UUID_PATTERN).test(input.sourceId),
-    { message: 'Invalid attention source id', path: ['sourceId'] },
-  );
+  .refine(input => new RegExp(UUID_PATTERN).test(input.sourceId), {
+    message: 'Invalid attention source id',
+    path: ['sourceId'],
+  });
 
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
@@ -584,14 +587,36 @@ export const FACTORY_ROUTE_CONTRACTS = {
       boards: z.array(
         z.object({
           id: z.string(),
+          /** Absent from servers older than the phase fields. */
+          name: z.string().optional(),
+          /** @deprecated Use `name`. */
           title: z.string(),
+          description: z.string().optional(),
           initialPhase: z.string(),
           phases: z.array(
             z.object({
               id: z.string(),
+              name: z.string().optional(),
+              /** @deprecated Use `name`. */
               title: z.string(),
+              description: z.string().optional(),
               kind: z.enum(['resting', 'working', 'terminal']),
+              nextPhases: z.array(z.string()).optional(),
+              /** The session context a working phase runs in. */
+              context: z.string().optional(),
+              /** @deprecated Use `context`. */
               role: z.string().optional(),
+              autoStart: z.boolean().optional(),
+              /** Cards the phase starts on its own for; absent means every card. */
+              autoStartWhen: cardRuleGroupSchema.optional(),
+              exitTool: z
+                .object({
+                  id: z.string(),
+                  autoApprove: z.boolean(),
+                  /** Cards the exit tool is approved for; absent means every card. */
+                  autoApproveWhen: cardRuleGroupSchema.optional(),
+                })
+                .optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),
@@ -734,24 +759,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Restore an archived Factory attention receipt',
     pathSchema: attentionActionPathSchema,
     responseSchema: z.object({ receipt: entitySchema }),
-  },
-  supervisorSession: {
-    method: 'POST',
-    path: '/web/factory/projects/:id/supervisor/session',
-    description: 'Get the deterministic Factory supervisor session address',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({ sessionId: z.string(), threadId: z.string(), factoryProjectId: uuidSchema }),
-  },
-  supervisorHealth: {
-    method: 'GET',
-    path: '/web/factory/projects/:id/supervisor/health',
-    description: 'Run the deterministic Factory supervisor health check',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      checkedAt: z.string(),
-      findings: z.array(entitySchema),
-      counts: z.record(z.string(), z.number().int().nonnegative()),
-    }),
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

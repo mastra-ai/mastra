@@ -2,8 +2,10 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { DurableAgent } from '../durable-agent';
@@ -23,6 +25,47 @@ function createModel(modelId = 'test') {
 }
 
 describe.each(AgentTypes)('%s modelSettings.timeout validation', (_, AgentType) => {
+  describe.each(['stream', 'generate'] as const)('%s execution claims', method => {
+    it.each(['per-call', 'static-default', 'dynamic-default'] as const)(
+      'rejects invalid %s timeouts without creating an ownership record (COR-1426)',
+      async source => {
+        const pubsub = new EventEmitterPubSub();
+        const storage = new InMemoryStore();
+        const modelSettings = { timeout: { stepMs: -1 } };
+        const baseAgent = new Agent({
+          id: 'invalid-timeout-claim',
+          name: 'Invalid timeout claim',
+          instructions: 'test',
+          model: createModel(),
+          defaultOptions:
+            source === 'dynamic-default'
+              ? () => ({ modelSettings })
+              : source === 'static-default'
+                ? { modelSettings }
+                : undefined,
+        });
+        const agent = new AgentType({ agent: baseAgent, pubsub });
+        new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+        const runId = crypto.randomUUID();
+        const workflows = (await storage.getStore('workflows'))!;
+
+        try {
+          await expect(
+            agent[method]('hello', {
+              runId,
+              ...(source === 'per-call' ? { modelSettings } : {}),
+            }),
+          ).rejects.toEqual(
+            new TypeError('`modelSettings.timeout.stepMs` must be a positive, finite number of milliseconds.'),
+          );
+          expect(await workflows.getRunOwnership({ runId })).toBeNull();
+        } finally {
+          await pubsub.close();
+        }
+      },
+    );
+  });
+
   it.each([
     [
       30_000,

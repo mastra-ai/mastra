@@ -419,7 +419,7 @@ await this.notify(
           },
           {
             name: 'priority',
-            type: '"high" | "medium" | "low"',
+            type: '"high" | "medium" | "low" | "urgent"',
             description: 'Notification priority.',
             isOptional: true,
           },
@@ -507,6 +507,13 @@ Identifies a specific agent thread.
     name: 'agentId',
     type: 'string',
     description: 'Agent identifier.',
+    isOptional: true,
+  },
+  {
+    name: 'ifIdle',
+    type: 'AgentSignalIfIdleOptions',
+    description:
+      'Options for signal delivery when the target thread is idle. Forwarded to `sendNotificationSignal`. See [thread signals](/reference/agents/agent#thread-signals).',
     isOptional: true,
   },
 ]}

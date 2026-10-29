@@ -32,16 +32,13 @@ export class WebSessionStorage extends CookieSessionStorage<Request, Response> {
       return null;
     }
 
-    const cookies = cookieHeader.split(';').reduce(
-      (acc, cookie) => {
-        const [cookieName, ...valueParts] = cookie.trim().split('=');
-        if (cookieName) {
-          acc[cookieName] = decodeURIComponent(valueParts.join('='));
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    const cookies = cookieHeader.split(';').reduce<Record<string, string>>((acc, cookie) => {
+      const [cookieName, ...valueParts] = cookie.trim().split('=');
+      if (cookieName) {
+        acc[cookieName] = decodeURIComponent(valueParts.join('='));
+      }
+      return acc;
+    }, {});
 
     return cookies[name] ?? null;
   }

@@ -105,10 +105,10 @@ function TrafficCard(args: ComponentProps<typeof MetricsLineChart>) {
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Traffic" description="Requests, errors and latency." />
         <MetricsCard.Actions>
-          <Button variant="ghost" size="icon-md" tooltip="View in Traces" aria-label="View in Traces">
+          <Button variant="ghost" size="icon-md" tooltip="View in traces" aria-label="View in traces">
             <EyeIcon />
           </Button>
-          <Button variant="ghost" size="icon-md" tooltip="View errors in Logs" aria-label="View errors in Logs">
+          <Button variant="ghost" size="icon-md" tooltip="View errors in logs" aria-label="View errors in logs">
             <LogsIcon />
           </Button>
         </MetricsCard.Actions>
@@ -294,4 +294,18 @@ export const FillHeight: Story = {
 export const Loading: Story = {
   args: { data: requestsByHour, series: requestsVsPreviousSeries, isLoading: true },
   render: args => wide(<MetricsLineChart {...args} />),
+};
+
+/**
+ * `lineStyle="thin"` with `dots="hover"`, for small cards in a grid: 1.5px lines, a fainter fill
+ * that fades out at both ends, and a dot only on the hovered point (a short series otherwise gets
+ * one on every point).
+ */
+export const ThinLines: Story = {
+  args: { lineStyle: 'thin', dots: 'hover' },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
 };

@@ -22,10 +22,12 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import { buildConnectionStringPoolConfig } from '../../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../../shared/pool-error-guard';
 import { parseSchemaName, schemaNamePrefix } from '../../shared/schema-name';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
+import { buildIndex } from './index-build';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { toPgJson } from './sanitize-json';
 import { getSchemaSnapshot } from './schema-snapshot';
@@ -171,6 +173,8 @@ export function resolvePgConfig(config: PgDomainConfig): {
       `resolvePgConfig: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
     );
   });
+
+  guardCheckedOutClientErrors(pool);
 
   const client = new PoolAdapter(pool);
   return {
@@ -638,8 +642,6 @@ export class PgDB extends MastraBase {
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
-    const schema = this.schemaName || 'public';
-
     const snapshot = this.schemaSnapshot;
     if (snapshot) {
       const columns = snapshot.columns.get(table);
@@ -647,12 +649,9 @@ export class PgDB extends MastraBase {
       return columns.has(column) || columns.has(column.toLowerCase());
     }
 
-    const result = await this.client.oneOrNone(
-      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
-      [schema, table, column, column.toLowerCase()],
-    );
-
-    return !!result;
+    // Outside init, reuse getColumnType's per-instance cache so hot paths
+    // (e.g. listWorkflowRuns with resourceId) don't probe the catalog per call.
+    return (await this.getColumnType(table, column)) !== null;
   }
 
   /**
@@ -679,8 +678,9 @@ export class PgDB extends MastraBase {
     if (cached !== undefined) return cached;
 
     const schema = this.schemaName || 'public';
+    // Prefer the exact-case column when both "resourceId" and "resourceid" exist.
     const result = await this.client.oneOrNone<{ data_type: string }>(
-      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4) ORDER BY (column_name = $3) DESC LIMIT 1`,
       [schema, table, column, column.toLowerCase()],
     );
 
@@ -1418,21 +1418,19 @@ export class PgDB extends MastraBase {
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,
     });
-    const schemaFilter = this.schemaName || 'public';
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
 
-    // A primary key is always backed by an index of the same name, so the init
-    // snapshot already answers this without a round trip.
     const snapshot = this.schemaSnapshot;
-    if (snapshot) return snapshot.primaryKeyIndexes.has(constraintName.toLowerCase());
+    if (snapshot) return snapshot.primaryKeyIndexes.get(constraintName.toLowerCase()) === TABLE_SPANS;
 
-    return this.spansPrimaryKeyExistsLive(constraintName, schemaFilter);
+    return this.spansPrimaryKeyExistsLive(constraintName, fullTableName);
   }
 
   /** Live-catalog variant of {@link spansPrimaryKeyExists}, bypassing the snapshot. */
-  private async spansPrimaryKeyExistsLive(constraintName: string, schemaFilter: string): Promise<boolean> {
+  private async spansPrimaryKeyExistsLive(constraintName: string, fullTableName: string): Promise<boolean> {
     const result = await this.client.oneOrNone<{ exists: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)) as exists`,
-      [constraintName, schemaFilter],
+      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND contype = 'p' AND conrelid = to_regclass($2)) as exists`,
+      [constraintName, fullTableName],
     );
 
     return result?.exists ?? false;
@@ -1449,20 +1447,8 @@ export class PgDB extends MastraBase {
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,
     });
-    const schemaFilter = this.schemaName || 'public';
-
     try {
-      // Check if the constraint already exists
-      const constraintExists = await this.client.oneOrNone<{ exists: boolean }>(
-        `
-        SELECT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)
-        ) as exists
-      `,
-        [constraintName, schemaFilter],
-      );
-
-      if (constraintExists?.exists) {
+      if (await this.spansPrimaryKeyExistsLive(constraintName, fullTableName)) {
         this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} already exists on ${fullTableName}`);
         return;
       }
@@ -1473,7 +1459,7 @@ export class PgDB extends MastraBase {
         ADD CONSTRAINT ${constraintName}
         PRIMARY KEY ("traceId", "spanId")
       `);
-      this.schemaSnapshot?.primaryKeyIndexes.add(constraintName.toLowerCase());
+      this.schemaSnapshot?.primaryKeyIndexes.set(constraintName.toLowerCase(), TABLE_SPANS);
 
       this.logger?.info?.(`Added PRIMARY KEY constraint ${constraintName} to ${fullTableName}`);
     } catch (error) {
@@ -1489,10 +1475,13 @@ export class PgDB extends MastraBase {
       // (if live) just said the constraint was ABSENT — that is why the ALTER
       // ran — so re-asking it would deterministically contradict the
       // concurrent creator and turn a benign race into a thrown error.
-      if (isDuplicateRelationError(error)) {
-        const confirmed = await this.spansPrimaryKeyExistsLive(constraintName, schemaFilter);
+      // PostgreSQL can also report invalid_table_definition when the other
+      // creator's primary key became visible while ALTER waited for its lock.
+      const primaryKeyRace = typeof error === 'object' && error !== null && 'code' in error && error.code === '42P16';
+      if (isDuplicateRelationError(error) || primaryKeyRace) {
+        const confirmed = await this.spansPrimaryKeyExistsLive(constraintName, fullTableName);
         if (confirmed) {
-          this.schemaSnapshot?.primaryKeyIndexes.add(constraintName.toLowerCase());
+          this.schemaSnapshot?.primaryKeyIndexes.set(constraintName.toLowerCase(), TABLE_SPANS);
           this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
           return;
         }
@@ -1806,7 +1795,6 @@ export class PgDB extends MastraBase {
 
       const snapshot = this.schemaSnapshot;
       if (snapshot?.indexes.has(name)) return;
-      if (!(await this.prepareIndexBuild(name, schemaName))) return;
 
       const uniqueStr = unique ? 'UNIQUE ' : '';
       const concurrentStr = concurrent ? 'CONCURRENTLY ' : '';
@@ -1839,10 +1827,11 @@ export class PgDB extends MastraBase {
       }
 
       const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
-      const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
+      const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}IF NOT EXISTS ${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
-      await this.timedIndexBuild(name, sql);
-      snapshot?.indexes.add(name);
+      if (await buildIndex(this.client, schemaName, name, () => this.timedIndexBuild(name, sql), this.logger)) {
+        snapshot?.indexes.add(name);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -1871,42 +1860,17 @@ export class PgDB extends MastraBase {
   async createIndexFromStatement(indexName: string, sql: string): Promise<void> {
     const snapshot = this.schemaSnapshot;
     if (snapshot?.indexes.has(indexName)) return;
-    if (!(await this.prepareIndexBuild(indexName, this.schemaName || 'public'))) return;
-
-    await this.timedIndexBuild(indexName, sql);
-    snapshot?.indexes.add(indexName);
-  }
-
-  /**
-   * Decides whether `indexName` still needs building. Returns false when a valid
-   * index already exists, or when another session is currently building it.
-   * An invalid index left by an interrupted `CREATE INDEX CONCURRENTLY` is
-   * dropped (concurrently) so the caller rebuilds it — `IF NOT EXISTS` would
-   * otherwise keep the broken index forever.
-   */
-  private async prepareIndexBuild(indexName: string, schemaName: string): Promise<boolean> {
-    const snapshot = this.schemaSnapshot;
-    if (snapshot && !snapshot.invalidIndexes.has(indexName)) return true;
-    const existing = await this.client.oneOrNone<{ is_valid: boolean; building: boolean }>(
-      `SELECT i.indisvalid AS is_valid,
-              EXISTS (SELECT 1 FROM pg_stat_progress_create_index p WHERE p.index_relid = c.oid) AS building
-         FROM pg_catalog.pg_index i
-         JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
-         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-        WHERE c.relname = $1 AND n.nspname = $2`,
-      [indexName, schemaName],
-    );
-    if (!existing) return true;
-    if (existing.is_valid) return false;
-    if (existing.building) {
-      this.logger.warn(`Index ${indexName} is being built by another session; skipping`);
-      return false;
+    if (
+      await buildIndex(
+        this.client,
+        this.schemaName || 'public',
+        indexName,
+        () => this.timedIndexBuild(indexName, sql),
+        this.logger,
+      )
+    ) {
+      snapshot?.indexes.add(indexName);
     }
-
-    this.logger.warn(`Dropping invalid index ${indexName} left by an interrupted build; rebuilding it`);
-    const quotedIndexName = `"${parseSqlIdentifier(indexName, 'index name')}"`;
-    await this.client.none(`DROP INDEX CONCURRENTLY IF EXISTS ${getSchemaName(this.schemaName)}.${quotedIndexName}`);
-    return true;
   }
 
   private async timedIndexBuild(indexName: string, sql: string): Promise<void> {
@@ -2161,6 +2125,56 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Runs one UPDATE per record in a transaction, changing a row only while every
+   * column in `nullColumns` is still NULL. Never inserts. Returns, in input order,
+   * whether each update changed a row.
+   */
+  async batchUpdateWhereNull({
+    tableName,
+    updates,
+    nullColumns,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+    nullColumns: string[];
+  }): Promise<boolean[]> {
+    const nullConditions = nullColumns
+      .map(column => ` AND "${parseSqlIdentifier(column, 'column name')}" IS NULL`)
+      .join('');
+    try {
+      return await this.client.tx(async tx => {
+        const applied: boolean[] = [];
+        for (const update of updates) {
+          const query = await this.buildUpdateQuery({ tableName, ...update });
+          if (!query) {
+            applied.push(false);
+            continue;
+          }
+          const rows = await tx.any(`${query.sql}${nullConditions} RETURNING 1`, query.values);
+          applied.push(rows.length > 0);
+        }
+        return applied;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'BATCH_UPDATE_WHERE_NULL', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: updates.length,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any>[] }): Promise<void> {
     try {
       if (keys.length === 0) {
@@ -2331,19 +2345,30 @@ export class PgDB extends MastraBase {
 
   private async executeUpdate(
     client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
-    {
-      tableName,
-      keys,
-      data,
-    }: {
+    args: {
       tableName: TABLE_NAMES;
       keys: Record<string, any>;
       data: Record<string, any>;
     },
   ): Promise<void> {
+    const query = await this.buildUpdateQuery(args);
+    if (!query) return; // Nothing to update after filtering
+
+    await client.none(query.sql, query.values);
+  }
+
+  private async buildUpdateQuery({
+    tableName,
+    keys,
+    data,
+  }: {
+    tableName: TABLE_NAMES;
+    keys: Record<string, any>;
+    data: Record<string, any>;
+  }): Promise<{ sql: string; values: QueryValues } | null> {
     // Filter out columns that don't exist in the actual database table
     const filteredData = await this.filterRecordToKnownColumns(tableName, data);
-    if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
+    if (Object.keys(filteredData).length === 0) return null;
 
     const setColumns: string[] = [];
     const setValues: QueryValues = [];
@@ -2370,8 +2395,6 @@ export class PgDB extends MastraBase {
     });
 
     const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
-    const values = [...setValues, ...whereValues];
-
-    await client.none(sql, values);
+    return { sql, values: [...setValues, ...whereValues] };
   }
 }

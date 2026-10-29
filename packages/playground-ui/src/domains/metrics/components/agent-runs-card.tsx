@@ -10,6 +10,7 @@ import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
 
 const SERIES = [
@@ -29,7 +30,15 @@ export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
   const total = data.reduce((sum, b) => sum + b.completed + b.failed, 0);
 
-  const layout = { title: 'Agent runs', description: 'Completed and failed runs.' };
+  const layout = {
+    title: 'Agent runs',
+    description: 'Completed and failed runs.',
+    toolbar: (
+      <MetricsCard.Toolbar>
+        <MetricsLineChartLegend series={SERIES} />
+      </MetricsCard.Toolbar>
+    ),
+  };
 
   if (isError) {
     return (
@@ -51,6 +60,7 @@ export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
           series={SERIES}
           height="fill"
           xLabels="edges"
+          showLegend={false}
           valueFormatter={formatCount}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
           isLoading={isLoading}

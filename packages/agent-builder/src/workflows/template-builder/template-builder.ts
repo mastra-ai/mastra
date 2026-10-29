@@ -1250,14 +1250,13 @@ Start by listing your tasks and work through them systematically!
               `Completed: ${conflict.unit.kind} ${conflict.unit.id}`,
             actualWork: true,
           };
-        } else {
-          return {
-            unit: conflict.unit,
-            issue: conflict.issue,
-            resolution: `No specific resolution found for ${conflict.unit.kind} ${conflict.unit.id}`,
-            actualWork: false,
-          };
         }
+        return {
+          unit: conflict.unit,
+          issue: conflict.issue,
+          resolution: `No specific resolution found for ${conflict.unit.kind} ${conflict.unit.id}`,
+          actualWork: false,
+        };
       });
 
       await gitAddAndCommit(targetPath, `feat(template): apply intelligent merge for ${slug}`, undefined, {

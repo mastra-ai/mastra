@@ -55,6 +55,23 @@ describe('IntakeStorage', () => {
     expect([a, b]).toContainEqual(await storage.getConfig({ orgId: 'org1' }));
   });
 
+  it('merges a partial config over the stored selections', async () => {
+    const storage = await makeStorage();
+    expect(
+      await storage.mergeConfig({ orgId: 'org1', config: { github: { enabled: true, sourceIds: ['a'] } } }),
+    ).toEqual({
+      github: { enabled: true, sourceIds: ['a'] },
+    });
+    await storage.mergeConfig({ orgId: 'org1', config: { custom: { enabled: false, sourceIds: ['x'] } } });
+    await storage.mergeConfig({ orgId: 'org1', config: { github: { enabled: false, sourceIds: null } } });
+
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
+      github: { enabled: false, sourceIds: null },
+      custom: { enabled: false, sourceIds: ['x'] },
+    });
+    expect(await storage.getConfig({ orgId: 'org2' })).toEqual(DEFAULT_INTAKE_CONFIG);
+  });
+
   describe('legacy per-member selections', () => {
     // File-backed so a per-member deployment can write rows, close, and a later boot folds them.
     function tempDatabaseUrl(): string {

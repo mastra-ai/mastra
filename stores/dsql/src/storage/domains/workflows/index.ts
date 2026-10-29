@@ -10,6 +10,9 @@ import {
   createStorageErrorId,
   isRunFenceConflictError,
   resolveRunFence,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   ClaimRunOwnershipInput,
@@ -24,8 +27,12 @@ import type {
   WorkflowRuns,
   CreateIndexOptions,
   TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
 import type { DsqlDomainConfig } from '../../db';
@@ -82,6 +89,15 @@ export class WorkflowsDSQL extends WorkflowsStorage {
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
 
+  /**
+   * Tables `prune()` can clean up. Run ownership rows anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's row is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   constructor(config: DsqlDomainConfig) {
     super();
     const { client, schemaName, skipDefaultIndexes, indexes } = resolveDsqlConfig(config);
@@ -93,6 +109,10 @@ export class WorkflowsDSQL extends WorkflowsStorage {
   }
 
   supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
     return true;
   }
 
@@ -110,6 +130,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for workflows domain
@@ -146,6 +167,22 @@ export class WorkflowsDSQL extends WorkflowsStorage {
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowsDSQL.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (target, cutoff, limit) =>
+        this.#db.pruneBatch({ tableName: target.table as TABLE_NAMES, column: target.column, cutoff, limit }),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -468,6 +505,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -476,19 +514,24 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       const resolvedFence = resolveRunFence(this, fence, runId);
-      await withRetry(() =>
+      // The status guard sits on the upsert itself, so a concurrent status change can't land
+      // between the check and the write. An empty list matches no status.
+      const guard = expectedStatus === undefined ? '' : ` WHERE t.snapshot::jsonb ->> 'status' = ANY($7::text[])`;
+      const written = await withRetry(() =>
         withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'persistWorkflowSnapshot', q =>
-          q.none(
-            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+          q.oneOrNone<{ written: number }>(
+            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6${guard}
+                 RETURNING 1 AS written`,
             [
               workflowName,
               runId,
@@ -496,10 +539,14 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               JSON.stringify(snapshot),
               createdAtValue.toISOString(),
               updatedAtValue.toISOString(),
+              ...(expectedStatus === undefined
+                ? []
+                : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
             ],
           ),
         ),
       );
+      return written !== null;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -507,6 +554,33 @@ export class WorkflowsDSQL extends WorkflowsStorage {
           id: createStorageErrorId('DSQL', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const row = await this.#db.client.oneOrNone<{ status: unknown }>(
+        `SELECT snapshot::jsonb ->> 'status' AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE "workflow_name" = $1 AND "run_id" = $2 ORDER BY "createdAt" DESC LIMIT 1`,
+        [workflowName, runId],
+      );
+      const status = row?.status;
+      return (status ?? null) as WorkflowRunStatus | null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );

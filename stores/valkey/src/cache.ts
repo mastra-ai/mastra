@@ -1,8 +1,14 @@
 import { MastraServerCache } from '@mastra/core/cache';
-import { Decoder, type GlideClient } from '@valkey/valkey-glide';
+import { Decoder } from '@valkey/valkey-glide';
+import type { GlideClient } from '@valkey/valkey-glide';
 
 export interface ValkeyServerCacheOptions {
   keyPrefix?: string;
+  /**
+   * Lifetime of cached values in seconds, refreshed on every write. Defaults to
+   * 300; `0` means no expiry. A cache list and its index counter always share
+   * this TTL so they expire together (see `listPushIndexed`).
+   */
   ttlSeconds?: number;
 }
 
@@ -13,7 +19,7 @@ const stringValue = (value: unknown): string => (Buffer.isBuffer(value) ? value.
  *
  * KEYS[1] = list key, KEYS[2] = counter key
  * ARGV[1] = JSON-serialized object WITHOUT an `index` property
- * ARGV[2] = TTL in seconds (0 = no expiry)
+ * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
  *
  * The index is spliced into the JSON text as the first property rather than
  * decoded/re-encoded with cjson, which would silently alter large integers
@@ -125,9 +131,15 @@ export class ValkeyServerCache extends MastraServerCache {
 
   /**
    * Single round-trip index allocation + list append + TTL refresh via Lua.
-   * This is the durable stream per-chunk hot path (issue #22477).
+   * The list and counter keys share one TTL; see
+   * {@link ValkeyServerCacheOptions.ttlSeconds}.
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
     const { index: _ignored, ...body } = value;
     const result = await this.command([
       'EVAL',
@@ -136,7 +148,9 @@ export class ValkeyServerCache extends MastraServerCache {
       this.getKey(listKey),
       this.getKey(counterKey),
       JSON.stringify(body),
-      String(this.ttlSeconds),
+      // A cache without expiry stays that way; otherwise `ttlMs` can only
+      // raise the default.
+      String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
     ]);
     return Number(result);
   }

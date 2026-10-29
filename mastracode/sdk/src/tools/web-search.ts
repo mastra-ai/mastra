@@ -1,9 +1,9 @@
-import { createTool, isValidationError, type ValidationError } from '@mastra/core/tools';
-import { createParallelSearchTool, createParallelExtractTool } from '@mastra/parallel';
-import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
+import { createTool, isValidationError } from '@mastra/core/tools';
+import type { ValidationError } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { loadSettings, type WebSearchProviderSetting } from '../onboarding/settings.js';
+import { loadSettings } from '../onboarding/settings.js';
+import type { WebSearchProviderSetting } from '../onboarding/settings.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 
 const MAX_WEB_SEARCH_TOKENS = 2_000;
@@ -46,7 +46,8 @@ export function hasParallelKey(): boolean {
  * relevance filtering, markdown string formatting, and token truncation.
  * The underlying Tavily tool handles client init, input validation, and the API call.
  */
-export function createWebSearchTool() {
+export async function createWebSearchTool() {
+  const { createTavilySearchTool } = await import('@mastra/tavily');
   const tavilySearchTool = createTavilySearchTool();
 
   return createTool({
@@ -82,7 +83,8 @@ export function createWebSearchTool() {
  * Wraps the @mastra/tavily extract tool with mastracode-specific behavior:
  * markdown string formatting and token truncation.
  */
-export function createWebExtractTool() {
+export async function createWebExtractTool() {
+  const { createTavilyExtractTool } = await import('@mastra/tavily');
   const tavilyExtractTool = createTavilyExtractTool();
 
   return createTool({
@@ -112,7 +114,8 @@ export function createWebExtractTool() {
  * Wraps the @mastra/parallel search tool with Mastra Code's standard tool id,
  * markdown string output, and token truncation.
  */
-export function createParallelWebSearchTool() {
+export async function createParallelWebSearchTool() {
+  const { createParallelSearchTool } = await import('@mastra/parallel');
   const parallelSearchTool = createParallelSearchTool();
 
   return createTool({
@@ -141,7 +144,8 @@ export function createParallelWebSearchTool() {
  * Wraps the @mastra/parallel extract tool with Mastra Code's standard tool id,
  * markdown string output, and token truncation.
  */
-export function createParallelWebExtractTool() {
+export async function createParallelWebExtractTool() {
+  const { createParallelExtractTool } = await import('@mastra/parallel');
   const parallelExtractTool = createParallelExtractTool();
 
   return createTool({
@@ -187,23 +191,23 @@ export function resolveWebSearchProvider(
 /**
  * Create the configured model-independent web tools for the provider selected
  * via the `webSearchProvider` preference (set in the TUI settings panel).
+ * Returns `undefined` synchronously when no provider key is configured, so the
+ * provider SDK (Tavily pulls in tiktoken, ~15 MB) only loads when one is.
  */
 export function createConfiguredWebTools() {
   const provider = resolveWebSearchProvider(loadSettings().preferences.webSearchProvider);
 
   if (provider === 'parallel') {
-    return {
-      web_search: createParallelWebSearchTool(),
-      web_extract: createParallelWebExtractTool(),
-    };
+    return loadWebTools(createParallelWebSearchTool, createParallelWebExtractTool);
   }
 
   if (provider === 'tavily') {
-    return {
-      web_search: createWebSearchTool(),
-      web_extract: createWebExtractTool(),
-    };
+    return loadWebTools(createWebSearchTool, createWebExtractTool);
   }
 
   return undefined;
+}
+
+async function loadWebTools<S, E>(createSearch: () => Promise<S>, createExtract: () => Promise<E>) {
+  return { web_search: await createSearch(), web_extract: await createExtract() };
 }

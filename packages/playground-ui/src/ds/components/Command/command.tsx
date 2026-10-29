@@ -222,7 +222,7 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
     },
     ref,
   ) => {
-    const menu = useFluidMenu<HTMLDivElement>({ activeAttr: 'data-selected' });
+    const menu = useFluidMenu({ activeAttr: 'data-selected' });
     const animateHeight = React.useContext(CommandDialogVariantContext) === 'inset';
     const list = (
       <CommandPrimitive.List
@@ -244,8 +244,9 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
 
     if (!scrollArea) return list;
 
+    // The list fills Command's `rounded-xl` box, so its scrollbar takes that radius's inset.
     return (
-      <ScrollArea className={cn('min-h-0', scrollAreaClassName)} mask={scrollAreaMask}>
+      <ScrollArea className={cn('min-h-0 scrollbar-inset-xl', scrollAreaClassName)} mask={scrollAreaMask}>
         <ScrollAreaViewport className={scrollAreaViewportClassName}>{list}</ScrollAreaViewport>
       </ScrollArea>
     );

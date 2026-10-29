@@ -26,7 +26,7 @@ function EditDatasetPageShell({ children }: { children?: ReactNode }) {
 }
 
 function EditDatasetPage() {
-  const { datasetId } = useParams()! as { datasetId: string };
+  const { datasetId } = useParams() as { datasetId: string };
   const navigate = useNavigate();
   const {
     data: dataset,

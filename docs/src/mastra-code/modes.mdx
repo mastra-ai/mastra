@@ -1,6 +1,6 @@
 ---
 title: 'Modes'
-description: "Learn how Mastra Code's three operating modes — Build, Plan, and Fast — shape the agent's behavior, tool access, and response style."
+description: "Learn how Mastra Code's three operating modes — Build, Plan, and Explore — shape the agent's behavior, tool access, and response style."
 packages:
   - 'mastracode'
 ---
@@ -61,50 +61,56 @@ Use Plan mode when you want to analyze architecture, design an approach, or crea
 
 ### Available tools
 
-- `view`: Read files and list directories
+- `view`: Read files
 - `search_content`: Search file contents
 - `find_files`: Find files by pattern
+- `file_stat`: Inspect file and directory metadata
+- `lsp_inspect`: Inspect code with the language server
 - `write_file` and `string_replace_lsp`: Create and edit plan files only
-- `execute_command`: Only for read-only commands (`git status`, `git log`, `git diff`)
+- `ask_user`: Ask clarifying questions
+- `submit_plan`: Submit the plan for review
+- `task_write`, `task_update`, `task_complete`, and `task_check`: Track plan work
+- `list-workflows` and `get-workflow`: Inspect saved workflows
+
+Plan mode has no `execute_command` tool, so the agent cannot run shell commands even when they would only read state. Writing is limited to Markdown files directly inside the project's plan directory.
 
 ### Plan submission
 
-When the agent finishes analyzing the codebase, it submits a structured plan using the `submit_plan` tool. The plan includes:
-
-- **Overview**: What the change does and why.
-- **Complexity estimate**: Size, risk level, and dependencies.
-- **Steps**: Specific files, changes, and rationale in dependency order.
-- **Verification**: What tests to run and what to check.
+The agent writes the plan to a Markdown file directly inside the project's plan directory, then calls `submit_plan` with that file's `path`. The plan file contains the overview, implementation steps, and verification details. The tool call suspends so you can review the file before the agent continues.
 
 After submission, you can:
 
 - **Approve**: Mastra Code switches to Build mode and begins implementation.
 - **Use as /goal**: Start a goal from the approved plan so Mastra Code keeps executing and checking the plan across turns.
 - **Reject**: Stay in Plan mode.
-- **Request changes**: Provide feedback for the agent to revise and resubmit.
+- **Request changes**: Provide feedback for the agent to revise the same plan file and resubmit it.
 
-## Fast mode
+## Explore mode
 
-Fast mode prioritizes speed and brevity. The agent uses a faster model and keeps responses short.
+Explore mode is read-only codebase exploration. It uses a faster model and answers questions directly instead of planning or implementing changes.
 
-Use Fast mode for quick lookups, simple questions, and small edits where latency matters more than depth.
+Use Explore mode for questions like "find all usages of X" or "how does module Y work."
 
 ### Rules
 
-- Responses stay under 200 words unless the task requires more.
-- No planning phase; the agent acts directly.
-- For general programming questions, the agent answers from knowledge without searching the codebase.
-- For project-specific questions, the agent reads the relevant code and answers concisely.
+- The agent has read-only access. It cannot modify files or run shell commands.
+- It searches broadly, then reads the relevant files to answer the question.
+- It can inspect saved workflows with `list-workflows` and `get-workflow`, but cannot create, run, or delete them.
+- It answers directly in the conversation rather than handing work back to another agent.
+
+The built-in mode keeps the id `fast` for compatibility. `/mode` displays it as Explore.
 
 ## Default models
 
-Each mode has a default model that's selected when you switch to it:
+Each mode has a default model for sessions that start in it. Switching modes keeps the current model:
 
 | Mode | Default model |
 | - | - |
-| Build | `anthropic/claude-opus-4-6` |
-| Plan | `openai/gpt-5.2-codex` |
-| Fast | `cerebras/zai-glm-4.7` |
+| Build | `openai/gpt-5.5` |
+| Plan | `openai/gpt-5.5` |
+| Explore | `openai/gpt-5.4-mini` |
+
+Mode packs can set a different model for each mode.
 
 Use `/model` to change the current mode model. The active pack becomes Custom, or the current custom pack is updated for that mode. Use `/models` to switch packs. `/packs` is an alias for `/models`.
 
@@ -130,7 +136,7 @@ The parent agent spawns subagents only when multiple tasks can run in parallel. 
 
 ## Thinking level
 
-You can control thinking depth through the `/settings` panel (or `/think`). Stored levels remain `off`, `low`, `medium`, `high`, and `xhigh` across providers. For OpenAI models, the UI shows provider-specific labels (for example, `Very High (xhigh)`), while non-OpenAI models keep generic labels.
+You can control thinking depth through the `/settings` panel (or `/think`). Stored levels remain `off`, `low`, `medium`, `high`, `xhigh`, and `max` across providers. For OpenAI models, the UI shows provider-specific labels (for example, `Very High (xhigh)`), while non-OpenAI models keep generic labels.
 
 ## YOLO mode
 

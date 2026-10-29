@@ -9,9 +9,10 @@ import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout
 import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardContent } from './board/BoardContent';
+import { BoardLoadingSkeleton } from '../domains/factory/components/BoardLoadingSkeleton';
 
 /**
- * Factory › Board: an org-wide kanban over the repository's work items. The
+ * Factory › Board: an org-wide grouped list of the repository's work items. The
  * Intake column merges persisted `intake` cards with live GitHub/Linear
  * candidates (issues and PRs that have no record yet — records are
  * materialized only when someone acts on them). Everything enters through
@@ -45,11 +46,7 @@ function BoardLayout({ kind }: { kind: string }) {
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
   const catalog = useBoardCatalog(factory.id);
   if (catalog.isPending) {
-    return (
-      <p role="status" className="p-4">
-        Loading boards…
-      </p>
-    );
+    return <BoardLoadingSkeleton />;
   }
   if (catalog.isError) {
     return <EmptyState variant="fill" titleSlot={<span role="alert">Unable to load boards.</span>} />;
@@ -70,5 +67,13 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
   const kind = definition.id;
   const repository = factory.repositories[0];
   if (!repository) return <ConnectRepositoryEmptyState factoryId={factory.id} review={kind === 'review'} />;
-  return <BoardContent factory={factory} repository={repository} kind={kind} definition={definition} />;
+  return (
+    <BoardContent
+      key={`${factory.id}:${kind}`}
+      factory={factory}
+      repository={repository}
+      kind={kind}
+      definition={definition}
+    />
+  );
 }

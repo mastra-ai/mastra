@@ -12,7 +12,7 @@ import type { LanguageModelV1, LanguageModelV1CallOptions } from '@internal/ai-s
  * is passed to Mastra, so callers do not need to construct it directly.
  */
 export class AISDKV4LegacyLanguageModel implements LanguageModelV1 {
-  readonly specificationVersion: 'v1' = 'v1';
+  readonly specificationVersion = 'v1' as const;
   readonly provider: LanguageModelV1['provider'];
   readonly modelId: LanguageModelV1['modelId'];
   readonly defaultObjectGenerationMode: LanguageModelV1['defaultObjectGenerationMode'];

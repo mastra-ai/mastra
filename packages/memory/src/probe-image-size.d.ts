@@ -15,7 +15,7 @@ declare module 'probe-image-size' {
   export default probeImageSize;
 }
 
-declare module 'probe-image-size/sync' {
+declare module 'probe-image-size/sync.js' {
   interface SyncProbeResult {
     width: number;
     height: number;

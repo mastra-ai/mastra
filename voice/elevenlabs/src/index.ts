@@ -33,23 +33,26 @@ interface RequestOptions {
 type ElevenLabsListenOptions = SpeechToTextOptions & RequestOptions;
 
 export class ElevenLabsVoice extends MastraVoice {
-  private client: ElevenLabsClient;
+  private speechClient?: ElevenLabsClient;
+  private listeningClient?: ElevenLabsClient;
 
   /**
    * Creates an instance of the ElevenLabsVoice class.
    *
    * @param {Object} options - The options for the voice configuration.
    * @param {ElevenLabsVoiceConfig} [options.speechModel] - The configuration for the speech model, including the model name and API key.
+   * @param {ElevenLabsVoiceConfig} [options.listeningModel] - The configuration for the listening model, including the model name and API key.
    * @param {string} [options.speaker] - The ID of the speaker to use. If not provided, a default speaker will be used.
    *
-   * @throws {Error} If the ELEVENLABS_API_KEY is not set in the environment variables.
+   * @throws {Error} If neither model has an API key and ELEVENLABS_API_KEY is not set.
    */
   constructor({
     speechModel,
     listeningModel,
     speaker,
   }: { speechModel?: ElevenLabsVoiceConfig; listeningModel?: ElevenLabsVoiceConfig; speaker?: string } = {}) {
-    const apiKey = speechModel?.apiKey ?? process.env.ELEVENLABS_API_KEY;
+    const speechApiKey = speechModel?.apiKey ?? process.env.ELEVENLABS_API_KEY;
+    const listeningApiKey = listeningModel?.apiKey ?? process.env.ELEVENLABS_API_KEY;
     super({
       speechModel: {
         name: speechModel?.name ?? 'eleven_multilingual_v2',
@@ -62,15 +65,33 @@ export class ElevenLabsVoice extends MastraVoice {
       speaker,
     });
 
-    if (!apiKey) {
+    if (!speechApiKey && !listeningApiKey) {
       throw new Error('ELEVENLABS_API_KEY is not set');
     }
 
-    this.client = new ElevenLabsClient({
-      apiKey,
-    });
+    if (speechApiKey) {
+      this.speechClient = new ElevenLabsClient({ apiKey: speechApiKey });
+    }
+    if (listeningApiKey) {
+      this.listeningClient =
+        listeningApiKey === speechApiKey ? this.speechClient : new ElevenLabsClient({ apiKey: listeningApiKey });
+    }
 
     this.speaker = speaker || '9BWtsMINqrJLrRacOk9x'; // Aria is the default speaker
+  }
+
+  private getSpeechClient(): ElevenLabsClient {
+    if (!this.speechClient) {
+      throw new Error('ElevenLabs speech API key is not set');
+    }
+    return this.speechClient;
+  }
+
+  private getListeningClient(): ElevenLabsClient {
+    if (!this.listeningClient) {
+      throw new Error('ElevenLabs listening API key is not set');
+    }
+    return this.listeningClient;
   }
 
   /**
@@ -81,7 +102,7 @@ export class ElevenLabsVoice extends MastraVoice {
    * A promise that resolves to an array of speaker objects.
    */
   async getSpeakers() {
-    const voices = await this.client.voices.getAll();
+    const voices = await this.getSpeechClient().voices.getAll();
     return (
       voices?.voices?.map(voice => ({
         voiceId: voice.voice_id,
@@ -134,7 +155,7 @@ export class ElevenLabsVoice extends MastraVoice {
     }
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
-    return await this.client.generate({
+    return await this.getSpeechClient().generate({
       text,
       voice: speaker,
       model_id: this.speechModel?.name as ElevenLabsModel,
@@ -149,7 +170,7 @@ export class ElevenLabsVoice extends MastraVoice {
    * @returns {Promise<{ enabled: boolean }>}
    */
   async getListener() {
-    return { enabled: true };
+    return { enabled: !!this.listeningClient };
   }
 
   /**
@@ -183,7 +204,7 @@ export class ElevenLabsVoice extends MastraVoice {
 
     const file = new File([buffer], `audio.${filetype || 'mp3'}`);
 
-    const transcription = await this.client.speechToText.convert(
+    const transcription = await this.getListeningClient().speechToText.convert(
       {
         file: file,
         model_id: this.listeningModel?.name as ElevenLabsModel,

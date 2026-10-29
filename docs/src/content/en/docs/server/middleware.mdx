@@ -22,9 +22,9 @@ Middleware handlers use Hono's signature, so they run on Hono-based serving
 paths: `mastra dev` and `mastra build`, the
 [Hono adapter](/reference/server/hono-adapter), and adapters built on it such as
 `@mastra/next` and `@mastra/tanstack-start`. Adapters for other frameworks
-(Express, Fastify, Koa) can't run Hono handlers and log a warning at startup
-when middleware is configured. Register middleware through the framework's own
-API there instead.
+(Elysia, Express, Fastify, Koa, NestJS) can't run Hono handlers and log a
+warning at startup when middleware is configured. Register middleware through
+the framework's own API there instead.
 
 User middleware never runs on routes declared public with
 `requiresAuth: false`, so it can't block endpoints the framework needs to keep
@@ -106,6 +106,10 @@ Each wildcard pattern blocks both the route group itself and its nested routes. 
 Generated servers pass `server.apiPrefix` to the Hono adapter's [`prefix` constructor option](/reference/server/hono-adapter#constructor-parameters), which prefixes built-in routes. Middleware paths are registered unchanged, so they must explicitly include the configured prefix. For example, with `apiPrefix: '/api/v2'`, use `/api/v2/memory/*`. Custom API routes must live outside the configured API prefix and aren't blocked by these patterns.
 
 This approach can't block routes declared public with `requiresAuth: false`, because Mastra skips user middleware for those routes. With a non-Hono server adapter, register equivalent middleware through the server framework instead.
+
+During `mastra dev`, inspect the full built-in route list, including MCP routes, in the [OpenAPI specification](http://localhost:4111/api/openapi.json). See the [server overview](/docs/server/overview#rest-api) for API exploration and production settings.
+
+If you use middleware for authentication without `server.auth`, prefer default-deny middleware that authenticates requests before allowing access, rather than enumerating protected paths. Include the full API prefix so REST routes alongside MCP transports are covered.
 
 ### Using `RequestContext`
 

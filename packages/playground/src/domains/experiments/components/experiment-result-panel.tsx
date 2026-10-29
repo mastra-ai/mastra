@@ -53,7 +53,7 @@ export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | '
     tags?: string[] | null;
   };
 
-export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number };
+export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number; reason?: string | null };
 
 export type ExperimentResultPanelProps = {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
@@ -197,7 +197,7 @@ function ExperimentResultPanelBody({
           <span className="font-mono" title={result.itemId}>
             {getShortId(result.itemId)}
           </span>
-          <CopyButton content={result.itemId} tooltip="Copy Item Id to clipboard" variant="link" />
+          <CopyButton content={result.itemId} tooltip="Copy item ID to clipboard" variant="link" />
         </span>
       ),
       delta: null,
@@ -249,6 +249,7 @@ function ExperimentResultPanelBody({
       scores: (scores ?? []).map(score => ({
         scorerId: score.scorerId,
         value: score.score,
+        reason: score.reason,
         label: onScoreClick ? (
           <ScoreButton
             scorerId={score.scorerId}
@@ -299,21 +300,20 @@ function ExperimentResultPanelBody({
   return (
     <>
       <DataPanel.Header>
-        <DataPanel.Heading>Experiment result</DataPanel.Heading>
+        {canFlag && (
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<ClipboardPlus />}>
+            Request review
+          </Button>
+        )}
+        {onComplete && result.status === 'needs-review' && (
+          <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+            Mark as reviewed
+          </Button>
+        )}
         <DataPanel.HeaderActions>
-          {canFlag && (
-            <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardPlus />}>
-              Request review
-            </Button>
-          )}
-          {onComplete && result.status === 'needs-review' && (
-            <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
-              Mark as reviewed
-            </Button>
-          )}
           {experimentLink && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               render={<Link href={experimentLink} />}
               tooltip="See experiment"
@@ -323,7 +323,7 @@ function ExperimentResultPanelBody({
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}

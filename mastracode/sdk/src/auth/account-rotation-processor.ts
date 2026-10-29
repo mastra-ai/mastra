@@ -20,11 +20,16 @@
  * `processInput` only and is registered in `inputProcessors`.
  */
 import { TripWire } from '@mastra/core/agent';
+import { classifyProviderError } from '@mastra/core/error';
+import type { ProviderFailureKind } from '@mastra/core/error';
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import { getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
+import { isThinkingLevelSetting } from '../thinking.js';
+import type { ThinkingLevelSetting } from '../thinking.js';
 import {
   getRequestAccountSelection,
   isRequestAccountRoutingExhausted,
@@ -85,16 +90,6 @@ const PROVIDER_HOST_PATTERNS: Array<[RegExp, string]> = [
   [/(^|\.)api\.github\.com$/i, 'github-copilot'],
 ];
 
-/**
- * Provider usage/quota-limit wording (locked Q7 bucket 1). Statuses 429/402
- * are matched before this; some providers deliver quota errors as plain 400s,
- * which only the message reveals. Deliberately restricted to unambiguous
- * quota phrases — a generic "exceeded your … limit" can appear on non-quota
- * client errors (request size, context length) that must never rotate.
- */
-const USAGE_LIMIT_MESSAGE_PATTERN =
-  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|rate limit (?:exceeded|reached)|weekly limit|monthly limit/i;
-
 const NETWORK_ERROR_CODES = new Set([
   'ECONNRESET',
   'EPIPE',
@@ -140,6 +135,21 @@ export type RotationClassification =
   | { kind: 'hop' }
   | { kind: 'never' };
 
+const ROTATION_BY_PROVIDER_KIND: Partial<Record<ProviderFailureKind, RotationClassification>> = {
+  auth: { kind: 'rotate', reason: 'auth-failed' },
+  quota: { kind: 'rotate', reason: 'quota-exhausted' },
+  rate_limited: { kind: 'rotate', reason: 'rate-limit' },
+  unavailable: { kind: 'hop' },
+};
+
+function rotationFromStatus(status: number | undefined): RotationClassification | undefined {
+  if (status === 429) return { kind: 'rotate', reason: 'rate-limit' };
+  if (status === 402) return { kind: 'rotate', reason: 'quota-exhausted' };
+  if (status === 401 || status === 403) return { kind: 'rotate', reason: 'auth-failed' };
+  if (status !== undefined && status >= 500 && status < 600) return { kind: 'hop' };
+  return undefined;
+}
+
 function isErrorWithCode(error: unknown): error is { code?: unknown } {
   return typeof error === 'object' && error !== null && 'code' in error;
 }
@@ -171,25 +181,6 @@ function isProviderAuthRequiredError(error: unknown): boolean {
   return false;
 }
 
-/** Concatenate the error's message with its cause chain (bounded). */
-function collectErrorText(error: unknown): string {
-  const parts: string[] = [];
-  let current: unknown = error;
-  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
-    if (current instanceof Error) {
-      parts.push(current.message);
-      current = current.cause;
-    } else if (typeof current === 'object' && 'message' in current) {
-      const message = (current as { message?: unknown }).message;
-      if (typeof message === 'string') parts.push(message);
-      current = (current as { cause?: unknown }).cause;
-    } else {
-      break;
-    }
-  }
-  return parts.join(' | ');
-}
-
 function isNetworkErrorLike(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
@@ -213,38 +204,24 @@ function isNetworkErrorLike(error: unknown): boolean {
 }
 
 /**
- * The locked Q7 taxonomy. 429/402/usage-limit rotate immediately (429 is not
- * covered by any transient matcher, so it arrives here on first occurrence);
- * 401/403 and `ProviderAuthRequiredError` rotate after one forced refresh;
- * 5xx/network hop only when the transient retry budget is already spent (they
- * reach this processor because `StreamErrorRetryProcessor` declined); 400 and
- * everything unknown never touch the registry.
+ * The locked Q7 taxonomy. Rate limits and exhausted quotas rotate immediately
+ * (429 is not covered by any transient matcher, so it arrives here on first
+ * occurrence); auth failures and `ProviderAuthRequiredError` rotate after one
+ * forced refresh; 5xx/network hop only when the transient retry budget is
+ * already spent (they reach this processor because `StreamErrorRetryProcessor`
+ * declined); everything else never touches the registry.
  */
 export function classifyRotationError(error: unknown): RotationClassification {
   if (isProviderAuthRequiredError(error)) {
     return { kind: 'rotate', reason: 'auth-failed' };
   }
-
   const status = readErrorStatus(error);
-
-  if (status === 429) return { kind: 'rotate', reason: 'rate-limit' };
-  if (status === 402) return { kind: 'rotate', reason: 'quota-exhausted' };
-  if (status === 401 || status === 403) return { kind: 'rotate', reason: 'auth-failed' };
-  if (status !== undefined && status >= 500 && status < 600) return { kind: 'hop' };
-
-  // Quota wording only rotates when it co-occurs with a statusless or 400
-  // error — the shapes providers actually use for message-only quota
-  // failures. Any other status keeps its own classification above (401/403
-  // auth, 5xx outage hop, 404/422 never), so limit-ish text riding a
-  // non-quota client error can no longer burn the whole pool.
-  if (status === undefined || status === 400) {
-    if (USAGE_LIMIT_MESSAGE_PATTERN.test(collectErrorText(error))) {
-      return { kind: 'rotate', reason: 'quota-exhausted' };
-    }
-  }
-  if (isNetworkErrorLike(error)) return { kind: 'hop' };
-
-  return { kind: 'never' };
+  const byStatus = rotationFromStatus(status);
+  if (byStatus) return byStatus;
+  // Wording only speaks for a statusless or 400 failure, where providers put quota and rate-limit text.
+  const byKind =
+    status === undefined || status === 400 ? ROTATION_BY_PROVIDER_KIND[classifyProviderError(error)] : undefined;
+  return byKind ?? (isNetworkErrorLike(error) ? { kind: 'hop' } : { kind: 'never' });
 }
 
 /** Provider id off a router model id: `mastracode/<provider>/<model>` or `<provider>/<model>`. */
@@ -591,6 +568,10 @@ export class AccountRotationProcessor implements Processor {
       settingsPath?: string;
       /** The host has no modes, so per-mode thinking defaults never apply. */
       modeless?: boolean;
+      /** Same host thinking default `getDynamicModel` uses, so a hop resolves at the same level. */
+      resolveDefaultThinkingLevel?: (ctx: {
+        requestContext: RequestContext;
+      }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
     },
   ) {}
 
@@ -768,6 +749,9 @@ export class AccountRotationProcessor implements Processor {
         }),
       },
       this.options.settingsPath,
+      args.requestContext && !isThinkingLevelSetting(state?.thinkingLevel)
+        ? await this.options.resolveDefaultThinkingLevel?.({ requestContext: args.requestContext })
+        : undefined,
     );
     const entries: ModelRouteCascade['entries'] = [];
     for (const entry of route.slice(startIndex)) {

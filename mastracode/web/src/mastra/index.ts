@@ -19,6 +19,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { AgentBrowser } from '@mastra/agent-browser';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -58,9 +59,21 @@ function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer
   return key;
 }
 
+// Outside development and tests, missing security configuration stops the boot
+// instead of falling back. Each fallback has its own explicit opt-in.
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+
 function credentialEncryption() {
   const encodedKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim();
   if (!encodedKey) {
+    const plaintextOptIn = process.env.FACTORY_CREDENTIAL_ENCRYPTION?.trim() === 'plaintext';
+    if (!localDevelopmentMode && !plaintextOptIn) {
+      throw new Error(
+        'FACTORY_CREDENTIAL_ENCRYPTION_KEY is required outside local development and tests. Generate a key with ' +
+          '`openssl rand -base64 32`, or set FACTORY_CREDENTIAL_ENCRYPTION=plaintext to store model-provider keys, ' +
+          'custom-provider API keys, and integration secrets unencrypted.',
+      );
+    }
     console.warn(
       '[factory] FACTORY_CREDENTIAL_ENCRYPTION_KEY is not set. Stored model-provider keys, custom-provider ' +
         'API keys, and integration secrets will be persisted as plaintext. Generate a key with ' +
@@ -223,6 +236,7 @@ const linear =
 // visible `jira` connections. Partial direct configuration falls back
 // to Platform Jira when Platform credentials are available.
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraApiBaseUrl = process.env.JIRA_API_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();
 const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
 const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
@@ -237,6 +251,7 @@ const jira =
   jiraBaseUrl && jiraEmail && jiraApiToken
     ? new JiraIntegration({
         baseUrl: jiraBaseUrl,
+        ...(jiraApiBaseUrl ? { apiBaseUrl: jiraApiBaseUrl } : {}),
         email: jiraEmail,
         apiToken: jiraApiToken,
       })
@@ -299,7 +314,6 @@ if (process.env.APP_DATABASE_URL?.trim() && !process.env.DATABASE_URL?.trim()) {
       'The old name is honored as a fallback for now, but new deploys should use DATABASE_URL.',
   );
 }
-const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 if (!databaseUrl && !localDevelopmentMode) {
   throw new Error('DATABASE_URL is required outside local development and tests.');
 }
@@ -317,35 +331,41 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
+const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
+
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
-// password, then the Slack signing secret so a Slack-only deployment still has
+// password, then a Slack transport secret so a Slack-only deployment still has
 // a stable signer. Unset → per-process random secret (single-process local dev
 // only).
 const stateSecret =
   process.env.GITHUB_APP_WEBHOOK_SECRET ||
   process.env.WORKOS_COOKIE_PASSWORD ||
-  process.env.SLACK_APP_SIGNING_SECRET ||
+  slackSigningSecret ||
+  slackAppToken ||
   undefined;
 
-// Slack channels + account linking. Optional: the Slack adapter validates the
-// signing secret at construction, so the integration is only built when the
-// Slack app env is configured. Repo-backed Slack threads come from the
-// factory's source-control owner (GitHub) — the integration wires itself.
-const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
-const slack = slackSigningSecret
-  ? new SlackIntegration({
-      signingSecret: slackSigningSecret,
-      botToken: process.env.SLACK_APP_BOT_TOKEN,
-      clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
-      clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
-      // Slack requires an HTTPS redirect_uri, which locally is the tunnel
-      // origin rather than the app's own public URL.
-      oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
-      uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
-    })
-  : undefined;
+// Slack channels + account linking. Socket Mode is selected when an app-level
+// token is configured; otherwise Slack uses HTTP webhook mode. Repo-backed
+// Slack threads come from the factory's source-control owner (GitHub) — the
+// integration wires itself.
+const slack =
+  slackAppToken || slackSigningSecret
+    ? new SlackIntegration({
+        mode: slackAppToken ? 'socket' : 'webhook',
+        appToken: slackAppToken,
+        signingSecret: slackSigningSecret,
+        botToken: process.env.SLACK_APP_BOT_TOKEN,
+        clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+        clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+        // Slack requires an HTTPS redirect_uri, which locally is the tunnel
+        // origin rather than the app's own public URL.
+        oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+        uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      })
+    : undefined;
 
 const integrations = [
   ...(github ? [github] : []),
@@ -363,10 +383,19 @@ const hasPlatformSandboxEnv =
   ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
 const e2bApiKey = process.env.E2B_API_KEY?.trim();
+if (!useLocalSandbox && !hasPlatformSandboxEnv && !e2bApiKey && !localDevelopmentMode) {
+  throw new Error(
+    'A sandbox provider is required outside local development and tests. Set MASTRA_PLATFORM_ACCESS_TOKEN or ' +
+      'MASTRA_PLATFORM_SECRET_KEY with MASTRA_PROJECT_ID and MASTRA_ENVIRONMENT_ID for Mastra platform sandboxes, ' +
+      'or E2B_API_KEY for E2B. To run agent commands directly on this machine as the server user, set ' +
+      'FACTORY_SANDBOX_PROVIDER=local.',
+  );
+}
 
 /**
  * The host sandbox, chosen once at boot: local when forced, else the platform
- * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local.
+ * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local
+ * (development and tests only; see the guard above).
  */
 const sandbox =
   !useLocalSandbox && hasPlatformSandboxEnv
@@ -378,6 +407,10 @@ const sandbox =
           env: localSandboxEnv(),
         });
 
+// One headless Chromium per session thread, so sessions don't share tabs.
+const browser =
+  process.env.FACTORY_BROWSER?.trim() === 'local' ? new AgentBrowser({ headless: true, scope: 'thread' }) : undefined;
+
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -387,6 +420,7 @@ export const factory = new MastraFactory({
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
+  browser,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

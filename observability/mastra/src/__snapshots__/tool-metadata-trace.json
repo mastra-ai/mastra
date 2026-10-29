@@ -29,7 +29,11 @@
         "entityId": "metadata-agent",
         "attributes": {
           "instructions": "You use tools and add metadata",
-          "availableTools": ["metadataTool"]
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "availableTools": ["metadataTool"],
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -77,10 +81,11 @@
                   }
                 }
               ],
+              "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 35,
@@ -145,7 +150,11 @@
                 "entityId": "metadata-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -322,6 +331,7 @@
                         }
                       ],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 10,
@@ -340,6 +350,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You use tools and add metadata"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Use metadata tool to process some data"
+                      }
+                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -459,7 +479,11 @@
                 "entityId": "metadata-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -700,6 +724,7 @@
                         }
                       ],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -718,6 +743,24 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You use tools and add metadata"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Use metadata tool to process some data"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "[tool: metadataTool]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: metadataTool]"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []

@@ -27,5 +27,5 @@ export type TracingOptionsUpdater = (options: TracingOptions) => TracingOptions;
  * ```
  */
 export function buildTracingOptions(...updaters: TracingOptionsUpdater[]): TracingOptions {
-  return updaters.reduce((opts, updater) => updater(opts), {} as TracingOptions);
+  return updaters.reduce<TracingOptions>((opts, updater) => updater(opts), {});
 }

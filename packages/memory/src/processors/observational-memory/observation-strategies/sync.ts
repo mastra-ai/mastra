@@ -277,6 +277,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         },
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });
+      this.opts.abortSignal?.throwIfAborted();
       await this.storage.patchThread({
         id: threadId,
         ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),

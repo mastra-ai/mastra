@@ -20,7 +20,7 @@ export const NoToolsInfo = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        Tools Documentation
+        Tools documentation
       </Button>
     }
     variant="fill"

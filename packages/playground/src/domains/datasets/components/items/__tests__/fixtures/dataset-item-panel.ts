@@ -14,12 +14,38 @@ export const itemWithMocks: DatasetItem = {
   toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }],
 };
 
+export const itemWithEmptyToolMocks: DatasetItem = {
+  ...baseItem,
+  toolMocks: [],
+};
+
 export const itemWithScorers: DatasetItem = {
   ...baseItem,
   scorerIds: ['quality'],
 };
 
-export const itemWithEmptyScorers: DatasetItem = {
+export const itemWithTextPayload: DatasetItem = {
   ...baseItem,
-  scorerIds: [],
+  input: 'What is the weather in Seattle?',
+  groundTruth: 'It is rainy.',
+};
+
+export const itemWithPreviousTextInput: DatasetItem = {
+  ...baseItem,
+  input: 'What was the weather in Seattle?',
+};
+
+export const itemWithEmptyStringGroundTruth: DatasetItem = {
+  ...baseItem,
+  groundTruth: '',
+};
+
+export const itemWithEmptyObjectGroundTruth: DatasetItem = {
+  ...baseItem,
+  groundTruth: {},
+};
+
+export const itemWithUuid: DatasetItem = {
+  ...baseItem,
+  id: '0bbd9730-e38f-43d8-bc35-67cf97c0c971',
 };

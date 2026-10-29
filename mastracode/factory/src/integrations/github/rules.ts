@@ -10,6 +10,7 @@ import {
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import { requestsChangesVerdict } from '../../review-verdict.js';
 import { selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
@@ -129,10 +130,14 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     // A comment on a PR arrives as `issue_comment` with `issue.pull_request` set.
     // It routes to the PR's own event so it binds to the authoring Work item via
     // provenance instead of being mistaken for a comment on an issue of the same
-    // number. Only `created` matters: edits and deletions of an existing comment
-    // are not new feedback to act on.
+    // number. Edits and deletions are not new feedback, with one exception: the
+    // review skill updates its earlier request-changes verdict in place instead
+    // of posting a new one, and that edit is the only handoff the author gets.
     if (object(issue?.pull_request)) {
-      return action === 'created' ? 'pullRequestCommentCreated' : undefined;
+      if (action === 'created') return 'pullRequestCommentCreated';
+      return action === 'edited' && editedRequestChangesVerdict(parsed.payload, parsed.payload.comment)
+        ? 'pullRequestCommentCreated'
+        : undefined;
     }
     if (action === 'created') return 'issueCommentCreated';
     if (action === 'edited') return 'issueCommentEdited';
@@ -145,7 +150,19 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   }
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
   if (parsed.event === 'pull_request_review' && action === 'submitted') return 'pullRequestReviewSubmitted';
+  if (parsed.event === 'pull_request_review' && action === 'edited') {
+    const review = object(parsed.payload.review);
+    return string(review?.state)?.toLowerCase() === 'changes_requested' &&
+      editedRequestChangesVerdict(parsed.payload, review)
+      ? 'pullRequestReviewSubmitted'
+      : undefined;
+  }
   return undefined;
+}
+
+/** A body edit that leaves a Factory request-changes verdict on the post. */
+function editedRequestChangesVerdict(payload: Record<string, unknown>, post: unknown): boolean {
+  return object(object(payload.changes)?.body) !== undefined && requestsChangesVerdict(string(object(post)?.body));
 }
 
 /**
@@ -303,10 +320,12 @@ export interface GithubRulesOptions {
 /** Identity under which label-driven relocations are recorded. */
 const LABEL_ROUTE_USER_ID = 'factory-rule-dispatcher';
 
-function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
-  const action = string(parsed.payload.action);
-  return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
-}
+type IssueActionHandler = (
+  parsed: ParsedGithubWebhook,
+  repositoryId: number,
+  repositoryName: string,
+  project: ExternalRepositoryProjectTarget,
+) => Promise<{ status: 'ignored' | 'committed' }>;
 
 /**
  * Whether a login is Factory itself. Prefers the resolved identity, which is
@@ -432,9 +451,83 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
+  /**
+   * `assigned` / `unassigned` are not rule events either: an existing issue card only mirrors the
+   * issue's full assignee list. No card is created, moved, or handed to a run.
+   */
+  async #syncIssueAssignees(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const issue = object(parsed.payload.issue);
+    const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
+    if (!issueNumber) return { status: 'ignored' };
+    const item = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      issueNumber,
+      undefined,
+      undefined,
+      null,
+    );
+    if (!item || item.externalSource?.type !== 'issue') return { status: 'ignored' };
+    const assignees = actorLogins(issue?.assignees);
+    // GitHub can deliver webhooks out of order; drop payloads older than the last applied one.
+    // Timestamps have one-second resolution, so equal timestamps still apply.
+    const updatedAt = string(issue?.updated_at);
+    const payloadTime = timestamp(updatedAt);
+    const storedTime = timestamp(item.metadata?.githubAssigneesUpdatedAt);
+    if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
+      return { status: 'ignored' };
+    }
+    // A newer payload with unchanged assignees still advances the stored time, so a delayed older
+    // payload cannot slip in behind it.
+    const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
+    if (sameStrings(item.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
+    try {
+      const updated = await this.options.storage.update({
+        orgId: item.orgId,
+        id: item.id,
+        userId: LABEL_ROUTE_USER_ID,
+        patch: {
+          metadata: {
+            ...(item.metadata ?? {}),
+            assignees,
+            ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
+          },
+        },
+        expectedRevision: item.revision,
+      });
+      return { status: updated ? 'committed' : 'ignored' };
+    } catch (error) {
+      // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
+      // winner left them until the next assigned/unassigned delivery for this issue.
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      return { status: 'ignored' };
+    }
+  }
+
+  /** `issues` actions that are not rule events but still update an existing card. */
+  #issueActionHandler(parsed: ParsedGithubWebhook): IssueActionHandler | undefined {
+    if (parsed.event !== 'issues') return undefined;
+    switch (string(parsed.payload.action)) {
+      case 'labeled':
+      case 'unlabeled':
+        return (...args) => this.#relocateLabeledIssue(...args);
+      case 'assigned':
+      case 'unassigned':
+        return (...args) => this.#syncIssueAssignees(...args);
+      default:
+        return undefined;
+    }
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
-    const labelChange = issueLabelChange(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
@@ -444,9 +537,15 @@ export class GithubRules {
       await this.#handOffPush(parsed, installationId, repositoryId);
       return { status: 'ignored' };
     }
-    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
-      return { status: 'ignored' };
-    }
+    if (!installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
+    const issueAction = this.#issueActionHandler(parsed);
+    const handle = event
+      ? (project: ExternalRepositoryProjectTarget) =>
+          this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
+      : issueAction
+        ? (project: ExternalRepositoryProjectTarget) => issueAction(parsed, repositoryId, repositoryName, project)
+        : undefined;
+    if (!handle) return { status: 'ignored' };
 
     const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
       installationExternalId: String(installationId),
@@ -455,11 +554,7 @@ export class GithubRules {
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
-      results.push(
-        event
-          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
-      );
+      results.push(await handle(project));
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
@@ -775,6 +870,48 @@ export class GithubRules {
       return { status: committed.status };
     };
 
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review. It is
+    // recorded before the push is evaluated: the dispatcher can apply the
+    // re-review transition as soon as it commits, and the pass it starts names
+    // the head it covers, which must be the pushed one.
+    const stampHead = async () => {
+      const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
+      if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
+      const headAt = timestamp(pullRequest?.updated_at);
+      if (relatedItem?.externalSource?.type !== 'pull-request') return;
+      const parent = await this.#linkedClosureItem(
+        project.orgId,
+        project.factoryProjectId,
+        repositoryId,
+        repositoryName,
+        pullRequestNumber,
+        relatedItem,
+      );
+      // The authoring Work item mirrors the verdict of the pull request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: relatedItem.orgId,
+        id: relatedItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: pullRequestNumber,
+        });
+      }
+    };
+    await stampHead();
+    const evaluated =
+      event === 'pullRequestUpdated' && relatedItem
+        ? ((await this.options.storage.get({ orgId: relatedItem.orgId, id: relatedItem.id })) ?? relatedItem)
+        : relatedItem;
     const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
     // A pull request opening concerns two cards: its own Review card, which the
     // arrival rule files — committed against the Work item that authored the
@@ -784,7 +921,7 @@ export class GithubRules {
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
-    const primary = await evaluate(relatedItem, deliveryIdentity, pullRequestOpened);
+    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened);
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -889,43 +1026,8 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
-    // A push moves the head a recorded review verdict was given on. Recording
-    // the new head lets the verdict badge show that it is outdated, while the
-    // verdict itself stays so the next pass still runs as a re-review.
-    const stampHead = async () => {
-      const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
-      if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
-      const headAt = timestamp(pullRequest?.updated_at);
-      if (relatedItem?.externalSource?.type !== 'pull-request') return;
-      const parent = await this.#linkedClosureItem(
-        project.orgId,
-        project.factoryProjectId,
-        repositoryId,
-        repositoryName,
-        pullRequestNumber,
-        relatedItem,
-      );
-      // The authoring Work item mirrors the verdict of the pull request it has
-      // out; a push to an older one must not mark its successor's verdict.
-      await recordPullRequestHead(this.options.storage, {
-        orgId: relatedItem.orgId,
-        id: relatedItem.id,
-        headSha,
-        headAt,
-      });
-      if (parent) {
-        await recordPullRequestHead(this.options.storage, {
-          orgId: parent.orgId,
-          id: parent.id,
-          headSha,
-          headAt,
-          ownedPullRequestNumber: pullRequestNumber,
-        });
-      }
-    };
     if (linked === undefined && authoringItem === undefined) {
       await stampClosed();
-      await stampHead();
       return primary;
     }
     const companion = linked ?? authoringItem;

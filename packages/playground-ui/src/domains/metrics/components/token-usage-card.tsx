@@ -4,7 +4,7 @@ import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import { BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
-import { formatAxisCount, formatCount, formatUsd } from '../lib/chart-format';
+import { formatAxisCount, formatAxisUsd, formatCount, formatUsd } from '../lib/chart-format';
 import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
@@ -23,8 +23,6 @@ const TOKEN_SERIES: MetricsLineChartSeries[] = [
   { dataKey: 'output', label: 'Output', color: CHART_COLORS.sky },
 ];
 const COST_SERIES: MetricsLineChartSeries[] = [{ dataKey: 'cost', label: 'Cost', color: CHART_COLORS.green }];
-
-const axisUsd = (value: number) => `$${value.toFixed(value < 10 ? 1 : 0)}`;
 
 /** Tokens (input, cache reads, output) or model cost per bucket; a bar opens its traces. */
 export type TokenUsageCardProps = {
@@ -86,7 +84,7 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
           height="fill"
           showLegend={false}
           valueFormatter={isTokens ? formatCount : formatUsd}
-          axisFormatter={isTokens ? formatAxisCount : axisUsd}
+          axisFormatter={isTokens ? formatAxisCount : formatAxisUsd}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
           isLoading={isLoading}
           {...BUCKET_AXIS}

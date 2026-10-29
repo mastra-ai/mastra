@@ -159,7 +159,6 @@ export class EventedAgent<
     // segment's background promise settles.
     const entry = getRunRegistryEntry(runId, this.getMastraInstance());
     const executionFence = entry?.executionFence;
-    const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
     try {
       const workflow = this.getWorkflow();
       // The evented engine executes via pubsub events consumed by in-process
@@ -214,15 +213,20 @@ export class EventedAgent<
               status: result?.status,
               error:
                 result?.status === 'failed'
-                  ? new Error((result as any).error?.message || 'Workflow execution failed')
+                  ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
                   : undefined,
             }),
           // settleExecution never rejects: a pubsub already closing during
           // shutdown must not become an unhandledRejection (#23168).
-          error => this.settleExecution(runId, executionFence, { error: toError(error) }),
+          error =>
+            this.settleExecution(runId, executionFence, {
+              error: this.workflowExecutionError(error, 'Workflow execution failed'),
+            }),
         );
     } catch (error) {
-      await this.settleExecution(runId, executionFence, { error: toError(error) });
+      await this.settleExecution(runId, executionFence, {
+        error: this.workflowExecutionError(error, 'Workflow execution failed'),
+      });
     }
   }
 }

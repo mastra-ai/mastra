@@ -5,6 +5,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
+import {
+  closePropertiesMenus,
+  openPropertiesMenu,
+  openPropertySubmenu,
+  togglePropertyOption,
+} from '../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import type { IntakeConfig, IntakeSourceBinding } from '../domains/factory/services/intake';
@@ -41,6 +47,9 @@ function stubSources() {
           },
         ],
       }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: true, installations: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: true, connected: true, workspace: null }),
@@ -88,15 +97,20 @@ function stubHostedSources(issues = hostedIssues) {
 }
 
 async function selectMany(name: string, options: string[]) {
-  if (!screen.queryByRole('combobox', { name: 'Add filter' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
   const user = userEvent.setup();
-  const input = screen.getByRole('combobox', { name: 'Add filter' });
-  await user.click(input);
-  await user.type(input, name);
-  await user.click(await screen.findByRole('option', { name }));
-  for (const option of options) await user.click(await screen.findByRole('option', { name: new RegExp(option) }));
-  await user.click(screen.getByRole('button', { name: /^Done/ }));
+  for (const option of options) await togglePropertyOption(user, 'Board properties', name, new RegExp(option));
+}
+
+async function saveAsView() {
+  const user = userEvent.setup();
+  await openPropertiesMenu(user, 'Board properties');
+  await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
+  await user.click(await screen.findByRole('button', { name: 'Save view' }));
+}
+
+async function intakeSourceOptions() {
+  await openPropertySubmenu(userEvent.setup(), 'Board properties', 'Intake source');
+  return screen.getAllByRole('menuitemcheckbox').map(option => option.textContent);
 }
 
 async function expectPortalView() {
@@ -122,12 +136,47 @@ async function expectPortalView() {
 }
 
 describe('Board source and Linear project filters', () => {
+  it('offers connected providers and Manual, but not unconnected sources', async () => {
+    stubSources();
+    const view = renderBoard();
+    await waitForMutationsIdle(view.client);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual']);
+  });
+
+  it('keeps a saved filter on a disconnected source labelled and selectable', async () => {
+    stubSources();
+    const view = renderBoard('?source=gitlab');
+    await waitForMutationsIdle(view.client);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual']);
+    expect(screen.getByRole('menuitemcheckbox', { name: 'GitLab' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('offers only Manual when configured providers are disconnected', async () => {
+    stubSources();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, workspace: null }),
+      ),
+    );
+    const view = renderBoard();
+    await waitForMutationsIdle(view.client);
+    expect(await intakeSourceOptions()).toEqual(['Manual']);
+  });
+
   describe('when a hosted Linear project is selected', () => {
     it('keeps matching live and stored cards across the board after saving and reloading the view', async () => {
       stubHostedSources();
       const first = renderBoard();
       await screen.findByText('DocsWatch: new documentation request');
       await waitForMutationsIdle(first.client);
+      const user = userEvent.setup();
+      await openPropertiesMenu(user, 'Board properties');
+      expect(screen.queryByRole('menuitem', { name: /^Linear project/ })).not.toBeInTheDocument();
+      await closePropertiesMenus(user);
+      await selectMany('Intake source', ['Linear']);
       await selectMany('Linear project', ['DocsWatch']);
       expect(new URLSearchParams(first.router.state.location.search).get('linearProject')).toBe(docsWatchId);
 
@@ -144,9 +193,7 @@ describe('Board source and Linear project filters', () => {
         expect(screen.queryByText('Billing: payment history')).not.toBeInTheDocument();
       };
       await expectDocsWatch();
-      const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: 'Save as view' }));
-      await user.click(screen.getByRole('button', { name: 'Save view' }));
+      await saveAsView();
       const viewId = new URLSearchParams(first.router.state.location.search).get('view');
       expect(viewId).toBeTruthy();
       first.unmount();
@@ -181,16 +228,13 @@ describe('Board source and Linear project filters', () => {
     await expectPortalView();
     expect(first.router.state.location.search).toContain('linearProject=project-a');
 
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Save as view' }));
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    await saveAsView();
     const viewId = new URLSearchParams(first.router.state.location.search).get('view');
     expect(viewId).toBeTruthy();
     first.unmount();
     const second = renderBoard(`?view=${viewId}`);
     await waitForMutationsIdle(second.client);
     await expectPortalView();
-    expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
   });
 
   it('hides a repository-scoped candidate already filed with a legacy key when source filters combine feeds', async () => {
@@ -221,19 +265,21 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('GitHub: improve error messages')).not.toBeInTheDocument();
   });
 
-  it('restores a project-only URL and combines it with existing label and text filters', async () => {
+  it('restores a project-only URL and combines it with an existing label filter', async () => {
     stubSources();
-    const view = renderBoard('?linearProject=project-a&label=feature&q=Portal');
+    const view = renderBoard('?linearProject=project-a&label=feature');
     await waitForMutationsIdle(view.client);
     await expectPortalView();
-    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
-    expect(screen.getByText('Customer Portal')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Linear project filter' }));
+    const user = userEvent.setup();
+    await openPropertiesMenu(user, 'Board properties');
+    expect(screen.getByRole('menuitem', { name: /^Linear project\s*Customer Portal$/ })).toBeInTheDocument();
+    await closePropertiesMenus(user);
+    await togglePropertyOption(user, 'Board properties', 'Linear project', 'Customer Portal');
     expect(view.router.state.location.search).not.toContain('linearProject=');
     expect(view.router.state.location.search).toContain('label=feature');
   });
 
-  it('merges selected source feeds and restores the Intake selector after clearing the filter', async () => {
+  it('merges selected source feeds and restores all sources after clearing the filter', async () => {
     stubSources();
     const view = renderBoard();
     await screen.findByText('GitHub: update dependencies');
@@ -243,9 +289,9 @@ describe('Board source and Linear project filters', () => {
     expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
     expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Intake source filter' }));
+    await selectMany('Intake source', ['GitHub', 'Linear']);
     await screen.findByText('Manual follow-up');
-    expect(screen.queryByText('Portal: add account switcher')).not.toBeInTheDocument();
+    expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
     expect(view.router.state.location.search).not.toContain('source=');
   });
 
@@ -260,11 +306,44 @@ describe('Board source and Linear project filters', () => {
         ),
       ),
     );
-    renderBoard('?linearProject=project-a');
+    const { client } = renderBoard('?linearProject=project-a');
+    await waitForMutationsIdle(client);
     fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
     await screen.findByText('Portal: later page');
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
   });
+  it('pages a healthy feed without retrying a failed provider', async () => {
+    stubSources();
+    let githubAttempts = 0;
+    let linearPageRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => {
+        githubAttempts++;
+        return HttpResponse.json({ error: 'GitHub feed unavailable' }, { status: 502 });
+      }),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) => {
+        if (new URL(request.url).searchParams.has('after')) {
+          linearPageRequests++;
+          return HttpResponse.json({
+            issues: [linearIssue('ENG-105', 'project-a', 'Portal: later page')],
+            nextCursor: null,
+          });
+        }
+        return HttpResponse.json({ issues: [linearIssues[0]], nextCursor: 'next-page' });
+      }),
+    );
+
+    renderBoard('?source=github&source=linear');
+    await screen.findAllByText('GitHub: GitHub feed unavailable');
+    await screen.findByText('Portal: add account switcher');
+    const githubAttemptsBeforePaging = githubAttempts;
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
+    await screen.findByText('Portal: later page');
+    expect(linearPageRequests).toBe(1);
+    expect(githubAttempts).toBe(githubAttemptsBeforePaging);
+    expect(screen.getAllByText('GitHub: GitHub feed unavailable')).not.toHaveLength(0);
+  });
+
   it('retries a failed page in a combined feed without losing the other source cards', async () => {
     stubSources();
     let pageAttempts = 0;
@@ -285,7 +364,7 @@ describe('Board source and Linear project filters', () => {
     await waitForMutationsIdle(view.client);
     await screen.findByText('Portal: add account switcher');
     fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
-    await screen.findByText('Linear page unavailable');
+    await screen.findByText('Linear: Linear page unavailable');
     expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByText('Portal: later page');
@@ -294,7 +373,7 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('Linear page unavailable')).not.toBeInTheDocument();
   });
 
-  it('matches any selected Linear project and respects an incompatible source filter', async () => {
+  it('matches any selected Linear project and narrows only Linear cards by it', async () => {
     stubSources();
     const first = renderBoard('?linearProject=project-a&linearProject=project-b');
     await waitForMutationsIdle(first.client);
@@ -302,11 +381,14 @@ describe('Board source and Linear project filters', () => {
     expect(screen.getByText('Billing: export invoices')).toBeInTheDocument();
     expect(screen.getByText('Moved project card')).toBeInTheDocument();
     expect(screen.queryByText('Unassigned project')).not.toBeInTheDocument();
-    first.unmount();
-    const second = renderBoard('?source=github&linearProject=project-a');
-    await waitForMutationsIdle(second.client);
-    expect(screen.queryByText('Portal: add account switcher')).not.toBeInTheDocument();
     expect(screen.queryByText('GitHub: update dependencies')).not.toBeInTheDocument();
+    first.unmount();
+    const second = renderBoard('?source=github&source=linear&linearProject=project-a');
+    await waitForMutationsIdle(second.client);
+    await screen.findByText('Portal: add account switcher');
+    expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
+    expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
+    expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
   });
 
   it('offers Linear reconnection when the selected feed authorization expires', async () => {
@@ -322,7 +404,8 @@ describe('Board source and Linear project filters', () => {
         ),
       ),
     );
-    renderBoard('?source=github&source=linear');
+    const { client } = renderBoard('?source=github&source=linear');
+    await waitForMutationsIdle(client);
     await screen.findByRole('button', { name: 'Connect Linear' });
     expect(screen.getByText('Linear authorization expired. Reconnect to keep syncing issues.')).toBeInTheDocument();
   });
@@ -335,8 +418,10 @@ describe('Board source and Linear project filters', () => {
     );
     const view = renderBoard('?source=jira');
     await waitForMutationsIdle(view.client);
-    await screen.findByText('No work items match filters');
-    expect(screen.getByText('Try adjusting or clearing your filters.')).toBeInTheDocument();
+    await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters');
+    expect(
+      within(screen.getByTestId('board-column-intake')).getByText(/Try adjusting or clearing your filters\./),
+    ).toBeInTheDocument();
     expect(screen.queryByText('No intake sources')).not.toBeInTheDocument();
   });
 });

@@ -1,12 +1,13 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
+import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { AIV5Type, MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType, ThreadRunStatusChunk } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
@@ -221,7 +222,20 @@ interface SharedArgs {
   tracingOptions?: TracingOptions;
 }
 
-export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMessage[] } & (
+/** JSON-serializable metadata attached to a user message sent through `useChat`. */
+export type UserMessageMetadata = NonNullable<SendAgentSignalParams['signal']['metadata']>;
+
+export type SendMessageArgs = {
+  message: string;
+  coreUserMessages?: CoreUserMessage[];
+  /**
+   * Custom metadata for the user message. It is merged into the optimistic
+   * message's `content.metadata` and, on the thread-signals path, sent with the
+   * outgoing message. Internal keys (`mode`, `status`, `clientMessageId`) take
+   * precedence over user-supplied values.
+   */
+  metadata?: UserMessageMetadata;
+} & (
   | ({ mode: 'generate' } & Omit<GenerateArgs, 'coreUserMessages'>)
   | ({ mode: 'stream' } & Omit<StreamArgs, 'coreUserMessages'>)
   | ({ mode: 'network' } & Omit<NetworkArgs, 'coreUserMessages'>)
@@ -244,6 +258,8 @@ export type StreamArgs = SharedArgs & {
    * and the outgoing message metadata so the server echo can reconcile them.
    */
   clientMessageId?: string;
+  /** Custom user-message metadata sent alongside the thread signal. */
+  metadata?: UserMessageMetadata;
 };
 
 export type NetworkArgs = SharedArgs & {
@@ -346,6 +362,7 @@ export const useChat = ({
   const liveApprovalIds = useRef(new Set<string>());
   const liveRunId = useRef<string | undefined>(undefined);
   const liveRunFinished = useRef(false);
+  const pendingRunStatuses = useRef<Map<string, ThreadRunStatusChunk> | undefined>(undefined);
   const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
@@ -353,7 +370,25 @@ export const useChat = ({
   const [subscriptionHistory, setSubscriptionHistory] = useState<
     { key: string; messages: MastraDBMessage[] } | undefined
   >(undefined);
+  // `hasMore` from the initial `thread-history` chunk, keyed by the subscription
+  // that delivered it so a stale page never describes a different thread or config.
+  const [subscriptionPagination, setSubscriptionPagination] = useState<
+    { key: string; pagination: { hasMore: boolean } } | undefined
+  >(undefined);
   const historyKey = `${agentId}:${resourceId ?? ''}:${threadId ?? ''}`;
+  const historyConfigKey = !withInitialHistory
+    ? ''
+    : withInitialHistory === true
+      ? 'history'
+      : `history:${withInitialHistory.perPage ?? ''}`;
+  const initialHistoryPagination: { hasMore: boolean } | undefined =
+    withInitialHistory &&
+    !threadSignalsDisabled &&
+    threadId &&
+    subscriptionPagination?.key ===
+      `${agentId}:${resourceId || agentId}:${threadId}:${streamPath ?? ''}:${historyConfigKey}`
+      ? subscriptionPagination.pagination
+      : undefined;
   const hydratedMessages =
     withInitialHistory && subscriptionHistory?.key === historyKey ? subscriptionHistory.messages : initialMessages;
 
@@ -494,6 +529,7 @@ export const useChat = ({
     _threadSubscriptionAbortRef.current = null;
     _threadSubscriptionKeyRef.current = undefined;
     _threadSubscriptionPromiseRef.current = null;
+    setSubscriptionPagination(undefined);
   }, []);
 
   const processStreamChunk = useCallback(
@@ -589,7 +625,7 @@ export const useChat = ({
 
   const ensureThreadSubscription = useCallback(
     async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
-      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}:${streamPath ?? ''}`;
+      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}:${streamPath ?? ''}:${historyConfigKey}`;
       if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
         await _threadSubscriptionPromiseRef.current;
         return;
@@ -608,6 +644,7 @@ export const useChat = ({
         _threadSubscriptionAbortRef.current = null;
         _threadSubscriptionKeyRef.current = undefined;
         _threadSubscriptionPromiseRef.current = null;
+        setSubscriptionPagination(undefined);
       };
 
       const clientWithAbort = new MastraClient({
@@ -617,7 +654,12 @@ export const useChat = ({
       const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({ resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) })
+        .subscribeToThread({
+          resourceId,
+          threadId,
+          withRunStatus: true,
+          ...(withInitialHistory ? { withInitialHistory } : {}),
+        })
         .then(response => {
           const subscription = response;
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
@@ -630,6 +672,22 @@ export const useChat = ({
             .processDataStream({
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
+                  if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+                    const { hasMore, activeRunId } = chunk.payload;
+                    if (
+                      activeRunId &&
+                      activeRunId !== liveRunId.current &&
+                      (!liveRunId.current || liveRunFinished.current)
+                    ) {
+                      liveRunId.current = activeRunId;
+                      liveRunFinished.current = false;
+                      _currentRunId.current = activeRunId;
+                      setIsRunning(pendingToolApprovalIdsRef.current.size === 0);
+                    }
+                    setSubscriptionPagination(
+                      typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
+                    );
+                  }
                   // Merge history into `messages` now, as a queued update, so the
                   // live chunks right behind it accumulate onto the stored parts.
                   const history = resolveInitialMessages(chunk.payload.messages);
@@ -641,6 +699,20 @@ export const useChat = ({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,
                   });
+                  return;
+                }
+                if (chunk.type === 'thread-run-status') {
+                  if (chunk.runId !== liveRunId.current) {
+                    pendingRunStatuses.current?.set(chunk.runId, chunk);
+                    return;
+                  }
+                  setIsRunning(false);
+                  if (chunk.payload.status !== 'suspended') {
+                    liveRunFinished.current = true;
+                    for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+                    pendingToolApprovalIdsRef.current.clear();
+                    setIsAwaitingToolApproval(false);
+                  }
                   return;
                 }
                 return processStreamChunk(chunk);
@@ -683,6 +755,7 @@ export const useChat = ({
       agentId,
       baseClient,
       closeThreadSubscription,
+      historyConfigKey,
       markThreadSignalsUnsupported,
       processStreamChunk,
       streamPath,
@@ -820,6 +893,7 @@ export const useChat = ({
     clientToolsResolver,
     signalId,
     clientMessageId,
+    metadata,
   }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -880,6 +954,7 @@ export const useChat = ({
 
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
+      _currentRunId.current = runId;
       const response = await agent.stream(coreUserMessages, {
         model,
         runId,
@@ -959,11 +1034,19 @@ export const useChat = ({
       clientToolsResolver,
     };
 
+    const liveRunIdBeforeSend = liveRunId.current;
+    // An outcome can reach SSE before the acceptance response supplies its run ID.
+    const earlyRunStatuses = new Map<string, ThreadRunStatusChunk>();
+    pendingRunStatuses.current = earlyRunStatuses;
     try {
       const result = await agent.sendMessage({
-        message: clientMessageId
-          ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
-          : messageContents,
+        message:
+          clientMessageId || metadata
+            ? {
+                contents: messageContents,
+                metadata: { ...metadata, ...(clientMessageId ? { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } : {}) },
+              }
+            : messageContents,
         resourceId: resourceId || agentId,
         threadId,
         ifIdle: {
@@ -975,6 +1058,28 @@ export const useChat = ({
           },
         },
       });
+      // SSE may already have finished this run or moved on while the request was pending.
+      if (
+        _streamAbortRef.current === internalAbort &&
+        liveRunId.current === liveRunIdBeforeSend &&
+        liveRunId.current !== result.runId
+      ) {
+        liveApprovalIds.current.clear();
+        liveRunId.current = result.runId;
+        liveRunFinished.current = false;
+        _currentRunId.current = result.runId;
+        setIsRunning(true);
+        const earlyStatus = earlyRunStatuses.get(result.runId);
+        if (earlyStatus) {
+          setIsRunning(false);
+          if (earlyStatus.payload.status !== 'suspended') {
+            liveRunFinished.current = true;
+            for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+            pendingToolApprovalIdsRef.current.clear();
+            setIsAwaitingToolApproval(false);
+          }
+        }
+      }
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -994,6 +1099,7 @@ export const useChat = ({
               id: resolvedSignalId,
               type: 'user-message',
               contents: messageContents,
+              ...(metadata ? { metadata } : {}),
             },
             resourceId: resourceId || agentId,
             threadId,
@@ -1013,6 +1119,8 @@ export const useChat = ({
         }
       }
       throw error;
+    } finally {
+      if (pendingRunStatuses.current === earlyRunStatuses) pendingRunStatuses.current = undefined;
     }
 
     if (_streamAbortRef.current === internalAbort) {
@@ -1088,12 +1196,42 @@ export const useChat = ({
   };
 
   const handleCancelRun = () => {
-    _streamAbortRef.current?.abort();
-    _streamAbortRef.current = null;
+    const runId = _currentRunId.current;
+    const agent = baseClient?.getAgent(agentId);
     const threadSubscription = _threadSubscriptionRef.current;
-    void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
-      console.error('[useChat] Failed to abort thread subscription', error);
-    });
+    const streamAbort = _streamAbortRef.current;
+    const cancellationAbort = new AbortController();
+    const timeout = setTimeout(
+      () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
+      10_000,
+    );
+    // Stop execution explicitly: aborting the HTTP request only detaches a durable observer.
+    const cancellation = (async () => {
+      if (agent && runId) {
+        while (true) {
+          cancellationAbort.signal.throwIfAborted();
+          const options = { signal: cancellationAbort.signal };
+          const result = threadId
+            ? await agent.abortThread({ threadId, resourceId: resourceId || agentId, expectedRunId: runId }, options)
+            : await agent.abortRun(runId, options);
+          if (result.aborted) return;
+          // Stop can overtake stream registration. Keep the request alive until cancellation is applied.
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      await threadSubscription?.abort?.();
+    })()
+      .catch(error => {
+        // Older servers and non-durable agents still stop when their HTTP request is aborted.
+        if (isObject(error) && (error.status === 404 || error.status === 501)) return;
+        throw error;
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        streamAbort?.abort();
+        if (_streamAbortRef.current === streamAbort) _streamAbortRef.current = null;
+      });
+    void cancellation.catch(error => console.error('[useChat] Failed to abort agent run', error));
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
     liveRunFinished.current = true;
@@ -1105,6 +1243,7 @@ export const useChat = ({
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
     _activeContinuation.current = {};
+    return cancellation;
   };
 
   const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
@@ -1356,13 +1495,22 @@ export const useChat = ({
     setIsRunning(false);
   };
 
-  const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
+  const sendMessage = async ({ mode = 'stream', metadata: userMetadata, ...args }: SendMessageArgs) => {
     if (!isRunning && !isAwaitingToolApproval) _currentRunId.current = undefined;
     const coreUserMessages = [createUserMessage(args.message, args.coreUserMessages)];
 
     // Use the same multipart message for the request and optimistic display.
     // Sending separate attachment messages would persist separate rows on reload.
-    const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
+    const coreDbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
+    const dbUserMessage: MastraDBMessage = userMetadata
+      ? {
+          ...coreDbUserMessage,
+          content: {
+            ...coreDbUserMessage.content,
+            metadata: { ...coreDbUserMessage.content.metadata, ...userMetadata },
+          },
+        }
+      : coreDbUserMessage;
     const clientSetId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
         ? `client-set-${uuid()}`
@@ -1390,7 +1538,7 @@ export const useChat = ({
       if (mode === 'generate') {
         await generate({ ...args, coreUserMessages });
       } else if (mode === 'stream') {
-        await stream({ ...args, coreUserMessages, signalId, clientMessageId });
+        await stream({ ...args, coreUserMessages, signalId, clientMessageId, metadata: userMetadata });
       } else if (mode === 'network') {
         await network({ ...args, coreUserMessages });
       }
@@ -1398,6 +1546,13 @@ export const useChat = ({
       // A failed send (subscription setup, request, or stream) must not leave
       // the chat stranded in a "running" state until reload (issue #18768).
       setIsRunning(false);
+      // Drop the optimistic bubble instead of leaving it pending until reload
+      // (issue #26831). If the server did accept the turn before the response
+      // was lost, the message can still reappear through the live subscription
+      // echo or when the caller reloads thread history.
+      if (signalId) {
+        setMessages(s => s.filter(m => !(m.id === signalId && m.content.metadata?.status === 'pending')));
+      }
       throw error;
     }
   };
@@ -1409,6 +1564,13 @@ export const useChat = ({
     activeRunId: isRunning || isAwaitingToolApproval ? _currentRunId.current : undefined,
     isAwaitingToolApproval,
     messages,
+    /**
+     * Pagination of the initial `thread-history` page from `withInitialHistory`:
+     * `hasMore: true` when older messages exist, `false` when the page reached the
+     * start of the thread, and `undefined` while history is disabled, pending, or
+     * the subscription for the current agent/resource/thread/config has ended.
+     */
+    initialHistoryPagination,
     tasks,
     approveToolCall,
     declineToolCall,
