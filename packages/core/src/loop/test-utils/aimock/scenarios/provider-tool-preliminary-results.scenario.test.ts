@@ -71,7 +71,7 @@ describeForAllEngines('AIMock loop scenario: preliminary provider tool results',
       },
     };
 
-    const { chunks } = await runLoopScenario({
+    const { chunks, output } = await runLoopScenario({
       engine,
       llm,
       prompt: 'Draw a cat.',
@@ -96,6 +96,13 @@ describeForAllEngines('AIMock loop scenario: preliminary provider tool results',
     ]);
 
     expect(processedResults).toEqual([{ result: FINAL }]);
+
+    const finalResultOnly = [
+      expect.objectContaining({ payload: expect.objectContaining({ result: { result: FINAL } }) }),
+    ];
+    expect(await output.toolResults).toEqual(finalResultOnly);
+    const steps = await output.steps;
+    expect(steps[0]!.toolResults).toEqual(finalResultOnly);
 
     const providerSpans = ended(SpanType.PROVIDER_TOOL_CALL);
     expect(providerSpans).toHaveLength(1);
