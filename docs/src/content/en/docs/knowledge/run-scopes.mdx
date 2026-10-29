@@ -1,0 +1,199 @@
+---
+title: "Set who a run is"
+description: "Give each agent run its Knowledge scopes from trusted host code: middleware, the agent's scopes option, and call scopes."
+packages:
+  - "@mastra/core"
+---
+
+# Set who a run is
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+A run's scopes identify the run: `org:acme`, `role:acme:support`, `resource:dana`. Knowledge's [scope declarations](/docs/knowledge/scope-types) then decide what those scopes may read and write. This page covers where run scopes come from and how to shape them per agent.
+
+Run scopes always come from host code. The model can't add to them or change them, and a client can't send them in a request body.
+
+## Vouch scopes in middleware
+
+Your server knows who the user is, so set their scopes there. Put them on the `MASTRA_SCOPES_KEY` request context key as plain `<type>:<value>` strings:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY } from '@mastra/core/request-context'
+
+export const mastra = new Mastra({
+  agents: { support, faq },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const user = await getUser(c.req.header('Authorization'))
+        const requestContext = c.get('requestContext')
+
+        requestContext.set(MASTRA_SCOPES_KEY, [
+          `org:${user.orgId}`,
+          ...user.roles.map(role => `role:${user.orgId}:${role}`),
+          ...user.teams.map(team => `team:${user.orgId}:${team}`),
+          `resource:${user.id}`,
+        ])
+        requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
+
+        await next()
+      },
+    ],
+  },
+})
+```
+
+Dana, a support agent at Acme, runs with `org:acme`, `role:acme:support`, `team:acme:support` and `resource:dana`, plus the `thread:` scope of the conversation. Every type here needs a declaration on the `Knowledge` instance, see [run scopes must be declared](/docs/knowledge/scope-types#run-scopes-must-be-declared).
+
+Set `MASTRA_RESOURCE_ID_KEY` alongside the scopes so the server's thread ownership checks use the same user. See [request context](/docs/server/request-context#reserved-keys).
+
+`MASTRA_SCOPES_KEY` is reserved: the server ignores it in request bodies. It needs a `@mastra/server` release that reserves it. With an older server registered, runs that get scopes from the request context or the call fail with an `AGENT_SCOPES_SERVER_OUTDATED` error.
+
+In code that calls the agent directly, pass the same list as `scopes` on the call:
+
+```typescript
+await support.generate('How do I handle a chargeback?', {
+  scopes: ['org:acme', 'role:acme:support', 'team:acme:support'],
+  memory: { resource: 'dana', thread: 'ticket-91' },
+})
+```
+
+Pass raw ids, as in `resource:${user.id}`. Knowledge turns them into canonical addresses, so a user id of `acme/dana` becomes `resource:acme%2Fdana` in the tools and the model's view. See [build addresses in code](/docs/knowledge/scope-types#build-addresses-in-code).
+
+## Add scopes on the agent
+
+A list in the agent's `scopes` option adds to the scopes from the request context and the call:
+
+```typescript
+export const triage = new Agent({
+  id: 'triage',
+  name: 'Triage',
+  instructions: 'You sort incoming tickets.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+  memory,
+  scopes: ['team:acme:triage'],
+})
+```
+
+Every run of `triage` holds `team:acme:triage` on top of the user's own scopes.
+
+## Narrow an agent with a function
+
+A function in `scopes` receives the incoming scopes and returns the run's final set. Use it to give an agent less than the user has.
+
+Map the user's scopes to purpose-made scopes that rules grant narrowly. Passing `org:acme` through would still reach everything org members can. Here the `faq` agent swaps the org for a public audience and drops roles and teams:
+
+```typescript
+export const faq = new Agent({
+  id: 'faq',
+  name: 'FAQ',
+  instructions: 'You answer public questions about Acme.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+  memory,
+  scopes: ({ scopes }) =>
+    scopes.flatMap(scope => {
+      if (scope.startsWith('org:')) return [`audience:${scope.slice(4)}:public`]
+      if (scope.startsWith('resource:') || scope.startsWith('thread:')) return [scope]
+      return []
+    }),
+})
+```
+
+| Run | Scopes |
+| - | - |
+| Dana, incoming | `org:acme`, `role:acme:support`, `team:acme:support`, `resource:dana`, `thread:t-1` |
+| Dana's `faq` run | `audience:acme:public`, `resource:dana`, `thread:t-1` |
+
+With the `kb-public:$orgId` rule from [public and internal knowledge](/docs/knowledge/access-patterns#public-and-internal-knowledge), the `faq` run finds public pages and nothing internal. The function works per org at runtime, so one agent serves every org.
+
+The function has to keep every `resource:` and `thread:` scope it receives. They're the run's Memory identity, and a function that drops one fails the run:
+
+```text
+The agent's scopes function dropped "resource:dana". A run keeps the "resource:" and "thread:" scopes it was given.
+```
+
+A narrowed agent still reaches the user's own `resource:` and `thread:` pages.
+
+## One agent, many tenants
+
+Bind every scope an agent holds to the tenant. To give a shared helper agent private notes per org, derive its agent scope from the incoming org:
+
+```typescript
+export const helper = new Agent({
+  id: 'helper',
+  name: 'Helper',
+  instructions: 'You help Acme and Globex staff.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+  memory,
+  scopes: ({ scopes }) => [
+    ...scopes,
+    ...scopes
+      .filter(scope => scope.startsWith('org:'))
+      .map(scope => `agent:${scope.slice(4)}:helper`),
+  ],
+})
+```
+
+An Acme run holds `agent:acme:helper` and a Globex run holds `agent:globex:helper`. The tenants never share the helper's notes. A tenant-less scope such as `agent:helper` would be one scope shared by every tenant.
+
+## One resource and one thread per run
+
+A run has exactly one Memory resource and one thread. Two `resource:` scopes, or a `resource:` scope that disagrees with `memory.resource`, fail the run:
+
+```text
+Agent scopes contain more than one resource: "resource:spec-1" and "resource:cust-7".
+Agent scope "resource:cust-7" conflicts with option "memory.resource" "spec-1". Pass the same resource in both places, or only one of them.
+```
+
+This shapes two setups:
+
+- **Users in several orgs.** Give each user a resource id per org, such as `acme-dana` and `globex-dana`. `knowledgeMemoryScopes()` places a user's `resource:` scope under the org it first runs with, and that placement doesn't change. One id shared across orgs stays under the first org.
+- **Temporary escalation.** To let a specialist work on one customer's knowledge, vouch `resource:cust-7` on the escalation runs, in a thread that belongs to that customer, and leave the specialist's own `resource:` out of them. Nothing is stored. The access ends with those runs.
+
+## Check what a run can reach
+
+`explainAccess()` tells you a run's role on a scope or page and the rules that give it. Pass the raw run scopes and a scope address, a page id or `<scope>#<key>`:
+
+```typescript
+await knowledge.explainAccess(['org:acme', 'role:acme:admin'], { scope: 'team:acme:support' })
+// {
+//   role: 'editor',
+//   reasons: [{ principal: 'role:acme:admin', role: 'editor', rule: 'team:$orgId:$teamId', via: 'rule' }],
+// }
+
+await knowledge.explainAccess(['org:acme', 'team:acme:sales'], { page: playbookId })
+// { role: null, reasons: [], page: { id: '…', scope: 'team:acme:support' }, reason: 'hidden' }
+```
+
+`reason` says why `role` is `null`: `missing` (no such page), `hidden` (the page exists, but the run can't read its scope), or `no-rule` (no rule gives the run that scope). `via` is `self` when the run holds that scope directly and `rule` when a rule on another scope reaches it.
+
+:::warning
+
+`explainAccess()` is for host code only. It tells a missing page from a hidden one, which a run must never learn. Never expose it through an agent tool, or through a server route without admin-level auth.
+
+:::
+
+## Errors
+
+| Error | Cause |
+| - | - |
+| `Agent request context "mastra__scopes" must be an array of "<type>:<value>" strings.` | A scope entry isn't a string, for example `{ scope, access }`. |
+| `Invalid agent scope "Org:acme" in request context "mastra__scopes". Scopes are "<type>:<value>" addresses with a lowercase type, such as "org:acme" or "thread:t1".` | A scope isn't `<type>:<value>` with a lowercase type. |
+| `Knowledge run scope "project:x" does not match a declared scope type. …` | Knowledge has no declaration for a scope the run holds. |
+| `The agent's scopes function dropped "resource:dana". …` | The agent's `scopes` function left out a `resource:` or `thread:` scope. |
+| `Agent scopes contain more than one resource: …` | The run holds two `resource:` (or `thread:`) scopes. |
+| `AGENT_SCOPES_SERVER_OUTDATED` | Scopes came from the request context or the call behind an older `@mastra/server`. |
+
+## Related
+
+- [Declare scope types](/docs/knowledge/scope-types)
+- [Access patterns](/docs/knowledge/access-patterns)
+- [Request context](/docs/server/request-context)

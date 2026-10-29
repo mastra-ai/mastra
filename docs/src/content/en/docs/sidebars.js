@@ -245,6 +245,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'knowledge/run-scopes',
+              label: 'Run scopes',
+            },
+            {
+              type: 'doc',
               id: 'knowledge/agents-and-tools',
               label: 'Tools',
             },

@@ -227,7 +227,7 @@ The page stays in `org:acme`. Bea, holding `org:acme` and `agent:acme:bea`, read
 
 ### One agent serving many tenants
 
-Bind every scope the agent holds to the tenant. A `scopes` function on the agent can derive `org:<id>` and `agent:<id>:helper` from the run's request context. Each tenant then gets its own agent scope, and tenants never share pages.
+Bind every scope the agent holds to the tenant. A `scopes` function on the agent can derive `agent:<id>:helper` from the run's `org:` scope, see [one agent, many tenants](/docs/knowledge/run-scopes#one-agent-many-tenants). Each tenant then gets its own agent scope, and tenants never share pages.
 
 Avoid a tenant-less scope such as `agent:helper`: it's one scope shared by every tenant the agent serves.
 
@@ -294,7 +294,7 @@ Account managers write to `account:acme:123` and to its child `account:acme:123/
 
 ### Temporary escalation
 
-To give a specialist access to one customer for an escalation, have the app vouch `resource:cust-7` on the specialist's escalation runs only. Nothing is stored, so access ends with those runs.
+To give a specialist access to one customer for an escalation, have the app vouch `resource:cust-7` on the specialist's escalation runs only, in place of the specialist's own `resource:` scope. A run holds one resource, see [one resource and one thread per run](/docs/knowledge/run-scopes#one-resource-and-one-thread-per-run). Nothing is stored, so access ends with those runs.
 
 ## Tenants and public bots
 
