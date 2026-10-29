@@ -1796,6 +1796,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         }
       }
       const pubsub = new StallingProcessPubSub(shared);
+      let ticks = 0;
       const tick = createTool({
         id: 'tick',
         description: 'Tick once',
@@ -2440,7 +2441,6 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       }
       const shared = new SharedLeases();
       const pubsub = new LateGrantPubSub(shared);
-      let ticks = 0;
       const tick = createTool({
         id: 'tick',
         description: 'Tick once',
