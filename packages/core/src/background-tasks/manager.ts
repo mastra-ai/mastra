@@ -385,6 +385,7 @@ export class BackgroundTaskManager {
       id: this.#mastra?.generateId() ?? globalThis.crypto.randomUUID(),
       status: 'pending',
       ownerId: context ? this.workerId : undefined,
+      leaseExpiresAt: context ? new Date(Date.now() + this.config.leaseDurationMs) : undefined,
       toolName: payload.toolName,
       toolCallId: payload.toolCallId,
       args: payload.args,
@@ -1056,6 +1057,7 @@ export class BackgroundTaskManager {
     // registerActiveAbortController().
     this.#abortActiveControllers();
 
+    const pendingTaskIds = [...this.localPendingTaskIds];
     this.taskContexts.clear();
     this.localReservations.clear();
     this.localPendingTaskIds.clear();
@@ -1072,7 +1074,7 @@ export class BackgroundTaskManager {
       clearTimeout(this.staleRecoveryTimeout);
       this.staleRecoveryTimeout = undefined;
     }
-    if (this.ownedLeases.size > 0) {
+    if (this.ownedLeases.size > 0 || pendingTaskIds.length > 0) {
       const ownedTaskIds = [...this.ownedLeases];
       this.ownedLeases.clear();
       try {
@@ -1082,15 +1084,22 @@ export class BackgroundTaskManager {
         // cannot stall teardown; any lease left unreleased expires on its own.
         await this.#waitForShutdownStep(
           'background task lease release',
-          Promise.allSettled(
-            ownedTaskIds.map(taskId =>
+          Promise.allSettled([
+            ...ownedTaskIds.map(taskId =>
               storage.updateTask(
                 taskId,
                 { ownerId: undefined, leaseExpiresAt: undefined },
                 { expectedOwnerId: this.workerId },
               ),
             ),
-          ),
+            ...pendingTaskIds.map(taskId =>
+              storage.updateTask(
+                taskId,
+                { ownerId: undefined, leaseExpiresAt: undefined },
+                { expectedStatus: 'pending', expectedOwnerId: this.workerId },
+              ),
+            ),
+          ]),
         );
       } catch {
         // Storage unavailable — leases expire on their own.
@@ -1852,13 +1861,35 @@ export class BackgroundTaskManager {
    * reclaimed by another owner, so it is dropped from the tracking set.
    */
   async #renewOwnedLeases(): Promise<void> {
-    if (this.ownedLeases.size === 0) return;
+    if (this.ownedLeases.size === 0 && this.localPendingTaskIds.size === 0) return;
     let storage;
     try {
       storage = await this.getStorage();
     } catch {
       // Storage unavailable mid-shutdown — leases expire on their own.
       return;
+    }
+    for (const taskId of [...this.localPendingTaskIds]) {
+      try {
+        const task = await storage.getTask(taskId);
+        if (task?.status !== 'pending') {
+          this.localPendingTaskIds.delete(taskId);
+          continue;
+        }
+        if (task.ownerId !== this.workerId) continue;
+        if (!task.leaseExpiresAt || task.leaseExpiresAt.getTime() <= Date.now()) continue;
+        await storage.updateTask(
+          taskId,
+          { leaseExpiresAt: new Date(Date.now() + this.config.leaseDurationMs) },
+          {
+            expectedStatus: 'pending',
+            expectedOwnerId: this.workerId,
+            expectedLeaseExpiresAt: task.leaseExpiresAt,
+          },
+        );
+      } catch {
+        // Transient storage error — the lease expires unless the next tick succeeds.
+      }
     }
     for (const taskId of [...this.ownedLeases]) {
       try {
@@ -2054,7 +2085,23 @@ export class BackgroundTaskManager {
         orderDirection: 'asc',
       });
       for (const task of pendingTasks) {
-        if (task.ownerId && task.ownerId !== this.workerId) continue;
+        if (task.ownerId && task.ownerId !== this.workerId) {
+          if (task.leaseExpiresAt && task.leaseExpiresAt.getTime() > now) {
+            const leaseExpiry = task.leaseExpiresAt.getTime();
+            nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
+            continue;
+          }
+          const reclaimed = await storage.updateTask(
+            task.id,
+            { ownerId: undefined, leaseExpiresAt: undefined },
+            {
+              expectedStatus: 'pending',
+              expectedOwnerId: task.ownerId,
+              expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+            },
+          );
+          if (!reclaimed) continue;
+        }
         this.localPendingTaskIds.add(task.id);
       }
       await this.drainPending();

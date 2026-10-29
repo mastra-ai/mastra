@@ -49,15 +49,15 @@ export interface BackgroundTask {
   /**
    * Identity of the worker process that owns execution of this task. Pending
    * tasks with an invocation-bound executor retain their enqueueing worker's
-   * identity so other workers cannot dispatch them without their local context.
-   * Running tasks pair this with `leaseExpiresAt` to fence stale owners.
+   * identity while its lease is live, so other workers cannot dispatch them
+   * without their local context. Running tasks also use the lease to fence stale owners.
    */
   ownerId?: string;
   /**
    * Wall-clock expiry of the current owner's execution lease. While this is in
    * the future the owner is considered alive and no other worker may reclaim
    * the task. Renewed by the owner's heartbeat; recovery may only reclaim a
-   * `running` task once its lease has expired.
+   * task once its lease has expired.
    */
   leaseExpiresAt?: Date;
 

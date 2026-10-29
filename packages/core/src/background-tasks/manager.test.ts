@@ -1704,7 +1704,7 @@ describe('BackgroundTaskManager', () => {
       const first = new Mastra({
         logger: false,
         storage,
-        backgroundTasks: { enabled: true, globalConcurrency: 1 },
+        backgroundTasks: { enabled: true, globalConcurrency: 1, leaseDurationMs: 3_000 },
       });
       let second: Mastra | undefined;
       let releaseFirst!: () => void;
@@ -1730,12 +1730,12 @@ describe('BackgroundTaskManager', () => {
         second = new Mastra({
           logger: false,
           storage,
-          backgroundTasks: { enabled: true, globalConcurrency: 2 },
+          backgroundTasks: { enabled: true, globalConcurrency: 2, leaseDurationMs: 3_000 },
         });
         const mgr2 = second.backgroundTaskManager!;
         mgr2.registerStaticExecutor('t', { execute: wrong });
         await second.startWorkers();
-        await tick(100);
+        await tick(3_300);
         expect((await mgr1.getTask(task.id))?.status).toBe('pending');
         expect(wrong).not.toHaveBeenCalled();
         releaseFirst();
@@ -1748,6 +1748,118 @@ describe('BackgroundTaskManager', () => {
         await second?.stopWorkers();
         await first.backgroundTaskManager?.shutdown();
         await first.stopWorkers();
+      }
+    });
+
+    it('releases queued invocation-bound tasks for static recovery on shutdown', async () => {
+      const storage = new MockStore();
+      const first = new Mastra({ logger: false, storage, backgroundTasks: { enabled: true, globalConcurrency: 1 } });
+      let releaseFirst!: () => void;
+      const gate = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      let second: Mastra | undefined;
+      try {
+        await first.startWorkers();
+        const mgr1 = first.backgroundTaskManager!;
+        await mgr1.enqueue(
+          { toolName: 't', toolCallId: 'first', args: {}, agentId: 'a', runId: 'first' },
+          ctx(async () => {
+            await gate;
+            return 'first result';
+          }),
+        );
+        const { task } = await mgr1.enqueue(
+          { toolName: 't', toolCallId: 'queued', args: {}, agentId: 'a', runId: 'queued' },
+          ctx(async () => 'invocation result'),
+        );
+        expect((await mgr1.getTask(task.id))?.status).toBe('pending');
+        const stopping = mgr1.shutdown();
+        releaseFirst();
+        await stopping;
+        await first.stopWorkers();
+        expect((await mgr1.getTask(task.id))?.status).toBe('pending');
+        second = new Mastra({ logger: false, storage, backgroundTasks: { enabled: true, globalConcurrency: 1 } });
+        const execute = vi.fn(async () => 'static result');
+        second.backgroundTaskManager!.registerStaticExecutor('t', { execute });
+        await second.startWorkers();
+        await vi.waitFor(async () => expect((await mgr1.getTask(task.id))?.status).toBe('completed'));
+        expect((await mgr1.getTask(task.id))?.result).toBe('static result');
+        expect(execute).toHaveBeenCalledOnce();
+      } finally {
+        releaseFirst();
+        await second?.backgroundTaskManager?.shutdown();
+        await second?.stopWorkers();
+        await first.backgroundTaskManager?.shutdown();
+        await first.stopWorkers();
+      }
+    });
+
+    it('recovers an orphaned pending task through a static executor after its owner lease expires', async () => {
+      const storage = new MockStore();
+      const bgStore = await storage.getStore('backgroundTasks');
+      await bgStore.createTask({
+        id: 'orphan-pending',
+        toolName: 't',
+        toolCallId: 'orphan',
+        args: {},
+        agentId: 'a',
+        runId: 'orphan',
+        status: 'pending',
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 1_000),
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5_000,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const local = new Mastra({ logger: false, storage, backgroundTasks: { enabled: true } });
+      const execute = vi.fn(async () => 'recovered');
+      local.backgroundTaskManager!.registerStaticExecutor('t', { execute });
+      try {
+        await local.startWorkers();
+        await vi.waitFor(async () => expect((await bgStore.getTask('orphan-pending'))?.status).toBe('completed'));
+        expect(execute).toHaveBeenCalledOnce();
+        expect((await bgStore.getTask('orphan-pending'))?.result).toBe('recovered');
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('retries recovery when a pending owner lease expires after startup', async () => {
+      const storage = new MockStore();
+      const bgStore = await storage.getStore('backgroundTasks');
+      await bgStore.createTask({
+        id: 'pending-lease',
+        toolName: 't',
+        toolCallId: 'pending-lease',
+        args: {},
+        agentId: 'a',
+        runId: 'pending-lease',
+        status: 'pending',
+        ownerId: 'stopped-worker',
+        leaseExpiresAt: new Date(Date.now() + 200),
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5_000,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const local = new Mastra({ logger: false, storage, backgroundTasks: { enabled: true, leaseDurationMs: 3_000 } });
+      const execute = vi.fn(async () => 'recovered');
+      local.backgroundTaskManager!.registerStaticExecutor('t', { execute });
+      try {
+        await local.startWorkers();
+        expect((await bgStore.getTask('pending-lease'))?.status).toBe('pending');
+        await vi.waitFor(async () => expect((await bgStore.getTask('pending-lease'))?.status).toBe('completed'), {
+          timeout: 4_000,
+        });
+        expect(execute).toHaveBeenCalledOnce();
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
       }
     });
 
