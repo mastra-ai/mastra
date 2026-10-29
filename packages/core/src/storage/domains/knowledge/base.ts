@@ -11,9 +11,9 @@ export type KnowledgeSemanticDocumentType = 'node' | 'record';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeSemanticOperation = 'upsert' | 'delete';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 4 as const;
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 4 as const;
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeStorageCapabilities {
@@ -60,7 +60,9 @@ export function inspectKnowledgeSchema(snapshot: KnowledgeSchemaSnapshot): Knowl
   return {
     status: 'incompatible-reset-required',
     schemaVersion: snapshot.schemaVersion ?? null,
-    reason: snapshot.reason ?? 'Existing experimental Knowledge tables are not compatible with schema version 2.',
+    reason:
+      snapshot.reason ??
+      `Existing experimental Knowledge tables are not compatible with schema version ${KNOWLEDGE_STORAGE_SCHEMA_VERSION}.`,
   };
 }
 
