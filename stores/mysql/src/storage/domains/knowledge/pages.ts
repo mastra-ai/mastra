@@ -229,10 +229,10 @@ function decodeCursor(cursor: string | undefined, length: number): string[] | un
   throw new Error('Invalid Knowledge cursor');
 }
 
-function isDuplicateEntry(error: unknown): boolean {
+function isRetryableRace(error: unknown): boolean {
   for (let current = error; current && typeof current === 'object'; current = (current as { cause?: unknown }).cause) {
     const { code, errno } = current as { code?: unknown; errno?: unknown };
-    if (code === 'ER_DUP_ENTRY' || errno === 1062) return true;
+    if (code === 'ER_DUP_ENTRY' || errno === 1062 || code === 'ER_LOCK_DEADLOCK' || errno === 1213) return true;
   }
   return false;
 }
@@ -368,13 +368,13 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult> {
     // Two racing materializations can both pass their existence checks and then collide on a unique
-    // index (scope address or live sibling key). The loser's transaction rolls back; running it again
+    // index (scope address or live sibling key) or deadlock on its gap locks. The loser's transaction rolls back; running it again
     // sees the winner's committed rows and treats them as already there.
     for (let attempt = 1; ; attempt++) {
       try {
         return await this.#materializeScopeOnce(input);
       } catch (error) {
-        if (attempt >= 5 || !isDuplicateEntry(error)) throw error;
+        if (attempt >= 5 || !isRetryableRace(error)) throw error;
       }
     }
   }
