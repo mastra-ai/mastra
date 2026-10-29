@@ -1208,7 +1208,7 @@ export class AgentThreadStreamRuntime {
       if (owner === expectedOwner) return;
       // This run's own retake holds the lease under a temporary token until it hands it to the run id, which a
       // queued tool call can still catch in flight. Nobody else took the thread, so the run keeps it.
-      if (typeof owner === 'string' && owner.startsWith(`${runId}${RETAKE_LEASE_MARKER}`)) {
+      if (typeof owner === 'string' && threadLeaseRunId(owner) === runId && isRetakeLeaseOwner(owner)) {
         const retake = state.leaseRetakes.get(runId);
         if (await (retake ?? Promise.resolve(false))) return;
         // That check may have settled it, so read the owner once more. Bound that read by one renewal interval:

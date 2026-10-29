@@ -1,4 +1,8 @@
-import { isExecutionFenceError } from '../../agent/durable/execution-fence';
+import {
+  getExecutionClaim,
+  isExecutionFenceError,
+  MASTRA_DURABLE_EXECUTIONS_KEY,
+} from '../../agent/durable/execution-fence';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -395,13 +399,6 @@ export class StepExecutor extends MastraBase {
 
       return finalResult;
     } catch (error: any) {
-      if (
-        isExecutionFenceError(error) &&
-        this.mastra &&
-        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
-      ) {
-        throw error;
-      }
       const endedAt = Date.now();
 
       const errorInstance = getErrorFromUnknown(error, {
@@ -419,6 +416,20 @@ export class StepExecutor extends MastraBase {
           error: errorInstance,
         },
       });
+
+      if (
+        isExecutionFenceError(error) &&
+        this.mastra &&
+        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
+      ) {
+        const currentClaim = getExecutionClaim(requestContext, runId);
+        const storageFenced = currentClaim
+          ? currentClaim.generation !== undefined
+          : Object.keys(requestContext.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY) ?? {}).some(
+              claimedRunId => getExecutionClaim(requestContext, claimedRunId)?.generation !== undefined,
+            );
+        if (storageFenced) throw error;
+      }
 
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(

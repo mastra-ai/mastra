@@ -751,6 +751,9 @@ export class ExecutionFence implements RunFenceScope {
     return fence;
   }
 
+  /**
+   * The unsettled execution this process is running for `runId`, if any.
+   */
   static getLocalActive(runId: string): ExecutionFence | undefined {
     return activeFenceByRunId.get(runId);
   }
@@ -948,16 +951,6 @@ export class ExecutionFence implements RunFenceScope {
     return this.#settledAs;
   }
 
-  /**
-   * Stop this execution without finishing the run, for a process that is
-   * shutting down. The execution loses the run at once, so it aborts and
-   * writes nothing more, and the claim is released so recovery can take the
-   * run right away instead of waiting for it to expire. With ownership in
-   * storage, the run is first claimed past this execution, so storage rejects
-   * writes that were already on their way. Settles as `superseded`.
-   *
-   * A no-op once the execution has settled or lost the run.
-   */
   /** Detach a coordinator without changing the claim shared with remote workers. */
   detach(): void {
     if (this.#settlement) return;
@@ -969,6 +962,16 @@ export class ExecutionFence implements RunFenceScope {
     this.#resolveSettled();
   }
 
+  /**
+   * Stop this execution without finishing the run, for a process that is
+   * shutting down. The execution loses the run at once, so it aborts and
+   * writes nothing more, and the claim is released so recovery can take the
+   * run right away instead of waiting for it to expire. With ownership in
+   * storage, the run is first claimed past this execution, so storage rejects
+   * writes that were already on their way. Settles as `superseded`.
+   *
+   * A no-op once the execution has settled or lost the run.
+   */
   async abandon(): Promise<void> {
     if (this.#settlement || this.#lossError) return;
     this.#markLost(new DurableExecutionFenceError(EXECUTION_ABANDONED_ERROR_ID, this.#details()));
