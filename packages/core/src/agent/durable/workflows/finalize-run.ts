@@ -6,7 +6,6 @@ import type { MastraMemory } from '../../../memory/memory';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
-import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
@@ -247,12 +246,11 @@ export async function runDurableFinishSideEffects({
 
   // Save the turn to agent memory only where memory itself adds a MessageHistory processor, as the
   // non-durable finish path does; a configured MessageHistory saves it in the output processors
-  // below. A worker that rebuilt the pipeline lacks call-time processors, so when the configured
-  // MessageHistory is gone, flush to agent memory rather than drop the turn. Runs started before
-  // historyWriter existed keep the earlier rule.
+  // below. A worker that rebuilt the pipeline lacks call-time processors and resolves its own
+  // writer from what it rebuilt, so when the configured MessageHistory is gone, flush to agent
+  // memory rather than drop the turn. Runs started before historyWriter existed keep the earlier rule.
   const configuredHistoryMissing =
-    durableState?.historyWriter === 'processor' &&
-    !registryEntry?.outputProcessors?.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
+    durableState?.historyWriter === 'processor' && registryEntry?.historyWriter?.kind !== 'processor';
   if (configuredHistoryMissing) {
     effectiveLogger.warn(
       '[DurableAgent] Configured MessageHistory is not available on this worker; saving the turn to agent memory',

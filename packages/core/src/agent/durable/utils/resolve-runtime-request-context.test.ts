@@ -142,6 +142,42 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
+  // The finish path compares the writer the run started with against the one this worker
+  // rebuilt, so the rebuild must resolve it from its own configured processors.
+  it.each([
+    { name: 'without the call-time MessageHistory', configured: [], kind: 'memory' },
+    {
+      name: 'with an agent-level MessageHistory',
+      configured: [{ id: 'message-history', persistMessages: vi.fn() }],
+      kind: 'processor',
+    },
+  ])('resolves the history writer on a worker $name', async ({ configured, kind }) => {
+    const runId = `history-writer-${kind}`;
+    const memory = { getMergedThreadConfig: () => ({ lastMessages: 10 }) };
+    const agent = {
+      ...makeAgent(),
+      getMemory: vi.fn().mockResolvedValue(memory),
+      listConfiguredOutputProcessors: vi.fn().mockResolvedValue(configured),
+      listOutputProcessors: vi.fn().mockResolvedValue([{ id: 'combined-workflow' }]),
+    };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+        rehydrateProcessors: true,
+      });
+
+      expect(globalRunRegistry.get(runId)?.historyWriter?.kind).toBe(kind);
+      expect(agent.listConfiguredOutputProcessors).toHaveBeenCalledTimes(1);
+      expect(agent.listOutputProcessors).toHaveBeenCalledWith(expect.anything(), configured);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it.each(['persistence-only', 'live-pipeline'] as const)(
     'keeps runtime resolution failures non-fatal for a %s rebuild',
     async registryState => {

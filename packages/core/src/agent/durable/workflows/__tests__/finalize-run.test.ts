@@ -79,19 +79,18 @@ describe('runDurableFinishSideEffects', () => {
   });
 
   // A rebuilt worker only has the agent's own output processors, so a MessageHistory passed at
-  // call time is gone. The turn must still be saved, through the save queue.
+  // call time is gone and the worker resolves a different writer. The turn must still be saved,
+  // through the save queue. The resolved pipeline is one combined workflow, so the check can't
+  // look for a top-level message-history processor.
   it.each([
-    { name: 'missing on a rebuilt worker', outputProcessors: [], flushes: 1 },
-    {
-      name: 'present on this worker',
-      outputProcessors: [{ id: 'message-history', processOutputResult: ({ messages }: any) => messages }],
-      flushes: 0,
-    },
-  ])('a configured MessageHistory writer $name', async ({ outputProcessors, flushes }) => {
+    { name: 'missing on a rebuilt worker', historyWriter: { kind: 'memory' }, flushes: 1 },
+    { name: 'present on this worker', historyWriter: { kind: 'processor' }, flushes: 0 },
+  ])('a configured MessageHistory writer $name', async ({ historyWriter, flushes }) => {
     const flushMessages = vi.fn().mockResolvedValue(undefined);
     globalRunRegistry.set('run-1', {
       isPlaceholder: false,
-      outputProcessors,
+      outputProcessors: [],
+      historyWriter,
       saveQueueManager: { flushMessages },
       memory: { createThread: vi.fn() },
     } as unknown as RunRegistryEntry);

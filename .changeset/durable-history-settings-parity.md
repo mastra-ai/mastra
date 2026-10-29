@@ -11,3 +11,13 @@ Behavior changes:
 - When observational memory is added as a processor, the run no longer saves a second copy to agent memory.
 - With `observationalMemory: { enabled: false }`, messages are saved by MessageHistory, the same as with a normal agent.
 - If a configured MessageHistory processor throws at the end of a run, the run now fails, as it does with a normal agent. Before, the error was logged and the run reported success even though nothing was saved.
+
+If you relied on a durable agent saving messages with history turned off, turn history back on:
+
+```ts
+// Before: durable runs saved messages even with this setting
+const memory = new Memory({ options: { lastMessages: false } });
+
+// After: enable history to keep saving messages
+const memory = new Memory({ options: { lastMessages: 10 } });
+```

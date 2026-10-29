@@ -5,6 +5,7 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import type { MemoryConfig } from '../../../memory/types';
 import type {
   ProcessorState,
   ErrorProcessorOrWorkflow,
@@ -18,6 +19,8 @@ import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../.
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
+import { resolveHistoryWriter } from '../../resolve-history-writer';
+import type { HistoryWriter } from '../../resolve-history-writer';
 import { SaveQueueManager } from '../../save-queue';
 import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
@@ -159,13 +162,25 @@ async function rebuildProcessorPipeline(options: {
   requestContext: RequestContext;
   emptyErrorProcessorOverride?: boolean;
   processorStates?: Map<string, ProcessorState>;
+  memory?: MastraMemory;
+  memoryConfig?: MemoryConfig;
   logger?: { error?: (...args: any[]) => void };
 }) {
-  const { agent, agentId, requestContext, emptyErrorProcessorOverride, processorStates, logger } = options;
+  const { agent, agentId, requestContext, emptyErrorProcessorOverride, processorStates, memory, memoryConfig, logger } =
+    options;
 
   try {
     const inputProcessors = await agent.listInputProcessors?.(requestContext);
-    const outputProcessors = await agent.listOutputProcessors?.(requestContext);
+    // Resolve the configured list once, as preparation does, so the history writer reflects what
+    // this worker actually rebuilt and a function-form resolver doesn't run twice.
+    const configuredOutputProcessors = memory
+      ? await agent.listConfiguredOutputProcessors?.(requestContext)
+      : undefined;
+    const outputProcessors = await agent.listOutputProcessors?.(requestContext, configuredOutputProcessors);
+    const historyWriter: HistoryWriter | undefined =
+      memory && configuredOutputProcessors
+        ? resolveHistoryWriter(memory, memoryConfig, configuredOutputProcessors)
+        : undefined;
     const errorProcessorOverride = emptyErrorProcessorOverride ? [] : undefined;
     const errorProcessors = (await agent.__resolveRunErrorProcessors?.(requestContext, errorProcessorOverride))
       ?.errorProcessors;
@@ -177,6 +192,7 @@ async function rebuildProcessorPipeline(options: {
       outputProcessors,
       errorProcessors,
       processorStates: processorStates ?? new Map<string, ProcessorState>(),
+      historyWriter,
     };
   } catch (processorError) {
     logger?.error?.(`[DurableAgent:${agentId}] Failed to rebuild processors from Mastra: ${processorError}`);
@@ -277,6 +293,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let inputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.inputProcessors;
   let llmRequestInputProcessors: LLMRequestProcessorOrWorkflow[] | undefined = globalEntry?.llmRequestInputProcessors;
   let outputProcessors: OutputProcessorOrWorkflow[] | undefined = globalEntry?.outputProcessors;
+  let historyWriter: HistoryWriter | undefined = globalEntry?.historyWriter;
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
@@ -338,6 +355,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         requestContext: resolveRequestContext,
         emptyErrorProcessorOverride: input.options?.emptyErrorProcessorOverride,
         processorStates: globalEntry?.processorStates,
+        memory,
+        memoryConfig: input.state?.memoryConfig,
         logger,
       });
       inputProcessors = rebuiltProcessors.inputProcessors;
@@ -345,6 +364,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       outputProcessors = rebuiltProcessors.outputProcessors;
       errorProcessors = rebuiltProcessors.errorProcessors;
       processorStates = rebuiltProcessors.processorStates;
+      historyWriter = rebuiltProcessors.historyWriter;
 
       rehydratedFromMastra = true;
     } catch (error) {
@@ -387,6 +407,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       outputProcessors,
       errorProcessors,
       processorStates,
+      historyWriter,
       agent: rebuiltAgent,
     };
     if (globalEntry) {
@@ -532,6 +553,7 @@ export async function rebuildRunToolsFromMastra(options: {
               outputProcessors: existing.outputProcessors,
               errorProcessors: existing.errorProcessors,
               processorStates: existing.processorStates,
+              historyWriter: existing.historyWriter,
             }
           : await rebuildProcessorPipeline({
               agent,
@@ -539,6 +561,8 @@ export async function rebuildRunToolsFromMastra(options: {
               requestContext: resolveRequestContext,
               emptyErrorProcessorOverride: execOptions?.emptyErrorProcessorOverride,
               processorStates: existing?.processorStates,
+              memory,
+              memoryConfig: state.memoryConfig,
               logger,
             });
 
@@ -579,6 +603,7 @@ export async function rebuildRunToolsFromMastra(options: {
       existing.outputProcessors ??= rebuiltProcessors.outputProcessors;
       existing.errorProcessors ??= rebuiltProcessors.errorProcessors;
       existing.processorStates ??= rebuiltProcessors.processorStates;
+      existing.historyWriter ??= rebuiltProcessors.historyWriter;
       existing.agent ??= processorAgent;
     } else {
       existing = patch as RunRegistryEntry;
