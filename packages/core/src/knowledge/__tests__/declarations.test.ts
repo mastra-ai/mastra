@@ -5,6 +5,8 @@ import {
   KnowledgeDeclarationError,
   knowledgeMemoryScopes,
   knowledgePatternPrefix,
+  knowledgeRunScopes,
+  knowledgeScopeAddress,
 } from '../declarations';
 
 const scopes = {
@@ -89,18 +91,17 @@ describe('binding params into patterns', () => {
   const team = compiled.declarations.get('team:$orgId:$teamId')!.pattern;
   const account = compiled.declarations.get('account:$orgId:$accountId')!.pattern;
 
-  it("won't bind a ':' value into a middle segment, which would reach another tenant", () => {
-    // org:a:b has orgId "a:b"; as a prefix it would be team:a:b:, matching team:a:b:support (org a).
+  it('encodes middle-segment colons without reaching another tenant', () => {
     expect(compiled.match('org:a:b')!.params).toEqual({ orgId: 'a:b' });
-    expect(knowledgePatternPrefix(team, { orgId: 'a:b' })).toBeNull();
-    expect(bindKnowledgePattern(team, { orgId: 'a:b', teamId: 'support' })).toBeNull();
+    expect(knowledgePatternPrefix(team, { orgId: 'a:b' })).toBe('team:a%3Ab:');
+    expect(bindKnowledgePattern(team, { orgId: 'a:b', teamId: 'support' })).toBe('team:a%3Ab:support');
     expect(knowledgePatternPrefix(team, { orgId: 'a' })).toBe('team:a:');
   });
 
-  it("allows ':' only in the last segment", () => {
+  it('preserves final colons and encodes reserved characters in every param', () => {
     expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b:c' })).toBe('team:a:b:c');
-    expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b/c' })).toBe('team:a:b/c');
-    expect(knowledgePatternPrefix(account, { orgId: 'a/b' })).toBeNull();
+    expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b/c' })).toBe('team:a:b%2Fc');
+    expect(knowledgePatternPrefix(account, { orgId: 'a/b' })).toBe('account:a%2Fb:');
   });
 
   it("doesn't match an undeclared child as a param value", () => {
@@ -108,24 +109,40 @@ describe('binding params into patterns', () => {
     expect(compiled.match('account:acme:1/foo')).toBeNull();
   });
 
-  it("lets a Memory id with '/' or ':' fill the last segment of a type without children", () => {
-    // Users pass their own resource ids; resource:/thread: scopes are on every Knowledge run.
-    expect(compiled.match('resource:user/123')).toMatchObject({
-      declaration: 'resource:$resourceId',
-      params: { resourceId: 'user/123' },
-    });
-    expect(compiled.match('thread:a/b:c')!.params).toEqual({ threadId: 'a/b:c' });
-    const resource = compiled.declarations.get('resource:$resourceId')!.pattern;
-    expect(bindKnowledgePattern(resource, { resourceId: 'user/123' })).toBe('resource:user/123');
+  it('round-trips Memory ids while keeping raw run scopes distinct from canonical addresses', () => {
+    const raw = ['resource:https://x/y#z', 'resource:a/b', 'resource:a%2Fb'];
+    expect(knowledgeRunScopes(compiled, raw)).toEqual([
+      'resource:https:%2F%2Fx%2Fy%23z',
+      'resource:a%2Fb',
+      'resource:a%252Fb',
+    ]);
+    expect(raw[0]).toBe('resource:https://x/y#z');
+    expect(compiled.match('resource:https:%2F%2Fx%2Fy%23z')?.params).toEqual({ resourceId: 'https://x/y#z' });
+    expect(knowledgeScopeAddress('resource:$resourceId', { resourceId: 'https://x/y#z' })).toBe(
+      'resource:https:%2F%2Fx%2Fy%23z',
+    );
+    expect(knowledgeRunScopes(compiled, [...raw])).toEqual(knowledgeRunScopes(compiled, raw));
   });
 
-  it("never lets '/' or ':' fill a middle segment, and keeps '/' out of types with children", () => {
+  it('keeps raw slash and hash out of canonical addresses, including types without children', () => {
     expect(compiled.match('team:a/b:eng')).toBeNull();
-    expect(knowledgePatternPrefix(team, { orgId: 'a/b' })).toBeNull();
-    expect(bindKnowledgePattern(team, { orgId: 'a/b', teamId: 'eng' })).toBeNull();
-    // account has an `internal` child, so account:acme:x/internal must only ever be that child.
-    expect(bindKnowledgePattern(account, { orgId: 'acme', accountId: 'x/internal' })).toBeNull();
+    expect(compiled.match('resource:a/b')).toBeNull();
+    expect(compiled.match('resource:a#b')).toBeNull();
+    expect(knowledgePatternPrefix(team, { orgId: 'a/b' })).toBe('team:a%2Fb:');
+    expect(bindKnowledgePattern(account, { orgId: 'acme', accountId: 'x/internal' })).toBe('account:acme:x%2Finternal');
+    expect(compiled.match('account:acme:x%2Finternal')?.compiled.child).toBeUndefined();
     expect(compiled.match('account:acme:x/y')).toBeNull();
+  });
+
+  it('provides an explicit canonical helper, never interpreting percent as an ingress escape', () => {
+    expect(knowledgeScopeAddress('team:$orgId:$teamId', { orgId: 'a:b', teamId: 'c/d#e%2F' })).toBe(
+      'team:a%3Ab:c%2Fd%23e%252F',
+    );
+    expect(knowledgeRunScopes(compiled, ['team:a:b:c'])).toEqual(['team:a:b:c']);
+    expect(() => knowledgeScopeAddress('team:$orgId:$teamId', { orgId: 'a', teamId: '' })).toThrow(
+      KnowledgeDeclarationError,
+    );
+    expect(() => compileKnowledgeScopes({ 'org:$orgId': {}, 'org:a#b': {} })).toThrow(KnowledgeDeclarationError);
   });
 });
 

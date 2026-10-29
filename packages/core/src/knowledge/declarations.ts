@@ -7,6 +7,8 @@
  * @experimental Knowledge APIs are experimental and may change without notice.
  */
 
+import { decodeKnowledgeScopeValue, encodeKnowledgeScopeValue } from './scope-address';
+
 /** @experimental */
 export type KnowledgeRole = 'viewer' | 'contributor' | 'editor' | 'owner';
 
@@ -98,12 +100,6 @@ export interface KnowledgeScopePattern {
   type: string;
   segments: Segment[];
   params: string[];
-  /**
-   * Whether the last segment's value may hold `/`. True for types without template children, so a
-   * Memory id like `user/123` fills `resource:$resourceId`; false where `<address>/<name>` would
-   * read as a child scope.
-   */
-  slashInLast: boolean;
 }
 
 /** How a rule's principal reaches its target scopes. */
@@ -167,7 +163,7 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
     .slice(colon + 1)
     .split(':')
     .map(part => {
-      if (!part || part.includes('/')) {
+      if (!part || part.includes('/') || part.includes('#')) {
         throw new KnowledgeDeclarationError(`${what} "${key}" has an empty or invalid segment.`);
       }
       if (part.startsWith('$')) {
@@ -181,16 +177,18 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
   if (new Set(params).size !== params.length) {
     throw new KnowledgeDeclarationError(`${what} "${key}" repeats a param.`);
   }
-  return { key, type, segments, params, slashInLast: false };
+  return { key, type, segments, params };
 }
 
-/** Binds a pattern's params from a concrete address; null when the address doesn't fit. */
+/** Binds raw param values from a canonical address; null when it isn't canonical or doesn't fit. */
 export function matchKnowledgePattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
+  return matchPattern(pattern, address, false);
+}
+
+function matchPattern(pattern: KnowledgeScopePattern, address: string, raw: boolean): Record<string, string> | null {
   const prefix = `${pattern.type}:`;
   if (!address.startsWith(prefix)) return null;
   const parts = address.slice(prefix.length).split(':');
-  const lastStart = pattern.segments.length - 1;
-  if (parts.some((part, i) => part.includes('/') && (i < lastStart || !pattern.slashInLast))) return null;
   const params: Record<string, string> = {};
   for (let i = 0; i < pattern.segments.length; i++) {
     const segment = pattern.segments[i]!;
@@ -201,24 +199,43 @@ export function matchKnowledgePattern(pattern: KnowledgeScopePattern, address: s
       continue;
     }
     const value = last ? parts.slice(i).join(':') : parts[i];
-    if (!value || (last && parts.slice(i).some(part => !part))) return null;
-    params[segment.param] = value;
+    if (!value) return null;
+    const decoded = raw ? value : decodeKnowledgeScopeValue(value, last);
+    if (decoded === null) return null;
+    params[segment.param] = decoded;
   }
   return params;
 }
 
 /**
- * Whether `value` can fill a segment: never empty, and holding `:` or `/` only in the last segment
- * (`/` only where the type has no template children). A value like `a:b` bound into a middle segment
- * would shift every later segment and reach another tenant's scopes.
+ * A canonical address from raw param values. For Knowledge APIs, templates, pins and tools only:
+ * NOT for Agent scopes, which always take raw addresses and treat every percent sign literally.
+ * @experimental
  */
-function fitsSegment(value: string, last: boolean, slashInLast: boolean): boolean {
-  if (value === '') return false;
-  if (!last) return !value.includes(':') && !value.includes('/');
-  return slashInLast || !value.includes('/');
+export function knowledgeScopeAddress(pattern: string, params: Record<string, string>): string {
+  const bound = bindKnowledgePattern(parsePattern(pattern, 'Knowledge scope pattern'), params);
+  if (bound === null)
+    throw new KnowledgeDeclarationError(`Knowledge scope pattern "${pattern}" needs non-empty values for every param.`);
+  return bound;
 }
 
-/** Fills a pattern's params; returns null when one is missing or can't fill its segment. */
+/** Encode raw Agent scopes at Knowledge run startup; never feed the result back into Agent scopes. @internal */
+export function knowledgeRunScopes(compiled: CompiledKnowledgeScopes, scopes: readonly string[]): string[] {
+  return [
+    ...new Set(
+      scopes.map(scope => {
+        for (const declaration of compiled.declarations.values()) {
+          if (declaration.child) continue;
+          const params = matchPattern(declaration.pattern, scope, true);
+          if (params) return bindKnowledgePattern(declaration.pattern, params)!;
+        }
+        throw new KnowledgeDeclarationError(`Knowledge run scope "${scope}" does not match a declared scope type.`);
+      }),
+    ),
+  ];
+}
+
+/** Encodes raw param values into a pattern; null when a value is missing or empty. */
 export function bindKnowledgePattern(pattern: KnowledgeScopePattern, params: Record<string, string>): string | null {
   const values: string[] = [];
   for (const [i, segment] of pattern.segments.entries()) {
@@ -227,16 +244,16 @@ export function bindKnowledgePattern(pattern: KnowledgeScopePattern, params: Rec
       continue;
     }
     const value = params[segment.param];
-    if (value === undefined || !fitsSegment(value, i === pattern.segments.length - 1, pattern.slashInLast)) return null;
-    values.push(value);
+    if (value === undefined || value === '') return null;
+    values.push(encodeKnowledgeScopeValue(value, i === pattern.segments.length - 1));
   }
   return `${pattern.type}:${values.join(':')}`;
 }
 
 /**
  * The address prefix a partial binding reaches: segments up to the last bound param, ending at a
- * segment boundary. Only valid for a leading run of bound params. Returns null when a bound value
- * can't fill its segment (a prefix always ends before the last segment, so no `:` is allowed).
+ * segment boundary. Only valid for a leading run of bound params; reserved characters in raw
+ * values (including colons) are encoded so they cannot change tenant or segment boundaries.
  */
 export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: Record<string, string>): string | null {
   let prefix = `${pattern.type}:`;
@@ -247,8 +264,8 @@ export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: R
     }
     const value = params[segment.param];
     if (value === undefined) break;
-    if (!fitsSegment(value, false, false)) return null;
-    prefix += `${value}:`;
+    if (value === '') return null;
+    prefix += `${encodeKnowledgeScopeValue(value, false)}:`;
   }
   return prefix;
 }
@@ -346,15 +363,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     }
   }
 
-  const slashInLast = (type: string) => !byType.get(type)?.some(candidate => candidate.declaration.children?.length);
-  for (const patterns of byType.values()) {
-    for (const compiled of patterns) compiled.pattern.slashInLast = slashInLast(compiled.pattern.type);
-  }
-  const typedPattern = (key: string, what: string) => {
-    const pattern = parsePattern(key, what);
-    pattern.slashInLast = slashInLast(pattern.type);
-    return pattern;
-  };
+  const typedPattern = (key: string, what: string) => parsePattern(key, what);
 
   const compiledScopes: CompiledKnowledgeScopes = {
     declarations: all,

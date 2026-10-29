@@ -499,6 +499,13 @@ export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './i
 /** @internal Used by Mastra Code's Factory Knowledge routes. */
 export { listPinnedKnowledge } from './pinned';
 export type { KnowledgeConfig } from './config';
+export { knowledgeScopeAddress, knowledgeMemoryScopes } from './declarations';
+export type {
+  KnowledgeScopeDeclaration,
+  KnowledgeScopeDeclarations,
+  KnowledgeAccessRule,
+  KnowledgeRole,
+} from './declarations';
 export type {
   KnowledgeScopeAccessConfig,
   KnowledgeScopeChildTemplate,
