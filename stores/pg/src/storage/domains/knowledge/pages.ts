@@ -1246,57 +1246,42 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const terms = [...new Set(input.query.toLowerCase().split(/\s+/).filter(Boolean))];
-    if (terms.length === 0) return [];
-    const hits: Array<{ score: number; updatedAt: number; hit: KnowledgePageSearchHit }> = [];
+    const query = input.query.trim();
+    if (!query) return [];
+    const hits: KnowledgePageSearchHit[] = [];
 
     {
       const params = new Params();
       const filter = new ReadFilter(input.read, params);
-      const where = [`p."deletedAt" IS NULL`, filter.readable('s')];
+      const pattern = params.add(`%${escapeLike(query)}%`);
+      const where = [`p."deletedAt" IS NULL`, `NOT p."isScope"`, filter.readable('s')];
       if (input.scopeIds?.length) where.push(`p."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
-      for (const term of terms) {
-        const pattern = params.add(`%${escapeLike(term)}%`);
-        where.push(`(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`);
-      }
+      where.push(`(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`);
       const rows = await this.#rows(
         this.#client,
-        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY p."updatedAt" DESC, p."id" LIMIT ${limit}`,
+        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY (p."name" ILIKE ${pattern}) DESC, p."updatedAt" DESC, p."id" LIMIT ${limit}`,
         params.values,
       );
-      for (const row of rows) {
-        const page = toPage(row);
-        const name = page.name.toLowerCase();
-        const score = terms.every(term => name.includes(term)) ? 3 : page.description ? 2 : 1;
-        hits.push({ score, updatedAt: page.updatedAt.getTime(), hit: { type: 'page', page } });
-      }
+      for (const row of rows) hits.push({ type: 'page', page: toPage(row) });
     }
+    if (hits.length >= limit) return hits;
 
     {
       const params = new Params();
       const filter = new ReadFilter(input.read, params);
       const extra = [`n."deletedAt" IS NULL`, `np."deletedAt" IS NULL`];
       if (input.scopeIds?.length) extra.push(`np."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
-      for (const term of terms) extra.push(`n."text" ILIKE ${params.add(`%${escapeLike(term)}%`)}`);
+      extra.push(`n."text" ILIKE ${params.add(`%${escapeLike(query)}%`)}`);
       const rows = await this.#rows(
         this.#client,
-        `SELECT ${this.#noteColumns()}, row_to_json(np) AS "pageJson" FROM ${this.#visibleNotes(filter)} AND ${extra.join(' AND ')} ORDER BY n."updatedAt" DESC, n."id" LIMIT ${limit}`,
+        `SELECT ${this.#noteColumns()}, row_to_json(np) AS "pageJson" FROM ${this.#visibleNotes(filter)} AND ${extra.join(' AND ')} ORDER BY n."createdAt" DESC, n."id" DESC LIMIT ${limit - hits.length}`,
         params.values,
       );
       for (const row of rows) {
-        const note = toNote(row);
-        hits.push({
-          score: 0,
-          updatedAt: note.updatedAt.getTime(),
-          hit: { type: 'note', note, page: toPage(parseJson<Row>(row.pageJson)) },
-        });
+        hits.push({ type: 'note', note: toNote(row), page: toPage(parseJson<Row>(row.pageJson)) });
       }
     }
-
-    return hits
-      .sort((a, b) => b.score - a.score || b.updatedAt - a.updatedAt)
-      .slice(0, limit)
-      .map(entry => entry.hit);
+    return hits;
   }
 
   async listPageActivity(input: {

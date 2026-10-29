@@ -1106,8 +1106,8 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const scopeArgs: InValue[] = input.scopeIds ? [jsonList(input.scopeIds)] : [];
     const pageRows = await this.#query(
       this.#read,
-      `SELECT p.* FROM ${T.pages} p WHERE p.deletedAt IS NULL AND ${readable.sql}${scopeFilter} AND (LOWER(p.name) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.description, '')) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.body, '')) LIKE ? ESCAPE '=') ORDER BY p.updatedAt DESC, p.id DESC LIMIT ?`,
-      [...readable.args, ...scopeArgs, like, like, like, limit],
+      `SELECT p.* FROM ${T.pages} p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND (LOWER(p.name) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.description, '')) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.body, '')) LIKE ? ESCAPE '=') ORDER BY CASE WHEN LOWER(p.name) LIKE ? ESCAPE '=' THEN 0 ELSE 1 END, p.updatedAt DESC, p.id ASC LIMIT ?`,
+      [...readable.args, ...scopeArgs, like, like, like, like, limit],
     );
     const hits: KnowledgePageSearchHit[] = pageRows.map(row => ({ type: 'page', page: toPage(row) }));
     if (hits.length >= limit) return hits;

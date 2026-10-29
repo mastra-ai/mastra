@@ -673,6 +673,43 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         );
       });
 
+      it('ranks name hits first, then description/body hits, then notes, and matches the whole query', async () => {
+        const acme = await scope('org:acme', ORG);
+        await scope('org:refund', ORG);
+        const pause = () => new Promise(resolve => setTimeout(resolve, 15));
+        const named = await page(acme.id, 'Refund window');
+        await pause();
+        const inBody = await page(acme.id, 'Billing', { body: 'Every refund needs approval.' });
+        await pause();
+        const inDescription = await page(acme.id, 'Support', { description: 'Refund escalations' });
+        await pause();
+        await page(acme.id, 'Unrelated', { body: 'Window cleaning schedule for the refunds office.' });
+        const note = await store.addNote({
+          pageId: inBody.id,
+          text: 'A refund over $500 needs a second approver.',
+          stampScopeIds: [acme.id],
+          mentions: [],
+          provenance: alex,
+        });
+        const r = read(['org:acme', 'org:refund']);
+        const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
+          hit.type === 'page' ? `page:${hit.page.name}` : `note:${hit.note.id}`;
+
+        expect((await store.searchPages({ query: 'refund', read: r })).map(label)).toEqual([
+          `page:${named.name}`,
+          'page:Unrelated',
+          `page:${inDescription.name}`,
+          `page:${inBody.name}`,
+          `note:${note.id}`,
+        ]);
+        expect((await store.searchPages({ query: 'refund', read: r, limit: 1 })).map(label)).toEqual([
+          `page:${named.name}`,
+        ]);
+        expect((await store.searchPages({ query: 'REFUND WINDOW', read: r })).map(label)).toEqual([
+          `page:${named.name}`,
+        ]);
+      });
+
       it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {
         const acme = await scope('org:acme', ORG);
         const secret = await scope('org:secret', ORG);

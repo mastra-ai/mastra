@@ -561,7 +561,13 @@ export interface KnowledgePageStore {
   restoreNote(input: { id: string; provenance: KnowledgeProvenance }): Promise<KnowledgeNote>;
 
   // Search and activity
-  /** Lexical search over page names, descriptions, bodies and note text; access filtered first. */
+  /**
+   * Lexical search over page names, descriptions, bodies and note text; access filtered first. The
+   * trimmed query matches as one case-insensitive substring. Scope pages are never returned. Results:
+   * pages whose name matches, then pages matching only by description or body (each newest
+   * `updatedAt` first, ties by id ascending), then notes (newest `createdAt` first, ties by id
+   * descending), truncated to `limit`.
+   */
   searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]>;
   /**
    * Events newest first, filtered by the page's and note's state now, not when the event happened:

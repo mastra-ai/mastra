@@ -1306,8 +1306,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   async searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const terms = [...new Set(input.query.toLowerCase().split(/\s+/).filter(Boolean))];
-    if (terms.length === 0) return [];
+    const query = input.query.trim();
+    if (!query) return [];
     const ids = await this.#readable(input.read);
     const scopes = input.scopeIds?.length ? input.scopeIds : undefined;
     const inScope = (field: string): Filter<Document> => {
@@ -1315,31 +1315,28 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const allowed = scopes ? scopes.filter(id => ids.includes(id)) : ids;
       return { [field]: { $in: allowed } };
     };
-    const matcher = (term: string) => ({ $regex: escapeRegex(term), $options: 'i' });
-    const hits: Array<{ score: number; updatedAt: number; hit: KnowledgePageSearchHit }> = [];
-
-    const pageRows = await (
-      await this.#c('pages')
-    )
-      .find(
-        {
-          ...live,
-          ...inScope('scopeId'),
-          $and: terms.map(term => ({
-            $or: [{ name: matcher(term) }, { description: matcher(term) }, { body: matcher(term) }],
-          })),
-        },
-        noProjection,
-      )
+    const matcher = { $regex: escapeRegex(query), $options: 'i' };
+    const pages = await this.#c('pages');
+    const pageFilter = { ...live, ...notScope, ...inScope('scopeId') };
+    const hits: KnowledgePageSearchHit[] = [];
+    const nameRows = await pages
+      .find({ ...pageFilter, name: matcher }, noProjection)
       .sort({ updatedAt: -1, id: 1 })
       .limit(limit)
       .toArray();
-    for (const row of pageRows) {
-      const page = toPage(row);
-      const name = page.name.toLowerCase();
-      const score = terms.every(term => name.includes(term)) ? 3 : page.description ? 2 : 1;
-      hits.push({ score, updatedAt: page.updatedAt.getTime(), hit: { type: 'page', page } });
+    for (const row of nameRows) hits.push({ type: 'page', page: toPage(row) });
+    if (hits.length < limit) {
+      const otherRows = await pages
+        .find(
+          { ...pageFilter, name: { $not: matcher }, $or: [{ description: matcher }, { body: matcher }] },
+          noProjection,
+        )
+        .sort({ updatedAt: -1, id: 1 })
+        .limit(limit - hits.length)
+        .toArray();
+      for (const row of otherRows) hits.push({ type: 'page', page: toPage(row) });
     }
+    if (hits.length >= limit) return hits;
 
     const noteRows = await (
       await this.#c('notes')
@@ -1349,33 +1346,25 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           ...live,
           ...this.#visibleNotes(ids),
           ...(scopes ? { pageScopeId: { $in: ids === null ? scopes : scopes.filter(id => ids.includes(id)) } } : {}),
-          $and: terms.map(term => ({ text: matcher(term) })),
+          text: matcher,
         },
         noProjection,
       )
-      .sort({ updatedAt: -1, id: 1 })
-      .limit(limit)
+      .sort({ createdAt: -1, id: -1 })
+      .limit(limit - hits.length)
       .toArray();
     const notePages = new Map(
       (
-        await (
-          await this.#c('pages')
-        )
+        await pages
           .find({ id: { $in: [...new Set(noteRows.map(row => String(row.pageId)))] }, ...live }, noProjection)
           .toArray()
       ).map(row => [String(row.id), toPage(row)]),
     );
     for (const row of noteRows) {
       const page = notePages.get(String(row.pageId));
-      if (!page) continue;
-      const note = toNote(row);
-      hits.push({ score: 0, updatedAt: note.updatedAt.getTime(), hit: { type: 'note', note, page } });
+      if (page) hits.push({ type: 'note', note: toNote(row), page });
     }
-
-    return hits
-      .sort((a, b) => b.score - a.score || b.updatedAt - a.updatedAt)
-      .slice(0, limit)
-      .map(entry => entry.hit);
+    return hits;
   }
 
   async listPageActivity(input: {
