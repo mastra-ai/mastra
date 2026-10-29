@@ -1,0 +1,210 @@
+---
+title: 'Reference: Knowledge tools | Knowledge'
+description: 'Arguments, operations, required roles and errors of the five Knowledge tools.'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge tools
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+Knowledge gives agents five tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Use the Knowledge tools](/docs/knowledge/agents-and-tools) for how agents use them.
+
+| Group | Tools | Enabled by |
+| - | - | - |
+| Read | `knowledge_search`, `knowledge_read` | `tools: true` or `tools: { read: true }` |
+| Write | `knowledge_page`, `knowledge_note` | `tools: true` or `tools: { write: true }` |
+| Pins | `knowledge_pin` | `pinnedContext` |
+
+Every tool acts with the run's scopes and the roles Knowledge declarations give them. A run that holds no scopes fails with:
+
+```text
+Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.
+```
+
+Tool errors come back to the model as the tool result, not as exceptions. A page or note the run can't read looks absent: the error says it wasn't found, never that access was denied.
+
+## Page references
+
+Arguments named `page` (and `into`, `parent`) take any of these:
+
+- a page ID;
+- a scope address, such as `org:acme`, for the scope's own page;
+- a keyed page, `<scope>#<key>`, such as `policy:acme#refund-policy`;
+- an exact page name.
+
+A name that matches more than one readable page is refused with the candidate IDs:
+
+```text
+Knowledge page name "Chargeback Playbook" is ambiguous; use one of these ids: 9a58… (in 67bf…), 37c1… (in 9fe2…).
+```
+
+## `knowledge_search`
+
+Searches page names, descriptions, bodies and notes the run can read. Name matches rank first. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are blended.
+
+<PropertiesTable
+  content={[
+  { name: 'query', type: 'string', description: 'What to look for.' },
+  { name: 'scope', type: 'string[]', description: 'Only search pages in these scope addresses.', isOptional: true },
+  { name: 'limit', type: 'number', description: 'Maximum results, 1 to 50.', isOptional: true, defaultValue: '10' },
+]}
+/>
+
+Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`.
+
+## `knowledge_read`
+
+Reads a page: its body, notes, child pages, and the notes on other pages that mention it. A scope address reads that scope's page, which lists its pages. Without `page`, it lists the scopes the run holds.
+
+<PropertiesTable
+  content={[
+  { name: 'page', type: 'string', description: 'A page reference.', isOptional: true },
+  {
+    name: 'cursor',
+    type: 'string',
+    description: "The previous result's `nextCursor`, for more notes.",
+    isOptional: true,
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Maximum notes and child pages, 1 to 50.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+]}
+/>
+
+## `knowledge_page`
+
+Creates, edits, moves and merges pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`: they act on the page's own scope.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'op',
+    type: "'write' | 'move' | 'merge'",
+    description: '`write` with `page` edits it; without `page` it creates one.',
+  },
+  { name: 'page', type: 'string', description: 'The page to edit, move or merge.', isOptional: true },
+  {
+    name: 'scope',
+    type: 'string',
+    description: 'Create: the home scope. Move: the destination scope.',
+    isOptional: true,
+  },
+  { name: 'parent', type: 'string', description: 'Create or move: a parent page in that scope.', isOptional: true },
+  {
+    name: 'into',
+    type: 'string',
+    description: "Merge: the page that remains. Both pages' notes are kept.",
+    isOptional: true,
+  },
+  { name: 'key', type: 'string', description: 'Create: a stable key, unique in the scope.', isOptional: true },
+  { name: 'name', type: 'string', description: 'The page name. Required on create.', isOptional: true },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'A short synopsis, about 100 tokens at most. An empty string clears it.',
+    isOptional: true,
+  },
+  { name: 'body', type: 'string', description: 'The curated long-form summary.', isOptional: true },
+  {
+    name: 'expectedVersion',
+    type: 'number',
+    description: 'The version you read. The write is refused if the page changed since.',
+    isOptional: true,
+  },
+]}
+/>
+
+| Operation | Role needed |
+| - | - |
+| Create (`write` without `page`) | `contributor` on `scope` |
+| Edit (`write` with `page`) | `editor` on the page's scope |
+| Move within a scope | `editor` on the page's scope |
+| Move to another scope | `owner` on the page's scope and on `scope` |
+| Merge | `owner` on the merged page's scope, `editor` on the scope of `into` |
+
+Errors:
+
+```text
+Creating a page needs scope and name.
+Editing a page needs at least one of name, description or body.
+Editing a page takes no scope, parent or key; use op "move" to relocate it.
+Moving a page needs the destination scope.
+Merging needs into: the page that remains.
+Editing a page needs editor on "team:acme:support"; this run has viewer there.
+Moving a page across scopes needs owner on "org:acme"; this run has editor there.
+Merging a page away needs owner on "team:acme:support"; this run has editor there.
+Knowledge page description exceeds the 100 token limit; put long-form text in the page body
+Knowledge record version conflict: 37c1e879-b328-47a9-9d3c-5788ad35ca2d
+```
+
+## `knowledge_note`
+
+Adds, restamps and removes notes. A note is one durable fact on a page. Link other pages with `[[Page Name]]`. Its stamp scopes say who can see it: a run reads a note when it can read the page and at least one stamp scope.
+
+<PropertiesTable
+  content={[
+  { name: 'op', type: "'add' | 'restamp' | 'remove'", description: 'What to do.' },
+  { name: 'page', type: 'string', description: 'Add: the page.', isOptional: true },
+  { name: 'note', type: 'string', description: 'Restamp or remove: the note ID.', isOptional: true },
+  { name: 'scope', type: 'string[]', description: 'Add or restamp: the stamp scope addresses.', isOptional: true },
+  { name: 'text', type: 'string', description: 'Add: the note, about 250 tokens at most.', isOptional: true },
+  {
+    name: 'when',
+    type: 'string',
+    description: 'Add: an ISO date-time for when it was true or observed.',
+    isOptional: true,
+  },
+]}
+/>
+
+| Operation | Role needed |
+| - | - |
+| `add` | `contributor` on the page's scope and on each stamp scope |
+| `restamp` | `editor` on the page's scope, `contributor` on each new stamp scope |
+| `remove` | `editor` on the page's scope |
+
+Removing a note and adding it again creates a new note ID. Errors:
+
+```text
+Adding a note needs page and text.
+Adding a note needs scope: the stamp scopes.
+Adding a note needs contributor on "team:acme:support"; this run has viewer there.
+Removing a note needs editor on "team:acme:support"; this run has viewer there.
+Knowledge note text exceeds the 250 token limit; split it into separate notes or put long-form text in the page body
+```
+
+## `knowledge_pin`
+
+Pins a page into the context of every run holding one of the audience scopes, every turn, or unpins it. Requires Memory to deliver pins. See [Pins](/docs/knowledge/pins).
+
+<PropertiesTable
+  content={[
+  { name: 'op', type: "'pin' | 'unpin'", description: 'What to do.' },
+  { name: 'page', type: 'string', description: 'The page to pin or unpin.' },
+  { name: 'audience', type: 'string[]', description: 'Scope addresses whose runs receive the pin.' },
+]}
+/>
+
+Pinning and unpinning need `editor` on the page's scope and, for each audience scope, holding it or `editor` on it. A pinned page reaches only runs that can read it.
+
+```text
+Pinning a page needs editor on "policy:acme"; this run has viewer there.
+Pinning for "role:acme:sales" needs holding it or editor on it; this run has neither.
+Pin audience "project:x" does not match a declared scope type.
+```
+
+## Related
+
+- [Use the Knowledge tools](/docs/knowledge/agents-and-tools)
+- [Knowledge class](/reference/knowledge/knowledge-class)
+- [Limits](/docs/knowledge/limits)

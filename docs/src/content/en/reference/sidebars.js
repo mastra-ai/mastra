@@ -410,7 +410,11 @@ const sidebars = {
       type: 'category',
       label: 'Knowledge',
       collapsed: true,
-      items: [{ type: 'doc', id: 'knowledge/knowledge-class', label: 'Knowledge Class' }],
+      items: [
+        { type: 'doc', id: 'knowledge/knowledge-class', label: 'Knowledge Class' },
+        { type: 'doc', id: 'knowledge/knowledge-memory-scopes', label: 'knowledgeMemoryScopes()' },
+        { type: 'doc', id: 'knowledge/knowledge-tools', label: 'Knowledge Tools' },
+      ],
     },
     {
       type: 'category',

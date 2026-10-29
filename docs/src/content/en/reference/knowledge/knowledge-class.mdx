@@ -13,35 +13,79 @@ Knowledge is experimental and can change without notice.
 
 :::
 
-```typescript
-import { Knowledge } from '@mastra/core/knowledge'
+The `Knowledge` class holds pages and notes, declares which scopes exist and who gets which role on them, and gives attached agents the Knowledge tools. See [Knowledge overview](/docs/knowledge/overview) for what it does and [Setup](/docs/knowledge/setup) for a walkthrough.
+
+## Usage example
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  tools: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'team:$orgId:$teamId': {
+      access: [
+        { principal: 'self', role: 'editor' },
+        { principal: 'org:$orgId', role: 'viewer' },
+      ],
+    },
+  },
+})
 ```
 
 ## Constructor options
 
 <PropertiesTable
   content={[
-  { name: 'id', type: 'string', description: 'Identifier. Random if omitted.', isOptional: true },
-  { name: 'storage', type: 'MastraCompositeStore', description: 'Storage adapter.', isOptional: true },
   {
     name: 'scopes',
-    type: 'KnowledgeScopeTypesConfig',
-    description: 'Scope types keyed by pattern, with optional description, children, and access.',
+    type: 'KnowledgeScopeDeclarations',
+    description:
+      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `belongsTo`, `children`, `pages`, `pins` and `pinPriority`. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Declare scope types](/docs/knowledge/scope-types).",
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Identifier. Random if omitted.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name used in logs. Defaults to `id`.',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Prose context for agents.',
+    isOptional: true,
+  },
+  {
+    name: 'storage',
+    type: 'MastraCompositeStore',
+    description: 'Storage adapter. Without it, Knowledge uses the storage of the Mastra instance it is registered on.',
     isOptional: true,
   },
   {
     name: 'tools',
-    type: 'boolean | { read: true }',
+    type: 'boolean | { read?: boolean; write?: boolean }',
     description:
-      'Tools an attached agent gets. `true` gives read and write tools, `{ read: true }` gives read tools only. Off by default.',
+      'Tools an attached agent gets. `true` gives `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first two, `{ write: true }` the last two. Off by default.',
     isOptional: true,
+    defaultValue: 'false',
   },
   {
     name: 'pinnedContext',
     type: 'boolean | { maxPins?: number; maxTokens?: number }',
     description:
-      'Pinned entries delivered every turn, plus the `knowledge_pin` tool. `maxPins` defaults to 20, `maxTokens` to 500 (at most 2000). Off by default.',
+      'Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs Memory. `maxPins` defaults to 20 and `maxTokens` to 500; `maxTokens` above 2000 throws. Off by default. See [Pins](/docs/knowledge/pins).',
     isOptional: true,
+    defaultValue: 'false',
   },
   {
     name: 'vector',
@@ -59,20 +103,145 @@ import { Knowledge } from '@mastra/core/knowledge'
   {
     name: 'embedderOptions',
     type: 'MastraEmbeddingOptions',
-    description: 'Options passed to the embedder on every call.',
+    description:
+      'Options passed to the embedder on every call: `maxRetries`, `headers`, `providerOptions`, `telemetry`.',
     isOptional: true,
   },
   {
     name: 'instructions',
-    type: 'false | string | function',
-    description: 'Replace or remove the built-in instructions.',
+    type: 'false | string | ((parts: { read: string; write: string; pins: string }) => string)',
+    description:
+      'Replaces the built-in usage instructions added when Knowledge attaches tools. `false` adds none. A function receives the built-in parts, with an empty string for each disabled group, and must return the same text for the same input so the prompt stays cacheable. See [Instructions](/docs/knowledge/instructions).',
     isOptional: true,
   },
 ]}
 />
 
+The constructor throws a `KnowledgeDeclarationError` when `scopes` is missing or a declaration is invalid, for example two patterns of one type that overlap or a rule principal that doesn't bind. Without `scopes` the message is:
+
+```text
+Knowledge needs `scopes`: declare the scopes its runs hold, e.g. `scopes: { ...knowledgeMemoryScopes() }`, or `{}` for none.
+```
+
 ## Methods
 
-- `createTools({ read, write, pinnedContext })`: returns the Knowledge tools for explicit wiring.
-- `getInstructions({ read, write, pinnedContext })`: returns the instruction block for those tools.
-- `reindex()`: re-embeds every page and note into the vector store and resolves to how many it indexed. Use it for content written straight to the store or after a failed embed. Throws without `vector` and `embedder`.
+### `createTools()`
+
+```typescript oxfmt:false
+createTools(options?: { read?: boolean; write?: boolean; pinnedContext?: boolean }): Record<string, Tool>
+```
+
+Returns the Knowledge tools for explicit wiring, such as an agent that isn't attached with `knowledge`. Each option overrides the matching group set on the instance. See [Knowledge tools](/reference/knowledge/knowledge-tools).
+
+```typescript
+const tools = knowledge.createTools({ write: false })
+// knowledge_search, knowledge_read
+```
+
+### `getInstructions()`
+
+```typescript oxfmt:false
+getInstructions(options?: { read?: boolean; write?: boolean; pinnedContext?: boolean }): string
+```
+
+Returns the usage instructions that go with `createTools(options)`, built the same way as for an attached agent: the built-in parts for the enabled groups, or what the `instructions` option makes of them.
+
+### `reindex()`
+
+```typescript oxfmt:false
+reindex(): Promise<number>
+```
+
+Re-embeds every live page and note into the vector store and resolves to how many it indexed. Use it for content written straight to the store or after a failed embed. Throws without `vector` and `embedder`.
+
+### `explainAccess()`
+
+```typescript oxfmt:false
+explainAccess(
+  runScopes: readonly string[],
+  target: { scope: string } | { page: string },
+): Promise<KnowledgeAccessExplanation>
+```
+
+Says why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are raw run scopes, as you'd pass to an agent. `target.page` takes a page ID or `<scope>#<key>`. Undeclared run scopes throw, as they do at run start.
+
+:::warning
+
+`explainAccess()` is host-only. It tells a missing page from a hidden one, which runs must never learn. Don't expose it through an agent tool, or through a server route without admin-level auth.
+
+:::
+
+```typescript
+await knowledge.explainAccess(['org:acme'], { page: 'team:acme:support#refunds' })
+// {
+//   role: 'viewer',
+//   reasons: [{ principal: 'org:acme', role: 'viewer', rule: 'team:$orgId:$teamId', via: 'rule' }],
+//   page: { id: '…', scope: 'team:acme:support' },
+// }
+
+await knowledge.explainAccess(['org:globex'], { page: 'team:acme:support#refunds' })
+// { role: null, reasons: [], page: { id: '…', scope: 'team:acme:support' }, reason: 'hidden' }
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'role',
+    type: "'viewer' | 'contributor' | 'editor' | 'owner' | null",
+    description: "The strongest role the run has on the target scope. `null` when it can't read it.",
+  },
+  {
+    name: 'reasons',
+    type: 'Array<{ principal: string; role: string; rule: string; via: "self" | "rule" | "belongsTo" }>',
+    description:
+      "Every rule that gives one of the run's scopes a role there: the held scope, the role, the declaration key or concrete address, and how the rule bound.",
+  },
+  {
+    name: 'page',
+    type: '{ id: string; scope: string }',
+    description: 'The resolved page and its home scope, for page targets that exist.',
+    isOptional: true,
+  },
+  {
+    name: 'reason',
+    type: "'missing' | 'hidden' | 'no-rule'",
+    description:
+      "`missing`: no such page. `hidden`: the page exists but the run can't read its scope. `no-rule`: no rule gives the run a role on the scope.",
+    isOptional: true,
+  },
+]}
+/>
+
+### `readScopeFor()`
+
+```typescript oxfmt:false
+readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope>
+```
+
+Returns what a holder of `principals` can read: the principals themselves plus every scope their rules reach in one hop. Pass the result as `read` to the store's read methods when host code reads Knowledge for a user. Undeclared principals throw; an empty list reads nothing.
+
+### `getStorage()`
+
+```typescript oxfmt:false
+getStorage(): Promise<KnowledgeStorage>
+```
+
+Returns the Knowledge store, for host code such as importers, admin pages and deletes. Store methods don't check roles: only the `read` argument from `readScopeFor()` limits what reads return.
+
+```typescript
+const store = await knowledge.getStorage()
+const read = await knowledge.readScopeFor(['org:acme'])
+const [scope] = await store.getScopesByAddress(['team:acme:support'])
+const page = await store.getPageByKey({ scopeId: scope.id, key: 'refunds', read })
+```
+
+### `pinnedContextEnabled`
+
+`true` when `pinnedContext` is on, so attached agents get pinned pages every turn.
+
+## Related
+
+- [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes)
+- [Knowledge tools](/reference/knowledge/knowledge-tools)
+- [Declare scope types](/docs/knowledge/scope-types)
+- [Set who a run is](/docs/knowledge/run-scopes)
