@@ -316,18 +316,56 @@ export function knowledgeScopeReadable(
 }
 
 const POSITION_DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
+/** Digits of an appended key's integer part: base 35, no `0`, so the key never ends in `0`. */
+const POSITION_INTEGER_DIGITS = POSITION_DIGITS.slice(1);
 
 function positionMidpoint(low: string, high: string | null): string {
-  if (high !== null) {
-    let common = 0;
-    while ((low[common] ?? '0') === high[common]) common++;
-    if (common > 0) return high.slice(0, common) + positionMidpoint(low.slice(common), high.slice(common));
+  let prefix = '';
+  for (;;) {
+    if (high !== null) {
+      let common = 0;
+      while ((low[common] ?? '0') === high[common]) common++;
+      if (common > 0) {
+        prefix += high.slice(0, common);
+        low = low.slice(common);
+        high = high.slice(common);
+      }
+    }
+    const lowDigit = low ? POSITION_DIGITS.indexOf(low[0]!) : 0;
+    const highDigit = high !== null ? POSITION_DIGITS.indexOf(high[0]!) : POSITION_DIGITS.length;
+    if (highDigit - lowDigit > 1) return prefix + POSITION_DIGITS[Math.round((lowDigit + highDigit) / 2)]!;
+    if (high !== null && high.length > 1) return prefix + high[0]!;
+    prefix += POSITION_DIGITS[lowDigit]!;
+    low = low.slice(1);
+    high = null;
   }
-  const lowDigit = low ? POSITION_DIGITS.indexOf(low[0]!) : 0;
-  const highDigit = high !== null ? POSITION_DIGITS.indexOf(high[0]!) : POSITION_DIGITS.length;
-  if (highDigit - lowDigit > 1) return POSITION_DIGITS[Math.round((lowDigit + highDigit) / 2)]!;
-  if (high !== null && high.length > 1) return high.slice(0, 1);
-  return POSITION_DIGITS[lowDigit]! + positionMidpoint(low.slice(1), null);
+}
+
+function positionInteger(length: number): string {
+  return POSITION_DIGITS[length]! + POSITION_INTEGER_DIGITS[0]!.repeat(length);
+}
+
+/**
+ * A key after `before`. Appended keys are integers: a head digit giving the digit count, then that
+ * many base-35 digits, so they grow logarithmically instead of by one character per few appends.
+ * Any key (including one inserted between two integers) appends after the integer it starts with.
+ */
+function positionAfter(before: string): string {
+  if (!before) return positionInteger(1);
+  const length = POSITION_DIGITS.indexOf(before[0]!);
+  const digits = before.slice(1, 1 + length);
+  if (length < 1 || digits.length < length || [...digits].some(digit => !POSITION_INTEGER_DIGITS.includes(digit))) {
+    // Not an integer key: jump to the smallest integer with a larger head, else halve toward the end.
+    return length >= 0 && length + 1 < POSITION_DIGITS.length
+      ? positionInteger(length + 1)
+      : positionMidpoint(before, null);
+  }
+  const top = POSITION_INTEGER_DIGITS.length - 1;
+  let at = length - 1;
+  while (at >= 0 && digits[at] === POSITION_INTEGER_DIGITS[top]) at--;
+  if (at < 0) return length + 1 < POSITION_DIGITS.length ? positionInteger(length + 1) : positionMidpoint(before, null);
+  const next = POSITION_INTEGER_DIGITS[POSITION_INTEGER_DIGITS.indexOf(digits[at]!) + 1]!;
+  return POSITION_DIGITS[length]! + digits.slice(0, at) + next + POSITION_INTEGER_DIGITS[0]!.repeat(length - at - 1);
 }
 
 /**
@@ -341,7 +379,7 @@ export function knowledgePositionBetween(before?: string, after?: string): strin
   if (before !== undefined && after !== undefined && before >= after) {
     throw new Error(`Invalid position range: ${before} >= ${after}`);
   }
-  return positionMidpoint(before ?? '', after ?? null);
+  return after === undefined ? positionAfter(before ?? '') : positionMidpoint(before ?? '', after);
 }
 
 /**

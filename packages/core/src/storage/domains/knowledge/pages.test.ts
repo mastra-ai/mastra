@@ -23,6 +23,39 @@ describe('knowledgePositionBetween', () => {
     expect([...keys].sort()).toEqual(keys);
   });
 
+  it('keeps appended keys short, so one parent can hold any number of children', () => {
+    let last: string | undefined;
+    for (let i = 1; i <= 100_000; i++) {
+      const key = knowledgePositionBetween(last);
+      if (last !== undefined) expect(key > last).toBe(true);
+      expect(key.endsWith('0')).toBe(false);
+      last = key;
+    }
+    expect(last!.length).toBeLessThanOrEqual(5);
+  });
+
+  it('appends after a key inserted between two appended keys, and after keys from an older format', () => {
+    const first = knowledgePositionBetween();
+    const second = knowledgePositionBetween(first);
+    const between = knowledgePositionBetween(first, second);
+    expect(knowledgePositionBetween(between) > between).toBe(true);
+    for (const old of ['i', 'k', 'z', 'zi', 'zzzzk', '2']) {
+      const key = knowledgePositionBetween(old);
+      expect(key > old).toBe(true);
+      expect(key.endsWith('0')).toBe(false);
+    }
+  });
+
+  it('inserts repeatedly at one spot without overflowing the stack', () => {
+    const low = knowledgePositionBetween();
+    let high = knowledgePositionBetween(low);
+    for (let i = 0; i < 45_000; i++) {
+      const key = knowledgePositionBetween(low, high);
+      expect(key > low && key < high).toBe(true);
+      high = key;
+    }
+  });
+
   it('inserts between adjacent keys and before the first key', () => {
     expect(knowledgePositionBetween('a', 'b') > 'a').toBe(true);
     expect(knowledgePositionBetween('a', 'b') < 'b').toBe(true);
