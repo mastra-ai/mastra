@@ -93,6 +93,53 @@ describeForAllEngines('AIMock loop scenario: savePerStep across tool steps', eng
     expect(assistants.flatMap(toolResultIds).sort()).toEqual(['call_echo', 'call_upper']);
   });
 
+  // The regular agent still reads any observationalMemory object as "on" for savePerStep
+  // (map-results-step.ts), so normal and fs keep the per-step save off for { enabled: false }.
+  (engine === 'normal' || engine === 'fs' ? it.fails : it)(
+    'saves each tool step before the next one runs when observational memory is switched off',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `save-per-step-om-disabled-${engine}`;
+      const resourceId = 'resource-om-disabled';
+      let savedBeforeSecondTool: string[] | undefined;
+      const observingUppercaseTool = createTool({
+        ...uppercaseTool,
+        execute: async (input, context) => {
+          const { messages } = await memory.recall({ threadId, resourceId });
+          savedBeforeSecondTool = assistantMessages(messages).flatMap(toolResultIds);
+          return uppercaseTool.execute!(input, context);
+        },
+      });
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo: echo this. Uppercase: uppercase this. Explain both results.',
+        tools: { echoTool, uppercaseTool: observingUppercaseTool },
+        memory,
+        threadId,
+        resourceId,
+        memoryOptions: { observationalMemory: { enabled: false } },
+        savePerStep: true,
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'echo this' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 1 },
+            { toolCalls: [{ id: 'call_upper', name: 'uppercaseTool', arguments: { input: 'uppercase this' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'Both done.' });
+        },
+      });
+
+      expect(await output.text).toBe('Both done.');
+      expect(savedBeforeSecondTool).toEqual(['call_echo']);
+    },
+  );
+
   it('keeps the completed tool step in memory when onStepFinish throws on the next step', async () => {
     const memory = new MockMemory();
     const threadId = `save-per-step-rescue-${engine}`;

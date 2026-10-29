@@ -42,6 +42,32 @@ describeForAllEngines('AIMock loop scenario: memory save rules', engine => {
     expect(messages).toEqual([]);
   });
 
+  it('saves the turn when observational memory is switched off', async () => {
+    const memory = new MockMemory();
+    const threadId = 'om-disabled-thread';
+    const resourceId = 'om-disabled-resource';
+    await newThread(memory, threadId, resourceId);
+
+    const { output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'OM_DISABLED_PROMPT',
+      memory,
+      threadId,
+      resourceId,
+      memoryOptions: { observationalMemory: { enabled: false } },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'OM_DISABLED_REPLY' });
+      },
+    });
+
+    expect(await output.text).toBe('OM_DISABLED_REPLY');
+    const { messages } = await memory.recall({ threadId, resourceId });
+    expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
+    expect(JSON.stringify(messages)).toContain('OM_DISABLED_PROMPT');
+    expect(JSON.stringify(messages)).toContain('OM_DISABLED_REPLY');
+  });
+
   it('saves the user message and the error when an input processor throws', async () => {
     for (const rotate of [false, true]) {
       const memory = new MockMemory();
