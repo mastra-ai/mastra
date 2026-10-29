@@ -847,6 +847,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
                 await setupHook(args);
               });
+              await previous?.(args);
             } catch (error) {
               // Core reports the logical sandbox id, which survives a recreate,
               // so the provider's VM id is the only handle for its logs.
@@ -854,7 +855,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               if (physicalId && error instanceof Error) error.message += ` (provider sandbox ${physicalId})`;
               throw error;
             }
-            await previous?.(args);
           });
           // Only a freshly constructed instance starts eagerly; the start itself
           // waits for this resolver to finish because the start hook reads
