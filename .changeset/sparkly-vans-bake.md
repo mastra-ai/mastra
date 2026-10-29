@@ -11,6 +11,24 @@ Hover highlights no longer glide between items. DropdownMenu, ContextMenu, Selec
 
 ```tsx
 // Before
+const hover = useFluidHover(listRef);
+<div ref={listRef} className="relative" {...hover.handlers}>
+  <FluidHoverHighlight hover={hover} className="rounded-lg bg-fill" />
+  {items.map((item, i) => (
+    <Row key={item.id} ref={el => hover.registerItem(i, el)} />
+  ))}
+</div>
+
+// After
+<div>
+  {items.map(item => (
+    <Row key={item.id} className="rounded-lg hover:bg-fill" />
+  ))}
+</div>
+```
+
+```tsx
+// Before
 <CommandList highlightClassName="rounded-lg">{items}</CommandList>
 // After
 <CommandList>{items}</CommandList>
