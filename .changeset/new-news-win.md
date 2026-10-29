@@ -20,7 +20,8 @@ import {
   fields={[FILTER_BAR_TIME_RANGE_FIELD, ...fields]}
   operators={operators}
   value={[FILTER_BAR_TIME_RANGE_ITEM, ...items]}
-  onValueChange={setItems}
+  // The time range item is synthetic: keep it out of the stored filters.
+  onValueChange={next => setItems(next.filter(item => item.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID))}
 >
   <FilterBar.Chips
     renderChip={item =>
