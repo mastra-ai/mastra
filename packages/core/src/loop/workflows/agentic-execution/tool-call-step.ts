@@ -589,12 +589,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 usage: suspendedStepUsage,
               },
             });
-            if (outputWriter) {
-              await outputWriter(approvalChunk);
-            } else {
-              safeEnqueue(controller, approvalChunk);
-            }
-
             // Add approval metadata to message before persisting
             addToolMetadata({
               toolCallId: inputData.toolCallId,
@@ -611,6 +605,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             // Flush messages before suspension to ensure they are persisted
             await flushMessagesBeforeSuspension();
+
+            // Publish only after the approval state is persisted: a consumer that reacts
+            // to this chunk (approve/decline, or abort) must find the parked tool call
+            // in memory instead of racing the flush still in flight (#1932).
+            if (outputWriter) {
+              await outputWriter(approvalChunk);
+            } else {
+              safeEnqueue(controller, approvalChunk);
+            }
 
             return suspend(
               {
@@ -652,8 +655,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               usage: suspendedStepUsage,
             },
           });
-          safeEnqueue(controller, suspensionChunk);
-
           // Add suspension metadata to message before persisting
           addToolMetadata({
             toolCallId: inputData.toolCallId,
@@ -668,6 +669,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           // Flush messages before suspension to ensure they are persisted
           await flushMessagesBeforeSuspension();
+
+          // Publish only after the parked tool call is persisted: a consumer that reacts
+          // to this chunk (abort, resume) must find the suspended invocation in memory
+          // instead of racing the flush still in flight (#1932).
+          safeEnqueue(controller, suspensionChunk);
 
           return await suspend(
             {
@@ -740,12 +746,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 usage: suspendedStepUsage,
               },
             });
-            if (outputWriter) {
-              await outputWriter(approvalChunk);
-            } else {
-              safeEnqueue(controller, approvalChunk);
-            }
-
             // Add approval metadata to message before persisting
             addToolMetadata({
               toolCallId: inputData.toolCallId,
@@ -758,6 +758,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             // Flush messages before suspension to ensure they are persisted
             await flushMessagesBeforeSuspension();
+
+            // Publish only after the approval state is persisted (#1932).
+            if (outputWriter) {
+              await outputWriter(approvalChunk);
+            } else {
+              safeEnqueue(controller, approvalChunk);
+            }
 
             return suspend(
               {
