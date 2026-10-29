@@ -1120,6 +1120,34 @@ export const mastra = new Mastra({
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'dependent:leaf' });
     });
+
+    it('should not install workspace packages that are inlined into the bundle (#28303)', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+      const fileDependencies = Object.entries(packageJson.dependencies as Record<string, string>).filter(([, spec]) =>
+        spec.startsWith('file:'),
+      );
+
+      // Only the workspace package listed in `bundler.externals` is packed; inlined ones are not.
+      expect(fileDependencies).toEqual([
+        ['@inner/subpath-only', 'file:./workspace-module/inner-subpath-only-1.0.0.tgz'],
+      ]);
+      expect(await readdir(join(outputDir, 'workspace-module'))).toEqual(['inner-subpath-only-1.0.0.tgz']);
+      for (const inlined of [
+        '@inner/hello-world',
+        '@inner/inner-tools',
+        '@inner/native-binding-package',
+        '@inner/raw-ts',
+        '@inner/transitive-a',
+        '@inner/transitive-b',
+        '@inner/versionless',
+        '@inner/versionless-dependent',
+        '@inner/transitive-only-dependent',
+        '@inner/transitive-only-leaf',
+      ]) {
+        expect(packageJson.dependencies).not.toHaveProperty([inlined]);
+      }
+    });
   });
 
   describe.sequential('start', async () => {
