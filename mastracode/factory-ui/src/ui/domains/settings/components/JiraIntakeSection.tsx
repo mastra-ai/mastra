@@ -8,7 +8,7 @@ import type { JiraStatus } from '../../factory/services/jira';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
-import { JiraRoutedSourcePicker } from './JiraRouting';
+import { JiraRoutedSourcePicker } from './jira/JiraRoutedSourcePicker';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 

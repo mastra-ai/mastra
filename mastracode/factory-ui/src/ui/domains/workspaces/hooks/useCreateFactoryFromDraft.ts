@@ -64,11 +64,11 @@ export function useCreateFactoryFromDraft({
       });
     } catch (error) {
       // A Jira project already feeding another factory with all its issues is not taken over; the
-      // new factory is still created and can take a labelled slice from Settings › Intake.
+      // new factory is still created and can take a labelled slice from Settings › Work Intake.
       if (!(error instanceof IntakeBindingConflictError)) throw error;
-      toast.error(
-        'This Jira project already sends all its issues to another factory. Add a label filter in Settings › Intake to route some of them here.',
-      );
+      toast.warning('This Jira project already feeds another factory', {
+        description: 'Add a label filter in Settings › Work Intake to route some of its issues here.',
+      });
       return;
     }
     const config = await fetchIntakeConfig(baseUrl);

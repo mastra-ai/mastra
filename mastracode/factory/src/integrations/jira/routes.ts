@@ -19,8 +19,10 @@ import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { JiraApiError } from './api.js';
 import { scopeJiraSourcesToProject } from './binding-scope.js';
+import { jiraIssueFiledIn } from './claim.js';
 import { unfilteredJiraScopes } from './intake-jql.js';
 import { DEPLOYMENT_CONNECTION } from './integration.js';
 import type { JiraIntegration } from './integration.js';
@@ -65,6 +67,8 @@ export interface MountJiraRoutesOptions {
    * the same automatic intake Linear has.
    */
   ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
+  /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
+  workItems?: Pick<WorkItemsStorage, 'getByClaimKey' | 'listBySource'>;
 }
 
 /**
@@ -124,7 +128,7 @@ function jiraFetchError(c: RouteContext, err: unknown) {
  */
 export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { jira, auth, intake } = options;
+  const { jira, auth, intake, workItems } = options;
   const enabled = Boolean(jira) && auth.enabled();
   const diagnostics = (): JiraFeatureDiagnostics => ({
     jiraConfigured: Boolean(jira),
@@ -322,11 +326,13 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
 
         try {
           const issue = await jira.intake.getIssue({ connection: DEPLOYMENT_CONNECTION, issueId: issueRef });
-          // The issue must fall in this Factory's slice of a routed project —
-          // an issue from an unbound project, or one another Factory's label
-          // filter takes, reads exactly like one that doesn't exist (same
-          // stance as the Linear detail route).
-          const routed = issue?.sourceId != null && projectScope.takes(issue.sourceId, issue.labels);
+          // An unbound project's issue, or one in another Factory's slice that this
+          // Factory never filed, reads like one that doesn't exist (as on Linear).
+          const routed =
+            issue?.sourceId != null &&
+            issue.sourceId in projectScope.intakeBoards &&
+            (projectScope.takes(issue.sourceId, issue.labels) ||
+              (await jiraIssueFiledIn(workItems, { orgId: resolved.tenant.orgId, factoryProjectId, issueRef: issue.id })));
           if (!issue || issue.identifier.toUpperCase() !== identifier.toUpperCase() || !routed) {
             return c.json({ error: 'issue_not_found' }, 404);
           }

@@ -526,6 +526,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
+      workItems: ctx.runtime?.workItems,
       appDbConfigured: Boolean(ctx.factoryStorage),
       ingestFactoryIssues: attachJiraRules(this, ctx),
     });

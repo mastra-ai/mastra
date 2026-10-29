@@ -567,6 +567,11 @@ export class IntakeStorage extends FactoryStorageDomain {
     );
   }
 
+  /** Release every source a deleted Factory project was bound to, so the others can take them. */
+  async clearProjectBindings({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<void> {
+    await this.#db.deleteMany('intake_source_subscriptions', { org_id: orgId, factory_project_id: factoryProjectId });
+  }
+
   /**
    * Bind a source to one Factory project, moving it away from any other: the
    * source keeps a single binding, which takes all of its issues.

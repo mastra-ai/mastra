@@ -13,7 +13,7 @@ import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../..
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
-import { jiraClaimKey } from './claim.js';
+import { jiraClaimKey, jiraIssueCards } from './claim.js';
 import type { JiraEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -105,19 +105,8 @@ export class JiraRules {
   }
 
   async #heldElsewhere(input: JiraRulesIngress, issue: JiraIssueIngress): Promise<boolean> {
-    const heldLive = (row: WorkItemRow) =>
-      row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row);
-    const claimant = await this.options.storage.getByClaimKey({
-      orgId: input.orgId,
-      claimKey: jiraClaimKey(issue.id),
-    });
-    if (claimant && heldLive(claimant)) return true;
-    // Cards filed before claims existed carry only the issue reference.
-    const legacy = await this.options.storage.listBySource({
-      orgId: input.orgId,
-      source: { integrationId: 'jira', type: 'issue', externalId: issue.id },
-    });
-    return legacy.some(heldLive);
+    const cards = await jiraIssueCards(this.options.storage, { orgId: input.orgId, issueRef: issue.id });
+    return cards.some(row => row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row));
   }
 
   async #ingestIssue(
