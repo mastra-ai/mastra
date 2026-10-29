@@ -81,24 +81,36 @@ export const exceedsAggregateWindow = ({ from, to }: TimeRange) =>
   Date.parse(to) - Date.parse(from) > MAX_TIME_RANGE_MS;
 
 /**
- * The start of the bar holding `ms`. Sub-day bars are step-aligned from local midnight, so they
- * land on round clock times. Day and longer bars are UTC-aligned, like the API's `1d` buckets.
+ * Whether bars can follow the local clock: only when every local bar edge is also an edge of the
+ * API's UTC-aligned buckets. True in whole-hour zones; false for hourly buckets in Kolkata (+5:30)
+ * or Kathmandu (+5:45), where a local grid would split API buckets and drop the ones at the edge.
  */
-function barStart(ms: number, stepMs: number) {
-  if (stepMs >= DAY) return Math.floor(ms / stepMs) * stepMs;
+function onLocalClock({ from, to }: TimeRange, { interval, stepMs }: HistogramPlan) {
+  if (stepMs >= DAY) return false;
+  const intervalMinutes = INTERVAL_MS[interval] / MINUTE;
+  return [from, to].every(iso => new Date(iso).getTimezoneOffset() % intervalMinutes === 0);
+}
+
+/**
+ * The start of the bar holding `ms`. On the local clock, bars are step-aligned from local midnight
+ * so they land on round clock times; otherwise they are UTC-aligned, like the API's buckets.
+ */
+function barStart(ms: number, stepMs: number, local: boolean) {
+  if (!local) return Math.floor(ms / stepMs) * stepMs;
   const d = new Date(ms);
   const stepMinutes = stepMs / MINUTE;
   const minutes = Math.floor((d.getHours() * 60 + d.getMinutes()) / stepMinutes) * stepMinutes;
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, minutes).getTime();
 }
 
-/** The next bar's start. Sub-day bars step in local time so a DST change doesn't drift the grid. */
-function nextBar(ms: number, stepMs: number) {
-  if (stepMs >= DAY) return ms + stepMs;
+/** The next bar's start. Local bars step in local time so a DST change doesn't drift the grid. */
+function nextBar(ms: number, stepMs: number, local: boolean) {
+  if (!local) return ms + stepMs;
   const d = new Date(ms);
   const next = barStart(
     new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes() + stepMs / MINUTE).getTime(),
     stepMs,
+    local,
   );
   return next > ms ? next : ms + stepMs;
 }
@@ -108,31 +120,33 @@ const fmtClock = (d: Date) =>
   d.toLocaleTimeString('en-US', d.getMinutes() === 0 ? { hour: 'numeric' } : { hour: 'numeric', minute: '2-digit' });
 
 function barLabels(ts: number, stepMs: number, multiDay: boolean): BucketLabels {
-  if (stepMs >= HOUR) return bucketLabels(ts, stepMs / HOUR, multiDay);
+  if (stepMs >= DAY) return bucketLabels(ts, stepMs / HOUR, multiDay);
   const d = new Date(ts);
   const edgeLabel = `${fmtDay(d)}, ${fmtClock(d)}`;
-  const time = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  if (!multiDay) return { ts, label: fmtClock(d), edgeLabel, time };
-  const midnight = d.getHours() === 0 && d.getMinutes() === 0;
-  return { ts, label: midnight ? fmtDay(d) : edgeLabel, edgeLabel, time };
+  if (!multiDay) return { ts, label: fmtClock(d), edgeLabel, time: edgeLabel };
+  // The day's first bar: local midnight on the local clock, just after it on the UTC grid.
+  const firstOfDay = d.getHours() * 60 + d.getMinutes() < stepMs / MINUTE;
+  return { ts, label: firstOfDay ? fmtDay(d) : edgeLabel, edgeLabel, time: edgeLabel };
 }
 
 /** Every bar of the window, quiet ones as zero, with non-error and error counts summed per bar. */
 export function bucketCountRows(rows: CountRow[], timeRange: TimeRange): HistogramBucket[] {
-  const { stepMs } = histogramPlan(timeRange);
+  const plan = histogramPlan(timeRange);
+  const { stepMs } = plan;
+  const local = onLocalClock(timeRange, plan);
   const start = new Date(timeRange.from);
   const end = new Date(timeRange.to);
   const multiDay = isMultiDay(start, end);
   const buckets: HistogramBucket[] = [];
   const index = new Map<number, HistogramBucket>();
-  for (let ts = barStart(start.getTime(), stepMs); ts < end.getTime(); ts = nextBar(ts, stepMs)) {
+  for (let ts = barStart(start.getTime(), stepMs, local); ts < end.getTime(); ts = nextBar(ts, stepMs, local)) {
     const bucket = { ...barLabels(ts, stepMs, multiDay), ok: 0, errors: 0 };
     buckets.push(bucket);
     index.set(ts, bucket);
   }
   for (const row of rows) {
     if (!row.bucket) continue;
-    const bucket = index.get(barStart(Date.parse(row.bucket), stepMs));
+    const bucket = index.get(barStart(Date.parse(row.bucket), stepMs, local));
     if (!bucket) continue;
     const count = row.measures.count ?? 0;
     const errors = row.measures.errorCount ?? 0;
