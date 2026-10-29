@@ -48,7 +48,7 @@ A name that matches more than one readable page is refused, and the error lists 
 
 ## Search and read
 
-`knowledge_search` matches the query against page names, descriptions, bodies and notes the run can read. Pages whose name matches come first, then pages matching in their description or body, then notes, each newest first. With [semantic search](/docs/knowledge/setup#add-semantic-search) set up, results also match by meaning, and keyword and meaning results are merged by rank, so a close meaning match can come before a name match. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
+`knowledge_search` looks for the whole query, as one case-insensitive phrase, in the page names, descriptions, bodies and notes the run can read. A query of several words isn't split, so `billing on-call` only matches text containing that exact phrase. Pages whose name matches come first, then pages matching in their description or body, then notes, each newest first. With [semantic search](/docs/knowledge/setup#add-semantic-search) set up, results also match by meaning, and keyword and meaning results are merged by rank, so a close meaning match can come before a name match. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
 
 ```json
 { "query": "on-call", "scope": ["org:acme"] }
