@@ -119,7 +119,7 @@ export interface KnowledgePage {
 
 /**
  * A short, attributed piece of durable knowledge attached to one page. Visible when its page is
- * visible, at least one stamp scope is readable, and every page it mentions is visible.
+ * visible, at least one stamp scope is readable, and every resolved mention's page scope is readable.
  *
  * @experimental
  */
@@ -514,10 +514,13 @@ export interface KnowledgePageStore {
   /** Lexical search over page names, descriptions, bodies and note text; access filtered first. */
   searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]>;
   /**
-   * Events on readable scopes, newest first. An event's scope is the page's home scope after the
-   * change (the target scope for a move or merge). Note events are returned only while the note
-   * itself is visible under `read` (page visible, a stamp readable, every mention visible), so the
-   * log never reveals a hidden note's id, author or source thread.
+   * Events newest first, filtered by the page's and note's state now, not when the event happened:
+   * an event is returned only while its page's current home scope is readable under `read` (deleted
+   * and merged-away pages included, so a page moved somewhere unreadable takes its whole history with
+   * it), and a note event only while the note is also visible (a stamp readable, every resolved
+   * mention's page scope readable). The log never reveals a hidden page's or note's id, author or
+   * source thread. `scopeId` on an event is the home scope after the change (the target for a move or
+   * merge); the `scopeId` filter matches the page's current home scope.
    */
   listPageActivity(input: {
     read: KnowledgeReadScope;
