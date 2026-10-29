@@ -328,7 +328,6 @@ export interface SandboxPreviewCookie {
 /** What {@link PlatformSandbox.getPortUrl} returns. */
 export interface SandboxPortLinks {
   url: string;
-  signInUrl: string;
   cookie: SandboxPreviewCookie;
 }
 
@@ -1343,11 +1342,9 @@ export class PlatformSandbox extends MastraSandbox {
    * - `url` is the port's address. Anyone with access to the sandbox's
    *   project can open it after signing in to the platform; anyone else is
    *   turned away. It doesn't expire, so it's the link to share.
-   * - `signInUrl` opens the same port in a browser that can't sign in to the
-   *   platform. It works once and expires after a minute; never share it.
-   * - `cookie` is what `signInUrl` would set, for putting straight into a
-   *   browser you control, such as an agent's own browser. It opens every port
-   *   of the sandbox for an hour; never share it.
+   * - `cookie` signs a browser you control, such as an agent's own browser,
+   *   in to that port for an hour, so it opens `url` without signing in.
+   *   Never share it.
    *
    * The sandbox control port is refused.
    */
@@ -1366,8 +1363,8 @@ export class PlatformSandbox extends MastraSandbox {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ port }),
     });
-    const { url: signInUrl, cookie } = (await response.json()) as { url: string; cookie: SandboxPreviewCookie };
-    return { url: `${new URL(signInUrl).origin}/`, signInUrl, cookie };
+    const { url: grantUrl, cookie } = (await response.json()) as { url: string; cookie: SandboxPreviewCookie };
+    return { url: `${new URL(grantUrl).origin}/`, cookie };
   }
 
   /**
