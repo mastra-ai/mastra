@@ -360,10 +360,11 @@ export class PostgresStore extends MastraCompositeStore {
     // blip during boot) is caught below and resets #initPromise, keeping
     // init() retryable instead of permanently rejecting.
     let pinnedClient: PoolClient | undefined;
+    let pinned: PinnedClientAdapter | undefined;
 
     try {
       pinnedClient = await this.#writePool.connect();
-      const pinned = new PinnedClientAdapter(this.#writePool, pinnedClient);
+      pinned = new PinnedClientAdapter(this.#writePool, pinnedClient);
       this.#db.pin(pinned);
       // Read the schema's catalog once, up front, so the domains below can
       // answer "does this table/column/index already exist?" locally instead of
@@ -408,6 +409,8 @@ export class PostgresStore extends MastraCompositeStore {
         error,
       );
     } finally {
+      // Snapshot loading can reject before its other queued catalog reads settle.
+      await pinned?.drain();
       // Drop the snapshot unconditionally — including when loading it or
       // super.init() threw — so no code path can read a stale catalog picture
       // after init returns.

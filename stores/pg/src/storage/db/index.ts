@@ -1418,21 +1418,19 @@ export class PgDB extends MastraBase {
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,
     });
-    const schemaFilter = this.schemaName || 'public';
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
 
-    // A primary key is always backed by an index of the same name, so the init
-    // snapshot already answers this without a round trip.
     const snapshot = this.schemaSnapshot;
-    if (snapshot) return snapshot.primaryKeyIndexes.has(constraintName.toLowerCase());
+    if (snapshot) return snapshot.primaryKeyIndexes.get(constraintName.toLowerCase()) === TABLE_SPANS;
 
-    return this.spansPrimaryKeyExistsLive(constraintName, schemaFilter);
+    return this.spansPrimaryKeyExistsLive(constraintName, fullTableName);
   }
 
   /** Live-catalog variant of {@link spansPrimaryKeyExists}, bypassing the snapshot. */
-  private async spansPrimaryKeyExistsLive(constraintName: string, schemaFilter: string): Promise<boolean> {
+  private async spansPrimaryKeyExistsLive(constraintName: string, fullTableName: string): Promise<boolean> {
     const result = await this.client.oneOrNone<{ exists: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)) as exists`,
-      [constraintName, schemaFilter],
+      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND contype = 'p' AND conrelid = to_regclass($2)) as exists`,
+      [constraintName, fullTableName],
     );
 
     return result?.exists ?? false;
@@ -1449,20 +1447,8 @@ export class PgDB extends MastraBase {
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,
     });
-    const schemaFilter = this.schemaName || 'public';
-
     try {
-      // Check if the constraint already exists
-      const constraintExists = await this.client.oneOrNone<{ exists: boolean }>(
-        `
-        SELECT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)
-        ) as exists
-      `,
-        [constraintName, schemaFilter],
-      );
-
-      if (constraintExists?.exists) {
+      if (await this.spansPrimaryKeyExistsLive(constraintName, fullTableName)) {
         this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} already exists on ${fullTableName}`);
         return;
       }
@@ -1473,7 +1459,7 @@ export class PgDB extends MastraBase {
         ADD CONSTRAINT ${constraintName}
         PRIMARY KEY ("traceId", "spanId")
       `);
-      this.schemaSnapshot?.primaryKeyIndexes.add(constraintName.toLowerCase());
+      this.schemaSnapshot?.primaryKeyIndexes.set(constraintName.toLowerCase(), TABLE_SPANS);
 
       this.logger?.info?.(`Added PRIMARY KEY constraint ${constraintName} to ${fullTableName}`);
     } catch (error) {
@@ -1493,9 +1479,9 @@ export class PgDB extends MastraBase {
       // creator's primary key became visible while ALTER waited for its lock.
       const primaryKeyRace = typeof error === 'object' && error !== null && 'code' in error && error.code === '42P16';
       if (isDuplicateRelationError(error) || primaryKeyRace) {
-        const confirmed = await this.spansPrimaryKeyExistsLive(constraintName, schemaFilter);
+        const confirmed = await this.spansPrimaryKeyExistsLive(constraintName, fullTableName);
         if (confirmed) {
-          this.schemaSnapshot?.primaryKeyIndexes.add(constraintName.toLowerCase());
+          this.schemaSnapshot?.primaryKeyIndexes.set(constraintName.toLowerCase(), TABLE_SPANS);
           this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
           return;
         }

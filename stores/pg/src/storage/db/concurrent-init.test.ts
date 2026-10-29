@@ -6,6 +6,7 @@ import type { DbClient } from '../client';
 import { PoolAdapter, RoutingDbClient } from '../client';
 import { WorkflowsPG, workflowSnapshotStatusIndexName, workflowSnapshotThreadIdIndexName } from '../domains/workflows';
 import { PostgresStore } from '../index';
+import { buildConstraintName } from './constraint-utils';
 import { loadSchemaSnapshot } from './schema-snapshot';
 import { PgDB } from './index';
 
@@ -730,6 +731,80 @@ describe('concurrent first boot (COR-1495)', () => {
       await pool.end();
     }
   }, 60000);
+
+  it.each(['check constraint', 'other table primary key'] as const)(
+    'does not mistake a same-named %s for the spans primary key',
+    async kind => {
+      const name = await schema();
+      const constraint = buildConstraintName({ baseName: 'mastra_ai_spans_traceid_spanid_pk', schemaName: name });
+      await admin.query(`CREATE TABLE "${name}".mastra_ai_spans ("traceId" text NOT NULL, "spanId" text NOT NULL)`);
+      if (kind === 'check constraint') {
+        await admin.query(`ALTER TABLE "${name}".mastra_ai_spans ADD CONSTRAINT "${constraint}" CHECK (true)`);
+      } else {
+        await admin.query(`CREATE TABLE "${name}".other (id text CONSTRAINT "${constraint}" PRIMARY KEY)`);
+      }
+      const pool = new Pool({ connectionString });
+      const client = new RoutingDbClient(new PoolAdapter(pool));
+      const db = new PgDB({ client, schemaName: name });
+      try {
+        for (const snapshot of [null, await loadSchemaSnapshot(client, name)]) {
+          client.setSchemaSnapshot(snapshot);
+          expect(await db.checkSpansMigrationStatus()).toMatchObject({ needsMigration: true, constraintExists: false });
+        }
+        client.setSchemaSnapshot(null);
+        // A same-named non-primary constraint on the spans table must not turn
+        // the failed ALTER into a successful migration either.
+        if (kind === 'check constraint') {
+          await expect(db.migrateSpans()).rejects.toMatchObject({ cause: { code: '42710' } });
+        }
+      } finally {
+        await pool.end();
+      }
+    },
+  );
+
+  it('settles queued catalog reads before returning a failed init connection to the pool', async () => {
+    const name = await schema();
+    const pool = new Pool({ connectionString, max: 1 });
+    const store = new PostgresStore({ id: 'failed-catalog', pool, schemaName: name });
+    let completed = 0;
+    let completedAtRelease = -1;
+    let finished!: () => void;
+    const drained = new Promise<void>(resolve => {
+      finished = resolve;
+    });
+    pool.on('connect', client => {
+      const original = client.query;
+      (client as any).query = async (...args: any[]) => {
+        const sql = typeof args[0] === 'string' ? args[0] : args[0]?.text;
+        if (args[1]?.[0] !== name || !/FROM pg_catalog\./.test(sql ?? '')) {
+          return (original as any).apply(client, args);
+        }
+        try {
+          if (sql.includes('pg_catalog.pg_tables')) {
+            return await original.call(client, 'SELECT 1 / 0');
+          }
+          await original.call(client, 'SELECT pg_sleep(0.1)');
+          return await (original as any).apply(client, args);
+        } finally {
+          completed++;
+          if (completed === 3) finished();
+        }
+      };
+    });
+    pool.on('release', () => {
+      completedAtRelease = completed;
+    });
+    try {
+      await expect(store.init()).rejects.toMatchObject({ cause: { code: '22012' } });
+      await drained;
+      expect(completedAtRelease).toBe(3);
+      expect(await store.db.one('SELECT 42 AS answer')).toEqual({ answer: 42 });
+    } finally {
+      await store.close();
+      await pool.end();
+    }
+  });
 
   it('does not hide an unrelated existing spans primary key', async () => {
     const name = await schema();

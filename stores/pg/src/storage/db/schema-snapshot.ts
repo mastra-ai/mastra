@@ -50,12 +50,11 @@ export interface SchemaSnapshot {
   /** Names of indexes that are the replica identity of their table. */
   replicaIdentityIndexes: Set<string>;
   /**
-   * Lowercased names of PRIMARY KEY indexes. A primary key is always backed by
-   * an index of the same name, so this answers "does constraint X exist?" for
-   * primary keys without a `pg_constraint` probe. Lowercased because the
-   * queries it replaces compare `conname = lower($1)`.
+   * Lowercased PRIMARY KEY index name -> owning table name. A primary key is
+   * backed by an index of the same name, but the owning table must also match.
+   * Lowercased because the live query compares `conname = lower($1)`.
    */
-  primaryKeyIndexes: Set<string>;
+  primaryKeyIndexes: Map<string, string>;
 }
 
 /**
@@ -108,13 +107,15 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     // and indisprimary, which answers primary-key constraint existence.
     client.manyOrNone<{
       indexname: string;
+      table_name: string;
       is_replica_identity: boolean;
       is_primary: boolean;
       is_valid: boolean;
     }>(
-      `SELECT c.relname AS indexname, i.indisreplident AS is_replica_identity, i.indisprimary AS is_primary, i.indisvalid AS is_valid
+      `SELECT c.relname AS indexname, t.relname AS table_name, i.indisreplident AS is_replica_identity, i.indisprimary AS is_primary, i.indisvalid AS is_valid
          FROM pg_catalog.pg_index i
          JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+         JOIN pg_catalog.pg_class t ON t.oid = i.indrelid
          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = $1`,
       [schema],
@@ -151,14 +152,14 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
 
   const indexes = new Set<string>();
   const replicaIdentityIndexes = new Set<string>();
-  const primaryKeyIndexes = new Set<string>();
+  const primaryKeyIndexes = new Map<string, string>();
   for (const row of indexRows) {
     if (row.is_valid) indexes.add(row.indexname);
     if (row.is_replica_identity) {
       replicaIdentityIndexes.add(row.indexname);
     }
     if (row.is_primary) {
-      primaryKeyIndexes.add(row.indexname.toLowerCase());
+      primaryKeyIndexes.set(row.indexname.toLowerCase(), row.table_name);
     }
   }
 
