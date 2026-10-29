@@ -21,7 +21,7 @@ vi.mock('../tools/index.js', () => ({
 
 import { createDynamicTools, createToolHooks } from './tools.js';
 
-function createRequestContext(state: Record<string, unknown>, modeId: string = 'build') {
+function createRequestContext(state: Record<string, unknown>, modeId: string = 'build', modelId?: string) {
   const getState = () => state;
   return {
     get(key: string) {
@@ -29,7 +29,7 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
       return {
         modeId,
         getState,
-        session: { state: { get: getState } },
+        session: { modelId, state: { get: getState } },
       };
     },
   } as any;
@@ -66,6 +66,38 @@ describe('createDynamicTools', () => {
 
     expect(tools.schedule_list).toBe(scheduleList);
     expect(tools.schedule_create).toBeUndefined();
+  });
+
+  it.each([
+    ['openai/gpt-5.5', 'openai.web_search'],
+    ['anthropic/claude-sonnet-4-5', 'anthropic.web_search_20250305'],
+  ])('offers the same provider search for %s and its gateway alias', async (modelId, toolId) => {
+    const build = createDynamicTools();
+    const canonical = await build({ requestContext: createRequestContext({}, 'build', modelId) });
+    const alias = await build({ requestContext: createRequestContext({}, 'build', `mastra/${modelId}`) });
+    expect(canonical.web_search?.id).toBe(toolId);
+    expect(alias.web_search?.id).toBe(toolId);
+
+    const disabled = await createDynamicTools(undefined, undefined, ['web_search'])({
+      requestContext: createRequestContext({}, 'build', `mastra/${modelId}`),
+    });
+    expect(disabled.web_search).toBeUndefined();
+  });
+
+  it('keeps explicit search backends for gateway aliases and unsupported providers', async () => {
+    const search = { description: 'external search' };
+    webToolMocks.configuredTools = { web_search: search, web_extract: { description: 'external extract' } };
+    for (const modelId of ['mastra/openai/gpt-5.5', 'mastra/anthropic/claude-sonnet-4-5', 'google/gemini-2.5-flash']) {
+      const tools = await createDynamicTools()({ requestContext: createRequestContext({}, 'build', modelId) });
+      expect(tools.web_search).toBe(search);
+    }
+  });
+
+  it('does not add provider search for an unsupported model', async () => {
+    const tools = await createDynamicTools()({
+      requestContext: createRequestContext({}, 'build', 'mastra/google/gemini-2.5-flash'),
+    });
+    expect(tools.web_search).toBeUndefined();
   });
 
   it('merges extra tools into the exposed tool map', async () => {

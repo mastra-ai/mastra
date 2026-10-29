@@ -9,6 +9,7 @@ export { fastModePrompt } from './fast.js';
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
+import { stripMastraGatewayPrefix } from '../../providers/model-ids.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
@@ -84,7 +85,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
  */
 export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // Determine whether web search tools are available
-  const modelId = ctx.modelId;
+  const modelId = ctx.modelId ? stripMastraGatewayPrefix(ctx.modelId) : ctx.modelId;
   const hasWebSearch =
     hasParallelKey() ||
     hasTavilyKey() ||
