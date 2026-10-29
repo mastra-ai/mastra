@@ -1,5 +1,6 @@
 import { estimateTokenCount } from 'tokenx';
 import { StorageDomain } from '../base';
+import type { KnowledgePageStore } from './pages';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeScope = string[];
@@ -905,7 +906,7 @@ const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export abstract class KnowledgeStorage extends StorageDomain {
+export abstract class KnowledgeStorage extends StorageDomain implements KnowledgePageStore {
   readonly #storageIsolationKey: unknown;
 
   constructor(config: { storageIsolationKey?: unknown } = {}) {
@@ -956,6 +957,104 @@ export abstract class KnowledgeStorage extends StorageDomain {
   /** Lists the nodes placed inside one structural scope, newest-first (bounded). */
   async listScopeMembers(_input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
     throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
+  }
+
+  // Schema-4 page store (see ./pages.ts). Adapters override every method; the defaults refuse, so an
+  // adapter that hasn't moved to schema 4 fails loudly instead of returning empty results.
+  materializeScope(
+    _input: Parameters<KnowledgePageStore['materializeScope']>[0],
+  ): ReturnType<KnowledgePageStore['materializeScope']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('materializeScope'));
+  }
+  getScopesByAddress(
+    _input: Parameters<KnowledgePageStore['getScopesByAddress']>[0],
+  ): ReturnType<KnowledgePageStore['getScopesByAddress']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('getScopesByAddress'));
+  }
+  listChildScopes(
+    _input: Parameters<KnowledgePageStore['listChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['listChildScopes']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listChildScopes'));
+  }
+  getPage(_input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('getPage'));
+  }
+  getPageByKey(
+    _input: Parameters<KnowledgePageStore['getPageByKey']>[0],
+  ): ReturnType<KnowledgePageStore['getPageByKey']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('getPageByKey'));
+  }
+  findPagesByName(
+    _input: Parameters<KnowledgePageStore['findPagesByName']>[0],
+  ): ReturnType<KnowledgePageStore['findPagesByName']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('findPagesByName'));
+  }
+  listChildPages(
+    _input: Parameters<KnowledgePageStore['listChildPages']>[0],
+  ): ReturnType<KnowledgePageStore['listChildPages']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listChildPages'));
+  }
+  listPages(_input: Parameters<KnowledgePageStore['listPages']>[0]): ReturnType<KnowledgePageStore['listPages']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listPages'));
+  }
+  createPage(_input: Parameters<KnowledgePageStore['createPage']>[0]): ReturnType<KnowledgePageStore['createPage']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('createPage'));
+  }
+  updatePage(_input: Parameters<KnowledgePageStore['updatePage']>[0]): ReturnType<KnowledgePageStore['updatePage']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('updatePage'));
+  }
+  movePage(_input: Parameters<KnowledgePageStore['movePage']>[0]): ReturnType<KnowledgePageStore['movePage']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('movePage'));
+  }
+  mergePages(_input: Parameters<KnowledgePageStore['mergePages']>[0]): ReturnType<KnowledgePageStore['mergePages']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('mergePages'));
+  }
+  deletePage(_input: Parameters<KnowledgePageStore['deletePage']>[0]): ReturnType<KnowledgePageStore['deletePage']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('deletePage'));
+  }
+  getNote(_input: Parameters<KnowledgePageStore['getNote']>[0]): ReturnType<KnowledgePageStore['getNote']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('getNote'));
+  }
+  listNotes(_input: Parameters<KnowledgePageStore['listNotes']>[0]): ReturnType<KnowledgePageStore['listNotes']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listNotes'));
+  }
+  listNotesMentioning(
+    _input: Parameters<KnowledgePageStore['listNotesMentioning']>[0],
+  ): ReturnType<KnowledgePageStore['listNotesMentioning']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listNotesMentioning'));
+  }
+  addNote(_input: Parameters<KnowledgePageStore['addNote']>[0]): ReturnType<KnowledgePageStore['addNote']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('addNote'));
+  }
+  restampNote(_input: Parameters<KnowledgePageStore['restampNote']>[0]): ReturnType<KnowledgePageStore['restampNote']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('restampNote'));
+  }
+  removeNote(_input: Parameters<KnowledgePageStore['removeNote']>[0]): ReturnType<KnowledgePageStore['removeNote']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('removeNote'));
+  }
+  restoreNote(_input: Parameters<KnowledgePageStore['restoreNote']>[0]): ReturnType<KnowledgePageStore['restoreNote']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('restoreNote'));
+  }
+  searchPages(_input: Parameters<KnowledgePageStore['searchPages']>[0]): ReturnType<KnowledgePageStore['searchPages']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('searchPages'));
+  }
+  listPageActivity(
+    _input: Parameters<KnowledgePageStore['listPageActivity']>[0],
+  ): ReturnType<KnowledgePageStore['listPageActivity']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listPageActivity'));
+  }
+  addPinAudience(
+    _input: Parameters<KnowledgePageStore['addPinAudience']>[0],
+  ): ReturnType<KnowledgePageStore['addPinAudience']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('addPinAudience'));
+  }
+  removePinAudience(
+    _input: Parameters<KnowledgePageStore['removePinAudience']>[0],
+  ): ReturnType<KnowledgePageStore['removePinAudience']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('removePinAudience'));
+  }
+  listPins(_input: Parameters<KnowledgePageStore['listPins']>[0]): ReturnType<KnowledgePageStore['listPins']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listPins'));
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
