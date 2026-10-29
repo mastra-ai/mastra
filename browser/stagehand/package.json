@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@browserbasehq/stagehand": "^4.3.0"
+    "@browserbasehq/stagehand": "^3.7.3"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",
