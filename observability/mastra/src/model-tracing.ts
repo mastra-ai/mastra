@@ -1233,7 +1233,7 @@ export class ModelSpanTracker {
     ) as T;
   }
   /** @internal Record a chunk only after output processors accept it. */
-  recordChunk(chunk: ChunkType<any>): void {
+  recordChunk<OUTPUT>(chunk: ChunkType<OUTPUT>): void {
     try {
       if (
         !this.#tracksProviderStream &&
