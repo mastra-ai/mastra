@@ -2280,7 +2280,8 @@ export class BackgroundTaskManager {
           if (leaseExpiry !== undefined && leaseExpiry > now) {
             nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
           }
-          if (!(await this.#recoverLapsedPin(storage, task, now))) continue;
+          if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.dispatch(task);
+          continue;
         }
         if (await this.checkConcurrency(task.agentId)) {
           await this.dispatch(task);
@@ -2348,6 +2349,23 @@ export class BackgroundTaskManager {
   }
 
   /**
+   * {@link #recoverLapsedPin}, but a row that would be retried is only unpinned
+   * while a slot is free: an unpinned pending row is no longer seen by the pin
+   * sweep, so unpinning it without dispatching would spend the retry and leave
+   * it waiting for a restart. Without a slot the pin stays lapsed and a later
+   * sweep tries again. A row out of retries is failed either way.
+   */
+  async #recoverLapsedPinWhenFree(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    task: BackgroundTask,
+    now: number,
+  ): Promise<boolean> {
+    const lapsed = !task.leaseExpiresAt || task.leaseExpiresAt.getTime() <= now;
+    if (lapsed && task.retryCount < task.maxRetries && !(await this.checkConcurrency(task.agentId))) return false;
+    return this.#recoverLapsedPin(storage, task, now);
+  }
+
+  /**
    * Periodically recovers lapsed `pinToWorker` rows. The startup scan only
    * sees rows that existed when this worker started, so without this a pin
    * enqueued later by a worker that then died would wait for a restart.
@@ -2371,9 +2389,7 @@ export class BackgroundTaskManager {
       this.pinSweepPage = tasks.length < PIN_SWEEP_PAGE_SIZE ? 0 : this.pinSweepPage + 1;
       for (const task of tasks) {
         if (!task.ownerId || this.shuttingDown) continue;
-        if ((await this.#recoverLapsedPin(storage, task, now)) && (await this.checkConcurrency(task.agentId))) {
-          await this.dispatch(task);
-        }
+        if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.dispatch(task);
       }
     } catch (error) {
       this.#mastra?.getLogger()?.error('Failed to recover lapsed pinned background tasks', error);
@@ -2383,7 +2399,7 @@ export class BackgroundTaskManager {
   }
 
   #startPinSweep(): void {
-    if (this.pinSweepInterval) return;
+    if (this.shuttingDown || this.pinSweepInterval) return;
     this.pinSweepInterval = setInterval(() => void this.#sweepLapsedPins(), this.config.leaseDurationMs);
     // Never keep the process alive just to sweep for lapsed pins.
     this.pinSweepInterval.unref?.();
