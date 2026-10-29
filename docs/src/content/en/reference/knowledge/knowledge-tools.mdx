@@ -46,11 +46,15 @@ Knowledge page name "Chargeback Playbook" is ambiguous; use one of these ids: 9a
 
 ## `knowledge_search`
 
-Searches page names, descriptions, bodies and notes the run can read for the whole query as one case-insensitive phrase. Words aren't matched separately. Keyword results list pages matching by name first, then pages matching by description or body, then notes, each newest first. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so that order no longer holds.
+Searches the pages and notes the run can read. The query is split into words, and each word matches case-insensitively as part of any word (`refund` matches `refunds`). A page matches when its name, description and body together contain every word. A note matches only when its own text contains every word. Keyword results list pages with the whole query in their name first, then pages with every word in their name, then other matching pages, then notes, each most recently updated first. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so that order no longer holds.
 
 <PropertiesTable
   content={[
-  { name: 'query', type: 'string', description: 'The phrase to look for, matched whole and case-insensitively.' },
+  {
+    name: 'query',
+    type: 'string',
+    description: 'Words to look for. Every word must match, case-insensitively. An empty query returns nothing.',
+  },
   { name: 'scope', type: 'string[]', description: 'Only search pages in these scope addresses.', isOptional: true },
   { name: 'limit', type: 'number', description: 'Maximum results, 1 to 50.', isOptional: true, defaultValue: '10' },
 ]}

@@ -34,7 +34,7 @@ export const knowledge = new Knowledge({
 
 Leave out `storage` to use the storage configured on `Mastra`. Knowledge storage is supported by `LibSQLStore`, `PostgresStore`, `MySQLStore`, `MongoDBStore` and `InMemoryStore` (for tests).
 
-Without a vector store, search finds the whole query, as one case-insensitive phrase, in page names, descriptions, bodies and notes. See [add semantic search](#add-semantic-search) to also match by meaning.
+Without a vector store, search matches pages and notes that contain every word of the query, case-insensitively. See [add semantic search](#add-semantic-search) to also match by meaning.
 
 ## Add semantic search
 
