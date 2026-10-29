@@ -22,6 +22,7 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConst
   const mockContext = {
     pages: vi.fn().mockReturnValue([mockPage]),
     activePage: vi.fn().mockReturnValue(mockPage),
+    addCookies: vi.fn().mockResolvedValue(undefined),
     on: vi.fn(),
     off: vi.fn(),
   };
@@ -706,6 +707,74 @@ describe('StagehandBrowser', () => {
       mockPage.getSessionForFrame.mockReturnValueOnce(null);
 
       await expect(browser.startScreencast()).rejects.toThrow('No CDP session available');
+    });
+  });
+
+  describe('setCookies', () => {
+    const cookie = { name: 'preview', value: 'v', domain: '.sbx.preview.test', path: '/' };
+
+    it('adds cookies to the open browser', async () => {
+      await browser.launch();
+      await browser.setCookies([cookie]);
+
+      expect(mockContext.addCookies).toHaveBeenCalledWith([cookie]);
+    });
+
+    it('adds cookies set before the browser opens once it does', async () => {
+      await browser.setCookies([cookie]);
+      expect(mockContext.addCookies).not.toHaveBeenCalled();
+
+      await browser.ensureReady();
+
+      expect(mockContext.addCookies).toHaveBeenCalledWith([cookie]);
+    });
+
+    it('adds a thread its cookies when its browser opens', async () => {
+      const threaded = new StagehandBrowser({ scope: 'thread' });
+      await threaded.launch();
+      await threaded.setCookies([cookie], 'thread-1');
+      expect(mockContext.addCookies).not.toHaveBeenCalled();
+
+      await threaded.getManagerForThread('thread-1');
+
+      expect(mockContext.addCookies).toHaveBeenCalledWith([cookie]);
+      await threaded.close();
+    });
+
+    it("closes the thread's browser when adding its cookies fails", async () => {
+      const threaded = new StagehandBrowser({ scope: 'thread' });
+      await threaded.launch();
+      await threaded.setCookies([cookie], 'thread-1');
+      mockStagehand.close.mockClear();
+      mockContext.addCookies.mockRejectedValueOnce(new Error('bad cookie'));
+
+      await expect(threaded.getManagerForThread('thread-1')).rejects.toThrow('bad cookie');
+
+      expect(mockStagehand.close).toHaveBeenCalled();
+      expect(threaded['threadManager'].getExistingManagerForThread('thread-1')).toBeNull();
+      await threaded.close();
+    });
+
+    it('adds cookies before restoring saved tabs', async () => {
+      const threaded = new StagehandBrowser({ scope: 'thread' });
+      await threaded.launch();
+      threaded['threadManager'].updateBrowserState('thread-1', {
+        tabs: [{ url: 'https://sbx.preview.test/' }],
+        activeTabIndex: 0,
+      });
+      const order: string[] = [];
+      mockContext.addCookies.mockImplementationOnce(async () => {
+        order.push('cookies');
+      });
+      mockPage.goto.mockImplementationOnce(async () => {
+        order.push('restore');
+      });
+
+      await threaded.setCookies([cookie], 'thread-1');
+      await threaded.getManagerForThread('thread-1');
+
+      expect(order).toEqual(['cookies', 'restore']);
+      await threaded.close();
     });
   });
 
