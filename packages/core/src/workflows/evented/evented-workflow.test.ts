@@ -1467,6 +1467,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       internal = false,
       parallel = false,
       foreach = false,
+      replaceResults = false,
       beforeEffect = async () => {},
     } = {}) {
       let effects = 0;
@@ -1506,6 +1507,18 @@ describe('Workflow (Evented Engine Specific)', () => {
         filterAccessible: vi.fn(),
       };
       const storage = new MockStore();
+      if (replaceResults) {
+        const store = (await storage.getStore('workflows'))!;
+        // Model adapters such as MySQL that replace a step result rather than merging metadata.
+        store.updateWorkflowResults = async ({ workflowName, runId, stepId, result, requestContext, state }) => {
+          const snapshot = (await store.loadWorkflowSnapshot({ workflowName, runId }))!;
+          snapshot.context[stepId] = result;
+          if (state !== undefined) snapshot.context.__state = state;
+          snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+          return snapshot.context;
+        };
+      }
       const emitter = new EventEmitter();
       const deliveries: Event[] = [];
       emitter.on('workflows', (event: Event) => {
@@ -1909,9 +1922,13 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     }, 15000);
 
-    it.each(['automatic resume', 'explicit resume', 'restart', 'time travel'])(
-      'preserves an authorized $0 child after denied redelivery',
-      async mode => {
+    it.each(
+      [false, true].flatMap(replaceResults =>
+        ['automatic resume', 'explicit resume', 'restart', 'time travel'].map(mode => ({ mode, replaceResults })),
+      ),
+    )(
+      'preserves an authorized $mode child after denied redelivery (replaceResults=$replaceResults)',
+      async ({ mode, replaceResults }) => {
         const entered = Promise.withResolvers<void>();
         const effect = Promise.withResolvers<void>();
         let block = false;
@@ -1919,6 +1936,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         const fixture = await setup({
           suspend: resuming,
           fail: mode === 'restart',
+          replaceResults,
           beforeEffect: async () => {
             if (block) {
               entered.resolve();

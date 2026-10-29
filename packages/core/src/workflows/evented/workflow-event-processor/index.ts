@@ -2035,27 +2035,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
     // Another delivery may have denied the parent while authorization was pending.
     if (await continueRedelivery()) return false;
-    if (workflowsStore && args.eventId) {
-      const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: args.runId });
-      const leaf = snapshot?.context[nestedWorkflowStep.id] ?? args.stepResults[nestedWorkflowStep.id];
-      await workflowsStore.updateWorkflowResults({
-        workflowName: workflow.id,
-        runId: args.runId,
-        stepId: nestedWorkflowStep.id,
-        result: {
-          ...(leaf ?? {
-            status: 'running',
-            startedAt: Date.now(),
-            payload: args.prevResult.status === 'success' ? args.prevResult.output : undefined,
-          }),
-          metadata: {
-            ...leaf?.metadata,
-            authorizedEventIds: [...new Set([...(leaf?.metadata?.authorizedEventIds ?? []), args.eventId])],
-          },
-        },
-        requestContext: withoutAuthToken(args.requestContext),
-      });
-    }
     return true;
   }
 
@@ -2130,6 +2109,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       !resumeSteps?.length &&
       step.type !== 'foreach';
     let nestedRunId = '';
+    let authorizedEventId: string | undefined;
     let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
     if (nestedWorkflowStep) {
       const continueRedelivery = async () => {
@@ -2202,6 +2182,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           continueRedelivery,
         });
         if (!authorized) return;
+        authorizedEventId = args.eventId;
       }
     }
 
@@ -2269,14 +2250,29 @@ export class WorkflowEventProcessor extends EventProcessor {
           payload: prevResult.status === 'success' ? prevResult.output : undefined,
           startedAt: Date.now(),
           status: 'running' as const,
-          ...(guardStart
+          ...(guardStart || authorizedEventId
             ? {
                 metadata: {
-                  ...stepResults[leafId]?.metadata,
-                  startedBy: args.eventId,
-                  __restartPending: undefined,
-                  __continuationStarted: undefined,
-                  loopCondition: undefined,
+                  ...(guardStart
+                    ? {
+                        ...stepResults[leafId]?.metadata,
+                        startedBy: args.eventId,
+                        __restartPending: undefined,
+                        __continuationStarted: undefined,
+                        loopCondition: undefined,
+                      }
+                    : {}),
+                  // Carry only authorization occurrences, not stale routing metadata.
+                  ...(authorizedEventId
+                    ? {
+                        authorizedEventIds: [
+                          ...new Set([
+                            ...(snapshot?.context[leafId]?.metadata?.authorizedEventIds ?? []),
+                            authorizedEventId,
+                          ]),
+                        ],
+                      }
+                    : {}),
                 },
               }
             : {}),
@@ -2361,6 +2357,16 @@ export class WorkflowEventProcessor extends EventProcessor {
               status: 'running',
               resumePayload: resumeData,
               resumedAt: Date.now(),
+              ...(authorizedEventId
+                ? {
+                    metadata: {
+                      ...storedResult.metadata,
+                      authorizedEventIds: [
+                        ...new Set([...(storedResult.metadata?.authorizedEventIds ?? []), authorizedEventId]),
+                      ],
+                    },
+                  }
+                : {}),
               // For a nested workflow step, the inner steps the caller resumed,
               // so restart can target them instead of guessing.
               ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
