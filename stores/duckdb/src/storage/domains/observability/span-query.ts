@@ -8,8 +8,8 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
-import { timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
-import { payloadColumnSql } from './helpers';
+import { spanQueryOutcomeFieldsSupported, timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
+import { parseJson, payloadColumnSql } from './helpers';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
 
@@ -45,6 +45,8 @@ const fields = [
   'executionSource',
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ];
 
 function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string {
@@ -178,7 +180,16 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   const compiled = compileDuckDBSpanQuery(plan);
   const rows = await query<Selected>(compiled.sql, compiled.values);
   const selected = rows.map(
-    ({ cursorId: _cursorId, startedAt, endedAt, timeToFirstChunkMs, timeToFirstTokenMs, ...row }) => ({
+    ({
+      cursorId: _cursorId,
+      startedAt,
+      endedAt,
+      timeToFirstChunkMs,
+      timeToFirstTokenMs,
+      outcome,
+      stopReason,
+      ...row
+    }) => ({
       ...row,
       startedAt: startedAt.toISOString(),
       endedAt: endedAt.toISOString(),
@@ -188,6 +199,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
       ...(timeToFirstTokenSupported && {
         timeToFirstTokenMs: timeToFirstTokenMs == null ? null : Number(timeToFirstTokenMs),
       }),
+      ...(spanQueryOutcomeFieldsSupported && { outcome: outcome ?? null, stopReason: stopReason ?? null }),
     }),
   );
   const page = rows.slice(0, plan.limit);
@@ -205,9 +217,10 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   // and provider fall back to span attributes for rows written before their columns existed; that
   // fallback is returned, never filtered on.
   const previewRows = await query<
-    SpanQueryIdentity & Record<(typeof previewPayloads)[number][0] | 'model' | 'provider', string | null>
+    SpanQueryIdentity &
+      Record<(typeof previewPayloads)[number][0] | 'model' | 'provider' | 'stopReasonContext', string | null>
   >(
-    `SELECT DISTINCT ${identities},
+    `SELECT DISTINCT ${identities}, CAST(stopReasonContext AS VARCHAR) AS stopReasonContext,
     COALESCE(model, CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END) AS model,
     COALESCE(provider, CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END) AS provider,
     ${previewPayloads
@@ -240,6 +253,10 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     ...row,
     model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
     provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
+    ...(spanQueryOutcomeFieldsSupported && {
+      stopReasonContext: (parseJson(metadata.get(coreStorage.spanQueryIdentityKey(row))?.stopReasonContext) ??
+        null) as Record<string, unknown> | null,
+    }),
   }));
   // Preserve costs only for older core contracts that still return them.
   let metrics: SpanQueryCostMetric[] = [];

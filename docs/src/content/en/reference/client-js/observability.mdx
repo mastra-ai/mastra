@@ -113,6 +113,22 @@ Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()
 
 Check `capabilities.spanQueryModelFields` before filtering on `model` or `provider`. These filters read only the span's `model` and `provider` columns. `@mastra/observability` fills the columns only when a span has both a `model` and a `provider`, and versions before it filled them left them empty. Filters treat empty columns as missing, so `eq`, `in` and `exists` don't match those spans while `ne`, `notIn` and `notExists` do. Results still return `model` and `provider` for them from the span's attributes. Trace query `spans.some` filters fall back to the attributes and do match those spans. With an older adapter, requests using these filters return `501`.
 
+Check `capabilities.spanQueryOutcomeFields` before filtering or grouping spans by `outcome` and `stopReason`. Rows then also include `outcome`, `stopReason` and `stopReasonContext`. These record how the span ended, separately from `status`, and are `null` when the span didn't record them. A missing outcome means "not recorded", not success. `stopReasonContext` is returned only. For traces, `capabilities.traceQueryOutcomeFields` enables the same fields on `queryTraces()` and `aggregateTraces()`, where they read the root span. With an older adapter, requests using these fields return `501`:
+
+```typescript
+const capabilities = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanQueryOutcomeFields) {
+  const limited = await mastraClient.querySpans({
+    timeRange: { from: '2026-10-01T00:00:00.000Z', to: '2026-10-02T00:00:00.000Z' },
+    where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+  })
+  console.log(limited.spans.map(span => [span.stopReason, span.stopReasonContext]))
+}
+```
+
+See [Filter by outcome](/reference/observability/tracing/advanced-queries#filter-by-outcome) for trace-scope and `spans.some` semantics.
+
 DuckDB returns `null` for parent/root entity type, ID and name on spans written before `@mastra/duckdb` stored them. Equality filters on these fields don't match those spans.
 
 ### Aggregate spans

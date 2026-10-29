@@ -77,6 +77,9 @@ export interface RawTraceQuerySpan {
   /** Dedicated span columns. Trace predicates fall back to string `attributes.model` / `attributes.provider`; span-query predicates read only the columns. */
   model?: string | null;
   provider?: string | null;
+  outcome?: string | null;
+  stopReason?: string | null;
+  stopReasonContext?: Record<string, unknown> | null;
 }
 
 export interface RawTraceQueryScore {
@@ -3206,6 +3209,8 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
     status: span.error === null ? 'success' : 'error',
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
     error: span.error,
     entityType: span.entityType,
     entityId: span.entityId,
@@ -3264,6 +3269,10 @@ export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: Tra
       return root.sessionId ?? null;
     case 'experimentId':
       return root.experimentId ?? null;
+    case 'outcome':
+      return root.outcome ?? null;
+    case 'stopReason':
+      return root.stopReason ?? null;
   }
 }
 
@@ -3294,6 +3303,8 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     spanType: traceQueryDimensionValue(root, 'spanType'),
     environment: traceQueryDimensionValue(root, 'environment'),
     status: traceQueryDimensionValue(root, 'status'),
+    outcome: traceQueryDimensionValue(root, 'outcome'),
+    stopReason: traceQueryDimensionValue(root, 'stopReason'),
     tags: root.tags,
     ...metadata,
   };
@@ -3321,6 +3332,9 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     status: root.error === null ? 'success' : 'error',
     timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
     timeToFirstTokenMs: root.timeToFirstTokenMs ?? null,
+    outcome: root.outcome ?? null,
+    stopReason: root.stopReason ?? null,
+    stopReasonContext: root.stopReasonContext ?? null,
   };
 }
 
