@@ -255,6 +255,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'knowledge/access-patterns',
+              label: 'Access patterns',
+            },
+            {
+              type: 'doc',
               id: 'knowledge/instructions',
               label: 'Instructions',
             },
