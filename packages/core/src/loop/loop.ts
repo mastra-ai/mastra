@@ -4,10 +4,12 @@ import { createStoredMessageLoader } from '../agent/message-list/memory-message-
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { ConsoleLogger } from '../logger';
+import { createRunScope } from '../mastra/run-scope';
 import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
+import { CONTINUATION_STOP_CAUSE_KEY } from './run-scope-keys';
 import { findSuspendedStreamState } from './suspended-stream-state';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
@@ -114,6 +116,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   // This map persists across loop iterations and is shared by all processor methods.
   const processorStates = rest.processorStates ?? new Map<string, ProcessorState>();
 
+  const tracingScope = rest.tracingScope ?? createRunScope();
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
     models,
@@ -138,6 +142,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     },
     processorStates,
     ...rest,
+    tracingScope,
   };
 
   const initialStreamState = findSuspendedStreamState(resumeContext?.snapshot)?.streamState;
@@ -183,6 +188,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       hideSignals,
     },
     initialState: initialStreamState,
+    onTracingTripwire: rest.onTracingTripwire,
+    getContinuationStopCause: () => tracingScope.get(CONTINUATION_STOP_CAUSE_KEY),
     onFinishComplete: async () => {
       await finalizeRun?.();
     },

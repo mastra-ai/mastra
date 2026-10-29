@@ -746,6 +746,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishUsageIsTotal,
     onFinishComplete,
     getTerminalRequest,
+    getContinuationStopCause,
+    onTracingTripwire,
   }: {
     model: {
       modelId: string | undefined;
@@ -768,6 +770,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     onFinishComplete?: () => Promise<void>;
     /** @internal Caller-local terminal metadata, taking precedence over queued step chunks. */
     getTerminalRequest?: () => LLMStepResult<OUTPUT>['request'] | undefined;
+    /** Internal tracing state, never serialized into finish chunks. */
+    onTracingTripwire?: import('../../loop/types').LoopOptions['onTracingTripwire'];
+    getContinuationStopCause?: () => import('../../loop/shared/continuation-core').ContinuationStopCause | undefined;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     if (options.logger) {
@@ -1505,6 +1510,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 metadata: chunk.payload?.metadata,
                 processorId: chunk.payload?.processorId,
               };
+              // Tracing must not change how the stream settles.
+              try {
+                onTracingTripwire?.(self.#tripwire, self.#usageCount, self.#bufferedText.join(''));
+              } catch (error) {
+                self.logger?.warn('Error recording tripwire tracing', error);
+              }
               self.#finishReason = 'other';
               // The tripwire terminates the stream without a `finish` chunk, so settle the
               // status here; otherwise the run stays 'running' forever.
@@ -2002,6 +2013,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (!self.#finishCallbackSent) {
                   self.#finishCallbackSent = true;
                   await options?.onFinish?.(onFinishPayload, {
+                    continuationStopCause: getContinuationStopCause?.(),
                     writer: outputResultWriter,
                     ...(outputResultTripwire && { outputResultTripwire }),
                   });

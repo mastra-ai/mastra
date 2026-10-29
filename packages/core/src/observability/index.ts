@@ -16,3 +16,11 @@ export { createObservabilityContext, resolveObservabilityContext } from './conte
 export { startRagIngestion, withRagIngestion } from './rag-ingestion';
 export type { StartRagIngestionOptions, StartRagIngestionResult } from './rag-ingestion';
 export { buildSpanPreviews } from './span-previews';
+
+/** @internal Runtime instrumentation helper; not a public API. */
+export { executionFailureTermination } from './execution-outcome';
+/** @internal Runtime instrumentation helper; not a public API. */
+export { agentLoopTermination } from '../loop/shared/execution-outcome';
+
+/** @internal Bounded stop-reason context for runtime instrumentation. */
+export { compactStopReasonContext } from './outcome-schema';

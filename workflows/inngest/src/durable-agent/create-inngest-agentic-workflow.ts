@@ -40,8 +40,9 @@ import { ChunkFrom } from '@mastra/core/stream';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
-
 import { init } from '../index';
+
+import { agentLoopTermination } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
@@ -182,6 +183,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     .map(
       async ({ inputData }) => {
         const state = inputData as IterationState;
+
         return {
           runId: state.runId,
           agentId: state.agentId,
@@ -363,6 +365,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .dowhile(singleIterationWorkflow, async params => {
         const { inputData, engine, mastra } = params;
         const state = inputData as IterationState;
+        const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const { step } = engine as { step: BaseContext<Inngest>['step'] };
 
@@ -391,6 +394,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
+          if (tracingRegistry)
+            tracingRegistry.tracingStopCause = state.lastStepResult?.isContinued ? 'delegation' : 'model_finished';
           await emitStepFinish(false);
           return false;
         }
@@ -402,6 +407,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
+          if (tracingRegistry) {
+            tracingRegistry.tracingStopCause = shouldContinue ? 'max_steps' : 'model_finished';
+          }
           await emitStepFinish(false);
           return false;
         }
@@ -444,6 +452,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return conditions.some(Boolean);
         });
 
+        if (stopped && tracingRegistry) tracingRegistry.tracingStopCause = 'stop_condition';
         await emitStepFinish(!stopped);
         return !stopped;
       })
@@ -452,6 +461,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         async params => {
           const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
+          const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
           // Access pubsub via symbol to emit finish event
@@ -541,11 +551,16 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const observability = mastra?.observability?.getSelectedInstance({});
           // Rebuilt spans end from snapshots taken at run start, so the clock the
           // steps carried through the loop state is applied here.
-          const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
+          const registry = getRunRegistryEntry(state.runId, mastra);
+          const clock = registry?.resumeModelSpanData ? registry.resumeCompletionStartTime : state.completionStartTime;
+          const completionStartTime = clock ? new Date(clock) : undefined;
           if (state.modelSpanData) {
-            const modelSpan = observability?.rebuildSpan(
-              state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
-            ) as AIModelGenerationSpan | undefined;
+            const modelSpan =
+              registry?.resumeModelSpan ??
+              registry?.modelSpan ??
+              (observability?.rebuildSpan(state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
+                | AIModelGenerationSpan
+                | undefined);
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -554,6 +569,15 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               })),
             );
             modelSpan?.createTracker()?.endGeneration({
+              ...(finalOutput.stepResult?.reason === 'tripwire' && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
@@ -565,8 +589,20 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           // End AGENT_RUN span with final output
           if (state.agentSpanData) {
-            const agentSpan = observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+            const agentSpan =
+              registry?.resumeAgentSpan ??
+              registry?.agentSpan ??
+              observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
+              ...(finalOutput.stepResult?.reason === 'tripwire' && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText },
               ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
             });
