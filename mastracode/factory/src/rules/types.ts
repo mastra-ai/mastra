@@ -239,8 +239,12 @@ export interface FactoryRuleCausalEntry {
 export interface FactoryRulePhaseContext {
   id: string;
   kind: 'resting' | 'working' | 'terminal';
-  /** Seat carrying a working phase; absent for resting and terminal phases. */
+  /** Session context a working phase runs in; absent for resting and terminal phases. */
+  context?: string;
+  /** @deprecated Use `context`. */
   role?: string;
+  /** Phases the card may move to from here. */
+  nextPhases: readonly string[];
   /** Outcome names the phase declares, e.g. `approved` or `canceled`; empty when it declares none. */
   outcomes: readonly string[];
 }
@@ -350,7 +354,10 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
   /** Present when a PR comment uses Factory's exact review command. */
   reviewCommand?: { command: 'review' | 're-review'; target: string };
-  /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
+  /**
+   * Present on `pullRequestReviewSubmitted`: the review that was just posted, or a
+   * request-changes review whose body was edited to a new Factory verdict.
+   */
   review?: { id: number; state: string; url: string; author?: string; body?: string };
 }
 

@@ -750,6 +750,8 @@ Default delivery is priority-aware. `urgent` notifications deliver immediately. 
 Configure `notifications.deliveryPolicy` on the agent when some notifications should wait for a different dispatch window or summary rollup:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
@@ -840,6 +842,14 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
               'Use true to hide all recognized signals, false to show all, or an array to hide selected types from this subscription, including live, idle-persisted, and replayed signals. Other subscribers and the initiating stream keep their own policies.',
           },
           {
+            name: 'withRunStatus',
+            type: 'boolean',
+            isOptional: true,
+            defaultValue: 'false',
+            description:
+              'Emit ordered thread-run-status chunks for live and retained outcomes without closing the subscription.',
+          },
+          {
             name: 'withInitialHistory',
             type: 'boolean | { perPage?: number }',
             isOptional: true,
@@ -877,7 +887,7 @@ for await (const chunk of subscription.stream) {
 }
 ```
 
-The `thread-history` chunk carries the newest `perPage` messages and a `hasMore` flag. See [Thread subscription chunks](/reference/streaming/ChunkType#thread-history) for its shape.
+The `thread-history` chunk carries the newest `perPage` messages, a `hasMore` flag, and `activeRunId` (the owning run or `null` when idle). Set `withRunStatus: true` to receive [run outcomes](/reference/streaming/ChunkType#thread-run-status), including one per still-retained finished run. Both options add their chunk types to the inferred subscription stream only when requested. See [Thread subscription chunks](/reference/streaming/ChunkType#thread-history) for its shape.
 
 `hideSignals: true` hides all recognized signal types. Set it to `false` to show all signals. An array accepts `user`, `state`, `reactive`, `notification`, `user-message`, and `system-reminder`. Matching normalizes `system-reminder` to `reactive` and `user-message` to `user`. An omitted option, `false`, or `[]` excludes nothing. Each subscriber filters its own live and replayed chunks, including remote pubsub events and idle-persisted signals. Filtering preserves non-signal chunks, unknown or malformed signal chunks, ordering, and completion/error events, even when every signal type is excluded.
 

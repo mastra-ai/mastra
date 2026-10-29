@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
 import type { QueryTraceThreadsResult } from '@mastra/client-js';
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   discoveredEntityNames,
   discoveredEnvironments,
   emptyThreadRows,
+  threadHeadPage,
   threadQueryCapabilities,
   threadRowsPage,
 } from '../../__tests__/fixtures/threads';
 import { ThreadsExplorerBody } from '../threads-explorer-body';
+import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -58,6 +60,24 @@ describe('ThreadsExplorerBody', () => {
       expect(await screen.findByText('Weather Agent')).toBeTruthy();
       expect(screen.getByText('Support Agent')).toBeTruthy();
     });
+
+    it("shows each thread's message count", async () => {
+      setHandlers(threadRowsPage);
+
+      renderBody();
+
+      const weatherRow = await screen.findByRole('button', { name: /Weather Agent/ });
+      const supportRow = screen.getByRole('button', { name: /Support Agent/ });
+      expect(within(weatherRow).getByText('2')).toBeTruthy();
+      expect(within(supportRow).getByText('7')).toBeTruthy();
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Messages' }));
+      expect(
+        await screen.findByText(
+          'Messages sent in this thread, counting the whole thread, not just the selected time range',
+        ),
+      ).toBeTruthy();
+    });
   });
 
   describe('when a thread row is clicked', () => {
@@ -89,6 +109,32 @@ describe('ThreadsExplorerBody', () => {
       renderBody();
 
       expect(await screen.findByRole('heading', { name: 'No threads for the last 7 days' })).toBeTruthy();
+    });
+  });
+
+  describe('when a thread starts while the page is open', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('appears in the list on the next poll', async () => {
+      setHandlers(threadRowsPage);
+      server.use(
+        http.post(THREADS_QUERY_URL, async ({ request }) => {
+          const body = (await request.json()) as { orderBy?: Array<{ field: string }> };
+          return HttpResponse.json(body.orderBy?.[0]?.field === 'endedAt' ? threadHeadPage : threadRowsPage);
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+
+      renderBody();
+      expect(await screen.findAllByText('Weather Agent')).toHaveLength(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
+      });
+
+      await waitFor(() => expect(screen.getAllByText('Weather Agent')).toHaveLength(2));
     });
   });
 });

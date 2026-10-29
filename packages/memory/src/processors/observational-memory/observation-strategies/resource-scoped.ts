@@ -493,6 +493,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
             },
             lastObservedMessageCursor: update.lastObservedMessageCursor,
           });
+          this.opts.abortSignal?.throwIfAborted();
           await this.storage.patchThread({
             id: update.threadId,
             ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),

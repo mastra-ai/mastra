@@ -301,22 +301,17 @@ describe('TraceSpanPanel', () => {
     expect(onSpanDetailRequest).toHaveBeenCalledWith('child1');
   });
 
-  it('when next/previous is clicked, then the adjacent span in the tree is selected', async () => {
+  it('when a span is open, then it has no next/previous buttons and the tree switches spans', async () => {
     installHandlers();
     const { queryClient } = renderPanel({ initialSpanId: 'child1' });
 
     expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(screen.queryByLabelText('Go to next span')).toBeNull();
+    expect(screen.queryByLabelText('Go to previous span')).toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Go to next span'));
+    fireEvent.click(screen.getByText('Second tool call'));
     expect(await screen.findByRole('heading', { name: /child2/ })).not.toBeNull();
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-    fireEvent.click(screen.getByLabelText('Go to previous span'));
-    expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
-
-    fireEvent.click(screen.getByLabelText('Go to previous span'));
-    expect(await screen.findByRole('heading', { name: /root01/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
@@ -394,9 +389,7 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID.slice(0, 6)}` })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    // Entity block: type label + name linking to the agent page. ("Agent" also
-    // appears as the span-type badge in the tree, so allow multiple matches.)
-    expect(screen.getAllByText('Agent').length).toBeGreaterThan(0);
+    // Entity block: name linking to the agent page.
     const entityLink = screen.getByRole('link', { name: /Weather Agent/ });
     expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent');
 

@@ -114,11 +114,9 @@ export class MarkdownHeaderTransformer {
           inCodeBlock = true;
           openingFence = strippedLine.startsWith('```') ? '```' : '~~~';
         }
-      } else {
-        if (strippedLine.startsWith(openingFence)) {
-          inCodeBlock = false;
-          openingFence = '';
-        }
+      } else if (strippedLine.startsWith(openingFence)) {
+        inCodeBlock = false;
+        openingFence = '';
       }
 
       if (inCodeBlock) {

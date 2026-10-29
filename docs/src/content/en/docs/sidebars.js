@@ -331,6 +331,11 @@ const sidebars = {
           label: 'Browser',
         },
         {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
+        },
+        {
           type: 'category',
           label: 'Connections',
           link: {

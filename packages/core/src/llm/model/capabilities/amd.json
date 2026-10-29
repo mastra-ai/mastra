@@ -41,10 +41,10 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "DeepSeek-V4-Flash-Vision-Exp": [
+    "GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "DeepSeek-V4-Flash": [
@@ -65,10 +65,10 @@
         "values": ["low", "medium"]
       }
     ],
-    "GLM-5.3-Flash": [
+    "DeepSeek-V4-Flash-Vision-Exp": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

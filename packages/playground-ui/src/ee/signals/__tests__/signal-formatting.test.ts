@@ -1,3 +1,4 @@
+import '@/test/english-locale';
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 

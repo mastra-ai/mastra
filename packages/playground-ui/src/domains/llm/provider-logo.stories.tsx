@@ -43,6 +43,7 @@ const providers = [
   ['meta-llama', 'Llama 4 Maverick'],
   ['moonshotai', 'Kimi K2'],
   ['x-ai', 'Grok 4'],
+  ['typesafe', 'Jev Router'],
 ] as const;
 
 export const Default: Story = {};

@@ -106,7 +106,7 @@ function setThreadsHandlers(
 describe('Threads page', () => {
   // jsdom has no layout, so the list virtualizer sees a zero-height scroll container and
   // renders no rows. Report a fixed viewport so rows materialize.
-  let layoutStubs: { rect: ReturnType<typeof vi.spyOn>; resizeObserver: typeof ResizeObserver };
+  let layoutStubs: { rects: ReturnType<typeof vi.spyOn>[]; resizeObserver: typeof ResizeObserver };
   beforeEach(() => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class LayoutResizeObserver {
@@ -133,14 +133,19 @@ describe('Threads page', () => {
     }
     globalThis.ResizeObserver = LayoutResizeObserver;
     layoutStubs = {
-      rect: vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+      rects: [
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+        // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800),
+        vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600),
+      ],
       resizeObserver: originalResizeObserver,
     };
     // jsdom does not implement scrollIntoView, which the thread view uses to reveal its latest turn.
     Element.prototype.scrollIntoView = vi.fn();
   });
   afterEach(() => {
-    layoutStubs.rect.mockRestore();
+    layoutStubs.rects.forEach(stub => stub.mockRestore());
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
   });
   // Let the list virtualizer's debounce timer fire before jsdom tears down `window`.

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
@@ -10,7 +11,13 @@ import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
-import { CREDENTIAL_LABEL, SHARED_SOURCE, credentialAt } from '../../provider-credential';
+import {
+  CREDENTIAL_LABEL,
+  SHARED_SOURCE,
+  SIGN_IN_EXPIRED_LABEL,
+  credentialAt,
+  signInExpiredAt,
+} from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
 import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
@@ -22,6 +29,12 @@ const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
 const CREDENTIAL_STATUS: Record<ProviderCredential, StatusPresentation> = {
   oauth: { label: CREDENTIAL_LABEL.oauth, tone: 'success', description: 'Signed in with a provider account' },
   api_key: { label: CREDENTIAL_LABEL.api_key, tone: 'success', description: 'An API key is saved' },
+};
+
+const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
+  label: SIGN_IN_EXPIRED_LABEL,
+  tone: 'error',
+  description: 'Could not renew this sign-in. Sign in again to keep using it.',
 };
 
 interface ActiveOAuthSession {
@@ -41,9 +54,13 @@ function sharedSourceStatus(source: ProviderInfo['source']): StatusPresentation 
 
 function providerConnection(provider: ProviderInfo, scope: CredentialScope): ProviderConnection | undefined {
   const credential = credentialAt(provider, scope);
-  if (credential) return { provider, status: CREDENTIAL_STATUS[credential], credential };
+  if (credential) {
+    const signInExpired = signInExpiredAt(provider, scope);
+    const status = signInExpired ? SIGN_IN_EXPIRED_STATUS : CREDENTIAL_STATUS[credential];
+    return { provider, status, credential, signInExpired };
+  }
   const sharedStatus = sharedSourceStatus(provider.source);
-  return sharedStatus && { provider, status: sharedStatus, credential: undefined };
+  return sharedStatus && { provider, status: sharedStatus, credential: undefined, signInExpired: false };
 }
 
 function connectedProviders(providers: ProviderInfo[], scope: CredentialScope): ProviderConnection[] {
@@ -86,7 +103,20 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
   };
 
   if (providersQuery.isPending) {
-    return <SkeletonRows label="Loading providers" rows={2} rowClassName="h-9 w-full" />;
+    return (
+      <div className="border-border overflow-hidden rounded-lg border">
+        <SkeletonRows label="Loading providers" rows={3} className="divide-border gap-0 divide-y">
+          <div aria-hidden className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
+            <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-3 w-28 max-w-full motion-reduce:before:animate-none" />
+            </div>
+            <Skeleton className="h-3 w-20 motion-reduce:before:animate-none" />
+            <Skeleton className="size-control-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
+          </div>
+        </SkeletonRows>
+      </div>
+    );
   }
 
   return (
@@ -99,6 +129,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
             requestScope={requestScope}
             disabled={actionsDisabled}
             onUpdateKey={() => setKeyDialogProvider(connection.provider)}
+            onOAuthStarted={openOAuth}
           />
         ))}
         <li>

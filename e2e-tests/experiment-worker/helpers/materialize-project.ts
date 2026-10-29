@@ -1,6 +1,7 @@
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { glob } from 'tinyglobby';
+import { E2E_TAG } from '../../_local-registry-setup/publish-roots.js';
 
 export async function resolvePublishedVersion(registry: string, packageName: string, tag: string) {
   const response = await fetch(`${registry}/${encodeURIComponent(packageName)}`);
@@ -28,7 +29,7 @@ export async function materializeProject(options: {
     };
     for (const field of ['dependencies', 'devDependencies'] as const) {
       for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
-        if (spec === 'experiment-worker-e2e-test') {
+        if (spec === E2E_TAG) {
           const version = await resolvePublishedVersion(options.registry, name, options.tag);
           manifest[field]![name] =
             manifest.packageManager === 'yarn@4.9.2' && name === 'mastra'

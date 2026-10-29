@@ -65,6 +65,8 @@ workflow
 By default the step's output is `{ text: string }`. Pass `structuredOutput.schema` to make the step return that shape instead. The schema becomes the step's output schema, so later steps chain against it with full type safety:
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts"
+import { z } from 'zod'
+
 workflow
   .agent(testAgent, {
     structuredOutput: {

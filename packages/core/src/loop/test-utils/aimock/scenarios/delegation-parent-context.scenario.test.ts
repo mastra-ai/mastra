@@ -4,7 +4,7 @@ import { it, expect, vi } from 'vitest';
 import { Agent } from '../../../../agent';
 import type { MessageFilterContext } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines, anyToolResult } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -20,11 +20,11 @@ describeForAllEngines('AIMock loop scenario: delegation parent context', engine 
 
   function delegateFixtures(llm: any) {
     llm.on(
-      { endpoint: 'chat', hasToolResult: false },
+      { endpoint: 'chat', predicate: req => !anyToolResult(req) },
       { toolCalls: [{ id: 'call_worker', name: 'agent-worker', arguments: { prompt: 'go' } }] },
     );
-    llm.on({ endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 }, { content: 'Finished' });
-    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+    llm.on({ endpoint: 'chat', predicate: req => !anyToolResult(req), sequenceIndex: 1 }, { content: 'Finished' });
+    llm.on({ endpoint: 'chat', predicate: anyToolResult }, { content: 'Done.' });
   }
 
   function makeWorker(mock: { url: string }, instructions: any = 'You work.') {

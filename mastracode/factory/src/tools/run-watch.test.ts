@@ -115,44 +115,52 @@ describe('observeSessionRunReports', () => {
     ]);
   });
 
-  it('reports a usage-limit rejection from the provider body instead of Bad Request', () => {
+  function failedReport(error: Error) {
     const session = fakeSession();
     const report = vi.fn(async () => {});
     observeSessionRunReports(session, report);
-    const error = new Error('Bad Request');
-    Object.assign(error, {
-      statusCode: 400,
-      responseBody: JSON.stringify({
-        error: { message: 'You have exceeded your current quota, please check your plan.' },
-      }),
-    });
-
     session.emit({ type: 'error', error } as AgentControllerEvent);
     session.emit(end('error'));
+    return report.mock.calls.map(([outcome]) => outcome)[0];
+  }
 
-    expect(report).toHaveBeenCalledWith(
-      {
-        status: 'failed',
-        reason: 'the run ended in error: You have exceeded your current quota, please check your plan.',
-      },
-      expect.any(Date),
-    );
+  function badRequest(body: unknown) {
+    return Object.assign(new Error('Bad Request'), { statusCode: 400, responseBody: JSON.stringify(body) });
+  }
+
+  it.each([
+    {
+      name: 'a usage-limit sentence in the provider body',
+      error: badRequest({ error: { message: 'You have exceeded your current quota, please check your plan.' } }),
+      reason: 'You have exceeded your current quota, please check your plan.',
+    },
+    {
+      name: 'any other sentence in the provider body',
+      error: badRequest({ error: { message: 'Invalid model id' } }),
+      reason: 'Invalid model id',
+    },
+    {
+      name: 'a Codex detail sentence',
+      error: badRequest({ detail: 'You have exceeded your usage limit for Codex' }),
+      reason: 'You have exceeded your usage limit for Codex',
+    },
+    {
+      name: 'a provider sentence behind a wrapping cause',
+      error: new Error('Agent stream failed', {
+        cause: badRequest({ error: { message: 'prompt is too long: 210345 tokens > 200000 maximum' } }),
+      }),
+      reason: 'prompt is too long: 210345 tokens > 200000 maximum',
+    },
+  ])('quotes $name instead of Bad Request', ({ error, reason }) => {
+    expect(failedReport(error)).toEqual({ status: 'failed', reason: `the run ended in error: ${reason}` });
   });
 
-  it('leaves a plain Bad Request unchanged when the provider body has no usage-limit reason', () => {
-    const session = fakeSession();
-    const report = vi.fn(async () => {});
-    observeSessionRunReports(session, report);
-    const error = new Error('Bad Request');
-    Object.assign(error, { statusCode: 400, responseBody: JSON.stringify({ error: { message: 'Invalid model id' } }) });
-
-    session.emit({ type: 'error', error } as AgentControllerEvent);
-    session.emit(end('error'));
-
-    expect(report).toHaveBeenCalledWith(
-      { status: 'failed', reason: 'the run ended in error: Bad Request' },
-      expect.any(Date),
-    );
+  it('quotes at most 400 characters of the provider sentence', () => {
+    const sentence = `Your weekly usage limit is reached. ${'x'.repeat(500)}`;
+    expect(failedReport(badRequest({ error: { message: sentence } }))).toEqual({
+      status: 'failed',
+      reason: `the run ended in error: ${sentence.slice(0, 400)}`,
+    });
   });
 
   it('keeps listening when a report fails', async () => {

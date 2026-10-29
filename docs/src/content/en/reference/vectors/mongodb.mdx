@@ -354,7 +354,7 @@ await store.createSearchIndex({
 })
 ```
 
-The field-mapped index name includes the logical `indexName`, so two logical indexes on the same collection get distinct text indexes. Recreating the _same_ logical index with different `fields` still requires dropping the existing index first (`IndexAlreadyExists`).
+The field-mapped index name includes the logical `indexName`, so two logical indexes on the same collection get distinct text indexes. Calling `createSearchIndex()` again for the _same_ logical index with different `fields` updates the existing text index definition in place. You don't need to drop it first.
 
 ### `waitForSearchIndexReady()`
 
@@ -575,18 +575,18 @@ Returns:
 interface IndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric?: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
-On an `autoEmbed` index, `dimension` is read from the index definition and reports MongoDB's default of `1024` when the index doesn't pin one. `count` counts documents that carry the embedded text field, since the generated vectors aren't stored on your documents.
+On an `autoEmbed` index, `dimension` is read from the index definition and reports MongoDB's default of `1024` when the index doesn't pin one. `metric` is omitted when the `autoEmbed` index doesn't specify a similarity. `count` counts documents that carry the embedded text field, since the generated vectors aren't stored on your documents.
 
 ### `deleteIndex()`
 
 Deletes a vector index. Behavior depends on how the index was created:
 
 - **Managed index** (created without `collectionName`): drops the entire collection and all its data.
-- **Bring-your-own index** (created with `collectionName`): drops the MongoDB vectorSearch index. If `createSearchIndex()` provisioned a companion full-text search index, it drops that index too. The caller's operational collection and its documents are preserved. This store never drops a collection it didn't create.
+- **Bring-your-own index** (created with `collectionName`): drops the MongoDB vectorSearch index. If `createSearchIndex()` provisioned a companion full-text search index, it drops that index too. A vectorSearch or full-text index that another logical index on the same collection still references is kept for that index. The caller's operational collection and its documents are preserved. This store never drops a collection it didn't create.
 
 The BYO classification is recorded durably when the index is created, so it's applied correctly even by a different process (e.g. an index created by a setup job and later deleted by a long-lived service). Always pass the **logical index name** (the `indexName` used at `createIndex`), not the physical collection name.
 
@@ -708,7 +708,7 @@ Query results are returned in this format:
 interface QueryResult {
   id: string
   score: number
-  metadata: Record<string, any>
+  metadata?: Record<string, any>
   vector?: number[] // Only included if includeVector is true
   document?: string // Source text stored with the vector, when available
 }

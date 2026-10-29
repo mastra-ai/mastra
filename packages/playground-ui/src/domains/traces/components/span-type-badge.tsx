@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { UISpanStyle } from '../types';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 
 type SpanTypeBadgeProps = {
@@ -8,11 +9,16 @@ type SpanTypeBadgeProps = {
   spanUI?: UISpanStyle | null;
 };
 
-/** Small tinted square carrying the span type's icon in its colour; a dot for types without an icon. */
+/**
+ * Small tinted square carrying the span type's icon in its colour; a dot for types without an icon.
+ * Hovering it names the type.
+ */
 export function SpanTypeBadge({ type, spanUI }: SpanTypeBadgeProps) {
   const color = spanUI?.color;
-  // Processors count as "Other" in the legend, but the sidebar gives them their own icon.
-  const icon = type?.toLowerCase().startsWith('processor') ? <ProcessorIcon /> : spanUI?.icon;
+  // Processors fall under "Other" colours, but get their own icon, so they get their own name too.
+  const isProcessor = type?.toLowerCase().startsWith('processor');
+  const icon = isProcessor ? <ProcessorIcon /> : spanUI?.icon;
+  const label = isProcessor ? 'Processor' : spanUI?.label;
   const style: CSSProperties = {
     color,
     backgroundColor: `color-mix(in oklab, ${color} 16%, transparent)`,
@@ -20,13 +26,19 @@ export function SpanTypeBadge({ type, spanUI }: SpanTypeBadgeProps) {
   };
 
   return (
-    <span
-      aria-hidden
-      title={spanUI?.label}
-      style={style}
-      className="flex size-5 shrink-0 items-center justify-center rounded-md [&_svg]:size-3"
-    >
-      {icon ?? <span className="size-1.5 rounded-full" style={{ backgroundColor: color }} />}
-    </span>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            data-slot="span-type-badge"
+            style={style}
+            className="flex size-5 shrink-0 items-center justify-center rounded-md [&_svg]:size-3"
+          />
+        }
+      >
+        {icon ?? <span className="size-1.5 rounded-full" style={{ backgroundColor: color }} />}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }

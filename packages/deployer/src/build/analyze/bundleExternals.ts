@@ -187,9 +187,8 @@ async function getInputPlugins(
             ...[...transpilePackagesMap.values()].map(p => {
               if (path.isAbsolute(p)) {
                 return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
-              } else {
-                return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
               }
+              return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
             }),
             // Also match workspace packages resolved through node_modules symlinks
             // (common in pnpm workspaces). Match by package name in node_modules path.
@@ -430,10 +429,8 @@ function findExternalImporter(
   for (const id of [...module.imports, ...module.dynamicImports]) {
     if (isDependencyPartOfPackage(id, external)) {
       return module;
-    } else {
-      if (id.endsWith('.mjs')) {
-        capturedFiles.add(id);
-      }
+    } else if (id.endsWith('.mjs')) {
+      capturedFiles.add(id);
     }
   }
 

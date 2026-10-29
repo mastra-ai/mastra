@@ -14,6 +14,8 @@ export function spanToListRow(span: SpanRow): TracesListViewTrace {
     threadId: span.threadId,
     resourceId: span.resourceId,
     environment: span.environment,
+    model: span.model,
+    provider: span.provider,
     status: span.status,
     inputPreview: span.inputPreview,
     outputPreview: span.outputPreview ?? undefined,

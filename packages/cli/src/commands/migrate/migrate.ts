@@ -179,21 +179,20 @@ export async function migrate({
         logger.error(result.message);
         process.exit(1);
       }
-    } else {
+    } else if (processResult.exitCode !== 0) {
       // No JSON result - check if process failed
-      if (processResult.exitCode !== 0) {
-        logger.error(pc.red('✗ Migration failed.'));
-        if (stderrData) {
-          logger.error(stderrData);
-        }
-        if (stdoutData && !stdoutData.includes('"success"')) {
-          logger.error(stdoutData);
-        }
-        process.exit(1);
-      } else {
-        // Process succeeded but no JSON output - unusual but OK
-        logger.info(pc.green('✓ Migration completed.'));
+
+      logger.error(pc.red('✗ Migration failed.'));
+      if (stderrData) {
+        logger.error(stderrData);
       }
+      if (stdoutData && !stdoutData.includes('"success"')) {
+        logger.error(stdoutData);
+      }
+      process.exit(1);
+    } else {
+      // Process succeeded but no JSON output - unusual but OK
+      logger.info(pc.green('✓ Migration completed.'));
     }
   } catch (error: any) {
     if (error.code === 'ERR_MODULE_NOT_FOUND' || error.message?.includes('Cannot find module')) {

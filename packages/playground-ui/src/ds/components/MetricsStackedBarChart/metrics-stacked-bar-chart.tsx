@@ -4,7 +4,7 @@ import type { LabelProps } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
-import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
+import { CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
 import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
@@ -20,6 +20,9 @@ import {
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
+import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
+import { DragSelectionBand, activeIndex, useDragSelection } from '@/ds/primitives/charts/drag-selection';
+import type { DragSelectionRange } from '@/ds/primitives/charts/drag-selection';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
 
@@ -72,7 +75,7 @@ function segmentShape({
     const { y, height: h } = laid;
     const radius = Math.min(RADIUS, Math.floor(h / 3));
     // Dimming is a CSS rule keyed on `data-bucket` (see `HoverDim`), so hovering re-renders no bars.
-    const bucket = { 'data-bucket': index, style: { transition: 'opacity 150ms ease-out' } };
+    const bucket = { 'data-bucket': index };
 
     if (capped) {
       return (
@@ -91,18 +94,28 @@ function segmentShape({
 }
 
 /**
- * Dims every column but the hovered one. Its own tiny state, so a hover only re-renders this
- * <style> tag: with hundreds of buckets, re-rendering the bars on each move froze the pointer.
+ * Dims every column outside the hovered one, or outside the range being dragged. Its own tiny
+ * state, so a move only re-renders this <style> tag: with hundreds of buckets, re-rendering the
+ * bars on each move froze the pointer.
  */
-function HoverDim({ scope, setter }: { scope: string; setter: { current: (index: number | undefined) => void } }) {
-  const [hovered, setHovered] = useState<number>();
+function HoverDim({
+  scope,
+  setter,
+}: {
+  scope: string;
+  setter: { current: (range: DragSelectionRange | undefined) => void };
+}) {
+  const [lit, setLit] = useState<DragSelectionRange>();
   useLayoutEffect(() => {
-    setter.current = setHovered;
+    setter.current = setLit;
   }, [setter]);
-  if (hovered === undefined) return null;
-  return (
-    <style>{`[data-chart-scope="${scope}"] [data-bucket]:not([data-bucket="${hovered}"]){opacity:${DIMMED}}`}</style>
-  );
+  if (!lit) return null;
+  const columns = `[data-chart-scope="${scope}"] [data-bucket]`;
+  const kept = Array.from(
+    { length: lit.end - lit.start + 1 },
+    (_, i) => `${columns}[data-bucket="${lit.start + i}"]`,
+  ).join(',');
+  return <style>{`${columns}{opacity:${DIMMED}}${kept}{opacity:1}`}</style>;
 }
 
 /** A line drawn over the bars on its own scale, e.g. average wake time over cold starts. */
@@ -144,8 +157,15 @@ export type MetricsStackedBarChartProps = {
   /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
   tooltipLabelKey?: string;
   columnLabelKey?: string;
+  /** Widest a column gets, in pixels. Defaults to 28; raise it for dense strips of many thin columns. */
+  maxBarSize?: number;
   /** Click a column (e.g. to open its traces); the plot shows a pointer cursor. */
   onBucketClick?: (row: Record<string, unknown>, index: number) => void;
+  /**
+   * Drag across two or more columns to select them (e.g. to zoom into that time span); reports the
+   * first and last selected row indices. A press and release on one column stays a click.
+   */
+  onZoom?: (range: DragSelectionRange) => void;
   /** One dashed line over the bars, on its own hidden scale (e.g. a duration over counts). */
   overlay?: MetricsStackedBarChartOverlay;
   /** Show a ghost of the chart while data loads, in the chart's own footprint. */
@@ -184,12 +204,16 @@ function BarPlot({
   xLabels = 'auto',
   tooltipLabelKey,
   columnLabelKey,
+  maxBarSize = 28,
   onBucketClick,
+  onZoom,
   overlay,
   id,
 }: MetricsStackedBarChartProps & { id: string }) {
-  const setHovered = useRef<(index: number | undefined) => void>(() => {});
+  const setLit = useRef<(range: DragSelectionRange | undefined) => void>(() => {});
   const { size, onResize, ref } = useChartSize();
+  // The dragged columns stay lit through the same rule as hover, so a drag never re-renders the bars.
+  const selection = useDragSelection({ onSelect: onZoom, onPreview: range => setLit.current(range) });
 
   const keyList = series.map(s => s.dataKey).join('\u0000');
   const colorList = series.map(s => s.color).join('\u0000');
@@ -214,20 +238,32 @@ function BarPlot({
 
   return (
     <>
-      <HoverDim scope={id} setter={setHovered} />
-      <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
+      <HoverDim scope={id} setter={setLit} />
+      <ChartPlot
+        height={height}
+        plotRef={ref}
+        onResize={onResize}
+        clickable={!!onBucketClick && !selection.enabled}
+        className={selection.className}
+      >
         <ComposedChart
           data={data}
           margin={margin}
+          onMouseDown={selection.onMouseDown}
           onMouseMove={state => {
-            const index = state?.activeTooltipIndex;
-            setHovered.current(index === undefined || index === null ? undefined : Number(index));
+            if (selection.isDragging()) return selection.onMouseMove(state);
+            const index = activeIndex(state);
+            setLit.current(index === undefined ? undefined : { start: index, end: index });
           }}
-          onMouseLeave={() => setHovered.current(undefined)}
+          onMouseLeave={() => {
+            // Mid-drag the selection stays lit until the release.
+            if (!selection.isDragging()) setLit.current(undefined);
+          }}
           onClick={state => {
-            const i = state?.activeTooltipIndex;
-            const row = i === undefined || i === null ? undefined : data[Number(i)];
-            if (onBucketClick && row) onBucketClick(row, Number(i));
+            if (selection.consumeReleaseClick()) return;
+            const i = activeIndex(state);
+            const row = i === undefined ? undefined : data[i];
+            if (onBucketClick && row && i !== undefined) onBucketClick(row, i);
           }}
         >
           <defs>
@@ -239,6 +275,7 @@ function BarPlot({
             ))}
           </defs>
           <CartesianGrid {...CHART_GRID_PROPS} />
+          {selection.enabled && <DragSelectionBand selection={selection} count={data.length} />}
           {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
           {valueYAxis({
             show: showYAxis,
@@ -270,14 +307,17 @@ function BarPlot({
               right: true,
             })}
           <Tooltip
+            {...CHART_TOOLTIP_PROPS}
             cursor={false}
             content={
-              <MetricsLineChartTooltip
-                formatValue={format}
-                showTotal={showTotal && !overlay}
-                labelKey={tooltipLabelKey}
-                formatByKey={overlay?.valueFormatter ? { [overlay.dataKey]: overlay.valueFormatter } : undefined}
-              />
+              <ChartTooltipPosition>
+                <MetricsLineChartTooltip
+                  formatValue={format}
+                  showTotal={showTotal && !overlay}
+                  labelKey={tooltipLabelKey}
+                  formatByKey={overlay?.valueFormatter ? { [overlay.dataKey]: overlay.valueFormatter } : undefined}
+                />
+              </ChartTooltipPosition>
             }
           />
           {series.map((s, i) => (
@@ -287,7 +327,7 @@ function BarPlot({
               name={s.label}
               stackId="1"
               fill={s.color}
-              maxBarSize={28}
+              maxBarSize={maxBarSize}
               isAnimationActive={false}
               shape={shapes[i]}
             >

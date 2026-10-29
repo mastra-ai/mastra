@@ -14,7 +14,6 @@ export interface SessionEnvironmentRepositoryState {
   /** The branch the checkout ended on after boot; `null` when it stays detached. */
   branch: string | null;
   defaultBranch: string;
-  position: number;
   /** `ok` ran or was already set up, `failed` exited non-zero, `skipped` has no setup command. */
   setupStatus: EnvironmentRepositorySetupStatus;
   /** The change request this session opened in the repository, once it has. */
@@ -137,8 +136,8 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
     const lines = state.repositories.map(
-      repo =>
-        `${repo.position}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
+      (repo, index) =>
+        `${index + 1}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
         (repo.changeRequestUrl ? `, change request ${escapeText(repo.changeRequestUrl)}` : ''),
     );
     const only = state.repositories.length === 1 ? state.repositories[0] : undefined;

@@ -39,8 +39,8 @@ describe.for([['pnpm'] as const])(`%s bundler analysis`, ([pkgManager]) => {
               build: 'mastra build',
             },
             dependencies: {
-              '@mastra/core': 'deployers-e2e-test',
-              mastra: 'deployers-e2e-test',
+              '@mastra/core': inject('tag'),
+              mastra: inject('tag'),
               pino: '^9.0.0',
               'pino-pretty': '^11.0.0',
               'pino-opentelemetry-transport': '^1.0.0',

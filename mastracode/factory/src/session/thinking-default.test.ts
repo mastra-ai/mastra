@@ -126,12 +126,15 @@ describe('resolveFactoryThinkingLevel', () => {
     expect(await resolve('chat-thread')).toBe('low');
   });
 
-  it('falls back to the Factory level when the owner has a personal model but no level', async () => {
-    const { resolve } = await setup('hybrid', { ownerLevel: null });
-    expect(await resolve('chat-thread')).toBe('low');
-  });
+  it.each(['user', 'hybrid'] as const)(
+    'starts a %s-routed chat at medium, never the Factory level, when the owner set no personal level',
+    async modelScope => {
+      const { resolve } = await setup(modelScope, { ownerLevel: null });
+      expect(await resolve('chat-thread')).toBe('medium');
+    },
+  );
 
-  it("starts a session under the user's own resource at their level, else at its Factory's", async () => {
+  it("starts a session under the user's own resource at their level, else at medium", async () => {
     const { project, deps } = await setup('hybrid', { withSourceSession: false });
     const ownResource = (userId: string) =>
       contextFor(
@@ -139,7 +142,7 @@ describe('resolveFactoryThinkingLevel', () => {
         userId,
       );
     expect(await resolveFactoryThinkingLevel(ownResource('viewer'), deps)).toBe('max');
-    expect(await resolveFactoryThinkingLevel(ownResource('user-1'), deps)).toBe('low');
+    expect(await resolveFactoryThinkingLevel(ownResource('user-1'), deps)).toBe('medium');
   });
 
   it("starts a Factory-page chat at the viewer's level on personal routing", async () => {
@@ -160,7 +163,7 @@ describe('resolveFactoryThinkingLevel', () => {
     expect(await resolveFactoryThinkingLevel(unsigned, deps)).toBe('low');
   });
 
-  it("keeps the Factory level when the personal defaults can't be read", async () => {
+  it("starts a personal-routed chat at medium when the personal defaults can't be read", async () => {
     const { deps } = await setup('hybrid');
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const failing = {
@@ -173,7 +176,7 @@ describe('resolveFactoryThinkingLevel', () => {
       },
     };
     const chat = contextFor({ sessionId: 'session-1', resourceId: 'session-1', threadId: 'chat-thread' });
-    expect(await resolveFactoryThinkingLevel(chat, failing)).toBe('low');
+    expect(await resolveFactoryThinkingLevel(chat, failing)).toBe('medium');
   });
 
   it('uses medium outside any Factory and when the lookup fails', async () => {
