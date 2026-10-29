@@ -74,7 +74,7 @@ export interface RawTraceQuerySpan {
   rootEntityType?: string | null;
   rootEntityId?: string | null;
   rootEntityName?: string | null;
-  /** Dedicated span columns; predicates never read `attributes.model` / `attributes.provider`. */
+  /** Dedicated span columns. Trace predicates fall back to string `attributes.model` / `attributes.provider`; span-query predicates read only the columns. */
   model?: string | null;
   provider?: string | null;
 }
@@ -774,8 +774,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-b',
       name: "llm: 'gpt-5'",
       spanType: 'model_generation',
-      model: 'gpt-5',
-      provider: 'openai',
+      // Exported before the dedicated columns were filled: only the attributes carry model and provider.
+      attributes: { model: 'gpt-5', provider: 'openai' },
       startedAt: '2026-08-05T10:00:00.250Z',
       endedAt: '2026-08-05T10:00:02.250Z',
     }),
@@ -791,8 +791,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-c',
       name: 'retrieve_medications',
       spanType: 'rag_action',
-      // Written before the dedicated columns existed: predicates must not read these.
-      attributes: { model: 'attribute-only-model', provider: 'attribute-only-provider' },
+      attributes: { model: 42, provider: { name: 'not-a-string' } },
       entityType: 'rag_ingestion',
       entityId: 'medication-index',
       entityName: 'Medication index',
@@ -1744,7 +1743,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-a' }],
   },
   {
-    name: 'treats model and provider stored only in span attributes as missing',
+    name: 'normalizes non-string model and provider attributes as missing',
     request: {
       timeRange: fullRange,
       where: {
@@ -1766,7 +1765,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-c' }],
   },
   {
-    name: 'never matches model or provider values stored only in span attributes',
+    name: 'matches model and provider from the column or, for older spans, string attributes',
     request: {
       timeRange: fullRange,
       where: {
@@ -1774,14 +1773,14 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
           some: {
             op: 'or',
             args: [
-              { op: 'eq', left: { path: 'model' }, right: { literal: 'attribute-only-model' } },
-              { op: 'in', value: { path: 'provider' }, set: ['attribute-only-provider'] },
+              { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5' } },
+              { op: 'in', value: { path: 'provider' }, set: ['anthropic'] },
             ],
           },
         },
       },
     },
-    expected: [],
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
     name: 'applies nullable negative membership semantics to current spans',
@@ -2835,6 +2834,9 @@ export function selectSpanQuerySpans(data: TraceQueryFixtureData, selection: Spa
 function spanQueryValues(span: RawTraceQuerySpan): Record<string, unknown> {
   return {
     ...spanValues(span),
+    // Span-query predicates read only the dedicated columns.
+    model: span.model ?? null,
+    provider: span.provider ?? null,
     traceId: span.traceId,
     spanId: span.spanId,
     parentSpanId: span.parentSpanId,
@@ -3192,11 +3194,14 @@ function durationMsBetween(startedAt: string, endedAt: string | null): number | 
 }
 
 function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
+  const attributeString = (key: 'model' | 'provider') =>
+    typeof span.attributes?.[key] === 'string' ? span.attributes[key] : null;
   return {
     name: span.name,
     spanType: span.spanType,
-    model: span.model ?? null,
-    provider: span.provider ?? null,
+    // Trace predicates fall back to the attributes older exporters wrote; span queries override this.
+    model: span.model ?? attributeString('model'),
+    provider: span.provider ?? attributeString('provider'),
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     durationMs: durationMsBetween(span.startedAt, span.endedAt),

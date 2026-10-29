@@ -173,8 +173,8 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-c',
       name: 'fallback-call',
       spanType: 'model_generation',
-      model: 'gpt-5',
-      provider: 'openai',
+      // Exported before the dedicated columns were filled: discovery reads the attribute fallback.
+      attributes: { model: 'gpt-5', provider: 'openai' },
     }),
     span(40, 'trace-pending', 'root-pending', {
       name: 'pending-root',

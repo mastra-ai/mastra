@@ -373,7 +373,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
   });
 
-  it('projects canonical span values from dedicated columns with typed parameters', () => {
+  it('projects canonical span values from columns or guarded JSON strings with typed parameters', () => {
     const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
@@ -399,9 +399,9 @@ describe('ClickHouse advanced trace query', () => {
     );
 
     expect(compiled.query.match(/FROM current_spans s/g)).toHaveLength(1);
-    // Model and provider predicates read only their columns, never span attributes.
-    expect(compiled.query).not.toContain(`attributes, 'model'`);
-    expect(compiled.query).not.toContain(`attributes, 'provider'`);
+    // Model and provider read the column, falling back to string attributes for older spans.
+    expect(compiled.query).toContain(`coalesce(model, if(JSONType(attributes, 'model') = 'String'`);
+    expect(compiled.query).toContain(`coalesce(provider, if(JSONType(attributes, 'provider') = 'String'`);
     expect(compiled.query).toMatch(/s\.model = \{trace_query_\d+:String\}/);
     expect(compiled.query).toMatch(/s\.provider = \{trace_query_\d+:String\}/);
     expect(compiled.query).toContain(`dateDiff('millisecond', startedAt, endedAt) AS durationMs`);

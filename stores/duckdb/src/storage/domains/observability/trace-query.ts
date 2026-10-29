@@ -528,6 +528,8 @@ function compileDuckDBTraceScope(
   ];
 
   if (relatedCollections.has('spans')) {
+    // Model and provider fall back to span attributes: exporters before the dedicated columns
+    // existed wrote them only there. Span queries filter on the columns alone (memory budget).
     ctes.push(`span_bounds AS (
       -- Exact event-time range of the in-scope traces, from a narrow
       -- (traceId, timestamp) pass. The join below cannot be pushed into the
@@ -559,8 +561,14 @@ function compileDuckDBTraceScope(
         traceId,
         name,
         spanType,
-        model,
-        provider,
+        COALESCE(
+          model,
+          CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END
+        ) AS model,
+        COALESCE(
+          provider,
+          CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END
+        ) AS provider,
         startedAt,
         endedAt,
         ${durationMsSql('startedAt', 'endedAt')} AS durationMs,

@@ -2601,8 +2601,9 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       if (capabilities.traceQuery) {
         it('reads model and provider from attributes when the columns are empty', async () => {
           // Rows written before the columns existed are never backfilled, so a
-          // span read must agree with span query results, which return the
-          // model-call attributes for them. Filters read only the columns.
+          // span read must agree with trace-query filters and span-query results,
+          // which fall back to the model-call attributes. Span-query filters read
+          // only the columns.
           await storage.batchCreateSpans({
             records: [
               makeSpan({

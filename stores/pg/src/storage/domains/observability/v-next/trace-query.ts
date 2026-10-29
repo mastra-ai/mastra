@@ -628,13 +628,15 @@ function compilePostgresTraceScope(
   ];
 
   if (relationCollections.has('spans')) {
+    // Model and provider fall back to span attributes: exporters before the dedicated columns
+    // existed wrote them only there. Span queries filter on the columns alone (memory budget).
     ctes.push(`current_spans AS MATERIALIZED (
     SELECT
       s."traceId",
       s."name",
       s."spanType",
-      s."model",
-      s."provider",
+      COALESCE(s."model", CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END) AS "model",
+      COALESCE(s."provider", CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END) AS "provider",
       s."startedAt",
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE
