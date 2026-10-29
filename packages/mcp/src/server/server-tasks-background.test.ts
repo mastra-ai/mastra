@@ -447,6 +447,33 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     );
   });
 
+  // The peer is up before the task exists, and no client ever asks it about a task: only its own
+  // sweep, started at registration, can notice the dead worker's row.
+  it.each([
+    { recover: true, status: 'completed', runs: 2 },
+    { recover: false, status: 'failed', runs: 1 },
+  ])(
+    "settles a crashed instance's task on a peer that has served no task request (recover: $recover)",
+    async ({ recover, status, runs }) => {
+      const tasks = { tools: { crashy: { mode: 'always' as const, recover } } };
+      const peer = await instance(tasks);
+      const dying = await child(recover);
+      await call(dying.url, 'crashy');
+      await until(() => runsIn(counterFile) === 1);
+      dying.process.kill('SIGKILL');
+
+      const deadline = Date.now() + LEASE_MS * 5;
+      let row = (await rows(peer.mastra))[0];
+      while (row?.status !== status && Date.now() < deadline) {
+        await sleep(100);
+        row = (await rows(peer.mastra))[0];
+      }
+      expect(row?.status).toBe(status);
+      if (!recover) expect(row?.error).toMatchObject({ message: TASK_LOST_MESSAGE });
+      expect(runsIn(counterFile)).toBe(runs);
+    },
+  );
+
   it('runs a task again on a peer when its instance shuts down gracefully mid-task (recover: true)', async () => {
     const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
     // Up before the task exists, so core's own stale recovery on B never looks at its row again.
@@ -921,60 +948,105 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     expect(JSON.stringify(row)).not.toContain('alice-token');
   });
 
-  it('keeps tasks in memory, with a warning, when the storage cannot expire rows', async () => {
-    const a = await instance({ tools: { echo: 'always' } });
-    const storage = await a.mastra.backgroundTaskManager!.getStorage();
-    // What an adapter predating per-row expiry reports.
-    Object.defineProperty(storage, 'supportsTaskExpiry', { value: false });
-    const warn = vi.spyOn((a.server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
-
-    const taskId = await call(a.url, 'echo', { text: 'hi' });
-    await waitFor(await requester(a.url), taskId, 'completed');
-    expect(await rows(a.mastra)).toEqual([]);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('does not support task expiry'));
-  });
-
-  it('chooses the store again after storage was unreachable for one request', async () => {
-    const a = await instance({ tools: { echo: 'always' } });
-    vi.spyOn(a.mastra.backgroundTaskManager!, 'getStorage').mockRejectedValueOnce(new Error('storage unreachable'));
-    await expect(call(a.url, 'echo', { text: 'first' })).rejects.toThrow();
-
-    const taskId = await call(a.url, 'echo', { text: 'second' });
-    await waitFor(await requester(a.url), taskId, 'completed');
-    expect(await rows(a.mastra)).toHaveLength(1);
-  });
-
-  it('does not sweep storage for a server that has served no task', async () => {
-    const a = await instance({ tools: { echo: 'always' } });
-    const list = vi.spyOn(a.mastra.backgroundTaskManager!, 'listTasks');
-    await sleep(LEASE_MS * 1.5);
-    expect(list.mock.calls.filter(([filter]) => filter?.agentId === 'mcp-server:tasks')).toEqual([]);
-  });
-
-  it('warns when tasks are kept in storage under an id generated for this process', async () => {
-    const server = new MCPServer({
-      name: 'Tasks',
-      version: '1.0.0',
-      tools: makeTools(probe, counterFile),
-      tasks: { tools: { echo: 'always' } },
-    });
+  /**
+   * A server added to a running Mastra instance, so a test can change the storage first and watch
+   * the logger from registration on: the store is chosen, and its warnings logged, from there.
+   */
+  async function addedLater(
+    tasks: MCPServerConfig['tasks'],
+    { key, before }: { key?: string; before?: (mastra: Mastra) => Promise<void> } = {},
+  ) {
+    const server = new MCPServer({ name: 'Tasks', version: '1.0.0', tools: makeTools(probe, counterFile), tasks });
     const mastra = new Mastra({
       logger: false,
       storage: new LibSQLStore({ id: 'tasks', url: db }),
       backgroundTasks: { enabled: true, leaseDurationMs: LEASE_MS },
     });
-    mastra.addMCPServer(server);
+    await before?.(mastra);
+    const warn = vi.spyOn((server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
+    const list = vi.spyOn(mastra.backgroundTaskManager!, 'listTasks');
+    mastra.addMCPServer(server, key);
+    // addMCPServer may swap in Mastra's logger; watch whichever the server ends up with.
+    const logger = (server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger;
+    const warns = vi.isMockFunction(logger.warn) ? warn : vi.spyOn(logger, 'warn');
     const served = await serveHTTP(server, { auth: () => authFor('alice') });
-    instances.push({
+    const created: Instance = {
       url: served.url,
       server,
       mastra,
       close: async () => (await served.close(), await mastra.shutdown()),
-    });
-    const warn = vi.spyOn((server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
+    };
+    instances.push(created);
+    const sweeps = () => list.mock.calls.filter(([filter]) => filter?.agentId === `mcp-server:${server.id}`);
+    return { ...created, warn: warns, sweeps };
+  }
 
-    await waitFor(await requester(served.url), await call(served.url, 'echo', { text: 'hi' }), 'completed');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('generated id'));
+  it('keeps tasks in memory, with a warning at registration, when the storage cannot expire rows', async () => {
+    const a = await addedLater(
+      { tools: { echo: 'always' } },
+      {
+        key: 'tasks',
+        // What an adapter predating per-row expiry reports.
+        before: async mastra => {
+          const storage = await mastra.backgroundTaskManager!.getStorage();
+          Object.defineProperty(storage, 'supportsTaskExpiry', { value: false });
+        },
+      },
+    );
+    await vi.waitFor(() =>
+      expect(a.warn).toHaveBeenCalledWith(expect.stringContaining('does not support task expiry')),
+    );
+    // The in-memory store starts no sweep of storage.
+    await sleep(LEASE_MS * 1.5);
+    expect(a.sweeps()).toEqual([]);
+
+    const taskId = await call(a.url, 'echo', { text: 'hi' });
+    await waitFor(await requester(a.url), taskId, 'completed');
+    expect(await rows(a.mastra)).toEqual([]);
+  });
+
+  it('chooses the store again on each task request while storage is unreachable, from registration on', async () => {
+    let down = true;
+    const a = await addedLater(
+      { tools: { echo: 'always' } },
+      {
+        key: 'tasks',
+        before: async mastra => {
+          const manager = mastra.backgroundTaskManager!;
+          const getStorage = manager.getStorage.bind(manager);
+          vi.spyOn(manager, 'getStorage').mockImplementation(() =>
+            down ? Promise.reject(new Error('storage unreachable')) : getStorage(),
+          );
+        },
+      },
+    );
+    await expect(call(a.url, 'echo', { text: 'first' })).rejects.toThrow();
+
+    down = false;
+    const taskId = await call(a.url, 'echo', { text: 'second' });
+    await waitFor(await requester(a.url), taskId, 'completed');
+    expect(await rows(a.mastra)).toHaveLength(1);
+  });
+
+  it('sweeps from registration, and stops when the server closes', async () => {
+    const a = await addedLater({ tools: { echo: 'always' } }, { key: 'tasks' });
+    await vi.waitFor(() => expect(a.sweeps().length).toBeGreaterThan(0), { timeout: LEASE_MS * 2 });
+
+    await a.server.close();
+    const swept = a.sweeps().length;
+    await sleep(LEASE_MS * 1.5);
+    expect(a.sweeps().length).toBe(swept);
+  });
+
+  it('does not sweep storage for a server with tasks off', async () => {
+    const a = await addedLater(undefined, { key: 'tasks' });
+    await sleep(LEASE_MS * 1.5);
+    expect(a.sweeps()).toEqual([]);
+  });
+
+  it('warns when tasks are kept in storage under an id generated for this process', async () => {
+    const a = await addedLater({ tools: { echo: 'always' } });
+    await vi.waitFor(() => expect(a.warn).toHaveBeenCalledWith(expect.stringContaining('generated id')));
   });
 
   it('uses the store passed in over Mastra background tasks', async () => {

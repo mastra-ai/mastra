@@ -1805,7 +1805,13 @@ export class MCPServer extends MCPServerBase {
     super.__registerMastra(mastra);
     // Usually the manager exists by now and has not recovered rows yet: register the executors
     // synchronously so recovered attempts find them.
-    this.prepareBackgroundTaskStore();
+    if (!this.prepareBackgroundTaskStore() || !(this.taskStore instanceof SelectingMCPTaskStore)) return;
+    // Choose the store now rather than on the first task request, so its sweep runs from the start
+    // and settles rows of instances that died even if this one never serves a task. A failure here
+    // is not remembered: the next task request chooses again.
+    this.taskStore
+      .resolve()
+      .catch(error => this.logger.debug(`MCP server '${this.name}' could not choose its task store yet`, { error }));
   }
 
   /**
@@ -1848,6 +1854,7 @@ export class MCPServer extends MCPServerBase {
             `MCP server '${this.name}' keeps tasks in Mastra storage under the generated id '${this.id}', which changes on every start: other instances and restarts won't find its tasks. Pass \`id\` to the MCPServer, or register it under a key in Mastra's \`mcpServers\`.`,
           );
         }
+        store.startSweeping();
         if (!prepared) {
           this.logger.warn(
             `MCP server '${this.name}' serves tasks from Mastra background tasks that started after it was registered; tasks created before a restart may not have been recovered`,

@@ -496,7 +496,9 @@ await mastra.backgroundTaskManager?.enqueue(
 
 `pinToWorker` means work for this task is already in flight on this worker. The `pending` task records this worker as its owner and holds an execution lease, which the worker renews while the task waits for a free slot. Other processes don't recover or dispatch the task while the lease is live.
 
-If the worker dies or shuts down first, that work is lost. Recovery treats the task as a lost attempt, like a running task whose worker died. If `retryCount` is below `maxRetries`, the task uses a retry and runs on another worker, which needs a static executor for it. Otherwise the task fails with `Worker process terminated before task completed`. A task with `maxRetries: 0` never runs on another worker.
+If the worker dies or shuts down first, that work is lost. Recovery treats the task as a lost attempt, like a running task whose worker died. If `retryCount` is below `maxRetries`, the task uses a retry and runs on another worker, which needs a static executor for it. Otherwise the task fails with `Worker process terminated before task completed`. A task with `maxRetries: 0` never runs on another worker. Other processes check for lapsed pins at startup and then every `leaseDurationMs`, unless `recoverStaleTasksOnStart` is `false`.
+
+A lapsed lease only shows that the worker stopped renewing it, not that the work stopped. A worker whose event loop stalls past the lease can still be running the task when another worker retries it. Make pinned work idempotent, or guard its side effects, if it can be retried.
 
 `pinToWorker` throws without a task context. Tasks that aren't pinned, including all agent tasks, hold no lease while `pending`.
 
