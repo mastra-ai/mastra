@@ -91,6 +91,19 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  it('applies a derived generation failure to the generation and its open children', () => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation', outcome: null });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep();
+    tracker.startInference();
+    tracker.reportGenerationError({ error: new Error('provider failed') });
+    for (const type of [SpanType.MODEL_GENERATION, SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
+      expect(testExporter.getSpansByType(type)).toMatchObject([
+        { outcome: 'error', stopReason: 'runtime_error', errorInfo: { message: 'provider failed' } },
+      ]);
+    }
+  });
+
   it('provider lifecycle chunks leave the logical step to the downstream tracker', async () => {
     const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation' });
     const tracker = new ModelSpanTracker(model);

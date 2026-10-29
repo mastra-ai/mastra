@@ -403,6 +403,7 @@ export class ModelSpanTracker {
   #currentInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
   #stepHasInference = false;
   #tracksProviderStream = false;
+  #processedInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
   #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
   #currentChunkType?: string;
   #accumulator: Record<string, any> = {};
@@ -426,7 +427,6 @@ export class ModelSpanTracker {
   #deferStepClose: boolean = false;
   /** Stored step-finish payload when defer mode is enabled */
   #pendingStepFinishPayload?: StepFinishPayload<any, any>;
-  #pendingInferenceFinish?: StepFinishPayload<any, any>;
   /** Static request-side context applied to every MODEL_INFERENCE span */
   #inferenceContext?: ModelInferenceContext;
 
@@ -522,7 +522,7 @@ export class ModelSpanTracker {
       });
       this.#currentStepSpan = undefined;
     }
-    this.#modelSpan?.error(options);
+    this.#modelSpan?.error({ ...options, ...termination });
   }
 
   /**
@@ -658,6 +658,7 @@ export class ModelSpanTracker {
       tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
     this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
+    this.#processedInferenceSpan = undefined;
     // Reset chunk sequence and first-chunk clock for new step
     this.#chunkSequence = 0;
     this.#inferenceCompletionStartTime = undefined;
@@ -672,10 +673,8 @@ export class ModelSpanTracker {
    *
    * Safe to call multiple times - no-ops if the span is already closed.
    */
-  #endInferenceSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>): void {
+  #endInferenceSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>, captureOutput = true): void {
     if (!this.#currentInferenceSpan) return;
-    payload = this.#pendingInferenceFinish ?? payload;
-    this.#pendingInferenceFinish = undefined;
 
     const { usage: rawUsage, ...otherOutput } = payload.output;
     const usage = extractUsageMetrics(rawUsage, payload.metadata?.providerMetadata);
@@ -691,7 +690,7 @@ export class ModelSpanTracker {
       ...(payload.stepResult.reason === 'error'
         ? { outcome: 'error' as const, stopReason: 'model_error' as const }
         : {}),
-      output: otherOutput,
+      ...(captureOutput ? { output: otherOutput } : {}),
       attributes: {
         usage,
         finishReason: payload.stepResult.reason,
@@ -735,17 +734,10 @@ export class ModelSpanTracker {
     this.#openInference(payload);
   }
 
-  /** Finish only the provider request; the logical step may still run processors or tools. */
-  finishInference(payload: StepFinishPayload): void {
-    // The upstream provider may finish before queued chunks reach wrapStream.
-    // Retain its result, then close only after downstream chunk processing.
-    this.#pendingInferenceFinish = payload;
-  }
-
   /** End the current attempt only; generation and agent spans belong to their owners. */
   endAttempt(termination: SpanTermination): void {
     termination = interruptedByRun(termination);
-    const payload = this.#pendingStepFinishPayload ?? this.#pendingInferenceFinish;
+    const payload = this.#pendingStepFinishPayload;
     if (payload) {
       this.#endStepSpan(payload, termination);
     } else {
@@ -756,7 +748,6 @@ export class ModelSpanTracker {
       this.#currentInferenceSpan = undefined;
     }
     this.#pendingStepFinishPayload = undefined;
-    this.#pendingInferenceFinish = undefined;
     this.#inferenceCompletionStartTime = undefined;
     this.#currentStepInputIsFinal = false;
   }
@@ -770,7 +761,6 @@ export class ModelSpanTracker {
     }
 
     this.#inferenceCompletionStartTime = undefined;
-    this.#pendingInferenceFinish = undefined;
     this.#inferenceTimeToFirstTokenMs = undefined;
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
@@ -813,7 +803,6 @@ export class ModelSpanTracker {
     this.#currentInferenceSpan = undefined;
     this.#inferenceCompletionStartTime = undefined;
     this.#inferenceTimeToFirstTokenMs = undefined;
-    this.#pendingInferenceFinish = undefined;
   }
 
   /** End the open inference span, if any, with `error` and what it streamed. */
@@ -829,7 +818,6 @@ export class ModelSpanTracker {
     this.#inferenceTimeToFirstTokenMs = undefined;
     this.#currentInferenceSpan = undefined;
     this.#inferenceCompletionStartTime = undefined;
-    this.#pendingInferenceFinish = undefined;
   }
 
   /**
@@ -952,7 +940,7 @@ export class ModelSpanTracker {
    * startStep() was bypassed.
    */
   #chunkParent(): Span<SpanType.MODEL_INFERENCE> | Span<SpanType.MODEL_STEP> | undefined {
-    return this.#currentInferenceSpan ?? this.#currentStepSpan;
+    return this.#currentInferenceSpan ?? this.#processedInferenceSpan ?? this.#currentStepSpan;
   }
 
   /**
@@ -1207,205 +1195,208 @@ export class ModelSpanTracker {
       this.#chunkSequence++;
     }
   }
+  /** Track provider timing and completion without recording unprocessed content. */
+  wrapInferenceStream<T extends { pipeThrough: Function }>(stream: T): T {
+    this.#tracksProviderStream = true;
+    return this.wrapStream(stream, true);
+  }
+
   /**
    * Wraps a stream with model tracing transform to track MODEL_STEP and MODEL_CHUNK spans.
    *
    * This should be added to the stream pipeline to automatically
    * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
    */
-  /** Track physical provider chunks before processors can buffer or replace them. */
-  wrapInferenceStream<T extends { pipeThrough: Function }>(stream: T): T {
-    this.#tracksProviderStream = true;
-    return this.wrapStream(stream, true);
-  }
-
   wrapStream<T extends { pipeThrough: Function }>(stream: T, inferenceOnly = false): T {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          const isResponseChunk =
-            MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type) ||
-            ['text-end', 'reasoning-end', 'tool-call-input-streaming-end', 'object', 'object-result'].includes(
-              chunk.type,
-            );
-          if (
-            (inferenceOnly && !isResponseChunk && chunk.type !== 'finish') ||
-            (!inferenceOnly && this.#tracksProviderStream && isResponseChunk)
-          ) {
+          if (inferenceOnly) {
+            try {
+              // Raw provider data supplies clocks and usage only. Content is captured
+              // downstream, after output processors have redacted or rejected it.
+              if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) this.#captureCompletionStartTime();
+              if (chunk.type === 'finish') {
+                this.#processedInferenceSpan = this.#currentInferenceSpan;
+                this.#endInferenceSpan(chunk.payload, false);
+              }
+            } catch {
+              // Optional telemetry must not affect stream delivery.
+            }
             controller.enqueue(chunk);
             return;
           }
-          try {
-            if (
-              (inferenceOnly || this.#inModelResponse || this.#deferStepClose) &&
-              MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)
-            ) {
-              this.#captureCompletionStartTime();
-            }
-
-            // Close the suspended step before forwarding: downstream handling of
-            // the suspension finishes the run and ends the span tree.
-            if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
-              if (chunk.type === 'tool-call-approval') {
-                this.#handleToolApprovalChunk(chunk);
-              }
-              this.#endSuspendedStep(chunk);
-            }
-
-            // Handle chunk span tracking based on chunk type
-            switch (chunk.type) {
-              case 'text-start':
-              case 'text-delta':
-              case 'text-end':
-                this.#handleTextChunk(chunk);
-                break;
-
-              case 'tool-call-input-streaming-start':
-              case 'tool-call-delta':
-              case 'tool-call-input-streaming-end':
-              case 'tool-call':
-                this.#handleToolCallChunk(chunk);
-                break;
-
-              case 'reasoning-start':
-              case 'reasoning-delta':
-              case 'reasoning-end':
-                this.#handleReasoningChunk(chunk);
-                break;
-
-              case 'object':
-              case 'object-result':
-                this.#handleObjectChunk(chunk);
-                break;
-
-              case 'step-start':
-                this.#inModelResponse = true;
-                // If step already started (via startStep()), just update with payload data
-                // Otherwise start a new step (for backwards compatibility)
-                if (this.#currentStepSpan) {
-                  this.updateStep(chunk.payload);
-                } else {
-                  this.startStep(chunk.payload);
-                }
-                // step-start fires when the provider stream has begun. Open the
-                // inference span here as a safety net for callers that don't
-                // explicitly call startInference() before invoking the model —
-                // chunks that follow will parent under MODEL_INFERENCE.
-                if (!this.#currentInferenceSpan && !this.#stepHasInference) {
-                  this.#openInference(chunk.payload);
-                }
-                break;
-
-              case 'step-finish':
-                this.#inModelResponse = false;
-                if (this.#deferStepClose) {
-                  // Durable mode: save payload for later, don't close the step.
-                  // Close MODEL_INFERENCE eagerly though - the provider stream is
-                  // done, and any subsequent tool execution under the step should
-                  // not inflate inference duration.
-                  this.#pendingStepFinishPayload = chunk.payload;
-                  this.#endChunkSpan();
-                  this.#endInferenceSpan(chunk.payload);
-                } else {
-                  // Normal mode: close the step immediately
-                  this.#endStepSpan(chunk.payload);
-                }
-                break;
-
-              case 'tripwire': {
-                // A tripwire chunk is a terminal runtime boundary; unlike a retry
-                // step it closes the consumer without an onFinish callback.
-                const termination = coreObservability.agentLoopTermination?.({ tripwire: chunk.payload });
-                // Older supported core versions do not supply native outcomes.
-                if (!termination) break;
-                this.endAttempt(termination);
-                break;
-              }
-
-              case 'finish':
-                if (inferenceOnly) {
-                  this.#endChunkSpan();
-                  this.#endInferenceSpan(chunk.payload);
-                }
-                break;
-
-              // Infrastructure chunks - skip creating spans for these
-              // They are either redundant, metadata-only, or error/control flow
-              case 'raw': // Redundant raw data
-              case 'start': // Stream start marker
-              case 'response-metadata': // Response metadata (not semantic content)
-              case 'source': // Source references (metadata)
-              case 'file': // Binary file data (too large/not semantic)
-              case 'error': // Error handling
-              case 'abort': // Abort signal
-              case 'watch': // Internal watch event
-              case 'tool-error': // Tool error handling
-              case 'reasoning-signature': // Signature metadata
-              case 'redacted-reasoning': // Redacted content metadata
-              case 'step-output': // Step output wrapper (content is nested)
-                // Don't create spans for these chunks
-                break;
-
-              case 'tool-call-suspended': // Suspension (handled before enqueue)
-              case 'tool-call-approval': // Approval request (handled before enqueue)
-                break;
-
-              case 'tool-output':
-                // tool-output chunks are streaming progress from tools (e.g., sub-agents)
-                // No span created - the final tool-result event captures the result
-                break;
-
-              case 'tool-result': {
-                // tool-result is always a point-in-time event span
-                // (tool execution duration is captured by the parent tool_call span)
-                const {
-                  // Metadata - tool call context (unique to tool-result chunks)
-                  toolCallId,
-                  toolName,
-                  isError,
-                  dynamic,
-                  providerExecuted,
-                  providerMetadata,
-                  // Keep provider-executed results on MODEL_CHUNK because they come
-                  // from the model/provider stream and may not have a sibling TOOL_CALL span.
-                  // For locally executed tools, the canonical payload lives on TOOL_CALL.
-                  result,
-                  // Stripped - redundant (already on TOOL_CALL span input)
-                  args: _args,
-                } = (chunk.payload as Record<string, any>) || {};
-
-                // All tool-result specific fields go in metadata
-                const metadata: Record<string, any> = { toolCallId, toolName };
-                if (isError !== undefined) metadata.isError = isError;
-                if (dynamic !== undefined) metadata.dynamic = dynamic;
-                if (providerExecuted !== undefined) metadata.providerExecuted = providerExecuted;
-                if (providerMetadata !== undefined) metadata.providerMetadata = providerMetadata;
-
-                const mastraMeta = providerMetadata?.mastra as Record<string, unknown> | undefined;
-                const spanOutput = providerExecuted
-                  ? result
-                  : mastraMeta?.modelOutput !== undefined
-                    ? mastraMeta.modelOutput
-                    : undefined;
-
-                this.#createEventSpan(chunk.type, spanOutput, { metadata });
-                break;
-              }
-
-              // Default: skip creating spans for unrecognized chunk types
-              // All semantic content chunks should be explicitly handled above
-              // Unknown chunks are likely infrastructure or custom chunks that don't need tracing
-              default:
-                // No span created - reduces trace noise
-                break;
-            }
-          } catch {
-            // Telemetry failures must not drop or fail the user's stream chunks.
-          } finally {
-            controller.enqueue(chunk);
-          }
+          this.recordChunk(chunk);
+          controller.enqueue(chunk);
         },
       }),
     ) as T;
+  }
+  /** @internal Record a chunk only after output processors accept it. */
+  recordChunk(chunk: ChunkType<any>): void {
+    try {
+      if (
+        !this.#tracksProviderStream &&
+        (this.#inModelResponse || this.#deferStepClose) &&
+        MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)
+      ) {
+        this.#captureCompletionStartTime();
+      }
+
+      // Close the suspended step before forwarding: downstream handling of
+      // the suspension finishes the run and ends the span tree.
+      if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+        if (chunk.type === 'tool-call-approval') {
+          this.#handleToolApprovalChunk(chunk);
+        }
+        this.#endSuspendedStep(chunk);
+      }
+
+      // Handle chunk span tracking based on chunk type
+      switch (chunk.type) {
+        case 'text-start':
+        case 'text-delta':
+        case 'text-end':
+          this.#handleTextChunk(chunk);
+          break;
+
+        case 'tool-call-input-streaming-start':
+        case 'tool-call-delta':
+        case 'tool-call-input-streaming-end':
+        case 'tool-call':
+          this.#handleToolCallChunk(chunk);
+          break;
+
+        case 'reasoning-start':
+        case 'reasoning-delta':
+        case 'reasoning-end':
+          this.#handleReasoningChunk(chunk);
+          break;
+
+        case 'object':
+        case 'object-result':
+          this.#handleObjectChunk(chunk);
+          break;
+
+        case 'step-start':
+          this.#inModelResponse = true;
+          // If step already started (via startStep()), just update with payload data
+          // Otherwise start a new step (for backwards compatibility)
+          if (this.#currentStepSpan) {
+            this.updateStep(chunk.payload);
+          } else {
+            this.startStep(chunk.payload);
+          }
+          // step-start fires when the provider stream has begun. Open the
+          // inference span here as a safety net for callers that don't
+          // explicitly call startInference() before invoking the model —
+          // chunks that follow will parent under MODEL_INFERENCE.
+          if (!this.#currentInferenceSpan && !this.#stepHasInference) {
+            this.#openInference(chunk.payload);
+          }
+          break;
+
+        case 'step-finish':
+          this.#inModelResponse = false;
+          if (this.#deferStepClose) {
+            // Durable mode: save payload for later, don't close the step.
+            // Close MODEL_INFERENCE eagerly though - the provider stream is
+            // done, and any subsequent tool execution under the step should
+            // not inflate inference duration.
+            this.#pendingStepFinishPayload = chunk.payload;
+            this.#endChunkSpan();
+            this.#endInferenceSpan(chunk.payload);
+          } else {
+            // Normal mode: close the step immediately
+            this.#endStepSpan(chunk.payload);
+          }
+          break;
+
+        case 'tripwire': {
+          // A tripwire chunk is a terminal runtime boundary; unlike a retry
+          // step it closes the consumer without an onFinish callback.
+          const termination = coreObservability.agentLoopTermination?.({ tripwire: chunk.payload });
+          // Older supported core versions do not supply native outcomes.
+          if (!termination) break;
+          this.endAttempt(termination);
+          break;
+        }
+
+        case 'finish':
+          break;
+
+        // Infrastructure chunks - skip creating spans for these
+        // They are either redundant, metadata-only, or error/control flow
+        case 'raw': // Redundant raw data
+        case 'start': // Stream start marker
+        case 'response-metadata': // Response metadata (not semantic content)
+        case 'source': // Source references (metadata)
+        case 'file': // Binary file data (too large/not semantic)
+        case 'error': // Error handling
+        case 'abort': // Abort signal
+        case 'watch': // Internal watch event
+        case 'tool-error': // Tool error handling
+        case 'reasoning-signature': // Signature metadata
+        case 'redacted-reasoning': // Redacted content metadata
+        case 'step-output': // Step output wrapper (content is nested)
+          // Don't create spans for these chunks
+          break;
+
+        case 'tool-call-suspended': // Suspension (handled before enqueue)
+        case 'tool-call-approval': // Approval request (handled before enqueue)
+          break;
+
+        case 'tool-output':
+          // tool-output chunks are streaming progress from tools (e.g., sub-agents)
+          // No span created - the final tool-result event captures the result
+          break;
+
+        case 'tool-result': {
+          // tool-result is always a point-in-time event span
+          // (tool execution duration is captured by the parent tool_call span)
+          const {
+            // Metadata - tool call context (unique to tool-result chunks)
+            toolCallId,
+            toolName,
+            isError,
+            dynamic,
+            providerExecuted,
+            providerMetadata,
+            // Keep provider-executed results on MODEL_CHUNK because they come
+            // from the model/provider stream and may not have a sibling TOOL_CALL span.
+            // For locally executed tools, the canonical payload lives on TOOL_CALL.
+            result,
+            // Stripped - redundant (already on TOOL_CALL span input)
+            args: _args,
+          } = (chunk.payload as Record<string, any>) || {};
+
+          // All tool-result specific fields go in metadata
+          const metadata: Record<string, any> = { toolCallId, toolName };
+          if (isError !== undefined) metadata.isError = isError;
+          if (dynamic !== undefined) metadata.dynamic = dynamic;
+          if (providerExecuted !== undefined) metadata.providerExecuted = providerExecuted;
+          if (providerMetadata !== undefined) metadata.providerMetadata = providerMetadata;
+
+          const mastraMeta = providerMetadata?.mastra as Record<string, unknown> | undefined;
+          const spanOutput = providerExecuted
+            ? result
+            : mastraMeta?.modelOutput !== undefined
+              ? mastraMeta.modelOutput
+              : undefined;
+
+          this.#createEventSpan(chunk.type, spanOutput, { metadata });
+          break;
+        }
+
+        // Default: skip creating spans for unrecognized chunk types
+        // All semantic content chunks should be explicitly handled above
+        // Unknown chunks are likely infrastructure or custom chunks that don't need tracing
+        default:
+          // No span created - reduces trace noise
+          break;
+      }
+    } catch {
+      // Optional telemetry must not affect stream delivery.
+    }
   }
 }

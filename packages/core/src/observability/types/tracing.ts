@@ -16,6 +16,7 @@ import type {
   ProviderMetadata,
   StepStartPayload,
   StepFinishPayload,
+  ChunkType,
   StepTripwireData,
 } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
@@ -1756,6 +1757,8 @@ export interface IModelSpanTracker {
   /** Time to first token of the first inference seen by this tracker; carried the same way. */
   getTimeToFirstTokenMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
+  /** @internal Record a chunk after the runtime has applied output processors. */
+  recordChunk?(chunk: ChunkType): void;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
 
@@ -1767,8 +1770,6 @@ export interface IModelSpanTracker {
    * Falls back to auto-creation on first chunk if the caller forgets.
    */
   startInference?(payload?: StepStartPayload): void;
-  /** Close the provider request before post-response processors and tool execution. */
-  finishInference?(payload: StepFinishPayload): void;
   /** Close the current attempt without ending the generation or agent. */
   endAttempt?(termination: SpanTermination): void;
 

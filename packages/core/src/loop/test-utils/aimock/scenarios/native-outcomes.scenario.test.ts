@@ -11,6 +11,38 @@ import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   const getMock = useLoopScenarioAimock();
 
+  it.each(['redact', 'block'] as const)(
+    'captures only processed model chunks when a processor chooses to %s',
+    async mode => {
+      const { observability, ended } = capture();
+      const { chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        collectChunks: true,
+        prompt: 'Return the private value',
+        outputProcessors: [
+          {
+            id: 'privacy-policy',
+            processOutputStream: ({ part, abort }) => {
+              if (part.type !== 'text-delta') return part;
+              if (mode === 'block') return abort('Blocked private reply');
+              return { ...part, payload: { ...part.payload, text: '[redacted]' } };
+            },
+          },
+        ],
+        afterStream: async () => {
+          await expect.poll(() => ended().length).toBeGreaterThan(0);
+        },
+        fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'private-secret-123' }),
+      });
+      expect(JSON.stringify(ended(SpanType.MODEL_CHUNK))).not.toContain('private-secret-123');
+      expect(JSON.stringify(chunks)).not.toContain('private-secret-123');
+      if (mode === 'redact') expect(JSON.stringify(ended(SpanType.MODEL_CHUNK))).toContain('[redacted]');
+      else expect(ended().at(-1)).toMatchObject({ outcome: 'blocked', stopReason: 'guardrail' });
+    },
+  );
+
   it.each([false, true])('records a supervisor bail after a worker failure=%s', async failed => {
     const { observability, ended } = capture();
     const worker = new Agent({

@@ -860,6 +860,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker({
               agentRunSpan: agentRunSpan as Span<SpanType.AGENT_RUN> | undefined,
             });
+            const recordProcessedChunk = (chunk: ChunkType) => {
+              try {
+                modelSpanTracker?.recordChunk?.(chunk);
+              } catch {
+                // Optional tracing must not prevent accepted output from reaching the caller.
+              }
+            };
             failInference = error => modelSpanTracker?.failInference?.(error);
             endAttemptSpans = () => {
               modelSpanTracker?.interruptInference?.(interruptionOutcome);
@@ -1736,7 +1743,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // The inner LLM stream emits 'finish' but never 'step-finish' (durable calls
             // `execute` directly). Rewrite 'finish' -> 'step-finish' before the tracker so
             // MODEL_STEP / MODEL_INFERENCE close and the client buffers the step.
-            const baseStream = outputStream._getBaseStream();
+            const rawBaseStream = outputStream._getBaseStream();
+            const baseStream = modelSpanTracker?.recordChunk
+              ? (modelSpanTracker.wrapInferenceStream?.(rawBaseStream) ?? rawBaseStream)
+              : rawBaseStream;
             const stepBoundaryStream = (baseStream as ReadableStream<any>).pipeThrough(
               new TransformStream<any, any>({
                 transform(chunk, controller) {
@@ -1749,7 +1759,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }),
             );
             // Wrap with ModelSpanTracker to create/close MODEL_STEP and MODEL_CHUNK spans
-            const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
+            const trackedStream = modelSpanTracker?.recordChunk
+              ? stepBoundaryStream
+              : (modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream);
 
             // ── processToolResult support for provider-executed results (#14282 parity port) ──
             // Provider-executed tool results (same-stream or deferred) never reach
@@ -2120,6 +2132,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // (what the client received), or null when a processor dropped it.
                 let processedChunk: typeof clientChunk | null | undefined;
                 if (rawChunk.type === 'step-finish') {
+                  recordProcessedChunk(rawChunk);
                   registryEntry?.runScope?.set(LOCAL_MODEL_REQUEST_KEY, request);
                 }
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
@@ -2157,6 +2170,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                             endTripwireSpans(chunk.payload);
                             outputStreamBlocked = true;
                           }
+                          recordProcessedChunk(chunk);
                           trackOpenReasoning(chunk, openReasoningIds);
                           try {
                             await emitChunkEvent(pubsub, runId, chunk, true);
@@ -2189,6 +2203,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       break;
                     }
                   } else {
+                    // Without producer-side processors, only record content when
+                    // none are configured; another worker may own those processors.
+                    if (effectiveOutputProcessors.length === 0) recordProcessedChunk(clientChunk);
                     trackOpenReasoning(clientChunk, openReasoningIds);
                     await emitChunkEvent(pubsub, runId, clientChunk);
                   }
