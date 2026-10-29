@@ -56,7 +56,7 @@ import {
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
-import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
+import { emitSuspendedEvent, emitChunkEvent, emitIterationStartEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableToolCallOutput,
@@ -421,9 +421,14 @@ export function createDurableToolCallStep() {
         agentSpanData?: unknown;
         modelSpanData?: unknown;
         completionStartTime?: Date | string;
+        iterationCount?: number;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
+      // Mark where this attempt's chunks start, so a recovery that runs this call again can supersede them.
+      if (pubsub && typeof initData.iterationCount === 'number') {
+        await emitIterationStartEvent(pubsub, runId, initData.iterationCount, toolCallId);
+      }
       const logger = (mastra as any)?.getLogger?.();
 
       // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before

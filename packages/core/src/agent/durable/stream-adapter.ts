@@ -162,6 +162,51 @@ function mergeCallbackToolChunks<T extends ToolCallChunk | ToolResultChunk>(stor
   return [...chunks.values()];
 }
 
+/** Where a recovery's claim says the superseded execution's uncheckpointed tail starts. */
+export interface SupersededTail {
+  /** Log index of the first event the recovery re-executes. */
+  supersededFrom: number;
+  /**
+   * When the model step was checkpointed and only tool calls re-execute, the
+   * tool calls that run again. Only their chunks are superseded: tool calls
+   * that finished before the takeover are checkpointed and do not run again.
+   */
+  supersededToolCallIds?: string[];
+}
+
+function chunkToolCallId(event: AgentStreamEvent): string | undefined {
+  if (event.type !== AgentStreamEventTypes.CHUNK) return undefined;
+  const toolCallId = (event.data as { payload?: { toolCallId?: unknown } } | undefined)?.payload?.toolCallId;
+  return typeof toolCallId === 'string' ? toolCallId : undefined;
+}
+
+/** Drop only the uncheckpointed tail superseded by a later recovery. Earlier generations' committed steps remain. */
+export function createSupersededEventFilter(history: AgentStreamEvent[]): (event: AgentStreamEvent) => boolean {
+  const ranges = history.flatMap(event => {
+    if (event.type !== AgentStreamEventTypes.OWNERSHIP_CLAIMED || event.index === undefined) return [];
+    const { supersededFrom: from, supersededToolCallIds } = (event.data ?? {}) as Partial<SupersededTail>;
+    return typeof from === 'number' && from < event.index && event.generation !== undefined
+      ? [
+          {
+            from,
+            to: event.index,
+            generation: event.generation,
+            toolCallIds: Array.isArray(supersededToolCallIds) ? new Set(supersededToolCallIds) : undefined,
+          },
+        ]
+      : [];
+  });
+  return event =>
+    event.index === undefined ||
+    event.generation === undefined ||
+    !ranges.some(({ from, to, generation, toolCallIds }) => {
+      if (event.index! < from || event.index! >= to || event.generation! >= generation) return false;
+      if (!toolCallIds) return true;
+      const toolCallId = chunkToolCallId(event);
+      return toolCallId !== undefined && toolCallIds.has(toolCallId);
+    });
+}
+
 /**
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
@@ -244,6 +289,7 @@ function withLateToolResultsInPlace(steps: Record<string, unknown>[]): Record<st
   return result;
 }
 
+/** Map legacy workflow token usage to the canonical LanguageModelUsage fields. */
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
   const inputTokens = (raw?.inputTokens as number | undefined) ?? (raw?.promptTokens as number | undefined);
   const outputTokens = (raw?.outputTokens as number | undefined) ?? (raw?.completionTokens as number | undefined);
@@ -311,6 +357,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * of a superseded execution doesn't close the stream.
    */
   rereadMinGeneration?: () => Promise<number | undefined>;
+  /** Reject events in uncheckpointed tails superseded before this reader attached. */
+  keepReplayEvent?: (event: AgentStreamEvent) => boolean | Promise<boolean>;
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -441,6 +489,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     offset,
     minGeneration,
     rereadMinGeneration,
+    keepReplayEvent,
     idleTimeoutMs,
     isAlive,
     onChunk,
@@ -658,6 +707,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
     // Parse the event data as AgentStreamEvent
     const streamEvent = event as unknown as AgentStreamEvent;
+    if (keepReplayEvent && !(await keepReplayEvent(streamEvent))) return;
 
     // Another execution took the run over: what the superseded one still
     // publishes is stale, and doesn't prove the run's producer is alive.
@@ -1206,12 +1256,36 @@ export async function emitChunkEvent<OUTPUT = undefined>(
  * offset. Readers swallow it and never forward it as a chunk. Readers that
  * reconnect past it read the claim's generation from storage instead.
  */
-export async function emitOwnershipClaimedEvent(pubsub: PubSub, runId: string, generation: number): Promise<void> {
+export async function emitOwnershipClaimedEvent(
+  pubsub: PubSub,
+  runId: string,
+  generation: number,
+  superseded?: SupersededTail,
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
     runId,
-    data: {},
+    data: superseded ?? {},
     generation,
+  });
+}
+
+/**
+ * Mark the start of an execution attempt before it can publish any chunks:
+ * the model step of iteration `stepIndex`, or with `toolCallId` one of its tool calls.
+ */
+export async function emitIterationStartEvent(
+  pubsub: PubSub,
+  runId: string,
+  stepIndex: number,
+  toolCallId?: string,
+): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ITERATION_START,
+    runId,
+    data: toolCallId === undefined ? {} : { toolCallId },
+    stepIndex,
+    ...generationTag(runId),
   });
 }
 
@@ -1273,11 +1347,13 @@ export async function publishStepStartChunk(
   runId: string,
   chunk: ChunkType,
   outputProcessed?: boolean,
+  stepIndex?: number,
 ): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
+    ...(stepIndex === undefined ? {} : { stepIndex }),
     ...(outputProcessed ? { outputProcessed } : {}),
     ...generationTag(runId),
   });

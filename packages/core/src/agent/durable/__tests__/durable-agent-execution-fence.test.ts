@@ -675,6 +675,19 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
+        // The real LLM execution boundary precedes any model or processor output.
+        const history = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const abandonedStartAt = history.findLast(event => event.type === AgentStreamEventTypes.ITERATION_START)?.index;
+        expect(abandonedStartAt).toEqual(expect.any(Number));
+        // Simulate a model step published before its result was checkpointed.
+        await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: AgentStreamEventTypes.STEP_START,
+          runId,
+          data: { type: 'step-start', payload: { messageId: 'same-message' } },
+          stepIndex: 0,
+          generation: originalGeneration,
+          producedAt: Date.now(),
+        });
         // The original execution's events so far carry its claim.
         await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
         expect(events.every(event => event.generation === originalGeneration)).toBe(true);
@@ -713,6 +726,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The claim is announced before the recovered execution publishes, and everything it publishes carries it.
         const claimedAt = events.findIndex(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
         expect(events[claimedAt]?.generation).toBe(recoveredGeneration);
+        const replay = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        expect((replay[claimedAt]?.data as { supersededFrom?: number }).supersededFrom).toBe(abandonedStartAt);
+        const replayed: Array<{ type: string; generation?: number }> = [];
+        const unsubscribe = await agentB.__subscribeToRunStream(runId, {}, event => replayed.push(event));
+        expect(
+          replayed.filter(
+            event => event.type === AgentStreamEventTypes.STEP_START && event.generation === originalGeneration,
+          ),
+        ).toHaveLength(0);
+        await unsubscribe();
         const afterClaim = events.slice(claimedAt + 1);
         expect(afterClaim.some(event => event.type === 'finish' && event.generation === recoveredGeneration)).toBe(
           true,
@@ -735,6 +758,207 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         ]);
 
         await startedStream.stop();
+        started.cleanup();
+        recovered.cleanup();
+      },
+    );
+
+    it.skipIf(backend === 'lease')(
+      'uses the highest generation when a stale step start arrives after its successor',
+      async () => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const cache = new InMemoryServerCache();
+        const original = gatedModel('original answer');
+        const agentA = buildAgent({ model: original.model, storage, memory, cache });
+        const started = await agentA.stream('What is the answer?', { memory: { thread: THREAD, resource: RESOURCE } });
+        const { runId } = started;
+        const originalStream = collect(started.fullStream);
+        await original.entered;
+        await waitForCheckpoint(storage, runId);
+        const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+
+        // A prior takeover already started this iteration; its predecessor publishes a late start.
+        // The next recovery must select the highest generation, not the last appended start.
+        const successorStart = (await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0)).length;
+        for (const generation of [originalGeneration + 1, originalGeneration]) {
+          await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+            type: AgentStreamEventTypes.ITERATION_START,
+            runId,
+            data: {},
+            stepIndex: 0,
+            generation,
+            producedAt: Date.now(),
+          });
+        }
+
+        globalRunRegistry.clear();
+        __resetExecutionFencesForTests();
+        const recovering = gatedModel('recovered answer');
+        const agentB = buildAgent({ model: recovering.model, storage, memory, cache });
+        const recovered = await agentB.recover(runId, { force: true });
+        const claims = await (agentB.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const claim = claims.findLast(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
+        expect((claim?.data as { supersededFrom?: number })?.supersededFrom).toBe(successorStart);
+        original.release();
+        recovering.release();
+        await drain(recovered.fullStream);
+        await originalStream.stop();
+        started.cleanup();
+        recovered.cleanup();
+      },
+    );
+
+    it.skipIf(backend === 'lease')(
+      'replay omits the superseded output of a tool call that recovery runs again, and keeps tool calls that finished',
+      async () => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const cache = new InMemoryServerCache();
+        // MockLanguageModelV2 rather than aimock: the model call must be scripted in-process alongside a gated tool.
+        let modelCalls = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async () => {
+            modelCalls++;
+            const toolCall = (toolCallId: string, id: string) => ({
+              type: 'tool-call' as const,
+              toolCallType: 'function' as const,
+              toolCallId,
+              toolName: 'lookup',
+              input: JSON.stringify({ id }),
+              providerExecuted: false,
+            });
+            const body =
+              modelCalls === 1
+                ? [
+                    toolCall('call-fast', 'fast'),
+                    toolCall('call-slow', 'slow'),
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'tool-calls' as const,
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ]
+                : [
+                    { type: 'text-start' as const, id: 'text-1' },
+                    { type: 'text-delta' as const, id: 'text-1', delta: 'final answer' },
+                    { type: 'text-end' as const, id: 'text-1' },
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'stop' as const,
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ];
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start' as const, warnings: [] },
+                {
+                  type: 'response-metadata' as const,
+                  id: `resp-${modelCalls}`,
+                  modelId: 'mock',
+                  timestamp: new Date(0),
+                },
+                ...body,
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        });
+        const slowGate = gate();
+        let slowEntered!: () => void;
+        const slowStarted = new Promise<void>(resolve => {
+          slowEntered = resolve;
+        });
+        const toolRuns: string[] = [];
+        const lookupTool = (blockSlow: boolean) =>
+          createTool({
+            id: 'lookup',
+            description: 'Look something up',
+            inputSchema: z.object({ id: z.string() }),
+            execute: async ({ id }) => {
+              toolRuns.push(id);
+              if (blockSlow && id === 'slow') {
+                slowEntered();
+                await slowGate.opened;
+              }
+              return { found: id };
+            },
+          });
+
+        const agentA = buildAgent({ model, storage, memory, cache, tools: { lookup: lookupTool(true) } });
+        const started = await agentA.stream('What is the answer?', { memory: { thread: THREAD, resource: RESOURCE } });
+        const { runId } = started;
+        const originalStream = collect(started.fullStream);
+        await slowStarted;
+        const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+
+        // Wait until the model step and the fast tool call are checkpointed while the slow one still runs.
+        const workflows = (await storage.getStore('workflows'))!;
+        await vi.waitFor(async () => {
+          const parent = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+          const parentSnapshot = parent?.snapshot as any;
+          const nestedRunId = parentSnapshot?.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+          const nested = await workflows.getWorkflowRunById({
+            runId: nestedRunId ?? runId,
+            workflowName: DurableStepIds.AGENTIC_EXECUTION,
+          });
+          const context = (nested?.snapshot as any)?.context;
+          expect(context?.[DurableStepIds.LLM_EXECUTION]?.status).toBe('success');
+          expect(context?.[DurableStepIds.TOOL_CALL]?.metadata?.foreachProgress?.[0]).toBeDefined();
+        });
+
+        // The slow call's result is published before the run is taken over, but never checkpointed.
+        await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: AgentStreamEventTypes.CHUNK,
+          runId,
+          data: {
+            type: 'tool-result',
+            runId,
+            from: 'AGENT',
+            payload: { toolCallId: 'call-slow', toolName: 'lookup', result: { found: 'stale' } },
+          },
+          generation: originalGeneration,
+          producedAt: Date.now(),
+        });
+
+        globalRunRegistry.clear();
+        __resetExecutionFencesForTests();
+        const agentB = buildAgent({ model, storage, memory, cache, tools: { lookup: lookupTool(false) } });
+        const recovered = await agentB.recover(runId, { force: true });
+        const recoveredGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+        expect(recoveredGeneration).toBeGreaterThan(originalGeneration);
+        const history = await (agentB.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const claim = history.findLast(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
+        expect(claim?.data).toMatchObject({ supersededToolCallIds: ['call-slow'] });
+        const staleAt = history.findIndex(event => (event.data as any)?.payload?.result?.found === 'stale');
+        expect(staleAt).toBeGreaterThan(-1);
+        expect(staleAt).toBeLessThan(history.indexOf(claim!));
+
+        const recoveredChunks = await drain(recovered.fullStream);
+        expect(recoveredChunks.some(chunk => chunk.type === 'finish')).toBe(true);
+        slowGate.open();
+        // Recovery runs only the call that had not finished.
+        expect(toolRuns).toEqual(['fast', 'slow', 'slow']);
+
+        const replayed: Array<{ type: string; generation?: number; data?: any }> = [];
+        const unsubscribe = await agentB.__subscribeToRunStream(runId, {}, event => replayed.push(event));
+        await unsubscribe();
+        const chunks = replayed.filter(event => event.type === AgentStreamEventTypes.CHUNK).map(event => event.data);
+        const resultsFor = (toolCallId: string) =>
+          chunks
+            .filter(chunk => chunk?.type === 'tool-result' && chunk.payload?.toolCallId === toolCallId)
+            .map(chunk => chunk.payload.result);
+        // The model step's tool calls were checkpointed and stay; the fast call's result stays.
+        expect(chunks.filter(chunk => chunk?.type === 'tool-call').map(chunk => chunk.payload.toolCallId)).toEqual([
+          'call-fast',
+          'call-slow',
+        ]);
+        expect(resultsFor('call-fast')).toEqual([{ found: 'fast' }]);
+        // The slow call's superseded result is replaced by the one its re-run published.
+        expect(resultsFor('call-slow')).toEqual([{ found: 'slow' }]);
+
+        await originalStream.stop();
         started.cleanup();
         recovered.cleanup();
       },

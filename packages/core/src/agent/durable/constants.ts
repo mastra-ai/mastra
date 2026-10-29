@@ -46,6 +46,8 @@ export const AgentControlEventTypes = {
 export const AgentStreamEventTypes = {
   /** Chunk of streaming data (text, tool call, etc.) */
   CHUNK: 'chunk',
+  /** Internal boundary preceding all output from an LLM execution step. */
+  ITERATION_START: 'iteration-start',
   /** Start of a new step in the agentic loop */
   STEP_START: 'step-start',
   /** End of a step in the agentic loop */
