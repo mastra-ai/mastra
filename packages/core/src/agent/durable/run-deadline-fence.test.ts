@@ -166,4 +166,67 @@ describe('run deadline fence', () => {
     expect(deadline.fence).toBeUndefined();
     await expect(expire()).resolves.toBeUndefined();
   });
+
+  describe('when the fence cannot be armed', () => {
+    const logger = () => ({ warn: vi.fn(), debug: vi.fn() });
+    const armWith = (mastra: Mastra) =>
+      armRunDeadline({ mastra, agentId, runId, requestContext: undefined, expiresAt: Date.now() + 60_000 });
+
+    it('logs a warning and arms without a fence when the store throws on raise', async () => {
+      const storage = new InMemoryStore();
+      const memoryStore = (await storage.getStore('memory')) as MemoryStorage;
+      vi.spyOn(memoryStore, 'raiseRunFence').mockRejectedValue(new Error('db down'));
+      const log = logger();
+      const mastra = {
+        getAgentById: () => ({ getMemory: async () => ({ storage }) }),
+        getLogger: () => log,
+      } as unknown as Mastra;
+
+      const { deadline, expire } = await armWith(mastra);
+
+      expect(deadline.fence).toBeUndefined();
+      await expect(expire()).resolves.toBeUndefined();
+      expect(log.warn).toHaveBeenCalledTimes(1);
+      expect(log.warn.mock.calls[0]![0]).toMatch(new RegExp(`run ${runId} \\(agent ${agentId}\\).*db down`));
+      expect(log.debug).not.toHaveBeenCalled();
+    });
+
+    it('logs at debug and arms without a fence when a newer session owns it', async () => {
+      const storage = new InMemoryStore();
+      const memoryStore = (await storage.getStore('memory')) as MemoryStorage;
+      await memoryStore.raiseRunFence({ runId, generation: Number.MAX_SAFE_INTEGER, ownerId: 'newer' });
+      const log = logger();
+      const mastra = {
+        getAgentById: () => ({ getMemory: async () => ({ storage }) }),
+        getLogger: () => log,
+      } as unknown as Mastra;
+
+      const { deadline } = await armWith(mastra);
+
+      expect(deadline.fence).toBeUndefined();
+      expect(log.debug).toHaveBeenCalledTimes(1);
+      expect(log.debug.mock.calls[0]![0]).toMatch(new RegExp(`run ${runId} \\(agent ${agentId}\\).*newer session`));
+      expect(log.warn).not.toHaveBeenCalled();
+    });
+
+    it('logs a warning and arms without a fence when the memory store cannot be resolved', async () => {
+      const log = logger();
+      const mastra = {
+        getAgentById: () => ({
+          getMemory: async () => {
+            throw new Error('memory misconfigured');
+          },
+        }),
+        getLogger: () => log,
+      } as unknown as Mastra;
+
+      const { deadline } = await armWith(mastra);
+
+      expect(deadline.fence).toBeUndefined();
+      expect(log.warn).toHaveBeenCalledTimes(1);
+      expect(log.warn.mock.calls[0]![0]).toMatch(
+        new RegExp(`run ${runId} \\(agent ${agentId}\\).*memory misconfigured`),
+      );
+    });
+  });
 });

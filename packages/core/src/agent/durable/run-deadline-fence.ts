@@ -10,13 +10,19 @@ import { currentRunFenceScope, runInRunFenceScope } from './run-fence-scope';
 async function resolveMemoryStore(
   mastra: Mastra | undefined,
   agentId: string,
+  runId: string,
   requestContext: RequestContext | undefined,
 ): Promise<MemoryStorage | undefined> {
   try {
     const memory = await mastra?.getAgentById(agentId)?.getMemory({ requestContext });
     const store = await memory?.storage?.getStore('memory');
     return (await supportsRunFencing(store)) ? store : undefined;
-  } catch {
+  } catch (error) {
+    mastra
+      ?.getLogger?.()
+      ?.warn?.(
+        `[DurableAgent] Could not resolve the memory store for the deadline fence of run ${runId} (agent ${agentId}); writes only get the deadline check: ${error}`,
+      );
     return undefined;
   }
 }
@@ -44,16 +50,30 @@ export async function armRunDeadline(args: {
   expiresAt: number;
 }): Promise<{ deadline: DurableRunDeadline; expire: () => Promise<void>; retire: () => Promise<void> }> {
   const { runId, expiresAt } = args;
-  const store = await resolveMemoryStore(args.mastra, args.agentId, args.requestContext);
+  const store = await resolveMemoryStore(args.mastra, args.agentId, runId, args.requestContext);
   if (!store) return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
 
   // Claimed runs use small claim counters; claim-less runs order fences by time.
   // Sessions take odd generations and expiries even ones, so a session armed in
   // the same millisecond as an earlier session expired still outranks it.
   const fence: RunFence = { runId, generation: Date.now() * 2 + 1, ownerId: `deadline:${expiresAt}` };
-  const raised = await store.raiseRunFence(fence).catch(() => false);
-  // A newer session already owns the fence; steps fall back to deadline checks.
-  if (!raised) return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
+  const logger = args.mastra?.getLogger?.();
+  let raised: boolean;
+  try {
+    raised = await store.raiseRunFence(fence);
+  } catch (error) {
+    logger?.warn?.(
+      `[DurableAgent] Failed to raise the deadline fence for run ${runId} (agent ${args.agentId}); writes only get the deadline check: ${error}`,
+    );
+    return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
+  }
+  if (!raised) {
+    // A newer session already owns the fence; steps fall back to deadline checks.
+    logger?.debug?.(
+      `[DurableAgent] Deadline fence for run ${runId} (agent ${args.agentId}) not raised: a newer session owns it`,
+    );
+    return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
+  }
 
   return {
     deadline: { expiresAt, fence: { generation: fence.generation, ownerId: fence.ownerId } },
@@ -90,7 +110,7 @@ export async function runInRunDeadlineScope<T>(
   if (!runId || !agentId || currentRunFenceScope() || getExecutionClaim(requestContext, runId)) return fn();
   const deadline = getRunDeadline(requestContext, runId);
   if (!deadline?.fence) return fn();
-  const store = await resolveMemoryStore(args.mastra, agentId, requestContext);
+  const store = await resolveMemoryStore(args.mastra, agentId, runId, requestContext);
   if (!store) return fn();
   const fence: RunFence = { runId, ...deadline.fence };
   return runInRunFenceScope({ fenceFor: target => (target === store ? fence : undefined) }, fn);
