@@ -438,6 +438,24 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   // Scopes ---------------------------------------------------------------------------------------
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult> {
+    // A racing materialization can lose a unique-index or write-conflict race; the retry re-reads
+    // what the winner created and only adds what is still missing.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.#materializeScopeOnce(input);
+      } catch (error) {
+        const core = await loadPagesCore();
+        const raced =
+          error instanceof core.KnowledgePageKeyConflictError ||
+          error instanceof KnowledgeConflictError ||
+          isDuplicateKey(error) ||
+          (error as { hasErrorLabel?: (label: string) => boolean })?.hasErrorLabel?.('TransientTransactionError');
+        if (!raced || attempt >= 4) throw error;
+      }
+    }
+  }
+
+  async #materializeScopeOnce(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult> {
     const bounds = await this.#bounds();
     bounds.assertKnowledgePageDescriptionWithinBound(input.description);
     for (const child of input.children ?? []) bounds.assertKnowledgePageDescriptionWithinBound(child.description);
