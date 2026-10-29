@@ -135,7 +135,7 @@ export function SpanDataPanelView({
     <section
       aria-labelledby={headingId}
       data-slot="span-data-panel"
-      className={cn('flex min-h-0 min-w-96 flex-1 flex-col overflow-hidden', className)}
+      className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}
     >
       <DataPanel.Header className="flex-nowrap">
         {span ? (

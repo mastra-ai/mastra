@@ -498,8 +498,9 @@ export function TraceDataPanelView({
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
                   // The bar itself is the search field: no pill inside the square panel, the
-                  // bottom rule is its only edge. The view switch stays as flat square icons.
-                  <DataPanel.Header className="gap-1 border-b border-surface-rim">
+                  // bottom rule is its only edge, and keyboard focus lights that rule like a
+                  // field's rim. The view switch stays as flat square icons.
+                  <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
                     <SearchIcon aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
                     <input
                       type="search"
@@ -776,7 +777,8 @@ function TracePanelColumns({
             <PanelSeparator variant="pill" />
           </>
         )}
-        <Panel id="trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+        {/* 384px: the timeline grid's own minimum (two 12rem columns), so its end never clips. */}
+        <Panel id="trace-main" minSize={384} className="flex min-h-0 min-w-0 flex-col">
           {children}
         </Panel>
         {spanPanelSlot && (

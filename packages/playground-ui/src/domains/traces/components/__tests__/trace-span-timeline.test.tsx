@@ -7,6 +7,7 @@ import { getSpanTimingLayout } from '../../utils/span-timing';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
 import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
+import { formatDuration } from '@/utils/duration';
 
 const scrollIntoView = vi.fn();
 Element.prototype.scrollIntoView = scrollIntoView;
@@ -127,6 +128,11 @@ describe('TraceSpanTimeline', () => {
       `${layout.leftPercent}%`,
       `${layout.widthPercent}%`,
     ]);
+
+    // The duration is printed right where the bar ends.
+    const childRow = screen.getByLabelText(`View details for span ${child.name}`);
+    const duration = within(childRow).getByText(formatDuration(child.latency));
+    expect(duration.style.left).toBe(`${layout.leftPercent + layout.widthPercent}%`);
   });
 
   it('scrolls the reveal span into view once its parent expands', () => {
