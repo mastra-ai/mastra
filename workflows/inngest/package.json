@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.10.8-alpha.4",
+  "version": "1.10.8",
   "description": "Mastra Inngest integration",
   "license": "Apache-2.0",
   "type": "module",
@@ -47,7 +47,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "inngest": "^4.26.0"
   },
   "devDependencies": {

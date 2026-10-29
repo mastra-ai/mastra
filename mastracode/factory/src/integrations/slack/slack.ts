@@ -1140,9 +1140,11 @@ async function setThreadMuted(
 
 /** Slack app credentials, passed in explicitly rather than read from env here. */
 interface SlackCredentials {
+  mode?: 'webhook' | 'socket';
   clientId?: string;
   clientSecret?: string;
-  signingSecret: string;
+  signingSecret?: string;
+  appToken?: string;
   botToken?: string;
 }
 

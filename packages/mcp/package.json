@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "2.6.0-alpha.3",
+  "version": "2.6.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -58,7 +58,7 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.135",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.137",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",

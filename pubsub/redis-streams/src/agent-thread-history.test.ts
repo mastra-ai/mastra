@@ -6,7 +6,7 @@
  */
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // AgentThreadStreamRuntime is internal to @mastra/core with no public export.
 import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
@@ -280,5 +280,65 @@ describe('agent thread history over Redis', () => {
     await resumed.registered;
     resumed.end('success');
     await waitFor(async () => (await entryCount(key)) === 3);
+  });
+
+  // The observational memory observer has no storage and runs on its own
+  // `<thread>-observational-memory-observer` thread. Its runs used to stay on the
+  // topic until MAXLEN, filling Redis (one stream reached 647 MB).
+  it("deletes a memoryless agent's finished run once live readers had time to read it", async () => {
+    const resourceId = 'memoryless-user';
+    const threadId = `parent-thread-${Date.now()}-observational-memory-observer`;
+    const key = streamKeyFor(resourceId, threadId);
+    const agent = { id: 'observational-memory-observer', getMemory: async () => undefined } as any;
+
+    // Another process reading the thread live.
+    const subscription = await new AgentThreadStreamRuntime().subscribeToThread(
+      agent,
+      { threadId, resourceId },
+      makePubSub(),
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+
+    const run = startRun(
+      new AgentThreadStreamRuntime(),
+      agent,
+      makePubSub(),
+      { runId: 'observer-run', threadId, resourceId, messageId: 'm1' },
+      [
+        { type: 'text-delta', payload: { text: '<observations>' } },
+        { type: 'finish', payload: {} },
+      ],
+    );
+    await run.registered;
+    await waitFor(() => collected.some(part => part.type === 'finish'));
+
+    // Fake only setTimeout so the delayed trim can be stepped over while Redis I/O stays real.
+    const pollReal = async (predicate: () => Promise<boolean>) => {
+      const deadline = Date.now() + 5_000;
+      while (!(await predicate())) {
+        if (Date.now() > deadline) throw new Error('Timed out waiting for condition');
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    };
+    const terminalTypes = async () =>
+      (await inspector.xRange(key, '-', '+')).map(entry => JSON.parse(entry.message.event).data.type);
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      run.end('success');
+      await pollReal(async () => (await terminalTypes()).includes('run-completed'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await entryCount(key)).toBeGreaterThan(2);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await pollReal(async () => (await entryCount(key)) === 2);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await terminalTypes()).toEqual(['run-registered', 'run-completed']);
+    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'finish']);
+    subscription.unsubscribe();
+    await consumed;
   });
 });

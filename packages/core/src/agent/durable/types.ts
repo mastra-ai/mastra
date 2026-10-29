@@ -424,6 +424,8 @@ export interface DurableLLMStepOutput {
   deferredStepFinishChunk?: unknown;
   /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this step's first chunk (kept with that chunk's clock) */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -446,6 +448,8 @@ export interface DurableToolCallInput {
   activeTools?: string[] | null;
   /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
   completionStartTime?: Date;
+  /** Time to first token of the same step, applied the same way */
+  timeToFirstTokenMs?: number;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -583,6 +587,8 @@ export interface DurableAgenticExecutionOutput {
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this iteration's first chunk */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -852,6 +858,8 @@ export interface RunRegistryEntry {
   resumeModelSpanData?: unknown;
   /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
   resumeCompletionStartTime?: Date;
+  /** Time to first token of the resumed segment's spans, kept the same way. */
+  resumeTimeToFirstTokenMs?: number;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.16.0-alpha.8",
+  "version": "1.16.0",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -103,7 +103,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.81.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langsmith",
-  "version": "1.4.0-alpha.3",
+  "version": "1.4.0",
   "description": "Langsmith observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "langsmith": "^0.8.12"
+    "langsmith": "^0.11.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.136",

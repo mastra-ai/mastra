@@ -15,16 +15,22 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "aleph-alpha/kolibri-1": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "zai-org/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "aleph-alpha/kolibri-1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "deepseek-ai/deepseek-v4-flash": [
@@ -37,12 +43,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

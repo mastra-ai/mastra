@@ -15,10 +15,9 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
+    "MiniMax-M3": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "gemma-4-31B-it": [
@@ -26,9 +25,10 @@
         "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "gpt-oss-120b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "DeepSeek-V3.2": [

@@ -167,16 +167,10 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "moonshotai/Kimi-K3": [
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "tencent/Hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "tencent/Hy4-preview": [
@@ -185,16 +179,46 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "tencent/Hy3": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "stepfun-ai/Step-3.7-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "thinkingmachines/Inkling": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "XiaomiMiMo/MiMo-V2.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "XiaomiMiMo/MiMo-V2.5-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-oss-20b": [
@@ -209,30 +233,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
-      {
-        "type": "effort",
-        "values": ["high"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
@@ -245,13 +245,37 @@
         "values": ["high", "max"]
       }
     ],
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-397B-A17B": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "Qwen/Qwen3-8B": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -263,13 +287,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "Qwen/Qwen3-8B": [
+    "Qwen/Qwen3.5-397B-A17B": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -281,28 +299,10 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "XiaomiMiMo/MiMo-V2.5-Pro": [
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "XiaomiMiMo/MiMo-V2.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "thinkingmachines/Inkling": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "stepfun-ai/Step-3.7-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

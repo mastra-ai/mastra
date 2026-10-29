@@ -186,30 +186,32 @@ function RepositoryRow({
           aria-label={`${expanded ? 'Hide' : 'Show'} settings for ${label}`}
           onClick={() => setExpanded(value => !value)}
         >
-          <span className="flex min-w-0 flex-1 flex-col gap-1 pr-28 pl-8 sm:flex-row sm:items-center sm:gap-2">
-            <span className="flex min-w-0 items-center gap-2 sm:flex-1">
-              <SettingsIntegrationIcon provider={provider} />
-              <Txt
-                as="span"
-                variant="caption"
-                tone={repository.inEnvironment ? undefined : 'muted'}
-                className="min-w-0 flex-1 truncate"
-                title={label}
-              >
-                {label}
-              </Txt>
-              <ChevronDown aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
+          <span className="flex min-w-0 flex-1 items-center gap-2 pr-28 pl-8">
+            <span className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+              <span className="flex min-w-0 items-center gap-2 sm:flex-1">
+                <SettingsIntegrationIcon provider={provider} />
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone={repository.inEnvironment ? undefined : 'muted'}
+                  className="min-w-0 flex-1 truncate"
+                  title={label}
+                >
+                  {label}
+                </Txt>
+              </span>
+              {!repository.inEnvironment && (
+                <Txt as="span" variant="caption" tone="muted">
+                  Skipped
+                </Txt>
+              )}
+              {repository.lastBuildStatus === 'failed' && (
+                <Badge size="sm" variant="destructive">
+                  Last build failed
+                </Badge>
+              )}
             </span>
-            {!repository.inEnvironment && (
-              <Txt as="span" variant="caption" tone="muted">
-                Skipped
-              </Txt>
-            )}
-            {repository.lastBuildStatus === 'failed' && (
-              <Badge size="sm" variant="destructive">
-                Last build failed
-              </Badge>
-            )}
+            <ChevronDown aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
           </span>
         </SettingsActionRow>
         {/* Native buttons block @hello-pangea/dnd drags. */}

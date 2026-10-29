@@ -801,6 +801,7 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
           `import { registerApiRoute } from '@mastra/core/server';
 import { camelCase } from 'lodash';
 import { getDaysInMonth, isLeapYear } from 'date-fns';
+import { greet } from '@inner/raw-ts';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { toPath } from 'unicorn-magic';
@@ -812,6 +813,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
     days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
     externalFile: basename(toPath(pathToFileURL(join(process.cwd(), 'optimized-entry.txt')))),
     leapYear: isLeapYear(new Date('2028-02-10T12:00:00Z')),
+    workspaceGreeting: greet('workspace'),
   }),
 });
 `,
@@ -930,6 +932,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
         days: 28,
         externalFile: 'optimized-entry.txt',
         leapYear: true,
+        workspaceGreeting: 'hello workspace c',
       });
     });
 

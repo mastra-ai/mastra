@@ -97,12 +97,6 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "Pro/zai-org/GLM-5": [
       {
         "type": "toggle"
@@ -125,7 +119,13 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -138,7 +138,7 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -154,17 +154,7 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.5-9B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.5-35B-A3B": [
+    "Qwen/Qwen3.5-4B": [
       {
         "type": "toggle"
       },
@@ -184,7 +174,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-14B": [
+    "Qwen/Qwen3.5-27B": [
       {
         "type": "toggle"
       },
@@ -194,7 +184,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-27B": [
+    "Qwen/Qwen3.5-9B": [
       {
         "type": "toggle"
       },
@@ -228,7 +218,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-32B": [
+    "Qwen/Qwen3.5-35B-A3B": [
       {
         "type": "toggle"
       },
@@ -238,7 +228,17 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-4B": [
+    "Qwen/Qwen3-14B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-32B": [
       {
         "type": "toggle"
       },

@@ -95,11 +95,10 @@ async function checkBucketHealth(
         responseData.nodes[0].status === 'healthy'
       ) {
         return;
-      } else {
-        console.log(`Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempt++;
       }
+      console.log(`Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      attempt++;
     } catch (error) {
       console.log(
         `Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed with error: ${error.message}`,

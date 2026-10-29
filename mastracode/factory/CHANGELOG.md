@@ -1,5 +1,325 @@
 # @mastra/factory
 
+## 0.26.0-alpha.0
+
+### Minor Changes
+
+- Added custom model provider creation during Factory setup, with immediate provider and model catalog refresh for organization and personal flows. ([#28706](https://github.com/mastra-ai/mastra/pull/28706))
+
+### Patch Changes
+
+- The latest account-related failure card in the Factory web chat now names the credential the session runs on. For example: **Runs on Claude Pro/Max · Shared by the organization**. A rate limit during a work-item review no longer looks like a problem with your own subscription. The line is left out on older failure cards and after the session switches to another model. In both cases, it could name a credential that a retry would not use. ([#28704](https://github.com/mastra-ai/mastra/pull/28704))
+
+  The Slack failure card shows the same line, **Shared by the organization** or **Personal credential**, while the session is still on the model that failed.
+
+  **Provider rate limit reached** now says the provider account hit a rate or usage limit. It no longer suggests a short wait, because providers report a brief burst and a used-up subscription the same way.
+
+  In **Settings → Models**, the personal **Apply to running sessions** button is now **Apply to my running chats**, which is what it switches: work-item runs and teammates' sessions keep their model. When nothing switched, the summary now says **No sessions switched** instead of **No running sessions to switch**.
+
+- More failed-run cards in the Factory web chat now come with a button that fixes them: ([#28695](https://github.com/mastra-ai/mastra/pull/28695))
+
+  - **Request timed out**, **Provider rate limit reached** and **Model provider temporarily unavailable** offer **Continue**, which resumes the run without typing a message. It only appears on the session's latest failure.
+  - **Provider rate limit reached** also offers **Review credentials** and **Change model**, and **Model provider temporarily unavailable** offers **Change model**.
+  - **Model request rejected** and **Model request failed** offer **Change model**.
+  - **Conversation exceeds the model's limit** and **Conversation history rejected** offer **New session**.
+
+  In Slack, every card that offers **Change model** in the web chat now links to the session, and the rate-limit card also links to the credential settings.
+
+  Returning from another thread of a workspace session to its first thread now switches the session back to it, so messages sent there no longer land in the thread you left.
+
+## 0.25.0
+
+### Minor Changes
+
+- Added Slack Socket Mode support to Factory integrations, including transport-specific credential validation and clean connection shutdown. ([#28449](https://github.com/mastra-ai/mastra/pull/28449))
+
+  ```ts
+  new SlackIntegration({
+    mode: 'socket',
+    appToken: process.env.SLACK_APP_TOKEN!,
+    botToken: process.env.SLACK_APP_BOT_TOKEN!,
+  });
+  ```
+
+- Added a `reply_in_thread` tool so a session's agent chooses what it posts to Slack, instead of every bit of reply text landing in the thread. The agent posts a short note when it starts a longer job, asks when it needs an answer, and posts the outcome when it finishes. To stay quiet, it doesn't post. ([#28071](https://github.com/mastra-ai/mastra/pull/28071))
+
+  - Replies stream into the thread as the agent writes them, with "is typing..." while they start.
+  - After five minutes without posting, the agent gets one reminder to post a short status if it would help.
+  - When you prompt a Slack-linked session from the web UI, or it wakes up on its own, the agent posts only the outcome to the thread. It does that when people there asked for the work or are waiting on it.
+
+  To post the agent's full reply text again:
+
+  ```ts
+  new SlackIntegration({ signingSecret, adapterOptions: { textDisplay: 'show' } });
+  ```
+
+- Added `@bot mute` and `@bot unmute` for Slack threads. A muted bot ignores messages that don't tag it until someone tags it with `unmute`. It confirms either change with a reaction instead of a reply. Only people who can prompt the session can mute or unmute it. ([#28071](https://github.com/mastra-ai/mastra/pull/28071))
+
+- Made the Factory MCP server work with Claude's custom connectors and browser MCP clients, and added experimental activity events. ([#28019](https://github.com/mastra-ai/mastra/pull/28019))
+
+  **Works with Claude and browser clients.** Browser-based MCP clients can now call the endpoint and read its sign-in challenge. The server tells clients what a Factory is and which tools to start with. `/web/config/features` now reports `mcp: true` when the Factory serves its MCP endpoint.
+
+  **Follow Factory activity (experimental).** MCP clients can poll a `factory.activity` event to see work item and session activity. Pass a `workItemId` or `actions` to narrow it. Work item activity always shows up. When it happened in another member's private session it is marked `privateSession: true` without naming the session, and activity on that session alone is left out. Events are delivered by polling only, so Claude and ChatGPT don't use it yet.
+
+  ```json
+  {
+    "method": "events/poll",
+    "params": { "name": "factory.activity", "arguments": { "workItemId": "<id>" }, "cursor": null }
+  }
+  ```
+
+  Start with `cursor: null` and pass back the returned `cursor` on each poll.
+
+  The endpoint speaks MCP 2026-07-28, and also serves clients that still open with `initialize` (such as VS Code and Cursor) statelessly.
+
+- When Platform credentials are set and you don't pass a `sandbox`, `MastraFactory` now picks one for you. Under `mastra dev` it runs sessions in a `LocalFactorySandbox`, so development no longer starts remote machines. Built deployments get a `PlatformFactorySandbox`. A `sandbox` you pass still takes precedence. ([#28400](https://github.com/mastra-ai/mastra/pull/28400))
+
+  `LocalFactorySandbox` options are now optional. `root` defaults to `MASTRACODE_LOCAL_SANDBOX_ROOT`, or `~/.mastracode/web/sandboxes` when that is unset. `env` defaults to an allow-list of host variables, so git and TLS keep working while app secrets stay out of repository commands.
+
+  ```ts
+  // Before: the host wired the Platform sandbox itself
+  new MastraFactory({ sandbox: new PlatformFactorySandbox() });
+
+  // After: omit it; local under `mastra dev`, Platform when built
+  new MastraFactory({});
+  ```
+
+- Added `processors` to `FactoryIntegration`. An integration can now add input and output processors to every session run, alongside its tools. They run before Factory's own processors, in the order integrations are listed. `initialize()` now also receives the controller's chat channels. ([#28187](https://github.com/mastra-ai/mastra/pull/28187))
+
+  ```ts
+  class MyIntegration implements FactoryIntegration {
+    readonly id = 'my-integration';
+    readonly processors = { input: [new MyInputProcessor()], output: [new MyOutputProcessor()] };
+    routes() {
+      return [];
+    }
+  }
+  ```
+
+- Added a thinking level to your personal defaults. In **Settings → Models**, the Personal defaults and Factory defaults cards now pair each model picker with its thinking level, replacing the separate **Thinking** row. Chats on your personal defaults start at your personal level, or at the Factory level when you have not set one. Sessions and work-item runs on the Factory defaults keep the Factory level. The composer thinking control now says which default a session follows: **Personal default** or **Factory default**. ([#28250](https://github.com/mastra-ai/mastra/pull/28250))
+
+- Added a way to take over a teammate's shared session. Anyone steering someone else's shared session sees a **Take ownership** button on the line under the composer. It asks for confirmation first, then stops a running agent and hands the session over: their next message runs with their credentials, and the thread shows a "Damien took ownership" divider that the agent also reads. ([#27957](https://github.com/mastra-ai/mastra/pull/27957))
+
+  ```http
+  POST /web/user-sessions/:sessionId/owner
+  { "expectedOwnerId": "user-ward" }
+  ```
+
+  `expectedOwnerId` is the owner the caller last saw. The response is `{ session }` with the new owner. The request returns `409` when someone else took the session first, when the caller already has a session on that branch, or for a Slack thread, Factory run or side session, which keep their owner, and `404` for a session the caller can't open. Each transfer is recorded in the Factory audit log as `factory.session.owner_transferred`.
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@octokit/auth-app@^8.3.1` ↗︎](https://www.npmjs.com/package/@octokit/auth-app/v/8.3.1) (from `^8.0.0`, in `dependencies`)
+  - Updated dependency [`chat@^4.43.0` ↗︎](https://www.npmjs.com/package/chat/v/4.43.0) (from `^4.37.0`, in `dependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
+  - Updated dependency [`posthog-node@^5.57.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.57.1) (from `^5.46.1`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+- Fixed guidance for replacing the default Factory boards and their plan-result rules. ([#28093](https://github.com/mastra-ai/mastra/pull/28093))
+
+- Chats on personal defaults no longer borrow from the Factory defaults. In **Personal** routing and in **Hybrid** chats, a chat with no personal thinking level now starts at medium instead of the Factory thinking level, and a chat with no personal default model starts on a built-in model your own keys can run instead of the Factory model. ([#28402](https://github.com/mastra-ai/mastra/pull/28402))
+
+  New sessions without a chosen default model now start on the same built-in model the server picks, in every routing mode. Empty default model pickers in Models settings name that model as **Built-in default**, and the New session page only asks you to connect a provider or choose a model when none of your keys can run one. The Factory default model picker always lists and names models the Factory's own keys can run, even in Personal routing, where the card says it is **Not used in this scope**. The composer labels the medium fallback **Built-in default**.
+
+- The Factory activity summary now loads only the events it shows, through a new `actions` filter on the project audit route. Unknown action names are ignored, and a request naming only unknown actions returns a 400 `unknown_actions` error instead of every event. ([#28394](https://github.com/mastra-ai/mastra/pull/28394))
+
+- When a session linked to a Slack thread opens a pull request, its link is posted into the thread, and again when it merges. The merge adds ✅ to the thread's first message. ([#28311](https://github.com/mastra-ai/mastra/pull/28311))
+
+- **Sandbox:** A Factory session's agent can now replace its own sandbox when it stops responding, with the new `factory_recreate_sandbox` tool. Before, a session whose sandbox hung (every command timing out, or "onStart hook failed") stayed stuck until someone pressed Recreate sandbox. ([#28052](https://github.com/mastra-ai/mastra/pull/28052))
+
+  The tool deletes the VM, so anything not committed and pushed is lost; its description tells the agent to push first. The agent keeps working in the same turn: its next command starts a fresh sandbox and runs setup again. Available on Platform sandboxes.
+
+- The **Take ownership** confirmation now says who pays once the session is yours. When the Factory pays for its sessions, it says the Factory keeps paying and the model stays the same. When each owner pays, it names the credential that pays from your next message and the model the session keeps, and warns that this first reply costs more because the session is cached on the previous owner's account. If you have no connection for the session's provider, it links to your personal defaults on the **Models** settings page. It mentions that the running agent stops only while one is running. ([#28023](https://github.com/mastra-ai/mastra/pull/28023))
+
+- The Studio and Factory chat composers now show one button while an agent is running: Stop until the draft has something to send, then Send. Sending or clearing the draft brings Stop back. A Factory draft with only images keeps Stop, since images can't be sent mid-run. Studio agents that can't take messages mid-run keep showing Stop. ([#28263](https://github.com/mastra-ai/mastra/pull/28263))
+
+- Factory startup avoids loading GitHub, GitLab, Jira, Linear, and incident.io when these integrations are not in use. ([#28254](https://github.com/mastra-ai/mastra/pull/28254))
+
+- The Docker sandbox setting and its low-memory warning no longer name the underlying sandbox provider. ([#28646](https://github.com/mastra-ai/mastra/pull/28646))
+
+- Fixed chats in a Factory using the Factory's observational memory settings instead of their owner's. Memory settings now follow the Factory's model routing, the same as models and credentials: ([#28179](https://github.com/mastra-ai/mastra/pull/28179))
+
+  - A chat that runs on personal credentials uses its owner's **Personal memory** settings.
+  - A run that uses the Factory's credentials uses **Factory memory**.
+
+  Before, a chat in a hybrid Factory could fail with `No usable anthropic credential is available` even though the owner had picked an OpenAI memory model and connected OpenAI.
+
+- Factory tools now return a web link (`url`) for work items and sessions, and channel agents link Factory items the same way they link pull requests. Refusals that used to say "do it from the Factory UI" now tell the agent to ask the person in their signed-in chat instead. ([#28630](https://github.com/mastra-ai/mastra/pull/28630))
+
+- Fixed the repository list the agent sees in a multi-repository Factory session. The list now always starts at 1 and continues without gaps, even when the project has repositories that are not part of the session's environment. Before, it could start at 2 or skip numbers. ([#28327](https://github.com/mastra-ai/mastra/pull/28327))
+
+- Discover open GitLab merge requests and issues when linking a repository or listing its items, so missing Review cards can appear without an initial webhook delivery. ([#28518](https://github.com/mastra-ai/mastra/pull/28518))
+
+- Factory now allows Mastra Platform sign-in on `*.localhost` hosts (for example `my-branch.factory.localhost`), not only on `localhost` itself. Browsers resolve these names to the loopback address (RFC 6761), so local dev proxies that give each worktree its own name no longer get the "custom domain unsupported" error. ([#27477](https://github.com/mastra-ai/mastra/pull/27477))
+
+- The web error card now names an outage that a provider reports mid-stream with its own code, such as a Codex `server_error`, instead of showing Run stopped, live and after a reload. ([#28496](https://github.com/mastra-ai/mastra/pull/28496))
+
+- Failed runs now say what went wrong and link to the fix, in the web chat and in Slack, instead of showing SDK error names such as `AI_APICallError` with `Bad Request`. ([#27811](https://github.com/mastra-ai/mastra/pull/27811))
+
+  - Each failure gets a plain title and the next step in words: a missing or rejected credential, an exhausted quota, a model the provider refuses, a conversation past the model's limit, a rate limit, a timeout or a provider outage.
+  - A provider failure card names the model the request was sent to, such as `claude-sonnet-5-5` behind an invalid API key, live and after a reload, on the web and in Slack.
+  - A model the provider refuses, such as a Codex model a ChatGPT plan does not include, quotes the provider's sentence and offers **Change model**. On the web it opens the model picker on the error card; in Slack it links to the session.
+  - A credential or quota failure quotes the provider's sentence, such as when a weekly limit resets, and offers both **Review credentials**, linking to the Factory's model settings, and **Change model**, to switch to a model whose provider has a stored credential.
+  - A Slack failure card shows the provider's request id when the provider sent one, so support can trace it.
+  - A Slack failure with nothing to change links to its session.
+  - A rejected request shows the provider's own reason when it gave one, and says plainly when it gave none.
+  - A reloaded thread explains a failure the same way the live run did, and every web failure keeps copyable diagnostics under **Error details**.
+  - A failed run shows one error card on the web, instead of the live card plus the saved copy that arrived when the run ended.
+
+- Failed run reports now quote the model provider's own reason for any provider failure, not only usage limits. For example, a report says `prompt is too long: 210345 tokens > 200000 maximum` instead of `Bad Request`. ([#28496](https://github.com/mastra-ai/mastra/pull/28496))
+
+  A run that fails because the provider rejected its credentials is now reported as a credentials problem even when only the response body says so, for example a 400 whose body code is `invalid_api_key`.
+
+- Added the session's history to the Factory sidebar hover card, in place of its branch names. ([#28127](https://github.com/mastra-ai/mastra/pull/28127))
+
+  **What the card shows**
+
+  - The owner, and who they took the session over from.
+  - A link to the issue or pull request.
+  - What the agent is doing.
+  - A timeline of stages, agent runs, and the moments a person moved the work or took the session over.
+  - The name, length, and times of any stage, run, or person you point at on the timeline.
+
+  Added `startedAt` to each `factory.run.ended` audit record, so a run's length can be read from its end record alone. Runs that ended before this release have no start time and do not appear on the timeline.
+
+- Factory settings are grouped by topic: **Account** (My account, Preferences, Connections), **Agent** (Models, Memory, Skills, Behavior) and **Factory** (Repositories, Environment, Work Intake, Manage Factory). ([#28100](https://github.com/mastra-ai/mastra/pull/28100))
+
+  **Models** is now one page. Pick **Personal**, **Hybrid** or **Factory** routing. A map shows which defaults chats and work-item runs use. Personal defaults and Factory defaults each have their own model and providers. The set your routing does not use folds away. Click **Settings** on its card to open it again. Chats with no personal default still use the Factory default, so you can change it from a Personal-routed Factory. Keys added under Personal defaults are yours. Keys added under Factory defaults are shared with the organization. Only organization admins can change them.
+
+  **Memory** shows personal memory (used by chats) and Factory memory (used by work-item runs) on one page, each laid out top to bottom from messages to the observer and the reflector.
+
+  `/login`, `/connect` and the new-chat setup screens open the defaults your session runs on: Factory defaults in a Factory-routed Factory, otherwise your personal defaults. A new chat checks the model it will actually start on, so under Personal or Hybrid routing a personal default is enough, with no Factory default set.
+
+  Old links to **Your models** and **Factory memory** open the new Models and Memory pages.
+
+- Channel-backed runs (Slack) get an `attach_file` tool that uploads a file from the session workspace — a report, export, or image the agent produced — straight into the thread it is replying in, instead of pointing the sender at a sandbox path. The tool is offered whenever the run's thread maps to a chat thread, including runs woken by a signal (a subagent finishing, a schedule firing) rather than an inbound message, which is where a long job usually ends with a file to hand back. Files over 50 MB are refused. ([#27351](https://github.com/mastra-ai/mastra/pull/27351))
+
+  The tool needs no setup; the agent calls it when it has a file to hand over.
+
+  ```json
+  { "name": "attach_file", "args": { "path": "/workspace/report/q3-summary.pdf" } }
+  ```
+
+  The file posts into the thread as an attachment and the agent describes it in its reply.
+
+  The Slack app does: uploading needs the `files:write` bot scope. Factory brings its own Slack app, so existing apps must add `files:write` under OAuth & Permissions → Bot Token Scopes and reinstall; until then `attach_file` fails with a message naming the missing scope.
+
+- Reworked the top of the Factory sidebar. The factory switcher is now a compact dropdown in the top-left corner, with search and the collapse toggle on its right. Below it, a **New session** row opens an empty session draft. It replaces the **+** next to Sessions. Removed the Mastra logo and the Beta label from the top of the sidebar. ([#28271](https://github.com/mastra-ai/mastra/pull/28271))
+
+- Added repository-boundary rules to the Factory review, re-review, self-review, GitLab review, triage, and planning skills. These skills keep private-repository content out of commits, pull requests, issues, and comments in other repositories, treat a repository whose visibility is unconfirmed as private, and allow normal citations of public repositories. On public target repositories, they allow only a yes/no conclusion about a private repository. ([#28497](https://github.com/mastra-ai/mastra/pull/28497))
+
+- Traces and memory now show the skill that started a Factory run, instead of recording the kickoff as a message a person typed. The model receives the skill instructions and work-item feed inside `<skill name="…">` as written, the same as running the skill with `/skill`. ([#27150](https://github.com/mastra-ai/mastra/pull/27150))
+
+  Skills you start from the chat are unchanged and still appear as your own message.
+
+- Restored the per-module `dist` layout so every source module is published as its own file again. ([#28139](https://github.com/mastra-ai/mastra/pull/28139))
+
+- Changed the Factory Changes panel to show every changed file's diff in one scroll, the way a pull request does. Every file starts open, under its own header that folds it away. A colored icon before the path says what happened to the file: orange for modified, green for added, red for deleted, blue for renamed. A moved or renamed file shows where it came from, and one moved without edits shows just its header instead of an empty diff. Before, you opened one file at a time and went back to the list for the next. ([#28274](https://github.com/mastra-ai/mastra/pull/28274))
+
+  The panel header is now one line: the scope picker, the panel's total `+N −N`, a **Jump to file** button with the file count, and a `…` menu. Screen readers now read every `+N −N`, including the one on the workspace's Changes button, as words: "4 additions and 1 deletion".
+
+  - **Branch changes** (default): everything the session changed since it left the base branch, committed or not (as before).
+  - **Uncommitted changes**: only the work not yet committed.
+  - **Jump to file** opens the folder tree and scrolls to the file you pick.
+  - **… → Diff layout** picks **Unified** (default) or **Split**. The choice is remembered in this browser. In both, a long line stays on one row and scrolls sideways instead of wrapping.
+  - **… → Refresh** reloads the diffs, for edits made outside an agent run. Diffs already reload when a run ends.
+
+  A file without a diff says why in its header: "Diff too large to show" when its own diff is over 512 KB, "Too many changes to show" once its repository's diffs pass 8 MB, and "Diff unavailable" when git could not diff it, for example in a repository without a commit yet. In that last case git's error appears once above the files. The file list stays visible in every case. In a session with several repositories, one that cannot be read is named above the files ("Couldn't read changes in acme/api"), even when the others have no changes.
+
+  `GET /web/workspace/changes/diff` is replaced by `GET /web/workspace/changes/patches?workspacePath=…&scope=branch|uncommitted`, which returns the change list, every file's diff, `omittedPatches` with the reason for each diff left out, and `diffError` when git could not diff.
+
+- Reorganized Factory Settings so each setting has one home and every page uses the same rows, drawers, and connection flows. ([#28602](https://github.com/mastra-ai/mastra/pull/28602))
+
+  - Manage repository linking, clone order, pre-cloning, setup, and teardown together in **Repositories**. Add repositories from a searchable drawer and expand each repository to configure it.
+  - Find global sandbox resources, workspace setup, and build controls in **Manage Factory**, instead of a separate Environment page. Old Environment links and bookmarks open **Repositories**.
+  - Configure **Work Intake** with integration-level sync controls, full-width source lists, and the same searchable drawer pattern. Connection management stays aligned across pages.
+  - Manage personal accounts, organization connections, and GitHub CLI tokens together in **Connections**. The MCP URL copy control appears on hover or keyboard focus without reserving space or changing row height.
+  - Deployments without GitLab no longer show a false connection error.
+  - When a run's repository is excluded from pre-cloning, the recovery message now points to **Repositories → Pre-clone**.
+
+- Added optional model release dates to provider catalogs for newest-first model selection. ([#27661](https://github.com/mastra-ai/mastra/pull/27661))
+
+- Fixed custom Factory skills being ignored in deployed build output. Fixes [#27189](https://github.com/mastra-ai/mastra/issues/27189). ([#28142](https://github.com/mastra-ai/mastra/pull/28142))
+
+- Fixed **Open in Slack** on Slack cards and their sessions. It opened the Factory session the card started instead of the Slack thread. It now opens the thread, and is hidden on cards saved before Factory recorded their Slack workspace. ([#28136](https://github.com/mastra-ai/mastra/pull/28136))
+
+- Collapsing the Factory sidebar now gives the page the whole window. The inset and the framed card around the page are gone while the sidebar is hidden, and come back when it opens. ([#28300](https://github.com/mastra-ai/mastra/pull/28300))
+
+- Fixed saving intake settings resetting the selections of custom Factory integrations. Toggling a built-in source such as GitHub used to drop any custom integration's saved choice, which then read back as enabled with no sources selected. Saves now keep the stored selection of every integration the request does not mention. ([#28567](https://github.com/mastra-ai/mastra/pull/28567))
+
+- Fixed Factory runs failing when repositories share an issue or pull request number. Existing card sessions are reused. Fixes [#28048](https://github.com/mastra-ai/mastra/issues/28048). ([#28152](https://github.com/mastra-ai/mastra/pull/28152))
+
+- Fixed the session access checks skipping multipart form requests. A form-encoded request that names another person's private session or memory resource, or that sets a shared session's thinking level, is now refused the same way as a JSON request. ([#28061](https://github.com/mastra-ai/mastra/pull/28061))
+
+- Let Factory agents look up the models available to a session before choosing an exact model ID from a user's request to switch models. ([#28055](https://github.com/mastra-ai/mastra/pull/28055))
+
+- The memory settings preview now shows the Auto memory model a run will actually use, instead of one that needs a credential the run cannot reach. Accounts whose runs authenticate with the organization's credentials no longer see a model that only their personal Google key can reach, and the other way round. ([#27450](https://github.com/mastra-ai/mastra/pull/27450))
+
+  A chat's preview follows the policy its own runs follow: a thread bound to a work-item run previews the Factory's credentials, and a session shared with a teammate previews the credentials of the person who owns it, not those of whoever is reading the page.
+
+  Rejects an observational memory threshold of 2000 tokens or fewer with a 400 that names the 2000-token floor, rather than saving a value that aborts memory on the next run.
+
+- In the Factory web UI, a Slack reply the agent posts with `reply_in_thread` now shows as the message itself, rendered as markdown with its own footer (model, "Sent to Slack", copy, time), instead of a JSON tool card. Any text the agent writes in the same turn shows separately, since only the web UI sees it. While a reply is still being written it shows the text so far and "Sending to Slack…". ([#28074](https://github.com/mastra-ai/mastra/pull/28074))
+
+- Made Factory's triage comment on GitHub easier to scan. It now opens with a one-row table of type, severity, confidence, effort, impact, and route, with dot meters for each rating. A plain-language summary and the next step follow, and the detailed findings sit in collapsed sections. This replaces the old table, which had a blank header row. ([#28512](https://github.com/mastra-ai/mastra/pull/28512))
+
+- Added support for scoped Jira API tokens by allowing API requests to use a separate Atlassian gateway URL while issue links keep using the Jira site URL. ([#28569](https://github.com/mastra-ai/mastra/pull/28569))
+
+  ```ts
+  new JiraIntegration({
+    baseUrl: 'https://acme.atlassian.net',
+    apiBaseUrl: 'https://api.atlassian.com/ex/jira/cloud-id',
+    email: 'developer@example.com',
+    apiToken: process.env.JIRA_API_TOKEN!,
+  });
+  ```
+
+- When a shared session stops because the owner's provider sign-in is missing or expired, a teammate steering it now sees who has to reconnect (for example "Ward Peeters needs to reconnect") instead of a Login link to their own settings, which could not fix it. The owner, and sessions the Factory pays for, keep the Login link. ([#28058](https://github.com/mastra-ai/mastra/pull/28058))
+
+- **Review:** Factory's GitHub review agent now updates its own earlier review and test report on a pull request when it can, instead of posting new ones on every pass, so pull requests no longer fill up with stale Factory reviews. It still posts a new verdict when the verdict flips state (GitHub cannot change a submitted review's state), when an approval was given on an older commit, or when GitHub refuses the edit. ([#28330](https://github.com/mastra-ai/mastra/pull/28330))
+
+  Editing a request-changes verdict still wakes the agent that authored the branch, so in-place updates do not break the repair loop. Factory also now reads verdicts that sit below the Platform `> Opened by @user` attribution line; before, a request-changes verdict posted as a PR comment never reached the authoring agent.
+
+- Removed the Factory Activity page, its Codebase view, and its sidebar and search links. The Activity unread badge, open-item dot, and attention chime for failed runs, mentions, and waiting agents are retired, along with the Needs you and followed-discussion lists and their inbox read, archive, and restore actions. ([#28257](https://github.com/mastra-ai/mastra/pull/28257))
+
+  Old Activity, Overview, Attention, Metrics, and Audit URLs now open the same Factory's board landing. Board cards retain failed-decision retries and proposal approval and dismissal. Session status indicators and completion sounds remain available.
+
+- Buttons, menu items, tabs and tooltips in Studio and Factory now use sentence case, so labels read the same everywhere ("Create dataset", "Edit working memory", "View in traces"). Proper nouns like Studio, GitHub and MCP stay capitalized. ([#28131](https://github.com/mastra-ai/mastra/pull/28131))
+
+- Slack thread replies now link the pull requests, issues, commits and Linear tickets they mention instead of leaving bare IDs like `#28467` or `FACT-526`. Every chat-channel run is told to write each reference as a markdown link with the ID as link text, take URLs from tool results or its repositories rather than guessing, and leave a reference unlinked only when it can't find the URL. ([#28475](https://github.com/mastra-ai/mastra/pull/28475))
+
+  `linear_get_issue` now states the connected workspace's issue URL pattern (`https://linear.app/<workspace>/issue/<ID>`), so agents can link a ticket like `FACT-1234` without fetching it first. GitHub references are linked against the repositories listed in the session's environment.
+
+- Studio session cookies are now host-only, so a session is never sent to other deployments on a shared domain. ([#28168](https://github.com/mastra-ai/mastra/pull/28168))
+
+  `@mastra/auth-studio`: on secure deployments `MastraAuthStudio` issues `__Host-wos-session` (`Secure`, `Path=/`, no `Domain`). `MASTRA_COOKIE_DOMAIN` is no longer used as the cookie `Domain`. A legacy `wos-session` cookie is still accepted on read, but only so it can be re-issued as `__Host-wos-session`. The new `getLegacySessionClearCookies()` expires the legacy `wos-session` on the current host, on `MASTRA_COOKIE_DOMAIN`, and on each domain in `MASTRA_LEGACY_COOKIE_DOMAINS` (or the `legacyCookieDomains` option). Plain-http `localhost` dev keeps an unprefixed host-only cookie; use `secureCookies` to override. An explicit `cookieDomain` option still issues a `wos-session` cookie with that `Domain`.
+
+  `@mastra/server`: the SSO callback, `POST /auth/refresh` and `POST /auth/logout` responses now also send the provider's `getLegacySessionClearCookies()`.
+
+  `@mastra/factory`: the default Studio provider no longer derives `Domain=.mastra.cloud` from `publicUrl`. Its sign-in and sign-out responses also expire legacy session cookies.
+
+  `@mastra/core`: `ISessionProvider` gains the optional `getLegacySessionClearCookies()`.
+
+- Only a shared session's owner can change its model or thinking level now. A teammate steering the session sees the model and thinking level disabled, with a tooltip naming who can change them, and `/model` or `/think` answers with the same line. The server enforces the same rule: `POST …/sessions/:sessionId/model`, and a `PUT …/state` that sets `thinkingLevel`, answer 403 for anyone but the owner. The single-session read reports it as `capabilities.switchModel`. Teammates can still send messages and steer the session as before. ([#28061](https://github.com/mastra-ai/mastra/pull/28061))
+
+- Fixed duplicate "finished" notices from Factory sessions. After a session reported that it was done, every later run that ended with nothing new (for example, one woken by a pull request comment or an automated check result) sent its followers another "finished" notice. Followers now hear it once; a failure or a session waiting on an answer is still reported. ([#28304](https://github.com/mastra-ai/mastra/pull/28304))
+
+- Fixed **Settings → Models** showing a provider as **Signed in** after its sign-in stopped working. When Factory cannot renew an expired subscription sign-in (for example Anthropic), the provider now shows **Sign-in expired** and its menu offers **Sign in again**. Before, chats failed with "Not logged in to Anthropic." while Settings still said Signed in. The warning clears after the next successful renewal or a new sign-in. ([#28401](https://github.com/mastra-ai/mastra/pull/28401))
+
+- Factory triage now labels GitHub issues with the severity from its handoff (`severity:critical`, `severity:high`, `severity:medium` or `severity:low`), alongside the existing effort and impact labels. Each issue keeps exactly one severity label, and a refresh replaces it when the severity changes. The handoff table now shows severity as plain text (`high`) instead of with a colored emoji. ([#28487](https://github.com/mastra-ai/mastra/pull/28487))
+
+- Fixed Git identity setup before session commands run so agents can commit in primary and secondary repositories. Fixes https://github.com/mastra-ai/mastra/issues/28233. ([#28292](https://github.com/mastra-ai/mastra/pull/28292))
+
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`9f68d70`](https://github.com/mastra-ai/mastra/commit/9f68d70066ae2b676df39003a92731ef7593e674), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`a15ea70`](https://github.com/mastra-ai/mastra/commit/a15ea70e71ca57242fa61b23e7f0178d77f9af4b), [`164b9c1`](https://github.com/mastra-ai/mastra/commit/164b9c196afb3e477e97029c369b34a14b84544b), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`a15ea70`](https://github.com/mastra-ai/mastra/commit/a15ea70e71ca57242fa61b23e7f0178d77f9af4b), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`c253e13`](https://github.com/mastra-ai/mastra/commit/c253e13ac627d0325f8665004f7af8a49805a9a4), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`c8f8e41`](https://github.com/mastra-ai/mastra/commit/c8f8e410d39a29b8b69cb7bf90cc9a774cb956f5), [`4cfae01`](https://github.com/mastra-ai/mastra/commit/4cfae01571df81b9ca31d859c317e269e45d8b92), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`08640de`](https://github.com/mastra-ai/mastra/commit/08640de350ff9183c1d9ef568fde4c6ccdf181e4), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`24a821b`](https://github.com/mastra-ai/mastra/commit/24a821b0ff29f527787c0645a7bf7bbe50d27f57), [`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`a1e248b`](https://github.com/mastra-ai/mastra/commit/a1e248bfe0776ab6ca2a55fed3c423b08fb5ae03), [`8657871`](https://github.com/mastra-ai/mastra/commit/8657871085a1c5aed8c87c17447e5dad0d3e7966), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`461ee61`](https://github.com/mastra-ai/mastra/commit/461ee61237cd83e89e120fc5ee7e98eb30e1587a), [`0afde2c`](https://github.com/mastra-ai/mastra/commit/0afde2c114aa02b0186ae963c8c83796f8801b60), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`a5a9179`](https://github.com/mastra-ai/mastra/commit/a5a9179daa5ac1ed49447265038208c9f96cd0f8), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`8e1247c`](https://github.com/mastra-ai/mastra/commit/8e1247cb26fc1a3cd1c2ac6edaf34fddad897852), [`7cd42a5`](https://github.com/mastra-ai/mastra/commit/7cd42a5863a19be68552c99565c345e06e4ffb1f), [`ed76bdc`](https://github.com/mastra-ai/mastra/commit/ed76bdcc88e09c0f7f0da14ffadca62b1b4a2409), [`cb99bcf`](https://github.com/mastra-ai/mastra/commit/cb99bcf4f538b68552303e97b4fe78e35abf9cd7), [`2f655e5`](https://github.com/mastra-ai/mastra/commit/2f655e53fcae10a2423e0194a113ce52e70580fe), [`ac953f0`](https://github.com/mastra-ai/mastra/commit/ac953f08a74d063ce0e8d2368b36556f715b1fb0), [`ca04e2c`](https://github.com/mastra-ai/mastra/commit/ca04e2cbb6f5ae13edf006905d9810434b4163fe), [`9ffb79b`](https://github.com/mastra-ai/mastra/commit/9ffb79b17e6ed0f0ec6bd1640218ef2a5fb7c058), [`155e3ac`](https://github.com/mastra-ai/mastra/commit/155e3aca3e57114ce3393bd88f6848c29f37c82b), [`be5c929`](https://github.com/mastra-ai/mastra/commit/be5c9292ac6d4beb7f1020d0dc745edd18842f3d), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`e39aa42`](https://github.com/mastra-ai/mastra/commit/e39aa4237c81a2eb546a899c9739c96d6359737f), [`0d7d5cb`](https://github.com/mastra-ai/mastra/commit/0d7d5cbdccacc0b03697b3400579ea520e382061), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`7c20f00`](https://github.com/mastra-ai/mastra/commit/7c20f008c84db8f4f49e6e95d6dc965482bb2039), [`e20bbd0`](https://github.com/mastra-ai/mastra/commit/e20bbd0ef40475bda611ddfd8ea2721ddac3642c), [`c9ff73d`](https://github.com/mastra-ai/mastra/commit/c9ff73dd24e9473cb0008857105367c99ba839cb), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`7d58088`](https://github.com/mastra-ai/mastra/commit/7d580884fbf1fb5d90e0761272e2480ed01da70f), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`4ad204d`](https://github.com/mastra-ai/mastra/commit/4ad204dc5bdde76dca26cb7d87c48dd11f97316d), [`f5ebbf3`](https://github.com/mastra-ai/mastra/commit/f5ebbf3b2dc935b8fc068996b4db478815f05bd5), [`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb), [`e56f88e`](https://github.com/mastra-ai/mastra/commit/e56f88e18d906635b033173abcae637cf361ce8a), [`cd4722a`](https://github.com/mastra-ai/mastra/commit/cd4722a583a0eb75022b1da6a6f8210f8126e486), [`db2a1a6`](https://github.com/mastra-ai/mastra/commit/db2a1a659ecb057ae9ff6798a501ed33dd38b7c7), [`6a4a607`](https://github.com/mastra-ai/mastra/commit/6a4a607e710000e46790e20f28c2355af9ca2a05), [`2499c00`](https://github.com/mastra-ai/mastra/commit/2499c00181520cf7cda756729dc0e0085b85454f), [`de53c27`](https://github.com/mastra-ai/mastra/commit/de53c27a70dbd0c362384691459648043edbee72), [`015c7db`](https://github.com/mastra-ai/mastra/commit/015c7db2acf5c0e364195831c3de2bcc376474fe), [`d580530`](https://github.com/mastra-ai/mastra/commit/d580530ff36d43e752b1f838b3f8e16017e8f92b), [`3e5ca12`](https://github.com/mastra-ai/mastra/commit/3e5ca12f7c941e92e242f2dd08c7018644b0cbbd), [`578cb67`](https://github.com/mastra-ai/mastra/commit/578cb670bd8621538eda4afc1f25139e5903aab9), [`a6077b7`](https://github.com/mastra-ai/mastra/commit/a6077b7f61bde8d302f20b54a2dced2d969887aa), [`279e890`](https://github.com/mastra-ai/mastra/commit/279e89061cd6327d4870b864e8d90fe0b873a72e), [`5bd713b`](https://github.com/mastra-ai/mastra/commit/5bd713b4f2ca7769675d949f8052943807c11598), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`d3f5000`](https://github.com/mastra-ai/mastra/commit/d3f500024f7b0c107c3786757b3f5481f029d061), [`682ebf6`](https://github.com/mastra-ai/mastra/commit/682ebf6b6f867224acbcb021fc142b902738ad07), [`11c83d5`](https://github.com/mastra-ai/mastra/commit/11c83d53331588e06623d5d4a35baa606bbaa424), [`dd6205e`](https://github.com/mastra-ai/mastra/commit/dd6205e985e5fd76b59d000076ab199143c989eb), [`97ade4e`](https://github.com/mastra-ai/mastra/commit/97ade4e8621a9afd01a1f38b921519ddc3086568), [`c8b8e27`](https://github.com/mastra-ai/mastra/commit/c8b8e27e9b26d9a08bc61d2e663804f25ae4fa2d), [`8ae87fa`](https://github.com/mastra-ai/mastra/commit/8ae87fadd01daa128086e015473881bf55d6e47b), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`2ca9e35`](https://github.com/mastra-ai/mastra/commit/2ca9e3522f117cc12fee7a9dad2f5961cd41164e), [`c319978`](https://github.com/mastra-ai/mastra/commit/c31997898896496625fdebb7f97dda73dc539350), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`20f40eb`](https://github.com/mastra-ai/mastra/commit/20f40ebf5623b059336f4c3000d47755941b4451), [`20f40eb`](https://github.com/mastra-ai/mastra/commit/20f40ebf5623b059336f4c3000d47755941b4451), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`e718b91`](https://github.com/mastra-ai/mastra/commit/e718b91a64eb720cd755b7fd78255d0ab5a412de), [`9a9085e`](https://github.com/mastra-ai/mastra/commit/9a9085ef3481c31093152ea9976759c72dc3fd89), [`35806cb`](https://github.com/mastra-ai/mastra/commit/35806cb9b62dfed212b238d00148341d8b2f68ac), [`2fed0ad`](https://github.com/mastra-ai/mastra/commit/2fed0ad258322811ea7f2107f1121c6d5dee1c59), [`b1f623f`](https://github.com/mastra-ai/mastra/commit/b1f623f8da21abfb21331c911ae0f994cc4c5d5e), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`6fea510`](https://github.com/mastra-ai/mastra/commit/6fea51000dfc4f249993a7d3959ad41ca6c422ca), [`b6fb8c8`](https://github.com/mastra-ai/mastra/commit/b6fb8c8d721e0150d260d8e11bc60ebb727bc899), [`9a83d42`](https://github.com/mastra-ai/mastra/commit/9a83d42b2461dd1629021d05704939b641330d5b), [`703b0a1`](https://github.com/mastra-ai/mastra/commit/703b0a1cb342d3a6fce72b5b07685fbb31695674), [`bfce5b6`](https://github.com/mastra-ai/mastra/commit/bfce5b6982dc17a6944484b1ee9b333f6f5023d6), [`95c6e7c`](https://github.com/mastra-ai/mastra/commit/95c6e7caf4929d941f958e3f146b551e25eaeef3), [`2447071`](https://github.com/mastra-ai/mastra/commit/2447071b11d7a5f159e6dc726eb5df0aa0db69da), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`59421d0`](https://github.com/mastra-ai/mastra/commit/59421d0137a0642c60b687567e33bf2358be4c64), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`709a1da`](https://github.com/mastra-ai/mastra/commit/709a1daa64843cc92ac0b817c4dc05b2efdc92ac), [`3143101`](https://github.com/mastra-ai/mastra/commit/31431019ddd56d0b5677f8cd169f715f0e907266), [`2829b0e`](https://github.com/mastra-ai/mastra/commit/2829b0eae687d36c8f864eba4051225ae3b82343), [`e053569`](https://github.com/mastra-ai/mastra/commit/e05356995ee8c807516d8aff836a8363dba7eee6), [`4fb45ff`](https://github.com/mastra-ai/mastra/commit/4fb45ff8a7c362b998f8f27855b18f347c98e4b4), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`ab1727d`](https://github.com/mastra-ai/mastra/commit/ab1727d5cafb64e36b04fad9f8871dc6640d2420), [`4fc17c6`](https://github.com/mastra-ai/mastra/commit/4fc17c65e85628a71201bf7490fca1db8376cf71), [`a9ad47d`](https://github.com/mastra-ai/mastra/commit/a9ad47d8c3186e51142b9c1a3ed1e8e29ade2338), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`cf0ca8b`](https://github.com/mastra-ai/mastra/commit/cf0ca8b55d67a3ccf6ee7835e4dd2addea0c82a8), [`2ded35c`](https://github.com/mastra-ai/mastra/commit/2ded35cb0c97b26f641a9eb9a5747d32164d45c9), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`d3e8ec7`](https://github.com/mastra-ai/mastra/commit/d3e8ec74e90bedefc28414e459ec9c5d52c97ccc), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`ddb7721`](https://github.com/mastra-ai/mastra/commit/ddb77211bc797c45fe434baac5c44c4193c1381e), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`d58fe2a`](https://github.com/mastra-ai/mastra/commit/d58fe2ac5cd64a96dca05657f07df18f23db14e1), [`7662736`](https://github.com/mastra-ai/mastra/commit/7662736615043b8f4d0d2e7277094936ff2c88d6), [`5e88354`](https://github.com/mastra-ai/mastra/commit/5e883545edd6082e741cdce1d192e0e83fa5dc2e), [`87e9194`](https://github.com/mastra-ai/mastra/commit/87e91941fffd04b20a7416437a80fcd522b2a9b6), [`5bb592a`](https://github.com/mastra-ai/mastra/commit/5bb592a862869d529d8d6ca48772cd0e1863f224), [`a1e248b`](https://github.com/mastra-ai/mastra/commit/a1e248bfe0776ab6ca2a55fed3c423b08fb5ae03), [`bd508a2`](https://github.com/mastra-ai/mastra/commit/bd508a2dec8c550baec245bfffc2d0853386e2eb), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`6f5eadb`](https://github.com/mastra-ai/mastra/commit/6f5eadbf7744a48ee742b940455e969922c3277d), [`578cb67`](https://github.com/mastra-ai/mastra/commit/578cb670bd8621538eda4afc1f25139e5903aab9), [`4278b9d`](https://github.com/mastra-ai/mastra/commit/4278b9dfb8aef7f274e4dfb102597cc0400475ee), [`2ac8cf1`](https://github.com/mastra-ai/mastra/commit/2ac8cf1435ba3abae9dba7b6c34f1c02f75eab21), [`1283717`](https://github.com/mastra-ai/mastra/commit/1283717ecfc652da293aafe6ff582afa07ca84a5), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`2b9f9a5`](https://github.com/mastra-ai/mastra/commit/2b9f9a55799ee7a6020a063d2419096429254481), [`307b711`](https://github.com/mastra-ai/mastra/commit/307b711bbe73132f1f319c3326333d49bc23b79d), [`45c1d16`](https://github.com/mastra-ai/mastra/commit/45c1d16c4f0cd3e5b18d2a788fb998c70b45b7c0), [`dc10589`](https://github.com/mastra-ai/mastra/commit/dc1058900dd9be01638d43491ddfd2037da12bac), [`339da0b`](https://github.com/mastra-ai/mastra/commit/339da0bef7e2e5570f533f6b41abbd746190bffb), [`34ee1d1`](https://github.com/mastra-ai/mastra/commit/34ee1d16226852f57d1f8bb34ee7a88397e5cce2), [`8c61247`](https://github.com/mastra-ai/mastra/commit/8c6124708341d699c3b1f3bb19f19be468923483), [`a9f392e`](https://github.com/mastra-ai/mastra/commit/a9f392e60e5bc1fab66280314bab5f697e8d7c09), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`5c56910`](https://github.com/mastra-ai/mastra/commit/5c56910b2647e11cbb6880431e556471b25ba949), [`66da6af`](https://github.com/mastra-ai/mastra/commit/66da6af573224af3daeb8767cddbd6112ad2c5e4), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`0811cda`](https://github.com/mastra-ai/mastra/commit/0811cda8d22476cf1393b429a63aaefa5292048c), [`1e31034`](https://github.com/mastra-ai/mastra/commit/1e31034b30cb9661e38af548dfda646aee74f08f), [`17444a7`](https://github.com/mastra-ai/mastra/commit/17444a7e46b656b3877faad6e61d5637f435b291), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c), [`3cdaaa8`](https://github.com/mastra-ai/mastra/commit/3cdaaa86f48812bdae1077e55be1d58dd5e85fc5), [`3be96ae`](https://github.com/mastra-ai/mastra/commit/3be96ae2f65a2ff3b2189fb79fd03b7eedee3dbe), [`852110d`](https://github.com/mastra-ai/mastra/commit/852110d4eeaf5ab74ea94747343501700033a1e8), [`f3bc1ca`](https://github.com/mastra-ai/mastra/commit/f3bc1caddb161453f8e2636fd0fc96d9b60e2719), [`b63456b`](https://github.com/mastra-ai/mastra/commit/b63456befb5f51d1a2b1288225f02c30738b6099), [`f156ad0`](https://github.com/mastra-ai/mastra/commit/f156ad0b7ed6b0ba286efd9040c061c9240d55c3), [`580452a`](https://github.com/mastra-ai/mastra/commit/580452acbbb9812eae1b31d4f3ded716c348a78b), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/auth-studio@1.3.11
+  - @mastra/auth-workos@1.6.8
+  - @mastra/code-sdk@1.16.0
+  - @mastra/core@1.80.0
+  - @mastra/mcp@2.6.0
+  - @mastra/platform-workspace@1.10.0
+  - @mastra/slack@1.8.0
+
 ## 0.25.0-alpha.8
 
 ### Patch Changes

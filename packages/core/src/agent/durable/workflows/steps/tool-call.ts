@@ -73,6 +73,7 @@ import {
 } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
+import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
 
 /**
@@ -96,6 +97,8 @@ const durableToolCallInputSchema = z.object({
   stepSpanData: z.any().optional(),
   // First-chunk clock of the step that produced this call, for ending spans on suspend
   completionStartTime: z.coerce.date().optional(),
+  // Time to first token of the same step, used the same way
+  timeToFirstTokenMs: z.number().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
 });
@@ -421,6 +424,7 @@ export function createDurableToolCallStep() {
         agentSpanData?: unknown;
         modelSpanData?: unknown;
         completionStartTime?: Date | string;
+        timeToFirstTokenMs?: number;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -444,13 +448,18 @@ export function createDurableToolCallStep() {
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
           const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
-          // Rebuilt spans come from the run-start snapshot, so end them with the clock
+          // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
-          // iteration) for the originals, the registry's for a resumed segment.
-          const clock = reg?.resumeModelSpanData
-            ? reg.resumeCompletionStartTime
-            : (initData.completionStartTime ?? typedInput.completionStartTime);
-          const attributes = clock ? { completionStartTime: new Date(clock) } : undefined;
+          // iteration) for the originals.
+          const attributes = carriedSpanClocks(
+            reg,
+            initData.completionStartTime
+              ? { completionStartTime: initData.completionStartTime, timeToFirstTokenMs: initData.timeToFirstTokenMs }
+              : {
+                  completionStartTime: typedInput.completionStartTime,
+                  timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
+                },
+          );
           if (typedInput.stepSpanData) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
           }
@@ -1477,70 +1486,69 @@ export function createDurableToolCallStep() {
               },
               { resumeLabel: toolCallId },
             );
-          } else {
-            // General tool suspension (e.g., tool calls context.agent.suspend())
-            const suspendedEventData: AgentSuspendedEventData = {
+          }
+          // General tool suspension (e.g., tool calls context.agent.suspend())
+          const suspendedEventData: AgentSuspendedEventData = {
+            toolCallId,
+            toolName,
+            args,
+            suspendPayload,
+            type: 'suspension',
+            resumeSchema: suspendOptions?.resumeSchema,
+          };
+
+          // Add suspension metadata to message before persisting
+          addToolMetadata({
+            type: 'suspension',
+            suspendPayload,
+            resumeSchema: suspendOptions?.resumeSchema,
+            delegatedRunId,
+          });
+
+          await doFlush();
+
+          if (pubsub) {
+            const suspensionChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-call-suspended' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId,
+                  toolName,
+                  suspendPayload,
+                  args,
+                  resumeSchema: suspendOptions?.resumeSchema,
+                  usage: typedInput.stepUsage,
+                },
+              },
+              {
+                policy: toolPayloadTransform,
+                tools: toolsForTransform,
+                logger: logger as any,
+              },
+            );
+            await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+            await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
+          }
+
+          endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
+
+          return suspend(
+            {
+              type: 'suspension',
+              toolCallSuspended: suspendPayload,
               toolCallId,
               toolName,
-              args,
-              suspendPayload,
-              type: 'suspension',
-              resumeSchema: suspendOptions?.resumeSchema,
-            };
-
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
-              type: 'suspension',
-              suspendPayload,
-              resumeSchema: suspendOptions?.resumeSchema,
-              delegatedRunId,
-            });
-
-            await doFlush();
-
-            if (pubsub) {
-              const suspensionChunk = await applyToolPayloadTransformToChunk(
-                {
-                  type: 'tool-call-suspended' as const,
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId,
-                    toolName,
-                    suspendPayload,
-                    args,
-                    resumeSchema: suspendOptions?.resumeSchema,
-                    usage: typedInput.stepUsage,
-                  },
-                },
-                {
-                  policy: toolPayloadTransform,
-                  tools: toolsForTransform,
-                  logger: logger as any,
-                },
-              );
-              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
-              await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
-            }
-
-            endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
-
-            return suspend(
-              {
-                type: 'suspension',
-                toolCallSuspended: suspendPayload,
-                toolCallId,
-                toolName,
-                resumeLabel: suspendOptions?.resumeLabel,
-                // Persist the inner suspended run id in the workflow snapshot,
-                // partitioned per tool call (resumeLabel = toolCallId), so the
-                // resume leg continues the delegate's suspended run instead of
-                // restarting it (#20496; mirrors the approval branch above).
-                ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
-              },
-              { resumeLabel: toolCallId },
-            );
-          }
+              resumeLabel: suspendOptions?.resumeLabel,
+              // Persist the inner suspended run id in the workflow snapshot,
+              // partitioned per tool call (resumeLabel = toolCallId), so the
+              // resume leg continues the delegate's suspended run instead of
+              // restarting it (#20496; mirrors the approval branch above).
+              ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+            },
+            { resumeLabel: toolCallId },
+          );
         },
       };
       // Raw `Tool` instances resolved from the Mastra registry (the cross-process

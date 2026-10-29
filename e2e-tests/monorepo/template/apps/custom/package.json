@@ -15,11 +15,11 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.110",
     "@bufbuild/protobuf": "2.13.0",
-    "@mastra/core": "monorepo-test",
-    "@mastra/deployer": "monorepo-test",
-    "@mastra/mcp": "monorepo-test",
-    "@mastra/observability": "monorepo-test",
-    "@mastra/server": "monorepo-test",
+    "@mastra/core": "e2e-test",
+    "@mastra/deployer": "e2e-test",
+    "@mastra/mcp": "e2e-test",
+    "@mastra/observability": "e2e-test",
+    "@mastra/server": "e2e-test",
     "@inner/alias-source": "workspace:*",
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
@@ -40,7 +40,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "mastra": "monorepo-test",
+    "mastra": "e2e-test",
     "typescript": "7.0.2"
   }
 }

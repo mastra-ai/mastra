@@ -40,7 +40,8 @@
           "instructions": "You are a helpful assistant",
           "model": "mock-model-id",
           "provider": "mock-provider",
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -120,7 +121,8 @@
                   "instructions": "You validate input messages",
                   "model": "mock-model-id",
                   "provider": "mock-provider",
-                  "completionStartTime": "<date>"
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -151,6 +153,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
@@ -213,6 +216,7 @@
                           "provider": "mock-provider",
                           "messageId": "<messageId-1>",
                           "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -364,6 +368,7 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
+                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,
@@ -452,6 +457,7 @@
               "streaming": true,
               "parameters": {},
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-2>",
               "responseModel": "mock-model-id",
@@ -514,6 +520,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-2>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -664,6 +671,7 @@
                       },
                       "availableTools": [],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -800,7 +808,8 @@
                   "instructions": "You summarize text concisely",
                   "model": "mock-model-id",
                   "provider": "mock-provider",
-                  "completionStartTime": "<date>"
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-3>",
@@ -831,6 +840,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "<responseId-3>",
                       "responseModel": "mock-model-id",
@@ -893,6 +903,7 @@
                           "provider": "mock-provider",
                           "messageId": "<messageId-3>",
                           "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -1044,6 +1055,7 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
+                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,

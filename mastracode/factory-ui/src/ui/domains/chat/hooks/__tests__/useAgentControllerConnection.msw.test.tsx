@@ -10,6 +10,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
+import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
 
 const controllerId = 'code';
 // A Factory session: addressed by its own id, running under its Factory's shared resource.
@@ -776,5 +777,46 @@ describe('useAgentControllerConnection', () => {
 
     await waitFor(() => expect(result.current.state?.running).toBe(false));
     await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
+  });
+
+  it('reports the thread a switch bound the session to, not the thread its state is read for', async () => {
+    let activeThreadId = 'primary-thread';
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: activeThreadId }),
+      ),
+      http.get(sessionUrl, ({ request }) =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          threadId: new URL(request.url).searchParams.get('threadId') ?? activeThreadId,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.post(`${sessionUrl}/thread`, async ({ request }) => {
+        activeThreadId = ((await request.json()) as { threadId: string }).threadId;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => ({
+      connection: useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'primary-thread', onEvent: vi.fn() }),
+      switchThread: useSwitchAgentControllerThreadMutation(hookArgs),
+    }));
+    await waitFor(() => expect(result.current.connection.status).toBe('ready'), { timeout: 2000 });
+    expect(result.current.connection.threadId).toBe('primary-thread');
+
+    await result.current.switchThread.mutateAsync('secondary-thread');
+    await waitFor(() => expect(result.current.connection.threadId).toBe('secondary-thread'));
+
+    await result.current.switchThread.mutateAsync('primary-thread');
+    await waitFor(() => expect(result.current.connection.threadId).toBe('primary-thread'));
   });
 });

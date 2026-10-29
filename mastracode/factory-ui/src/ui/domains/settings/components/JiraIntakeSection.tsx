@@ -7,9 +7,8 @@ import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraStatus } from '../../factory/services/jira';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
-import { SourcePicker } from './IntakeSourcePicker';
+import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
-import { IntakeSourceRouting } from './LinearRouting';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 
@@ -70,31 +69,23 @@ export function JiraIntakeSection({
       }
     >
       {configured && config.jira.enabled && !authError && (
-        <>
-          <SourcePicker
-            label="Jira projects"
-            addLabel="Add project"
-            itemIcon={<SettingsIntegrationIcon provider="jira" />}
-            groups={groupJiraProjectsBySite(projects)}
-            selectedIds={config.jira.sourceIds}
-            pending={busy}
-            loading={projectsQuery.isPending}
-            error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
-            onRetry={() => void projectsQuery.refetch()}
-            onToggleItem={id =>
-              update({ ...config, jira: { ...config.jira, sourceIds: toggleSourceId(config.jira.sourceIds, id) } })
-            }
-          />
-          {!projectsQuery.isError && (
-            <IntakeSourceRouting
-              integrationId="jira"
-              label="Jira"
-              sourceIds={config.jira.sourceIds ?? []}
-              sources={projects.map(project => ({ id: project.id, name: `${project.key} · ${project.name}` }))}
-              factories={factories}
-            />
-          )}
-        </>
+        <RoutedSourcePicker
+          integrationId="jira"
+          routingLabel="Jira"
+          factories={factories}
+          label="Jira projects"
+          addLabel="Add project"
+          itemIcon={<SettingsIntegrationIcon provider="jira" />}
+          groups={groupJiraProjectsBySite(projects)}
+          selectedIds={projectsQuery.isPending ? [] : config.jira.sourceIds}
+          pending={busy}
+          loading={projectsQuery.isPending}
+          error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
+          onRetry={() => void projectsQuery.refetch()}
+          onToggleItem={id =>
+            update({ ...config, jira: { ...config.jira, sourceIds: toggleSourceId(config.jira.sourceIds, id) } })
+          }
+        />
       )}
     </IntakeProviderCard>
   );
