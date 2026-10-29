@@ -976,6 +976,18 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         if (priorAccepted) {
           expect(history).toContain('EARLIER_ACCEPTED');
           expect(history).toContain('earlier-tool');
+        } else if (cancellation === 'timeout') {
+          // The total timeout saves one notice next to the input (#28735); nothing else from the run.
+          await vi.waitFor(async () => {
+            const assistant = (await memory.recall(scope)).messages.filter(message => message.role === 'assistant');
+            expect(assistant).toHaveLength(1);
+            expect(assistant[0]!.content.parts).toEqual([
+              expect.objectContaining({
+                type: 'error',
+                error: expect.objectContaining({ name: 'MastraTimeoutError' }),
+              }),
+            ]);
+          });
         } else {
           expect((await memory.recall(scope)).messages.filter(message => message.role === 'assistant')).toHaveLength(0);
         }
