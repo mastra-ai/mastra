@@ -953,17 +953,20 @@ describe('StagehandBrowser thread scope on a profile', () => {
     expect(logAtChromeStart).toBe(false);
   });
 
-  // The peer range allows @mastra/core 1.80.0, which has no prepareLocalProfile().
-  it('still starts another thread browser on a core without prepareLocalProfile()', async () => {
+  // A tool or screencast still holding a retired browser reaches getManagerForThread()
+  // without ensureReady(), so it must not start a Chrome that nothing tracks.
+  it('does not start a thread browser after retire()', async () => {
     const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
     browser.setCurrentThread('thread-1');
     await browser.ensureReady();
-    Object.defineProperty(browser, 'prepareLocalProfile', { value: undefined });
+    await browser.retire();
+    mockStagehandConstructor.mockClear();
+    mockStagehand.init.mockClear();
 
-    browser.setCurrentThread('thread-2');
-    await browser.ensureReady();
+    await expect(browser.getManagerForThread('thread-2')).rejects.toThrow(/was retired/);
 
-    expect(mockStagehandConstructor).toHaveBeenCalledTimes(2);
+    expect(mockStagehandConstructor).not.toHaveBeenCalled();
+    expect(mockStagehand.init).not.toHaveBeenCalled();
   });
 });
 

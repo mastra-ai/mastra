@@ -927,9 +927,7 @@ export abstract class MastraBrowser extends MastraBase {
       this.setCurrentThread(threadId);
     }
 
-    if (this.retired) {
-      throw new Error(`Browser ${this.id} was retired and cannot be launched again`);
-    }
+    this.assertNotRetired();
 
     // Already ready
     if (this.status === 'ready') {
@@ -1051,6 +1049,16 @@ export abstract class MastraBrowser extends MastraBase {
    * before the browser was replaced) gets an error instead of a new Chrome
    * that nothing tracks.
    */
+  /**
+   * Throw if retire() was called. Subclasses that start browsers outside
+   * launch()/ensureReady() (e.g. per-thread sessions) must call this first.
+   */
+  protected assertNotRetired(): void {
+    if (this.retired) {
+      throw new Error(`Browser ${this.id} was retired and cannot be used`);
+    }
+  }
+
   async retire(): Promise<void> {
     this.retired = true;
     await this.close();
@@ -1092,9 +1100,7 @@ export abstract class MastraBrowser extends MastraBase {
    * If browser was previously closed, it will be re-launched.
    */
   async ensureReady(): Promise<void> {
-    if (this.retired) {
-      throw new Error(`Browser ${this.id} was retired and cannot be used`);
-    }
+    this.assertNotRetired();
     if (this.status === 'ready') {
       // Check if browser is still alive (handles external closure)
       // checkBrowserAlive() should save lastBrowserState internally if it detects closure
@@ -1120,9 +1126,7 @@ export abstract class MastraBrowser extends MastraBase {
     if (this.status === 'closing') {
       // Wait for close to complete, then re-launch
       await this._closePromise;
-      if (this.retired) {
-        throw new Error(`Browser ${this.id} was retired and cannot be used`);
-      }
+      this.assertNotRetired();
       this.status = 'pending';
       await this.launch();
       return;
