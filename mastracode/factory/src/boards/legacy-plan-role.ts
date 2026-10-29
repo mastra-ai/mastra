@@ -37,7 +37,8 @@ export function workStageCarries(
   skillName: unknown,
   contextOf: (stage: string) => string | undefined,
 ): boolean | undefined {
-  if (boardId !== 'work') return undefined;
+  // A board installed as `work` in place of the built-in one is matched by context, like any other board.
+  if (boardId !== 'work' || contextOf('planning') !== 'work') return undefined;
   if (role === LEGACY_PLAN_ROLE) return stage === 'planning';
   if (role !== 'work') return contextOf(stage) === role;
   if (contextOf(stage) !== 'work') return false;

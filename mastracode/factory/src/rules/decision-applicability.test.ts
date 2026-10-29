@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBoardRegistry } from '../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { decisionOvertaken, decisionRetryable } from './decision-applicability.js';
 
@@ -31,7 +32,12 @@ describe('decisionRetryable', () => {
 
 describe('decisionOvertaken on the Work board', () => {
   // Planning and Building share the `work` context, so the skill tells which lane a held run was for.
-  async function heldInIntakeThenMoved(skillName: string, role: string, to: string) {
+  async function heldInIntakeThenMoved(
+    skillName: string,
+    role: string,
+    to: string,
+    boards: BoardRegistry = createBoardRegistry(),
+  ) {
     const { workItems } = await createFactoryStorageForTests();
     const scope = { orgId: 'org-1', userId: 'user-1' };
     const { item: created } = await workItems.upsert({
@@ -53,7 +59,7 @@ describe('decisionOvertaken on the Work board', () => {
     };
     await new Promise(resolve => setTimeout(resolve, 5));
     const moved = await workItems.update({ ...scope, id: created.id, patch: { stages: [to] } });
-    return decisionOvertaken({ boards: createBoardRegistry(), item: moved!.item, record, role, siblings: [record] });
+    return decisionOvertaken({ boards, item: moved!.item, record, role, siblings: [record] });
   }
 
   it.each([
@@ -65,5 +71,29 @@ describe('decisionOvertaken on the Work board', () => {
     ['a run held for the old plan role', 'factory-plan', 'plan', 'execute', true],
   ])('%s (%s, role %s) entering %s is overtaken: %s', async (_label, skillName, role, to, overtaken) => {
     expect(await heldInIntakeThenMoved(skillName, role, to)).toBe(overtaken);
+  });
+
+  it('matches a board installed as work in place of the built-in one by context, not by phase name', async () => {
+    const replacement = createBoardRegistry({
+      boards: [
+        defineBoard({
+          id: 'work',
+          name: 'Work',
+          initialPhase: 'intake',
+          phases: {
+            intake: { kind: 'resting', name: 'Intake', nextPhases: ['design', 'done'] },
+            design: {
+              kind: 'working',
+              name: 'Design',
+              runner: { context: 'work', skill: 'factory-plan' },
+              nextPhases: ['done'],
+            },
+            done: { kind: 'terminal', name: 'Done' },
+          },
+        }),
+      ],
+      includeDefaultBoards: false,
+    });
+    expect(await heldInIntakeThenMoved('factory-plan', 'work', 'design', replacement)).toBe(false);
   });
 });
