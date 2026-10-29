@@ -21,13 +21,13 @@ async function setup() {
   return { mastra, memoryStore };
 }
 
-async function arm(mastra: Mastra) {
+async function arm(mastra: Mastra, budgetMs = 60_000) {
   const armed = await armRunDeadline({
     mastra,
     agentId,
     runId,
     requestContext: undefined,
-    expiresAt: Date.now() + 60_000,
+    expiresAt: Date.now() + budgetMs,
   });
   const requestContext = new RequestContext(Object.entries(withRunDeadline({}, runId, armed.deadline)));
   const inScope = <T>(fn: () => Promise<T>) => runInRunDeadlineScope({ mastra, agentId, runId, requestContext }, fn);
@@ -73,6 +73,39 @@ describe('run deadline fence', () => {
     await expect(resumed.inScope(() => memoryStore.saveThread({ thread: thread() }))).resolves.toMatchObject({
       id: 't-1',
     });
+  });
+
+  it('accepts writes from a session resumed in the same millisecond an earlier deadline expired', async () => {
+    const { mastra, memoryStore } = await setup();
+    const first = await arm(mastra);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+    try {
+      await first.expire();
+      const resumed = await arm(mastra);
+
+      expect(resumed.deadline.fence).toBeDefined();
+      await expect(resumed.inScope(() => memoryStore.saveThread({ thread: thread() }))).resolves.toMatchObject({
+        id: 't-1',
+      });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('fences a session resumed with a smaller budget before the earlier deadline', async () => {
+    const { mastra, memoryStore } = await setup();
+    const first = await arm(mastra, 60_000);
+    await first.retire();
+    await new Promise(resolve => setTimeout(resolve, 2));
+
+    const resumed = await arm(mastra, 1_000);
+    expect(resumed.deadline.fence).toBeDefined();
+    await expect(
+      resumed.inScope(async () => {
+        await resumed.expire();
+        return memoryStore.saveThread({ thread: thread() });
+      }),
+    ).rejects.toSatisfy(isRunFenceConflictError);
   });
 
   it('retires the session fence so retention can prune it', async () => {

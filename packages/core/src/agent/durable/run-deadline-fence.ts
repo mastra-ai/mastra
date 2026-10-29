@@ -47,8 +47,10 @@ export async function armRunDeadline(args: {
   const store = await resolveMemoryStore(args.mastra, args.agentId, args.requestContext);
   if (!store) return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
 
-  // Claimed runs use small claim counters; claim-less runs order sessions by time.
-  const fence: RunFence = { runId, generation: Date.now(), ownerId: `deadline:${expiresAt}` };
+  // Claimed runs use small claim counters; claim-less runs order fences by time.
+  // Sessions take odd generations and expiries even ones, so a session armed in
+  // the same millisecond as an earlier session expired still outranks it.
+  const fence: RunFence = { runId, generation: Date.now() * 2 + 1, ownerId: `deadline:${expiresAt}` };
   const raised = await store.raiseRunFence(fence).catch(() => false);
   // A newer session already owns the fence; steps fall back to deadline checks.
   if (!raised) return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
@@ -58,7 +60,7 @@ export async function armRunDeadline(args: {
     expire: async () => {
       const expired: RunFence = {
         runId,
-        generation: Math.max(Date.now(), fence.generation + 1),
+        generation: Math.max(Date.now() * 2, fence.generation + 1),
         ownerId: 'deadline:expired',
       };
       // On failure, writes are still refused by the deadline check.
