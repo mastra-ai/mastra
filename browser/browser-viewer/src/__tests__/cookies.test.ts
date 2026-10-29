@@ -132,31 +132,39 @@ describe.skipIf(!canLaunchBrowser)('BrowserViewer.setCookies', () => {
     }
   }, 60_000);
 
-  it('makes listeners registered while cookies are being added wait for them', async () => {
-    viewer = new BrowserViewer({ cli: 'agent-browser', headless: true, scope: 'thread' });
-    await viewer.setCookies([cookie('slow')], 'thread-1');
-    // Hold cookie adding open so a listener can register in the middle of it.
-    let release!: () => void;
-    const held = new Promise<void>(resolve => (release = resolve));
-    const add = viewer['addCookiesToOpenBrowser'].bind(viewer);
-    viewer['addCookiesToOpenBrowser'] = async (...args) => {
-      await held;
-      return add(...args);
-    };
+  it.each([
+    ['thread', 'thread-1'],
+    ['shared', undefined],
+  ] as const)(
+    'makes %s-scope listeners registered while cookies are being added wait for them',
+    async (scope, listenerThread) => {
+      viewer = new BrowserViewer({ cli: 'agent-browser', headless: true, scope });
+      viewer.setCurrentThread('thread-1');
+      await viewer.setCookies([cookie('slow')], 'thread-1');
+      // Hold cookie adding open so a listener can register in the middle of it.
+      let release!: () => void;
+      const held = new Promise<void>(resolve => (release = resolve));
+      const add = viewer['addCookiesToOpenBrowser'].bind(viewer);
+      viewer['addCookiesToOpenBrowser'] = async (...args) => {
+        await held;
+        return add(...args);
+      };
 
-    const launching = viewer.launch('thread-1');
-    while (!viewer['threadManager'].getContextForThread('thread-1')) await new Promise(r => setTimeout(r, 10));
-    const seen = new Promise<string[]>(resolve => {
-      viewer.onBrowserReady(() => {
-        const context = viewer['threadManager'].getContextForThread('thread-1')!;
-        resolve(context.cookies().then(cookies => cookies.map(c => `${c.name}=${c.value}`)));
-      }, 'thread-1');
-    });
-    release();
-    await launching;
+      const launching = viewer.launch('thread-1');
+      while (!viewer['threadManager'].getContextForThread('thread-1')) await new Promise(r => setTimeout(r, 10));
+      const seen = new Promise<string[]>(resolve => {
+        viewer.onBrowserReady(() => {
+          const context = viewer['threadManager'].getContextForThread('thread-1')!;
+          resolve(context.cookies().then(cookies => cookies.map(c => `${c.name}=${c.value}`)));
+        }, listenerThread);
+      });
+      release();
+      await launching;
 
-    expect(await seen).toEqual(['preview=slow']);
-  }, 30_000);
+      expect(await seen).toEqual(['preview=slow']);
+    },
+    30_000,
+  );
 
   it("closes the browser when its cookies can't be added, so later listeners never see it ready", async () => {
     viewer = new BrowserViewer({ cli: 'agent-browser', headless: true, scope: 'thread' });

@@ -135,10 +135,13 @@ export class BrowserViewer extends MastraBrowser {
     await this.addPendingCookies(threadId);
   }
 
+  private addingCookies(threadId: string): boolean {
+    return this.cookiesNotAdded.has(this.threadManager.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId);
+  }
+
   /** A thread's browser isn't ready for listeners until its waiting cookies are added. */
   override hasThreadSession(threadId: string): boolean {
-    const key = this.threadManager.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId;
-    return !this.cookiesNotAdded.has(key) && super.hasThreadSession(threadId);
+    return !this.addingCookies(threadId) && super.hasThreadSession(threadId);
   }
 
   // ---------------------------------------------------------------------------
@@ -215,7 +218,9 @@ export class BrowserViewer extends MastraBrowser {
    * Check if browser is running (for current thread in thread scope).
    */
   override isBrowserRunning(threadId?: string): boolean {
-    return this.threadManager.isBrowserRunning(threadId ?? this.getCurrentThread());
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    // Not ready for listeners (or screencasts) until its waiting cookies are added.
+    return !this.addingCookies(effectiveThreadId) && this.threadManager.isBrowserRunning(effectiveThreadId);
   }
 
   /**
