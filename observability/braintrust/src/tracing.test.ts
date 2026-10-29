@@ -187,6 +187,22 @@ describe('BraintrustExporter', () => {
       });
     });
 
+    it('keeps timeToFirstTokenMs out of metadata on non-LLM spans', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span-id',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123', timeToFirstTokenMs: 42 } as any,
+      });
+
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: rootSpan });
+
+      const { event } = mockLogger.startSpan.mock.calls.at(-1)![0];
+      expect(event.metadata).toMatchObject({ agentId: 'agent-123' });
+      expect(event.metadata).not.toHaveProperty('timeToFirstTokenMs');
+    });
+
     it('should handle logger initialization failure', async () => {
       const error = new Error('Init failed');
       mockInitLogger.mockRejectedValue(error);

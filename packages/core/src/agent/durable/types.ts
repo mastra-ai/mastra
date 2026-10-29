@@ -7,8 +7,8 @@ import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs 
 import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
-
 import type { MastraFGAPermissionInput } from '../../auth/ee';
+
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
@@ -44,7 +44,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
@@ -424,6 +424,8 @@ export interface DurableLLMStepOutput {
   deferredStepFinishChunk?: unknown;
   /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this step's first chunk (kept with that chunk's clock) */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -446,6 +448,8 @@ export interface DurableToolCallInput {
   activeTools?: string[] | null;
   /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
   completionStartTime?: Date;
+  /** Time to first token of the same step, applied the same way */
+  timeToFirstTokenMs?: number;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -487,6 +491,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  tripwire?: StepTripwireData;
   /**
    * Set when an output processor dropped the tool-result chunk without a
    * tripwire. The model still gets the result, but callbacks leave it out of
@@ -583,6 +588,8 @@ export interface DurableAgenticExecutionOutput {
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this iteration's first chunk */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -757,6 +764,10 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Transient tracing fact; not part of the iteration state or finish payload. */
+  tracingTermination?: import('../../observability').SpanTermination;
+  tracingDelegationFailure?: import('../../observability').SpanTermination;
+  tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
   /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
   agentId?: string;
   /**
@@ -852,6 +863,8 @@ export interface RunRegistryEntry {
   resumeModelSpanData?: unknown;
   /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
   resumeCompletionStartTime?: Date;
+  /** Time to first token of the resumed segment's spans, kept the same way. */
+  resumeTimeToFirstTokenMs?: number;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from
@@ -939,7 +952,7 @@ export interface RunRegistryEntry {
   /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
   pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
-  subscribePendingSignals?: (listener: () => void) => () => void;
+  subscribePendingSignals?: (listener: PendingSignalListener) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
   stopStepSignalListener?: () => void;
   /**

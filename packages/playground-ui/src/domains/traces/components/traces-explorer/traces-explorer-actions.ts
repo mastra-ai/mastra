@@ -134,6 +134,16 @@ export const sanitizeTracesFilters = (filters: TracesFilters, withRootDuration: 
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
 
+const selectsRunning = (node: TraceFilterGroup | TraceFilterToken): boolean => {
+  if ('nodes' in node) return node.nodes.some(selectsRunning);
+  if (node.fieldId !== 'status') return false;
+  return Array.isArray(node.value) ? node.value.includes('running') : node.value === 'running';
+};
+
+/** Whether a status filter asks for `running`, which the trace query can't express and drops. */
+export const selectsRunningStatus = (filters: TracesFilters): boolean =>
+  filters.tokens.some(selectsRunning) || filters.groups.some(selectsRunning);
+
 const tokenValue = (tokens: TraceFilterToken[], fieldId: string) => {
   const value = tokens.find(token => token.fieldId === fieldId)?.value;
   return typeof value === 'string' ? value : undefined;

@@ -16,6 +16,7 @@ import { jiraScenario } from './jira.js';
 import { linearScenario } from './linear.js';
 import { microsoftPowerpointScenario } from './microsoft-powerpoint.js';
 import { microsoftTeamsScenario } from './microsoft-teams.js';
+import { microsoftWordScenario } from './microsoft-word.js';
 import { notionScenario } from './notion.js';
 import { oneDriveScenario } from './one-drive.js';
 import { openaiScenario } from './openai.js';
@@ -52,6 +53,7 @@ export const scenarios: Scenario[] = [
   linearScenario,
   microsoftPowerpointScenario,
   microsoftTeamsScenario,
+  microsoftWordScenario,
   notionScenario,
   oneDriveScenario,
   openaiScenario,

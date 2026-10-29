@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@browserbasehq/stagehand": "^4.3.0"
+    "@browserbasehq/stagehand": "^3.7.3"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",
@@ -46,7 +46,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.22.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.81.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
