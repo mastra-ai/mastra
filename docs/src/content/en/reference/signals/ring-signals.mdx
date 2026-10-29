@@ -37,183 +37,183 @@ export const homeAgent = new Agent({
 })
 ```
 
-Linked accounts are saved in the channels storage domain, so the Mastra instance needs a storage adapter.
+Linked accounts are saved in the channels storage domain. The Mastra instance needs a storage adapter.
 
 ## Constructor parameters
 
-All fields are optional. Credentials fall back to environment variables.
+All fields are optional. Credentials fall back to environment variables. If `clientId`, `clientSecret`, or `hmacKey` is missing, a warning is logged when the agent is registered, and account linking, webhooks, and media requests fail.
 
 <PropertiesTable
   content={[
-    {
-      name: 'clientId',
-      type: 'string',
-      isOptional: true,
-      defaultValue: 'process.env.RING_CLIENT_ID',
-      description: "Client ID of your app in the Ring Developer Console.",
-    },
-    {
-      name: 'clientSecret',
-      type: 'string',
-      isOptional: true,
-      defaultValue: 'process.env.RING_CLIENT_SECRET',
-      description: "Client secret of your app in the Ring Developer Console.",
-    },
-    {
-      name: 'hmacKey',
-      type: 'string',
-      isOptional: true,
-      defaultValue: 'process.env.RING_HMAC_KEY',
-      description:
-        'HMAC signature key of your Ring app. Verifies link nonces and webhook signatures, and derives the key that signs media links.',
-    },
-    {
-      name: 'baseUrl',
-      type: 'string',
-      isOptional: true,
-      defaultValue: 'process.env.RING_BASE_URL',
-      description:
-        'Public URL of your Mastra server, used to build signed snapshot and clip links. Without it, the tools return no links. The agent still sees snapshots, and chat channels still receive attachments.',
-    },
-    {
-      name: 'encryptionKey',
-      type: 'string',
-      isOptional: true,
-      defaultValue: 'process.env.MASTRA_ENCRYPTION_KEY',
-      description:
-        'Key used to encrypt stored Ring tokens. When unset, tokens are stored unencrypted and a warning is logged.',
-    },
-    {
-      name: 'mediaUrlTtlMs',
-      type: 'number',
-      isOptional: true,
-      defaultValue: '604800000 (7 days)',
-      description: 'How long signed snapshot and clip links stay valid, in milliseconds.',
-    },
-    {
-      name: 'routePrefix',
-      type: 'string',
-      isOptional: true,
-      defaultValue: "'/ring'",
-      description: 'Path prefix for the Ring routes added to the server.',
-    },
-    {
-      name: 'userAgent',
-      type: 'string',
-      isOptional: true,
-      defaultValue: "'MastraRingSignals/1.0'",
-      description: '`User-Agent` header sent to the Ring API.',
-    },
-    {
-      name: 'hardwareId',
-      type: 'string',
-      isOptional: true,
-      description:
-        '`Hardware_Id` sent to the Ring API. By default, a UUID is generated when an account is linked and stored with that account\'s tokens.',
-    },
-    {
-      name: 'target',
-      type: 'SignalProviderTarget | RingTargetResolver',
-      isOptional: true,
-      defaultValue: '{ resourceId: <agent id>, threadId: <device id> }',
-      description:
-        'Where events are delivered when no thread has subscribed to the device with `subscribeThread()`. Pass a fixed target, or a function that receives the `RingWebhookEvent` and returns a target, or `undefined` to drop the event. The function can be async.',
-    },
-    {
-      name: 'events',
-      type: 'Partial<Record<RingEventType, RingEventNotification | false>>',
-      isOptional: true,
-      defaultValue: 'DEFAULT_RING_EVENTS',
-      description:
-        'How each Ring event type becomes a notification. Entries are merged over the defaults. Set an event to `false` to disable it. See [Events](#events).',
-      properties: [
-        {
-          type: 'RingEventNotification',
-          parameters: [
-            {
-              name: 'priority',
-              type: "'urgent' | 'high' | 'medium' | 'low'",
-              description: 'Notification priority.',
-            },
-            {
-              name: 'summary',
-              type: 'string',
-              description: 'Short text the model sees for the event.',
-            },
-            {
-              name: 'coalesce',
-              type: 'boolean',
-              isOptional: true,
-              defaultValue: 'false',
-              description:
-                'Merge repeats of this event from the same device into one pending notification, counted by `coalescedCount`.',
-            },
-            {
-              name: 'attributes',
-              type: '(event: RingWebhookEvent) => Record<string, unknown>',
-              isOptional: true,
-              description:
-                'Extra attributes the model sees on the notification, merged over the defaults. Values that aren\'t strings, numbers, booleans, or `null` are dropped.',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'instructions',
-      type: 'string | false',
-      isOptional: true,
-      defaultValue: 'buildRingInstructions() for the enabled tools',
-      description:
-        "Fixed text added to the agent's system prompt that tells it how to handle Ring notifications. It doesn't change between requests, so it doesn't invalidate the prompt cache. Set to `false` to leave it out.",
-    },
-    {
-      name: 'tools',
-      type: 'RingToolsOptions',
-      isOptional: true,
-      description:
-        'Which tools the agent gets, and their options. Both tools are enabled by default. Set a tool to `false` to remove it, or to an options object to configure it. See [Tools](#tools).',
-      properties: [
-        {
-          type: 'RingToolsOptions',
-          parameters: [
-            {
-              name: 'snapshot',
-              type: 'boolean | RingSnapshotToolOptions',
-              isOptional: true,
-              defaultValue: 'true',
-              description: 'Adds `ring_snapshot`. Set to `false` to remove it.',
-            },
-            {
-              name: 'clip',
-              type: 'boolean | RingClipToolOptions',
-              isOptional: true,
-              defaultValue: 'true',
-              description: 'Adds `ring_clip`. Set to `false` to remove it.',
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'clientId',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'process.env.RING_CLIENT_ID',
+    description: 'Client ID of your app in the Ring Developer Console.',
+  },
+  {
+    name: 'clientSecret',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'process.env.RING_CLIENT_SECRET',
+    description: 'Client secret of your app in the Ring Developer Console.',
+  },
+  {
+    name: 'hmacKey',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'process.env.RING_HMAC_KEY',
+    description:
+      'HMAC signature key of your Ring app. Verifies link nonces and webhook signatures, and derives the key that signs media links.',
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'process.env.RING_BASE_URL',
+    description:
+      'Public URL of your Mastra server, used to build signed snapshot and clip links. Without it, the tools return no links. The agent still sees snapshots, and chat channels still receive attachments.',
+  },
+  {
+    name: 'encryptionKey',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'process.env.MASTRA_ENCRYPTION_KEY',
+    description:
+      'Key used to encrypt stored Ring tokens. When unset, tokens are stored unencrypted and a warning is logged.',
+  },
+  {
+    name: 'mediaUrlTtlMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '604800000 (7 days)',
+    description: 'How long signed snapshot and clip links stay valid, in milliseconds.',
+  },
+  {
+    name: 'routePrefix',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'/ring'",
+    description: 'Path prefix for the Ring routes added to the server.',
+  },
+  {
+    name: 'userAgent',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'MastraRingSignals/1.0'",
+    description: '`User-Agent` header sent to the Ring API.',
+  },
+  {
+    name: 'hardwareId',
+    type: 'string',
+    isOptional: true,
+    description:
+      "`Hardware_Id` sent to the Ring API. By default, a UUID is generated when an account is linked and stored with that account's tokens.",
+  },
+  {
+    name: 'target',
+    type: 'SignalProviderTarget | RingTargetResolver',
+    isOptional: true,
+    defaultValue: '{ resourceId: <agent id>, threadId: <device id> }',
+    description:
+      'Where events are delivered when no thread has subscribed to the device with `subscribeThread()`. Pass a fixed target, or a function that receives the `RingWebhookEvent` and returns a target, or `undefined` to drop the event. The function can be async.',
+  },
+  {
+    name: 'events',
+    type: 'Partial<Record<RingEventType, RingEventNotification | false>>',
+    isOptional: true,
+    defaultValue: 'DEFAULT_RING_EVENTS',
+    description:
+      'How each Ring event type becomes a notification. Entries are merged over the defaults. Set an event to `false` to disable it. See [Events](#events).',
+    properties: [
+      {
+        type: 'RingEventNotification',
+        parameters: [
+          {
+            name: 'priority',
+            type: "'urgent' | 'high' | 'medium' | 'low'",
+            description: 'Notification priority.',
+          },
+          {
+            name: 'summary',
+            type: 'string',
+            description: 'Short text the model sees for the event.',
+          },
+          {
+            name: 'coalesce',
+            type: 'boolean',
+            isOptional: true,
+            defaultValue: 'false',
+            description:
+              'Merge repeats of this event from the same device into one pending notification, counted by `coalescedCount`.',
+          },
+          {
+            name: 'attributes',
+            type: '(event: RingWebhookEvent) => Record<string, unknown>',
+            isOptional: true,
+            description:
+              "Extra attributes the model sees on the notification, merged over the defaults. Values that aren't strings, numbers, booleans, or `null` are dropped.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'instructions',
+    type: 'string | false',
+    isOptional: true,
+    defaultValue: 'buildRingInstructions() for the enabled tools',
+    description:
+      "Fixed text added to the agent's system prompt that tells it how to handle Ring notifications. It doesn't change between requests, so it doesn't invalidate the prompt cache. Set to `false` to leave it out.",
+  },
+  {
+    name: 'tools',
+    type: 'RingToolsOptions',
+    isOptional: true,
+    description:
+      'Which tools the agent gets, and their options. Both tools are enabled by default. Set a tool to `false` to remove it, or to an options object to configure it. See [Tools](#tools).',
+    properties: [
+      {
+        type: 'RingToolsOptions',
+        parameters: [
+          {
+            name: 'snapshot',
+            type: 'boolean | RingSnapshotToolOptions',
+            isOptional: true,
+            defaultValue: 'true',
+            description: 'Adds `ring_snapshot`. Set to `false` to remove it.',
+          },
+          {
+            name: 'clip',
+            type: 'boolean | RingClipToolOptions',
+            isOptional: true,
+            defaultValue: 'true',
+            description: 'Adds `ring_clip`. Set to `false` to remove it.',
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 ## Events
 
 Ring sends these event types. Events without an entry in `DEFAULT_RING_EVENTS` are disabled until you configure them in `events`.
 
-| Event                      | Sent when                                    | Default priority | Default summary       |
-| -------------------------- | -------------------------------------------- | ---------------- | --------------------- |
-| `button_press`             | The doorbell button is pressed               | `high`           | Doorbell was pressed. |
-| `motion_detected`          | A device camera detects motion               | `medium`         | Motion was detected.  |
-| `device_added`             | A device becomes accessible to your app      | Disabled         |                       |
-| `device_removed`           | A device is no longer accessible to your app | Disabled         |                       |
-| `device_online`            | A device comes online                        | Disabled         |                       |
-| `device_offline`           | A device goes offline                        | Disabled         |                       |
-| `app_integration_added`    | A Ring account links your app                | Disabled         |                       |
-| `app_integration_removed`  | A Ring account unlinks your app              | Disabled         |                       |
-| `subscription_activated`   | A Ring paid subscription or trial starts     | Disabled         |                       |
-| `subscription_deactivated` | A Ring paid subscription or trial ends       | Disabled         |                       |
+| Event | Sent when | Default priority | Default summary |
+| - | - | - | - |
+| `button_press` | The doorbell button is pressed | `high` | Doorbell was pressed. |
+| `motion_detected` | A device camera detects motion | `medium` | Motion was detected. |
+| `device_added` | A device becomes accessible to your app | Disabled | |
+| `device_removed` | A device is no longer accessible to your app | Disabled | |
+| `device_online` | A device comes online | Disabled | |
+| `device_offline` | A device goes offline | Disabled | |
+| `app_integration_added` | A Ring account links your app | Disabled | |
+| `app_integration_removed` | A Ring account unlinks your app | Disabled | |
+| `subscription_activated` | A Ring paid subscription or trial starts | Disabled | |
+| `subscription_deactivated` | A Ring paid subscription or trial ends | Disabled | |
 
 Each notification has `deviceId` and `timestamp` attributes. Motion events also have `motionType`: `human`, `vehicle`, `package_delivery`, or `other_motion` when Ring Smart Alerts are on, and `motion` when they're off.
 
@@ -263,84 +263,85 @@ Input: `{ deviceId: string, timestamp: number }`, taken from the notification's 
 
 <PropertiesTable
   content={[
-    {
-      name: 'attachment',
-      type: 'boolean | string[]',
-      isOptional: true,
-      defaultValue: 'true',
-      description:
-        'Send the snapshot as a file attachment on channel threads. `true` attaches on every channel platform, `false` never attaches, and a list of platform names attaches only on those. Studio, web, and API threads never get attachments.',
-    },
-    {
-      name: 'maxAttachmentBytes',
-      type: 'number | Record<string, number>',
-      isOptional: true,
-      defaultValue: '10000000 (10 MB)',
-      description:
-        'Largest snapshot to attach. A number applies to every platform. An object sets a limit per platform name, and unlisted platforms use the default.',
-    },
-    {
-      name: 'visibleToModel',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'true',
-      description: 'Pass the image to the model so the agent can describe it. Requires a model that supports image input.',
-    },
-  ]}
+  {
+    name: 'attachment',
+    type: 'boolean | string[]',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Send the snapshot as a file attachment on channel threads. `true` attaches on every channel platform, `false` never attaches, and a list of platform names attaches only on those. Studio, web, and API threads never get attachments.',
+  },
+  {
+    name: 'maxAttachmentBytes',
+    type: 'number | Record<string, number>',
+    isOptional: true,
+    defaultValue: '10000000 (10 MB)',
+    description:
+      'Largest snapshot to attach. A number applies to every platform. An object sets a limit per platform name, and unlisted platforms use the default.',
+  },
+  {
+    name: 'visibleToModel',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Pass the image to the model so the agent can describe it. Requires a model that supports image input.',
+  },
+]}
 />
 
 ### `ring_clip`
 
-Fetches a video clip that starts at the event. Ring needs time to process a recording, so the tool retries until the clip is ready or `processingTimeoutMs` passes.
+Fetches a video clip that starts at the event. Ring needs time to process a recording. The tool retries until the clip is ready or `processingTimeoutMs` passes.
 
 Input: `{ deviceId: string, timestamp: number }`, taken from the notification's attributes.
 
 <PropertiesTable
   content={[
-    {
-      name: 'attachment',
-      type: 'boolean | string[]',
-      isOptional: true,
-      defaultValue: 'true',
-      description: 'Send the clip as a file attachment on channel threads. Same values as the snapshot option.',
-    },
-    {
-      name: 'maxAttachmentBytes',
-      type: 'number | Record<string, number>',
-      isOptional: true,
-      defaultValue: '10000000 (10 MB)',
-      description: 'Largest clip to attach. Same values as the snapshot option.',
-    },
-    {
-      name: 'visibleToModel',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'false',
-      description:
-        'Pass the video to the model so the agent can describe it. Requires a model that supports video input, for example Gemini. Video input counts toward the context window for every second of footage.',
-    },
-    {
-      name: 'audio',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'true',
-      description: 'Include audio in the clip.',
-    },
-    {
-      name: 'durationMs',
-      type: 'number',
-      isOptional: true,
-      defaultValue: '15000 (15 seconds)',
-      description: "Clip length in milliseconds. Capped at Ring's maximum of 15 minutes.",
-    },
-    {
-      name: 'processingTimeoutMs',
-      type: 'number',
-      isOptional: true,
-      defaultValue: '120000 (2 minutes)',
-      description: 'How long to wait for Ring to finish processing the recording.',
-    },
-  ]}
+  {
+    name: 'attachment',
+    type: 'boolean | string[]',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Send the clip as a file attachment on channel threads. Same values as the snapshot option.',
+  },
+  {
+    name: 'maxAttachmentBytes',
+    type: 'number | Record<string, number>',
+    isOptional: true,
+    defaultValue: '10000000 (10 MB)',
+    description: 'Largest clip to attach. Same values as the snapshot option.',
+  },
+  {
+    name: 'visibleToModel',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Pass the video to the model so the agent can describe it. Requires a model that supports video input, for example Gemini. Video input counts toward the context window for every second of footage.',
+  },
+  {
+    name: 'audio',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Include audio in the clip.',
+  },
+  {
+    name: 'durationMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '15000 (15 seconds)',
+    description: "Clip length in milliseconds. Capped at Ring's maximum of 15 minutes.",
+  },
+  {
+    name: 'processingTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '120000 (2 minutes)',
+    description: 'How long to wait for Ring to finish processing the recording.',
+  },
+]}
 />
 
 ### Tool result
@@ -349,41 +350,42 @@ Both tools return the same shape:
 
 <PropertiesTable
   content={[
-    {
-      name: 'mediaId',
-      type: 'string',
-      description: 'Identifier for the snapshot or clip.',
-    },
-    {
-      name: 'url',
-      type: 'string',
-      isOptional: true,
-      description: 'Signed link to the media on your server. Only present when `baseUrl` is set.',
-    },
-    {
-      name: 'attached',
-      type: 'boolean',
-      description: 'Whether the media was sent as a file attachment on the thread.',
-    },
-    {
-      name: 'shareLink',
-      type: 'boolean',
-      description: "Whether the agent should share `url` in its reply, because the thread's platform can't show tool results and the media wasn't attached.",
-    },
-  ]}
+  {
+    name: 'mediaId',
+    type: 'string',
+    description: 'Identifier for the snapshot or clip.',
+  },
+  {
+    name: 'url',
+    type: 'string',
+    isOptional: true,
+    description: 'Signed link to the media on your server. Only present when `baseUrl` is set.',
+  },
+  {
+    name: 'attached',
+    type: 'boolean',
+    description: 'Whether the media was sent as a file attachment on the thread.',
+  },
+  {
+    name: 'shareLink',
+    type: 'boolean',
+    description:
+      "Whether the agent should share `url` in its reply, because the thread's platform can't show tool results and the media wasn't attached.",
+  },
+]}
 />
 
 ## Routes
 
-These routes are added to the Mastra server. Ring calls them without Mastra authentication. Webhooks are verified with Ring's signature, and account links with Ring's link nonce.
+These routes are added to the Mastra server when the agent is registered. They don't use Mastra authentication. Webhooks are verified with Ring's signature, account links with Ring's link nonce, and media links with their signature and expiry time.
 
-| Route                            | Purpose                                                       |
-| -------------------------------- | ------------------------------------------------------------- |
-| `GET <routePrefix>/link`         | Account Link URL. Finishes linking and shows the result.         |
-| `GET <routePrefix>/home`         | App Homepage URL. Returns `Ring Signals` as plain text.       |
-| `POST <routePrefix>/token`       | Token Exchange URL. Exchanges an authorization code for tokens. |
-| `POST <routePrefix>/webhook`     | Webhook URL. Receives Ring events.                            |
-| `GET <routePrefix>/media/:kind/:deviceId/:timestamp` | Serves signed snapshot and clip links.        |
+| Route | Purpose |
+| - | - |
+| `GET <routePrefix>/link` | Account Link URL. Finishes linking and shows the result. |
+| `GET <routePrefix>/home` | App Homepage URL. Returns `Ring Signals` as plain text. |
+| `POST <routePrefix>/token` | Token Exchange URL. Exchanges an authorization code for tokens. |
+| `POST <routePrefix>/webhook` | Webhook URL. Receives Ring events. |
+| `GET <routePrefix>/media/:kind/:deviceId/:timestamp` | Serves signed snapshot and clip links. |
 
 ## Methods
 
@@ -399,17 +401,17 @@ Returns: `SignalSubscription`
 
 <PropertiesTable
   content={[
-    {
-      name: 'target',
-      type: 'SignalProviderTarget',
-      description: 'The thread to deliver events to. Must include `threadId` and `resourceId`.',
-    },
-    {
-      name: 'deviceId',
-      type: 'string',
-      description: 'The Ring device ID.',
-    },
-  ]}
+  {
+    name: 'target',
+    type: 'SignalProviderTarget',
+    description: 'The thread to deliver events to. Must include `threadId` and `resourceId`.',
+  },
+  {
+    name: 'deviceId',
+    type: 'string',
+    description: 'The Ring device ID.',
+  },
+]}
 />
 
 ### `unsubscribeThread(target, deviceId)`
@@ -424,7 +426,7 @@ Returns: `boolean`, `true` if the thread was subscribed.
 
 - `DEFAULT_RING_EVENTS`: The default `events` configuration.
 - `DEFAULT_RING_INSTRUCTIONS`: The default system instruction, for both tools.
-- `buildRingInstructions({ snapshot, clip })`: Builds the system instruction for a given set of enabled tools. Use it to extend the default text.
+- `buildRingInstructions({ snapshot, clip })`: Builds the system instruction for the enabled tools. Use it to extend the default text.
 - `RingApiClient` and `RingApiError`: A client for the Ring Partner API and the error it throws.
 - Types: `RingSignalsOptions`, `RingEventType`, `RingEventNotification`, `RingMotionType`, `RingWebhookEvent`, `RingTargetResolver`, `RingToolsOptions`, `RingSnapshotToolOptions`, `RingClipToolOptions`, `RingAttachmentOption`, and `RingMaxAttachmentBytesOption`.
 

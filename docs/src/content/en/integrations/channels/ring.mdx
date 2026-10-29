@@ -48,9 +48,9 @@ RING_BASE_URL=http://localhost:4111
 Add `new RingSignals()` to the agent's `signals` array:
 
 ```typescript title="src/mastra/agents/home-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { RingSignals } from '@mastra/ring-signals';
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { RingSignals } from '@mastra/ring-signals'
 
 export const homeAgent = new Agent({
   id: 'home-agent',
@@ -59,7 +59,7 @@ export const homeAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory(),
   signals: [new RingSignals()],
-});
+})
 ```
 
 `RING_CLIENT_ID`, `RING_CLIENT_SECRET`, `RING_HMAC_KEY`, and `RING_BASE_URL` are read from the environment by default. To override them, pass `clientId`, `clientSecret`, `hmacKey`, and `baseUrl` in the config. See the [RingSignals reference](/reference/signals/ring-signals) for every option and its default.
@@ -67,9 +67,9 @@ export const homeAgent = new Agent({
 Register the agent and a storage adapter on the Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { LibSQLStore } from '@mastra/libsql';
-import { homeAgent } from './agents/home-agent';
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { homeAgent } from './agents/home-agent'
 
 export const mastra = new Mastra({
   agents: { homeAgent },
@@ -77,7 +77,7 @@ export const mastra = new Mastra({
     id: 'mastra-storage',
     url: 'file:./mastra.db',
   }),
-});
+})
 ```
 
 ## Account linking
@@ -91,12 +91,12 @@ Linking connects a Ring account to your agent. Set it up in two places, in this 
 
 The routes Ring needs are added automatically to your Mastra server under `/ring`:
 
-| Ring setting       | Route                            | What Ring uses it for                         |
-| ------------------ | -------------------------------- | --------------------------------------------- |
-| Account Link URL   | `GET <server URL>/ring/link`     | Finishes linking and shows the result         |
-| Token Exchange URL | `POST <server URL>/ring/token`   | Exchanges an authorization code for tokens    |
-| Webhook URL        | `POST <server URL>/ring/webhook` | Sends doorbell, motion, and other events      |
-| App Homepage URL   | `GET <server URL>/ring/home`     | Links to your app from its Ring Appstore page |
+| Ring setting | Route | What Ring uses it for |
+| - | - | - |
+| Account Link URL | `GET <server URL>/ring/link` | Finishes linking and shows the result |
+| Token Exchange URL | `POST <server URL>/ring/token` | Exchanges an authorization code for tokens |
+| Webhook URL | `POST <server URL>/ring/webhook` | Sends doorbell, motion, and other events |
+| App Homepage URL | `GET <server URL>/ring/home` | Links to your app from its Ring Appstore page |
 
 Ring calls these routes without Mastra authentication. Webhooks are verified with Ring's signature, and account links with Ring's link nonce.
 
@@ -117,6 +117,10 @@ The account's tokens are saved in the channels store and refreshed before they e
 
 You can link several Ring accounts to one agent. Ring allows up to 10 accounts on a private developer app. Each device is matched to the account that owns it.
 
+### Test the integration
+
+Press the doorbell button. A `button_press` notification arrives in the device's thread, and the agent responds to it. Open the agent in Studio to see the thread. Its thread ID is the device ID.
+
 ## Events and priorities
 
 Ring events arrive as notification signals. `button_press` (`high` priority) and `motion_detected` (`medium` priority) are enabled by default. See the [RingSignals reference](/reference/signals/ring-signals#events) for every event type and its defaults.
@@ -133,7 +137,7 @@ new RingSignals({
     },
     device_offline: { priority: 'low', summary: 'Device went offline.', coalesce: true },
   },
-});
+})
 ```
 
 The agent sees each notification's `deviceId`, `timestamp`, and `motionType` attributes. Use `attributes` to add your own, for example the device's location.
@@ -149,7 +153,7 @@ You can provide custom values for both by setting `target.resourceId` and `targe
 ```typescript
 new RingSignals({
   target: { resourceId: 'home', threadId: 'ring-alerts' },
-});
+})
 ```
 
 To pick the thread per event, set `target` to a function. The function receives the webhook payload Ring sent for the event and returns the target for that event. The payload includes:
@@ -165,10 +169,10 @@ This example gives each kind of activity its own thread. Motion caused by a pers
 ```typescript
 new RingSignals({
   target: event => {
-    const activity = event.data.attributes.sub_type ?? 'doorbell';
-    return { resourceId: 'home', threadId: `ring-${activity}` };
+    const activity = event.data.attributes.sub_type ?? 'doorbell'
+    return { resourceId: 'home', threadId: `ring-${activity}` }
   },
-});
+})
 ```
 
 Return `undefined` to drop the event. The function can be `async`. The [RingSignals reference](/reference/signals/ring-signals#ringwebhookevent) documents the full payload type, `RingWebhookEvent`.
@@ -189,7 +193,7 @@ new RingSignals({
   tools: {
     clip: { visibleToModel: true },
   },
-});
+})
 ```
 
 When `visibleToModel` is `false`, the model gets only the tool's text result and link, and can't describe what the media shows.
@@ -227,12 +231,12 @@ new RingSignals({
     snapshot: { attachment: ['imessage', 'slack'] },
     clip: { maxAttachmentBytes: { discord: 10_000_000 } },
   },
-});
+})
 ```
 
 A platform name is the key you gave the adapter in the agent's `channels.adapters` configuration. In this agent, the platform names are `imessage` and `slack`:
 
-```typescript
+```typescript oxfmt:false
 channels: {
   adapters: {
     imessage: { adapter: createiMessageAdapter() },
@@ -248,13 +252,13 @@ When media isn't attached on a channel thread, because the platform isn't listed
 To get Ring alerts in a chat, the channel and Ring need to use the same thread. Give the channel's thread a fixed ID with `resolveResourceId` and `resolveThreadId`, and set `target` to the same values:
 
 ```typescript title="src/mastra/agents/home-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { RingSignals } from '@mastra/ring-signals';
-import { createiMessageAdapter } from '@photon-ai/chat-adapter-imessage';
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { RingSignals } from '@mastra/ring-signals'
+import { createiMessageAdapter } from '@photon-ai/chat-adapter-imessage'
 
-const resourceId = 'home';
-const threadId = 'ring-alerts';
+const resourceId = 'home'
+const threadId = 'ring-alerts'
 
 export const homeAgent = new Agent({
   id: 'home-agent',
@@ -274,7 +278,7 @@ export const homeAgent = new Agent({
       target: { resourceId, threadId },
     }),
   ],
-});
+})
 ```
 
 The channel creates the `ring-alerts` thread on the first message, and Ring events then go to that same thread. If a Ring event arrives first, Ring creates the thread instead, and the channel can't take over a thread that already exists, so it starts a new one.
