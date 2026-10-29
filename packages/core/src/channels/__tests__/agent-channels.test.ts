@@ -4531,5 +4531,42 @@ describe('per-sender handler runs end to end', () => {
       expect(zip.fetchData).not.toHaveBeenCalled();
       expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
     });
+
+    it('saves to a filesystem the workspace resolves per request', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: () => new LocalFilesystem({ basePath: dir }) }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      const zipPath = userTurn.match(/report\.zip \(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(zipPath).toMatch(/^channel-attachments\/[0-9a-f]+\/report\.zip$/);
+      expect(await readFile(join(dir, zipPath!))).toEqual(ZIP_BYTES);
+    });
+
+    it('keeps attachments without a URL apart when they share a name, type and size', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const withoutUrl = (bytes: string) => {
+        const { url: _url, ...att } = binary('data.bin', 'application/octet-stream', async () => Buffer.from(bytes), 4);
+        return att;
+      };
+      const userTurn = await deliverFiles(h, [withoutUrl('AAAA'), withoutUrl('BBBB')]);
+
+      const paths = [
+        ...userTurn.matchAll(/data\.bin \(application\/octet-stream\) — saved in the workspace at ([^\]\\]+)\]/g),
+      ].map(m => m[1]!);
+      expect(paths).toHaveLength(2);
+      expect(paths[0]).not.toBe(paths[1]);
+      expect((await readFile(join(dir, paths[0]!))).toString()).toBe('AAAA');
+      expect((await readFile(join(dir, paths[1]!))).toString()).toBe('BBBB');
+    });
   });
 });

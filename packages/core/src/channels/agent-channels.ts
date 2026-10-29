@@ -1803,7 +1803,7 @@ export class AgentChannels {
   private async resolveAttachmentFilesystem(requestContext: RequestContext): Promise<WorkspaceFilesystem | undefined> {
     try {
       const workspace = await this.getDispatchAgent()?.getWorkspace?.({ requestContext });
-      const fs = workspace?.filesystem;
+      const fs = workspace ? await workspace.resolveFilesystem({ requestContext }) : undefined;
       return fs && !fs.readOnly ? fs : undefined;
     } catch (err) {
       this.log('warn', 'Could not resolve the agent workspace for attachments', { error: err });
@@ -1812,10 +1812,11 @@ export class AgentChannels {
   }
 
   /**
-   * Save an attachment under `channel-attachments/<url hash>/<name>` and
-   * return the path, or undefined when it cannot be downloaded or written.
-   * The URL-derived folder keeps same-named files apart and lets history
-   * walks reuse a file that is already saved.
+   * Save an attachment under `channel-attachments/<hash>/<name>` and return
+   * the path, or undefined when it cannot be downloaded or written. The
+   * folder hashes the URL so history walks reuse a saved file without
+   * refetching; attachments without a URL hash their downloaded bytes, so
+   * different files never share a path.
    */
   private async saveAttachmentToWorkspace(
     fs: WorkspaceFilesystem,
@@ -1824,20 +1825,18 @@ export class AgentChannels {
     filename: string,
     mimeType: string,
   ): Promise<string | undefined> {
-    const key = createHash('sha256')
-      .update(att.url ?? `${filename}:${mimeType}:${att.size ?? ''}`)
-      .digest('hex')
-      .slice(0, 16);
     const safeName = filename.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '') || 'file';
-    const path = `channel-attachments/${key}/${safeName}`;
+    const pathFor = (source: string | Uint8Array) =>
+      `channel-attachments/${createHash('sha256').update(source).digest('hex').slice(0, 16)}/${safeName}`;
     try {
-      if (await fs.exists(path)) return path;
+      if (att.url && (await fs.exists(pathFor(att.url)))) return pathFor(att.url);
       const buf = await fetchData();
       const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
       if (bytes.byteLength > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
         this.log('warn', 'Attachment exceeds the download ceiling, not saved', { mimeType, bytes: bytes.byteLength });
         return undefined;
       }
+      const path = pathFor(att.url ?? bytes);
       await fs.writeFile(path, bytes, { recursive: true, mimeType });
       return path;
     } catch (err) {
