@@ -104,6 +104,38 @@ const LABEL_GAP = 48;
 /** Rough label width at the axis font size. */
 export const labelWidth = (text: string) => text.length * CHART_AXIS_FONT_SIZE * 0.58;
 
+export type TimeTickPlacement = { x: number; anchor: 'start' | 'middle' | 'end' };
+
+/**
+ * Where a label goes: centred on its bucket, or pinned to the plot's edge when centring would
+ * push it out. A pinned label anchors on that edge, so it ends exactly there whatever the font's
+ * real widths (`labelWidth` is only an estimate).
+ */
+export function placeTimeTick({
+  x,
+  index,
+  offset = 0,
+  count,
+  plotWidth,
+  textWidth,
+}: {
+  x: number;
+  index: number;
+  /** Half a band (bars); 0 for points (lines). */
+  offset?: number;
+  count: number;
+  plotWidth: number;
+  textWidth: number;
+}): TimeTickPlacement {
+  // Bars sit in bands (label at the band's centre); lines sit on points (first at the edge).
+  const left = offset > 0 ? x - offset * (2 * index + 1) : x - (index * plotWidth) / Math.max(count - 1, 1);
+  const right = left + plotWidth;
+  const half = textWidth / 2;
+  if (x + half > right) return { x: right, anchor: 'end' };
+  if (x - half < left) return { x: left, anchor: 'start' };
+  return { x, anchor: 'middle' };
+}
+
 /**
  * Which buckets get a label: the smallest round step whose labels fit the width, on
  * clock-aligned times (hours divisible by the step, days on local midnight or, for daily
