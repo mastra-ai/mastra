@@ -17,7 +17,9 @@ Knowledge is off in Mastra Code until you turn it on.
 
 ## Turn it on in the TUI
 
-Open `/settings`, turn on **Experimental Knowledge**, and restart Mastra Code. The code agent then gets the Knowledge tools (search, read, write, and pin) and pinned context every turn. Knowledge is stored with Mastra Code's own storage under a shared `org:local` scope.
+Open `/settings`, turn on **Experimental Knowledge**, and restart Mastra Code. The code agent then gets the Knowledge tools (search, read, write, and pin) and pinned context every turn.
+
+This built-in Knowledge is stored with Mastra Code's own storage and declares Memory's scopes with [`knowledgeMemoryScopes()`](/docs/knowledge/scope-types). Every local session runs as `org:local`, so the agent can write pages at `org:local` that every session on the same storage reads.
 
 ## Attach your own Knowledge
 
@@ -26,39 +28,54 @@ When you embed Mastra Code, attach Knowledge the way you would on an agent, with
 ```typescript
 const code = await createMastraCode({
   knowledge: companyKnowledge,
-  scopes: ['org:acme', { scope: 'team:acme:support', access: 'write' }],
+  scopes: ['org:acme', 'team:acme:support'],
 })
 ```
 
-Here every run reads `org:acme` and `team:acme:support` and writes only to `team:acme:support`. As everywhere else, a plain tag is read-only. See [read and write access](/docs/knowledge/concepts#read-and-write-access). The instance's own `tools` and `pinnedContext` options decide which tools the agent gets.
+`scopes` say who every run in the session is. What the run may read or write comes from `companyKnowledge`'s [scope declarations](/docs/knowledge/scope-types), so declare each type you pass here. The instance's own `tools` and `pinnedContext` options decide which tools the agent gets.
 
 The instance is registered on the mounted Mastra runtime under its `id`. To register it under another key, pass `knowledge: { key: 'company', instance: companyKnowledge }`.
 
 The `knowledge` option also accepts:
 
-- `true`: the built-in Knowledge, the same one the TUI setting turns on. With no `scopes`, it writes to `org:local`.
+- `true`: the built-in Knowledge, the same one the TUI setting turns on. With no `scopes`, its runs are `org:local`.
 - `false`: Knowledge stays off, even when the TUI setting is on.
 
-## Session scopes
+## Factory sessions
 
-Local sessions act with the `scopes` you pass. Factory sessions always add writable `org:<org>` and `project:<project>` tags. The tags you pass keep the access you gave them.
+In Factory, the TUI setting has no effect: Knowledge stays off unless the Factory host passes its own `knowledge: { key, instance }`.
 
-If a Factory session has no organization, or a tag in `scopes` has the same type as one of those but a different value, the agent runs with only its `resource:` and `thread:` tags. Its writes are private to the run, and the `/knowledge` inspector reports Knowledge as unavailable.
+Factory sessions add `org:<orgId>` and `project:<projectId>` to the session's scopes, so the instance must declare both types. Otherwise every Knowledge tool call fails with `Knowledge run scope "project:p1" does not match a declared scope type.`
 
-In a Factory session, Knowledge is stored under `project:<projectId>` together with `org:<orgId>`. Knowledge written earlier under `resource:<projectId>` no longer shows.
+```typescript
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
 
-By default the agent writes at all of its writable tags: org, project, its Memory resource, and the thread. Those records show only in that session's drill-down. To share a record with the whole project, have the agent write with `scope: ['org:<org>', 'project:<id>']`.
+const companyKnowledge = new Knowledge({
+  id: 'company',
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'project:$projectId': { access: [{ principal: 'self', role: 'editor' }] },
+  },
+  tools: true,
+})
+```
+
+With this setup, a page written at `project:p1` is read by every session in that project, and sessions in other projects don't see it. The agent picks where each page goes with the tools' `scope` argument. Pages it writes at its `resource:` or `thread:` scope stay private to that user or conversation.
+
+If a Factory session has no organization, or a host scope has type `org:` or `project:` with a different value than the session's, the agent runs with only its `resource:` and `thread:` scopes. Nothing it writes is shared, and the `/knowledge` inspector reports Knowledge as unavailable.
 
 ## Scopes per message
 
-A long-lived session can change what a run is allowed to see for each task. Pass `scopes` to `session.sendMessage`. Entries take the same form as above: a plain tag is read-only, and `{ scope, access: 'write' }` is writable:
+A long-lived session can change what a run is allowed to see for each task. Pass `scopes` to `session.sendMessage`, in the same plain-string form as above:
 
 ```typescript
 await session.sendMessage({
   content: 'Fix the login bug',
-  scopes: [{ scope: 'request:r25', access: 'write' }],
+  scopes: ['request:r25'],
 })
 ```
+
+The run holds `request:r25` on top of the session's scopes. Declare the `request:` type on the Knowledge instance like any other.
 
 A run's scopes are fixed when it starts:
 
@@ -76,6 +93,6 @@ Scopes are set in process only. Remote callers, through the agent controller HTT
 
 ## Upgrading
 
-`experimental_subconscious` and the Memory `knowledge` option are removed, and setting either throws. Attach Knowledge to the agent instead. The `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` and `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` environment variables do nothing.
+Mastra Code no longer includes the experimental Subconscious. The Subconscious activity view and the `ask_memory` tool are removed. `experimental_subconscious` and the Memory `knowledge` option are removed too, and setting either throws. Attach Knowledge to the agent instead. The `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` and `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` environment variables do nothing.
 
-Scope entries changed shape. A plain tag used to be writable and is now read-only. Mark tags the run should write to as `{ scope, access: 'write' }`. The old `{ tag, access: 'read' }` form is gone, because a plain tag already means read-only.
+Scopes are plain strings that say who the run is. The `{ scope, access }` and `{ tag, access }` forms are gone. Roles come from the Knowledge instance's scope declarations.
