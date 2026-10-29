@@ -394,10 +394,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           outputTokens: undefined,
           totalTokens: undefined,
         };
-        // End the root spans here too — this is the only error path that covers EventedAgent,
-        // whose fire-and-forget launch never sees the failure (so emitError never runs).
-        terminateAttemptSpans?.(executionFailureTermination(fatalError));
-        endRunSpansWithError(runId, fatalError);
+        // This bail returns a finish result. Record the failure now, but let finalization
+        // end the roots with accumulated usage and output, including on evented workers.
+        const termination = executionFailureTermination(fatalError);
+        const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+        if (registry) registry.tracingTermination = termination;
+        terminateAttemptSpans?.(termination);
+        // A total timeout can tear down the workflow before its finish mapping runs.
+        endRunSpansWithError(runId, fatalError, {
+          endSpan: isMastraTimeoutError(fatalError) && fatalError.timeoutType === 'total',
+        });
 
         // Emit the deferred error chunk so consumers see it
         if (pubsub) {
@@ -868,9 +874,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
             };
             failInference = error => modelSpanTracker?.failInference?.(error);
+            // Older observability releases expose only the step snapshot API.
+            // Preserve their cleanup path without requiring a package upgrade.
+            const endAttempt = (termination: SpanTermination) => {
+              if (modelSpanTracker?.endAttempt) {
+                modelSpanTracker.endAttempt(termination);
+              } else {
+                const stepData = modelSpanTracker?.exportCurrentStep();
+                if (stepData) observability?.rebuildSpan(stepData)?.end(termination);
+              }
+            };
             endAttemptSpans = () => {
               modelSpanTracker?.interruptInference?.(interruptionOutcome);
-              modelSpanTracker?.endAttempt?.(interruptionOutcome);
+              endAttempt(interruptionOutcome);
             };
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
@@ -881,7 +897,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // the attempt before any provider request is made.
             modelSpanTracker?.startStep();
             terminateAttemptSpans = termination => {
-              modelSpanTracker?.endAttempt?.(termination);
+              endAttempt(termination);
             };
             const endTripwireSpans = (
               cause: TripWire | NonNullable<Parameters<typeof agentLoopTermination>[0]['tripwire']>,
@@ -899,7 +915,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               });
               const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
               if (registry) registry.tracingTermination = termination;
-              modelSpanTracker?.endAttempt?.(termination);
+              endAttempt(termination);
             };
 
             // Build structured output for AI SDK if configured. Held in a `let`

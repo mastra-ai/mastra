@@ -39,12 +39,16 @@ describe.each(['esm', 'cjs'] as const)('outcome compatibility (%s)', format => {
         script,
         `${
           format === 'esm'
-            ? "import { workflowTermination, agentLoopTermination } from './dist/compat.mjs';"
-            : "const { workflowTermination, agentLoopTermination } = require('./dist/compat.cjs');"
+            ? "import { workflowTermination, agentLoopTermination, generationUsage } from './dist/compat.mjs';"
+            : "const { workflowTermination, agentLoopTermination, generationUsage } = require('./dist/compat.cjs');"
         }
-        process.stdout.write(JSON.stringify([workflowTermination({status:'failed'}), agentLoopTermination({finishReason:'stop'})]));`,
+        process.stdout.write(JSON.stringify([workflowTermination({status:'failed'}), agentLoopTermination({finishReason:'stop'}), generationUsage({inputTokens:3},[]).usage]));`,
       );
-      expect(JSON.parse(execFileSync(process.execPath, [script], { encoding: 'utf8' }))).toEqual([{}, {}]);
+      expect(JSON.parse(execFileSync(process.execPath, [script], { encoding: 'utf8' }))).toEqual([
+        {},
+        {},
+        { inputTokens: 3 },
+      ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

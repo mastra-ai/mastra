@@ -13,6 +13,7 @@ import { isObservationalMemoryEnabled } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
+import { compactStopReasonContext } from '../../../observability/outcome-schema';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { OutputProcessorOrWorkflow } from '../../../processors';
 import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
@@ -448,10 +449,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
               stopReason: payload.suspendReason === 'tool-call-approval' ? 'approval_required' : null,
               stopReasonContext:
                 payload.suspendReason === 'tool-call-approval'
-                  ? {
+                  ? compactStopReasonContext('approval_required', {
                       toolName: payload.toolName,
                       toolCallId: payload.toolCallId,
-                    }
+                    })
                   : null,
               endTree: true,
               output: {
@@ -575,10 +576,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
               capabilities.logger.error('Error saving memory after total timeout', { error: e, runId });
             }
           }
-          // Retries have settled by this terminal error path. Finish tracing after persistence.
           const spanError = error instanceof Error ? error : new Error(String(error));
-          // Classify the original value: serialized errors lose their fields when re-wrapped.
-          agentSpan?.error({ error: spanError, ...executionFailureTermination(error), endTree: true });
+          // Ordinary errors still produce onFinish, which records generation usage before
+          // ending the agent. A total deadline has no finish chunk and needs cleanup here.
+          const endsWithoutFinish = isMastraTimeoutError(error) && error.timeoutType === 'total';
+          agentSpan?.error({
+            error: spanError,
+            ...executionFailureTermination(error),
+            endSpan: endsWithoutFinish,
+            ...(endsWithoutFinish ? { endTree: true } : {}),
+          });
           await options.onError?.({ error });
         },
         onAbort: options.onAbort,

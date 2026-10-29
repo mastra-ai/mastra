@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { expect, it } from 'vitest';
+import { expect, it, onTestFinished } from 'vitest';
+import { ModelSpanTracker } from '../../../../../../../observability/mastra/src/model-tracing';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { SCENARIO_MODEL_ID } from '../types';
@@ -11,7 +12,7 @@ import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it('parents buffered reply chunks to a span that is still open', async () => {
+  it.each([true, false])('keeps processed chunks inside their logical step (buffered=%s)', async buffered => {
     const { observability, ended } = capture();
     let bufferedText = '';
     let releasedAfterInference = false;
@@ -21,32 +22,34 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       observability,
       collectChunks: true,
       prompt: 'Write a short reply',
-      outputProcessors: [
-        {
-          id: 'buffer-reply',
-          processOutputStream: async ({ part }) => {
-            if (part.type === 'text-start') return null;
-            if (part.type === 'text-delta') {
-              bufferedText += part.payload.text;
-              return null;
-            }
-            if (part.type === 'text-end') {
-              // Hold content until provider completion has been exported. This makes
-              // the delayed-processor boundary deterministic rather than racing clocks.
-              await expect.poll(() => ended(SpanType.MODEL_INFERENCE).length).toBe(1);
-              releasedAfterInference = true;
-              return { ...part, type: 'text-delta', payload: { ...part.payload, text: bufferedText } };
-            }
-            return part;
-          },
-        },
-      ],
+      outputProcessors: buffered
+        ? [
+            {
+              id: 'buffer-reply',
+              processOutputStream: async ({ part }) => {
+                if (part.type === 'text-start') return null;
+                if (part.type === 'text-delta') {
+                  bufferedText += part.payload.text;
+                  return null;
+                }
+                if (part.type === 'text-end') {
+                  // Hold content until provider completion has been exported. This makes
+                  // the delayed-processor boundary deterministic rather than racing clocks.
+                  await expect.poll(() => ended(SpanType.MODEL_INFERENCE).length).toBe(1);
+                  releasedAfterInference = true;
+                  return { ...part, type: 'text-delta', payload: { ...part.payload, text: bufferedText } };
+                }
+                return part;
+              },
+            },
+          ]
+        : [],
       afterStream: async () => {
         await expect.poll(() => ended().length).toBe(1);
       },
       fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'Buffered reply' }),
     });
-    expect(releasedAfterInference).toBe(true);
+    expect(releasedAfterInference).toBe(buffered);
     expect(
       chunks
         ?.filter(chunk => chunk.type === 'text-delta')
@@ -61,7 +64,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     for (const chunk of chunkSpans) {
       const parent = parents.get(chunk.parentSpanId!);
       expect(parent).toBeDefined();
+      expect(parent!.type).toBe(SpanType.MODEL_STEP);
       expect(parent!.endTime).toBeDefined();
+      expect(chunk.endTime!.getTime()).toBeLessThanOrEqual(parent!.endTime!.getTime());
       expect(chunk.startTime.getTime()).toBeLessThanOrEqual(parent!.endTime!.getTime());
     }
   });
@@ -189,7 +194,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     const firstChunkTime = new Date(inference.attributes?.completionStartTime as string).getTime();
     expect(firstChunkTime).toBeGreaterThanOrEqual(new Date(inference.startTime).getTime());
     expect(firstChunkTime).toBeLessThanOrEqual(new Date(inference.endTime!).getTime());
-    for (const span of ended(SpanType.MODEL_CHUNK)) expect(span.parentSpanId).toBe(inference.id);
+    for (const span of ended(SpanType.MODEL_CHUNK)) expect(span.parentSpanId).toBe(ended(SpanType.MODEL_STEP)[0]!.id);
     expect(JSON.stringify(chunks)).not.toContain('continuationStopCause');
   });
 
@@ -324,40 +329,50 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended().at(-1)).toMatchObject({ outcome: 'blocked', stopReason: 'guardrail' });
   });
 
-  it('ends both executions when an input-step guardrail terminates before onFinish', async () => {
-    const { observability, ended } = capture();
-    const { requests } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      observability,
-      afterStream: async () => {
-        await expect.poll(() => ended().length).toBeGreaterThan(0);
-      },
-      prompt: 'Blocked step',
-      inputProcessors: [
-        {
-          id: 'step-policy',
-          processInputStep: ({ abort }) =>
-            abort('Step denied', {
-              retry: false,
-              metadata: { rule: 'policy', observerFailure: { cause: { outcome: 'invalid' } } },
-            }),
+  it.each(engine === 'durable' || engine === 'evented' ? [false, true] : [false])(
+    'ends an input-step guardrail without onFinish (legacy tracker=%s)',
+    async legacy => {
+      if (legacy) {
+        // Simulate an installed tracker version without the new lifecycle method;
+        // the real exporter, spans and snapshot/rebuild cleanup still run.
+        const descriptor = Object.getOwnPropertyDescriptor(ModelSpanTracker.prototype, 'endAttempt')!;
+        Object.defineProperty(ModelSpanTracker.prototype, 'endAttempt', { ...descriptor, value: undefined });
+        onTestFinished(() => Object.defineProperty(ModelSpanTracker.prototype, 'endAttempt', descriptor));
+      }
+      const { observability, ended } = capture();
+      const { requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length).toBeGreaterThan(0);
         },
-      ],
-      fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'must not run' }),
-    });
-    expect(requests).toHaveLength(0);
-    expect(ended().at(-1)).toMatchObject({ outcome: 'blocked', stopReason: 'guardrail' });
-    expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'blocked', stopReason: 'guardrail' });
-    expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({
-      outcome: 'blocked',
-      stopReason: 'guardrail',
-      stopReasonContext: {
-        processorId: 'step-policy',
-      },
-    });
-    expect(ended(SpanType.MODEL_INFERENCE)).toHaveLength(0);
-  });
+        prompt: 'Blocked step',
+        inputProcessors: [
+          {
+            id: 'step-policy',
+            processInputStep: ({ abort }) =>
+              abort('Step denied', {
+                retry: false,
+                metadata: { rule: 'policy', observerFailure: { cause: { outcome: 'invalid' } } },
+              }),
+          },
+        ],
+        fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'must not run' }),
+      });
+      expect(requests).toHaveLength(0);
+      expect(ended().at(-1)).toMatchObject({ outcome: 'blocked', stopReason: 'guardrail' });
+      expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'blocked', stopReason: 'guardrail' });
+      expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({
+        outcome: 'blocked',
+        stopReason: 'guardrail',
+        stopReasonContext: {
+          processorId: 'step-policy',
+        },
+      });
+      expect(ended(SpanType.MODEL_INFERENCE)).toHaveLength(0);
+    },
+  );
 
   it.each(['request', 'response'] as const)('preserves a %s processor block on its logical step', async stage => {
     const { observability, ended } = capture();
@@ -455,7 +470,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
             // test also proves cancellation preserves an already settled child.
             await expect.poll(() => ended(SpanType.MODEL_INFERENCE).at(-1)?.outcome).toBe('success');
             controller.abort();
-            return { cancelled: true };
+            throw new DOMException('Tool canceled', 'AbortError');
           },
         }),
       },
@@ -544,7 +559,10 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     });
   }
 
-  it('preserves suspension when approval creates a new successful execution', async () => {
+  // OBS-754: Inngest still reuses the pre-suspension identity. Separate resume
+  // spans are deferred until their identity can travel to the executing worker.
+  const itSeparateResume = engine === 'inngest' ? it.fails : it;
+  itSeparateResume('preserves suspension when approval creates a new successful execution', async () => {
     const { observability, ended } = capture();
     const { output, approvals } = await runApprovalScenario({
       engine,
@@ -605,6 +623,49 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(await output.text).toBe('Recovered.');
     expect(ended().at(-1)).toMatchObject({ outcome: 'success' });
     expect(ended(SpanType.MODEL_GENERATION)).toMatchObject([{ outcome: 'success', stopReason: null }]);
+  });
+
+  it('retains successful-step usage when the next provider request fails', async () => {
+    const { observability, ended } = capture();
+    const { output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up stock then answer',
+      maxRetries: 0,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up stock',
+          inputSchema: z.object({}),
+          execute: async () => ({ stock: 5 }),
+        }),
+      },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'stock-1', name: 'lookup', arguments: {} }],
+            usage: { input_tokens: 13, output_tokens: 7 },
+          },
+        );
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          { error: { message: 'Unavailable', type: 'server_error' }, status: 500 },
+        );
+      },
+      afterStream: async () => {
+        await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBeGreaterThan(0);
+      },
+    });
+    expect(await output.finishReason).toBe('error');
+    const generations = ended(SpanType.MODEL_GENERATION);
+    expect(generations).toHaveLength(1);
+    expect(generations[0]).toMatchObject({
+      outcome: 'error',
+      attributes: { usage: { inputTokens: 13, outputTokens: 7 } },
+    });
+    expect(generations[0]?.output).toBeDefined();
   });
 
   it('attributes a failed provider request to the model layer', async () => {

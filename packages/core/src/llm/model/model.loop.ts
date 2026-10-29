@@ -5,6 +5,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import { DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { isMastraTimeoutError } from '../../loop/timeout';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
@@ -296,7 +297,13 @@ export class MastraLLMVNext extends MastraBase {
           ...options,
           onError: async event => {
             const error = event.error instanceof Error ? event.error : new Error(String(event.error));
-            modelSpanTracker?.reportGenerationError({ error, ...executionFailureTermination(error) });
+            modelSpanTracker?.reportGenerationError({
+              error,
+              ...executionFailureTermination(error),
+              // A total deadline bypasses onFinish; all other settled errors retain
+              // the generation until that callback supplies usage and output.
+              endSpan: isMastraTimeoutError(error) && error.timeoutType === 'total',
+            });
             await options?.onError?.(event);
           },
           onStepFinish: async props => {

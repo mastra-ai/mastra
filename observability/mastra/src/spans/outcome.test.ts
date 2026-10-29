@@ -27,6 +27,33 @@ function setup(filter = false) {
 }
 
 describe('native execution outcomes (OBS-724)', () => {
+  it.each(['start', 'update', 'end', 'error'] as const)(
+    'serializes and copies custom context supplied through %s',
+    async method => {
+      const { tracing, events } = setup();
+      const context = { counter: 12n, failure: new Error('diagnostic'), nested: { value: 'original' } };
+      const fields = { outcome: 'custom', stopReason: 'custom_reason', stopReasonContext: context };
+      const span = tracing.startSpan({
+        name: 'custom-context',
+        type: SpanType.GENERIC,
+        ...(method === 'start' ? fields : {}),
+      });
+      if (method === 'update') span.update(fields);
+      if (method === 'end') span.end(fields);
+      if (method === 'error') span.error({ ...fields, error: new Error('failed') });
+      context.nested.value = 'mutated';
+      span.end();
+      await tracing.flush();
+      const exported = events.find(event => event.type === TracingEventType.SPAN_ENDED)!.exportedSpan;
+      const serialized = JSON.parse(JSON.stringify(exported));
+      expect(serialized.stopReasonContext).toMatchObject({
+        counter: '12n',
+        failure: { message: 'diagnostic' },
+        nested: { value: 'original' },
+      });
+    },
+  );
+
   it('filters compact context before it reaches exporters', async () => {
     const { tracing, events } = setup(true);
     const span = tracing.startSpan({ name: 'private-policy', type: SpanType.AGENT_RUN });

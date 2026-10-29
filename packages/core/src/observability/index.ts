@@ -24,3 +24,6 @@ export { agentLoopTermination } from '../loop/shared/execution-outcome';
 
 /** @internal Bounded stop-reason context for runtime instrumentation. */
 export { compactStopReasonContext } from './outcome-schema';
+
+/** @internal Preserve observed model usage when an incomplete provider call ends a durable run. */
+export { calculateObservedUsage, isUsageIncomplete } from './usage';

@@ -426,7 +426,10 @@ export function createDurableLLMMappingStep() {
           const pendingPayload = llmOutput.stepFinishPayload as any;
           const signal = getRunRegistryEntry(_runId, mastra as Mastra | undefined)?.abortSignal ?? params.abortSignal;
           const abortReason = getAbortReason(signal);
-          const termination = signal?.aborted
+          // A late run abort does not change completed tool work. Only calls
+          // that actually observed cancellation interrupt this logical step.
+          const interrupted = toolResults.some(result => result.aborted);
+          const termination = interrupted
             ? isMastraTimeoutError(abortReason)
               ? executionFailureTermination(abortReason)
               : agentLoopTermination({ finishReason: 'abort' })
@@ -437,7 +440,7 @@ export function createDurableLLMMappingStep() {
               });
           stepSpan.end({
             ...termination,
-            ...(signal?.aborted ? { outcome: 'interrupted' as const } : {}),
+            ...(interrupted ? { outcome: 'interrupted' as const } : {}),
             output: {
               text: llmOutput.text,
               toolCalls: llmOutput.toolCalls,

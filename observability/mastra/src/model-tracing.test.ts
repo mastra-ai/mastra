@@ -96,7 +96,17 @@ describe('ModelSpanTracker', () => {
     const tracker = new ModelSpanTracker(model);
     tracker.startStep();
     tracker.startInference();
+    tracker.recordChunk({
+      type: 'text-delta',
+      runId: 'run',
+      from: 'AGENT',
+      payload: { id: 'partial', text: 'partial reply' },
+    } as any);
     tracker.reportGenerationError({ error: new Error('provider failed') });
+    const [chunk] = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+    const [step] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+    expect(chunk?.output).toEqual({ text: 'partial reply' });
+    expect(chunk?.endTime!.getTime()).toBeLessThanOrEqual(step!.endTime!.getTime());
     for (const type of [SpanType.MODEL_GENERATION, SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
       expect(testExporter.getSpansByType(type)).toMatchObject([
         { outcome: 'error', stopReason: 'runtime_error', errorInfo: { message: 'provider failed' } },
@@ -1903,7 +1913,7 @@ describe('ModelSpanTracker', () => {
       coreFeatures.add('model-inference-span');
     });
 
-    it('creates a MODEL_INFERENCE span as a child of MODEL_STEP, with chunks parented under it', async () => {
+    it('creates a MODEL_INFERENCE span as a child of MODEL_STEP, with processed chunks parented under the step', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1946,7 +1956,7 @@ describe('ModelSpanTracker', () => {
 
       expect(chunkSpans.length).toBeGreaterThan(0);
       for (const chunk of chunkSpans) {
-        expect(chunk.parentSpanId).toBe(inferenceSpan!.id);
+        expect(chunk.parentSpanId).toBe(testExporter.getSpansByType(SpanType.MODEL_STEP)[0]!.id);
       }
     });
 
@@ -2285,7 +2295,7 @@ describe('ModelSpanTracker', () => {
 
       tracker.startStep();
       // Caller forgets startInference() — chunk handlers should auto-create it
-      // so chunks still parent under MODEL_INFERENCE rather than MODEL_STEP.
+      // while processed chunks remain children of MODEL_STEP.
       await consumeStream(
         tracker.wrapStream(
           createMockStream([
@@ -2304,7 +2314,7 @@ describe('ModelSpanTracker', () => {
       expect(inferenceSpan).toBeDefined();
       expect(chunkSpans.length).toBeGreaterThan(0);
       for (const chunk of chunkSpans) {
-        expect(chunk.parentSpanId).toBe(inferenceSpan!.id);
+        expect(chunk.parentSpanId).toBe(testExporter.getSpansByType(SpanType.MODEL_STEP)[0]!.id);
       }
     });
 

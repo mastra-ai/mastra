@@ -46,13 +46,22 @@ describe.each(['esm', 'cjs'] as const)('older core outcome compatibility (%s)', 
             ? "import { DefaultObservabilityInstance } from './dist/instances.mjs'; import { ModelSpanTracker } from './dist/tracker.mjs'; import { getOmFailureMetadata } from './dist/observer.mjs';"
             : "const { DefaultObservabilityInstance } = require('./dist/instances.cjs'); const { ModelSpanTracker } = require('./dist/tracker.cjs'); const { getOmFailureMetadata } = require('./dist/observer.cjs');"
         }
-        const tracing = new DefaultObservabilityInstance({ name: 'compat', serviceName: 'compat', exporters: [] });
+        const events = [];
+        const tracing = new DefaultObservabilityInstance({ name: 'compat', serviceName: 'compat', exporters: [{ name: 'capture', exportTracingEvent: async event => events.push(event), flush: async () => {}, shutdown: async () => {} }] });
         const span = tracing.startSpan({ name: 'run', type: 'agent_run', outcome: null });
         span.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { processorId: 'policy' } });
         if (span.exportSpan().stopReasonContext?.processorId !== 'policy') throw new Error('Custom context must be preserved on old core');
-        const tracker = new ModelSpanTracker();
+        const model = tracing.startSpan({ name: 'model', type: 'model_generation' });
+        const tracker = new ModelSpanTracker(model);
+        tracker.startStep();
+        tracker.startInference();
         tracker.reportGenerationError({error: new Error('provider failed')});
-        tracker.endGeneration({outcome:'abort', stopReason:'caller_cancelled'});
+        tracker.endGeneration();
+        const attempts = events.filter(e => e.type === 'span_ended' && ['model_step', 'model_inference'].includes(e.exportedSpan.type));
+        if (attempts.length !== 2) throw new Error('Expected step and inference exports');
+        for (const event of attempts) {
+          if (event.exportedSpan.outcome !== undefined) throw new Error('Older core must not opt into execution outcomes');
+        }
         process.stdout.write(JSON.stringify(getOmFailureMetadata(new Error('storage failed'), 'abort')));`,
       );
       expect(JSON.parse(execFileSync(process.execPath, [script], { encoding: 'utf8' }))).toEqual({

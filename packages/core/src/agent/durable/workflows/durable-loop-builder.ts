@@ -1138,7 +1138,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const clocks = carriedSpanClocks(reg, state);
               // Another worker may lack tracingTermination; fallback retains guardrail outcome but can lose observer context.
               const termination =
-                finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
+                ['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && reg?.tracingTermination
                   ? reg.tracingTermination
                   : agentLoopTermination({
                       stopCause: reg?.tracingStopCause,

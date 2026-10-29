@@ -328,7 +328,7 @@ export async function executeEntry(
   params: ExecuteEntryParams,
 ): Promise<EntryExecutionResult> {
   const { entry, resume, executionContext, workflowId, runId } = params;
-  if (!resume?.resumePath.length || (entry.type !== 'parallel' && entry.type !== 'conditional'))
+  if (!resume?.resumePath?.length || (entry.type !== 'parallel' && entry.type !== 'conditional'))
     return executeEntryBody(engine, params);
 
   // Resume selects the suspended branch directly; it does not re-evaluate conditions

@@ -1,4 +1,5 @@
 import { tripwireTermination } from '../../observability/execution-outcome';
+import { compactStopReasonContext } from '../../observability/outcome-schema';
 import type { SpanTermination, SpanTripwireContext } from '../../observability/types/outcome';
 import type { ContinuationStopCause } from './continuation-core';
 
@@ -26,7 +27,10 @@ export function agentLoopTermination(input: {
       return {
         outcome: 'suspend',
         stopReason: 'approval_required',
-        stopReasonContext: { toolCallId: suspension.toolCallId, toolName: suspension.toolName },
+        stopReasonContext: compactStopReasonContext('approval_required', {
+          toolCallId: suspension.toolCallId,
+          toolName: suspension.toolName,
+        }),
       };
     return { outcome: 'suspend', stopReason: null, stopReasonContext: null };
   }

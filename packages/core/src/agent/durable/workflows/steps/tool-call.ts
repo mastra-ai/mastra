@@ -22,6 +22,7 @@ import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
+import { compactStopReasonContext } from '../../../../observability/outcome-schema';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { ProcessorRunner } from '../../../../processors/runner';
@@ -475,7 +476,12 @@ export function createDurableToolCallStep() {
               outcome: 'suspend',
               stopReason: info.reason === 'approval' ? 'approval_required' : null,
               stopReasonContext:
-                info.reason === 'approval' ? { toolCallId: info.toolCallId, toolName: info.toolName } : null,
+                info.reason === 'approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    })
+                  : null,
             });
           }
           if (modelSpanData) {
@@ -485,7 +491,12 @@ export function createDurableToolCallStep() {
               outcome: 'suspend',
               stopReason: info.reason === 'approval' ? 'approval_required' : null,
               stopReasonContext:
-                info.reason === 'approval' ? { toolCallId: info.toolCallId, toolName: info.toolName } : null,
+                info.reason === 'approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    })
+                  : null,
             });
           }
           if (agentSpanData) {
@@ -496,10 +507,10 @@ export function createDurableToolCallStep() {
               stopReason: info.reason === 'approval' ? 'approval_required' : null,
               stopReasonContext:
                 info.reason === 'approval'
-                  ? {
+                  ? compactStopReasonContext('approval_required', {
                       toolCallId: info.toolCallId,
                       toolName: info.toolName,
-                    }
+                    })
                   : null,
             });
           }

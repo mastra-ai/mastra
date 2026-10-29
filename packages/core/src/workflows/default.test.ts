@@ -455,7 +455,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
     abortController = new AbortController();
   });
 
-  it('should use the suspended step payload when resuming a step with stale previous output', async () => {
+  it.each([[], undefined])('uses the suspended step payload with resumePath=%j', async resumePath => {
     const workflowId = 'resume-payload-repro';
     const runId = globalThis.crypto.randomUUID();
     const resumedStep = {
@@ -501,7 +501,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
         steps: ['needs-approval'],
         stepResults,
         resumePayload: { approved: true },
-        resumePath: [],
+        resumePath: resumePath as number[],
       },
       executionContext: {
         workflowId,

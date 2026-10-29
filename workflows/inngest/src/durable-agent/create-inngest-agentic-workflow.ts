@@ -42,7 +42,7 @@ import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 import { init } from '../index';
 
-import { agentLoopTermination } from '../observability-compat';
+import { agentLoopTermination, generationUsage } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
@@ -577,8 +577,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                 args: tc.args,
               })),
             );
+            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
-              ...(finalOutput.stepResult?.reason === 'tripwire' && registry?.tracingTermination
+              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
                 ? registry.tracingTermination
                 : agentLoopTermination({
                     stopCause: registry?.tracingStopCause,
@@ -590,9 +591,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
+                ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 ...clocks,
               },
-              usage: state.accumulatedUsage,
+              usage,
             });
           }
 
@@ -603,7 +605,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               registry?.agentSpan ??
               observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
-              ...(finalOutput.stepResult?.reason === 'tripwire' && registry?.tracingTermination
+              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
                 ? registry.tracingTermination
                 : agentLoopTermination({
                     stopCause: registry?.tracingStopCause,

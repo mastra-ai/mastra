@@ -4,9 +4,10 @@
  * Provides span tracking for Model generations, including:
  * - MODEL_STEP spans (one per Model API call - includes processors and tool executions)
  * - MODEL_INFERENCE spans (the provider call itself - model latency only)
- * - MODEL_CHUNK spans (individual streaming chunks within an inference)
+ * - MODEL_CHUNK spans (processed streaming content within a logical step)
  *
- * Hierarchy: MODEL_GENERATION -> MODEL_STEP -> MODEL_INFERENCE -> MODEL_CHUNK
+ * Hierarchy: MODEL_GENERATION -> MODEL_STEP -> MODEL_INFERENCE (provider timing)
+ *                                          -> MODEL_CHUNK (processed content)
  *
  * Processors and tool executions remain children of MODEL_STEP (siblings of
  * MODEL_INFERENCE), so MODEL_INFERENCE measures pure model time.
@@ -500,6 +501,7 @@ export class ModelSpanTracker {
    * doesn't leave them dangling. No-op if they were already closed.
    */
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
+    this.#endChunkSpan();
     const termination =
       options.outcome != null
         ? { outcome: options.outcome, stopReason: options.stopReason, stopReasonContext: options.stopReasonContext }
@@ -647,7 +649,7 @@ export class ModelSpanTracker {
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: SpanType.MODEL_STEP,
-      outcome: null,
+      ...(typeof coreObservability.agentLoopTermination === 'function' ? { outcome: null } : {}),
       attributes: {
         stepIndex: this.#stepIndex,
         ...(payload?.messageId ? { messageId: payload.messageId } : {}),
@@ -767,7 +769,7 @@ export class ModelSpanTracker {
     this.#currentInferenceSpan = this.#currentStepSpan.createChildSpan({
       name: `inference: ${this.#stepIndex}`,
       type: SpanType.MODEL_INFERENCE,
-      outcome: null,
+      ...(typeof coreObservability.agentLoopTermination === 'function' ? { outcome: null } : {}),
       attributes: {
         stepIndex: this.#stepIndex,
         model: payload?.modelId ?? generationAttrs?.model,
@@ -932,22 +934,12 @@ export class ModelSpanTracker {
     );
   }
 
-  /**
-   * Parent processed chunks under the live inference, or under the logical step
-   * when the provider has finished but output processors are still releasing content.
-   */
-  #chunkParent(): Span<SpanType.MODEL_INFERENCE> | Span<SpanType.MODEL_STEP> | undefined {
-    if (this.#currentInferenceSpan && !this.#currentInferenceSpan.endTime) return this.#currentInferenceSpan;
+  /** Processed content belongs to the logical step, independently of provider timing. */
+  #chunkParent(): Span<SpanType.MODEL_STEP> | undefined {
     return this.#currentStepSpan?.endTime ? undefined : this.#currentStepSpan;
   }
 
-  /**
-   * Safety-net invoked from chunk handlers: auto-create MODEL_STEP and
-   * MODEL_INFERENCE if a chunk arrives before the loop has explicitly opened
-   * them, so chunks parent under MODEL_INFERENCE rather than falling through
-   * to MODEL_STEP. Idempotent — each public start* method is itself a no-op
-   * when its span is already live.
-   */
+  /** Ensure a logical step and provider timing span exist for legacy stream callers. */
   #ensureStepAndInference(): void {
     if (!this.#currentStepSpan) {
       this.startStep();
@@ -1287,7 +1279,7 @@ export class ModelSpanTracker {
           // step-start fires when the provider stream has begun. Open the
           // inference span here as a safety net for callers that don't
           // explicitly call startInference() before invoking the model —
-          // chunks that follow will parent under MODEL_INFERENCE.
+          // processed chunks remain children of the logical step.
           if (!this.#currentInferenceSpan && !this.#stepHasInference) {
             this.#openInference(chunk.payload);
           }

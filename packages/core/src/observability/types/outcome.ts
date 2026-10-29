@@ -25,7 +25,7 @@ export interface SpanStopReasonContextMap {
   timeout: { timeoutMs?: number; timeoutType?: 'step' | 'total' | 'firstChunk' };
   runtime_error: SpanFailureContext;
   model_error: SpanFailureContext;
-  caller_cancelled: {};
+  caller_cancelled: Record<string, never>;
   signal_received: { signalId?: string; signalType?: 'user' | 'state' | 'reactive' | 'notification' };
   observer_failed: {
     observerSpanId?: string;
@@ -37,7 +37,7 @@ export interface SpanStopReasonContextMap {
   guardrail: { processorId?: string };
   content_filter: { provider?: string };
   approval_required: { toolCallId?: string; toolName?: string };
-  stop_condition: {};
+  stop_condition: Record<string, never>;
   iteration_hook: { feedbackCompleted?: boolean };
   delegation_bail: { causeOutcome?: SpanOutcome; causeStopReason?: SpanStopReason };
   authentication: SpanFailureContext;

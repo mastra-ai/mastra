@@ -55,7 +55,7 @@ A [guardrail](/docs/agents/guardrails) that stops execution by firing a tripwire
 
 For Mastra-generated outcomes, `stopReasonContext` is a flat tooltip summary with at most three scalar fields. It excludes raw error messages, signal contents, tripwire metadata, and nested causes. Strings are limited to 128 characters. Oversized values are omitted. Missing facts are omitted, and a context with no available facts is `null`.
 
-Custom producers can supply their own outcome strings, stop reasons, and context objects. These values are preserved through span updates, exports, and rebuilds. The framework allowlist applies to Mastra-generated context.
+Custom producers can supply their own outcome strings, stop reasons, and context objects. These values are preserved through span updates, exports, and rebuilds, with the same serialization limits used for span metadata. The framework allowlist applies to Mastra-generated context.
 
 Model chunk spans capture content after output processors have accepted or redacted it. Provider timing and completion are recorded separately without capturing raw chunk content. A workflow waiting intentionally records `suspend`; a stopped executor handing off unfinished work records `interrupted`, even when the persisted workflow status is `waiting`.
 
@@ -64,6 +64,10 @@ When an observer fails and stops the main execution, the observer span records i
 If the configured failure policy lets the main execution continue, it can still succeed. A guardrail retry that recovers also preserves the successful final outcome and the rejected attempt's separate result.
 
 `MastraStorageExporter` and `MastraPlatformExporter` carry these fields in exported span records. Persisting them requires a storage implementation that supports the fields.
+
+Model inference spans (`MODEL_INFERENCE`) measure provider execution and record usage. Model chunk spans (`MODEL_CHUNK`) capture content after output processors have accepted or transformed it. Chunks belong to the logical step (`MODEL_STEP`), so buffered output can arrive after provider execution ends without outliving its parent. In the agent streaming paths, inference spans no longer capture response output; use the processed chunk spans or the generation output instead.
+
+When durable execution finishes on another worker, the original termination cause may be unavailable. Normal completion and step-limit exits can then report `unknown`. Separate resumed-segment tracing is not supported on Inngest. Core durable resume tracing also requires the workers to share live tracing state; span identity and finalization across workers are not yet guaranteed.
 
 ## Sampling strategies
 

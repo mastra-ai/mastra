@@ -1902,7 +1902,6 @@ export class EventedWorkflow<
         stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
         tracingPolicy: this.options?.tracingPolicy,
-        isForeignExecution: this.options?.isForeignExecution,
       });
 
     this.runs.set(runIdToUse, run);
@@ -1985,14 +1984,10 @@ export class EventedRun<
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
     tracingPolicy?: TracingPolicy;
-    isForeignExecution?: WorkflowOptions['isForeignExecution'];
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
-    this.isForeignExecution = params.isForeignExecution;
   }
-
-  private readonly isForeignExecution?: WorkflowOptions['isForeignExecution'];
 
   private completeWorkflowTracing(
     span: TracingContext['currentSpan'],

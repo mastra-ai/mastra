@@ -410,13 +410,15 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (options.outcome !== undefined) {
       this.outcome = options.outcome;
       this.stopReason = options.stopReason ?? null;
-      this.stopReasonContext = options.stopReasonContext ?? null;
+      this.stopReasonContext =
+        options.stopReasonContext == null ? null : deepClean(options.stopReasonContext, this.deepCleanOptions);
       return;
     }
     if (options.stopReason !== undefined && options.stopReason !== this.stopReason) this.stopReasonContext = null;
     if (options.stopReason !== undefined) this.stopReason = options.stopReason;
     if (options.stopReasonContext !== undefined) {
-      this.stopReasonContext = options.stopReasonContext ?? null;
+      this.stopReasonContext =
+        options.stopReasonContext == null ? null : deepClean(options.stopReasonContext, this.deepCleanOptions);
     }
   }
 
