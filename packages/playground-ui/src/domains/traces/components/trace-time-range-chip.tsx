@@ -107,7 +107,9 @@ export function TraceTimeRangeChip({ defaultPreset, ...props }: TraceTimeRangeCh
           disabled={props.disabled}
           aria-label="Reset time range"
           title="Reset time range"
-          className={removeSegmentClass}
+          // The chip's `divide-x` seam can't reach this button: its previous sibling is the
+          // `contents` wrapper, which has no box to draw a border on.
+          className={cn(removeSegmentClass, 'border-l border-border')}
           onClick={() => props.onPresetChange?.(defaultPreset)}
         >
           <XIcon className="size-[1.1em]" />
