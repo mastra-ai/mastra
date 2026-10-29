@@ -111,7 +111,7 @@ Each summary includes identity, context, entity lineage, status, timestamps, `du
 
 Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
 
-Check `capabilities.spanQueryModelFields` before filtering on `model` or `provider`. These filters read the span's stored `model` and `provider` values. Spans written before the store kept those values still return `model` and `provider` from their attributes, but filters don't match them. With an older adapter, requests using these filters return `501`.
+Check `capabilities.spanQueryModelFields` before filtering on `model` or `provider`. These filters read only the span's `model` and `provider` columns. `@mastra/observability` fills the columns only when a span has both a `model` and a `provider`, and versions before it filled them left them empty. Filters don't match spans with empty columns, but results still return `model` and `provider` for them from the span's attributes. Trace query `spans.some` filters fall back to the attributes and do match those spans. With an older adapter, requests using these filters return `501`.
 
 DuckDB returns `null` for parent/root entity type, ID and name on spans written before `@mastra/duckdb` stored them. Equality filters on these fields don't match those spans.
 
