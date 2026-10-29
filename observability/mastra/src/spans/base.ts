@@ -689,6 +689,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Checked again here because links can be set on the span after it starts
     const links = validLinks(this.links);
     const correlation = this.getCorrelationContext();
+    // Measured once on the inference that streamed the first chunk and copied up as an attribute.
+    const timeToFirstTokenMs = (this.attributes as { timeToFirstTokenMs?: unknown } | undefined)?.timeToFirstTokenMs;
 
     return {
       id: this.id,
@@ -717,6 +719,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
+      ...(typeof timeToFirstTokenMs === 'number' ? { timeToFirstTokenMs } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),
       // Tags are only included for root spans, and a nested run does not own the trace
