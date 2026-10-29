@@ -816,7 +816,7 @@ export function createDurableToolCallStep() {
         assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
       // Background-task hooks can fire after the execution settled and
       // released its claim; their writes only stop once another execution
-      // claimed the run.
+      // claimed the run, or, for a run without a claim, once its deadline passed.
       const assertNotSuperseded = () =>
         assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
 

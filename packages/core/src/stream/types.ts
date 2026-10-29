@@ -231,6 +231,8 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   providerMetadata?: ProviderMetadata;
   args?: TArgs;
   dynamic?: boolean;
+  /** Partial provider-executed result (e.g. an in-progress image). A final, non-preliminary result always follows. */
+  preliminary?: boolean;
 }
 
 export type DynamicToolCallPayload = ToolCallPayload<any, any>;

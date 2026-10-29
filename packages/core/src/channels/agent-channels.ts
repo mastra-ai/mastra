@@ -34,6 +34,7 @@ import {
   extractUrls,
   findInlineLinkRule,
   headContentType,
+  isTextMimeType,
   normalizeInlineLinks,
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
@@ -85,6 +86,12 @@ type ChannelAgent = Pick<
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
+
+/** Size cap for text attachments decoded into the agent's prompt. */
+const MAX_TEXT_ATTACHMENT_BYTES = 128 * 1024;
+
+/** Text attachments whose reported size exceeds this are not downloaded. */
+const MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -1684,7 +1691,9 @@ export class AgentChannels {
   /**
    * Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
    * Inline types are sent as file parts (the LLM adapter converts image/* to
-   * image content automatically). Non-inline types are described as text
+   * image content automatically). Non-inline text-like types (text/*, JSON,
+   * YAML, XML, …) that come with an authenticated `fetchData` are decoded and
+   * sent as text. Other non-inline types are described as text
    * metadata so the agent is aware of them without crashing models that
    * reject unsupported media (e.g. OpenAI rejects video/mp4).
    */
@@ -1727,6 +1736,34 @@ export class AgentChannels {
             ...(att.name ? { filename: att.name } : {}),
           });
         } else if (fetchFailed) {
+          parts.push({
+            type: 'text',
+            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
+          });
+        }
+      } else if (
+        att.fetchData &&
+        isTextMimeType(mimeType) &&
+        !(att.size !== undefined && att.size > MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES)
+      ) {
+        // Text-like files behind an authenticated fetch (e.g. Slack's
+        // url_private) are decoded and handed to the agent as text, since the
+        // URL alone is unreadable without the adapter's credentials.
+        try {
+          const buf = await att.fetchData();
+          const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+          const truncated = bytes.byteLength > MAX_TEXT_ATTACHMENT_BYTES;
+          const content = new TextDecoder().decode(truncated ? bytes.subarray(0, MAX_TEXT_ATTACHMENT_BYTES) : bytes);
+          parts.push({
+            type: 'text',
+            text:
+              `[Attached file: ${filename} (${mimeType})]\n${content}` +
+              (truncated
+                ? `\n[Truncated: showing the first ${MAX_TEXT_ATTACHMENT_BYTES} of ${bytes.byteLength} bytes]`
+                : ''),
+          });
+        } catch (err) {
+          this.log('warn', 'Attachment fetchData failed', { mimeType, error: err });
           parts.push({
             type: 'text',
             text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
