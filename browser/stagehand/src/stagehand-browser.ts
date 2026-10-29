@@ -200,6 +200,13 @@ export class StagehandBrowser extends MastraBrowser {
     this.assertNotRetired();
     const stagehand = new Stagehand(stagehandOptions);
     await stagehand.init();
+    // retire() may have closed the browser while init() was starting Chrome.
+    try {
+      this.assertNotRetired();
+    } catch (error) {
+      await stagehand.close().catch(() => {});
+      throw error;
+    }
     return stagehand;
   }
 

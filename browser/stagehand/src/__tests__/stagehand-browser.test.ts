@@ -968,6 +968,22 @@ describe('StagehandBrowser thread scope on a profile', () => {
     expect(mockStagehandConstructor).not.toHaveBeenCalled();
     expect(mockStagehand.init).not.toHaveBeenCalled();
   });
+
+  it('closes a thread browser whose Chrome finished starting after retire()', async () => {
+    const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+    browser.setCurrentThread('thread-1');
+    await browser.ensureReady();
+    let retiring: Promise<void> | undefined;
+    mockStagehand.init.mockImplementationOnce(async () => {
+      retiring = browser.retire();
+    });
+    mockStagehand.close.mockClear();
+
+    await expect(browser.getManagerForThread('thread-2')).rejects.toThrow(/was retired/);
+    await retiring;
+
+    expect(mockStagehand.close).toHaveBeenCalled();
+  });
 });
 
 describe('createStagehandTools', () => {
