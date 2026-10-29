@@ -18,9 +18,13 @@ import { incidentIoProvider } from './incident-io/index.js';
 import { jiraProvider } from './jira/index.js';
 import { linearProvider } from './linear/index.js';
 import { microsoftExcelProvider } from './microsoft-excel/index.js';
+import { microsoftPowerpointProvider } from './microsoft-powerpoint/index.js';
 import { microsoftTeamsProvider } from './microsoft-teams/index.js';
+import { microsoftWordProvider } from './microsoft-word/index.js';
 import { notionProvider } from './notion/index.js';
+import { oneDriveProvider } from './one-drive/index.js';
 import { openaiProvider } from './openai/index.js';
+import { outlookProvider } from './outlook/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
 import { slackProvider } from './slack/index.js';
@@ -47,9 +51,13 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   jiraProvider,
   linearProvider,
   microsoftExcelProvider,
+  microsoftPowerpointProvider,
   microsoftTeamsProvider,
+  microsoftWordProvider,
   notionProvider,
+  oneDriveProvider,
   openaiProvider,
+  outlookProvider,
   posthogProvider,
   resendProvider,
   slackProvider,

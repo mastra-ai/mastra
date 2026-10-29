@@ -9,7 +9,7 @@ import {
   useReconnectPlatformProviderMutation,
 } from '../../../../../hooks/usePlatformConnections';
 import { isJiraAuthError } from '../../../factory/services/jira';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { JiraIcon } from '../../../../ui/icons';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
@@ -42,7 +42,7 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
   };
 
   if (jiraStatus.isPending || (connected && projects.isPending)) {
-    return <SkeletonRows label="Loading Jira projects" rows={2} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading Jira projects" rows={2} />;
   }
 
   if (!connected) {

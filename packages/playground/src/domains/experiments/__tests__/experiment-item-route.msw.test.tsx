@@ -157,6 +157,18 @@ beforeEach(() => {
   );
 });
 
+/** The open span panel, once its header shows the given span title. */
+const spanPanelTitled = async (title: string) => {
+  return screen.findByRole('region', { name: title });
+};
+
+/** A span row in the tree, not the open span panel's header that repeats its title. */
+const treeRow = (title: string) => {
+  const row = screen.getAllByText(title).find(element => !element.closest('[data-slot="span-data-panel"]'));
+  if (!row) throw new Error(`No tree row titled ${title}`);
+  return row;
+};
+
 describe('experiment item sub-route', () => {
   describe('when the experiment page renders', () => {
     it('shows results directly with no tabs', async () => {
@@ -429,10 +441,10 @@ describe('experiment item sub-route', () => {
       expect(await within(sideColumn).findByRole('tab', { name: /scores \(1\)/i })).toBeDefined();
 
       await pickTraceSideView(/^scores/i, traceDialog);
-      expect((await screen.findAllByText('Experiment relevance')).length).toBeGreaterThan(0);
+      expect(await within(sideColumn).findByText('Experiment relevance')).toBeDefined();
 
       await pickTraceSideView(/^feedback/i, traceDialog);
-      expect(await screen.findByText('Trace feedback for the experiment run')).toBeDefined();
+      expect(await within(sideColumn).findByText('Trace feedback for the experiment run')).toBeDefined();
     });
 
     it('opens the existing experiment score details for a matching trace score', async () => {
@@ -447,7 +459,7 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
       await pickTraceSideView(/^scores/i, traceDialog);
-      fireEvent.click(await screen.findByRole('button', { name: 'Score experime' }));
+      fireEvent.click(await within(traceDialog).findByRole('button', { name: 'Open Experiment relevance score' }));
 
       expect(await screen.findByText('Matches the experiment result score')).toBeDefined();
     });
@@ -459,7 +471,7 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
       await pickTraceSideView(/^scores/i, traceDialog);
-      fireEvent.click(await screen.findByRole('button', { name: 'Score experime' }));
+      fireEvent.click(await within(traceDialog).findByRole('button', { name: 'Open Experiment relevance score' }));
 
       expect(traceSideViewLabel(traceDialog)).toMatch(/scores \(1\)/i);
       expect(screen.queryByText('Matches the experiment result score')).toBeNull();
@@ -477,9 +489,7 @@ describe('experiment item sub-route', () => {
       expect(dialog.isConnected).toBe(true);
 
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      const spanHeading = await screen.findByRole('heading', { name: /span-child/ });
-      const spanSection = spanHeading.closest('section');
-      if (!spanSection) throw new Error('Expected span detail section');
+      const spanSection = await spanPanelTitled('Experiment tool call');
       expect(traceDialog.contains(spanSection)).toBe(true);
 
       const spanFeedbackTab = await within(spanSection).findByRole('tab', { name: /^feedback \(1\)/i });
@@ -487,9 +497,9 @@ describe('experiment item sub-route', () => {
       expect(await screen.findByText('Child span feedback for the tool call')).toBeDefined();
 
       // Re-clicking the selected span toggles the span column away.
-      fireEvent.click(screen.getByText('Experiment tool call'));
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child/ })).toBeNull());
-      expect(screen.getByText('Experiment agent run')).toBeDefined();
+      fireEvent.click(treeRow('Experiment tool call'));
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
+      expect(treeRow('Experiment agent run')).toBeDefined();
     });
 
     it('shows the span details inside the shared trace card', async () => {
@@ -499,29 +509,33 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
 
-      const spanHeading = await screen.findByRole('heading', { name: /span-child/ });
+      const spanPanel = await spanPanelTitled('Experiment tool call');
       // Span details render as a column of the trace drawer, not as a drawer of their own.
       const traceDialog = screen.getByRole('dialog', { name: 'Trace experiment-trace-1' });
-      expect(traceDialog.contains(spanHeading)).toBe(true);
+      expect(traceDialog.contains(spanPanel)).toBe(true);
       // The result sits inline in the side panel, so the trace drawer is the only dialog.
       expect(screen.getAllByRole('dialog', { hidden: true })).toHaveLength(1);
       await waitFor(() => expect(screen.queryByText('Loading span details...')).toBeNull());
       expect(dialog.isConnected).toBe(true);
     });
 
-    it('navigates between adjacent spans inside the shared trace card', async () => {
+    it('switches between spans from the tree inside the shared trace card', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await findResultPanel('res-1');
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
+      expect(await spanPanelTitled('Experiment tool call')).toBeDefined();
 
-      fireEvent.click(screen.getByLabelText('Go to previous span'));
-      expect(await screen.findByRole('heading', { name: /span-root/ })).toBeDefined();
+      // The span panel has no previous/next buttons; the tree switches spans.
+      expect(screen.queryByLabelText('Go to previous span')).toBeNull();
+      expect(screen.queryByLabelText('Go to next span')).toBeNull();
 
-      fireEvent.click(screen.getByLabelText('Go to next span'));
-      expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
+      fireEvent.click(treeRow('Experiment agent run'));
+      expect(await spanPanelTitled('Experiment agent run')).toBeDefined();
+
+      fireEvent.click(treeRow('Experiment tool call'));
+      expect(await spanPanelTitled('Experiment tool call')).toBeDefined();
     });
 
     it('closes span details without closing the trace card', async () => {
@@ -530,13 +544,13 @@ describe('experiment item sub-route', () => {
       const dialog = await findResultPanel('res-1');
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
+      expect(await spanPanelTitled('Experiment tool call')).toBeDefined();
 
       // Re-clicking the selected span toggles the span column away.
-      fireEvent.click(screen.getByText('Experiment tool call'));
+      fireEvent.click(treeRow('Experiment tool call'));
 
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child/ })).toBeNull());
-      expect(screen.getByText('Experiment agent run')).toBeDefined();
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
+      expect(treeRow('Experiment agent run')).toBeDefined();
       expect(dialog.isConnected).toBe(true);
     });
 

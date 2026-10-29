@@ -179,7 +179,7 @@ describe('AgentControllerChannels tenant context', () => {
     // repo-backed session workspace fails its owner check on the first message.
     expect(createSessionUser).toEqual({ id: 'tenant-user-9', organizationId: 'org-9' });
 
-    const session = await controller.getSessionByResource('channel:C-1:t-1');
+    const session = await controller.getSession('channel:C-1:t-1');
     expect(session).toBeDefined();
 
     restore();
@@ -243,7 +243,7 @@ describe('AgentControllerChannels binds the mapped thread with the tenant contex
     const store = await mastra.getStorage()!.getStore('memory');
     const { threads } = await store!.listThreads({ filter: { resourceId }, perPage: 10 });
     expect(threads).toHaveLength(1);
-    const session = (await controller.getSessionByResource(resourceId))!;
+    const session = (await controller.getSession(resourceId))!;
     expect(session.thread.getId()).toBe(threads[0]!.id);
 
     expect(seen.length).toBeGreaterThan(0);
@@ -273,7 +273,7 @@ describe('AgentControllerChannels binds the mapped thread with the tenant contex
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'agent reply posted' });
     expect(JSON.stringify(chatThread.post.mock.calls)).toContain('Hello from the controller!');
 
-    const session = (await controller.getSessionByResource('channel:C-4:t-4'))!;
+    const session = (await controller.getSession('channel:C-4:t-4'))!;
     const channelThread = await session.thread.getById({ threadId: session.thread.getId()! });
     expect((channelThread?.metadata as Record<string, unknown>)?.channel_externalThreadId).toBe('C-4:t-4');
     // The session's own scoped thread plus the channel thread it switched onto.

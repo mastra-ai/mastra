@@ -660,7 +660,7 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   const moduleStatements = action.moduleStatements.map(statement => {
     if (!statement.includes(`const ${action.inputSchemaName}`)) return statement;
 
-    const updated = statement.replace('userId: z.string().describe(', 'userId: z.string().optional().describe(');
+    const updated = statement.replace('userId: z.string().describe(', 'userId: z.string().min(1).optional().describe(');
     inputSchemaUpdated ||= updated !== statement;
     return updated;
   });

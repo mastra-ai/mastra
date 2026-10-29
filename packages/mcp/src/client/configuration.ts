@@ -12,6 +12,14 @@ import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
 import type { MCPDiscoveryErrorDetails } from './error-utils';
+import type {
+  MCPClientWebhookOptions,
+  MCPEventDescriptor,
+  MCPEventSubscribeOptions,
+  MCPEventSubscription,
+} from './events';
+import type { EventsWebhookSetup } from './events/types';
+import { WebhookReceiver } from './events/webhook-receiver';
 import { loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
@@ -19,12 +27,22 @@ import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
 import type {
   MCPClientInfo,
+  MCPClientServers,
+  MCPClientTools,
+  MCPClientToolsets,
   MCPServerImplementation,
+  MCPServerMap,
   SerializableMCPToolCatalog,
   SerializableMCPToolDefinition,
 } from './types';
 
-const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
+// Client snapshots are erased in the shared runtime cache.
+const mcpClientInstances = new Map<string, object>();
+
+/** Reads the shared cache without promising the snapshot shape it was created with. */
+function cachedClient<TServers extends MCPClientServers<TServers>>(id: string): MCPClient<TServers> | undefined {
+  return mcpClientInstances.get(id) as MCPClient<TServers> | undefined;
+}
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
 // Outcome of a single server's discovery within discoverAcrossServers(). An
@@ -58,18 +76,43 @@ function isLoopbackHostname(hostname: string): boolean {
 /**
  * Configuration options for creating an MCPClient instance.
  */
-export interface MCPClientOptions {
+export interface MCPClientOptions<
+  TServers extends MCPClientServers<TServers> = MCPServerMap,
+> {
   /** Optional unique identifier to prevent memory leaks when creating multiple instances with identical configurations */
   id?: string;
-  /** Map of server names to their connection configurations (stdio or HTTP-based) */
-  servers: Record<string, MastraMCPServerDefinition>;
+  /**
+   * Map of server names to their connection configurations (stdio or HTTP-based).
+   *
+   * Broad when no snapshot generic is supplied, so ordinary object literals stay contextually
+   * typed (a mapped type over an unresolved type parameter suppresses that); exact keys once the
+   * caller supplies a generated server map.
+   */
+  servers: string extends keyof TServers
+    ? Record<string, MastraMCPServerDefinition>
+    : Record<keyof NoInfer<TServers> & string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /** Optional output path for the package's generate command, relative to its working directory. */
+  typegen?: { outFile: string };
   /**
    * Default `clientInfo` every server receives on connect and with each request.
    * Per-server `clientInfo` overrides it field-wise. Defaults to the server key and `'1.0.0'`.
    */
   clientInfo?: MCPClientInfo;
+  /**
+   * Install process exit and signal hooks that disconnect servers and end the process (default: true).
+   * Set to false when the host handles shutdown, and call disconnect() from its shutdown handler.
+   * Set this on every client: exit-hook's global signal listeners persist after disconnect().
+   */
+  registerProcessHooks?: boolean;
+  /**
+   * Webhook delivery for MCP Events. Servers that offer webhook delivery POST occurrences to
+   * `webhook.url`, which must route to {@link MCPClient.events}`.handleWebhook()`.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  webhook?: MCPClientWebhookOptions;
 }
 
 /**
@@ -98,11 +141,16 @@ export interface MCPClientOptions {
  * @see [MCP client documentation](https://mastra.ai/reference/tools/mcp-client)
  * if packaged docs are unavailable.
  */
-export class MCPClient extends MastraBase {
+export class MCPClient<
+  TServers extends MCPClientServers<TServers> = MCPServerMap,
+> extends MastraBase {
+  readonly typegen?: Readonly<{ outFile: string }>;
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
   private defaultClientInfo?: MCPClientInfo;
+  private readonly registerProcessHooks: boolean;
+  private webhook?: EventsWebhookSetup;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
@@ -143,30 +191,37 @@ export class MCPClient extends MastraBase {
    * });
    * ```
    */
-  constructor(args: MCPClientOptions) {
+  constructor(args: MCPClientOptions<NoInfer<TServers>>) {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.defaultClientInfo = args.clientInfo && { ...args.clientInfo };
+    this.registerProcessHooks = args.registerProcessHooks ?? true;
     this.serverConfigs = args.servers;
+    this.webhook = args.webhook && { options: { ...args.webhook }, receiver: new WebhookReceiver() };
     this.id = args.id ?? this.makeId();
 
     if (args.id) {
       this.id = args.id;
-      const cached = mcpClientInstances.get(this.id);
+      const cached = cachedClient<TServers>(this.id);
 
-      if (cached && (!equal(cached.serverConfigs, args.servers) || !equal(cached.defaultClientInfo, args.clientInfo))) {
-        const existingInstance = mcpClientInstances.get(this.id);
-        if (existingInstance) {
-          void existingInstance.disconnect();
-          mcpClientInstances.delete(this.id);
-        }
+      // `typegen`, `clientInfo`, and process hook ownership belong to the cache identity.
+      // A mismatch replaces the instance just like a server configuration change.
+      if (
+        cached &&
+        (!equal(cached.serverConfigs, args.servers) ||
+          !equal(cached.defaultClientInfo, args.clientInfo) ||
+          cached.registerProcessHooks !== this.registerProcessHooks ||
+          cached.typegen?.outFile !== args.typegen?.outFile)
+      ) {
+        void cached.disconnect();
+        mcpClientInstances.delete(this.id);
       }
     } else {
       this.id = this.makeId();
     }
 
     // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
-    const existingInstance = mcpClientInstances.get(this.id);
+    const existingInstance = cachedClient<TServers>(this.id);
     if (existingInstance) {
       if (!args.id) {
         throw new Error(`MCPClient was initialized multiple times with the same configuration options.
@@ -182,6 +237,13 @@ To fix this you have three different options:
       return existingInstance;
     }
 
+    const { typegen } = args;
+    if (typegen !== undefined) {
+      // Runtime guard for untyped callers; the option is typed as `{ outFile: string }`.
+      if (!typegen || typeof typegen.outFile !== 'string' || !typegen.outFile.trim() || typegen.outFile.includes('\0'))
+        throw new Error('typegen.outFile must be a nonempty file path');
+      this.typegen = Object.freeze({ outFile: typegen.outFile });
+    }
     mcpClientInstances.set(this.id, this);
     this.addToInstanceCache();
     return this;
@@ -227,6 +289,73 @@ To fix this you have three different options:
           );
         }
       },
+    };
+  }
+
+  /**
+   * Provides access to MCP Events (SEP-3415) on configured servers: list event types and
+   * subscribe to their occurrences over webhook (when `webhook` is configured), push or poll
+   * delivery.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   *
+   * @example
+   * ```typescript
+   * const events = await mcp.events.list('github');
+   * const sub = await mcp.events.subscribe('github', 'push', { repo: 'mastra-ai/mastra' });
+   * for await (const event of sub) {
+   *   console.log(event.eventId, event.data);
+   *   await saveCursor(sub.cursor);
+   * }
+   * ```
+   */
+  public get events() {
+    this.addToInstanceCache();
+    const wrap = async <T>(
+      id: Uppercase<string>,
+      details: Record<string, string>,
+      run: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await run();
+      } catch (error) {
+        throw new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, details }, error);
+      }
+    };
+    return {
+      /**
+       * Lists the event types a server offers. Changes are not announced yet; call it again to refresh.
+       *
+       * @throws {MastraError} `MCP_CLIENT_LIST_EVENTS_FAILED`; the cause is `MCP_EVENTS_NOT_SUPPORTED`
+       * when the server does not advertise the events extension.
+       */
+      list: (serverName: string): Promise<MCPEventDescriptor[]> =>
+        wrap('MCP_CLIENT_LIST_EVENTS_FAILED', { serverName }, async () =>
+          (await this.getConnectedClientForServer(serverName)).events.list(),
+        ),
+      /**
+       * Subscribes to an event type on a server. Resolves once the server accepted the subscription.
+       *
+       * @throws {MastraError} `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED`; the cause carries the events error id.
+       */
+      subscribe: (
+        serverName: string,
+        eventName: string,
+        args?: Record<string, unknown>,
+        options?: MCPEventSubscribeOptions,
+      ): Promise<MCPEventSubscription> =>
+        wrap('MCP_CLIENT_SUBSCRIBE_EVENT_FAILED', { serverName, eventName }, async () =>
+          (await this.getConnectedClientForServer(serverName)).events.subscribe(eventName, args, options),
+        ),
+      /**
+       * Handles a webhook delivery POSTed to `webhook.url`: verifies the signature, answers the
+       * server's verification handshake, and routes occurrences to their subscription. Mount it
+       * on the route that `webhook.url` points at. Returns 404 when `webhook` is not configured.
+       *
+       * @experimental SEP-3415 is a draft; this API may change.
+       */
+      handleWebhook: async (request: Request): Promise<Response> =>
+        this.webhook ? this.webhook.receiver.handle(request) : new Response(null, { status: 404 }),
     };
   }
 
@@ -636,10 +765,15 @@ To fix this you have three different options:
   }
 
   private makeId() {
+    // Keep existing ids when process hooks use the default behavior.
     const text = JSON.stringify(
-      this.defaultClientInfo === undefined
+      this.defaultClientInfo === undefined && this.registerProcessHooks
         ? this.serverConfigs
-        : { servers: this.serverConfigs, clientInfo: this.defaultClientInfo },
+        : {
+            servers: this.serverConfigs,
+            ...(this.defaultClientInfo === undefined ? {} : { clientInfo: this.defaultClientInfo }),
+            ...(this.registerProcessHooks ? {} : { registerProcessHooks: false }),
+          },
     ).normalize('NFKC');
     return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
@@ -975,7 +1109,7 @@ To fix this you have three different options:
    * });
    * ```
    */
-  public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
+  public async listTools(): Promise<MCPClientTools<TServers>> {
     const result = await this.listToolsWithErrors();
     return result.tools;
   }
@@ -998,8 +1132,14 @@ To fix this you have three different options:
    * }
    * ```
    */
+  public listToolsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+    tools: MCPClientTools<TServers>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }>;
   public async listToolsWithErrors(options?: MCPDiscoveryOptions): Promise<{
-    tools: Record<string, Tool<any, any, any, any>>;
+    tools: Partial<Record<string, Tool<any, any, any, any>>>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
     durations?: Record<string, number>;
@@ -1058,7 +1198,7 @@ To fix this you have three different options:
    * });
    * ```
    */
-  public async listToolsets(): Promise<Record<string, Record<string, Tool<any, any, any, any>>>> {
+  public async listToolsets(): Promise<MCPClientToolsets<TServers>> {
     const result = await this.listToolsetsWithErrors();
     return result.toolsets;
   }
@@ -1080,8 +1220,14 @@ To fix this you have three different options:
    * }
    * ```
    */
+  public listToolsetsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+    toolsets: MCPClientToolsets<TServers>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }>;
   public async listToolsetsWithErrors(options?: MCPDiscoveryOptions): Promise<{
-    toolsets: Record<string, Record<string, Tool<any, any, any, any>>>;
+    toolsets: Partial<Record<string, Partial<Record<string, Tool<any, any, any, any>>>>>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
     durations?: Record<string, number>;
@@ -1500,10 +1646,12 @@ To fix this you have three different options:
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
+      registerProcessHooks: this.registerProcessHooks,
       clientInfo: {
         name: config.clientInfo?.name ?? this.defaultClientInfo?.name,
         version: config.clientInfo?.version ?? this.defaultClientInfo?.version,
       },
+      webhook: this.webhook,
     });
 
     mcpClient.__setLogger(this.logger);

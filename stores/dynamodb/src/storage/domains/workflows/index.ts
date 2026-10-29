@@ -341,7 +341,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         const now = new Date();
         let snapshot: WorkflowRunState;
@@ -455,7 +455,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         const existingSnapshot = existingRecord.data?.snapshot as WorkflowRunState | undefined;
         const { expectedStatus, ...state } = opts;
@@ -622,7 +622,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           workflow_name: workflowName,
           run_id: runId,
         })
-        .go();
+        .go({ consistent: true });
 
       if (!result.data?.snapshot) {
         // Check snapshot exists
@@ -770,7 +770,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         if (!result.data) {
           return null;

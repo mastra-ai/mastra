@@ -31,9 +31,10 @@ describeForAllEngines('AIMock loop scenario: sub-agent delegation result', engin
       model: openai(SCENARIO_MODEL_ID),
     });
 
-    const { output } = await runLoopScenario({
+    const { output, chunks, requests } = await runLoopScenario({
       engine,
       llm,
+      collectChunks: true,
       instructions: 'Delegate research tasks to specialized agents.',
       prompt: 'Use the research agent to find information about TypeScript',
       agents: { researchAgent },
@@ -57,6 +58,25 @@ describeForAllEngines('AIMock loop scenario: sub-agent delegation result', engin
       subAgentThreadId: expect.any(String),
       subAgentResourceId: expect.any(String),
       subAgentToolResults: [],
+    });
+
+    // COR-1440: durable/evented computed toModelOutput for persistence but dropped
+    // its metadata from the public tool-result chunk.
+    const delegationResults = chunks?.filter(
+      chunk => chunk.type === 'tool-result' && chunk.payload.toolName === 'agent-researchAgent',
+    );
+    expect(delegationResults).toHaveLength(1);
+    expect(delegationResults![0]).toMatchObject({
+      payload: {
+        providerMetadata: {
+          mastra: { modelOutput: { type: 'text', value: 'TypeScript adds static types.' } },
+        },
+      },
+    });
+    const continuation = requests.find(req => isSupervisor(req.body) && lastIsToolResult(req.body));
+    expect(continuation?.body.messages.at(-1)).toMatchObject({
+      role: 'tool',
+      content: 'TypeScript adds static types.',
     });
   });
 });

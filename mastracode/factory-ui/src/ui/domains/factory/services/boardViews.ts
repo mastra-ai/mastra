@@ -5,7 +5,7 @@
  */
 
 import { boardPath } from '../boardCatalog';
-import { BOARD_FILTER_QUERY } from '../boardFilters';
+import { BOARD_FILTER_FIELDS } from '../boardFilters';
 import { BOARD_LAYOUT_QUERY } from '../boardLayout';
 import { BOARD_VIEW_QUERY } from '../boardSavedViews';
 import { BOARD_SORT_QUERY } from '../boardSort';
@@ -13,7 +13,7 @@ import { BOARD_SORT_QUERY } from '../boardSort';
 const BOARD_VIEWS_KEY = 'mastracode.boardViews';
 const MAX_BOARDS = 50;
 const BOARD_VIEW_PARAMS: readonly string[] = [
-  ...Object.values(BOARD_FILTER_QUERY),
+  ...BOARD_FILTER_FIELDS,
   BOARD_SORT_QUERY,
   BOARD_LAYOUT_QUERY,
   BOARD_VIEW_QUERY,

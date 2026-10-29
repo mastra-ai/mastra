@@ -85,7 +85,6 @@ const studioSidePanelArgs = {
   entityHref: '#',
   onEvaluateTrace: () => {},
   onSaveAsDatasetItem: () => {},
-  onAddTraceMocksToItem: () => {},
   onPrevious: () => {},
   onNext: () => {},
 } satisfies Partial<Story['args']>;

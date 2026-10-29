@@ -8,9 +8,14 @@ import type { TextButtonSize } from '../Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
-import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
+import {
+  menuItemCheckClass,
+  menuItemClass,
+  menuPopupClass,
+  menuPositionerClass,
+  menuSeparatorClass,
+} from '@/ds/primitives/menu-item';
 import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -218,7 +223,6 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
@@ -241,9 +245,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
           <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, menuScrollPopupClass, className)} {...props}>
             {/* The viewport is Select's list, so Select scrolls it to line the selected item up with the
                 trigger. `role` is restated because the viewport's own `presentation` role would win. */}
-            <MenuScrollArea menu={menu} viewportRender={<SelectPrimitive.List role="listbox" />}>
-              {children}
-            </MenuScrollArea>
+            <MenuScrollArea viewportRender={<SelectPrimitive.List role="listbox" />}>{children}</MenuScrollArea>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
       </SelectPrimitive.Portal>
@@ -257,7 +259,7 @@ export type SelectItemProps = Omit<SelectPrimitive.Item.Props, 'className'> & {
 };
 
 const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
+  <SelectPrimitive.Item ref={ref} className={cn(menuItemClass, className)} {...props}>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     <SelectPrimitive.ItemIndicator className={menuItemCheckClass}>
       <Check />
@@ -266,4 +268,18 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
 ));
 SelectItem.displayName = 'SelectItem';
 
-export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem };
+export type SelectSeparatorProps = Omit<SelectPrimitive.Separator.Props, 'className'> & {
+  className?: string;
+};
+
+const SelectSeparator = React.forwardRef<HTMLDivElement, SelectSeparatorProps>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Separator
+    ref={ref}
+    data-slot="select-separator"
+    className={cn(menuSeparatorClass, className)}
+    {...props}
+  />
+));
+SelectSeparator.displayName = 'SelectSeparator';
+
+export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectSeparator };

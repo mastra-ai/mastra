@@ -1,3 +1,4 @@
+import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { useId, useMemo } from 'react';
 import {
@@ -15,7 +16,6 @@ import { DataListReorderContext } from './data-list-reorder-context';
 import type { DataListReorderContextValue } from './data-list-reorder-context';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
-import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import { cn } from '@/lib/utils';
@@ -47,6 +47,8 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   fit?: DataListFit;
   /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
+  /** Disable the internal scroll area when a parent owns scrolling, allowing row effects to extend outside the list. */
+  scrollable?: boolean;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
    * by default so it does not fade the sticky top header.
@@ -109,9 +111,9 @@ const dataListGridStyles = [
   '[&_.data-list-top]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-background',
   // A sticky cell must stay opaque over horizontally scrolled cells, so it
-  // cannot show the fluid highlight through; it takes the opaque twin of a fill
+  // cannot show the hover layer through; it takes the opaque twin of a fill
   // rung over the row well instead, the same level a selected row rests on.
-  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-surface-panel',
+  '[&_.data-list-row-interactive:not(:disabled):hover>.data-list-sticky-start]:bg-surface-panel',
   '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
 ] as const;
@@ -220,9 +222,14 @@ function DataListBase({
   className,
   fit = 'content',
   variant = 'default',
+  scrollable = true,
   mask,
   scrollRef,
   reorder,
+  maxHeight,
+  autoScroll,
+  scrollButtons,
+  revealScrollbarOnHover,
   ...props
 }: DataListBaseProps) {
   const scopeId = useId();
@@ -240,26 +247,30 @@ function DataListBase({
         .join('\n')
     : null;
 
-  // One hover surface travels between rows (same primitive as menus/selects).
-  // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
-  const menu = useFluidMenu({ gapClick: false });
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
-      // It is also the offsetParent rows are measured against and the highlight is positioned in.
-      className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
+      // `isolate` keeps each row's negative-z surface and hover layers above the list's own background.
+      className={cn('relative isolate grid content-start', ...dataListGridStyles, dataListFitClasses[fit])}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
-      {...menu.getContainerProps({})}
     >
       {orderRules && <style>{orderRules}</style>}
-      {/* The highlight is the old row hover color. It sits between each row's
-          `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
-      <FluidMenuItems menu={menu} className="rounded-(--fluid-hover-item-radius) bg-fill-subtle">
-        {children}
-      </FluidMenuItems>
+      {children}
     </div>
   );
+
+  if (!scrollable) {
+    return (
+      // Preserve Base UI's render/style/ref contract without adding a clipping viewport.
+      <ScrollAreaPrimitive.Root
+        {...props}
+        className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}
+      >
+        <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
+      </ScrollAreaPrimitive.Root>
+    );
+  }
 
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width. Masks default to every overflowing edge except the
@@ -267,6 +278,10 @@ function DataListBase({
   return (
     <ScrollArea
       {...props}
+      maxHeight={maxHeight}
+      autoScroll={autoScroll}
+      scrollButtons={scrollButtons}
+      revealScrollbarOnHover={revealScrollbarOnHover}
       orientation="both"
       mask={getDataListMask(mask)}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.

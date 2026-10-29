@@ -18,6 +18,7 @@ import {
   DEFAULT_BROWSER_VIEWPORT,
 } from '@mastra/core/browser';
 import type {
+  BrowserCookie,
   BrowserState,
   BrowserTabState,
   BrowserToolError,
@@ -32,6 +33,9 @@ import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
 import { getStagehandChromePid, patchProfileExitType } from './utils';
+
+/** How long to wait for a Chrome started after retire() to close before killing it. */
+const RETIRED_CLOSE_TIMEOUT_MS = 5000;
 
 // Type for Stagehand v3 Page
 type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
@@ -85,6 +89,8 @@ export class StagehandBrowser extends MastraBrowser {
       onBrowserCreated: (stagehand, threadId) => {
         this.setupCloseListener(stagehand, () => this.handleThreadBrowserDisconnected(threadId), threadId);
       },
+      // Cookies go in before saved tabs reload, so restored pages load signed in.
+      onBrowserOpened: threadId => this.addPendingCookies(threadId),
     });
   }
 
@@ -107,6 +113,7 @@ export class StagehandBrowser extends MastraBrowser {
       // This will create the Stagehand instance for this thread if needed
       await this.getManagerForThread(threadId);
     }
+    await this.addPendingCookies(threadId);
   }
 
   // ---------------------------------------------------------------------------
@@ -184,9 +191,38 @@ export class StagehandBrowser extends MastraBrowser {
    * Used by thread manager for 'thread' scope.
    */
   private async createStagehandInstance(): Promise<Stagehand> {
+    // While another thread's Chrome is alive, a new thread's Chrome starts without
+    // launch() running again, so the profile must be prepared here too.
+    // Thread sessions are also created outside ensureReady(), so check retirement
+    // here, before and after the awaits, so a retired browser starts no Chrome.
+    this.assertNotRetired();
+    if (this.getScope() === 'thread') {
+      await this.prepareLocalProfile();
+    }
     const stagehandOptions = await this.buildStagehandOptions();
+    this.assertNotRetired();
     const stagehand = new Stagehand(stagehandOptions);
     await stagehand.init();
+    // retire() may have closed the browser while init() was starting Chrome.
+    try {
+      this.assertNotRetired();
+    } catch (error) {
+      // Nothing tracks this Chrome yet, so if close fails or hangs, kill it.
+      const pid = this.isConnectedToRemoteBrowser() ? undefined : getStagehandChromePid(stagehand);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const closed = await Promise.race([
+        stagehand.close().then(
+          () => true,
+          () => false,
+        ),
+        new Promise<boolean>(resolve => {
+          timer = setTimeout(() => resolve(false), RETIRED_CLOSE_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (!closed) this.killBrowserProcessGroup(pid);
+      throw error;
+    }
     return stagehand;
   }
 
@@ -224,6 +260,10 @@ export class StagehandBrowser extends MastraBrowser {
   private isConnectedToRemoteBrowser(): boolean {
     const config = this.stagehandConfig;
     return config.env === 'BROWSERBASE' || config.cdpUrl != null;
+  }
+
+  protected override getLocalProfilePath(): string | undefined {
+    return this.isConnectedToRemoteBrowser() ? undefined : this.stagehandConfig.profile;
   }
 
   /**
@@ -442,11 +482,8 @@ export class StagehandBrowser extends MastraBrowser {
   async getManagerForThread(threadId?: string): Promise<Stagehand | null> {
     const scope = this.getScope();
 
-    if (scope === 'shared') {
-      return this.sharedManager;
-    }
-
-    if (!threadId || threadId === DEFAULT_THREAD_ID) {
+    if (scope === 'shared' || !threadId || threadId === DEFAULT_THREAD_ID) {
+      await this.addPendingCookies(threadId ?? this.getCurrentThread());
       return this.sharedManager;
     }
 
@@ -458,8 +495,20 @@ export class StagehandBrowser extends MastraBrowser {
       await this.threadManager.getManagerForThread(threadId);
       stagehand = this.threadManager.getExistingManagerForThread(threadId);
     }
+    await this.addPendingCookies(threadId);
 
     return stagehand ?? null;
+  }
+
+  protected override async addCookiesToOpenBrowser(cookies: BrowserCookie[], threadId: string): Promise<boolean> {
+    const stagehand =
+      this.getScope() === 'shared' || threadId === DEFAULT_THREAD_ID
+        ? this.sharedManager
+        : this.threadManager.getExistingManagerForThread(threadId);
+    const context = stagehand?.context;
+    if (!context) return false;
+    await context.addCookies(cookies);
+    return true;
   }
 
   /**

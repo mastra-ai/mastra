@@ -13,6 +13,7 @@ const ui = () => chatModule();
 
 const TOOL_PREFIXES = ['mastra_workspace_'];
 const MAX_ARG_SUMMARY_LENGTH = 35;
+const MAX_TASK_TITLE_LENGTH = 80;
 const MAX_RESULT_LENGTH = 300;
 
 export function stripToolPrefix(name: string): string {
@@ -24,12 +25,22 @@ export function stripToolPrefix(name: string): string {
   return name;
 }
 
-export function formatArgsSummary(args: unknown): string {
+/** Tool args arrive either as an object or as the raw JSON string the model emitted. */
+function parseArgs(args: unknown): Record<string, unknown> | undefined {
   try {
     const obj = typeof args === 'string' ? JSON.parse(args) : args;
-    if (!obj || typeof obj !== 'object') return '';
+    return obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
-    const entries = Object.entries(obj as Record<string, unknown>).filter(
+export function formatArgsSummary(args: unknown): string {
+  try {
+    const obj = parseArgs(args);
+    if (!obj) return '';
+
+    const entries = Object.entries(obj).filter(
       ([key, val]) => key !== '__mastraMetadata' && val != null && val !== false && val !== '',
     );
     if (entries.length === 0) return '';
@@ -43,6 +54,28 @@ export function formatArgsSummary(args: unknown): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * One-line title for a tool's row in a plan/task widget. A tool that
+ * describes itself (e.g. `execute_command`'s `description`) gets that line
+ * verbatim — "Listing files in /workspace" reads better than
+ * "execute_command ls -la". Otherwise fall back to `name args`.
+ *
+ * Not every `description` is a one-liner — issue/PR creators and MCP tools
+ * take multi-paragraph bodies under that name — so only the first non-blank
+ * line is used, with runs of whitespace collapsed.
+ */
+export function formatTaskTitle(displayName: string, argsSummary: string, args: unknown): string {
+  const description = parseArgs(args)?.description;
+  if (typeof description === 'string') {
+    const line = description
+      .split('\n')
+      .map(l => l.replace(/\s+/g, ' ').trim())
+      .find(Boolean);
+    if (line) return line.length > MAX_TASK_TITLE_LENGTH ? line.slice(0, MAX_TASK_TITLE_LENGTH) + '…' : line;
+  }
+  return argsSummary ? `${displayName} ${argsSummary}` : displayName;
 }
 
 export function formatResult(result: unknown, isError?: boolean): string {

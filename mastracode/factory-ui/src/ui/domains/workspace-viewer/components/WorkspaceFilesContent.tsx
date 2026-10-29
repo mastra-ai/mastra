@@ -18,7 +18,6 @@ export function WorkspaceFilesContent() {
       <WorkspaceViewerPanel
         key={`${workspacePath}|${threadId}`}
         workspacePath={workspacePath}
-        threadId={threadId}
         onSizeChange={setSize}
         visible={open}
         workItem={workItem.data}

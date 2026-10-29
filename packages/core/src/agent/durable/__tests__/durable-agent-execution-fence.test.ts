@@ -21,6 +21,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
@@ -29,6 +30,7 @@ import { RequestContext } from '../../../request-context';
 import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID, resolveRunFence } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { SaveQueueManager } from '../../save-queue';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
@@ -382,6 +384,56 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       return JSON.stringify(messages.filter(message => message.role === 'assistant').map(message => message.content));
     }
 
+    it.each(['default', 'evented'] as const)(
+      '%s: losing ownership at the initial input barrier neither writes the request nor calls the model (COR-1472)',
+      async engine => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const model = gatedModel('This execution must never reach the model.');
+        const agent = new Agent({
+          id: 'barrier-fence-agent',
+          name: 'Barrier Fence Agent',
+          instructions: 'Answer the request.',
+          model: model.model as LanguageModelV2,
+          memory,
+        });
+        const durableAgent =
+          engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+        new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+        const runId = `initial-barrier-${backend}-${engine}`;
+        let fence: ExecutionFence | undefined;
+        const flushMessages = SaveQueueManager.prototype.flushMessages;
+        // Move ownership immediately before the real queued guard runs; keep the queue and storage real.
+        vi.spyOn(SaveQueueManager.prototype, 'flushMessages').mockImplementationOnce(async function (...args) {
+          fence = ExecutionFence.getLocalActive(runId)!;
+          await foreignOwnership(backend, storage, pubsub).takeOver(fence, 'barrier-recoverer');
+          return flushMessages.apply(this, args);
+        });
+
+        const result = await durableAgent.stream('Do not lose or execute this superseded request.', {
+          runId,
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const stream = collect(result.fullStream);
+        try {
+          await vi.waitFor(() => expect(fence).toBeDefined());
+          await fence!.whenSettled;
+          expect(fence!.isLost()).toBe(true);
+          expect(model.calls()).toBe(0);
+          const store = (await storage.getStore('memory'))!;
+          expect((await store.listMessages({ threadId: THREAD, perPage: false })).messages).toEqual([]);
+          expect(await foreignOwnership(backend, storage, pubsub).isHeldBy(agent.id, runId, 'barrier-recoverer')).toBe(
+            true,
+          );
+        } finally {
+          model.release();
+          await stream.stop();
+          result.cleanup();
+          await foreignOwnership(backend, storage, pubsub).free(agent.id, runId, 'barrier-recoverer');
+        }
+      },
+    );
+
     it('a superseded execution does not overwrite the recovered answer, delete snapshots, or publish a terminal event', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });
@@ -609,9 +661,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The original caller keeps reading: it follows the run across the takeover.
         const startedStream = collect(started.fullStream);
         const events: Array<{ type: string; generation?: number }> = [];
-        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        // A frame reaches the transport only after it is in the run log, so a reader
+        // that attaches after stream() started reads the log (which is what replay
+        // from an offset does) instead of racing the live publish of frame 0.
+        await (agentA.pubsub as unknown as CachingPubSub).subscribeWithReplay(AGENT_STREAM_TOPIC(runId), event => {
           events.push({
-            type: event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type,
+            type: event.type === 'chunk' ? `chunk:${(event.data as any)?.type}` : event.type,
             generation: event.generation,
           });
         });
@@ -621,7 +676,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
         // The original execution's events so far carry its claim.
-        expect(events.length).toBeGreaterThan(0);
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
         expect(events.every(event => event.generation === originalGeneration)).toBe(true);
 
         // ---- This process forgets it drives the run, as a restarted process would, and takes it over.
@@ -811,6 +866,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const remove = vi.spyOn(durableAgent, 'deleteRunSnapshots');
       vi.useFakeTimers();
       try {
+        const recoveryStartedAt = Date.now();
         const recovery = mastra.recoverAllDurableAgents();
         await vi.waitFor(() => expect(next.calls()).toBe(1));
         const fence = ExecutionFence.getLocalActive(runId)!;
@@ -820,11 +876,14 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         await vi.advanceTimersByTimeAsync(30_000);
         expect(await recovery).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 1 });
-        expect(await recover.mock.results[0]!.value).toEqual({
-          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout' }],
+        const batch = await recover.mock.results[0]!.value;
+        expect(batch).toEqual({
+          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout', retryAt: expect.any(Number) }],
           succeeded: 0,
           failed: 0,
         });
+        expect(batch.recovered[0]!.retryAt).toBeGreaterThanOrEqual(recoveryStartedAt + 60_000);
+        expect(batch.recovered[0]!.retryAt).toBeLessThanOrEqual(Date.now() + 30_000);
         expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
         expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
         expect(signal.aborted).toBe(false);

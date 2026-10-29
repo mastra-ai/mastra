@@ -4,6 +4,7 @@ import { createStoredMessageLoader } from '../agent/message-list/memory-message-
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { ConsoleLogger } from '../logger';
+import { createRunScope } from '../mastra/run-scope';
 import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
@@ -114,6 +115,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   // This map persists across loop iterations and is shared by all processor methods.
   const processorStates = rest.processorStates ?? new Map<string, ProcessorState>();
 
+  const tracingScope = rest.tracingScope ?? createRunScope();
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
     models,
@@ -130,6 +133,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     rotateResponseMessageId,
     agentId,
     requireToolApproval,
+    returnScorerData,
     toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,
@@ -137,10 +141,16 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     },
     processorStates,
     ...rest,
+    tracingScope,
   };
 
   const initialStreamState = findSuspendedStreamState(resumeContext?.snapshot)?.streamState;
-  const baseStream = workflowLoopStream(workflowLoopProps);
+  let finalizeRun: (() => Promise<void>) | undefined;
+  const baseStream = workflowLoopStream(workflowLoopProps, {
+    register: cleanup => {
+      finalizeRun = cleanup;
+    },
+  });
 
   // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
@@ -171,11 +181,16 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       ...observabilityContext,
       requestContext: rest.requestContext,
       processorStates,
+      agent: rest.agent,
       transportRef: internalToUse.transportRef,
       experimentalTransform,
       hideSignals,
     },
     initialState: initialStreamState,
+    onTracingTripwire: rest.onTracingTripwire,
+    onFinishComplete: async () => {
+      await finalizeRun?.();
+    },
   });
 
   return createDestructurableOutput(modelOutput);

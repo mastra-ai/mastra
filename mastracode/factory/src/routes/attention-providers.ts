@@ -1,3 +1,4 @@
+import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 /**
@@ -169,13 +170,8 @@ function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItem
   return {
     kind: 'work-item' as const,
     workItemId: item.id,
-    board: workItemBoard(item),
+    board: boardForWorkItem(item),
   };
-}
-
-export function workItemBoard(item: WorkItemRow): 'review' | 'work' {
-  const review = item.externalSource?.integrationId === 'github' && item.externalSource.type === 'pull-request';
-  return review ? 'review' : 'work';
 }
 
 /** One deferred-decision status seen as attention: failures and parked runs differ only by this. */
@@ -514,7 +510,7 @@ function toMentionItem(scope: AttentionScope, { mention, comment, item, identity
     target: {
       kind: 'work-item' as const,
       workItemId: mention.workItemId,
-      board: workItemBoard(item),
+      board: boardForWorkItem(item),
       commentId: mention.commentId,
     },
   };

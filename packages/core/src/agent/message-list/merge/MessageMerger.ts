@@ -2,6 +2,23 @@ import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
 import { stampPart, stampToolPartUpdate } from '../utils/stamp-part';
 
+type MessagePart = MastraMessageContentV2['parts'][number];
+
+/**
+ * Per-merge index over both messages' parts. Every part is keyed once and the per-key counts
+ * are updated as parts are inserted, so inserting a part costs O(1) key work instead of
+ * re-keying every part of both messages (which made merging quadratic in the part count).
+ */
+type MergeIndex = {
+  keyOf: (part: MessagePart) => string;
+  latestCounts: Map<string, number>;
+  incomingCounts: Map<string, number>;
+  /** First index of each part object in the incoming message (same result as `indexOf`). */
+  incomingIndex: Map<MessagePart, number>;
+  /** Index of the first incoming part that is not a step-start. */
+  firstIncomingNonStepStart: number;
+};
+
 /**
  * MessageMerger - Handles complex logic for merging assistant messages
  *
@@ -249,12 +266,14 @@ export class MessageMerger {
   }): void {
     let previousLeftAnchor = -1;
     let insertionDrift = 0;
+    const index = MessageMerger.createMergeIndex(latestMessage, incomingMessage);
+    let window: { leftAnchor: number; parts: MessagePart[]; start: number; counts: Map<string, number> } | undefined;
 
     // Walk through incomingMessage, inserting any part not present at the canonical position
     for (let i = 0; i < incomingMessage.content.parts.length; ++i) {
       const part = incomingMessage.content.parts[i];
       if (!part) continue;
-      const key = CacheKeyGenerator.fromDBParts([part]);
+      const key = index.keyOf(part);
       const partToAdd = partsToAdd.get(i);
       if (!key || !partToAdd) continue;
       if (anchorMap.size > 0) {
@@ -282,18 +301,33 @@ export class MessageMerger {
         const rightAnchorLatest =
           rightAnchorV2 !== -1 ? anchorMap.get(rightAnchorV2)! : latestMessage.content.parts.length;
 
-        if (
-          insertAt >= 0 &&
-          insertAt <= rightAnchorLatest &&
-          !latestMessage.content.parts
-            .slice(insertAt, rightAnchorLatest)
-            .some(p => CacheKeyGenerator.fromDBParts([p]) === CacheKeyGenerator.fromDBParts([part]))
-        ) {
+        if (insertAt < 0 || insertAt > rightAnchorLatest) continue;
+
+        // insertAt only moves forward within an interval and inserted parts always land before the
+        // next insertAt, so [insertAt, rightAnchorLatest) is always a suffix of the parts the interval
+        // held when first visited. Count that suffix once and trim it from the front instead of
+        // rescanning the slice for every incoming part.
+        if (!window || window.leftAnchor !== leftAnchorV2) {
+          const parts = latestMessage.content.parts.slice(insertAt, rightAnchorLatest);
+          const counts = new Map<string, number>();
+          for (const p of parts) {
+            const k = index.keyOf(p);
+            counts.set(k, (counts.get(k) ?? 0) + 1);
+          }
+          window = { leftAnchor: leftAnchorV2, parts, start: 0, counts };
+        }
+        while (window.parts.length - window.start > rightAnchorLatest - insertAt) {
+          const k = index.keyOf(window.parts[window.start++]!);
+          window.counts.set(k, window.counts.get(k)! - 1);
+        }
+
+        if (!window.counts.get(key)) {
           const insertedCount = MessageMerger.pushNewPart({
             latestMessage,
             newMessage: incomingMessage,
             part,
             insertAt,
+            index,
           });
           if (insertedCount === 0) continue;
           insertionDrift += insertedCount - 1;
@@ -308,9 +342,45 @@ export class MessageMerger {
           latestMessage,
           newMessage: incomingMessage,
           part,
+          index,
         });
       }
     }
+  }
+
+  private static createMergeIndex(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): MergeIndex {
+    const keys = new Map<MessagePart, string>();
+    const keyOf = (part: MessagePart) => {
+      let key = keys.get(part);
+      if (key === undefined) {
+        key = CacheKeyGenerator.fromDBParts([part]);
+        keys.set(part, key);
+      }
+      return key;
+    };
+    const countKeys = (parts: MessagePart[]) => {
+      const counts = new Map<string, number>();
+      for (const part of parts) {
+        const key = keyOf(part);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      return counts;
+    };
+
+    const incomingParts = incomingMessage.content.parts;
+    const incomingIndex = new Map<MessagePart, number>();
+    incomingParts.forEach((part, i) => {
+      if (!incomingIndex.has(part)) incomingIndex.set(part, i);
+    });
+    const firstNonStepStart = incomingParts.findIndex(p => p.type !== 'step-start');
+
+    return {
+      keyOf,
+      latestCounts: countKeys(latestMessage.content.parts),
+      incomingCounts: countKeys(incomingParts),
+      incomingIndex,
+      firstIncomingNonStepStart: firstNonStepStart === -1 ? incomingParts.length : firstNonStepStart,
+    };
   }
 
   /**
@@ -321,28 +391,28 @@ export class MessageMerger {
     newMessage,
     part,
     insertAt,
+    index,
   }: {
     latestMessage: MastraDBMessage;
     newMessage: MastraDBMessage;
     part: MastraMessageContentV2['parts'][number];
     insertAt?: number;
+    index: MergeIndex;
   }): number {
-    const partKey = CacheKeyGenerator.fromDBParts([part]);
-    const latestPartCount = latestMessage.content.parts.filter(
-      p => CacheKeyGenerator.fromDBParts([p]) === partKey,
-    ).length;
-    const newPartCount = newMessage.content.parts.filter(p => CacheKeyGenerator.fromDBParts([p]) === partKey).length;
+    const partKey = index.keyOf(part);
+    const latestPartCount = index.latestCounts.get(partKey) ?? 0;
+    const newPartCount = index.incomingCounts.get(partKey) ?? 0;
     // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
     if (latestPartCount < newPartCount) {
       // Check if we need to add a step-start when merging assistant messages: before text parts the
       // incoming message doesn't already precede with a step-start, and before a tool call that opens
       // the incoming step. Only add after tool invocations. Later tool calls in the same incoming
       // message are parallel calls of that step and stay together.
-      const partIndex = newMessage.content.parts.indexOf(part);
+      const partIndex = index.incomingIndex.get(part) ?? -1;
       const hasStepStartBefore = partIndex > 0 && newMessage.content.parts[partIndex - 1]?.type === 'step-start';
       // An incoming step-start can be deduplicated against one already stored, so a tool call
       // preceded only by step-starts still opens a new step.
-      const opensStep = newMessage.content.parts.slice(0, partIndex).every(p => p.type === 'step-start');
+      const opensStep = partIndex <= index.firstIncomingNonStepStart;
 
       const needsStepStart =
         latestMessage.role === 'assistant' &&
@@ -350,28 +420,34 @@ export class MessageMerger {
         latestMessage.content.parts.length > 0 &&
         latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
 
-      const previousStepStart = [...latestMessage.content.parts].reverse().find(p => p.type === 'step-start');
-      const stepStartPart = previousStepStart?.model
-        ? stampPart({
-            type: 'step-start' as const,
-            model: previousStepStart.model,
-          })
-        : ({ type: 'step-start' as const } as MastraMessageContentV2['parts'][number]);
+      let stepStartPart: MessagePart | undefined;
+      if (needsStepStart) {
+        const previousStepStart = latestMessage.content.parts.findLast(p => p.type === 'step-start');
+        stepStartPart = previousStepStart?.model
+          ? stampPart({
+              type: 'step-start' as const,
+              model: previousStepStart.model,
+            })
+          : ({ type: 'step-start' as const } as MessagePart);
+        const stepStartKey = index.keyOf(stepStartPart);
+        index.latestCounts.set(stepStartKey, (index.latestCounts.get(stepStartKey) ?? 0) + 1);
+      }
+      index.latestCounts.set(partKey, latestPartCount + 1);
 
       if (typeof insertAt === 'number') {
-        if (needsStepStart) {
+        if (stepStartPart) {
           latestMessage.content.parts.splice(insertAt, 0, stepStartPart);
           latestMessage.content.parts.splice(insertAt + 1, 0, part);
         } else {
           latestMessage.content.parts.splice(insertAt, 0, part);
         }
       } else {
-        if (needsStepStart) {
+        if (stepStartPart) {
           latestMessage.content.parts.push(stepStartPart);
         }
         latestMessage.content.parts.push(part);
       }
-      return needsStepStart ? 2 : 1;
+      return stepStartPart ? 2 : 1;
     }
     return 0;
   }

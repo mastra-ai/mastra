@@ -135,6 +135,8 @@ export class AcpAgent<
       resolveText = resolve;
       rejectText = reject;
     });
+    // Callers that only read fullStream never await text; keep its rejection handled.
+    textPromise.catch(() => {});
 
     const fullStream = new ReadableStream<ChunkType>({
       start: async controller => {
@@ -175,10 +177,13 @@ export class AcpAgent<
           resolveText(text);
           controller.close();
         } catch (error) {
-          const text = chunks.join('');
-          await options?.onFinish?.(createOnFinishResult({ text, runId, messageList, toolResults, error }) as any);
           rejectText(error);
-          controller.error(error);
+          try {
+            const text = chunks.join('');
+            await options?.onFinish?.(createOnFinishResult({ text, runId, messageList, toolResults, error }) as any);
+          } finally {
+            controller.error(error);
+          }
         }
       },
     });

@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import './drawer.css';
 
 export type DrawerSide = 'top' | 'right' | 'bottom' | 'left';
+// Width of left/right drawers: `md` keeps each variant's width (20rem default, 32rem floating).
+export type DrawerSize = 'md' | 'lg' | 'xl';
 
 const drawerBackdropVariants = cva('drawer-backdrop fixed inset-0 z-50', {
   variants: {
@@ -39,17 +41,41 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
       floating: 'p-2 sm:p-3',
       floatingOverlay: 'inset-0 p-2 sm:p-3',
     },
+    size: {
+      md: '',
+      lg: '',
+      xl: '',
+    },
   },
+  // A floating drawer without an overlay sizes its viewport to the popup plus the `p-2 sm:p-3` gutter.
   compoundVariants: [
     {
       side: 'right',
       layout: 'floating',
-      className: 'inset-y-0 right-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
+      className: 'inset-y-0 right-0 max-w-full',
     },
     {
       side: 'left',
       layout: 'floating',
-      className: 'inset-y-0 left-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
+      className: 'inset-y-0 left-0 max-w-full',
+    },
+    {
+      side: ['left', 'right'],
+      layout: 'floating',
+      size: 'md',
+      className: 'w-[calc(32rem+1.5rem)] sm:w-[calc(32rem+2rem)]',
+    },
+    {
+      side: ['left', 'right'],
+      layout: 'floating',
+      size: 'lg',
+      className: 'w-[calc(42rem+1.5rem)] sm:w-[calc(42rem+2rem)]',
+    },
+    {
+      side: ['left', 'right'],
+      layout: 'floating',
+      size: 'xl',
+      className: 'w-[calc(56rem+1.5rem)] sm:w-[calc(56rem+2rem)]',
     },
     {
       side: 'bottom',
@@ -65,13 +91,15 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
   defaultVariants: {
     side: 'bottom',
     layout: 'default',
+    size: 'md',
   },
 });
 
 // `drawer-popup` hooks into drawer.css for swipe/stack transforms; `::after` dims under nested drawers.
+// `overflow-y-auto` makes the x axis `auto` too: `overscroll-x-none` stops Chrome's sideways trackpad bounce.
 const drawerPopupVariants = cva(
   cn(
-    'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
+    'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-x-none overscroll-y-contain will-change-transform outline-none',
     'text-foreground',
     dialogSurfaceStyle,
     'data-[swiping]:select-none',
@@ -90,6 +118,11 @@ const drawerPopupVariants = cva(
         default: '',
         floating: 'drawer-popup-floating pointer-events-auto rounded-lg',
       },
+      size: {
+        md: '',
+        lg: '',
+        xl: '',
+      },
     },
     compoundVariants: [
       {
@@ -105,18 +138,18 @@ const drawerPopupVariants = cva(
       {
         side: 'left',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-r-xl',
+        className: 'h-full max-w-[85vw] rounded-r-xl',
       },
       {
         side: 'right',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-l-xl',
+        className: 'h-full max-w-[85vw] rounded-l-xl',
       },
       {
         side: ['left', 'right'],
         variant: 'floating',
         className:
-          'h-[calc(100dvh-1.5rem)] w-[32rem] max-w-[calc(100vw-1.5rem)] sm:h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)]',
+          'h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)] sm:h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)]',
       },
       {
         side: ['top', 'bottom'],
@@ -124,10 +157,33 @@ const drawerPopupVariants = cva(
         className:
           'max-h-[calc(85dvh-1.5rem)] w-[calc(100vw-1.5rem)] sm:max-h-[calc(85dvh-2rem)] sm:w-[calc(100vw-2rem)]',
       },
+      {
+        side: ['left', 'right'],
+        variant: 'default',
+        size: 'md',
+        className: 'w-[20rem]',
+      },
+      {
+        side: ['left', 'right'],
+        variant: 'floating',
+        size: 'md',
+        className: 'w-[32rem]',
+      },
+      {
+        side: ['left', 'right'],
+        size: 'lg',
+        className: 'w-2xl',
+      },
+      {
+        side: ['left', 'right'],
+        size: 'xl',
+        className: 'w-4xl',
+      },
     ],
     defaultVariants: {
       side: 'bottom',
       variant: 'default',
+      size: 'md',
     },
   },
 );
@@ -137,7 +193,7 @@ type DrawerViewportClassVariantsProps = VariantProps<typeof drawerViewportVarian
 type DrawerPopupVariantsProps = VariantProps<typeof drawerPopupVariants>;
 export type DrawerVariant = NonNullable<DrawerPopupVariantsProps['variant']>;
 type DrawerViewportLayout = NonNullable<DrawerViewportClassVariantsProps['layout']>;
-type DrawerViewportVariantsProps = Pick<DrawerViewportClassVariantsProps, 'side'> & {
+type DrawerViewportVariantsProps = Pick<DrawerViewportClassVariantsProps, 'side' | 'size'> & {
   variant?: DrawerVariant;
 };
 export type DrawerOverlay = 'auto' | NonNullable<DrawerBackdropVariantsProps['overlay']>;
@@ -153,6 +209,7 @@ const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'>
 type DrawerContextValue = {
   side: DrawerSide;
   variant: DrawerVariant;
+  size: DrawerSize;
   resolvedOverlay: NonNullable<DrawerBackdropVariantsProps['overlay']>;
 };
 
@@ -170,6 +227,7 @@ const resolveDrawerOverlay = (
 const DrawerContext = React.createContext<DrawerContextValue>({
   side: 'bottom',
   variant: 'default',
+  size: 'md',
   resolvedOverlay: 'visible',
 });
 
@@ -191,6 +249,8 @@ export type DrawerProps<Payload = unknown> = Omit<DrawerPrimitive.Root.Props<Pay
   side?: DrawerSide;
   /** Visual treatment for the drawer panel. Defaults to `default`. */
   variant?: DrawerVariant;
+  /** Width of left/right drawers: `md` (20rem, or 32rem floating), `lg` (42rem) or `xl` (56rem). No effect on top/bottom drawers. Defaults to `md`. */
+  size?: DrawerSize;
   /** Backdrop behavior. `auto` renders a visible backdrop for default drawers and no backdrop for floating drawers. */
   overlay?: DrawerOverlay;
 };
@@ -198,6 +258,7 @@ export type DrawerProps<Payload = unknown> = Omit<DrawerPrimitive.Root.Props<Pay
 function Drawer<Payload = unknown>({
   side = 'bottom',
   variant = 'default',
+  size = 'md',
   overlay = 'auto',
   modal,
   disablePointerDismissal,
@@ -208,8 +269,8 @@ function Drawer<Payload = unknown>({
   const resolvedModal = modal ?? (resolvedOverlay === 'none' ? false : undefined);
   const resolvedDisablePointerDismissal = disablePointerDismissal ?? (resolvedOverlay === 'none' ? true : undefined);
   const contextValue = React.useMemo<DrawerContextValue>(
-    () => ({ side, variant, resolvedOverlay }),
-    [side, variant, resolvedOverlay],
+    () => ({ side, variant, size, resolvedOverlay }),
+    [side, variant, size, resolvedOverlay],
   );
 
   return (
@@ -299,10 +360,11 @@ type DrawerViewportProps = Omit<DrawerPrimitive.Viewport.Props, 'className'> & {
 // Floating drawers without an overlay constrain the viewport so the page behind stays interactive.
 // Floating drawers with an overlay keep a full-screen viewport so overlay-start drags stay native.
 const DrawerViewport = React.forwardRef<HTMLDivElement, DrawerViewportProps>(
-  ({ className, side, variant, ...props }, ref) => {
+  ({ className, side, variant, size, ...props }, ref) => {
     const context = useDrawerContext();
     const resolvedSide = side ?? context.side;
     const resolvedVariant = variant ?? context.variant;
+    const resolvedSize = size ?? context.size;
     const layout = resolveDrawerViewportLayout(resolvedVariant, context.resolvedOverlay);
 
     return (
@@ -310,7 +372,7 @@ const DrawerViewport = React.forwardRef<HTMLDivElement, DrawerViewportProps>(
         ref={ref}
         data-slot="drawer-viewport"
         data-variant={resolvedVariant}
-        className={cn(drawerViewportVariants({ side: resolvedSide, layout }), className)}
+        className={cn(drawerViewportVariants({ side: resolvedSide, layout, size: resolvedSize }), className)}
         {...props}
       />
     );
@@ -323,17 +385,22 @@ type DrawerPopupProps = Omit<DrawerPrimitive.Popup.Props, 'className'> & {
 } & DrawerPopupVariantsProps;
 
 const DrawerPopup = React.forwardRef<HTMLDivElement, DrawerPopupProps>(
-  ({ className, side, variant, ...props }, ref) => {
+  ({ className, side, variant, size, ...props }, ref) => {
     const context = useDrawerContext();
     const resolvedSide = side ?? context.side;
     const resolvedVariant = variant ?? context.variant;
+    const resolvedSize = size ?? context.size;
 
     return (
       <DrawerPrimitive.Popup
         ref={ref}
         data-slot="drawer-popup"
         data-variant={resolvedVariant}
-        className={cn(drawerPopupVariants({ side: resolvedSide, variant: resolvedVariant }), className)}
+        data-size={resolvedSize}
+        className={cn(
+          drawerPopupVariants({ side: resolvedSide, variant: resolvedVariant, size: resolvedSize }),
+          className,
+        )}
         {...props}
       />
     );
@@ -386,21 +453,22 @@ type DrawerContentProps = Omit<DrawerPrimitive.Popup.Props, 'className' | 'child
   children?: React.ReactNode;
   /** Shows the built-in top-right close button. Defaults to `true`. */
   showCloseButton?: boolean;
-} & Pick<DrawerPopupVariantsProps, 'variant'>;
+} & Pick<DrawerPopupVariantsProps, 'variant' | 'size'>;
 
 // Opinionated bundle: Portal + Backdrop + Viewport + Popup, with handle on top/bottom sheets.
 // Drop to the primitives for non-modal pages, custom portal targets, or chrome outside the popup.
 const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
-  ({ className, children, variant, showCloseButton = true, ...props }, ref) => {
-    const { side, variant: contextVariant, resolvedOverlay } = useDrawerContext();
+  ({ className, children, variant, size, showCloseButton = true, ...props }, ref) => {
+    const { side, variant: contextVariant, size: contextSize, resolvedOverlay } = useDrawerContext();
     const resolvedVariant = variant ?? contextVariant;
+    const resolvedSize = size ?? contextSize;
     const showHandle = side === 'top' || side === 'bottom';
 
     return (
       <DrawerPortal>
         {resolvedOverlay !== 'none' && <DrawerBackdrop />}
-        <DrawerViewport variant={resolvedVariant}>
-          <DrawerPopup ref={ref} variant={resolvedVariant} className={className} {...props}>
+        <DrawerViewport variant={resolvedVariant} size={resolvedSize}>
+          <DrawerPopup ref={ref} variant={resolvedVariant} size={resolvedSize} className={className} {...props}>
             {showHandle && side === 'bottom' && <DrawerHandleBar />}
             <DrawerFloatingSideHandle side={side} variant={resolvedVariant} />
             <div

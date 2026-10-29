@@ -41,6 +41,7 @@ export function testChatSession(
   overrides: Partial<ChatSessionContextApi> = {},
 ): ChatSessionContextApi {
   return {
+    sessionId: 'session-1',
     resourceId: 'resource-1',
     sessionEnabled: false,
     resourceReady: false,

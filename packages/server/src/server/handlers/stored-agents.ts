@@ -21,6 +21,7 @@ import {
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
+import type { toolsConfigSchema } from '../schemas/stored-agents';
 import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
@@ -99,6 +100,15 @@ const CODE_AGENT_OVERRIDE_FIELDS = [
 ] as const;
 
 /**
+ * Whether a registered agent is defined by the project: in code (`'code'`) or in an
+ * `agents/<name>/` folder (`'fs'`). Stored records for these agents are overrides whose
+ * fields are limited by the agent's editor config.
+ */
+function isCodeBackedAgent<TAgent extends { source?: string }>(agent: TAgent | undefined): agent is TAgent {
+  return agent?.source === 'code' || agent?.source === 'fs';
+}
+
+/**
  * Derive ownership flags from a code agent's editor config.
  * Mirrors the semantics of `editor.agent.applyStoredOverrides` so that
  * client save payloads, persisted snapshots, and export output all agree
@@ -126,6 +136,28 @@ function getCodeAgentOwnership(editorConfig: unknown): {
   const ownsToolDescriptionsOnly =
     typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true;
   return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
+}
+
+type StoredTools = z.infer<typeof updateStoredAgentBodySchema>['tools'];
+
+/** Keep description overrides from changing tool availability or conditional rules. */
+function toolDescriptionsOnly(tools: StoredTools): StoredTools {
+  const descriptions = (value: z.infer<typeof toolsConfigSchema>) =>
+    Object.fromEntries(
+      Object.entries(value)
+        .filter(([, config]) => config.description !== undefined)
+        .map(([id, config]) => [id, { description: config.description }]),
+    );
+
+  if (tools === undefined) return undefined;
+  if (Array.isArray(tools)) {
+    // Request rules are caller-owned, and the registered agent does not expose
+    // project-owned variant rules. Reject instead of widening a scoped override.
+    throw new HTTPException(400, {
+      message: 'Conditional tool description overrides require project-owned rules and are not supported',
+    });
+  }
+  return descriptions(tools);
 }
 
 function hasNonEmptyInstructions(value: unknown): boolean {
@@ -179,7 +211,7 @@ function buildExportConfig(
   agent?: { __getEditorConfig?: () => unknown; source?: string },
 ) {
   const editorConfig = agent?.__getEditorConfig?.();
-  const isCodeAgent = agent?.source === 'code';
+  const isCodeAgent = isCodeBackedAgent(agent);
   const allowedFields = isCodeAgent ? CODE_AGENT_OVERRIDE_FIELDS : AGENT_SNAPSHOT_CONFIG_FIELDS;
   const ownership = isCodeAgent ? getCodeAgentOwnership(editorConfig) : null;
   const config: Record<string, unknown> = {};
@@ -191,12 +223,15 @@ function buildExportConfig(
       if (
         (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
         !ownership.ownsTools &&
-        !ownership.ownsToolDescriptionsOnly
+        (field !== 'tools' || !ownership.ownsToolDescriptionsOnly)
       ) {
         continue;
       }
     }
-    config[field] = input[field];
+    config[field] =
+      field === 'tools' && ownership?.ownsToolDescriptionsOnly && !ownership.ownsTools
+        ? toolDescriptionsOnly(updateStoredAgentBodySchema.shape.tools.parse(input[field]))
+        : input[field];
   }
 
   return sortForStableJson(config) as Record<string, unknown>;
@@ -628,23 +663,25 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       let createTools = tools;
       let createIntegrationTools = integrationTools;
       let createMcpClients = mcpClients;
+      let createToolProviders = toolProviders;
       let codeAgentForCreate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
       try {
         codeAgentForCreate = mastra.getAgentById?.(id) as typeof codeAgentForCreate;
       } catch {
         codeAgentForCreate = undefined;
       }
-      if (codeAgentForCreate?.source === 'code') {
+      if (isCodeBackedAgent(codeAgentForCreate)) {
         const ownership = getCodeAgentOwnership(codeAgentForCreate.__getEditorConfig?.());
         if (ownership.ownsInstructions) {
           assertOwnedInstructionsNotEmpty(createInstructions);
         } else {
           createInstructions = undefined;
         }
-        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
-          createTools = undefined;
+        if (!ownership.ownsTools) {
+          createTools = ownership.ownsToolDescriptionsOnly ? toolDescriptionsOnly(createTools) : undefined;
           createIntegrationTools = undefined;
           createMcpClients = undefined;
+          createToolProviders = undefined;
         }
       }
 
@@ -668,7 +705,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools: createIntegrationTools,
-        toolProviders,
+        toolProviders: createToolProviders,
         mcpClients: createMcpClients,
         inputProcessors,
         outputProcessors,
@@ -846,7 +883,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       } catch {
         codeAgentForUpdate = undefined;
       }
-      if (codeAgentForUpdate?.source === 'code') {
+      if (isCodeBackedAgent(codeAgentForUpdate)) {
         const ownership = getCodeAgentOwnership(codeAgentForUpdate.__getEditorConfig?.());
         if (ownership.ownsInstructions) {
           if (instructions !== undefined) {
@@ -856,10 +893,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
           instructions = undefined;
           shouldValidateStoredInstructions = false;
         }
-        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
-          tools = undefined;
+        if (!ownership.ownsTools) {
+          tools = ownership.ownsToolDescriptionsOnly ? toolDescriptionsOnly(tools) : undefined;
           integrationTools = undefined;
           mcpClients = undefined;
+          toolProviders = undefined;
         }
       }
 

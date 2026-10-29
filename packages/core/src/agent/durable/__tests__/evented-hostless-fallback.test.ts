@@ -38,6 +38,9 @@ describe('EventedAgent without a Mastra host', () => {
     // The degradation is visible, and memoized (warned once, not per read).
     const hostWarnings = warn.mock.calls.filter((c: any[]) => String(c[0]).includes('no Mastra host'));
     expect(hostWarnings).toHaveLength(1);
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('supportsConcurrentUpdates'))).toHaveLength(
+      0,
+    );
 
     cleanup();
   }, 30_000);

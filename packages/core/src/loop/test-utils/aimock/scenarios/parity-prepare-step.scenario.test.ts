@@ -17,7 +17,8 @@ import { z } from 'zod';
 import { Agent } from '../../../../agent';
 import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
-import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import type { CapturedRequest, ParityEngine } from '../parity';
 import {
@@ -62,10 +63,10 @@ function expectSettled(turn: { finishReason?: string; chunks: Array<{ type: stri
 }
 
 describeParity('prepare-step parity', target => {
-  const pubsubs: EventEmitterPubSub[] = [];
+  const hosts: Mastra[] = [];
 
   afterEach(async () => {
-    await Promise.all(pubsubs.splice(0).map(pubsub => pubsub.close()));
+    await Promise.all(hosts.splice(0).map(host => host.shutdown()));
   });
 
   it('model: uses the model returned for each step', async () => {
@@ -305,12 +306,9 @@ describeParity('prepare-step parity', target => {
       instructions: 'noop',
       model: createRecordingModel({ tapes: [textOnlyTape('x')] }).model,
     });
-    const pubsub = new EventEmitterPubSub();
-    pubsubs.push(pubsub);
     const wrapper =
-      target === 'durable'
-        ? createDurableAgent({ agent: baseAgent, pubsub })
-        : createEventedAgent({ agent: baseAgent, pubsub });
+      target === 'durable' ? createDurableAgent({ agent: baseAgent }) : createEventedAgent({ agent: baseAgent });
+    hosts.push(new Mastra({ agents: { [baseAgent.id]: wrapper }, storage: new InMemoryStore(), logger: false }));
 
     const prepareStep = vi.fn();
     const { workflowInput, registryEntry } = await wrapper.prepare('hello', { prepareStep });

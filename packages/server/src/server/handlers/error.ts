@@ -55,7 +55,7 @@ const RUN_CLAIM_CONFLICT_CODES = new Set([
   'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
 ]);
 
-function isRunClaimConflictError(error: unknown): error is Error {
+function isRunClaimConflictError(error: unknown): error is Error & { id: string } {
   return error instanceof Error && RUN_CLAIM_CONFLICT_CODES.has((error as { id?: unknown }).id as string);
 }
 
@@ -70,6 +70,7 @@ const DURABLE_RUN_CONFLICT_CODES = new Set([
   'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY',
   'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
   'DURABLE_AGENT_RECOVER_RUN_SUSPENDED',
+  'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE',
   'DURABLE_AGENT_EXECUTION_CONFLICT',
 ]);
 
@@ -160,7 +161,14 @@ export function handleError(error: unknown, defaultMessage: string): never {
   // a conflict on run state, not a malformed request, so it maps to 409 and clients can
   // distinguish it from a 400/500 and re-read the run.
   if (isRunClaimConflictError(error) || isDurableRunConflictError(error)) {
+    const res = isRunClaimConflictError(error)
+      ? new Response(JSON.stringify({ error: error.message, code: error.id }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        })
+      : undefined;
     throw new HTTPException(409, {
+      res,
       message: error.message,
       stack: error.stack,
       cause: error,

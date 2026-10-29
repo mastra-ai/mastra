@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
@@ -14,6 +15,9 @@ import type {
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { sessionActivity } from './deliver.js';
+import type { FactorySessionActivity } from './deliver.js';
+import type { FactoryMessaging } from './messaging-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
 export const MAX_TEXT = 600;
@@ -36,6 +40,8 @@ export interface FactoryReadToolDependencies {
   comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
   boards: BoardRegistry;
+  /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
+  messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
 }
 
 export function truncate(text: string, max: number): string {
@@ -92,6 +98,17 @@ function activeWorker(bindings: FactoryRunBindingRecord[], itemId: string) {
   return binding ? { role: binding.role, sessionId: binding.sessionId } : null;
 }
 
+/** The card on its Factory board; null when the server has no public URL configured. */
+function workItemUrl(item: WorkItemRow) {
+  return (
+    factoryWorkItemUrl({
+      factoryProjectId: item.factoryProjectId,
+      board: boardForWorkItem(item),
+      workItemId: item.id,
+    }) ?? null
+  );
+}
+
 function summarizeItem(item: WorkItemRow, bindings: FactoryRunBindingRecord[]) {
   return {
     id: item.id,
@@ -99,6 +116,7 @@ function summarizeItem(item: WorkItemRow, bindings: FactoryRunBindingRecord[]) {
     title: truncate(item.title, MAX_TEXT),
     board: boardForWorkItem(item),
     stage: workItemStage(item),
+    url: workItemUrl(item),
     activeWorker: activeWorker(bindings, item.id),
     requestedBy: item.createdBy,
     updatedAt: iso(item.updatedAt),
@@ -202,7 +220,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_inspect_work_item: createTool({
       id: 'factory_inspect_work_item',
       description:
-        'Everything the Factory knows about one work item: stage history, sessions by role, decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
+        'Everything the Factory knows about one work item: stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
       inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
@@ -229,11 +247,33 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           ? all.find(candidate => candidate.id === item.parentWorkItemId)
           : undefined;
         const children = all.filter(candidate => candidate.parentWorkItemId === item.id);
+        const controller = (await deps.messaging?.())?.controller;
+        const activity = async (sessionId: string, threadId: string): Promise<FactorySessionActivity | null> =>
+          controller ? sessionActivity(controller, sessionId, threadId) : null;
+        const sessions = await Promise.all(
+          Object.entries(item.sessions).map(async ([role, ref]) => ({
+            role,
+            sessionId: ref.sessionId,
+            threadId: ref.threadId,
+            url:
+              factorySessionUrl({
+                factoryProjectId: item.factoryProjectId,
+                sessionId: ref.sessionId,
+                threadId: ref.threadId,
+              }) ?? null,
+            startedBy: ref.startedBy,
+            active: bindings.some(
+              binding => binding.role === role && binding.sessionId === ref.sessionId && binding.status === 'active',
+            ),
+            // `running` with an old `lastActivityAt` is a stuck run; `running` with a recent one is a long one.
+            ...((await activity(ref.sessionId, ref.threadId)) ?? { running: null, lastActivityAt: null }),
+          })),
+        );
         return {
           item: {
             ...summarizeItem(item, bindings),
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
-            url: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
+            sourceUrl: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
             triageType: item.triageType,
             revision: item.revision,
           },
@@ -244,15 +284,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             exitedAt: entry.exitedAt ?? null,
             by: entry.by,
           })),
-          sessions: Object.entries(item.sessions).map(([role, ref]) => ({
-            role,
-            sessionId: ref.sessionId,
-            threadId: ref.threadId,
-            startedBy: ref.startedBy,
-            active: bindings.some(
-              binding => binding.role === role && binding.sessionId === ref.sessionId && binding.status === 'active',
-            ),
-          })),
+          sessions,
           decisions: itemDecisions.map(decision => summarizeDecision(decision, overtaken.has(decision.id))),
           audit: audit.events
             .filter(event => event.targets.some(target => target.type === 'work_item' && target.id === item.id))
@@ -312,6 +344,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             workItemId,
             number: item ? workItemNumber(item) : null,
             title: item ? truncate(item.title, MAX_TEXT) : null,
+            url: item ? workItemUrl(item) : null,
           };
         };
         const allIncidents = [...groups.values()].sort((a, b) => b.decisions.length - a.decisions.length);

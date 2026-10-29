@@ -72,6 +72,65 @@ test.describe('Factory board virtualization', () => {
     );
   });
 
+  test('keeps the activity halo visible on the first and last list rows after expanding a group', async ({ page }) => {
+    server.use(
+      http.get('*/web/factory/projects/fp-1/work-items', () =>
+        HttpResponse.json({
+          workItems: largeBoard(2).map((item, index) => ({
+            ...item,
+            sessions: {
+              chat: {
+                sessionId: `session-${index}`,
+                threadId: `session-${index}`,
+                branch: 'fix/list-glow',
+                startedBy: 'user-1',
+              },
+            },
+          })),
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({
+          runs: [0, 1].map(index => ({
+            runId: `run-${index}`,
+            resourceId: `session-${index}`,
+            threadId: `session-${index}`,
+          })),
+        }),
+      ),
+    );
+    await page.goto('/factories/fp-1/work?item=large-1');
+    const halos = page.getByTestId('work-item-card').locator('.session-wick');
+    await expect(halos).toHaveCount(2);
+
+    // Check the actual clipping geometry, including the halo's 6px outset.
+    // Both the nested list viewport and the collapsible panel used to cut it off.
+    const clippedHalos = () =>
+      halos.evaluateAll(elements =>
+        elements.flatMap(element => {
+          const bounds = element.getBoundingClientRect();
+          for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+            const style = getComputedStyle(parent);
+            const clip = parent.getBoundingClientRect();
+            const clipsX =
+              style.overflowX !== 'visible' && (bounds.left - 6 < clip.left || bounds.right + 6 > clip.right);
+            const clipsY =
+              style.overflowY !== 'visible' && (bounds.top - 6 < clip.top || bounds.bottom + 6 > clip.bottom);
+            if (clipsX || clipsY) return [parent.className];
+          }
+          return [];
+        }),
+      );
+    await expect.poll(clippedHalos).toEqual([]);
+
+    const group = page.getByRole('button', { name: 'Triage, 2', exact: true });
+    await group.click();
+    await expect(halos.first()).toBeHidden();
+    await group.click();
+    await expect(halos.first()).toBeVisible();
+    await expect.poll(clippedHalos).toEqual([]);
+  });
+
   for (const viewport of viewports) {
     for (const layout of ['list', 'board'] as const) {
       test.describe(`when scrolling paginated candidates in ${layout} on ${viewport.name}`, () => {

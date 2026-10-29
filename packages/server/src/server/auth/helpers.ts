@@ -609,7 +609,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // No explicit authorization configured (authorizeUser, authorize, or rules)
     // Check if RBAC is configured - if not, allow authenticated users through
     // (auth-only mode = authenticated users get full access)
-    const rbacProvider = mastra.getServer()?.rbac;
+    const rbacProvider =
+      requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
+        ? (mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac)
+        : mastra.getServer()?.rbac;
     if (rbacProvider) {
       if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
         const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);

@@ -15,9 +15,13 @@ import { incidentIoScenario } from './incident-io.js';
 import { jiraScenario } from './jira.js';
 import { linearScenario } from './linear.js';
 import { microsoftExcelScenario } from './microsoft-excel.js';
+import { microsoftPowerpointScenario } from './microsoft-powerpoint.js';
 import { microsoftTeamsScenario } from './microsoft-teams.js';
+import { microsoftWordScenario } from './microsoft-word.js';
 import { notionScenario } from './notion.js';
+import { oneDriveScenario } from './one-drive.js';
 import { openaiScenario } from './openai.js';
+import { outlookScenario } from './outlook.js';
 import { posthogScenario } from './posthog.js';
 import { resendScenario } from './resend.js';
 import { slackScenario } from './slack.js';
@@ -49,9 +53,13 @@ export const scenarios: Scenario[] = [
   jiraScenario,
   linearScenario,
   microsoftExcelScenario,
+  microsoftPowerpointScenario,
   microsoftTeamsScenario,
+  microsoftWordScenario,
   notionScenario,
+  oneDriveScenario,
   openaiScenario,
+  outlookScenario,
   posthogScenario,
   resendScenario,
   slackScenario,

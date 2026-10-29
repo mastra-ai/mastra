@@ -1781,12 +1781,16 @@ export class SessionRunEngine {
     aborted,
     resourceId,
     threadId,
+    terminalError,
+    abortReason,
   }: {
     suspended?: boolean;
     error?: boolean;
     aborted?: boolean;
     resourceId?: string;
     threadId?: string;
+    terminalError?: string;
+    abortReason?: string;
   }): Promise<void> {
     const reason = error
       ? 'error'
@@ -1797,8 +1801,10 @@ export class SessionRunEngine {
           : 'complete';
     // A follower Session mirrors suspensions from runs it does not own. Once
     // such a run completes (it was resumed elsewhere), its parked calls were
-    // answered, so drop them without a cancellation event. Error and tripwire
-    // finishes retract in their chunk handlers; lease loss keeps them parked.
+    // answered, so drop them without a cancellation event. An aborted run or a
+    // non-success finish (e.g. content-filter) ends the call for good, so
+    // retract it with a cancellation event. Error chunks and tripwires retract
+    // in their chunk handlers; lease loss keeps them parked.
     const runId = this.#session.run.getRunId();
     if (reason === 'complete' && resourceId && threadId && runId) {
       for (const s of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
@@ -1809,8 +1815,12 @@ export class SessionRunEngine {
           toolCallId: s.toolCallId,
         });
       }
+    } else if (reason === 'aborted') {
+      this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: ABORTED_BY_USER_REASON });
+    } else if (reason === 'error' && terminalError) {
+      this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: terminalError });
     }
-    await this.#session.finishAgentRun(reason);
+    await this.#session.finishAgentRun(reason, reason === 'aborted' ? { abortReason } : undefined);
     this.#session.run.reset();
   }
 
@@ -1923,6 +1933,7 @@ export class SessionRunEngine {
             // content-filter refusal) becomes an explicit error so the
             // run never silently stops without a visible terminal state.
             let isError = chunk.type === 'error';
+            let terminalError: string | undefined;
             if (
               currentRun.terminalError &&
               !isError &&
@@ -1931,6 +1942,7 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
+              terminalError = currentRun.terminalError;
               this.#session.emit({
                 type: 'error',
                 error: new Error(currentRun.terminalError),
@@ -1943,6 +1955,8 @@ export class SessionRunEngine {
               aborted,
               resourceId: currentRun.resourceId,
               threadId: currentRun.threadId,
+              terminalError,
+              abortReason: aborted ? getString(getRecord(chunk.payload)?.reason) : undefined,
             });
             currentRun = undefined;
             if (aborted) {

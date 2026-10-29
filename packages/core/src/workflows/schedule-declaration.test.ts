@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
+import { MockStore } from '../storage/mock';
 import { rehydrateWorkflow } from './dynamic/rehydrate';
 import { createWorkflow as createExplicitEventedWorkflow } from './evented/workflow';
 import { createWorkflow, createStep } from './index';
@@ -38,13 +39,29 @@ afterEach(() => {
 
 describe('createWorkflow — declaring a schedule', () => {
   describe('without MASTRA_WORKERS', () => {
-    it('keeps the default engine and exposes a single schedule', () => {
+    it('keeps the default engine and manually runs a scheduled workflow without a host', async () => {
       vi.stubEnv('MASTRA_WORKERS', undefined);
       const wf = scheduled('declared-single');
 
       expect(wf.engineType).toBe('default');
       expect(promotionWarnings()).toHaveLength(0);
       expect(wf.getScheduleConfigs()).toEqual([{ cron: '*/5 * * * *' }]);
+      const run = await wf.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('success');
+    });
+
+    // COR-1410 / harness T60 scheduled-nonatomic: capability substitution uses
+    // MockStore's existing spy instead of the harness's LibSQL override.
+    it('manually runs a scheduled workflow on storage without atomic concurrent updates', async () => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const storage = new MockStore();
+      vi.spyOn(storage.stores.workflows, 'supportsConcurrentUpdates').mockReturnValue(false);
+      const wf = scheduled('scheduled-nonatomic');
+      new Mastra({ storage, workflows: { wf }, logger: false });
+
+      expect(wf.engineType).toBe('default');
+      const run = await wf.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('success');
     });
 
     it('keeps the default engine for the array form', () => {

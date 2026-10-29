@@ -7,7 +7,7 @@ description: Documentation guidelines for Mastra. Use this skill when creating, 
 
 Follow the most specific `AGENTS.md` and use these references:
 
-1. `references/STYLEGUIDE.md`: Global writing, accuracy, links, code, and accessibility rules.
+1. `references/STYLEGUIDE.md`: ISO 24495-1 plain-language principles, accuracy, links, code, and accessibility.
 2. `references/INFORMATION_ARCHITECTURE.md`: Content families, canonical ownership, sidebars, and routes.
 3. Choose the page guide:
    - `references/DOC.md`: Pages under `/docs`.

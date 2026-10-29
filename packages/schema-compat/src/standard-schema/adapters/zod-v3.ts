@@ -38,7 +38,7 @@ function convertToJsonSchema<T extends ZodType<any, ZodTypeDef, any>>(
     // For unknown targets, try to use jsonSchema7 as fallback or throw
     const supportedTargets = Object.keys(TARGET_MAP);
     throw new Error(
-      `Unsupported JSON Schema target: "${options.target}". ` + `Supported targets are: ${supportedTargets.join(', ')}`,
+      `Unsupported JSON Schema target: "${options.target}". Supported targets are: ${supportedTargets.join(', ')}`,
     );
   }
 

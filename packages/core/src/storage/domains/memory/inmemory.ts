@@ -812,9 +812,8 @@ export class InMemoryMemory extends MemoryStorage {
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         if (direction === 'ASC') {
           return aValue - bValue;
-        } else {
-          return bValue - aValue;
         }
+        return bValue - aValue;
       }
       return direction === 'ASC'
         ? String(aValue).localeCompare(String(bValue))
@@ -1118,12 +1117,11 @@ export class InMemoryMemory extends MemoryStorage {
           bestOverBoundary = boundary;
           bestOverTokens = cumulativeMessageTokens;
         }
-      } else {
+      } else if (cumulativeMessageTokens > bestUnderTokens) {
         // Under — track the closest (highest) under boundary
-        if (cumulativeMessageTokens > bestUnderTokens) {
-          bestUnderBoundary = boundary;
-          bestUnderTokens = cumulativeMessageTokens;
-        }
+
+        bestUnderBoundary = boundary;
+        bestUnderTokens = cumulativeMessageTokens;
       }
     }
 

@@ -1,7 +1,3 @@
-/**
- * BDD coverage for the factory-scoped connections overview.
- * Drives the real channel-accounts service and React Query stack through MSW.
- */
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -36,10 +32,6 @@ function renderSection() {
 }
 
 describe('ConnectedAccountsSection', () => {
-  // Modern factories answer the path with a stub when no Slack integration is
-  // registered. Naming the env vars here would be a half-truth — they only
-  // enable Slack in deployments whose entry registers SlackIntegration, which
-  // the server can't see — so the card states the fact and stops there.
   it('given the server reports the Slack integration is not registered, when rendered, then it states the fact without naming env vars', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
@@ -49,16 +41,11 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/SLACK_APP_SIGNING_SECRET/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });
 
-  // An old server has no channel route and no stub, so the SPA's index.html
-  // answers instead. The old code fed that HTML to res.json() and rendered the
-  // parse error ("Unexpected token '<'"); the not-configured card must stand in
-  // for it.
   it('given an old server with no channel route, when rendered, then it shows the not-configured card instead of a parse error', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
@@ -68,31 +55,36 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/^Missing required environment variables/)).not.toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });
 
-  it('given a linked Slack account, when rendered, then it shows Slack as connected with a configure link', async () => {
+  it('given a linked Slack account, when rendered, then it shows the account identity with a configure link', async () => {
     mockAccounts([slackLink], true);
 
     renderSection();
 
-    expect(await screen.findByText('Connected')).toBeInTheDocument();
-    const slackRow = screen.getByRole('link', { name: /Slack.*Connected.*Configure/ });
-    expect(slackRow).toHaveAttribute('href', '/factories/fp-1/settings/connections/slack');
-    expect(slackRow).toHaveTextContent(/Slack.*Connected.*Configure/);
+    expect(await screen.findByText('Test User · Example Workspace')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Configure Slack' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/connections/slack',
+    );
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });
 
-  it('given multiple linked Slack accounts, when rendered, then it shows the connected account count', async () => {
-    mockAccounts([slackLink, { ...slackLink, externalTeamId: 'T00000002', externalUserId: 'U00000002' }]);
+  it('given multiple linked Slack accounts, when rendered, then it shows each identity once and one configure link', async () => {
+    mockAccounts([
+      slackLink,
+      { ...slackLink, externalTeamId: 'T00000002', externalUserId: 'U00000002', externalTeamName: 'Other Workspace' },
+    ]);
 
     renderSection();
 
-    expect(await screen.findByText('2 connected')).toBeInTheDocument();
+    expect(await screen.findByText('Test User · Example Workspace')).toBeInTheDocument();
+    expect(screen.getByText('Test User · Other Workspace')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Configure Slack' })).toHaveLength(1);
   });
 
   it('given no link and OIDC configured, when rendered, then it offers Slack connection', async () => {
@@ -100,10 +92,7 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Not connected')).toBeInTheDocument();
-    const slackRow = screen.getByRole('button', { name: /Slack.*Not connected.*Connect/ });
-    expect(slackRow).toBeEnabled();
-    expect(slackRow).toHaveTextContent(/Slack.*Not connected.*Connect/);
+    expect(await screen.findByRole('button', { name: 'Connect Slack' })).toBeEnabled();
   });
 
   it('given no link and no OIDC config, when rendered, then the connect action is unavailable', async () => {
@@ -111,7 +100,7 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Not connected')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Slack.*Not connected.*Connect/ })).toBeDisabled();
+    expect(await screen.findByText('Slack sign-in is not configured on this server.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Slack' })).toBeDisabled();
   });
 });

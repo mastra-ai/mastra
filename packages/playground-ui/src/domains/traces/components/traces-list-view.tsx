@@ -16,6 +16,7 @@ import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } f
 import type { DataListSort } from '@/ds/components/DataList';
 import { splitColumns } from '@/ds/components/DataList/shared';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
@@ -35,6 +36,9 @@ export type TracesListViewTrace = {
   threadId?: string | null;
   resourceId?: string | null;
   environment?: string | null;
+  /** Model and provider of a model span; only span rows carry them. */
+  model?: string | null;
+  provider?: string | null;
   status?: string | null;
   /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
   inputPreview?: string | null;
@@ -46,6 +50,10 @@ export type TracesListViewTrace = {
   metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
   endedAt?: Date | string | null;
+  /** The root span's time to first chunk; `null` when it never streamed one. */
+  timeToFirstChunkMs?: number | null;
+  /** Thread rows only: every trace in the thread, regardless of the listed time range. */
+  traceCount?: number;
   createdAt: Date | string;
 };
 
@@ -80,6 +88,16 @@ function isFailedTrace(trace: TracesListViewTrace): trace is FailedTrace {
   return trace.status === 'error' && !!trace.errorPreview && !!trace.spanId;
 }
 
+/** The TTFC abbreviation, spelled out on hover; the sort button already names the column for screen readers. */
+function TimeToFirstChunkLabel() {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span />}>TTFC</TooltipTrigger>
+      <TooltipContent>Time to first chunk</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export type TracesListViewProps = {
   traces: TracesListViewTrace[];
   isLoading?: boolean;
@@ -87,6 +105,8 @@ export type TracesListViewProps = {
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;
+  /** What the rows hold, named in the empty messages. Defaults to `traces`. */
+  resource?: 'traces' | 'spans' | 'threads';
   /** Currently featured/selected trace — its row gets the highlighted background. */
   featuredTraceId?: string | null;
   /**
@@ -110,6 +130,9 @@ export type TracesListViewProps = {
   /** Current sort of the Created column. When `onSortChange` is provided the header becomes sortable. */
   createdSort?: DataListSort;
   onSortChange?: (direction: DataListSort, key: 'startedAt') => void;
+  /** Current sort of the TTFC column. When `onTimeToFirstChunkSortChange` is provided the header becomes sortable. */
+  timeToFirstChunkSort?: DataListSort;
+  onTimeToFirstChunkSortChange?: (direction: DataListSort) => void;
   /** When provided, custom column headers offer an `is <value>` filter for every value currently listed. */
   onFilterByField?: (field: TraceCustomColumn, value: string) => void;
   /** Storage id for the persisted column order. Use a distinct id per page so each keeps its own order. */
@@ -127,6 +150,7 @@ export function TracesListView({
   hasNextPage,
   setEndOfListElement,
   filtersApplied,
+  resource = 'traces',
   featuredTraceId,
   featuredSpanId,
   isBranchesMode,
@@ -136,6 +160,8 @@ export function TracesListView({
   onTraceClick,
   createdSort,
   onSortChange,
+  timeToFirstChunkSort,
+  onTimeToFirstChunkSortChange,
   onFilterByField,
   listId = 'all-traces',
 }: TracesListViewProps) {
@@ -189,10 +215,36 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
         )}
+        {hasTraceColumn(columnPreferences, 'traceCount') && (
+          <TracesDataList.TopCellWithTooltip
+            tooltip="Messages sent in this thread, counting the whole thread, not just the selected time range"
+            className="justify-end text-right"
+          >
+            Messages
+          </TracesDataList.TopCellWithTooltip>
+        )}
+        {hasTraceColumn(columnPreferences, 'timeToFirstChunk') &&
+          (onTimeToFirstChunkSortChange ? (
+            <TracesDataList.SortableTopCell
+              sortKey="timeToFirstChunkMs"
+              sort={timeToFirstChunkSort}
+              onSortChange={onTimeToFirstChunkSortChange}
+              label="Time to first chunk"
+              align="end"
+            >
+              <TimeToFirstChunkLabel />
+            </TracesDataList.SortableTopCell>
+          ) : (
+            <TracesDataList.TopCellWithTooltip tooltip="Time to first chunk" className="justify-end text-right">
+              TTFC
+            </TracesDataList.TopCellWithTooltip>
+          ))}
         {hasTraceColumn(columnPreferences, 'endTime') && <TracesDataList.TopCell>End</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'environment') && (
           <TracesDataList.TopCell>Environment</TracesDataList.TopCell>
         )}
+        {hasTraceColumn(columnPreferences, 'model') && <TracesDataList.TopCell>Model</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'provider') && <TracesDataList.TopCell>Provider</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'inputTokens') && (
           <TracesDataList.TopCell className="justify-end text-right">Input tokens</TracesDataList.TopCell>
         )}
@@ -250,7 +302,7 @@ export function TracesListView({
         <DataListSkeletonRows columnCount={splitColumns(columns).length} />
       ) : traces.length === 0 ? (
         <TracesDataList.NoMatch
-          message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
+          message={filtersApplied ? `No ${resource} found for applied filters` : `No ${resource} found yet`}
         />
       ) : (
         <>
@@ -302,11 +354,25 @@ export function TracesListView({
                     {formatDuration(getSpanDurationMs(trace.startedAt, trace.endedAt))}
                   </DataList.NumberCell>
                 )}
+                {hasTraceColumn(columnPreferences, 'traceCount') && (
+                  <DataList.NumberCell>
+                    {trace.traceCount === undefined ? undefined : formatCompactNumber(trace.traceCount)}
+                  </DataList.NumberCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'timeToFirstChunk') && (
+                  <DataList.NumberCell font="mono">{formatDuration(trace.timeToFirstChunkMs)}</DataList.NumberCell>
+                )}
                 {hasTraceColumn(columnPreferences, 'endTime') && (
                   <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} preset="day-time-seconds" />
                 )}
                 {hasTraceColumn(columnPreferences, 'environment') && (
                   <DataList.TextCell>{trace.environment || '—'}</DataList.TextCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'model') && (
+                  <DataList.TextCell>{trace.model || '—'}</DataList.TextCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'provider') && (
+                  <DataList.TextCell>{trace.provider || '—'}</DataList.TextCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'inputTokens') && (
                   <DataList.NumberCell>

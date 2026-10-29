@@ -1,20 +1,24 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User } from 'lucide-react';
+import { Pin, User } from 'lucide-react';
 import { useRef } from 'react';
-import type { RefObject } from 'react';
+import { Link } from 'react-router';
+import type { Location } from 'react-router';
 
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
+import type { SessionExternalLink } from '../services/sessionRows';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
+import { SessionActionsMenu } from './SessionActionsMenu';
+import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
+import { SessionSharingPopover } from './SessionSharingPopover';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -30,6 +34,7 @@ export function SessionNavRow({
   name,
   title,
   url,
+  externalLinks,
   source,
   active,
   disabled,
@@ -39,16 +44,20 @@ export function SessionNavRow({
   changeRequestProvider = 'github',
   preview: previewDetails,
   pinned = false,
-  onSelect,
+  from,
   onPinChange,
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  visibility,
+  onVisibilityChange,
+  changingVisibility,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
+  externalLinks: readonly SessionExternalLink[];
   /** Leading icon: a user session, or the source of the session's work item. */
   source?: SessionSource;
   active: boolean;
@@ -62,28 +71,45 @@ export function SessionNavRow({
   status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
-  onSelect: () => void;
+  /** Retain the board location when opening a factory workspace in this tab. */
+  from?: Location;
   onPinChange: (pinned: boolean) => void;
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  /** Private rows show a sharing popover; shared rows have no visibility badge. */
+  visibility?: 'org' | 'private';
+  /** Omitted for sessions the viewer does not own: the server only lets owners change visibility. */
+  onVisibilityChange?: (visibility: 'org' | 'private') => void;
+  /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
+  changingVisibility?: boolean;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
   const sidebar = useMaybeSidebar();
   // Touch has no hover: the card would only open behind the tap that already navigated away.
   const preview = sidebar?.isMobile ? undefined : previewDetails;
-  const button = (
-    <button
-      type="button"
+  const link = (
+    <Link
+      to={url}
+      state={from ? { from } : undefined}
       aria-current={active ? 'page' : undefined}
       aria-label={name}
-      disabled={disabled || loading}
-      onClick={() => {
-        sidebar?.setOpenMobile(false);
-        onSelect();
+      aria-disabled={disabled || loading || undefined}
+      tabIndex={disabled || loading ? -1 : undefined}
+      onClick={event => {
+        if (disabled || loading) {
+          event.preventDefault();
+          return;
+        }
+        if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
+          sidebar?.setOpenMobile(false);
+        }
+      }}
+      onAuxClick={event => {
+        if (disabled || loading) event.preventDefault();
       }}
       title={preview ? undefined : title}
     >
@@ -92,14 +118,34 @@ export function SessionNavRow({
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
-    </button>
+    </Link>
   );
+  const menuProps = {
+    url,
+    externalLinks,
+    pinned,
+    onPinChange,
+    onDelete,
+    onRegenerateTitle,
+    regeneratingTitle,
+    visibility,
+    onVisibilityChange,
+    changingVisibility,
+  };
   const belt = loading ? undefined : status;
   const trailing = trailingKind({ loading, status, merged });
   const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
   const action = (
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {visibility === 'private' ? (
+        <SessionSharingPopover
+          name={name}
+          disabled={disabled || loading}
+          onShare={onVisibilityChange ? () => onVisibilityChange('org') : undefined}
+          sharing={changingVisibility}
+        />
+      ) : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? (
           <Spinner size="sm" aria-label={`Opening ${name}`} className="text-muted-foreground" />
@@ -115,30 +161,38 @@ export function SessionNavRow({
           </span>
         ) : null}
         {trailing === 'loading' ? null : (
-          <SessionActionsMenu
-            name={name}
-            anchor={anchor}
-            disabled={disabled}
-            pinned={pinned}
-            onPinChange={onPinChange}
-            onDelete={onDelete}
-            onRegenerateTitle={onRegenerateTitle}
-            regeneratingTitle={regeneratingTitle}
-          />
+          <SessionActionsMenu name={name} anchor={anchor} disabled={disabled}>
+            <SessionMenuItems menu="dropdown" {...menuProps} />
+          </SessionActionsMenu>
         )}
       </span>
     </>
   );
   const row = (
-    <Sidebar.NavLink
-      ref={anchor}
-      link={{ name, url }}
-      isActive={active}
-      className="group/session"
-      // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
-      render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={button} /> : button}
-      action={action}
-    />
+    <ContextMenu
+      onOpenChange={(open, details) => {
+        if (open && (disabled || loading)) details.cancel();
+      }}
+    >
+      <ContextMenu.Trigger
+        render={
+          <Sidebar.NavLink
+            ref={anchor}
+            link={{ name, url }}
+            isActive={active}
+            className="group/session"
+            // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
+            render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={link} /> : link}
+            action={action}
+          />
+        }
+      />
+      {!disabled && !loading ? (
+        <ContextMenu.Content>
+          <SessionMenuItems menu="context" {...menuProps} />
+        </ContextMenu.Content>
+      ) : null}
+    </ContextMenu>
   );
 
   if (!preview) return row;
@@ -158,11 +212,11 @@ function SessionSourceIcon({ source }: { source: SessionSource }) {
   return <SourceIcon source={source} className="size-3.5" />;
 }
 
-const trailingSlot = 'size-control-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
+const trailingSlot = 'size-control-sm shrink-0 grid-rows-1 place-items-center *:col-start-1 *:row-start-1';
 
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =
-  'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
+  'grid pointer-fine:hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
 
 function beltLabel(status: SessionRowStatus, name: string) {
   if (status === 'initializing') return `Initializing ${name}`;
@@ -176,63 +230,6 @@ function trailingKind({ loading, status, merged }: { loading?: boolean; status?:
   return merged && !status ? 'merged' : undefined;
 }
 
-function SessionActionsMenu({
-  name,
-  anchor,
-  disabled,
-  pinned,
-  onPinChange,
-  onDelete,
-  onRegenerateTitle,
-  regeneratingTitle,
-}: {
-  name: string;
-  anchor: RefObject<HTMLElement | null>;
-  disabled: boolean;
-  pinned: boolean;
-  onPinChange: (pinned: boolean) => void;
-  onDelete?: () => void;
-  onRegenerateTitle?: () => void;
-  regeneratingTitle?: boolean;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Session actions for ${name}`}
-            disabled={disabled}
-            className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
-          >
-            <MoreHorizontal />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content anchor={anchor} align="end">
-        <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
-          {pinned ? <PinOff /> : <Pin />}
-          {pinned ? 'Unpin' : 'Pin session'}
-        </DropdownMenu.Item>
-        {onRegenerateTitle ? (
-          <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
-            <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
-            Regenerate title
-          </DropdownMenu.Item>
-        ) : null}
-        {onDelete ? (
-          <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-            <Trash2 />
-            Delete
-          </DropdownMenu.Item>
-        ) : null}
-      </DropdownMenu.Content>
-    </DropdownMenu>
-  );
-}
-
 // The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
 const yieldsToActions =
-  'group-hover/session:hidden group-focus-within/session:hidden group-has-[[data-popup-open]]/session:hidden';
+  'pointer-coarse:hidden group-hover/session:hidden group-focus-within/session:hidden group-has-[[data-popup-open]]/session:hidden';

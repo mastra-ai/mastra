@@ -96,7 +96,7 @@ type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; statu
 
 function reviewRuntimeFromRequestContext(
   requestContext: ComputeStateSignalArgs['requestContext'],
-  factoryThinkingLevel: ThinkingLevel | undefined,
+  defaultThinkingLevel: ThinkingLevel | undefined,
 ): RuntimeSnapshot {
   if (!requestContext || typeof requestContext.get !== 'function') {
     throw new Error('Factory review phase requires a controller request context.');
@@ -108,7 +108,7 @@ function reviewRuntimeFromRequestContext(
   }
   return {
     modelId,
-    thinkingLevel: resolveRequestThinkingLevel({ state: context?.state }, undefined, factoryThinkingLevel),
+    thinkingLevel: resolveRequestThinkingLevel({ state: context?.state }, undefined, defaultThinkingLevel),
   };
 }
 
@@ -275,8 +275,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         requestContext: ProcessInputStepArgs['requestContext'];
         binding: FactoryRunBindingRecord | null;
       }) => Promise<void>;
-      /** The Factory's stored thinking default, used when the session has not picked a level. */
-      factoryThinkingLevel?: (factoryProjectId: string) => Promise<ThinkingLevel>;
+      /** The session's routed thinking default, used when the session has not picked a level. */
+      defaultThinkingLevel?: (requestContext: ComputeStateSignalArgs['requestContext']) => Promise<ThinkingLevel>;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -422,7 +422,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
             board,
             ...reviewRuntimeFromRequestContext(
               args.requestContext,
-              await this.options.factoryThinkingLevel?.(binding.factoryProjectId),
+              await this.options.defaultThinkingLevel?.(args.requestContext),
             ),
           }
         : { ...baseValue, board };
@@ -433,7 +433,12 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
-    const phaseLabel = this.options.boards.get(board)?.phases[stage]?.title ?? stage;
+    const phase = this.options.boards.get(board)?.phases[stage];
+    const phaseLabel = phase?.name ?? stage;
+    const exitText =
+      phase?.kind === 'working' && phase.exitTool
+        ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
+        : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
     const snapshotContents =
@@ -446,6 +451,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ((board === 'work' || board === 'review') && stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
         : '') +
+      exitText +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
     return {

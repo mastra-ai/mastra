@@ -1,6 +1,8 @@
 import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import Elysia from 'elysia';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { z } from 'zod/v4';
 import { getMastraOpenAPIDoc, clearMastraOpenAPICache } from './helper';
 import { MastraServer } from './index';
 
@@ -186,6 +188,43 @@ describe('getMastraOpenAPIDoc', () => {
       if (result.components) {
         expect(typeof result.components).toBe('object');
       }
+    });
+
+    it('points custom recursive schema refs at their own component, not a built-in one', async () => {
+      interface Category {
+        name: string;
+        children: Category[];
+      }
+      const Category: z.ZodType<Category> = z.lazy(() => z.object({ name: z.string(), children: z.array(Category) }));
+      const customServer = new MastraServer({
+        mastra,
+        app: new Elysia(),
+        customApiRoutes: [
+          registerApiRoute('/categories', {
+            method: 'GET',
+            handler: async c => c.json({}),
+            openapi: {
+              responses: {
+                200: {
+                  description: 'ok',
+                  content: { 'application/json': { schema: z.object({ category: Category }) as any } },
+                },
+              },
+            },
+          }),
+        ],
+      });
+      await customServer.init();
+
+      const doc = JSON.parse(JSON.stringify(getMastraOpenAPIDoc(customServer)));
+      const ref: string =
+        doc.paths['/api/categories'].get.responses['200'].content['application/json'].schema.properties.category.$ref;
+      expect(ref).toMatch(/^#\/components\/schemas\//);
+      const target = doc.components.schemas[ref.slice('#/components/schemas/'.length)];
+      expect(target).toMatchObject({
+        type: 'object',
+        properties: { name: { type: 'string' }, children: { type: 'array', items: { $ref: ref } } },
+      });
     });
   });
 

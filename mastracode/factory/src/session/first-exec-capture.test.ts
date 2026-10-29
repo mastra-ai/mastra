@@ -7,7 +7,7 @@ import type { FirstExecCaptureDependencies, FirstExecCaptureSession } from './fi
 function createSession() {
   const listeners: Array<(event: AgentControllerEvent) => void> = [];
   const session: FirstExecCaptureSession = {
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getId: () => 'resource-1' },
     subscribe: listener => {
       listeners.push(listener);
       return () => {

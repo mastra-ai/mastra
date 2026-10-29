@@ -9,13 +9,18 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
+import { FGADeniedError } from '../../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../../auth/ee/interfaces/fga';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
+import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { SaveQueueManager } from '../../save-queue';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 
 // ============================================================================
 // Helper Functions
@@ -115,6 +120,75 @@ describe('DurableAgent memory configuration', () => {
 
   afterEach(async () => {
     await pubsub.close();
+  });
+
+  describe.each(['default', 'evented'] as const)('%s initial input authorization', engine => {
+    it.each(['stream', 'generate'] as const)(
+      '%s: denying WRITE on an existing readable thread neither saves input nor runs the model (COR-1472)',
+      async method => {
+        const memory = new MockMemory();
+        const threadId = `denied-initial-input-${engine}-${method}`;
+        const resourceId = 'read-only-customer';
+        await memory.createThread({ threadId, resourceId });
+        const model = createTextModel('This request must not execute.');
+        const generate = vi.spyOn(model, 'doGenerate');
+        const stream = vi.spyOn(model, 'doStream');
+        const permissions: string[] = [];
+        const fga: IFGAProvider = {
+          check: async (_user, input) => input.permission !== 'memory:write',
+          filterAccessible: async () => [],
+          require: async (user, input) => {
+            permissions.push(input.permission);
+            if (input.permission === 'memory:write') {
+              throw new FGADeniedError(user, input.resource, input.permission);
+            }
+          },
+        };
+        const agent = new Agent({
+          id: 'denied-input-agent',
+          name: 'Denied Input Agent',
+          instructions: 'Answer the request.',
+          model,
+          memory,
+        });
+        const durableAgent =
+          engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+        new Mastra({
+          agents: { agent: durableAgent },
+          storage: memory.storage,
+          server: { fga },
+          pubsub,
+          logger: false,
+        });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { id: 'reader' });
+        const options = { memory: { thread: threadId, resource: resourceId }, requestContext };
+        try {
+          if (method === 'generate') {
+            await expect(durableAgent.generate('Do not persist this unauthorized request.', options)).rejects.toThrow();
+          } else {
+            const result = await durableAgent.stream('Do not persist this unauthorized request.', options);
+            try {
+              const chunks = [];
+              for await (const chunk of result.fullStream) chunks.push(chunk);
+              expect(chunks.some(chunk => chunk.type === 'error')).toBe(true);
+            } finally {
+              result.cleanup();
+            }
+          }
+          // Existing threads require READ during preparation; WRITE must be checked again at acceptance.
+          expect(permissions).toContain('memory:read');
+          expect(permissions).toContain('memory:write');
+          expect(generate).not.toHaveBeenCalled();
+          expect(stream).not.toHaveBeenCalled();
+          const store = (await memory.storage.getStore('memory'))!;
+          expect((await store.listMessages({ threadId, perPage: false })).messages).toEqual([]);
+        } finally {
+          generate.mockRestore();
+          stream.mockRestore();
+        }
+      },
+    );
   });
 
   describe('basic memory options', () => {

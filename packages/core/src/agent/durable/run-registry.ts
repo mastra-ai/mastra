@@ -1,5 +1,7 @@
 import { TTLCache } from '@isaacs/ttlcache';
+import type { MastraScorer } from '../../evals/base';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
@@ -79,6 +81,45 @@ export function setRunRegistryEntry(runId: string, entry: RunRegistryEntry, mast
 /** Remove `runId`'s entry only if it belongs to `mastra` (or has no owner). */
 export function deleteRunRegistryEntry(runId: string, mastra: Mastra | undefined): void {
   if (getRunRegistryEntry(runId, mastra)) globalRunRegistry.delete(runId);
+}
+
+/**
+ * Scorer instances a run was configured with, keyed like the serialized
+ * `scorers` workflow input. Workflow input only carries scorer names, so a
+ * scorer passed at call time or via `defaultOptions.scorers` that is not
+ * registered on Mastra can only run in-process through this store (#27579).
+ *
+ * Kept apart from the run registry entry: callers typically `cleanup()` as
+ * soon as the output resolves, which drops that entry before the trailing
+ * scorer step runs. Entries are consumed by the scorer step; the TTL only
+ * bounds runs that never reach it.
+ */
+const runScorerInstances = new TTLCache<string, { mastra?: Mastra; scorers: Record<string, MastraScorer> }>({
+  max: 1000,
+  ttl: RUN_REGISTRY_TTL_MS,
+});
+
+export function setRunScorerInstances(
+  runId: string,
+  scorers: Record<string, MastraScorer>,
+  mastra: Mastra | undefined,
+): void {
+  if (Object.keys(scorers).length === 0) return;
+  runScorerInstances.set(runId, { mastra, scorers });
+}
+
+/** Remove and return the run's scorer instances, unless another Mastra owns them. */
+export function takeRunScorerInstances(
+  runId: string,
+  mastra: Mastra | undefined,
+): Record<string, MastraScorer> | undefined {
+  const entry = runScorerInstances.get(runId);
+  if (!entry) return undefined;
+  if (entry.mastra && mastra && unwrapMastraTracingProxy(entry.mastra) !== unwrapMastraTracingProxy(mastra)) {
+    return undefined;
+  }
+  runScorerInstances.delete(runId);
+  return entry.scorers;
 }
 
 /** runId -> number of in-flight operations holding the entry alive. */
@@ -213,11 +254,19 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
  * spans are the active root, so prefer them. Ending an already-ended span is a no-op,
  * so the duplicate error paths (workflow failure + emitError) are safe. Never throws.
  */
-export function endRunSpansWithError(runId: string, error: Error): void {
+export function endRunSpansWithError(runId: string, error: Error, options: { endSpan?: boolean } = {}): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
-    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({ error, endSpan: true });
-    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({ error, endSpan: true });
+    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({
+      error,
+      ...executionFailureTermination(error),
+      endSpan: options.endSpan ?? true,
+    });
+    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({
+      error,
+      ...executionFailureTermination(error),
+      endSpan: options.endSpan ?? true,
+    });
   } catch {
     // Span bookkeeping must never break error reporting.
   }

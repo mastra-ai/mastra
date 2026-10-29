@@ -16,4 +16,16 @@ describe('useServerFeatures', () => {
       await waitFor(() => expect(result.current.data).toEqual({ knowledge: true }));
     });
   });
+
+  describe('when the server serves its MCP endpoint', () => {
+    it('exposes the MCP flag so the UI can show the connect URL', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/features`, () => HttpResponse.json({ knowledge: false, mcp: true })),
+      );
+
+      const { result } = renderHookWithProviders(() => useServerFeatures());
+
+      await waitFor(() => expect(result.current.data?.mcp).toBe(true));
+    });
+  });
 });

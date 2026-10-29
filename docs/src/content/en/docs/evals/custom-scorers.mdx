@@ -78,7 +78,7 @@ const quoteSourcesScorer = createScorer({
   id: 'quote-sources',
   description: 'Check if the response includes sources',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: 'You are a strict evaluator.',
   },
 })
@@ -355,7 +355,7 @@ export const refundJudge = createScorer({
   description: 'Judges how well refund requests were handled',
   type: 'agent',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: 'You are a strict QA reviewer for customer-support refund handling.',
   },
 })
@@ -375,6 +375,26 @@ export const refundJudge = createScorer({
 Put the check in `preprocess` so it runs before any judge step. `notScorable()` is different from an [eligibility filter](/docs/evals/overview#how-live-evaluations-work): filters decide from request context whether the scorer runs at all, while `notScorable()` lets the scorer inspect the run's input and output first.
 
 See the [`notScorable()` reference](/reference/evals/not-scorable) for the result shape and how live scoring, `runEvals()`, and experiments treat a skipped run.
+
+## Anchoring the judge's score scale
+
+A prompt-object `generateScore` step asks the judge for `{ score: number }`. Mastra forwards whatever number comes back without clamping or normalizing it, so the prompt is the only thing defining your scale:
+
+```typescript title="src/mastra/scorers/refund-judge.ts" oxfmt:false
+.generateScore({
+  description: 'Score the refund handling from 0 to 1',
+  createPrompt: ({ run }) => `Rate this refund handling:
+- 1.0: refund issued correctly, no policy breach
+- 0.5: refund issued but policy explained poorly or a step was missed
+- 0.0: refund not issued, or issued against policy
+
+${JSON.stringify(run.output)}`,
+})
+```
+
+`Rate this refund handling from 0 to 1` alone leaves the middle of the scale undefined, and judges fill that gap differently between calls. Name the endpoints and describe at least one middle value. Leave the output format out of the prompt: the step already asks the judge for `{ score: number }`, and a prompt that says "return only the number" makes the judge answer in a shape the step can't read. If your scorer must not drift outside a range, clamp or reject the value in a function step instead of trusting the judge.
+
+This matters most for [gates](/docs/evals/gates-and-verdicts), whose thresholds must be between 0 and 1 even though the judge's number is stored exactly as returned. A prompt that asks for a 1 to 10 score makes a failing `2` pass every threshold you're allowed to set. The gate then never fires.
 
 ## Example: Create a custom scorer
 
@@ -445,7 +465,7 @@ export const glutenCheckerScorer = createScorer({
   id: 'gluten-checker',
   description: 'Check if the output contains any gluten',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -480,7 +500,7 @@ Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript oxfmt:false
 judge: {
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```

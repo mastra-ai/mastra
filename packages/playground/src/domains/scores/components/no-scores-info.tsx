@@ -19,7 +19,7 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
 
           icon={<ExternalLinkIcon />}
         >
-          Scorers Documentation
+          Scorers documentation
         </Button>
       </div>
     }

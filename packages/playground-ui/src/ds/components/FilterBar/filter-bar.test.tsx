@@ -400,6 +400,25 @@ describe('FilterBar', () => {
         expect(committed.hasAttribute('data-shine')).toBe(false);
       });
 
+      // Chips already there when the bar mounts (a page opening with its filters) must sit still:
+      // growing them from zero width would slide every control after them across the toolbar.
+      it('skips the entrance animation for chips present when the bar mounts', async () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'Failed' }]} />);
+        const preexisting = screen.getByRole('group', { name: 'Status is Failed' });
+        expect(preexisting.hasAttribute('data-initial')).toBe(true);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        key('Enter');
+
+        expect(screen.getByRole('group', { name: 'Status is Running' }).hasAttribute('data-initial')).toBe(false);
+        expect(preexisting.hasAttribute('data-initial')).toBe(true);
+      });
+
       it('keeps the draft chip element when the consumer derives item ids itself', async () => {
         // Consumers that round-trip filters through a URL rebuild items on every change, so the
         // id they hand back is theirs, not ours. `createItemId` lets the draft carry that id up front.

@@ -877,7 +877,9 @@ describe('Standalone thread page', () => {
       expect(input.value).toBe('');
       fireEvent.change(input, { target: { value: 'Keep this follow-up' } });
       await act(async () => response.finish());
-      await waitFor(() => expect(router.state.location.pathname).not.toContain('/threads/new'));
+      // The router commits navigations in a transition, so wait for the created thread to render,
+      // not just for the router state, before reading its composer or leaving it.
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).not.toContain('/threads/new'));
       const createdPath = router.state.location.pathname;
       expect((await composerInput()).value).toBe('Keep this follow-up');
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/new`));
@@ -1363,7 +1365,7 @@ describe('Standalone thread page', () => {
       // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
       const temperature = screen.getAllByRole('slider', { hidden: true })[0];
       fireEvent.change(temperature, { target: { value: '0.2' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
       fireEvent.change(await screen.findByLabelText('Max Steps'), { target: { value: '8' } });
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
       fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });

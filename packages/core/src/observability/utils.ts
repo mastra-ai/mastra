@@ -250,6 +250,8 @@ export function getEntityTypeForSpan(span: {
       return EntityType.MCP_SERVER;
     case SpanType.PROCESSOR_RUN:
       return EntityType.OUTPUT_PROCESSOR;
+    case SpanType.CLASSIFIER_EVALUATION:
+      return EntityType.CLASSIFIER;
     default:
       return undefined;
   }

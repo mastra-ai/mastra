@@ -154,7 +154,10 @@ const response = await memoryAgent.generate('Remember my favorite color is blue.
 
 Scopes can also come from the agent and from the request context. Mastra combines all three sources:
 
-```typescript title="src/mastra/agents/memory-agent.ts" {4-8}
+```typescript title="src/mastra/agents/memory-agent.ts" {7-11}
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
@@ -273,6 +276,9 @@ Open [Studio](/docs/studio/overview) and select the **Observability** tab in the
 Use [`RequestContext`](/docs/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript title="src/mastra/agents/memory-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
 export type UserTier = {
   'user-tier': 'enterprise' | 'pro'
 }

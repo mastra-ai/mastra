@@ -112,7 +112,7 @@ You can use this history in two ways:
 
 :::note
 
-`lastMessages` counts every stored message, including tool calls, tool results, and [signals](/docs/harness/signals) of any kind, so a single turn can add several messages to the count. The window also slides forward on every request: once a thread grows past the limit, the oldest message leaves context on each turn, which changes the start of the prompt and invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory), which keeps the prompt prefix stable.
+`lastMessages` counts every stored message, including tool calls, tool results, and [signals](/docs/signals/sending-signals) of any kind, so a single turn can add several messages to the count. The window also slides forward on every request: once a thread grows past the limit, the oldest message leaves context on each turn, which changes the start of the prompt and invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory), which keeps the prompt prefix stable.
 
 :::
 
@@ -135,6 +135,9 @@ For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk
 Message count is a poor proxy for context size: a tool result can be a few tokens or thousands. Use `messageHistory` to keep recent history within a token budget instead:
 
 ```typescript title="src/mastra/agents/test-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
 export const agent = new Agent({
   id: 'test-agent',
   memory: new Memory({
@@ -235,7 +238,7 @@ export const supportAgent = new Agent({
   memory: new Memory({
     options: {
       generateTitle: {
-        model: '__GATEWAY_OPENAI_MODEL_MINI__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         instructions: 'Generate a one-word title.',
       },
     },

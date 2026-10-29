@@ -14,13 +14,14 @@ export interface IntakeSelection {
   repositoryByLinearProject?: Record<string, string>;
 }
 
-export interface IntakeConfig {
+/** Built-in providers always present, plus any custom integration ids the server returns. */
+export type IntakeConfig = Record<string, IntakeSelection> & {
   github: IntakeSelection;
   gitlab: IntakeSelection;
   linear: IntakeSelection;
   jira: IntakeSelection;
   incidentio: IntakeSelection;
-}
+};
 
 /**
  * The server keeps intake config as a dynamic map keyed by integration id and
@@ -31,10 +32,12 @@ export interface IntakeConfig {
  * so every synthetic placeholder stays disabled. Registered integrations are
  * returned by the server with their effective defaults, and saving the fixed
  * shape back is safe because the server ignores disabled/unselected keys for
- * unregistered integrations.
+ * unregistered integrations. Other keys (custom integrations) pass through so
+ * every save sends them back unchanged.
  */
 function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
   return {
+    ...raw,
     github: raw?.github ?? { enabled: false, sourceIds: null },
     gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
     linear: raw?.linear ?? { enabled: false, sourceIds: null },

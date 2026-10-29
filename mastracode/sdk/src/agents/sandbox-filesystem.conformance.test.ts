@@ -9,11 +9,12 @@
  */
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import { createWorkspaceTools, LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem';
@@ -91,6 +92,86 @@ createFilesystemTestSuite({
   testTimeout: 20000,
 });
 
+/**
+ * Same suite with the sandbox exposing a native filesystem (the host disk,
+ * unconfined, standing in for a provider's file API). Proves the delegation
+ * wiring — absolute paths, workspace-relative `stat` paths, which operations
+ * delegate and which stay on the shell — against the shared contract.
+ */
+createFilesystemTestSuite({
+  suiteName: 'SandboxFilesystem Conformance (native filesystem)',
+  createFilesystem: () => {
+    const workdir = realpathSync(mkdtempSync(join(tmpdir(), 'mastra-sandbox-native-fs-')));
+    tmpDirs.push(workdir);
+    const sandbox = { ...createLocalShellExec(), filesystem: new LocalFilesystem({ basePath: '/', contained: false }) };
+    return new SandboxFilesystem({ sandbox, workdir });
+  },
+  capabilities: {
+    supportsAppend: true,
+    supportsBinaryFiles: true,
+    supportsForceDelete: true,
+    supportsOverwrite: true,
+    supportsEmptyDirectories: true,
+    deleteThrowsOnMissing: true,
+    supportsConcurrency: true,
+    supportsPermissions: false,
+    supportsMounting: false,
+    // appendFile and no-overwrite writes still travel as one base64 argument.
+    maxTestFileSize: 64 * 1024,
+  },
+  testTimeout: 20000,
+});
+
+describe('read_file media output (local shell)', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+
+  it('stat reports file MIME types and none for directories', async () => {
+    const filesystem = createSandboxFilesystem();
+    await filesystem.writeFile('page.png', png);
+    await filesystem.writeFile('photo.jpg', png);
+    await filesystem.writeFile('image.webp', png);
+    await filesystem.writeFile('doc.pdf', '%PDF-1.4 test');
+    await filesystem.mkdir('assets.png');
+
+    expect((await filesystem.stat('page.png')).mimeType).toBe('image/png');
+    expect((await filesystem.stat('photo.jpg')).mimeType).toBe('image/jpeg');
+    expect((await filesystem.stat('image.webp')).mimeType).toBe('image/webp');
+    expect((await filesystem.stat('doc.pdf')).mimeType).toBe('application/pdf');
+    expect((await filesystem.stat('assets.png')).mimeType).toBeUndefined();
+  });
+
+  it('stat follows in-workspace symlinks to their target', async () => {
+    const filesystem = createSandboxFilesystem();
+    await filesystem.writeFile('page.png', png);
+    await filesystem.mkdir('assets');
+    symlinkSync('page.png', join(filesystem.basePath, 'link.png'));
+    symlinkSync('assets', join(filesystem.basePath, 'dir-link.png'));
+
+    expect(await filesystem.stat('link.png')).toMatchObject({ type: 'file', size: png.length, mimeType: 'image/png' });
+    const dirLink = await filesystem.stat('dir-link.png');
+    expect(dirLink.type).toBe('directory');
+    expect(dirLink.mimeType).toBeUndefined();
+  });
+
+  it('returns a PNG as native media the model can view', async () => {
+    const filesystem = createSandboxFilesystem();
+    await filesystem.writeFile('page.png', png);
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+    const tool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+
+    const result = await tool.execute({ path: 'page.png' }, { workspace });
+
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'content',
+      value: [
+        { type: 'text', text: '/page.png (12 bytes, image/png)' },
+        { type: 'media', data: png.toString('base64'), mediaType: 'image/png' },
+      ],
+    });
+  });
+});
+
 describe('SandboxFilesystem.walk ignore options (local shell)', () => {
   it('keeps .gitignore files and prunes skipped directories', async () => {
     const filesystem = createSandboxFilesystem();
@@ -130,6 +211,25 @@ const hostHasGnuGrepAndGit = (() => {
       execFileSync('grep', ['--version'], { encoding: 'utf8' }).includes('GNU grep') &&
       execFileSync('git', ['--version'], { encoding: 'utf8' }).startsWith('git version')
     );
+  } catch {
+    return false;
+  }
+})();
+
+/** Whether host grep and git both run PCRE (`-P`); git can be built without it. */
+const hostHasPcre = (() => {
+  try {
+    execFileSync('sh', ['-c', "printf 'a1\\n' | grep -qP '\\d(?=)'"]);
+    const repo = mkdtempSync(join(tmpdir(), 'mastra-pcre-probe-'));
+    try {
+      execFileSync('sh', ['-c', "git init -q && printf 'a1\\n' >f && git grep -q --untracked -P -e '\\d(?=)'"], {
+        cwd: repo,
+        stdio: 'ignore',
+      });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+    return true;
   } catch {
     return false;
   }
@@ -192,5 +292,18 @@ describe.skipIf(!hostHasGnuGrepAndGit)('SandboxFilesystem.grep with GNU grep and
 
     expect((await grep(fs, 'app/node_modules')).map(result => result.path)).toEqual(['dep/i.js']);
     expect((await grep(fs, 'app/dist')).map(result => result.path)).toEqual(['d.js']);
+  });
+
+  it.skipIf(!hostHasPcre)('runs \\b, \\s, \\w, and lookarounds natively when grep and git support -P', async () => {
+    const root = createWorkspace();
+    const results = await createGnuFilesystem(root).grep({
+      pattern: '\\bisBot:\\s(?=[a-z])\\w+',
+      path: '.',
+      caseSensitive: true,
+      includeHidden: false,
+    });
+
+    expect(results.map(result => result.path).sort()).toEqual(['app/src/a.ts', 'app/src/new.ts', 'loose/l.txt']);
+    expect(results.find(result => result.path === 'app/src/a.ts')!.matches[0]).toMatchObject({ line: 2, column: 6 });
   });
 });

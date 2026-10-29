@@ -1,6 +1,6 @@
 import * as matchers from '@testing-library/jest-dom/matchers';
 
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 
 // Extend Vitest's `expect` with jest-dom matchers explicitly. We avoid the
@@ -8,6 +8,10 @@ import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 // nested store layout, that module re-imports `vitest` from its own install
 // path and fails to resolve it.
 expect.extend(matchers);
+
+// Match the other UI suites: cold route imports and MSW round-trips can exceed
+// Testing Library's default one-second DOM wait.
+configure({ asyncUtilTimeout: 3_000 });
 
 import { server } from './msw-server';
 
@@ -86,8 +90,18 @@ if (!globalThis.IntersectionObserver) {
   };
 }
 
+// jsdom ranges have no layout; CodeMirror's measure cycle calls these asynchronously after mount.
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => Object.assign([], { item: () => null });
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+}
+
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
+}
+
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
 }
 
 // jsdom's window.scrollTo only logs "Not implemented"; <ScrollRestoration /> calls it on every navigation.

@@ -59,16 +59,16 @@ beforeEach(() => {
 
 const expectedAdaptations = {
   anthropic: {
-    primaryModel: 'anthropic/claude-sonnet-5',
-    observationalModel: 'anthropic/claude-haiku-4-5',
+    primaryModel: 'anthropic/claude-sonnet-5-5',
+    observationalModel: 'anthropic/claude-haiku-5-5',
   },
   google: {
-    primaryModel: 'google/gemini-3.5-flash',
-    observationalModel: 'google/gemini-3.5-flash',
+    primaryModel: 'google/gemini-3.8-flash',
+    observationalModel: 'google/gemini-3.8-flash',
   },
   xai: {
-    primaryModel: 'xai/grok-4.3',
-    observationalModel: 'xai/grok-4.3',
+    primaryModel: 'xai/grok-4.7',
+    observationalModel: 'xai/grok-4.7',
   },
 } satisfies Record<Exclude<CreateLLMProvider, 'openai'>, { primaryModel: string; observationalModel: string }>;
 

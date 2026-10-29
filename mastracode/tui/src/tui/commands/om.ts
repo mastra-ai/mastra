@@ -1,4 +1,4 @@
-import { getActiveRouteMemoryModelId } from '@mastra/code-sdk/agents/model';
+import { canUseProvider, getActiveRouteMemoryModelId } from '@mastra/code-sdk/agents/model';
 import {
   applyOmRoleAuto,
   applyOmRoleOverride,
@@ -60,7 +60,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const observerModelId = getEffectiveOMRoleModelId(session, 'observer') ?? '';
   const reflectorModelId = getEffectiveOMRoleModelId(session, 'reflector') ?? '';
   const packMemoryModelId = getActiveRouteMemoryModelId(agentControllerState, ctx.state.session.thread.getId());
-  const autoModelId = resolveAutoOMModelId(ctx.state.session.model.get() ?? undefined);
+  const autoModelId = resolveAutoOMModelId(ctx.state.session.model.get() ?? undefined, canUseProvider);
   const config = {
     observerModel: session.om.observer.model() ?? 'auto',
     observerModelId,

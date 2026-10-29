@@ -108,7 +108,12 @@ async function drain(stream: { fullStream: AsyncIterable<any> }) {
 
 /** What a reloaded page sees: the history chunk plus anything replayed after it. */
 async function reload(agent: Agent<any, any, any, any>) {
-  const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
+  const subscription = await agent.subscribeToThread({
+    threadId,
+    resourceId,
+    withInitialHistory: true,
+    withRunStatus: true,
+  });
   const chunks: any[] = [];
   const consumed = (async () => {
     for await (const chunk of subscription.stream) chunks.push(chunk);
@@ -127,11 +132,11 @@ describe('thread history across a restart', () => {
   it('a completed run loads once from history and leaves nothing on the stream', async () => {
     const env = backend();
     await drain(await env.boot().stream('hello', { memory }));
-    expect(env.runEntries()).toEqual([]);
+    expect(env.runEntries().map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
 
     const chunks = await reload(env.restart());
 
-    expect(chunks.map(chunk => chunk.type)).toEqual(['thread-history']);
+    expect(chunks.map(chunk => chunk.type)).toEqual(['thread-history', 'thread-run-status']);
     const [history] = chunks;
     expect(history.payload.messages.filter((m: any) => m.role === 'user')).toHaveLength(1);
     expect(history.payload.messages.filter((m: any) => m.role === 'assistant')).toHaveLength(1);
@@ -146,7 +151,7 @@ describe('thread history across a restart', () => {
     // Restart before answering: the card comes back exactly once.
     const restarted = env.restart();
     const restored = await reload(restarted);
-    expect(restored.map(chunk => chunk.type)).toEqual(['thread-history', 'tool-call-approval']);
+    expect(restored.map(chunk => chunk.type)).toEqual(['thread-history', 'tool-call-approval', 'thread-run-status']);
 
     // Answer it the way a restored card is answered: find the stored suspended run.
     const { runs } = await restarted.listSuspendedRuns({ threadId, resourceId });
@@ -156,11 +161,15 @@ describe('thread history across a restart', () => {
 
     expect(env.executed).toEqual(['lookup']);
     expect((await restarted.listSuspendedRuns({ threadId, resourceId })).runs).toEqual([]);
-    // Both halves of the run — before and after the restart — leave the stream.
-    expect(env.runEntries()).toEqual([]);
+    // Output from both halves leaves the stream; authority and outcome metadata remain.
+    expect(env.runEntries().map(event => event.data.type)).toEqual([
+      'run-registered',
+      'run-registered',
+      'run-completed',
+    ]);
 
     // Restart again: no card, no replay.
-    expect((await reload(env.restart())).map(chunk => chunk.type)).toEqual(['thread-history']);
+    expect((await reload(env.restart())).map(chunk => chunk.type)).toEqual(['thread-history', 'thread-run-status']);
     expect(env.executed).toEqual(['lookup']);
   });
 });

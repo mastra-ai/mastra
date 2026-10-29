@@ -56,6 +56,7 @@ import { reconcileInterval, reconciliationEnabled } from './reconciliation-confi
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
+import type { GitIdentity } from './sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -426,6 +427,11 @@ export class GithubIntegration implements FactoryIntegration {
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  /** Commit authorship for repositories opened by this App. */
+  get gitIdentity(): GitIdentity | undefined {
+    return { login: `${this.#slug}[bot]` };
   }
 
   /** Whether a GitHub login belongs to this integration's App. */

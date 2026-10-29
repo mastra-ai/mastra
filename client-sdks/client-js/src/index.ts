@@ -50,6 +50,8 @@ export type { GetMetricTimeSeriesResponse } from './types';
 export type {
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   TraceAggregateDiscovery,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,

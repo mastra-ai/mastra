@@ -9,6 +9,7 @@ import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
+import { ModelCredential } from './ModelCredential';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
@@ -18,7 +19,7 @@ import { RuntimeActivity } from './RuntimeActivity';
  */
 export function StatusLine() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
-  const { projectPath, factorySessionState } = useChatSessionContext();
+  const { factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
   const repository = factory?.repositories.find(
     repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
@@ -27,9 +28,7 @@ export function StatusLine() {
   const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
   const workItems = useWorkItemsQuery(factoryProjectKey);
   const currentItem = workItems.data?.find(item =>
-    Object.values(item.sessions).some(
-      session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
-    ),
+    Object.values(item.sessions).some(session => session.threadId === threadId),
   );
   const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
 
@@ -39,6 +38,7 @@ export function StatusLine() {
       className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModelPicker />
+      <ModelCredential />
       <OperationalMemoryStatus />
       <RuntimeActivity />
       <ConnectionActivity />

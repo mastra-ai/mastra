@@ -1,4 +1,6 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install --frozen-lockfile",
   "headers": [
     {
       "source": "/(.*)",
@@ -15,6 +17,16 @@
     }
   ],
   "redirects": [
+    {
+      "source": "/docs/mastra-platform/connect/end-user-connections",
+      "destination": "/docs/mastra-platform/connect/overview",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes",
+      "destination": "/reference/connect/tools",
+      "permanent": false
+    },
     {
       "source": "/docs/workspace/overview",
       "destination": "/docs/sandbox/overview",
@@ -111,11 +123,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/observability/tracing/exporters/:path*",
-      "destination": "/docs/observability/integrations/exporters/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/observability/tracing/bridges/datadog",
       "destination": "/integrations/observability/datadog",
       "permanent": true
@@ -123,11 +130,6 @@
     {
       "source": "/docs/observability/tracing/bridges/otel",
       "destination": "/integrations/observability/opentelemetry",
-      "permanent": true
-    },
-    {
-      "source": "/docs/observability/tracing/processors/:path*",
-      "destination": "/docs/observability/integrations/processors/:path*",
       "permanent": true
     },
     {
@@ -141,16 +143,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/v1/:path*",
-      "destination": "/docs/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/models/v1/:path*",
-      "destination": "/models/:path*",
-      "permanent": true
-    },
-    {
       "source": "/models/providers/neon",
       "destination": "/models/gateways/neon",
       "permanent": true
@@ -158,16 +150,6 @@
     {
       "source": "/models/providers/merge-gateway",
       "destination": "/models/gateways/merge-gateway",
-      "permanent": true
-    },
-    {
-      "source": "/guides/v1/:path*",
-      "destination": "/guides/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/reference/v1/:path*",
-      "destination": "/reference/:path*",
       "permanent": true
     },
     {
@@ -232,12 +214,12 @@
     },
     {
       "source": "/docs/agents/signal-providers",
-      "destination": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals",
-      "destination": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
       "permanent": true
     },
     {
@@ -1201,18 +1183,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/rag/:path*",
-      "destination": "/guides/rag/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/voice",
       "destination": "/reference/voice/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/voice/:path*",
-      "destination": "/reference/voice/:path*",
       "permanent": true
     },
     {
@@ -1901,18 +1873,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/migrations/:path*",
-      "destination": "/reference/migrations/:path*",
-      "permanent": true
-    },
-    {
       "source": "/reference/storage/neon",
       "destination": "/integrations/databases/neon",
-      "permanent": true
-    },
-    {
-      "source": "/guides/concepts/:path*",
-      "destination": "/docs/guides/:path*",
       "permanent": true
     },
     {
@@ -2021,11 +1983,6 @@
       "permanent": true
     },
     {
-      "source": "/guides/voice/:path*",
-      "destination": "/reference/voice/:path*",
-      "permanent": true
-    },
-    {
       "source": "/guides/getting-started/quickstart",
       "destination": "/docs",
       "permanent": true
@@ -2107,12 +2064,12 @@
     },
     {
       "source": "/docs/long-running-agents/signals",
-      "destination": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/signal-providers",
-      "destination": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
       "permanent": true
     },
     {
@@ -2176,11 +2133,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/server/auth/:path*",
-      "destination": "/docs/auth/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/auth/index",
       "destination": "/docs/auth/overview",
       "permanent": true
@@ -2203,11 +2155,6 @@
     {
       "source": "/docs/datasets/running-experiments",
       "destination": "/docs/evals/experiments",
-      "permanent": true
-    },
-    {
-      "source": "/docs/datasets/:path*",
-      "destination": "/docs/evals/datasets",
       "permanent": true
     },
     {
@@ -2244,6 +2191,31 @@
       "source": "/reference/observability/tracing/trace-query",
       "destination": "/reference/observability/tracing/advanced-queries",
       "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
+      "destination": "/docs/mastra-platform/connect/overview/llms.txt",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes/llms.txt",
+      "destination": "/reference/connect/tools/llms.txt",
+      "permanent": false
     },
     {
       "source": "/docs/workspace/overview/llms.txt",
@@ -2442,12 +2414,12 @@
     },
     {
       "source": "/docs/agents/signal-providers/llms.txt",
-      "destination": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals/llms.txt",
-      "destination": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
       "permanent": true
     },
     {
@@ -3062,6 +3034,11 @@
     },
     {
       "source": "/docs/frameworks/agents/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/:path*/llms.txt",
       "destination": "/docs/agents/overview/llms.txt",
       "permanent": true
     },
@@ -3947,12 +3924,12 @@
     },
     {
       "source": "/docs/long-running-agents/signals/llms.txt",
-      "destination": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/signal-providers/llms.txt",
-      "destination": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     },
     {
@@ -4083,6 +4060,91 @@
     {
       "source": "/reference/observability/tracing/trace-query/llms.txt",
       "destination": "/reference/observability/tracing/advanced-queries/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/:path*",
+      "destination": "/docs/observability/integrations/exporters/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/processors/:path*",
+      "destination": "/docs/observability/integrations/processors/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/:path*",
+      "destination": "/docs/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/models/v1/:path*",
+      "destination": "/models/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/:path*",
+      "destination": "/guides/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/:path*",
+      "destination": "/reference/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/:path*",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*",
+      "destination": "/guides/rag/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*",
+      "destination": "/reference/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/concepts/:path*",
+      "destination": "/docs/guides/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/:path*",
+      "destination": "/reference/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*",
+      "destination": "/docs/auth/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/datasets/:path*",
+      "destination": "/docs/evals/datasets",
       "permanent": true
     }
   ]

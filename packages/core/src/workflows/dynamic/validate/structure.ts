@@ -140,10 +140,10 @@ export function validateWorkflowStructure(def: WorkflowValidationInput): Workflo
             message: 'Concurrency must be positive.',
           });
         }
-        return;
+        break;
       }
       default:
-        return;
+        break;
     }
   });
 

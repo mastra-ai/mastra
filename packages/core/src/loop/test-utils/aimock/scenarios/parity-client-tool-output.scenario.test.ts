@@ -62,7 +62,7 @@ function askClientTool(onOutput: (output: unknown) => void) {
   });
 }
 
-async function runT74(target: ParityTarget) {
+async function runT74(target: ParityTarget, answer: object) {
   const outputs = new Map<ParityEngine, unknown[]>();
 
   const results = await expectParity(target, {
@@ -98,7 +98,7 @@ async function runT74(target: ParityTarget) {
                 type: 'tool-result',
                 toolCallId: call.toolCallId,
                 toolName: 'askClient',
-                result: CLIENT_ANSWER,
+                result: answer,
               },
             ],
           },
@@ -112,8 +112,13 @@ async function runT74(target: ParityTarget) {
 }
 
 describeParity('client-tool-output parity', target => {
-  it('the client answer reaches onOutput unwrapped', async () => {
-    const { results, outputs } = await runT74(target);
+  it.each([
+    CLIENT_ANSWER,
+    { value: 20, unit: 'celsius' },
+    { type: 'json', value: 20, unit: 'celsius' },
+    { type: 'measurement', value: 20 },
+  ])('the client answer %j reaches onOutput intact', async answer => {
+    const { results, outputs } = await runT74(target, answer);
 
     for (const engine of ['plain', target] as const) {
       const turns = results[engine]!.turns;
@@ -129,7 +134,7 @@ describeParity('client-tool-output parity', target => {
       // onOutput fired exactly once, with the client answer intact.
       const seen = outputs.get(engine)!;
       expect(seen).toHaveLength(1);
-      expect(JSON.stringify(seen[0])).toBe(JSON.stringify(CLIENT_ANSWER));
+      expect(seen[0]).toEqual(answer);
     }
 
     // Pin the plain reference so it cannot drift unnoticed.
@@ -137,6 +142,6 @@ describeParity('client-tool-output parity', target => {
     expect(plain.turns[0]!.toolCalls).toEqual([
       { toolCallId: 'parity-call-1', toolName: 'askClient', args: { question: 'temperature?' } },
     ]);
-    expect(outputs.get('plain')).toEqual([CLIENT_ANSWER]);
+    expect(outputs.get('plain')).toEqual([answer]);
   });
 });

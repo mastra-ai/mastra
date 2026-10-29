@@ -7,6 +7,8 @@ import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { InlineSkillSource } from '@mastra/core/skills';
+import type { InlineSkill } from '@mastra/core/skills';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type {
   FactorySandbox,
@@ -78,21 +80,26 @@ export const BUNDLED_FACTORY_SKILLS_PATH =
 /**
  * Resolve the consumer repo's local Factory skills root, if any. Checked in
  * addition to the bundled skills so projects can add (or override) Factory
- * skills without patching the installed package. Candidates cover the cwd
- * variants the dev server runs with (`repo root`, `--dir src/mastra` which
- * runs with cwd `src/mastra/public`).
+ * skills without patching the installed package. Skills live in
+ * `src/mastra/factory-skills`; `src/mastra/public/factory-skills` is the older
+ * location and still works. Candidates cover the cwd variants the dev server
+ * runs with (`repo root`, `mastra dev` which runs with cwd `src/mastra/public`),
+ * then the platform build output when the server runs from its parent directory.
  */
 export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
   const candidates = [
+    join(cwd, 'src', 'mastra', 'factory-skills'),
     join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
+    ...(path.basename(cwd) === 'public' ? [join(cwd, '..', 'factory-skills')] : []),
     join(cwd, 'public', 'factory-skills'),
     join(cwd, 'factory-skills'),
+    join(cwd, 'output', 'factory-skills'),
   ];
   return candidates.find(
     candidate => path.normalize(candidate) !== path.normalize(BUNDLED_FACTORY_SKILLS_PATH) && existsSync(candidate),
   );
 }
-const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
   'factory-complete-issue',
@@ -105,7 +112,10 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-triage',
 ]);
 
-/** Review skills only sessions with an active review run binding may discover or load. */
+/**
+ * Review skills only sessions with an active review run binding, or unbound
+ * side sessions a user session started, may discover or load.
+ */
 export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-gitlab-rereview',
   'factory-gitlab-review',
@@ -137,9 +147,46 @@ export async function rescanFactorySkills(skills: NonNullable<Workspace['skills'
   await pending;
 }
 
+/**
+ * Serves `createSkill()` skills under mount-relative paths (`<name>/SKILL.md`),
+ * the layout the other Factory skill layers use.
+ */
+class CodeSkillSource implements SkillSource {
+  readonly #inline: InlineSkillSource;
+  readonly #names: string[];
+
+  constructor(skills: readonly InlineSkill[]) {
+    this.#inline = new InlineSkillSource([...skills]);
+    this.#names = skills.map(skill => skill.name);
+  }
+
+  #inlinePath(relativePath: string): string {
+    return `inline/${relativePath.split(path.sep).join('/')}`;
+  }
+
+  async exists(relativePath: string): Promise<boolean> {
+    if (relativePath === '') return this.#names.length > 0;
+    return this.#inline.exists(this.#inlinePath(relativePath));
+  }
+
+  stat(relativePath: string): Promise<SkillSourceStat> {
+    return this.#inline.stat(this.#inlinePath(relativePath));
+  }
+
+  readFile(relativePath: string): Promise<string | Buffer> {
+    return this.#inline.readFile(this.#inlinePath(relativePath));
+  }
+
+  async readdir(relativePath: string): Promise<SkillSourceEntry[]> {
+    if (relativePath === '') return this.#names.map(name => ({ name, type: 'directory' as const }));
+    return this.#inline.readdir(this.#inlinePath(relativePath));
+  }
+}
+
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
+  readonly #codeSource: CodeSkillSource | undefined;
   readonly #fallbackSkillRoots: Set<string>;
 
   constructor(
@@ -148,9 +195,18 @@ export class FactorySkillSource implements SkillSource {
     localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
     /** Evaluated per call because a session's bound role changes across stages. */
     readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
+    /** Skills passed as `MastraFactory({ skills })`; they win over local and bundled skills of the same name. */
+    codeSkills: readonly InlineSkill[] = [],
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
+    this.#codeSource = codeSkills.length > 0 ? new CodeSkillSource(codeSkills) : undefined;
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
+  }
+
+  /** A code skill owns its whole directory, so a same-named folder skill never mixes in files. */
+  async #ownedByCode(relativePath: string): Promise<boolean> {
+    const skillName = relativePath.split(path.sep)[0];
+    return !!skillName && !!this.#codeSource && (await this.#codeSource.exists(skillName));
   }
 
   #isFactoryPath(skillPath: string): boolean {
@@ -169,8 +225,9 @@ export class FactorySkillSource implements SkillSource {
     return !(await this.isReviewSession());
   }
 
-  /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
-  async #layerFor(relativePath: string): Promise<LocalSkillSource> {
+  /** Pick the layer serving this mount-relative path: code skills, then local entries, then bundled. */
+  async #layerFor(relativePath: string): Promise<SkillSource> {
+    if (await this.#ownedByCode(relativePath)) return this.#codeSource!;
     if (this.#localSource && (await this.#localSource.exists(relativePath))) return this.#localSource;
     return this.#bundledSource;
   }
@@ -179,6 +236,7 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) return false;
+    if (await this.#ownedByCode(relative)) return this.#codeSource!.exists(relative);
     if (this.#localSource && (await this.#localSource.exists(relative))) return true;
     return this.#bundledSource.exists(relative);
   }
@@ -201,19 +259,24 @@ export class FactorySkillSource implements SkillSource {
     if (this.#isFactoryPath(skillPath)) {
       const relative = this.#factoryPath(skillPath);
       if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+      if (relative !== '' && (await this.#ownedByCode(relative))) return this.#codeSource!.readdir(relative);
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
       ]);
-      if (!bundledExists && !localExists) throw skillSourceEnoent(skillPath);
-      const [bundledEntries, localEntries] = await Promise.all([
+      if (!bundledExists && !localExists && !(relative === '' && this.#codeSource)) {
+        throw skillSourceEnoent(skillPath);
+      }
+      const [bundledEntries, localEntries, codeEntries] = await Promise.all([
         bundledExists ? this.#bundledSource.readdir(relative) : [],
         localExists ? this.#localSource!.readdir(relative) : [],
+        relative === '' && this.#codeSource ? this.#codeSource.readdir('') : [],
       ]);
       const merged = new Map<string, SkillSourceEntry>();
       for (const entry of bundledEntries) merged.set(entry.name, entry);
-      // Local entries override bundled names.
+      // Local entries override bundled names; code skills override both.
       for (const entry of localEntries) merged.set(entry.name, entry);
+      for (const entry of codeEntries) merged.set(entry.name, entry);
       const entries = [...merged.values()];
       if (relative !== '' || (await this.isReviewSession())) return entries;
       return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
@@ -227,12 +290,13 @@ export class FactorySkillSource implements SkillSource {
   }
 
   /**
-   * Names the Factory mount serves: bundled skills plus the app's local skills.
+   * Names the Factory mount serves: bundled skills plus the app's code and local skills.
    * Repository skills with these names are hidden so they cannot collide with
    * Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
    */
   async #reservedNames(): Promise<Set<string>> {
     const reserved = new Set(FACTORY_SKILL_NAMES);
+    for (const entry of (await this.#codeSource?.readdir('')) ?? []) reserved.add(entry.name);
     if (!this.#localSource) return reserved;
     try {
       for (const entry of await this.#localSource.readdir('')) {
@@ -297,12 +361,21 @@ class UnmaterializedAwareSkillSource implements SkillSource {
   }
 }
 
-function createFactorySkillExtension(isReviewSession: () => Promise<boolean>): WorkspaceSkillExtension {
+function createFactorySkillExtension(
+  isReviewSession: () => Promise<boolean>,
+  codeSkills: readonly InlineSkill[],
+): WorkspaceSkillExtension {
   return {
     id: 'web-factory',
     paths: [FACTORY_SKILLS_MOUNT],
     createSource: (fallback, fallbackSkillRoots) =>
-      new FactorySkillSource(fallback, fallbackSkillRoots, resolveLocalFactorySkillsPath(), isReviewSession),
+      new FactorySkillSource(
+        fallback,
+        fallbackSkillRoots,
+        resolveLocalFactorySkillsPath(),
+        isReviewSession,
+        codeSkills,
+      ),
   };
 }
 
@@ -345,11 +418,13 @@ export interface CreateWorkspaceFactoryOptions {
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
-  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
+  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
+  /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
+  skills?: readonly InlineSkill[];
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -587,7 +662,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
   const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
-    const resolvedSession = ctx?.resourceId ? await resolveSourceControlSession(sourceControls, ctx.resourceId) : null;
+    const resolvedSession = ctx?.sessionId ? await resolveSourceControlSession(sourceControls, ctx.sessionId) : null;
     const session = resolvedSession?.session ?? null;
     const sourceControl = resolvedSession?.provider;
 
@@ -616,6 +691,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     const factorySandbox = sandboxConfig;
     const githubProvider = sourceControl.github;
+    const gitIdentity = githubProvider?.gitIdentity ?? { name: user.name, email: user.email };
 
     const storage = sourceControl.storage;
     const projectRepository = session.projectRepositoryId
@@ -908,12 +984,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         sessionId: session.sessionId,
       });
       if (!binding || !ctx?.threadId) return binding;
-      return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
+      return binding.threadId === ctx.threadId && binding.sessionId === ctx.sessionId ? binding : null;
     };
-    // Fails closed: without a readable active review binding, review skills stay hidden.
+    // Fails closed: review skills need a readable active review binding, or a
+    // side session (started by a user session to run a skill on request) that
+    // has never been bound. Any binding (another role, revoked, or several
+    // ambiguous active ones) keeps the side session on the binding check.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
       try {
+        if (session.originSessionId) {
+          const everBound = await workItems.hasRunBindingForSession({
+            orgId: session.orgId,
+            factoryProjectId: connection.factoryProjectId,
+            sessionId: session.sessionId,
+          });
+          if (!everBound) return true;
+        }
         return isActiveReviewBinding(await findSessionBinding(), session.orgId);
       } catch {
         return false;
@@ -921,7 +1008,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const effectiveSkillExtension =
       skillExtension ??
-      createFactorySkillExtension((): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)());
+      createFactorySkillExtension(
+        (): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)(),
+        options.skills ?? [],
+      );
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
@@ -1193,6 +1283,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         storage: storage.sessions,
       });
       await checkoutSessionBranch(target, workdir, {
+        identity: gitIdentity,
         branch: session.branch,
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
@@ -1295,7 +1386,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             dir: entry.dir,
             branch: null,
             defaultBranch: repo.defaultBranch,
-            position: repo.position,
             setupStatus: repo.setupCommand ? 'ok' : 'skipped',
           };
           states.push(state);
@@ -1338,6 +1428,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
               syncEnvironmentRepository(target, entry.dir, {
+                identity: gitIdentity,
                 branch: session.branch,
                 defaultBranch: repo.defaultBranch,
                 token,

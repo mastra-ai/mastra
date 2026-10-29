@@ -14,17 +14,11 @@ import {
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { createNameSuffix } from '../utils/default-names';
-import { SchemaConfigSection } from './schema-config-section';
 import type { DatasetTargetType } from './target-type-options';
 
 export interface CreateDatasetDialogProps {
@@ -38,9 +32,6 @@ export interface CreateDatasetDialogProps {
 
 interface CreateDatasetFormValues {
   name: string;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
-  requestContextSchema?: Record<string, unknown>;
 }
 
 export function CreateDatasetDialog({
@@ -89,26 +80,10 @@ interface CreateDatasetDialogFormProps {
 }
 
 function CreateDatasetDialogForm({ createDataset, targetType, targetIds, onCreated }: CreateDatasetDialogFormProps) {
-  const { register, handleSubmit, setValue, watch } = useForm<CreateDatasetFormValues>({
+  const { register, handleSubmit, watch } = useForm<CreateDatasetFormValues>({
     defaultValues: { name: `Dataset ${createNameSuffix()}` },
   });
-  const [name, inputSchema, groundTruthSchema, requestContextSchema] = watch([
-    'name',
-    'inputSchema',
-    'groundTruthSchema',
-    'requestContextSchema',
-  ]);
-  const [showCustomSchema, setShowCustomSchema] = useState(!targetType);
-
-  const handleSchemaChange = (schemas: {
-    inputSchema: Record<string, unknown> | null;
-    outputSchema: Record<string, unknown> | null;
-    requestContextSchema: Record<string, unknown> | null;
-  }) => {
-    setValue('inputSchema', schemas.inputSchema ?? undefined);
-    setValue('groundTruthSchema', schemas.outputSchema ?? undefined);
-    setValue('requestContextSchema', schemas.requestContextSchema ?? undefined);
-  };
+  const name = watch('name');
 
   const onSubmit = handleSubmit(async values => {
     if (!values.name.trim()) {
@@ -119,9 +94,6 @@ function CreateDatasetDialogForm({ createDataset, targetType, targetIds, onCreat
     try {
       const result = await createDataset.mutateAsync({
         name: values.name.trim(),
-        inputSchema: values.inputSchema,
-        groundTruthSchema: values.groundTruthSchema,
-        requestContextSchema: values.requestContextSchema,
         targetType,
         targetIds,
       });
@@ -140,31 +112,11 @@ function CreateDatasetDialogForm({ createDataset, targetType, targetIds, onCreat
           <FieldLabel required>Name</FieldLabel>
           <Input required {...register('name')} placeholder="Enter dataset name" autoFocus />
         </Field>
-
-        {targetType && !showCustomSchema ? (
-          <button
-            type="button"
-            className={cn('self-start', quietTextHover, controlStateColorTransition)}
-            onClick={() => setShowCustomSchema(true)}
-          >
-            <Txt as="span" variant="caption" className="block">
-              + Custom schema
-            </Txt>
-          </button>
-        ) : (
-          <SchemaConfigSection
-            inputSchema={inputSchema}
-            outputSchema={groundTruthSchema}
-            requestContextSchema={requestContextSchema}
-            onChange={handleSchemaChange}
-            disabled={createDataset.isPending}
-          />
-        )}
       </DialogBody>
       <DialogFooter>
         <DialogCancel>Cancel</DialogCancel>
         <DialogAction type="submit" disabled={!name.trim()}>
-          {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
+          {createDataset.isPending ? 'Creating...' : 'Create dataset'}
         </DialogAction>
       </DialogFooter>
     </Form>

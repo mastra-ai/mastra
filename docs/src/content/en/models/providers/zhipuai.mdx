@@ -9,7 +9,7 @@ description: "Browse Zhipu AI model IDs, capabilities, context windows, and pric
 
 Access 17 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
-Learn more in the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing).
+Learn more in the [Zhipu AI documentation](https://docs.bigmodel.cn/cn/guide/start/pricing).
 
 ```bash title=".env"
 ZHIPU_API_KEY=your-api-key
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::note
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Zhipu AI documentation](https://docs.bigmodel.cn/cn/guide/start/pricing) for details.
 
 :::
 
@@ -66,8 +66,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 98304,
-    "inputCost": 0.2,
-    "outputCost": 1.1
+    "inputCost": 0.11952,
+    "outputCost": 0.89637
   },
   {
     "model": "zhipuai/glm-4.5-flash",
@@ -90,8 +90,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 64000,
     "maxOutput": 16384,
-    "inputCost": 0.6,
-    "outputCost": 1.8
+    "inputCost": 0.29879,
+    "outputCost": 0.89637
   },
   {
     "model": "zhipuai/glm-4.6",
@@ -114,8 +114,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 0.9
+    "inputCost": 0.1494,
+    "outputCost": 0.44819
   },
   {
     "model": "zhipuai/glm-4.6v-flash",
@@ -138,8 +138,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.2
+    "inputCost": 0.44819,
+    "outputCost": 2.09153
   },
   {
     "model": "zhipuai/glm-4.7-flash",
@@ -162,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 131072,
-    "inputCost": 0.07,
-    "outputCost": 0.4
+    "inputCost": 0.0747,
+    "outputCost": 0.44819
   },
   {
     "model": "zhipuai/glm-5",
@@ -174,8 +174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 1,
-    "outputCost": 3.2
+    "inputCost": 0.59758,
+    "outputCost": 2.68911
   },
   {
     "model": "zhipuai/glm-5.1",
@@ -186,8 +186,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
+    "inputCost": 0.89637,
+    "outputCost": 3.58548
   },
   {
     "model": "zhipuai/glm-5.2",
@@ -198,8 +198,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
+    "inputCost": 1.19516,
+    "outputCost": 4.18306
   },
   {
     "model": "zhipuai/glm-5.3",
@@ -210,8 +210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
+    "inputCost": 1.19516,
+    "outputCost": 4.18306
   },
   {
     "model": "zhipuai/glm-5.3-flash",
@@ -222,8 +222,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.15,
-    "outputCost": 0.5
+    "inputCost": 0.11952,
+    "outputCost": 0.41831
   },
   {
     "model": "zhipuai/glm-5.3-flashx",
@@ -234,8 +234,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.37,
-    "outputCost": 1.25
+    "inputCost": 0.29879,
+    "outputCost": 1.04577
   },
   {
     "model": "zhipuai/glm-5v-turbo",
@@ -246,8 +246,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 131072,
-    "inputCost": 5,
-    "outputCost": 22
+    "inputCost": 0.74698,
+    "outputCost": 3.28669
   }
 ]}
 />
@@ -259,6 +259,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -276,6 +278,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

@@ -32,4 +32,22 @@ describe('Channel thread deep link (/threads/:threadId)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/workspaces/channel/threads/th-1'));
     expect(router.state.location.search).toBe('?resourceId=channel%3Aslack%3AD0BJUSE45QE%3A1784829459.879119');
   });
+  it('forwards a session-addressed link preserving ?sessionId=', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'First Factory' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+    );
+
+    const router = renderAt('/threads/th-1?sessionId=channel%3Aslack%3AD0BJUSE45QE%3A1784829459.879119');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/workspaces/channel/threads/th-1'));
+    expect(router.state.location.search).toBe('?sessionId=channel%3Aslack%3AD0BJUSE45QE%3A1784829459.879119');
+  });
 });

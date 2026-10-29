@@ -11,7 +11,6 @@ export const WORKSPACE_PR_STATUS_POLL_MS = 5_000;
 export interface WorkspacePullRequestTarget {
   sessionId: string;
   threadId: string;
-  projectPath: string;
   pullRequestNumber: number;
   /** Route to poll; defaults to GitHub for callers that predate GitLab review cards. */
   provider?: ChangeRequestProvider;
@@ -20,12 +19,10 @@ export interface WorkspacePullRequestTarget {
 
 export function useWorkspacePullRequestMerges({
   baseUrl,
-  resourceId,
   targets,
   enabled,
 }: {
   baseUrl: string;
-  resourceId: string;
   targets: WorkspacePullRequestTarget[];
   enabled: boolean;
 }): Record<string, boolean> {
@@ -33,11 +30,10 @@ export function useWorkspacePullRequestMerges({
     queries: targets.map(target =>
       queryOptions({
         queryKey: [
-          ...pullRequestSubscriptionsQueryKey(resourceId, target.threadId, target.projectPath, target.provider),
+          ...pullRequestSubscriptionsQueryKey(target.sessionId, target.threadId, target.provider),
           target.pullRequestNumber,
         ],
-        queryFn: () =>
-          listPullRequestSubscriptions(baseUrl, resourceId, target.threadId, target.projectPath, target.provider),
+        queryFn: () => listPullRequestSubscriptions(baseUrl, target.sessionId, target.threadId, target.provider),
         enabled,
         refetchOnWindowFocus: true,
         refetchInterval: query => {

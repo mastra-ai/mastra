@@ -67,25 +67,28 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values).toContain(5000);
   });
 
-  it('compiles time-to-first-chunk predicates from the stored root and span columns', () => {
-    const compiled = compilePostgresTraceQuery(
-      'custom',
-      plan({
-        where: {
-          op: 'and',
-          args: [
-            { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
-            { spans: { some: { op: 'lt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 100 } } } },
-          ],
-        },
-      }),
-    );
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'compiles %s predicates from the stored root and span columns',
+    field => {
+      const compiled = compilePostgresTraceQuery(
+        'custom',
+        plan({
+          where: {
+            op: 'and',
+            args: [
+              { op: 'gt', left: { path: field }, right: { literal: 500 } },
+              { spans: { some: { op: 'lt', left: { path: field }, right: { literal: 100 } } } },
+            ],
+          },
+        }),
+      );
 
-    expect(compiled.text).toContain(`r."timeToFirstChunkMs" AS "timeToFirstChunkMs"`);
-    expect(compiled.text).toContain(`r."timeToFirstChunkMs" IS NOT NULL AND r."timeToFirstChunkMs" > $`);
-    expect(compiled.text).toContain(`s."timeToFirstChunkMs" IS NOT NULL AND s."timeToFirstChunkMs" < $`);
-    expect(compiled.values).toEqual(expect.arrayContaining([500, 100]));
-  });
+      expect(compiled.text).toContain(`r."${field}" AS "${field}"`);
+      expect(compiled.text).toContain(`r."${field}" IS NOT NULL AND r."${field}" > $`);
+      expect(compiled.text).toContain(`s."${field}" IS NOT NULL AND s."${field}" < $`);
+      expect(compiled.values).toEqual(expect.arrayContaining([500, 100]));
+    },
+  );
 
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
     const compiled = compilePostgresTraceQuery(
@@ -427,7 +430,7 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).toContain('"endedAt" < $3');
     expect(compiled.text).toContain('"traceId" > $4');
-    expect(compiled.text).toContain('ORDER BY "endedAt" DESC, "traceId" ASC');
+    expect(compiled.text).toContain('ORDER BY "endedAt" DESC NULLS LAST, "traceId" ASC');
     expect(compiled.values.at(-1)).toBe(3);
   });
 
@@ -449,7 +452,7 @@ describe('Postgres advanced trace query', () => {
     const data = compilePostgresTraceQuery('public', pagePlan);
 
     expect(count.text).toContain('SELECT COUNT(*)::text AS count\nFROM candidates');
-    expect(data.text).toContain('ORDER BY "endedAt" ASC, "traceId" ASC');
+    expect(data.text).toContain('ORDER BY "endedAt" ASC NULLS LAST, "traceId" ASC');
     expect(data.text).toContain('LIMIT $3 OFFSET $4');
     expect(data.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
     expect(count.text.split('candidates AS')[0]).toBe(data.text.split('candidates AS')[0]);
@@ -627,10 +630,11 @@ describe('Postgres advanced trace query', () => {
       ],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(20);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       timeToFirstChunkMs: null,
+      timeToFirstTokenMs: null,
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',

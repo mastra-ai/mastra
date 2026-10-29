@@ -1,13 +1,17 @@
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import { LLMock } from '@copilotkit/aimock';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 
 import { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
 import type { AgentControllerEvent } from '../../agent-controller/types';
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import type { MastraModelConfig } from '../../llm';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -141,7 +145,7 @@ async function createSetup({
   platform?: string;
   responseText?: string;
   instructions?: () => Promise<string>;
-  model?: MockLanguageModelV2;
+  model?: MastraModelConfig;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
   stateSchema?: z.ZodTypeAny;
@@ -262,7 +266,7 @@ describe('AgentControllerChannels', () => {
     );
 
     // One durable session keyed `channel:{platform}:{externalThreadId}`
-    const session = await controller.getSessionByResource('channel:chan-1:t-1');
+    const session = await controller.getSession('channel:chan-1:t-1');
     expect(session).toBeDefined();
 
     // The mapped Mastra thread carries channel metadata and the derived owner
@@ -312,7 +316,7 @@ describe('AgentControllerChannels', () => {
     const chatThread = createChatThread(adapter, 'chan-1:t-1');
 
     await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'first'), mastra, new RequestContext());
-    const session = await controller.getSessionByResource('channel:chan-1:t-1');
+    const session = await controller.getSession('channel:chan-1:t-1');
     expect(session).toBeDefined();
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'first reply' });
     const boundThreadId = session!.thread.getId();
@@ -326,11 +330,55 @@ describe('AgentControllerChannels', () => {
     await waitFor(() => chatThread.post.mock.calls.length >= 2, { what: 'second reply' });
 
     // Same session instance, same bound thread, still exactly one mapped thread
-    const sessionAgain = await controller.getSessionByResource('channel:chan-1:t-1');
+    const sessionAgain = await controller.getSession('channel:chan-1:t-1');
     expect(sessionAgain).toBe(session);
     expect(sessionAgain!.thread.getId()).toBe(boundThreadId);
     const threads = await getChannelThreads(mastra, 'chan-1:t-1');
     expect(threads).toHaveLength(1);
+  }, 30_000);
+
+  it('posts the provider explanation, not just the HTTP status text, when the model call is rejected', async () => {
+    // A provider 400 whose body the AI SDK cannot parse leaves only the status
+    // text ("Bad Request") in the error message; the explanation is in the body.
+    const llm = new LLMock({ port: 0 });
+    await llm.start();
+    try {
+      llm.onMessage(/.*/, {
+        error: { message: 'PROVIDER_REJECTED_THIS_REQUEST', type: 'invalid_request_error' },
+        status: 400,
+      });
+      const model = createOpenAI({
+        apiKey: 'aimock-test-key',
+        baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+        // Reshape the error body so it no longer matches the provider's error
+        // schema — the shape of the production failures this guards against.
+        fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          const { error } = (await response.json()) as { error: { message: string } };
+          return new Response(JSON.stringify({ message: error.message }), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: { 'content-type': 'application/json', 'x-request-id': 'req_provider_400' },
+          });
+        },
+      }).chat('gpt-4o-mini');
+      const { adapter, mastra, channels } = await createSetup({ model });
+      const chatThread = createChatThread(adapter, 'chan-1:t-provider-400');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      await waitFor(() => postedText(chatThread).includes('❌ Error:'), { what: 'error posted to chat thread' });
+      expect(postedText(chatThread)).toContain(
+        '❌ Error: Bad Request (HTTP 400): PROVIDER_REJECTED_THIS_REQUEST (request id req_provider_400)',
+      );
+    } finally {
+      await llm.stop();
+    }
   }, 30_000);
 
   /**
@@ -458,7 +506,7 @@ describe('AgentControllerChannels', () => {
       ).rejects.toBeInstanceOf(FGADeniedError);
 
       expect(resolveSession).not.toHaveBeenCalled();
-      expect(await controller.getSessionByResource('channel:chan-1:t-fga-denied')).toBeUndefined();
+      expect(await controller.getSession('channel:chan-1:t-fga-denied')).toBeUndefined();
       expect(provider.require).toHaveBeenCalledTimes(1);
       const [user, authorization] = vi.mocked(provider.require).mock.calls[0]!;
       expect(user).toEqual({ id: 'user-1', organizationMembershipId: 'om-1' });
@@ -500,8 +548,9 @@ describe('AgentControllerChannels', () => {
       // id, not the default one) is the session that answered on the mapped
       // thread.
       expect(calls).toEqual([{ resourceId: 'channel:chan-1:t-resolve', tenant: 'acme' }]);
-      const resolved = (await controller.getSessionByResource('channel:chan-1:t-resolve'))!;
-      expect(resolved.identity.getId()).toBe('tenant-acme:channel:chan-1:t-resolve');
+      const resolved = (await controller.getSession('tenant-acme:channel:chan-1:t-resolve'))!;
+      expect(resolved.identity.getResourceId()).toBe('channel:chan-1:t-resolve');
+      expect(await controller.getSession('channel:chan-1:t-resolve')).toBeUndefined();
       const threads = await getChannelThreads(mastra, 'chan-1:t-resolve');
       expect(resolved.thread.getId()).toBe(threads[0]!.id);
     }, 30_000);
@@ -546,7 +595,7 @@ describe('AgentControllerChannels', () => {
         new RequestContext(),
       );
 
-      expect(await controller.getSessionByResource('channel:chan-1:t-denied')).toBeUndefined();
+      expect(await controller.getSession('channel:chan-1:t-denied')).toBeUndefined();
       expect(doStream).not.toHaveBeenCalled();
       // Silence includes the error card: posting it would echo the host's
       // authorization message into a shared channel.
@@ -676,7 +725,7 @@ describe('AgentControllerChannels', () => {
         new RequestContext(),
       );
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
-      const session = (await controller.getSessionByResource('channel:chan-1:t-stale-hook'))!;
+      const session = (await controller.getSession('channel:chan-1:t-stale-hook'))!;
       const respondSpy = vi.spyOn(session, 'respondToToolApproval');
       const threads = await getChannelThreads(mastra, 'chan-1:t-stale-hook');
       const memory = { thread: threads[0]!.id, resource: threads[0]!.resourceId };
@@ -719,7 +768,7 @@ describe('AgentControllerChannels', () => {
         mastra,
         new RequestContext(),
       );
-      const session = (await controller.getSessionByResource('channel:chan-1:t-live-hook'))!;
+      const session = (await controller.getSession('channel:chan-1:t-live-hook'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
       const toolCallId = session.approval.getToolCallIds()[0]!;
 
@@ -737,8 +786,8 @@ describe('AgentControllerChannels', () => {
     await (channels as any).processChatMessage(threadA, createMessage('m-a', 'hello a'), mastra, new RequestContext());
     await (channels as any).processChatMessage(threadB, createMessage('m-b', 'hello b'), mastra, new RequestContext());
 
-    const sessionA = await controller.getSessionByResource('channel:chan-1:t-a');
-    const sessionB = await controller.getSessionByResource('channel:chan-1:t-b');
+    const sessionA = await controller.getSession('channel:chan-1:t-a');
+    const sessionB = await controller.getSession('channel:chan-1:t-b');
     expect(sessionA).toBeDefined();
     expect(sessionB).toBeDefined();
     expect(sessionA).not.toBe(sessionB);
@@ -775,7 +824,7 @@ describe('AgentControllerChannels', () => {
     );
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
 
-    const session = await controller.getSessionByResource('channel:chan-1:t-po');
+    const session = await controller.getSession('channel:chan-1:t-po');
     const threadId = session!.thread.getId()!;
     // Signals persist through the mode agent's memory (not the controller
     // storage), and land asynchronously — poll until the user signal row shows.
@@ -834,7 +883,7 @@ describe('AgentControllerChannels', () => {
     );
 
     // Session keyed off the thread's own resourceId — no ownership throw
-    const session = await controller.getSessionByResource('custom-owner');
+    const session = await controller.getSession('custom-owner');
     expect(session).toBeDefined();
     expect(session!.thread.getId()).toBe('pre-existing-thread');
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply on pre-existing thread' });
@@ -885,7 +934,7 @@ describe('AgentControllerChannels', () => {
         new RequestContext(),
       );
 
-      const session = (await controller.getSessionByResource('channel:chan-1:t-appr'))!;
+      const session = (await controller.getSession('channel:chan-1:t-appr'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
       // Approval card was posted to the platform while the run stays parked
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'approval card posted' });
@@ -957,7 +1006,7 @@ describe('AgentControllerChannels', () => {
         new RequestContext(),
       );
 
-      const session = (await controller.getSessionByResource('channel:chan-1:t-deny'))!;
+      const session = (await controller.getSession('channel:chan-1:t-deny'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
 
       const toolCallId = session.approval.getToolCallIds()[0]!;
@@ -983,7 +1032,7 @@ describe('AgentControllerChannels', () => {
         new RequestContext(),
       );
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
-      const session = (await controller.getSessionByResource('channel:chan-1:t-stale'))!;
+      const session = (await controller.getSession('channel:chan-1:t-stale'))!;
       expect(session.approval.isArmed()).toBe(false);
 
       const threads = await getChannelThreads(mastra, 'chan-1:t-stale');
@@ -1024,7 +1073,7 @@ describe('AgentControllerChannels', () => {
         new RequestContext(),
       );
 
-      const session = (await controller.getSessionByResource('channel:chan-1:t-interrupt'))!;
+      const session = (await controller.getSession('channel:chan-1:t-interrupt'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
 
       // New inbound message while the approval is pending
@@ -1064,7 +1113,7 @@ describe('AgentControllerChannels', () => {
         what: 'final text rendered',
       });
 
-      const session = (await controller.getSessionByResource('channel:chan-1:t-yolo'))!;
+      const session = (await controller.getSession('channel:chan-1:t-yolo'))!;
       // The auto-approve marker lives on the channels instance, not in
       // user-owned session state (which is schema-validated).
       expect((session.state.get() as Record<string, unknown>).yolo).toBeUndefined();
@@ -1127,6 +1176,211 @@ describe('AgentControllerChannels', () => {
 
       const renderContext = await channels.buildRenderContextForThread(mapped!.id);
       expect(renderContext).not.toBeNull();
+    }, 30_000);
+
+    it('rebuilds the thread around its last sender, so a reply streams the way an inbound one would', async () => {
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-sender');
+      const message = { ...createMessage('m-1', 'hello'), raw: { team_id: 'T1', text: 'not kept' } };
+      await (channels as any).processChatMessage(chatThread, message, mastra, new RequestContext());
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-sender' } },
+        perPage: 1,
+      });
+      expect(threads[0]!.metadata?.channel_lastSender).toEqual({
+        author: { userId: 'user-1', userName: 'caleb', fullName: 'Caleb Barnes' },
+        raw: { team_id: 'T1' },
+      });
+
+      // A run that didn't start from a message: the thread comes from metadata alone.
+      adapter.stream = vi.fn(async (_threadId: string, stream: AsyncIterable<string>) => {
+        for await (const _ of stream);
+        return { id: 'streamed-1', threadId: 'discord:t-sender', raw: {} };
+      });
+      const render = await channels.buildRenderContextForThread(threads[0]!.id);
+      await render!.chatThread.post(
+        (async function* () {
+          yield 'hi';
+        })(),
+      );
+
+      expect(adapter.stream).toHaveBeenCalledWith(
+        'discord:t-sender',
+        expect.anything(),
+        expect.objectContaining({ recipientUserId: 'user-1', recipientTeamId: 'T1' }),
+      );
+    }, 30_000);
+
+    for (const isDM of [true, false]) {
+      it(`gives a run that did not start from a message the same system prompt as one that did (${isDM ? 'DM' : 'thread'})`, async () => {
+        const systemPrompts: string[] = [];
+        const model = new MockLanguageModelV2({
+          doStream: async ({ prompt }) => {
+            systemPrompts.push(
+              prompt
+                .filter(m => m.role === 'system')
+                .map(m => m.content)
+                .join('\n'),
+            );
+            return createTextStreamModel('hi').doStream({ prompt } as any);
+          },
+        });
+        const { adapter, mastra, channels } = await createSetup({ model });
+        const chatThread = createChatThread(adapter, 'discord:t-same', { isDM });
+        await (channels as any).processChatMessage(
+          chatThread,
+          createMessage('m-1', 'hello'),
+          mastra,
+          new RequestContext(),
+        );
+        await waitFor(() => systemPrompts.length > 0, { what: 'the inbound run' });
+        // Everything after the agent's own instructions comes from the channel processor.
+        const inbound = systemPrompts[0]!.replace('You are a test agent.\n', '');
+        expect(inbound.startsWith('This conversation is connected to a discord')).toBe(true);
+
+        const memoryStore = await mastra.getStorage()!.getStore('memory');
+        const { threads } = await memoryStore!.listThreads({
+          filter: { metadata: { channel_externalThreadId: 'discord:t-same' } },
+          perPage: 1,
+        });
+        // A schedule, a Studio prompt or a signal: the memory thread, but no `channel`.
+        const requestContext = new RequestContext();
+        requestContext.set('MastraMemory', { thread: { id: threads[0]!.id } });
+        const messageList = new MessageList({});
+        const processor = channels.getInputProcessors().find(p => p.id === 'chat-channel-context')!;
+        await processor.processInputStep!({ messageList, requestContext, state: {}, tools: {} } as any);
+        const linked = messageList
+          .getSystemMessages('chat-channel-context')
+          .map(m => m.content)
+          .join('\n');
+
+        expect(linked).toBe(inbound);
+      }, 30_000);
+    }
+  });
+
+  describe('reaction tools on a run with no inbound message', () => {
+    // A schedule, a Studio prompt or a woken run in a channel-backed thread has
+    // no `channel` on request context. The reaction tools must still find the
+    // chat thread through the run's memory thread, like the output processor.
+    async function mappedThread() {
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-react');
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-react' } },
+        perPage: 1,
+      });
+      expect(threads[0], 'inbound dispatch mapped the chat thread to a Mastra thread').toBeDefined();
+      adapter.addReaction.mockClear();
+      const tools = channels.getTools() as Record<
+        string,
+        { execute: (input: unknown, ctx: unknown) => Promise<unknown> }
+      >;
+      return { adapter, tools, threadId: threads[0]!.id };
+    }
+
+    it('reacts through the agent thread id', async () => {
+      const { adapter, tools, threadId } = await mappedThread();
+
+      await tools.add_reaction!.execute(
+        { messageId: 'm-1', emoji: 'eyes' },
+        { requestContext: new RequestContext(), agent: { threadId } },
+      );
+      await tools.remove_reaction!.execute(
+        { messageId: 'm-1', emoji: 'eyes' },
+        { requestContext: new RequestContext(), agent: { threadId } },
+      );
+
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+      expect(adapter.removeReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('reacts through the memory thread on request context', async () => {
+      const { adapter, tools, threadId } = await mappedThread();
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: threadId } });
+
+      await tools.add_reaction!.execute({ messageId: 'm-1', emoji: 'eyes' }, { requestContext });
+
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('reacts from an agent run that a prompt outside the channel started', async () => {
+      // Inbound runs answer with text; the later prompt answers with a reaction.
+      let react = false;
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async options => {
+          call += 1;
+          const reacting = react && !options.prompt.some(m => m.role === 'tool');
+          if (!reacting) return createTextStreamModel('ok').doStream(options);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'react-1',
+                toolName: 'add_reaction',
+                input: '{"messageId":"m-1","emoji":"eyes"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      });
+      // Like a host that mounts `channels.getTools()` on its agent.
+      let channelTools: Record<string, unknown> = {};
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model,
+        tools: (() => channelTools) as any,
+      });
+      channelTools = channels.getTools();
+      const chatThread = createChatThread(adapter, 'discord:t-react-run');
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => postedText(chatThread).includes('ok'), { what: 'the inbound reply' });
+      expect(adapter.addReaction).not.toHaveBeenCalled();
+
+      // A Studio or API prompt on the same session: no inbound message, no `channel`.
+      react = true;
+      const session = (await controller.getSession('channel:discord:t-react-run'))!;
+      await session.permissions.setForTool({ toolName: 'add_reaction', policy: 'allow' });
+      await session.sendMessage({ content: 'react to the last message' });
+
+      await waitFor(() => adapter.addReaction.mock.calls.length > 0, { what: 'the reaction from the agent run' });
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react-run', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('still fails clearly when the thread is not in a channel', async () => {
+      const { adapter, tools } = await mappedThread();
+
+      await expect(
+        tools.add_reaction!.execute(
+          { messageId: 'm-1', emoji: 'eyes' },
+          { requestContext: new RequestContext(), agent: { threadId: 'no-such-thread' } },
+        ),
+      ).rejects.toThrow('No channel context');
+      expect(adapter.addReaction).not.toHaveBeenCalled();
     }, 30_000);
   });
 });
@@ -1192,7 +1446,7 @@ describe('AgentControllerChannels thread history', () => {
       mastra,
       new RequestContext(),
     );
-    const session = await controller.getSessionByResource('channel:C123:456');
+    const session = await controller.getSession('channel:C123:456');
     const threadId = session!.thread.getId()!;
     await vi.waitFor(async () =>
       expect((await agentMemory.getThreadById({ threadId }))?.title).toBe('Fix checkout timeouts'),
@@ -1257,7 +1511,7 @@ describe('AgentControllerChannels thread history', () => {
     expect(JSON.stringify(sends[0].input.contents)).not.toContain('[Thread context');
     await expect(sends[0].result.accepted).resolves.toMatchObject({ action: 'wake' });
 
-    const session = await controller.getSessionByResource('channel:chan-1:t-history');
+    const session = await controller.getSession('channel:chan-1:t-history');
     const threadId = session!.thread.getId()!;
     const memoryStore = await (agentMemory as any).storage.getStore('memory');
     const { messages } = await memoryStore!.listMessages({ threadId, perPage: 50 });

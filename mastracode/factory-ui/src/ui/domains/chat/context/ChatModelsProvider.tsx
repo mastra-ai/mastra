@@ -2,9 +2,11 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
+import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { routedDefaultModelId } from './chatDefaultModel';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
@@ -24,17 +26,29 @@ export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { projectQuery: factoryProjectQuery, modelScope } = useChatModelScope();
+  const { projectQuery: factoryProjectQuery, modelScope, catalogTarget } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
+  const fallbackModelQuery = useFallbackModelQuery(catalogTarget);
   const [draftModelId, setDraftModelId] = useState<string>();
-  const defaultModelId =
-    (modelScope === 'factory' ? factoryProjectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId) ??
-    undefined;
+  const defaultModelId = routedDefaultModelId(modelScope, {
+    factory: factoryProjectQuery.data?.defaultModelId,
+    personal: defaultModelQuery.data?.modelId,
+  });
+  const personalDefaultUsed = modelScope !== 'factory';
+  const usesFallback = !defaultModelId;
   const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? defaultModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
+    activeModelId: draftModelId ?? defaultModelId ?? fallbackModelQuery.data,
     defaultModelId,
-    isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
-    error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
+    pendingModelId: undefined,
+    isLoading:
+      factoryProjectQuery.isPending ||
+      (personalDefaultUsed && defaultModelQuery.isPending) ||
+      (usesFallback && fallbackModelQuery.isPending),
+    error:
+      factoryProjectQuery.error ??
+      (personalDefaultUsed ? defaultModelQuery.error : null) ??
+      (usesFallback ? fallbackModelQuery.error : null) ??
+      undefined,
     setModel: modelId => {
       setDraftModelId(modelId);
       return Promise.resolve();
@@ -45,26 +59,32 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
   const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
-  const localDefaultModelId =
-    modelScope === 'factory' ? projectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId;
+  const localDefaultModelId = routedDefaultModelId(modelScope, {
+    factory: projectQuery.data?.defaultModelId,
+    personal: defaultModelQuery.data?.modelId,
+  });
   const defaultModelId = sessionModelsQuery.isSuccess
     ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
       undefined)
     : undefined;
-  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
+  const {
+    mutateAsync: switchModel,
+    isPending: switching,
+    variables: switchingTo,
+  } = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   });
   const value: ChatModelsApi = {
     activeModelId: state?.modelId,
     defaultModelId,
+    pendingModelId: switching ? switchingTo?.modelId : undefined,
     isLoading: sessionModelsQuery.isPending,
     error: sessionModelsQuery.error ?? undefined,
     setModel: modelId => switchModel({ modelId }),

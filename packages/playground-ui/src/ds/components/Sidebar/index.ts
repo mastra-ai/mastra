@@ -1,4 +1,5 @@
 export { Sidebar } from './sidebar';
+export { SidebarBadge, type SidebarBadgeProps } from './header/sidebar-badge';
 export { SidebarBrand, type SidebarBrandProps } from './header/sidebar-brand';
 export { SidebarCommandHeader, type SidebarCommandHeaderProps } from './header/sidebar-command-header';
 export { SidebarFooter, type SidebarFooterProps } from './footer/sidebar-footer';
