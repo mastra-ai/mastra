@@ -268,19 +268,15 @@ describe('MSSQLStore Pool Exposure', () => {
 // Helper to check if a MSSQL index exists in a specific schema
 const mssqlIndexExists = async (store: MSSQLStore, namePattern: string): Promise<boolean> => {
   const schemaName = (store as any).schema || 'dbo';
-  try {
-    const result = await store.pool.request().input('schemaName', schemaName).input('namePattern', `%${namePattern}%`)
-      .query(`
-        SELECT 1 as found
-        FROM sys.indexes i
-        INNER JOIN sys.tables t ON i.object_id = t.object_id
-        INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-        WHERE s.name = @schemaName AND i.name LIKE @namePattern
-      `);
-    return result.recordset.length > 0;
-  } catch {
-    return false;
-  }
+  const result = await store.pool.request().input('schemaName', schemaName).input('namePattern', `%${namePattern}%`)
+    .query(`
+      SELECT 1 as found
+      FROM sys.indexes i
+      INNER JOIN sys.tables t ON i.object_id = t.object_id
+      INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+      WHERE s.name = @schemaName AND i.name LIKE @namePattern
+    `);
+  return result.recordset.length > 0;
 };
 
 // Store-level index configuration tests
