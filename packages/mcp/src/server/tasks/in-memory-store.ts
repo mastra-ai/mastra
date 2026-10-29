@@ -49,7 +49,7 @@ export interface InMemoryMCPTaskStoreOptions {
 
 interface PendingInput {
   requests: MCPTaskInputRequests;
-  responses: MCPTaskInputResponses;
+  responses: Map<string, MCPTaskInputResponses[string]>;
   resolve: (responses: MCPTaskInputResponses) => void;
   reject: (error: Error) => void;
 }
@@ -142,12 +142,12 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     const pending = record.pendingInput;
     if (!pending) return true;
     for (const [key, response] of Object.entries(inputResponses)) {
-      if (key in pending.requests && !(key in pending.responses)) pending.responses[key] = response;
+      if (Object.hasOwn(pending.requests, key) && !pending.responses.has(key)) pending.responses.set(key, response);
     }
-    if (Object.keys(pending.requests).every(key => key in pending.responses)) {
+    if (Object.keys(pending.requests).every(key => pending.responses.has(key))) {
       record.pendingInput = undefined;
       this.#transition(record, 'working');
-      pending.resolve(pending.responses);
+      pending.resolve(Object.fromEntries(pending.responses));
     }
     return true;
   }
@@ -226,7 +226,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     const { suspendPayload } = outcome;
     record.pendingInput = {
       requests: outcome.inputRequests,
-      responses: {},
+      responses: new Map(),
       resolve: inputResponses => this.#attempt(record, work, { inputResponses, suspendPayload }),
       // Cancellation and expiry abort the signal; nothing is waiting on this attempt.
       reject: () => {},
@@ -264,7 +264,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
         }
         for (const key of keys) record.usedInputKeys.add(key);
         return new Promise<MCPTaskInputResponses>((resolve, reject) => {
-          record.pendingInput = { requests, responses: {}, resolve, reject };
+          record.pendingInput = { requests, responses: new Map(), resolve, reject };
           this.#transition(record, 'input_required');
         });
       },
@@ -281,12 +281,11 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     };
   }
 
-  /** Aborts all work and forgets every task. */
+  /** Cancels all running work, invalidates every handle and forgets every task. */
   close(): void {
     for (const record of this.#tasks.values()) {
       clearTimeout(record.expiryTimer);
-      record.pendingInput?.reject(new Error('MCP task store closed'));
-      record.abort.abort();
+      if (!isTerminalTaskStatus(record.status)) this.#finish(record, 'cancelled', new Error('MCP task store closed'));
     }
     this.#tasks.clear();
     this.#openByPrincipal.clear();
@@ -342,10 +341,8 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     this.#transition(record, status);
     const pending = record.pendingInput;
     record.pendingInput = undefined;
-    if (reason) {
-      pending?.reject(reason);
-      record.abort.abort(reason);
-    }
+    pending?.reject(reason ?? new Error(`MCP task "${record.taskId}" ${status} while waiting for input`));
+    if (reason) record.abort.abort(reason);
   }
 
   #snapshot(record: TaskRecord): MCPTask {
@@ -365,7 +362,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     switch (record.status) {
       case 'input_required': {
         const { requests, responses } = record.pendingInput!;
-        const open = Object.fromEntries(Object.entries(requests).filter(([key]) => !(key in responses)));
+        const open = Object.fromEntries(Object.entries(requests).filter(([key]) => !responses.has(key)));
         return { ...base, status: 'input_required', inputRequests: open };
       }
       case 'completed':
