@@ -651,7 +651,7 @@ export class BackgroundTaskManager {
     try {
       await this.pubsub.publish(dispatchTopic, {
         type: 'task.resume',
-        data: { taskId, resumeData },
+        data: { taskId, resumeData, suspendedAt: suspensionToken(task) },
         runId: taskId,
       });
     } catch (error) {
@@ -1529,16 +1529,19 @@ export class BackgroundTaskManager {
   private async handleResume(event: Event): Promise<boolean> {
     if (this.shuttingDown) return false;
     const { taskId, resumeData } = event.data;
+    // The suspension this event answers. Absent on events published by an
+    // older version, which fall back to the status-only check.
+    const answers: number | null | undefined = event.data.suspendedAt;
     this.inFlightPortableResumes.delete(taskId);
 
     const storage = await this.getStorage();
     if (this.shuttingDown) return false;
     const task = await storage.getTask(taskId);
     if (this.shuttingDown) return false;
-    if (!task || task.status !== 'suspended') {
-      // Either gone or already resumed/cancelled by another worker. Drop the
-      // event silently — the worker group ensures exactly-once delivery, but
-      // the task may have moved on between publish and pickup.
+    if (!task || task.status !== 'suspended' || (answers !== undefined && suspensionToken(task) !== answers)) {
+      // Either gone, already resumed/cancelled by another worker, or resumed
+      // and suspended again — this event's data answers an earlier
+      // suspension. Drop it.
       this.releaseLocalSlot(taskId);
       void this.drainPending();
       return true;
@@ -1554,7 +1557,7 @@ export class BackgroundTaskManager {
         ownerId: this.workerId,
         leaseExpiresAt: new Date(Date.now() + this.config.leaseDurationMs),
       },
-      { expectedStatus: 'suspended' },
+      { expectedStatus: 'suspended', expectedSuspendedAt: task.suspendedAt ?? null },
     );
     if (!resumed) {
       this.releaseLocalSlot(taskId);
