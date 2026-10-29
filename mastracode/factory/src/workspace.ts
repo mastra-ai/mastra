@@ -59,6 +59,7 @@ import {
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { instrumentMethods, timed, timedPhase } from './timing.js';
@@ -183,6 +184,14 @@ class CodeSkillSource implements SkillSource {
   }
 }
 
+/** A project's edited SKILL.md, served in place of the original's. */
+export interface FactorySkillOverride {
+  content: string;
+  updatedAt: Date;
+}
+
+const NO_SKILL_OVERRIDES: ReadonlyMap<string, FactorySkillOverride> = new Map();
+
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
@@ -197,6 +206,9 @@ export class FactorySkillSource implements SkillSource {
     readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
     /** Skills passed as `MastraFactory({ skills })`; they win over local and bundled skills of the same name. */
     codeSkills: readonly InlineSkill[] = [],
+    /** The session project's edited SKILL.md files by skill name; read per call so saves and reverts apply on the next scan. */
+    readonly skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>> = () =>
+      Promise.resolve(NO_SKILL_OVERRIDES),
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
     this.#codeSource = codeSkills.length > 0 ? new CodeSkillSource(codeSkills) : undefined;
@@ -232,6 +244,17 @@ export class FactorySkillSource implements SkillSource {
     return this.#bundledSource;
   }
 
+  /**
+   * The edit replacing this path, when it is a skill's SKILL.md. Only the instructions are
+   * edited; the skill's other files still come from its layer. `exists` and `readdir` never
+   * consult edits, so an edit whose skill was removed from the app is never discovered.
+   */
+  async #overrideFor(relativePath: string): Promise<FactorySkillOverride | undefined> {
+    const [skillName, file, ...rest] = relativePath.split(path.sep);
+    if (!skillName || file !== 'SKILL.md' || rest.length > 0) return undefined;
+    return (await this.skillOverrides()).get(skillName);
+  }
+
   async exists(skillPath: string): Promise<boolean> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
@@ -245,6 +268,16 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) {
+      return {
+        name: 'SKILL.md',
+        type: 'file',
+        size: Buffer.byteLength(override.content),
+        createdAt: override.updatedAt,
+        modifiedAt: override.updatedAt,
+      };
+    }
     return (await this.#layerFor(relative)).stat(relative);
   }
 
@@ -252,6 +285,8 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) return override.content;
     return (await this.#layerFor(relative)).readFile(relative);
   }
 
@@ -364,6 +399,7 @@ class UnmaterializedAwareSkillSource implements SkillSource {
 function createFactorySkillExtension(
   isReviewSession: () => Promise<boolean>,
   codeSkills: readonly InlineSkill[],
+  skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>>,
 ): WorkspaceSkillExtension {
   return {
     id: 'web-factory',
@@ -375,6 +411,7 @@ function createFactorySkillExtension(
         resolveLocalFactorySkillsPath(),
         isReviewSession,
         codeSkills,
+        skillOverrides,
       ),
   };
 }
@@ -425,6 +462,8 @@ export interface CreateWorkspaceFactoryOptions {
   workspaceRegistry?: FactoryWorkspaceRegistry;
   /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
   skills?: readonly InlineSkill[];
+  /** Per-project SKILL.md edits served over the Factory skills of each session's project. */
+  skillOverrides?: Pick<SkillOverridesStorage, 'revision' | 'snapshot'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -629,7 +668,7 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -655,13 +694,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
   const constructedWorkspaces = new Map<string, Workspace>();
-  // Review-skill visibility last used to populate each workspace's skill cache.
-  const skillCacheReviewState = new Map<string, boolean>();
+  // Review-skill visibility and override revision last used to populate each workspace's skill cache.
+  const skillCacheState = new Map<string, string>();
   const skillCacheRefreshes = new Map<string, Promise<void>>();
   // The review check of the latest request to resolve each workspace. The skill
   // source outlives the request that built it, so it must gate on this rather
   // than on the context it was constructed with.
   const skillReviewChecks = new Map<string, () => Promise<boolean>>();
+  // The project skill edits each workspace's skill source serves, and the
+  // override revision they were read at. Loaded on first use, so building a
+  // workspace never suspends between the reuse check and construction.
+  const skillOverrideStates = new Map<
+    string,
+    Promise<{ revision: number; overrides: ReadonlyMap<string, FactorySkillOverride> }>
+  >();
+  const skillCacheKey = (isReview: boolean, revision: number) => `${isReview ? 'review' : 'work'}@${revision}`;
 
   const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -1024,11 +1071,36 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       createFactorySkillExtension(
         (): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)(),
         options.skills ?? [],
+        async () => (await (skillOverrideStates.get(workspaceId) ?? loadSkillOverrides())).overrides,
       );
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
     if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
+    // A caller-supplied skill extension owns its own skills, so edits only apply to Factory's.
+    const overrideScope =
+      skillOverrides && !skillExtension ? { orgId: session.orgId, projectId: connection.factoryProjectId } : undefined;
+    const currentOverrideRevision = async () => (overrideScope ? skillOverrides!.revision(overrideScope) : 0);
+    const loadSkillOverrides = () => {
+      const loading = (async () => {
+        if (!overrideScope) return { revision: 0, overrides: NO_SKILL_OVERRIDES };
+        const snapshot = await skillOverrides!.snapshot(overrideScope);
+        return {
+          revision: snapshot.revision,
+          overrides: new Map(
+            snapshot.overrides.map(o => [o.skillName, { content: o.content, updatedAt: o.updatedAt }] as const),
+          ),
+        };
+      })();
+      skillOverrideStates.set(workspaceId, loading);
+      // A failed read is retried by the next skill access instead of being served forever.
+      loading.catch(() => {
+        if (skillOverrideStates.get(workspaceId) === loading) skillOverrideStates.delete(workspaceId);
+      });
+      return loading;
+    };
+    const loadedOverrideRevision = async () =>
+      (await skillOverrideStates.get(workspaceId)?.catch(() => undefined))?.revision;
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
@@ -1191,7 +1263,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
-            skillCacheReviewState.delete(workspaceId);
+            skillCacheState.delete(workspaceId);
           }
         }
         throw error;
@@ -1214,6 +1286,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
+      // Likewise when the project's skill-override revision moves: a save or revert
+      // must reach the next session on this workspace, not wait for a staleness walk.
       if (!skillExtension) {
         // An outside rescan makes the recorded role untrustworthy. Wait for it to
         // settle first, so the refresh below starts a scan for the current role
@@ -1224,11 +1298,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           await outside;
           if (rescannedOutsideResolver.get(existing.skills!) === outside)
             rescannedOutsideResolver.delete(existing.skills!);
-          skillCacheReviewState.delete(workspaceId);
+          skillCacheState.delete(workspaceId);
           return true;
         };
         await consumeOutsideRescan();
-        let isReview = await isReviewSession();
+        const readTarget = async () => {
+          const [isReview, revision] = await Promise.all([isReviewSession(), currentOverrideRevision()]);
+          return { isReview, revision };
+        };
+        let target = await readTarget();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
         // been started for the opposite role) and re-read the role afterwards.
@@ -1236,22 +1314,26 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const inFlight = skillCacheRefreshes.get(workspaceId);
           if (inFlight) {
             await inFlight;
-            isReview = await isReviewSession();
+            target = await readTarget();
             continue;
           }
           if (await consumeOutsideRescan()) {
-            isReview = await isReviewSession();
+            target = await readTarget();
             continue;
           }
-          if (skillCacheReviewState.get(workspaceId) === isReview) break;
-          const target = isReview;
+          if (skillCacheState.get(workspaceId) === skillCacheKey(target.isReview, target.revision)) break;
+          const { isReview, revision } = target;
           const pending = (async () => {
+            const served =
+              (await loadedOverrideRevision()) === revision ? revision : (await loadSkillOverrides()).revision;
             await existing.skills?.refresh();
-            skillCacheReviewState.set(workspaceId, target);
+            // Record the revision the source actually serves; a save landing after
+            // `readTarget` makes the next check rescan rather than skip it.
+            skillCacheState.set(workspaceId, skillCacheKey(isReview, served));
           })().finally(() => skillCacheRefreshes.delete(workspaceId));
           skillCacheRefreshes.set(workspaceId, pending);
           await pending;
-          isReview = await isReviewSession();
+          target = await readTarget();
         }
       }
       // A materialization kicked off by another caller may still be running.
@@ -1611,6 +1693,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // point, and a concurrent resolution for the same session must observe this
     // workspace rather than build a second one.
     constructedWorkspaces.set(workspaceId, workspace);
+    // A workspace evicted and rebuilt under this id reads the project's edits afresh.
+    skillOverrideStates.delete(workspaceId);
     // Retirement is registered against the workspace itself rather than the
     // sandbox: construction is eager while the VM start is lazy, so a session
     // retired before its first tool call still has a workspace (and possibly a
@@ -1622,8 +1706,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       async () => {
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
-        skillCacheReviewState.delete(workspaceId);
+        skillCacheState.delete(workspaceId);
         skillReviewChecks.delete(workspaceId);
+        skillOverrideStates.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.
