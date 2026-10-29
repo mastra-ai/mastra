@@ -105,6 +105,17 @@ describe('waitForTask during a server outage', () => {
     expect(elapsed()).toBe(20_000);
   });
 
+  it('counts the TTL from when it first saw the task when createdAt does not parse', async () => {
+    const { port, options, elapsed } = scripted([refused()]);
+
+    const error = await waitForTask(port, { ...created, createdAt: 'not a date', ttlMs: 20_000 }, options).catch(
+      e => e,
+    );
+
+    expect(error).toMatchObject({ reason: 'unreachable' });
+    expect(elapsed()).toBe(20_000);
+  });
+
   it('times out and cancels when maxWaitMs ends during the outage', async () => {
     const { port, options } = scripted([refused()]);
 
