@@ -824,6 +824,24 @@ describe('Scheduler', () => {
       await scheduler.stop();
     });
 
+    it('finds a direct storage write every tick when the cap is not above the tick interval', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 20, maxIdleIntervalMs: 10 },
+      });
+
+      await scheduler.start();
+      await store.createSchedule(row('sched-small-cap', Date.now() - 1));
+      await wait(150);
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
     it('clamps a cap beyond the largest timer delay instead of polling in a hot loop', async () => {
       const { store } = makeStore();
       const scheduler = new Scheduler({

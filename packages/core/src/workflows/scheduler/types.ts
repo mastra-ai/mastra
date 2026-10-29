@@ -82,7 +82,7 @@ export type SchedulerConfig = {
    * to storage directly, or by a process that shares no pubsub with this one.
    * With `enabled: true` it opts that fixed-interval poller into the same
    * capped sleep, so scale-to-zero databases (e.g. Neon) can suspend.
-   * Ignored unless greater than `tickIntervalMs`.
+   * Values at or below `tickIntervalMs` check storage every tick.
    */
   maxIdleIntervalMs?: number;
   /**
