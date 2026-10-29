@@ -6,7 +6,7 @@ Added a schema for custom dashboard definitions. A definition lays out rows of w
 
 `dashboardDefinitionSchema` validates a whole definition. `dashboardDefinitionEnvelopeSchema` checks only what a service storing dashboards needs (known `schemaVersion`, at most 20 widgets, 1 to 8 queries per view, 64 KiB serialized, unique widget ids, every widget has `kind` and `views`), so new widget kinds can be stored without upgrading that service.
 
-Widget `kind` accepts any non-empty string, and view `options` are passed through for each kind to validate, so new widget kinds need no `@mastra/core` upgrade. `DASHBOARD_WIDGET_KINDS` lists the built-in kinds (`kpis`, `breakdown`, `timeseries`, `scores`); `table` is reserved for a future generic table kind. Adding an optional field keeps `schemaVersion` the same; a breaking change bumps it and comes with an upgrade step in `migrateDashboardDefinition`, which brings any stored version up to the current one before parsing.
+Widget `kind` accepts any non-empty string, and view `options` are passed through for each kind to validate, so new widget kinds need no `@mastra/core` upgrade. `DASHBOARD_WIDGET_KINDS` lists the built-in kinds (`kpis`, `table`, `timeseries`, `scores`). Adding an optional field keeps `schemaVersion` the same; a breaking change bumps it and comes with an upgrade step in `migrateDashboardDefinition`, which brings any stored version up to the current one before parsing.
 
 The dashboard schemas are also exported from `@mastra/core/storage/dashboards`, which browser apps can import: it loads no Node built-ins and uses no Node globals such as `process` or `Buffer`, unlike `@mastra/core/storage`, which reaches agent code that reads `process` when it loads.
 
@@ -21,7 +21,7 @@ const result = dashboardDefinitionSchema.safeParse({
         {
           id: 'agents',
           span: 6,
-          kind: 'breakdown',
+          kind: 'table',
           views: [
             {
               queries: [

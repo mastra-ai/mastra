@@ -108,7 +108,7 @@ const metricsDashboard: DashboardDefinition = {
         {
           id: 'agents',
           span: 6,
-          kind: 'breakdown',
+          kind: 'table',
           title: 'Agents',
           views: [
             {
@@ -314,7 +314,7 @@ describe('dashboardDefinitionSchema', () => {
     const result = dashboardDefinitionSchema.safeParse(input);
     expect(messages(result)).toEqual([]);
     expect(result.data?.rows[0]!.widgets[0]).toMatchObject({ kind: 'heatmap', views: [{ options }] });
-    expect(DASHBOARD_WIDGET_KINDS).toEqual(['kpis', 'breakdown', 'timeseries', 'scores']);
+    expect(DASHBOARD_WIDGET_KINDS).toEqual(['kpis', 'table', 'timeseries', 'scores']);
   });
 
   it('still validates the common widget shape and queries for any kind', () => {
@@ -389,7 +389,7 @@ describe('dashboardDefinitionSchema', () => {
   it('rejects duplicate column ids within a view', () => {
     const columns = [{ id: 'count' }, { id: 'errorCount' }, { id: 'count', label: 'Runs' }];
     const result = dashboardDefinitionSchema.safeParse(
-      definition([[widget('w', { kind: 'breakdown', views: [{ queries: [countQuery], columns }] })]]),
+      definition([[widget('w', { kind: 'table', views: [{ queries: [countQuery], columns }] })]]),
     );
     expect(messages(result)).toEqual(["Duplicate column id 'count'"]);
     expect(result.error?.issues[0]?.path).toEqual(['rows', 0, 'widgets', 0, 'views', 0, 'columns', 2, 'id']);

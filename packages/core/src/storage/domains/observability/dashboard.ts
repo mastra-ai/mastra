@@ -46,8 +46,7 @@ export const DASHBOARD_MAX_QUERIES_PER_VIEW = 8;
 export const DASHBOARD_MAX_BYTES = 64 * 1024;
 export const DASHBOARD_WIDGET_SPANS = [1, 2, 3, 4, 6, 12] as const;
 /** Kinds the built-in renderer ships. Not enforced: `kind` accepts any non-empty string. */
-// 'table' is reserved for a future generic table kind.
-export const DASHBOARD_WIDGET_KINDS = ['kpis', 'breakdown', 'timeseries', 'scores'] as const;
+export const DASHBOARD_WIDGET_KINDS = ['kpis', 'table', 'timeseries', 'scores'] as const;
 export const DASHBOARD_SCOPES = ['org', 'project'] as const;
 export const DASHBOARD_DRILLDOWN_PAGES = ['traces', 'spans', 'logs', 'threads'] as const;
 
