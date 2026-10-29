@@ -1,4 +1,5 @@
 import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon, SplitIcon } from 'lucide-react';
+import { Fragment } from 'react';
 import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
@@ -161,6 +162,96 @@ export function TracesDataListStatusCell({ status }: TracesDataListStatusCellPro
       <Badge size="xs" variant={config.variant}>
         {config.label}
       </Badge>
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OutcomeCell
+// ---------------------------------------------------------------------------
+
+const OUTCOME_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
+  success: { label: 'OK', variant: 'success' },
+  error: { label: 'ERR', variant: 'destructive' },
+  abort: { label: 'Abort', variant: 'warning' },
+  interrupted: { label: 'Interrupted', variant: 'warning' },
+  limit: { label: 'Limit', variant: 'orange' },
+  blocked: { label: 'Blocked', variant: 'orange' },
+  suspend: { label: 'Suspend', variant: 'info' },
+  unknown: { label: 'Unknown', variant: 'neutral' },
+};
+
+const formatContextValue = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value));
+
+export interface TracesDataListOutcomeCellProps {
+  outcome?: string | null;
+  stopReason?: string | null;
+  stopReasonContext?: Record<string, unknown> | null;
+  /** Error-based status, shown muted when no outcome was recorded. */
+  status?: string | null;
+}
+
+export function TracesDataListOutcomeCell({
+  outcome,
+  stopReason,
+  stopReasonContext,
+  status,
+}: TracesDataListOutcomeCellProps) {
+  if (!outcome) {
+    const config = STATUS_CONFIG[(status ?? 'unset').toLowerCase()] ?? UNSET_STATUS_CONFIG;
+    const badge = (
+      <Badge size="xs" variant={config.variant} emphasis="subtle">
+        {config.label}
+      </Badge>
+    );
+    return (
+      <DataListCell>
+        {config === UNSET_STATUS_CONFIG ? (
+          badge
+        ) : (
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex" />}>{badge}</TooltipTrigger>
+            <TooltipContent>Outcome not recorded; status from error</TooltipContent>
+          </Tooltip>
+        )}
+      </DataListCell>
+    );
+  }
+
+  const config = OUTCOME_CONFIG[outcome.toLowerCase()] ?? { label: outcome, variant: 'neutral' };
+  const contextEntries = stopReasonContext ? Object.entries(stopReasonContext) : [];
+  const content = (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <Badge size="xs" variant={config.variant}>
+        {config.label}
+      </Badge>
+      {stopReason && (
+        <Txt as="span" variant="body-sm" tone="muted" font="mono" className="min-w-0 truncate">
+          · {stopReason}
+        </Txt>
+      )}
+    </span>
+  );
+
+  return (
+    <DataListCell className="flex min-w-0 items-center">
+      {contextEntries.length > 0 ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="inline-flex min-w-0" />}>{content}</TooltipTrigger>
+          <TooltipContent>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              {contextEntries.map(([key, value]) => (
+                <Fragment key={key}>
+                  <dt>{key}</dt>
+                  <dd>{formatContextValue(value)}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        content
+      )}
     </DataListCell>
   );
 }

@@ -16,6 +16,7 @@ import {
   TracesDataListOutputCell,
   TracesDataListTypeCell,
   TracesDataListStatusCell,
+  TracesDataListOutcomeCell,
 } from './traces-data-list-cells';
 
 // oxlint-disable-next-line react/only-export-components -- compound component root, same pattern as ScoresDataList
@@ -41,5 +42,6 @@ export const TracesDataList = Object.assign(TracesDataListRoot, {
   OutputCell: TracesDataListOutputCell,
   TypeCell: TracesDataListTypeCell,
   StatusCell: TracesDataListStatusCell,
+  OutcomeCell: TracesDataListOutcomeCell,
   NextPageLoading: DataListNextPageLoading,
 });

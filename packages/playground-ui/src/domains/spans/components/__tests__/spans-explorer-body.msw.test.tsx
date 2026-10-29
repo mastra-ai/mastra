@@ -15,10 +15,12 @@ import {
   emptySpanRows,
   endedSpan,
   firstListedSpan,
+  limitedSpanPage,
   spanAggregateCapabilities,
   spanAggregateError,
   spanCountsAggregate,
   spanHeadPage,
+  spanOutcomeCapabilities,
   spanQueryCapabilities,
   spanRowsPage,
 } from '../../__tests__/fixtures/spans';
@@ -105,6 +107,66 @@ describe('SpansExplorerBody', () => {
   });
   beforeEach(() => {
     window.localStorage.clear();
+  });
+
+  describe('when the store records span outcomes', () => {
+    const spanQueryBodies = vi.fn<(body: unknown) => void>();
+    const setOutcomeHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
+      setHandlers(limitedSpanPage);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          spanQueryBodies(await request.json());
+          return HttpResponse.json(limitedSpanPage);
+        }),
+      );
+    };
+    const filterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
+
+    afterEach(() => spanQueryBodies.mockClear());
+
+    it('shows each span outcome with its stop reason', async () => {
+      setOutcomeHandlers(spanOutcomeCapabilities);
+
+      renderBody();
+
+      const row = await screen.findByRole('button', { name: /agent run: weather/ });
+      expect(within(row).getByText('Limit')).toBeTruthy();
+      expect(within(row).getByText('· max_steps')).toBeTruthy();
+    });
+
+    it('queries spans with no recorded outcome', async () => {
+      setOutcomeHandlers(spanOutcomeCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Outcome' } });
+      await screen.findByRole('option', { name: 'Outcome' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+      fireEvent.change(filterInput(), { target: { value: 'is not recorded' } });
+      await screen.findByRole('option', { name: 'is not recorded' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+
+      await waitFor(() =>
+        expect(spanQueryBodies).toHaveBeenLastCalledWith(
+          expect.objectContaining({ where: { op: 'and', args: [{ op: 'notExists', path: 'outcome' }] } }),
+        ),
+      );
+    });
+
+    it('does not offer outcome filters when the store cannot filter on them', async () => {
+      setOutcomeHandlers(spanQueryCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Status' } });
+      await screen.findByRole('option', { name: 'Status' });
+      fireEvent.change(filterInput(), { target: { value: 'Outcome' } });
+
+      expect(screen.queryByRole('option', { name: 'Outcome' })).toBeNull();
+    });
   });
 
   describe('when the store returns span rows', () => {

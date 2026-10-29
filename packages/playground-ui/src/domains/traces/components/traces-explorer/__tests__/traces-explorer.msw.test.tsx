@@ -25,6 +25,8 @@ import {
   idleDeltaBatch,
   noDeltaPollingCapabilities,
   noRootDurationCapabilities,
+  outcomeCapabilities,
+  outcomeTracesPage,
   noSpanQueryCapabilities,
   noThreadRowsCapabilities,
   noTimeToFirstChunkCapabilities,
@@ -303,7 +305,7 @@ describe('TracesExplorer', () => {
       renderExplorer();
 
       expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
-      expect(screen.getByText('Status')).toBeTruthy();
+      expect(screen.getByText('Outcome')).toBeTruthy();
       expect(screen.queryByText('Messages')).toBeNull();
     });
   });
@@ -622,6 +624,72 @@ describe('TracesExplorer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
       expect(onChange.mock.calls.at(-1)?.[0].filters.tokens).toEqual(SCOPE_TOKENS);
+    });
+  });
+
+  describe('when the server records trace outcomes', () => {
+    const lastWhere = () => (onTraceQuery.mock.calls.at(-1)?.[0] as { where?: unknown } | undefined)?.where;
+
+    it('shows each root outcome, and the error status where none was recorded', async () => {
+      setExplorerHandlers(outcomeCapabilities, outcomeTracesPage);
+
+      renderExplorer();
+
+      const limited = await screen.findByRole('button', { name: /What is the weather in Paris\?/ });
+      expect(within(limited).getByText('Limit')).toBeTruthy();
+      expect(within(limited).getByText('· max_steps')).toBeTruthy();
+      expect(within(traceRow('Book a table for two')).getByText('ERR')).toBeTruthy();
+    });
+
+    it('sends outcome and missing-stop-reason filters in the trace query', async () => {
+      setExplorerHandlers(outcomeCapabilities, outcomeTracesPage);
+
+      const { queryClient } = renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [
+            { fieldId: 'outcome', value: 'limit' },
+            { fieldId: 'stopReason', operatorId: 'notExists', value: '' },
+          ],
+        },
+      });
+      await settle(queryClient);
+
+      expect(lastWhere()).toEqual({
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+          { op: 'notExists', path: 'stopReason' },
+        ],
+      });
+    });
+
+    it('offers the Outcome filter with a not-recorded operator', async () => {
+      setExplorerHandlers(outcomeCapabilities, outcomeTracesPage);
+      const { queryClient } = renderExplorer();
+      await settle(queryClient);
+      const input = () => screen.getByRole('combobox', { name: 'Add filter' });
+
+      input().focus();
+      fireEvent.change(input(), { target: { value: 'Outcome' } });
+      await screen.findByRole('option', { name: 'Outcome' });
+      fireEvent.keyDown(input(), { key: 'Enter' });
+
+      expect(await screen.findByRole('option', { name: 'is not recorded' })).toBeTruthy();
+    });
+  });
+
+  describe('when the server cannot filter on trace outcomes', () => {
+    it('does not send outcome tokens in the trace query', async () => {
+      setExplorerHandlers(traceQueryCapabilities, outcomeTracesPage);
+
+      const { queryClient } = renderExplorer({
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: [{ fieldId: 'outcome', value: 'limit' }] },
+      });
+      await settle(queryClient);
+
+      expect(onTraceQuery).toHaveBeenCalled();
+      expect(JSON.stringify(onTraceQuery.mock.calls.at(-1)?.[0])).not.toContain('outcome');
     });
   });
 

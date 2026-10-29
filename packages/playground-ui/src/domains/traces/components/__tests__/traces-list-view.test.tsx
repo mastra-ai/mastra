@@ -91,7 +91,7 @@ describe('TracesListView columns', () => {
         'Primitive name',
         'Input',
         'Output',
-        'Status',
+        'Outcome',
         'Duration',
         'Est. cost',
       ]);
@@ -165,13 +165,119 @@ describe('TracesListView — status column', () => {
   });
 });
 
+describe('TracesListView — outcome column', () => {
+  const outcomeLast = { visibleColumns: [], customColumns: [], metadataKeys: [] } as const;
+  const outcomeCell = (traceName: string) => {
+    const cell = screen.getByRole('button', { name: new RegExp(traceName) }).lastElementChild;
+    assert(cell instanceof HTMLElement);
+    return cell;
+  };
+
+  it('shows the outcome badge followed by the stop reason', () => {
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[makeTrace({ traceId: 'limited', status: 'success', outcome: 'limit', stopReason: 'max_steps' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(outcomeCell('run limited').textContent).toBe('Limit· max_steps');
+  });
+
+  it('shows only the badge when no stop reason was recorded', () => {
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[makeTrace({ traceId: 'ok', status: 'success', outcome: 'success' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const cell = outcomeCell('run ok');
+    expect(cell.textContent).toBe('OK');
+    expect(cell.querySelector('[data-base-ui-tooltip-trigger]')).toBeNull();
+  });
+
+  it('lists the stop reason context when hovering the outcome', async () => {
+    const user = userEvent.setup();
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[
+          makeTrace({
+            traceId: 'limited',
+            outcome: 'limit',
+            stopReason: 'max_steps',
+            stopReasonContext: { limit: 5, scope: 'agent' },
+          }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    await user.hover(screen.getByText('Limit'));
+
+    expect(await screen.findByText('limit')).toBeTruthy();
+    expect(screen.getByText('5')).toBeTruthy();
+    expect(screen.getByText('scope')).toBeTruthy();
+    expect(screen.getByText('agent')).toBeTruthy();
+  });
+
+  it('falls back to the error-based status and says the outcome was not recorded', async () => {
+    const user = userEvent.setup();
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[makeTrace({ traceId: 'legacy', status: 'error' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(outcomeCell('run legacy').textContent).toBe('ERR');
+    await user.hover(screen.getByText('ERR'));
+
+    expect(await screen.findByText('Outcome not recorded; status from error')).toBeTruthy();
+  });
+
+  it('shows unknown and custom outcomes as neutral badges', () => {
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[
+          makeTrace({ traceId: 'unknown', outcome: 'unknown' }),
+          makeTrace({ traceId: 'custom', outcome: 'handed_off' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Unknown').className).toContain('text-badge-neutral-foreground');
+    expect(screen.getByText('handed_off').className).toContain('text-badge-neutral-foreground');
+  });
+
+  it('keeps the Status column when the outcome column is turned off', () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        outcomeColumn={false}
+        traces={[makeTrace({ traceId: 'thread', status: 'error', outcome: 'limit' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(headerTexts(container)).toContain('Status');
+    expect(outcomeCell('run thread').textContent).toBe('ERR');
+  });
+});
+
 describe('TracesListView — time to first chunk column', () => {
   const ttfcOnly = { visibleColumns: ['timeToFirstChunk'], customColumns: [], metadataKeys: [] } as const;
 
-  it('labels the column TTFC right after Status', () => {
+  it('labels the column TTFC right after Outcome', () => {
     const { container } = render(<TracesListView traces={[]} columnPreferences={ttfcOnly} onTraceClick={vi.fn()} />);
 
-    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Status', 'TTFC']);
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Outcome', 'TTFC']);
   });
 
   it('shows how long each root took to stream its first chunk, leaving rows that never streamed empty', () => {
@@ -492,7 +598,7 @@ describe('TracesListView — usage cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Total tokens']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Total tokens']);
       expect(screen.getByText('12.4K')).toBeTruthy();
     });
 
@@ -586,7 +692,7 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Environment']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Environment']);
       expect(screen.getByText('production')).toBeTruthy();
       expect(screen.getByText('—')).toBeTruthy();
     });
@@ -636,7 +742,7 @@ describe('TracesListView — custom columns', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Thread ID']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Thread ID']);
       expect(screen.getByText('thread-42')).toBeTruthy();
     });
 
@@ -836,9 +942,9 @@ describe('TracesListView column reordering', () => {
       const { container, rerender } = render(
         <TracesListView traces={traces} columnPreferences={base} onTraceClick={vi.fn()} />,
       );
-      dragHeader(container, 'Status', 'Start');
+      dragHeader(container, 'Outcome', 'Start');
       expect(visualHeaders(container)).toEqual([
-        'Status',
+        'Outcome',
         'Start',
         'Primitive type',
         'Primitive name',
@@ -853,7 +959,7 @@ describe('TracesListView column reordering', () => {
           onTraceClick={vi.fn()}
         />,
       );
-      expect(visualHeaders(container)).toEqual(['Status', 'Start', 'Primitive name', 'Input', 'Duration', 'tenant']);
+      expect(visualHeaders(container)).toEqual(['Outcome', 'Start', 'Primitive name', 'Input', 'Duration', 'tenant']);
     });
   });
 });
