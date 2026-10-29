@@ -2232,6 +2232,7 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    observability: base.observability,
     ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {
