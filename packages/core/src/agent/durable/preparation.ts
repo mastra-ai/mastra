@@ -11,7 +11,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
-import type { AIModelGenerationSpan, ExportedSpan } from '../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import type {
   InputProcessorOrWorkflow,
   LLMRequestProcessorOrWorkflow,
@@ -603,14 +603,22 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     typeof agentSpanId === 'string' && agentSpanId !== 'no-op'
       ? mastra?.observability?.getSelectedInstance({ requestContext })
       : undefined;
-  const resumedSpans = resumedSpanData && {
-    agentSpan: resumedObservability?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>),
-    modelSpan: modelSpanData
-      ? (resumedObservability?.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-          | AIModelGenerationSpan
-          | undefined)
-      : undefined,
-  };
+  let resumedSpans: { agentSpan?: Span<SpanType.AGENT_RUN>; modelSpan?: AIModelGenerationSpan } | undefined;
+  if (resumedSpanData) {
+    resumedSpans = {};
+    try {
+      resumedSpans.agentSpan = resumedObservability?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+      if (modelSpanData) {
+        resumedSpans.modelSpan = resumedObservability?.rebuildSpan(
+          modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
+        ) as AIModelGenerationSpan | undefined;
+      }
+    } catch (error) {
+      // Span bookkeeping must never block a resume, so a run whose spans cannot be rebuilt continues unrecorded.
+      resumedSpans = {};
+      (logger ?? mastra?.getLogger?.())?.warn?.(`[DurableAgent] Failed to rebuild the spans of run ${runId}: ${error}`);
+    }
+  }
   const agentSpan = resumedSpans
     ? resumedSpans.agentSpan
     : getOrCreateSpan({

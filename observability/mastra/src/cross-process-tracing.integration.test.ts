@@ -173,6 +173,31 @@ describe('a durable agent run resumed by another process', () => {
     expect(ends[0]!.exportedSpan.errorInfo).toBeUndefined();
   });
 
+  it('still resumes when the saved run span cannot be rebuilt', async () => {
+    const storage = new InMemoryStore();
+    const exporter = new TestExporter();
+    const started = await startAgentProcess(storage, exporter).stream('Pay the bill.', { closeOnSuspend: true });
+    const toolCallId = await drain(started);
+
+    const workflows = await storage.getStore('workflows');
+    const snapshot = await workflows!.loadWorkflowSnapshot({
+      workflowName: 'durable-agentic-loop',
+      runId: started.runId,
+    });
+    (snapshot!.context.input as { agentSpanData: { links: unknown } }).agentSpanData.links = 'not a list';
+    await workflows!.persistWorkflowSnapshot({
+      workflowName: 'durable-agentic-loop',
+      runId: started.runId,
+      snapshot: snapshot!,
+    });
+
+    await drain(
+      await startAgentProcess(storage, exporter).approveToolCall({ runId: started.runId, toolCallId: toolCallId! }),
+    );
+
+    expect((await scoreOf(storage, started.runId)).score).toBe(1);
+  });
+
   it('leaves a run its sampler skipped unrecorded when another process resumes it', async () => {
     const storage = new InMemoryStore();
     const exporter = new TestExporter();
