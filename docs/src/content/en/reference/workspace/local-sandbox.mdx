@@ -43,6 +43,18 @@ const response = await agent.generate('Run npm install')
 
 `LocalSandbox` automatically starts on the first command execution if not already running. You can also explicitly start the sandbox by calling `workspace.init()` at application startup to avoid first-command latency.
 
+### Windows shell
+
+On native Windows with `isolation: 'none'`, `executeCommand(command, args)` quotes arguments for a POSIX shell, so `LocalSandbox` runs these commands through Git Bash instead of `cmd.exe`. It looks for the shell in this order:
+
+1. The `MASTRA_WINDOWS_SHELL` environment variable, which must point to an existing `bash.exe` or `sh.exe`.
+1. `bin\bash.exe` in the Git for Windows install that provides `git.exe` on `PATH`.
+1. `%ProgramFiles%\Git\bin\bash.exe`.
+
+If no shell is found, these commands fall back to `cmd.exe`, where arguments with spaces, backslashes, or POSIX tools such as `mkdir -p` and `find` fail. Install [Git for Windows](https://git-scm.com/download/win) or set `MASTRA_WINDOWS_SHELL` to use a local sandbox on Windows.
+
+Plain command strings, such as the ones the `execute_command` tool runs, keep using `cmd.exe` unless `MASTRA_WINDOWS_SHELL` is set. Deep repository checkouts can also exceed the Windows path length limit. Run `git config --global core.longpaths true` to allow them.
+
 ## Constructor parameters
 
 <PropertiesTable

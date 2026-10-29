@@ -5,6 +5,7 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
@@ -251,6 +252,52 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
 }
 
 // =============================================================================
+// Windows POSIX Shell
+// =============================================================================
+
+function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const key = Object.keys(env).find(k => k.toUpperCase() === name.toUpperCase());
+  return key === undefined ? undefined : env[key];
+}
+
+/**
+ * Find a POSIX shell to run commands with on native Windows.
+ *
+ * Order: `MASTRA_WINDOWS_SHELL`, then Git for Windows' `bin\bash.exe` next to a
+ * `git.exe` on PATH, then `%ProgramFiles%\Git\bin\bash.exe`. `bin\bash.exe` is
+ * Git's launcher, which puts the GNU tools (`mkdir`, `find`, `rm`, `sh`) on PATH.
+ */
+export function resolveWindowsPosixShell(
+  env: NodeJS.ProcessEnv,
+  exists: (file: string) => boolean = existsSync,
+): string | undefined {
+  const configured = readEnv(env, 'MASTRA_WINDOWS_SHELL')?.trim();
+  if (configured) {
+    if (!exists(configured)) {
+      throw new Error(`MASTRA_WINDOWS_SHELL points to "${configured}", which does not exist`);
+    }
+    return configured;
+  }
+
+  for (const entry of (readEnv(env, 'PATH') ?? '').split(path.win32.delimiter)) {
+    const dir = entry.trim().replace(/^"(.*)"$/, '$1');
+    if (!dir || !exists(path.win32.join(dir, 'git.exe'))) continue;
+    const normalized = path.win32.normalize(dir).replace(/[\\/]+$/, '');
+    const root = /[\\/](mingw64|usr)[\\/]bin$/i.test(normalized)
+      ? path.win32.dirname(path.win32.dirname(normalized))
+      : /^(cmd|bin)$/i.test(path.win32.basename(normalized))
+        ? path.win32.dirname(normalized)
+        : undefined;
+    if (!root) continue;
+    const bash = path.win32.join(root, 'bin', 'bash.exe');
+    if (exists(bash)) return bash;
+  }
+
+  const fallback = path.win32.join(readEnv(env, 'ProgramFiles') ?? 'C:\\Program Files', 'Git', 'bin', 'bash.exe');
+  return exists(fallback) ? fallback : undefined;
+}
+
+// =============================================================================
 // Local Process Manager
 // =============================================================================
 
@@ -292,9 +339,20 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     }
     const env = this.sandbox.buildEnv(options.env);
     const invocation = options.originalInvocation;
-    // Preserve the script as one argument instead of letting cmd.exe interpret its operators.
+    // argv invocations are joined with POSIX quoting (shellQuote), so on Windows they
+    // need a POSIX shell; cmd.exe misreads single quotes and POSIX tools. Plain string
+    // commands keep cmd.exe unless MASTRA_WINDOWS_SHELL opts them in.
+    let posixShell: string | undefined;
+    if (isWindows && this.sandbox.isolation === 'none') {
+      const lookupEnv = { ...process.env, ...env };
+      if (invocation !== undefined || readEnv(lookupEnv, 'MASTRA_WINDOWS_SHELL')?.trim()) {
+        posixShell = resolveWindowsPosixShell(lookupEnv);
+      }
+    }
+    // Without a POSIX shell, preserve the script as one argument instead of letting cmd.exe interpret its operators.
     const directShell =
       isWindows &&
+      posixShell === undefined &&
       this.sandbox.isolation === 'none' &&
       invocation !== undefined &&
       /^(sh|sh\.exe)$/i.test(path.win32.basename(invocation.command)) &&
@@ -335,7 +393,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       // Process tree killing uses `taskkill /T` instead of Unix process groups.
       execaOptions = {
         ...baseOptions,
-        shell: !directShell && this.sandbox.isolation === 'none',
+        shell: posixShell ?? (!directShell && this.sandbox.isolation === 'none'),
         windowsHide: true,
       };
     } else {

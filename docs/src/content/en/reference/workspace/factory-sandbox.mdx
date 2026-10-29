@@ -53,6 +53,8 @@ new LocalFactorySandbox() // reads MASTRACODE_LOCAL_SANDBOX_ROOT, defaults to ~/
 
 `LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`. Without `env`, commands only see an allow-list of host variables that git and TLS need, such as `HOME`, `USER`, `SHELL` and `SSL_CERT_FILE`, plus `PATH`. App secrets stay out of commands that run in repository checkouts.
 
+On native Windows, `LocalFactorySandbox` needs Git for Windows so repository setup runs through Git Bash. See [`LocalSandbox` Windows shell](/reference/workspace/local-sandbox#windows-shell).
+
 ### Scope env to one factory
 
 Every provider's `env` option takes a record or a function of the session's `FactorySandboxContext`. Use the function form when one deployment hosts several factories and a credential belongs to only one of them:
