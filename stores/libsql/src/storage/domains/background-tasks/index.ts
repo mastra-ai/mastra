@@ -64,10 +64,13 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     completedAt: row.completedAt ? new Date(String(row.completedAt)) : undefined,
     ownerId: row.ownerId != null ? String(row.ownerId) : undefined,
     leaseExpiresAt: row.leaseExpiresAt ? new Date(String(row.leaseExpiresAt)) : undefined,
+    expiresAt: row.expiresAt ? new Date(String(row.expiresAt)) : undefined,
+    metadata: parseJson(row.metadata),
   };
 }
 
 export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   /**
    * Completed/failed task records accumulate. Anchored on `completedAt`, which
    * is NULL while a task is in-flight (pending/running/suspended) — so `completedAt
@@ -96,7 +99,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
   }
 
@@ -140,6 +143,8 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
         completedAt: task.completedAt?.toISOString() ?? null,
         ownerId: task.ownerId ?? null,
         leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+        expiresAt: task.expiresAt?.toISOString() ?? null,
+        metadata: task.metadata ?? null,
       },
     });
   }
@@ -191,6 +196,14 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     if ('leaseExpiresAt' in update) {
       setClauses.push('leaseExpiresAt = ?');
       params.push(update.leaseExpiresAt?.toISOString() ?? null);
+    }
+    if ('expiresAt' in update) {
+      setClauses.push('expiresAt = ?');
+      params.push(update.expiresAt?.toISOString() ?? null);
+    }
+    if ('metadata' in update) {
+      setClauses.push('metadata = jsonb(?)');
+      params.push(serializeJson(update.metadata));
     }
 
     if (setClauses.length === 0) return false;
@@ -274,7 +287,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(filter.fromDate.toISOString());
@@ -342,7 +360,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(filter.fromDate.toISOString());

@@ -9,7 +9,7 @@ import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { SpanType, resolveExportedSpanId } from '../../../observability';
+import { SpanType, getResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import { coverNestedRun } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
@@ -24,6 +24,7 @@ import type {
   TimeTravelExecutionParams,
   WorkflowRunState,
   WorkflowRunStatus,
+  WorkflowStateTracingContext,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
@@ -581,27 +582,11 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Snapshot of the run's current span as the {traceId, spanId, parentSpanId} shape that
-   * `UpdateWorkflowStateOptions.tracingContext` expects, so a suspend's persisted snapshot
-   * can stitch the resumed AGENT_RUN/WORKFLOW_RUN span back to the original trace. Mirrors
-   * `default.ts`'s `persistTracingContext`; the evented engine holds the live span on
-   * Mastra (since it can't ride pubsub events), so we resolve it via runId here.
+   * The evented engine holds the live span on Mastra (since it can't ride pubsub
+   * events), so we resolve it via runId here.
    */
-  private resolveSuspendTracingContext(
-    runId: string,
-  ): { traceId?: string; spanId?: string; parentSpanId?: string } | undefined {
-    const span = this.resolveRunTracingContext(runId)?.currentSpan as
-      | {
-          id?: string;
-          traceId?: string;
-          getParentSpanId?: () => string | undefined;
-          getExportedSpanId?: () => string | undefined;
-        }
-      | undefined;
-    if (!span) return undefined;
-    // See default.ts: the persisted spanId becomes the resumed span's parentSpanId,
-    // so it must reference a span that actually reaches exporters.
-    return { traceId: span.traceId, spanId: resolveExportedSpanId(span), parentSpanId: span.getParentSpanId?.() };
+  private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
+    return getResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
   }
 
   /**

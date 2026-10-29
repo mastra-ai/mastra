@@ -44,6 +44,7 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
   const client = useMastraClient();
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
   const { data: entityNames = NO_SUGGESTIONS } = useEntityNames();
   const { data: environments = NO_SUGGESTIONS } = useEnvironments();
 
@@ -54,12 +55,13 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
       TRACE_TIME_RANGE_FIELD,
       ...createSpanFilterBarFields({
         withContextFields,
+        withOutcomeFields,
         entityNames,
         environments,
         valueSuggestions: path => createTraceQueryValuesResolver(client, timeRange, 'spans', path),
       }),
     ],
-    [withContextFields, entityNames, environments, client, timeRange],
+    [withContextFields, withOutcomeFields, entityNames, environments, client, timeRange],
   );
 }
 

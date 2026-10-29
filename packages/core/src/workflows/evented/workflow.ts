@@ -2686,8 +2686,7 @@ export class EventedRun<
         resumedFromSpanId: snapshot.tracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: { traceId: snapshot.tracingContext?.traceId },
-      resumedFromSpanId: snapshot.tracingContext?.spanId,
+      resumeFrom: snapshot.tracingContext,
       requestContext,
       mastra: this.mastra,
     });

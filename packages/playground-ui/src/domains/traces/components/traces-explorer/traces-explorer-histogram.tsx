@@ -24,18 +24,32 @@ const SELECTION_CLOCK = new Date(0);
  * Dragging across bars narrows the list to their time span as a custom range.
  */
 export function TracesExplorerHistogram() {
-  const { withQueryTrace, withRootDuration } = useTracesConfig();
+  const { withQueryTrace, withRootDuration, withOutcomeFields } = useTracesConfig();
   const { filters, dateFrom, dateTo, runningSelected, setDatePreset, setDateRange } = useTracesFilters();
   const aggregateAvailable = useTraceAggregateAvailable();
 
   const selectionKey = JSON.stringify(
-    buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, now: SELECTION_CLOCK }),
+    buildTracesQueryRequest({
+      filters,
+      dateFrom,
+      dateTo,
+      withRootDuration,
+      withOutcomeFields,
+      now: SELECTION_CLOCK,
+    }),
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `selectionKey` is the trigger, not an input.
   const now = useMemo(() => new Date(), [selectionKey]);
 
   const request = useMemo<AggregateTracesArgs>(() => {
-    const { timeRange, where } = buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, now });
+    const { timeRange, where } = buildTracesQueryRequest({
+      filters,
+      dateFrom,
+      dateTo,
+      withRootDuration,
+      withOutcomeFields,
+      now,
+    });
     return {
       timeRange,
       ...(where ? { where } : {}),
@@ -44,7 +58,7 @@ export function TracesExplorerHistogram() {
       // No groupBy means a single group; the default limit would multiply past the server's row cap.
       limit: 1,
     };
-  }, [filters, dateFrom, dateTo, withRootDuration, now]);
+  }, [filters, dateFrom, dateTo, withRootDuration, withOutcomeFields, now]);
 
   const hidden =
     !withQueryTrace || !aggregateAvailable.enabled || runningSelected || exceedsAggregateWindow(request.timeRange);

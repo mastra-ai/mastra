@@ -54,10 +54,13 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     completedAt: parseDateTime(row.completedAt),
     ownerId: row.ownerId != null ? String(row.ownerId) : undefined,
     leaseExpiresAt: parseDateTime(row.leaseExpiresAt),
+    expiresAt: parseDateTime(row.expiresAt),
+    metadata: parseJson(row.metadata),
   };
 }
 
 export class BackgroundTasksMySQL extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private pool: Pool;
   private operations: StoreOperationsMySQL;
   #skipDefaultIndexes?: boolean;
@@ -94,7 +97,7 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
     await this.operations.alterTable({
       tableName: TABLE_BACKGROUND_TASKS as any,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -166,7 +169,7 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
 
   async createTask(task: BackgroundTask): Promise<void> {
     await this.pool.execute(
-      `INSERT INTO ${formatTableName(TABLE_BACKGROUND_TASKS)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('tool_call_id', 'column name')}, ${quoteIdentifier('tool_name', 'column name')}, ${quoteIdentifier('agent_id', 'column name')}, ${quoteIdentifier('thread_id', 'column name')}, ${quoteIdentifier('resource_id', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('status', 'column name')}, ${quoteIdentifier('args', 'column name')}, ${quoteIdentifier('result', 'column name')}, ${quoteIdentifier('error', 'column name')}, ${quoteIdentifier('suspend_payload', 'column name')}, ${quoteIdentifier('retry_count', 'column name')}, ${quoteIdentifier('max_retries', 'column name')}, ${quoteIdentifier('timeout_ms', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('startedAt', 'column name')}, ${quoteIdentifier('suspendedAt', 'column name')}, ${quoteIdentifier('completedAt', 'column name')}, ${quoteIdentifier('ownerId', 'column name')}, ${quoteIdentifier('leaseExpiresAt', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ${formatTableName(TABLE_BACKGROUND_TASKS)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('tool_call_id', 'column name')}, ${quoteIdentifier('tool_name', 'column name')}, ${quoteIdentifier('agent_id', 'column name')}, ${quoteIdentifier('thread_id', 'column name')}, ${quoteIdentifier('resource_id', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('status', 'column name')}, ${quoteIdentifier('args', 'column name')}, ${quoteIdentifier('result', 'column name')}, ${quoteIdentifier('error', 'column name')}, ${quoteIdentifier('suspend_payload', 'column name')}, ${quoteIdentifier('retry_count', 'column name')}, ${quoteIdentifier('max_retries', 'column name')}, ${quoteIdentifier('timeout_ms', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('startedAt', 'column name')}, ${quoteIdentifier('suspendedAt', 'column name')}, ${quoteIdentifier('completedAt', 'column name')}, ${quoteIdentifier('ownerId', 'column name')}, ${quoteIdentifier('leaseExpiresAt', 'column name')}, ${quoteIdentifier('expiresAt', 'column name')}, ${quoteIdentifier('metadata', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.toolCallId,
@@ -189,6 +192,8 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
         transformToSqlValue(task.completedAt),
         task.ownerId ?? null,
         transformToSqlValue(task.leaseExpiresAt),
+        transformToSqlValue(task.expiresAt),
+        task.metadata ? JSON.stringify(task.metadata) : null,
       ],
     );
   }
@@ -240,6 +245,14 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
     if ('leaseExpiresAt' in update) {
       setClauses.push(`${quoteIdentifier('leaseExpiresAt', 'column name')} = ?`);
       params.push(transformToSqlValue(update.leaseExpiresAt));
+    }
+    if ('expiresAt' in update) {
+      setClauses.push(`${quoteIdentifier('expiresAt', 'column name')} = ?`);
+      params.push(transformToSqlValue(update.expiresAt));
+    }
+    if ('metadata' in update) {
+      setClauses.push(`${quoteIdentifier('metadata', 'column name')} = ?`);
+      params.push(serializeJson(update.metadata));
     }
 
     if (setClauses.length === 0) return false;
@@ -324,7 +337,12 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
           ? quoteIdentifier('suspendedAt', 'column name')
           : filter.dateFilterBy === 'completedAt'
             ? quoteIdentifier('completedAt', 'column name')
-            : quoteIdentifier('createdAt', 'column name');
+            : filter.dateFilterBy === 'expiresAt'
+              ? quoteIdentifier('expiresAt', 'column name')
+              : quoteIdentifier('createdAt', 'column name');
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(`${quoteIdentifier('expiresAt', 'column name')} IS ${filter.hasExpiresAt ? 'NOT NULL' : 'NULL'}`);
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(transformToSqlValue(filter.fromDate));
@@ -393,7 +411,12 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
           ? quoteIdentifier('suspendedAt', 'column name')
           : filter.dateFilterBy === 'completedAt'
             ? quoteIdentifier('completedAt', 'column name')
-            : quoteIdentifier('createdAt', 'column name');
+            : filter.dateFilterBy === 'expiresAt'
+              ? quoteIdentifier('expiresAt', 'column name')
+              : quoteIdentifier('createdAt', 'column name');
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(`${quoteIdentifier('expiresAt', 'column name')} IS ${filter.hasExpiresAt ? 'NOT NULL' : 'NULL'}`);
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(transformToSqlValue(filter.fromDate));

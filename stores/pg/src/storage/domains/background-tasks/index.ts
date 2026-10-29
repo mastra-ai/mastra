@@ -53,6 +53,10 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
   const suspendedAt = row.suspendedAtZ || row.suspendedAt;
   const completedAt = row.completedAtZ || row.completedAt;
   const leaseExpiresAt = row.leaseExpiresAtZ || row.leaseExpiresAt;
+  // `expiresAtZ` is added with `DEFAULT NOW()` like every Z twin, so rows that
+  // predate the column carry a value there. The nullable naive column is the
+  // source of truth for whether the row has an expiry at all.
+  const expiresAt = row.expiresAt != null ? row.expiresAtZ || row.expiresAt : undefined;
   return {
     id: row.id,
     status: row.status as BackgroundTaskStatus,
@@ -82,10 +86,13 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
         ? leaseExpiresAt
         : new Date(leaseExpiresAt)
       : undefined,
+    expiresAt: expiresAt ? (expiresAt instanceof Date ? expiresAt : new Date(expiresAt)) : undefined,
+    metadata: parseJson(row.metadata),
   };
 }
 
 export class BackgroundTasksPG extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
@@ -120,7 +127,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -269,6 +276,9 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         ownerId: task.ownerId ?? null,
         leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
         leaseExpiresAtZ: task.leaseExpiresAt?.toISOString() ?? null,
+        expiresAt: task.expiresAt?.toISOString() ?? null,
+        expiresAtZ: task.expiresAt?.toISOString() ?? null,
+        metadata: serializeJson(task.metadata),
       },
     });
   }
@@ -329,6 +339,16 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       setClauses.push(`"leaseExpiresAtZ" = $${paramIdx++}`);
       const val = update.leaseExpiresAt?.toISOString() ?? null;
       params.push(val, val);
+    }
+    if ('expiresAt' in update) {
+      setClauses.push(`"expiresAt" = $${paramIdx++}`);
+      setClauses.push(`"expiresAtZ" = $${paramIdx++}`);
+      const val = update.expiresAt?.toISOString() ?? null;
+      params.push(val, val);
+    }
+    if ('metadata' in update) {
+      setClauses.push(`"metadata" = $${paramIdx++}`);
+      params.push(serializeJson(update.metadata));
     }
 
     if (setClauses.length === 0) return false;
@@ -413,7 +433,17 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
           ? '"suspendedAt"'
           : filter.dateFilterBy === 'completedAt'
             ? '"completedAt"'
-            : '"createdAt"';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '"expiresAtZ"'
+              : '"createdAt"';
+    // Presence lives on the nullable naive column (see rowToTask); compare
+    // times on the timezone-aware twin.
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '"expiresAt" IS NOT NULL' : '"expiresAt" IS NULL');
+    }
+    if (filter.dateFilterBy === 'expiresAt' && (filter.fromDate || filter.toDate)) {
+      conditions.push('"expiresAt" IS NOT NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= $${paramIdx++}`);
       params.push(filter.fromDate.toISOString());
@@ -482,7 +512,17 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
           ? '"suspendedAt"'
           : filter.dateFilterBy === 'completedAt'
             ? '"completedAt"'
-            : '"createdAt"';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '"expiresAtZ"'
+              : '"createdAt"';
+    // Presence lives on the nullable naive column (see rowToTask); compare
+    // times on the timezone-aware twin.
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '"expiresAt" IS NOT NULL' : '"expiresAt" IS NULL');
+    }
+    if (filter.dateFilterBy === 'expiresAt' && (filter.fromDate || filter.toDate)) {
+      conditions.push('"expiresAt" IS NOT NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= $${paramIdx++}`);
       params.push(filter.fromDate.toISOString());

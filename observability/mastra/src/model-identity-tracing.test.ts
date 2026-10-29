@@ -17,7 +17,7 @@ import type { Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Observability } from './default';
 import { TestExporter } from './exporters';
@@ -83,8 +83,15 @@ const weatherTool = createTool({
 
 const askWeather = { toolName: 'get_weather', input: { city: 'Paris' } };
 
+const exporters: TestExporter[] = [];
+
+afterEach(() => {
+  for (const span of exporters.splice(0).flatMap(exporter => exporter.getAllSpans())) identity(span);
+});
+
 function setup(engine: Engine, agent: Agent) {
   const exporter = new TestExporter();
+  exporters.push(exporter);
   const registered =
     engine === 'agent' ? agent : (engine === 'durable' ? createDurableAgent : createEventedAgent)({ agent });
   const mastra = new Mastra({
@@ -127,7 +134,12 @@ const byStart = <T extends AnyExportedSpan>(spans: T[]) =>
 const spansOf = (exporter: TestExporter, type: SpanType) => byStart(exporter.getSpansByType(type) as AnyExportedSpan[]);
 const identity = (span: AnyExportedSpan | undefined) => {
   const attributes = span?.attributes as { model?: string; provider?: string } | undefined;
-  return { model: attributes?.model, provider: attributes?.provider };
+  const pair = { model: attributes?.model, provider: attributes?.provider };
+  if (span) {
+    const native = Object.fromEntries(Object.entries(span).filter(([key]) => key === 'model' || key === 'provider'));
+    expect(native).toStrictEqual(pair.model && pair.provider ? pair : {});
+  }
+  return pair;
 };
 const none = { model: undefined, provider: undefined };
 const acmeLarge = { model: 'acme-large', provider: 'acme' };

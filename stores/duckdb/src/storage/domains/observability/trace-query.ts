@@ -21,7 +21,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
-import { timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
+import { timeToFirstChunkSupported, timeToFirstTokenSupported, traceQueryOutcomeFieldsSupported } from '../../features';
 import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { needsPreview } from './preview-compat';
@@ -69,6 +69,8 @@ const TRACE_FIELDS = {
   spanType: { sql: 'r.spanType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'scalar' },
+  outcome: { sql: 'r.outcome', parameterType: 'scalar' },
+  stopReason: { sql: 'r.stopReason', parameterType: 'scalar' },
   tags: { sql: 'r.tags', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQueryField>;
 
@@ -83,6 +85,8 @@ const SPAN_FIELDS = {
   timeToFirstChunkMs: { sql: 's.timeToFirstChunkMs', parameterType: 'scalar' },
   timeToFirstTokenMs: { sql: 's.timeToFirstTokenMs', parameterType: 'scalar' },
   status: { sql: 's.status', parameterType: 'scalar' },
+  outcome: { sql: 's.outcome', parameterType: 'scalar' },
+  stopReason: { sql: 's.stopReason', parameterType: 'scalar' },
   error: { sql: 's.error', parameterType: 'scalar' },
   entityType: { sql: 's.entityType', parameterType: 'scalar' },
   entityId: { sql: 's.entityId', parameterType: 'scalar' },
@@ -163,6 +167,9 @@ const TRACE_SELECT = `
   r.entityName AS entityName,
   r.entityType AS entityType,
   r.environment AS environment,
+  r.outcome AS outcome,
+  r.stopReason AS stopReason,
+  r.stopReasonContext AS stopReasonContext,
   ${TRACE_STATUS_SQL} AS status`;
 
 function fieldDefinition<TField extends string>(
@@ -528,6 +535,8 @@ function compileDuckDBTraceScope(
   ];
 
   if (relatedCollections.has('spans')) {
+    // Model and provider fall back to span attributes: exporters before the dedicated columns
+    // existed wrote them only there. Span queries filter on the columns alone (memory budget).
     ctes.push(`span_bounds AS (
       -- Exact event-time range of the in-scope traces, from a narrow
       -- (traceId, timestamp) pass. The join below cannot be pushed into the
@@ -559,18 +568,22 @@ function compileDuckDBTraceScope(
         traceId,
         name,
         spanType,
-        CASE
-          WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model')
-        END AS model,
-        CASE
-          WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider')
-        END AS provider,
+        COALESCE(
+          model,
+          CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END
+        ) AS model,
+        COALESCE(
+          provider,
+          CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END
+        ) AS provider,
         startedAt,
         endedAt,
         ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
         timeToFirstChunkMs,
         timeToFirstTokenMs,
         CASE WHEN error IS NOT NULL THEN 'error' ELSE 'success' END AS status,
+        outcome,
+        stopReason,
         error,
         entityType,
         entityId,
@@ -981,6 +994,11 @@ function traceFromRow(row: Record<string, unknown>) {
     }),
     ...(timeToFirstTokenSupported && {
       timeToFirstTokenMs: row.timeToFirstTokenMs == null ? null : Number(row.timeToFirstTokenMs),
+    }),
+    ...(traceQueryOutcomeFieldsSupported && {
+      outcome: row.outcome == null ? null : String(row.outcome),
+      stopReason: row.stopReason == null ? null : String(row.stopReason),
+      stopReasonContext: (parseJson(row.stopReasonContext) ?? null) as Record<string, unknown> | null,
     }),
   };
 }
