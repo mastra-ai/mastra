@@ -16,6 +16,11 @@ export const FRAME = KIT + 4 * TRAIL;
 
 export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 export const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+export function once<T>(make: () => T) {
+  let value: T | undefined;
+  return () => (value ??= make());
+}
 export const lerpFrame = (a: Frame, b: Frame, w: number): Frame => a.map((v, i) => v + ((b[i] ?? v) - v) * w);
 
 export function sstep(a: number, b: number, x: number) {
@@ -100,6 +105,11 @@ export const anyOf =
   (...shapes: Inside[]): Inside =>
   p =>
     shapes.some(inside => inside(p));
+
+export const allOf =
+  (...shapes: Inside[]): Inside =>
+  p =>
+    shapes.every(inside => inside(p));
 
 export const nothing: Inside = () => false;
 

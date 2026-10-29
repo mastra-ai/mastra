@@ -18,6 +18,7 @@ interface ActivityContextValue {
   foldable: boolean;
   status: ActivityStatus;
   appearance: ActivityAppearance;
+  nested: boolean;
   toggle: () => void;
 }
 
@@ -63,6 +64,7 @@ export function Activity({
   children,
   ...props
 }: ActivityProps) {
+  const nested = useContext(ActivityContext) !== undefined;
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlledOpen ?? (foldable && uncontrolledOpen);
   const statusId = useId();
@@ -73,7 +75,9 @@ export function Activity({
   };
 
   return (
-    <ActivityContext.Provider value={{ open, foldable, status, appearance, toggle: () => handleOpenChange(!open) }}>
+    <ActivityContext.Provider
+      value={{ open, foldable, status, appearance, nested, toggle: () => handleOpenChange(!open) }}
+    >
       <Collapsible
         open={open}
         onOpenChange={handleOpenChange}
@@ -236,7 +240,7 @@ export const ActivityTrailing = ({ className, ...props }: ComponentProps<'span'>
 );
 
 export const ActivityDisclosure = ({ className, children, ...props }: ComponentProps<'span'>) => {
-  const { open, foldable } = useActivity();
+  const { open, foldable, nested } = useActivity();
 
   return (
     <span className={cn('flex size-4 shrink-0 items-center justify-center', className)} {...props}>
@@ -248,6 +252,7 @@ export const ActivityDisclosure = ({ className, children, ...props }: ComponentP
           open && 'text-muted-foreground',
           open && children != null && 'rotate-90',
           !foldable && 'opacity-0',
+          foldable && nested && 'opacity-0 group-hover/row:opacity-100 group-has-focus-visible/row:opacity-100',
         )}
       >
         {children ?? <DisclosureChevron direction="right" open={open} className="size-3.25" />}

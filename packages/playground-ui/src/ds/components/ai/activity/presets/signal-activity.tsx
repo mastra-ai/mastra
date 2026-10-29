@@ -1,6 +1,17 @@
-import { Info, Layers } from 'lucide-react';
-import { ActivityItem } from '../activity';
+import {
+  Activity,
+  ActivityContent,
+  ActivityDetail,
+  ActivityDisclosure,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityItem,
+  ActivityLabel,
+  ActivityTrigger,
+} from '../activity';
+import type { ActivityAppearance } from '../activity';
 import { messagePreview, messagePreviewShowsAll } from './message-preview';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 
@@ -11,30 +22,91 @@ export interface SignalActivityProps {
   detail?: string;
   mode?: string;
   defaultOpen?: boolean;
+  /** `inline` reads like the agent's own lines: their glyph, type and weight, the message as prose. */
+  appearance?: ActivityAppearance;
 }
 
 const signalKinds = {
   state: {
-    icon: <Layers className="text-badge-purple-indicator" aria-hidden />,
+    Icon: agentGlyph('context'),
+    accent: 'text-badge-purple-indicator',
     body: { variant: 'caption' },
   },
   reactive: {
-    icon: <Info aria-hidden />,
+    Icon: agentGlyph('notice'),
+    accent: undefined,
     body: { variant: 'caption' },
   },
   reminder: {
-    icon: <Info className="text-info-indicator" aria-hidden />,
+    Icon: agentGlyph('notice'),
+    accent: 'text-info-indicator',
     body: { variant: 'meta', font: 'mono' },
   },
 } as const;
 
-export function SignalActivity({ kind, label, message, detail, mode, defaultOpen }: SignalActivityProps) {
-  const { icon, body } = signalKinds[kind];
+const spoken = (name: string) => name.charAt(0).toUpperCase() + name.slice(1).replace(/[-_]+/g, ' ');
+
+function SignalLine({ kind, label, message, detail, mode, defaultOpen }: Omit<SignalActivityProps, 'appearance'>) {
+  const { Icon } = signalKinds[kind];
+  const name = spoken(label);
+  const lineHoldsMessage = detail === undefined && messagePreviewShowsAll(message);
+
+  return (
+    <Activity
+      appearance="inline"
+      foldable={!lineHoldsMessage}
+      defaultOpen={defaultOpen}
+      data-signal-kind={kind}
+      aria-label={`Signal: ${name}`}
+    >
+      <ActivityTrigger>
+        <ActivityHeader>
+          <ActivityIcon className="[&_svg]:size-4">
+            <Icon />
+          </ActivityIcon>
+          <ActivityLabel className="text-body font-medium">{name}</ActivityLabel>
+          {mode && <ActivityLabel className="-ml-1 text-body before:content-['·_']">{mode}</ActivityLabel>}
+          {detail && (
+            <ActivityDetail font="sans" className="text-body-sm">
+              {detail}
+            </ActivityDetail>
+          )}
+          {lineHoldsMessage && message && <ActivityLabel className="min-w-0 shrink text-body">{message}</ActivityLabel>}
+          <ActivityDisclosure />
+        </ActivityHeader>
+      </ActivityTrigger>
+      {!lineHoldsMessage && (
+        <ActivityContent>
+          <Txt tone="muted" className="break-words whitespace-pre-wrap">
+            {message}
+          </Txt>
+        </ActivityContent>
+      )}
+    </Activity>
+  );
+}
+
+export function SignalActivity({
+  kind,
+  label,
+  message,
+  detail,
+  mode,
+  defaultOpen,
+  appearance = 'row',
+}: SignalActivityProps) {
+  if (appearance === 'inline') {
+    return (
+      <SignalLine kind={kind} label={label} message={message} detail={detail} mode={mode} defaultOpen={defaultOpen} />
+    );
+  }
+  const { Icon, accent, body } = signalKinds[kind];
   const lineHoldsMessage = detail === undefined && messagePreviewShowsAll(message);
 
   return (
     <ActivityItem
-      icon={icon}
+      appearance={appearance}
+      icon={<Icon className={accent} aria-hidden />}
       label={label}
       detail={detail ?? messagePreview(message)}
       badges={mode ? <Badge size="xs">{mode}</Badge> : undefined}

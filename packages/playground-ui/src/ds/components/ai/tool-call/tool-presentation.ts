@@ -1,24 +1,13 @@
-import {
-  BookOpen,
-  Braces,
-  CircleStop,
-  Eye,
-  FileSearch,
-  FolderPlus,
-  FolderSearch,
-  Globe,
-  ScrollText,
-  Search,
-  SquarePen,
-  SquareTerminal,
-  Trash2,
-  Wrench,
-} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import type { ToolKind } from './tool-phrases';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
+import type { AgentIndicatorState } from '@/ds/components/AgentIndicator';
 
 export interface ToolPresentation {
+  /** What the agent indicator turns into while this call runs. */
+  pose: AgentIndicatorState;
+  /** The pose held still, so the call's row and the live indicator draw the same thing. */
   icon: LucideIcon;
   /** Stable name of the kind of tool, e.g. "Run"; also groups calls by kind. */
   label: string;
@@ -63,38 +52,38 @@ function firstStringArg(args: unknown, keys: string[]): string | undefined {
 }
 
 interface ToolStyle {
-  icon: LucideIcon;
+  pose: AgentIndicatorState;
   label: ToolKind;
   detailKeys?: string[];
   isCommand?: boolean;
 }
 
 const TOOL_STYLES: Record<string, ToolStyle> = {
-  view: { icon: Eye, label: 'Read', detailKeys: ['path'] },
-  read_file: { icon: Eye, label: 'Read', detailKeys: ['path'] },
-  write_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
-  create_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
-  edit_file: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  string_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  str_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  ast_edit: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  execute_command: { icon: SquareTerminal, label: 'Run', detailKeys: ['command'], isCommand: true },
-  get_process_output: { icon: ScrollText, label: 'Process output', detailKeys: ['pid'] },
-  kill_process: { icon: CircleStop, label: 'Stop process', detailKeys: ['pid'] },
-  find_files: { icon: FolderSearch, label: 'Find files', detailKeys: ['pattern', 'path'] },
-  list_files: { icon: FolderSearch, label: 'List files', detailKeys: ['pattern', 'path'] },
-  grep: { icon: Search, label: 'Search', detailKeys: ['pattern', 'path'] },
-  search_content: { icon: Search, label: 'Search', detailKeys: ['pattern', 'query'] },
-  search: { icon: Search, label: 'Search', detailKeys: ['query'] },
-  web_search: { icon: Globe, label: 'Search the web', detailKeys: ['query'] },
-  lsp_inspect: { icon: Braces, label: 'Inspect code', detailKeys: ['path'] },
-  file_stat: { icon: FileSearch, label: 'File info', detailKeys: ['path'] },
-  delete: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
-  delete_file: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
-  mkdir: { icon: FolderPlus, label: 'New folder', detailKeys: ['path'] },
-  skill: { icon: BookOpen, label: 'Skill', detailKeys: ['name'] },
-  skill_search: { icon: BookOpen, label: 'Search skills', detailKeys: ['query'] },
-  skill_read: { icon: BookOpen, label: 'Skill file', detailKeys: ['path'] },
+  view: { pose: 'reading', label: 'Read', detailKeys: ['path'] },
+  read_file: { pose: 'reading', label: 'Read', detailKeys: ['path'] },
+  write_file: { pose: 'editing', label: 'Write', detailKeys: ['path'] },
+  create_file: { pose: 'editing', label: 'Write', detailKeys: ['path'] },
+  edit_file: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
+  string_replace: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
+  str_replace: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
+  ast_edit: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
+  execute_command: { pose: 'running', label: 'Run', detailKeys: ['command'], isCommand: true },
+  get_process_output: { pose: 'reading', label: 'Process output', detailKeys: ['pid'] },
+  kill_process: { pose: 'running', label: 'Stop process', detailKeys: ['pid'] },
+  find_files: { pose: 'finding', label: 'Find files', detailKeys: ['pattern', 'path'] },
+  list_files: { pose: 'finding', label: 'List files', detailKeys: ['pattern', 'path'] },
+  grep: { pose: 'searching', label: 'Search', detailKeys: ['pattern', 'path'] },
+  search_content: { pose: 'searching', label: 'Search', detailKeys: ['pattern', 'query'] },
+  search: { pose: 'searching', label: 'Search', detailKeys: ['query'] },
+  web_search: { pose: 'browsing', label: 'Search the web', detailKeys: ['query'] },
+  lsp_inspect: { pose: 'reading', label: 'Inspect code', detailKeys: ['path'] },
+  file_stat: { pose: 'reading', label: 'File info', detailKeys: ['path'] },
+  delete: { pose: 'deleting', label: 'Delete', detailKeys: ['path'] },
+  delete_file: { pose: 'deleting', label: 'Delete', detailKeys: ['path'] },
+  mkdir: { pose: 'editing', label: 'New folder', detailKeys: ['path'] },
+  skill: { pose: 'skill', label: 'Skill', detailKeys: ['name'] },
+  skill_search: { pose: 'skill', label: 'Search skills', detailKeys: ['query'] },
+  skill_read: { pose: 'skill', label: 'Skill file', detailKeys: ['path'] },
 };
 
 function prettifyToolName(toolName: string): string {
@@ -109,15 +98,16 @@ function withoutCdPrefix(command: string): string {
 
 export function presentTool(toolName: string, args: unknown): ToolPresentation {
   const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
-  if (!style) return { icon: Wrench, label: prettifyToolName(toolName) };
+  if (!style) return { pose: 'tool', icon: agentGlyph('tool'), label: prettifyToolName(toolName) };
 
+  const dressed = { pose: style.pose, icon: agentGlyph(style.pose), label: style.label };
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
-  if (!detail) return { icon: style.icon, label: style.label };
-  if (!style.isCommand) return { icon: style.icon, label: style.label, detail };
+  if (!detail) return dressed;
+  if (!style.isCommand) return { ...dressed, detail };
   // Workspaces with `requireDescription` have the agent say what a command does; that reads better
   // on a one-line row than "Run" and the command, which stays in the expanded body.
   const description = stringArg(args, 'description')?.replace(/\s+/g, ' ').trim() || undefined;
-  return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), description, command: detail };
+  return { ...dressed, detail: withoutCdPrefix(detail), description, command: detail };
 }
 
 export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string });

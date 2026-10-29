@@ -27,6 +27,18 @@ export function ArrivalScope({ children }: { children: ReactNode }) {
   return <SettledContext value={settled}>{children}</SettledContext>;
 }
 
+/**
+ * Something the reader already sees, moved to a new place, such as the run's indicator stepping onto the line
+ * that now describes it. It mounts without fading in, and takes the entrance off any element around it.
+ */
+export function Continuing({ children }: { children: ReactNode }) {
+  return (
+    <div data-arrival="continuing" className="contents">
+      <ArrivalScope>{children}</ArrivalScope>
+    </div>
+  );
+}
+
 /** An element that fades in when it lands, and hosts a scope for whatever lands inside it later. */
 export function Arriving({ children, className }: { children: ReactNode; className?: string }) {
   const arriving = useArriving();

@@ -1,4 +1,5 @@
 import {
+  allOf,
   anyOf,
   around,
   clamp01,
@@ -12,24 +13,34 @@ import {
   kit,
   lerpFrame,
   nothing,
+  once,
   placed,
   range,
   sstep,
   TAU,
   withTrail,
 } from './shapes';
-import type { Frame, Inside, Point, TrailPoint } from './shapes';
+import type { Frame, Inside, Point, Segment, TrailPoint } from './shapes';
 
 export const agentIndicatorStates = [
   'idle',
   'memory',
   'thinking',
+  'reading',
   'searching',
+  'finding',
+  'browsing',
+  'editing',
+  'running',
+  'deleting',
+  'skill',
   'tool',
   'writing',
   'waiting',
   'done',
   'error',
+  'context',
+  'notice',
 ] as const;
 
 export type AgentIndicatorState = (typeof agentIndicatorStates)[number];
@@ -40,11 +51,6 @@ export const MORPH_SECONDS = 0.52;
 
 const GROW = 1.2;
 const settle = (sinceEntered: number) => Math.max(0, sinceEntered - MORPH_SECONDS);
-
-function once<T>(make: () => T) {
-  let value: T | undefined;
-  return () => (value ??= make());
-}
 
 const AGENT_HEAD: Point = [0, -5.5];
 const AGENT_LIMBS: [Point, Point, Point, Point] = [
@@ -179,7 +185,7 @@ const TELESCOPE = anyOf(
 );
 const MOUNT: Point = [-0.4, 1];
 
-const searching: Pose = t => {
+const browsing: Pose = t => {
   const a = -0.5 + 0.2 * Math.sin(0.9 * t) + 0.06 * Math.sin(2.3 * t);
   return withTrail(
     kit(placed(TELESCOPE, a, MOUNT), MOUNT, {
@@ -205,6 +211,166 @@ const tool: Pose = t => {
   const turn = sstep(0.55, 0.85, c - Math.floor(c));
   return Number.isInteger(turn) ? restingNut() : nut(turn);
 };
+
+const turned = ([x, y]: Point, a: number): Point => [
+  x * Math.cos(a) - y * Math.sin(a),
+  x * Math.sin(a) + y * Math.cos(a),
+];
+const shifted = ([x, y]: Point, [dx, dy]: Point): Point => [x + dx, y + dy];
+const segment = (a: Point, b: Point, width: number): Segment => [...a, ...b, width];
+const polyline = (points: Point[], ink: number, cut: number): TrailPoint[] =>
+  points.map((p, i) => (i < points.length - 1 ? [...p, ink, cut] : [...p, 0, 0]));
+const dotCut = (p: Point, d: number): TrailPoint[] => [
+  [...p, 0, d],
+  [...p, 0, 0],
+];
+
+const ALMOND = allOf(inCirc(0, 4.6, 8.8), inCirc(0, -4.6, 8.8));
+
+const reading: Pose = t => {
+  const iris: Point = [1.5 * Math.sin((TAU * t) / 2.6), 0];
+  return withTrail(kit(ALMOND, [0, 0], { hole: inCirc(...iris, 3.1), holeCenter: iris, balls: [[...iris, 1.7]] }));
+};
+
+const LENS: Point = [-1.6, -1.6];
+const MAGNIFIER = anyOf(inCirc(...LENS, 5), inCap([1.8, 1.8], [5.4, 5.4], 1.7));
+
+const searching: Pose = t => {
+  const w = (TAU * t) / 2.4;
+  const at: Point = [0.9 * Math.sin(w), 0.5 * Math.sin(2 * w)];
+  const lens = shifted(LENS, at);
+  return withTrail(kit(placed(MAGNIFIER, 0, at), lens, { hole: inCirc(...lens, 3.1), holeCenter: lens }));
+};
+
+const FOLDER = anyOf(inRoundRect(0, 0.8, 7.6, 5, 1.8), inRoundRect(-4, -4.4, 3.6, 1.4, 1.2));
+const FOLDER_LENS: Point = [-0.6, 0.6];
+
+const finding: Pose = t => {
+  const w = (TAU * t) / 2.8;
+  const lens = shifted(FOLDER_LENS, [1.3 * Math.sin(w), 0.6 * Math.sin(2 * w)]);
+  return withTrail(
+    kit(FOLDER, [0, 0.4], {
+      hole: inCirc(...lens, 2.9),
+      holeCenter: lens,
+      balls: [[...lens, 1.7]],
+      cuts: [segment(shifted(lens, [2.1, 2.1]), shifted(lens, [3.5, 3.5]), 1.5)],
+    }),
+  );
+};
+
+const PEN = anyOf(
+  inCap([-2.6, 2.6], [5, -5], 2.3),
+  inShape([
+    [-4.23, 0.97],
+    [-0.97, 4.23],
+    [-5.9, 5.9],
+  ]),
+);
+const PEN_BANDS: [Point, Point][] = [
+  [
+    [-3.4, 0.6],
+    [-0.6, 3.4],
+  ],
+  [
+    [1.4, -4.2],
+    [4.2, -1.4],
+  ],
+];
+
+const editing: Pose = t => {
+  const w = (TAU * t) / 0.9;
+  const at: Point = [0.45 * Math.sin(w), 0.3 * Math.sin(2 * w)];
+  return withTrail(
+    kit(placed(PEN, 0, at), at, {
+      cuts: PEN_BANDS.map(([a, b]) => segment(shifted(a, at), shifted(b, at), 1)),
+    }),
+  );
+};
+
+const SCREEN = inRoundRect(0, 0, 7.6, 6.2, 2);
+const PROMPT: Point[] = [
+  [-4, -2.4],
+  [-1.2, 0.2],
+  [-4, 2.8],
+];
+
+const running: Pose = t => {
+  const p = (t / 1.1) % 1;
+  const cursor = 1 - sstep(0.45, 0.55, p) + sstep(0.9, 1, p);
+  return withTrail(
+    kit(SCREEN, [0, 0], { cuts: [segment([0.6, 2.8], [4.2, 2.8], 1.8 * cursor)] }),
+    polyline(PROMPT, 0, 1.8),
+  );
+};
+
+const CAN = anyOf(inRoundRect(0, 1.6, 5.4, 5.2, 1.4), inRoundRect(0, -4.4, 7.2, 1, 1), inRoundRect(0, -6, 2.4, 1, 0.8));
+const CAN_CUTS: [Point, Point][] = [
+  [
+    [-1.9, -0.8],
+    [-1.9, 4.4],
+  ],
+  [
+    [1.9, -0.8],
+    [1.9, 4.4],
+  ],
+];
+const LID_SEAM: Point[] = [
+  [-5.6, -3.2],
+  [5.6, -3.2],
+];
+
+const deleting: Pose = t => {
+  const a = 0.08 * Math.sin((TAU * t) / 1.2);
+  return withTrail(
+    kit(placed(CAN, a), [0, 0], { cuts: CAN_CUTS.map(([p, q]) => segment(turned(p, a), turned(q, a), 1.3)) }),
+    polyline(
+      LID_SEAM.map(p => turned(p, a)),
+      0,
+      0.9,
+    ),
+  );
+};
+
+const page = (side: 1 | -1, lift: number): Inside =>
+  inShape(
+    (
+      [
+        [-0.1, -3.6],
+        [3, -5.2 - lift],
+        [7.6, -5 - lift],
+        [7.6, 4.6],
+        [3, 4.8],
+        [-0.1, 6.2],
+      ] satisfies Point[]
+    ).map(([x, y]): Point => [side * x, y]),
+  );
+
+const skill: Pose = t => {
+  const lift = 0.5 * Math.sin((TAU * t) / 2.2);
+  return withTrail(kit(anyOf(page(1, lift), page(-1, -lift)), [0, 0.4], { cuts: [segment([0, -3.2], [0, 5.6], 1)] }));
+};
+
+const LAYER_TIERS = [-3.2, 0, 3.2];
+const diamond = (cy: number): [Point, Point, Point, Point] => [
+  [0, cy - 3.6],
+  [7.4, cy],
+  [0, cy + 3.6],
+  [-7.4, cy],
+];
+
+const context = once(() =>
+  withTrail(
+    kit(anyOf(...LAYER_TIERS.map(cy => inShape(diamond(cy)))), [0, 0]),
+    LAYER_TIERS.slice(0, -1).flatMap(cy => {
+      const [, right, bottom, left] = diamond(cy);
+      return polyline([left, bottom, right], 0, 1);
+    }),
+  ),
+);
+
+const notice = once(() =>
+  withTrail(kit(inCirc(0, 0, 7.4), [0, 0], { cuts: [segment([0, -0.4], [0, 3.8], 1.9)] }), dotCut([0, -3.6], 2.3)),
+);
 
 const HOME: Point = [-7.8, -5.4];
 const ROWS: [number, [number, number][]][] = [
@@ -310,6 +476,8 @@ const RINGING_SECONDS = MORPH_SECONDS + 2;
 export const restsAfterSeconds: Partial<Record<AgentIndicatorState, number>> = {
   idle: 0,
   waiting: 0,
+  context: 0,
+  notice: 0,
   done: RINGING_SECONDS,
   error: RINGING_SECONDS,
 };
@@ -318,10 +486,19 @@ export const poses: Record<AgentIndicatorState, Pose> = {
   idle: grown(agent),
   memory: grown(memory),
   thinking: grown(thinking),
+  reading: grown(reading),
   searching: grown(searching),
+  finding: grown(finding),
+  browsing: grown(browsing),
+  editing: grown(editing),
+  running: grown(running),
+  deleting: grown(deleting),
+  skill: grown(skill),
   tool: grown(tool),
   writing: grown(writing),
   waiting: grown(waiting),
   done: grown(done),
   error: grown(error),
+  context: grown(context),
+  notice: grown(notice),
 };

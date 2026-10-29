@@ -59,7 +59,7 @@ describe('ActivityLine', () => {
     expect(screen.getByText('Thinking')).toBeInTheDocument();
   });
 
-  it('leaves a running call to the stretch line that names it, keeping only its glyph', async () => {
+  it('hands a running call to the stretch line, which wears the indicator in its place', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
@@ -74,9 +74,9 @@ describe('ActivityLine', () => {
       args: { path: 'src/index.ts' },
     });
 
-    await screen.findByRole('group', { name: /^Reading/ }, { timeout: 3000 });
-    await waitFor(() => expect(document.querySelector('[data-state="tool"]')).not.toBeNull());
-    expect(screen.queryByText('Calling a tool')).not.toBeInTheDocument();
+    const stretch = await screen.findByRole('group', { name: /^Reading/ }, { timeout: 3000 });
+    await waitFor(() => expect(stretch.querySelector('.agent-indicator[data-state="reading"]')).not.toBeNull());
+    expect(document.querySelectorAll('.agent-indicator')).toHaveLength(1);
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
@@ -98,7 +98,9 @@ describe('ActivityLine', () => {
     await session.emit({ type: 'tool_end', toolCallId: 'call-web', result: 'ok', isError: false });
 
     await waitFor(() => expect(screen.getAllByText('Thinking')).toHaveLength(1));
-    expect(document.querySelector('[data-state="thinking"]')).not.toBeNull();
+    const stretch = document.querySelector('[data-slot="activity-stretch"]');
+    expect(stretch?.querySelector('.agent-indicator[data-state="thinking"]')).not.toBeNull();
+    expect(document.querySelectorAll('.agent-indicator')).toHaveLength(1);
   });
 
   it('names a call no stretch speaks for', async () => {
@@ -111,10 +113,11 @@ describe('ActivityLine', () => {
 
     await session.emit({ type: 'tool_start', toolCallId: 'call-skill', toolName: 'skill', args: { name: 'review' } });
 
-    expect(await screen.findByText('Calling a tool')).toBeInTheDocument();
+    expect(await screen.findByText('Using skill')).toBeInTheDocument();
+    expect(document.querySelector('.agent-indicator[data-state="skill"]')).not.toBeNull();
   });
 
-  it('says it is writing while the answer streams', async () => {
+  it('steps aside while the answer streams, since the words arriving say it', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
@@ -130,7 +133,8 @@ describe('ActivityLine', () => {
     });
 
     await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
-    expect(await screen.findByText('Writing')).toBeInTheDocument();
+    expect(screen.queryByText('Writing')).not.toBeInTheDocument();
+    expect(document.querySelector('.agent-indicator')).toBeNull();
   });
 
   it('says the run is saving memory while memory holds it', async () => {
@@ -183,6 +187,27 @@ describe('ActivityLine', () => {
 
     expect(await screen.findByText('Done')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Done')).not.toBeInTheDocument(), { timeout: 3000 });
+  });
+
+  it('ends quietly after an answer, which already said the run is over', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+    await session.emit({ type: 'message_start', message: assistantText('') });
+    await session.emit({
+      type: 'message_update',
+      id: 'assistant-1',
+      event: { type: 'text-delta', delta: 'Auth starts at the composer' },
+    });
+    await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
+
+    await session.emit({ type: 'agent_end' });
+
+    await expect(screen.findByText('Done', {}, { timeout: 1000 })).rejects.toThrow();
+    expect(document.querySelector('.agent-indicator')).toBeNull();
   });
 
   it('lands on the failure when the run errors', async () => {

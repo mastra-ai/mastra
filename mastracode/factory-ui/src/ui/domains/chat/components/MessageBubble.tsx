@@ -57,6 +57,14 @@ function metaText(entry: MessageEntry, prose: string, reply?: string): string | 
   return entry.streaming ? undefined : reply;
 }
 
+/** The tail line steps aside for a live stretch at once, so the reveal must not hold it back. */
+function withLiveHost(entryId: string, written: MessagePart[], paced: MessagePart[], activity: EntryActivity) {
+  const host = written.findIndex(
+    (part, index) => index >= paced.length && activity.hosts.get(activityPartKey(entryId, part, index))?.live,
+  );
+  return host === -1 ? paced : [...paced, ...written.slice(paced.length, host + 1)];
+}
+
 export function MessageBubble({
   entry,
   suspensions,
@@ -78,7 +86,8 @@ export function MessageBubble({
   activity?: EntryActivity;
 }) {
   const written = renderableParts(entry);
-  const parts = useRevealedParts(written, Boolean(entry.streaming));
+  const paced = useRevealedParts(written, Boolean(entry.streaming));
+  const parts = withLiveHost(entry.id, written, paced, activity);
   const { attachments, content } =
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
@@ -89,7 +98,7 @@ export function MessageBubble({
     return draws(part, suspensions, entry.runtimeTools) && !activity.hidden.has(key);
   });
   const revealed = new Map<string, MessagePart>(
-    parts.map((part, index) => [activityPartKey(entry.id, part, index), part]),
+    paced.map((part, index) => [activityPartKey(entry.id, part, index), part]),
   );
   const keyOfPart = new Map<object, string>(parts.map((part, index) => [part, activityPartKey(entry.id, part, index)]));
 
@@ -187,7 +196,11 @@ export function MessageBubble({
       if (!hasVisibleText(part.text)) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        return activation ? (
+          <SkillMessage activation={activation} appearance="inline" />
+        ) : (
+          <MarkdownRenderer>{part.text}</MarkdownRenderer>
+        );
       }
 
       return (
@@ -235,7 +248,7 @@ export function MessageBubble({
   const view = messageEntryView(entry, parts);
   switch (view.kind) {
     case 'skill':
-      return <SkillMessage activation={view.activation} />;
+      return <SkillMessage activation={view.activation} appearance="inline" />;
     case 'hidden':
       return null;
     case 'notifications':
@@ -256,11 +269,15 @@ export function MessageBubble({
     case 'signal': {
       const { row } = view;
       if (row.kind === 'state') {
-        return <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} />;
+        return (
+          <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
+        );
       }
       if (row.kind === 'divider') return <TranscriptDivider label={row.label} title={row.title} />;
-      if (row.kind === 'reminder') return <SignalActivity kind="reminder" label="System reminder" message={row.text} />;
-      return <SignalActivity kind="reactive" label={row.tagName} message={row.text} />;
+      if (row.kind === 'reminder') {
+        return <SignalActivity kind="reminder" label="System reminder" message={row.text} appearance="inline" />;
+      }
+      return <SignalActivity kind="reactive" label={row.tagName} message={row.text} appearance="inline" />;
     }
     case 'status':
       return <StatusMetadataCard status={view.status} />;

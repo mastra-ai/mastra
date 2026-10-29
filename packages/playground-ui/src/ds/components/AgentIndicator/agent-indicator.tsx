@@ -8,6 +8,8 @@ import './agent-indicator.css';
 
 export interface AgentIndicatorProps {
   state: AgentIndicatorState;
+  /** Holds idle and waiting without their ambient motion, for a state that is over rather than live. */
+  still?: boolean;
   className?: string;
 }
 
@@ -38,7 +40,7 @@ const TRAIL_INKS = (
   </g>
 );
 
-export function AgentIndicator({ state, className }: AgentIndicatorProps) {
+export function AgentIndicator({ state, still, className }: AgentIndicatorProps) {
   const maskId = `agent-indicator-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const svgRef = useRef<SVGSVGElement>(null);
   const animation = useRef<ReturnType<typeof animate>>(undefined);
@@ -58,7 +60,12 @@ export function AgentIndicator({ state, className }: AgentIndicatorProps) {
   }, [state]);
 
   return (
-    <span aria-hidden data-state={state} className={cn('agent-indicator inline-flex size-4 shrink-0', className)}>
+    <span
+      aria-hidden
+      data-state={state}
+      data-still={still || undefined}
+      className={cn('agent-indicator inline-flex size-4 shrink-0', className)}
+    >
       <svg ref={svgRef} viewBox="-12 -12 24 24" className="size-full">
         <defs>
           <mask id={maskId} maskUnits="userSpaceOnUse" x={-12} y={-12} width={24} height={24}>

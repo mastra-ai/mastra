@@ -168,7 +168,7 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(failedRow).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
   });
 
-  it('keeps a live stretch on screen when it opens with a thought that has no text yet', () => {
+  it('keeps a live stretch on screen when it opens with a thought that has no text yet, reading its running call', () => {
     renderEntries(
       [
         assistantMessage(
@@ -185,7 +185,7 @@ describe('TranscriptEntries tool rows', () => {
       true,
     );
 
-    expect(screen.getByRole('group', { name: 'Thinking' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Running pnpm test' })).toBeInTheDocument();
   });
 
   it('names a single call in the past tense with its salient argument, not the raw tool name', () => {

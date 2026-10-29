@@ -175,3 +175,26 @@ describe('assistant prose', () => {
     expect(container.textContent).toContain('first half second half');
   });
 });
+
+describe('handing the run indicator from the tail to a stretch', () => {
+  const tail = (stretchLive: boolean) => (stretchLive ? null : <p>The tail is thinking</p>);
+  const liveView = (entries: TimelineEntry[]) => (
+    <TranscriptEntries entries={entries} running onApprove={() => {}} onRespond={() => {}} tail={tail} />
+  );
+  const liveStretch = () => document.querySelector('[data-slot="activity-stretch"]');
+
+  it('draws the stretch before the beat of the running call it opens on', () => {
+    vi.useFakeTimers();
+    const { rerender } = renderWithProviders(liveView([]));
+    const view = {
+      type: 'tool-invocation' as const,
+      toolInvocation: { state: 'call' as const, toolCallId: 'call-view', toolName: 'view', args: { path: 'a.ts' } },
+    };
+
+    rerender(liveView([assistant([view], true)]));
+
+    expect(screen.queryByText('The tail is thinking')).toBeNull();
+    expect(liveStretch()?.querySelector('.agent-indicator[data-state="reading"]')).not.toBeNull();
+    expect(screen.getByRole('group', { name: 'Reading a.ts' })).toBeTruthy();
+  });
+});

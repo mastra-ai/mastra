@@ -1,6 +1,13 @@
 import type { MastraMessagePart } from '@mastra/core/agent-controller';
-import { Activity, ActivityHeader, ActivityIcon, ActivityLabel } from '@mastra/playground-ui/components/ai/activity';
+import {
+  Activity,
+  ActivityDetail,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
+} from '@mastra/playground-ui/components/ai/activity';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
+import { callPose, liveWords } from '@mastra/playground-ui/domains/chat/activity';
 import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
 import type { AgentIndicatorState } from '@mastra/playground-ui/components/AgentIndicator';
@@ -14,32 +21,47 @@ import { isTerminalInvocationState } from '../services/transcript';
 import type { TimelineEntry } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 
-type RunActivity = Exclude<AgentIndicatorState, 'idle'>;
+interface RunningCall {
+  toolName: string;
+  args: unknown;
+}
 
-const LABELS: Record<RunActivity, string> = {
+type RunActivity = 'memory' | 'thinking' | 'writing' | 'waiting' | 'done' | 'error' | RunningCall;
+
+type LineState = Exclude<RunActivity, 'writing'>;
+
+const LABELS: Record<Exclude<LineState, RunningCall>, string> = {
   memory: 'Updating memory',
   thinking: 'Thinking',
-  searching: 'Searching the web',
-  tool: 'Calling a tool',
-  writing: 'Writing',
   waiting: 'Waiting for you',
   done: 'Done',
   error: 'Something went wrong',
 };
 
-/** What a live stretch line already says, so this line keeps only its glyph under one. */
-const SPOKEN_BY_STRETCH = new Set<RunActivity>(['thinking', 'searching', 'tool']);
-
-const STATUS: Record<RunActivity, ActivityStatus> = {
+const STATUS: Record<Exclude<LineState, RunningCall>, ActivityStatus> = {
   memory: 'running',
   thinking: 'running',
-  searching: 'running',
-  tool: 'running',
-  writing: 'running',
   waiting: 'idle',
   done: 'idle',
   error: 'error',
 };
+
+function spokenByStretch(state: LineState): boolean {
+  return state === 'thinking' || typeof state !== 'string';
+}
+
+interface LineLook {
+  pose: AgentIndicatorState;
+  label: string;
+  detail?: string;
+  status: ActivityStatus;
+}
+
+function lineLook(state: LineState): LineLook {
+  if (typeof state === 'string') return { pose: state, label: LABELS[state], status: STATUS[state] };
+  const { label, detail } = liveWords([{ ...state, status: 'running' }]);
+  return { pose: callPose(state.toolName), label, detail, status: 'running' };
+}
 
 /**
  * Parts the transcript puts on screen. A hidden tool draws nothing, and an `ask_user` is drawn
@@ -67,7 +89,7 @@ function partIsDrawn(part: MastraMessagePart): boolean {
 function partActivity(part: MastraMessagePart): RunActivity {
   if (part.type === 'text') return 'writing';
   if (part.type !== 'tool-invocation' || isTerminalInvocationState(part.toolInvocation.state)) return 'thinking';
-  return part.toolInvocation.toolName === 'web_search' ? 'searching' : 'tool';
+  return part.toolInvocation;
 }
 
 /**
@@ -126,6 +148,15 @@ export function ActivityLine({ stretchLive }: { stretchLive: boolean }) {
   if (!shown) return null;
 
   const state = lineState(activity, busy, Object.values(omWork(runtime)).includes('blocking'));
+  if (state === 'writing' || (stretchLive && spokenByStretch(state))) return null;
+  return <RunLine state={state} live={live} />;
+}
+
+/** Born done = the answer or a stretch already said the run is over. */
+function RunLine({ state, live }: { state: LineState; live: boolean }) {
+  const [bornDone] = useState(state === 'done');
+  if (bornDone) return null;
+  const { pose, label, detail, status } = lineLook(state);
 
   return (
     <Arriving>
@@ -133,12 +164,13 @@ export function ActivityLine({ stretchLive }: { stretchLive: boolean }) {
         aria-hidden
         className={cn('transition-opacity duration-300 motion-reduce:duration-0', !live && 'opacity-0 delay-1100')}
       >
-        <Activity foldable={false} status={STATUS[state]}>
+        <Activity foldable={false} status={status} appearance="inline">
           <ActivityHeader>
             <ActivityIcon className="[&_svg]:size-4">
-              <AgentIndicator state={state} />
+              <AgentIndicator state={pose} />
             </ActivityIcon>
-            {!(stretchLive && SPOKEN_BY_STRETCH.has(state)) && <ActivityLabel>{LABELS[state]}</ActivityLabel>}
+            <ActivityLabel className="text-body font-medium">{label}</ActivityLabel>
+            {detail && <ActivityDetail className="text-body-sm">{detail}</ActivityDetail>}
           </ActivityHeader>
         </Activity>
       </div>
