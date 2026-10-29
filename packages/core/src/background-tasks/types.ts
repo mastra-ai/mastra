@@ -47,11 +47,10 @@ export interface BackgroundTask {
   completedAt?: Date;
 
   /**
-   * Identity of the worker process that currently owns execution of this task.
-   * Set when a worker acquires the execution lease and cleared when the task
-   * reaches a terminal state, suspends, or is cancelled. Combined with
-   * `leaseExpiresAt` so recovery can prove whether the previous owner is dead
-   * before reclaiming a `running` task.
+   * Identity of the worker process that owns execution of this task. Pending
+   * tasks with an invocation-bound executor retain their enqueueing worker's
+   * identity so other workers cannot dispatch them without their local context.
+   * Running tasks pair this with `leaseExpiresAt` to fence stale owners.
    */
   ownerId?: string;
   /**

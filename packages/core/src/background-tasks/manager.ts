@@ -261,12 +261,6 @@ export class BackgroundTaskManager {
         ]);
         return;
       }
-
-      if (this.config.recoverStaleTasksOnStart) {
-        // Recover stale tasks from a previous process — only workers should
-        // attempt recovery since they own execution.
-        await this.recoverStaleTasks();
-      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
@@ -281,6 +275,12 @@ export class BackgroundTaskManager {
       lateSubscriptions.push([TOPIC_RESULT, this.resultCallback]);
       await this.#releaseLateInitSubscriptions(lateSubscriptions);
       return;
+    }
+
+    if (!isProducerOnly && this.config.recoverStaleTasksOnStart) {
+      // Listen for completions before dispatching recovered tasks so that
+      // fast tasks can trigger a pending-queue drain during startup.
+      await this.recoverStaleTasks();
     }
 
     // Start periodic cleanup if configured
@@ -384,6 +384,7 @@ export class BackgroundTaskManager {
     const task: BackgroundTask = {
       id: this.#mastra?.generateId() ?? globalThis.crypto.randomUUID(),
       status: 'pending',
+      ownerId: context ? this.workerId : undefined,
       toolName: payload.toolName,
       toolCallId: payload.toolCallId,
       args: payload.args,
@@ -1962,14 +1963,14 @@ export class BackgroundTaskManager {
       const storage = await this.getStorage();
       for (const taskId of [...this.localPendingTaskIds]) {
         const task = await storage.getTask(taskId);
-        if (!task || task.status !== 'pending') {
+        if (!task || task.status !== 'pending' || (task.ownerId && task.ownerId !== this.workerId)) {
           this.localPendingTaskIds.delete(taskId);
           continue;
         }
 
         const isProcessAffine = this.taskContexts.has(taskId);
-        if (!(await this.checkConcurrency(task.agentId))) continue;
-        if (isProcessAffine && !this.reserveLocalSlot(task)) continue;
+        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
+        if (!canRun) continue;
 
         this.localPendingTaskIds.delete(taskId);
         try {
@@ -2053,6 +2054,7 @@ export class BackgroundTaskManager {
         orderDirection: 'asc',
       });
       for (const task of pendingTasks) {
+        if (task.ownerId && task.ownerId !== this.workerId) continue;
         this.localPendingTaskIds.add(task.id);
       }
       await this.drainPending();
