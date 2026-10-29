@@ -992,6 +992,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         arriving.map(row => String(row.key)),
         target.id,
         session,
+        source.id,
       );
       if (tree.maxDepth > 0 && tree.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new core.KnowledgePageDepthError(source.id);
@@ -999,6 +1000,24 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const now = new Date();
       const pages = await this.#c('pages');
       const notes = await this.#c('notes');
+      // Retire the source first: its key may equal a child's, which must be free under the target.
+      const deleted = await pages.updateOne(
+        { id: source.id, version: input.sourceVersion },
+        {
+          $set: {
+            deletedAt: now,
+            deletedBy: input.provenance.author,
+            mergedInto: target.id,
+            scopeId: target.scopeId,
+            updatedAt: now,
+            updatedBy: input.provenance,
+          },
+          $unset: { activeKey: '' },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (deleted.matchedCount === 0) throw new KnowledgeConflictError(input.sourceId);
       try {
         if (tree.ids.length) {
           await pages.updateMany(
@@ -1057,23 +1076,6 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         await pins.deleteOne({ id: sourcePin.id }, { session });
       }
 
-      const deleted = await pages.updateOne(
-        { id: source.id, version: input.sourceVersion },
-        {
-          $set: {
-            deletedAt: now,
-            deletedBy: input.provenance.author,
-            mergedInto: target.id,
-            scopeId: target.scopeId,
-            updatedAt: now,
-            updatedBy: input.provenance,
-          },
-          $unset: { activeKey: '' },
-          $inc: { version: 1 },
-        },
-        { session },
-      );
-      if (deleted.matchedCount === 0) throw new KnowledgeConflictError(input.sourceId);
       await (
         await this.#c('activity')
       ).updateMany({ pageId: source.id }, { $set: { pageScopeId: target.scopeId } }, { session });

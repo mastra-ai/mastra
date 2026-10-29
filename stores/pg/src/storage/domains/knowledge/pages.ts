@@ -456,16 +456,21 @@ export class PgKnowledgePages implements KnowledgePageStore {
    * Refuses before any write when a live page arriving under `parentId` has a key a live child of
    * `parentId` already uses: the moved root itself, or, for a merge, the source's live children.
    */
-  async #assertNoKeyConflicts(db: Queryable, arriving: { rootId?: string; childrenOf?: string }, parentId: string) {
+  async #assertNoKeyConflicts(
+    db: Queryable,
+    arriving: { rootId?: string; childrenOf?: string },
+    parentId: string,
+    exceptId?: string,
+  ) {
     const core = await loadPagesCore();
     const arrivingWhere = arriving.rootId ? `c."id" = $1` : `c."parentId" = $1 AND NOT c."isScope"`;
     const rows = await this.#rows(
       db,
       `SELECT c."key" FROM ${this.#pages} c
-       JOIN ${this.#pages} t ON t."parentId" = $2 AND t."key" = c."key" AND t."deletedAt" IS NULL AND t."id" <> c."id"
+       JOIN ${this.#pages} t ON t."parentId" = $2 AND t."key" = c."key" AND t."deletedAt" IS NULL AND t."id" <> c."id" AND t."id" IS DISTINCT FROM $3::text
        WHERE ${arrivingWhere} AND c."key" IS NOT NULL AND c."deletedAt" IS NULL
        LIMIT 1`,
-      [arriving.rootId ?? arriving.childrenOf, parentId],
+      [arriving.rootId ?? arriving.childrenOf, parentId, exceptId ?? null],
     );
     if (rows[0]) throw new core.KnowledgePageKeyConflictError(String(rows[0].key), parentId);
   }
@@ -976,11 +981,16 @@ export class PgKnowledgePages implements KnowledgePageStore {
       if (stats.live > core.MAX_KNOWLEDGE_MOVE_PAGES) throw new core.KnowledgeMoveTooLargeError(source.id, stats.live);
       // Source's children become target's children, one level below the target.
       const delta = (await this.#depthOf(tx, target.id)) - (await this.#depthOf(tx, source.id));
-      await this.#assertNoKeyConflicts(tx, { childrenOf: source.id }, target.id);
+      await this.#assertNoKeyConflicts(tx, { childrenOf: source.id }, target.id, source.id);
       if (stats.maxDepth > 0 && stats.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new core.KnowledgePageDepthError(source.id);
       }
       const now = new Date();
+      // Retire the source first: its key may equal a child's, which must be free under the target.
+      await tx.query(
+        `UPDATE ${this.#pages} SET "deletedAt" = $2, "deletedBy" = $3, "mergedInto" = $4, "scopeId" = $6, "version" = "version" + 1, "updatedAt" = $2, "updatedBy" = $5::jsonb WHERE "id" = $1`,
+        [source.id, iso(now), input.provenance.author, target.id, JSON.stringify(input.provenance), target.scopeId],
+      );
       try {
         await tx.query(
           `${this.#subtree('$1')} UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" IN (SELECT "id" FROM sub)`,
@@ -1015,10 +1025,6 @@ export class PgKnowledgePages implements KnowledgePageStore {
         await tx.query(`DELETE FROM ${this.#pins} WHERE "id" = $1`, [String(sourcePin.id)]);
       }
 
-      await tx.query(
-        `UPDATE ${this.#pages} SET "deletedAt" = $2, "deletedBy" = $3, "mergedInto" = $4, "scopeId" = $6, "version" = "version" + 1, "updatedAt" = $2, "updatedBy" = $5::jsonb WHERE "id" = $1`,
-        [source.id, iso(now), input.provenance.author, target.id, JSON.stringify(input.provenance), target.scopeId],
-      );
       const rows = await this.#rows(tx, `SELECT * FROM ${this.#pages} WHERE "id" = $1`, [target.id]);
       await this.#logActivity(tx, {
         action: 'page-merged',
