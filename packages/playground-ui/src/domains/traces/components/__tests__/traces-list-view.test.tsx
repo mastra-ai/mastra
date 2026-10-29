@@ -205,7 +205,7 @@ describe('TracesListView — outcome column', () => {
     );
 
     expect(outcomeCell('run ok').textContent).toBe('OK');
-    expect(stopReasonCell('run ok').textContent).toBe('-');
+    expect(stopReasonCell('run ok').textContent).toBe('');
     expect(screen.getByRole('button', { name: /run ok/ }).querySelector('[data-base-ui-tooltip-trigger]')).toBeNull();
   });
 
@@ -229,6 +229,8 @@ describe('TracesListView — outcome column', () => {
     await user.hover(screen.getByText('max_steps'));
 
     expect(await screen.findByText('limit')).toBeTruthy();
+    // The tooltip names the reason too, since the cell can truncate it.
+    expect(screen.getAllByText('max_steps')).toHaveLength(2);
     expect(screen.getByText('5')).toBeTruthy();
     expect(screen.getByText('scope')).toBeTruthy();
     expect(screen.getByText('agent')).toBeTruthy();
@@ -245,7 +247,7 @@ describe('TracesListView — outcome column', () => {
     );
 
     expect(outcomeCell('run legacy').textContent).toBe('ERR');
-    expect(stopReasonCell('run legacy').textContent).toBe('-');
+    expect(stopReasonCell('run legacy').textContent).toBe('');
     await user.hover(screen.getByText('ERR'));
 
     expect(await screen.findByText('Outcome not recorded; status from error')).toBeTruthy();

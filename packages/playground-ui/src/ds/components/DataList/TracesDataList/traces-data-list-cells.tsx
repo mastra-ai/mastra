@@ -232,20 +232,27 @@ export interface TracesDataListStopReasonCellProps {
 }
 
 export function TracesDataListStopReasonCell({ stopReason, stopReasonContext }: TracesDataListStopReasonCellProps) {
+  // Empty, so DataListCell shows its own placeholder.
+  if (!stopReason) return <DataListCell />;
+
   const contextEntries = stopReasonContext ? Object.entries(stopReasonContext) : [];
-  if (!stopReason || contextEntries.length === 0) {
-    return <DataListTextCell font="mono">{stopReason || '-'}</DataListTextCell>;
+  if (contextEntries.length === 0) {
+    return <DataListTextCell font="mono">{stopReason}</DataListTextCell>;
   }
 
   return (
-    <DataListCell className="flex min-w-0 items-center">
+    <DataListCell className="flex items-center">
       <Tooltip>
         <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
-          <Txt as="span" variant="body-sm" tone="muted" font="mono" className="min-w-0 truncate">
+          <Txt as="span" variant="body-sm" tone="muted" font="mono" className="truncate">
             {stopReason}
           </Txt>
         </TooltipTrigger>
         <TooltipContent>
+          {/* The cell can truncate long reasons like `context_window_exceeded`, so name it here too. */}
+          <Txt as="p" variant="body-sm" font="mono" className="mb-1">
+            {stopReason}
+          </Txt>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
             {contextEntries.map(([key, value]) => (
               <Fragment key={key}>
