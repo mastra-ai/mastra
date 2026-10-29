@@ -5,12 +5,13 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { PoolAdapter } from '../../client';
 import type { DbClient } from '../../db';
 import { PostgresStore } from '../../index';
+import { connectionString as defaultConnectionString } from '../../test-utils';
 
 import { getPgKnowledgeIsolationKey, KnowledgePG } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-const connectionString = process.env.KNOWLEDGE_PG_URL ?? 'postgresql://postgres:postgres@localhost:5444/mastra';
+const connectionString = process.env.KNOWLEDGE_PG_URL ?? defaultConnectionString;
 const pool = new Pool({ connectionString });
 afterAll(async () => {
   await pool.end();

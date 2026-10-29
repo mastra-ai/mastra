@@ -11,10 +11,11 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { PoolAdapter } from '../../client';
+import { connectionString as defaultConnectionString } from '../../test-utils';
 import { PgKnowledgePages } from './pages';
 import { initPgKnowledgePagesSchema, PgKnowledgeResetRequiredError, resetPgKnowledgePagesSchema } from './pages-schema';
 
-const connectionString = process.env.KNOWLEDGE_PG_URL ?? 'postgresql://postgres:postgres@localhost:5444/mastra';
+const connectionString = process.env.KNOWLEDGE_PG_URL ?? defaultConnectionString;
 const schemaName = 'knowledge_pages_test';
 const provenance = { author: 'agent:test' };
 
