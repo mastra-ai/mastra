@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChartCard } from './chart-card';
@@ -48,6 +48,8 @@ describe('ChartCard', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Spend by model' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'By provider' }));
       expect(onValueChange).toHaveBeenCalledWith('provider');
+      // Picking a view closes the menu.
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     });
 
     it("keeps the title as the top bar's first item, sized to its text, while the menu is open", async () => {
