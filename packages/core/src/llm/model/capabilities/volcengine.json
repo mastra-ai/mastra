@@ -50,19 +50,16 @@
     "glm-5-3-flash-260828"
   ],
   "reasoning": {
-    "doubao-seed-2-0-pro-260215": [
+    "doubao-seed-1-8-251228": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-pro-ga-260813": [
-      {
-        "type": "toggle"
-      },
+    "doubao-seed-2-0-pro-260215": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "doubao-seed-2-0-mini-260428": [
@@ -71,21 +68,25 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "doubao-seed-1-6-vision-250815": [
+    "doubao-seed-2-0-lite-260428": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "doubao-seed-evolving": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "doubao-seed-2-0-code-preview-260215": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "doubao-seed-1-6-251015": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5-2-260617": [
       {
         "type": "toggle"
       },
@@ -99,43 +100,13 @@
         "type": "toggle"
       }
     ],
-    "doubao-seed-2-0-code-preview-260215": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "doubao-seed-2-0-lite-260428": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm-5-3-flash-260828": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "doubao-seed-2-1-pro-260628": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "doubao-seed-evolving": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "doubao-seed-character-260628": [
+    "deepseek-v4-pro-ga-260813": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["minimal", "low", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "doubao-seed-2-1-turbo-260628": [
@@ -153,10 +124,39 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "doubao-seed-1-8-251228": [
+    "glm-5-3-flash-260828": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5-2-260617": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "doubao-seed-1-6-vision-250815": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2-1-pro-260628": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "doubao-seed-character-260628": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "high"]
       }
     ]
   }

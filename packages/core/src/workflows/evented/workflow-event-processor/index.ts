@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
+import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
@@ -1233,6 +1234,47 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
+  private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
+    for (;;) {
+      try {
+        await this.mastra.pubsub.publish('workflows-finish', event);
+        return;
+      } catch (error) {
+        if (!(error instanceof PublisherQueueLimitError)) {
+          throw error;
+        }
+        if (error.waitForCapacity) {
+          await error.waitForCapacity();
+          continue;
+        }
+        // Only permanently oversized results need a compact notification. If
+        // the broker stays stalled, even this notification cannot be delivered.
+        const notification = {
+          type: 'workflow.publish-failed',
+          runId: event.runId,
+          data: {
+            message: error.message,
+            workflowId: event.data.workflowId,
+            runId: event.runId,
+            requestContext: event.data.requestContext,
+            finishPendingCleanup: event.data.finishPendingCleanup,
+          },
+        };
+        for (;;) {
+          try {
+            await this.mastra.pubsub.publish('workflows-finish', notification);
+            return;
+          } catch (notificationError) {
+            if (!(notificationError instanceof PublisherQueueLimitError) || !notificationError.waitForCapacity) {
+              throw notificationError;
+            }
+            await notificationError.waitForCapacity();
+          }
+        }
+      }
+    }
+  }
+
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
     // Keep cleanup intent local to this serialized handoff, not downstream notifications.
     const { deleteSnapshotAfterEnd, ...finishArgs } = args;
@@ -1362,10 +1404,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.end',
       runId,
-      data: { ...finishArgs, workflow: undefined, state: finalState },
+      data: {
+        ...finishArgs,
+        workflow: undefined,
+        state: finalState,
+        finishPendingCleanup: deleteSnapshotAfterEnd === true,
+      },
     });
 
     if (deleteSnapshotAfterEnd === true) {
@@ -1377,6 +1424,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
+      await this.publishFinishEvent({
+        type: 'workflow.finish-cleanup-complete',
+        runId,
+        data: { workflowId, requestContext },
+      });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1470,7 +1522,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.suspend',
       runId,
       data: { ...args, workflow: undefined, state: finalState },
@@ -1594,10 +1646,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.fail',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: { ...args, workflow: undefined, state: finalState, finishPendingCleanup: !ownershipLost && !shouldPersist },
     });
 
     if (!ownershipLost && !shouldPersist) {
@@ -1607,6 +1659,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
+      await this.publishFinishEvent({
+        type: 'workflow.finish-cleanup-complete',
+        runId,
+        data: { workflowId, requestContext },
+      });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)

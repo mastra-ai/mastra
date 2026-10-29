@@ -1751,6 +1751,60 @@ describe('BackgroundTaskManager', () => {
       }
     });
 
+    it.each(['renewed lease', 'lost claim'] as const)('runs a queued invocation-bound task after a %s', async race => {
+      const storage = new MockStore();
+      const bgStore = await storage.getStore('backgroundTasks');
+      const local = new Mastra({ logger: false, storage, backgroundTasks: { enabled: true, globalConcurrency: 1 } });
+      let releaseFirst!: () => void;
+      const gate = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      const second = vi.fn(async () => 'second result');
+      try {
+        await local.startWorkers();
+        const mgr = local.backgroundTaskManager!;
+        await mgr.enqueue(
+          { toolName: 't', toolCallId: 'first', args: {}, agentId: 'a', runId: 'first' },
+          ctx(async () => {
+            await gate;
+            return 'first result';
+          }),
+        );
+        const { task } = await mgr.enqueue(
+          { toolName: 't', toolCallId: 'second', args: {}, agentId: 'a', runId: 'second' },
+          ctx(second),
+        );
+        expect((await bgStore.getTask(task.id))?.status).toBe('pending');
+        const updateTask = bgStore.updateTask.bind(bgStore);
+        let renewed = false;
+        vi.spyOn(bgStore, 'updateTask').mockImplementation(async (id, updates, expected) => {
+          if (!renewed && id === task.id && updates.status === 'running') {
+            renewed = true;
+            if (race === 'lost claim') return null;
+            const current = await bgStore.getTask(id);
+            await updateTask(
+              id,
+              { leaseExpiresAt: new Date(Date.now() + 30_000) },
+              {
+                expectedStatus: 'pending',
+                expectedOwnerId: current?.ownerId,
+                expectedLeaseExpiresAt: current?.leaseExpiresAt,
+              },
+            );
+          }
+          return updateTask(id, updates, expected);
+        });
+        releaseFirst();
+        await vi.waitFor(async () => expect((await bgStore.getTask(task.id))?.status).toBe('completed'));
+        expect(renewed).toBe(true);
+        expect(second).toHaveBeenCalledOnce();
+      } finally {
+        releaseFirst();
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
     it('releases queued invocation-bound tasks for static recovery on shutdown', async () => {
       const storage = new MockStore();
       const first = new Mastra({ logger: false, storage, backgroundTasks: { enabled: true, globalConcurrency: 1 } });

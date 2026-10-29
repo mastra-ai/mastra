@@ -445,6 +445,23 @@ export interface KeyboardEventParams {
   windowsVirtualKeyCode?: number;
 }
 
+/**
+ * A cookie for {@link MastraBrowser.setCookies}. Give either `url`, or
+ * `domain` and `path`. A `domain` with a leading dot also covers subdomains.
+ */
+export interface BrowserCookie {
+  name: string;
+  value: string;
+  url?: string;
+  domain?: string;
+  path?: string;
+  /** Unix time in seconds. Omit for a session cookie. */
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
+}
+
 // =============================================================================
 // MastraBrowser Base Class
 // =============================================================================
@@ -752,6 +769,9 @@ export abstract class MastraBrowser extends MastraBase {
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */
   async close(): Promise<void> {
+    for (const key of new Set([...this.pendingCookies.keys(), ...this.cookieQueueUpdates.keys()])) {
+      this.dropQueuedCookies(key);
+    }
     // Already closed
     if (this.status === 'closed') {
       return;
@@ -1400,6 +1420,8 @@ export abstract class MastraBrowser extends MastraBase {
    * @param threadId - The thread ID whose session should be closed
    */
   async closeThreadSession(threadId: string): Promise<void> {
+    // A shared browser outlives any one thread, so its queue stays.
+    if (this.getScope() === 'thread') this.dropQueuedCookies(threadId);
     if (!this.threadManager) {
       return;
     }
@@ -1520,6 +1542,109 @@ export abstract class MastraBrowser extends MastraBase {
    */
   async injectKeyboardEvent(_event: KeyboardEventParams, _threadId?: string): Promise<void> {
     throw new Error('Keyboard event injection not supported by this provider');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cookies
+  // ---------------------------------------------------------------------------
+
+  /** Cookies waiting for a browser to open, by thread (one shared entry with `scope: 'shared'`). */
+  private readonly pendingCookies = new Map<string, BrowserCookie[]>();
+
+  /** The last queued cookie update per queue key, so updates run one at a time. */
+  private readonly cookieQueueUpdates = new Map<string, Promise<unknown>>();
+
+  /** Bumped when a queue is dropped, so an update already under way can't queue its cookies again. */
+  private readonly cookieQueueGenerations = new Map<string, number>();
+
+  private dropQueuedCookies(key: string): void {
+    this.pendingCookies.delete(key);
+    // Only an update under way can hold the old generation; with none, forget the key.
+    if (this.cookieQueueUpdates.has(key)) {
+      this.cookieQueueGenerations.set(key, (this.cookieQueueGenerations.get(key) ?? 0) + 1);
+    } else {
+      this.cookieQueueGenerations.delete(key);
+    }
+  }
+
+  /** Add cookies to the open browser. If it rejects them, they leave the queue, so they can't fail every later call. */
+  private async addOrForget(cookies: BrowserCookie[], key: string, threadId: string): Promise<boolean> {
+    try {
+      return await this.addCookiesToOpenBrowser(cookies, threadId);
+    } catch (error) {
+      this.pendingCookies.delete(key);
+      throw error;
+    }
+  }
+
+  /** Run cookie updates for one queue key in call order, so overlapping calls don't lose cookies. */
+  private updateCookieQueue<T>(key: string, update: () => Promise<T>): Promise<T> {
+    const result = (this.cookieQueueUpdates.get(key) ?? Promise.resolve()).then(update, update);
+    const settled = result.catch(() => {});
+    this.cookieQueueUpdates.set(key, settled);
+    void settled.then(() => {
+      if (this.cookieQueueUpdates.get(key) === settled) this.cookieQueueUpdates.delete(key);
+    });
+    return result;
+  }
+
+  /** With `scope: 'shared'` every thread uses one browser, so they share one queue. */
+  private cookieQueueKey(threadId: string): string {
+    return this.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId;
+  }
+
+  /**
+   * Add cookies to a thread's browser, so its pages can open a site your app
+   * signed in to some other way. Cookies set before the browser opens are
+   * added when it does. With `scope: 'shared'` every thread uses one browser,
+   * so the cookies reach every thread.
+   *
+   * @param cookies - Cookies to add
+   * @param threadId - Optional thread ID (defaults to the current thread)
+   * @throws If this provider can't set cookies
+   */
+  async setCookies(cookies: BrowserCookie[], threadId?: string): Promise<void> {
+    for (const cookie of cookies) {
+      if (!cookie.url && !(cookie.domain && cookie.path)) {
+        throw new Error(`Cookie "${cookie.name}" needs a url, or a domain and a path`);
+      }
+    }
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const key = this.cookieQueueKey(effectiveThreadId);
+    const generation = this.cookieQueueGenerations.get(key) ?? 0;
+    const dropped = () => (this.cookieQueueGenerations.get(key) ?? 0) !== generation;
+    await this.updateCookieQueue(key, async () => {
+      // The thread or browser closed after this call: its cookies go with it.
+      if (dropped()) return;
+      // Cookies still waiting go first, so an older value never overwrites a newer one.
+      const all = [...(this.pendingCookies.get(key) ?? []), ...cookies];
+      if (await this.addOrForget(all, key, effectiveThreadId)) {
+        this.pendingCookies.delete(key);
+        return;
+      }
+      if (!dropped()) this.pendingCookies.set(key, all);
+    });
+  }
+
+  /**
+   * Add cookies to the thread's browser if it's open. Override to support
+   * {@link setCookies}, and call {@link addPendingCookies} once a thread's
+   * browser opens, before it loads a page.
+   *
+   * @returns false when the thread has no open browser yet
+   */
+  protected async addCookiesToOpenBrowser(_cookies: BrowserCookie[], _threadId: string): Promise<boolean> {
+    throw new Error(`${this.provider} does not support setting cookies`);
+  }
+
+  /** Add the cookies {@link setCookies} queued while the thread's browser wasn't open. */
+  protected async addPendingCookies(threadId: string): Promise<void> {
+    const key = this.cookieQueueKey(threadId);
+    await this.updateCookieQueue(key, async () => {
+      const pending = this.pendingCookies.get(key);
+      if (!pending) return;
+      if (await this.addOrForget(pending, key, threadId)) this.pendingCookies.delete(key);
+    });
   }
 
   // ---------------------------------------------------------------------------

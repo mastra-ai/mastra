@@ -7,7 +7,7 @@ description: "Browse LLM Gateway model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/llmgateway-providers.svg" alt="LLM Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LLM Gateway
 
-Access 409 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 410 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [LLM Gateway documentation](https://llmgateway.io/docs).
 
@@ -1998,8 +1998,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 393216,
-    "inputCost": 0.435,
-    "outputCost": 0.87
+    "inputCost": 0.66,
+    "outputCost": 1.98
   },
   {
     "model": "llmgateway-providers/deepseek/deepseek-v4.1-flash-1017",
@@ -2406,6 +2406,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1
+  },
+  {
+    "model": "llmgateway-providers/inference.net/deepseek-v4.1-flash-cyber",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1040000,
+    "maxOutput": 393216,
     "inputCost": 0.3,
     "outputCost": 1
   },

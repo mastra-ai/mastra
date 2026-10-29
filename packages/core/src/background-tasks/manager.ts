@@ -1000,6 +1000,9 @@ export class BackgroundTaskManager {
     // Retryable running tasks intentionally remain `running` in storage so
     // the next process can recover them through recoverStaleTasks(). Tasks
     // without retries retain the existing terminal cancellation behavior.
+    // Snapshot the held leases now: waiting for runs to settle below removes
+    // them from `ownedLeases`, but their leases still need handing back.
+    const leasesToRelease = new Set(this.ownedLeases);
     const activeTaskIds = [...this.activeAbortControllers.keys()];
     this.#abortActiveControllers();
     const cancellationResults = await this.#waitForShutdownStep(
@@ -1074,9 +1077,10 @@ export class BackgroundTaskManager {
       clearTimeout(this.staleRecoveryTimeout);
       this.staleRecoveryTimeout = undefined;
     }
-    if (this.ownedLeases.size > 0 || pendingTaskIds.length > 0) {
-      const ownedTaskIds = [...this.ownedLeases];
-      this.ownedLeases.clear();
+    for (const taskId of this.ownedLeases) leasesToRelease.add(taskId);
+    this.ownedLeases.clear();
+    if (leasesToRelease.size > 0 || pendingTaskIds.length > 0) {
+      const ownedTaskIds = [...leasesToRelease];
       try {
         const storage = await this.getStorage();
         // Fenced on `ownerId` so a task already reclaimed or finished elsewhere
@@ -1280,12 +1284,11 @@ export class BackgroundTaskManager {
     // leaves the task `pending`, so the worker that picks up the redelivery
     // still gets the full retry budget.
     const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
-    // Claim execution ownership with an expiring lease. The compare-and-set on
-    // the previously observed owner/lease fences concurrent dispatchers: when
-    // two workers race for the same pending task, only the first claim wins and
-    // the loser acknowledges without starting a second execution. An explicit
-    // restart skips the owner fence — the caller is deliberately asking this
-    // worker to take the task over from whoever ran it before.
+    // Claim execution ownership with an expiring lease. A pending task owned
+    // by this worker may renew its lease between the read and the claim, so
+    // fence that claim on status and owner rather than the lease timestamp.
+    // Other claims still fence on the observed lease to prevent double runs.
+    // An explicit restart deliberately takes over the previous owner.
     const now = new Date();
     const started = await storage.updateTask(
       taskId,
@@ -1301,10 +1304,20 @@ export class BackgroundTaskManager {
         : {
             expectedStatus: task.status,
             expectedOwnerId: task.ownerId ?? null,
-            expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+            ...(task.status === 'pending' && task.ownerId === this.workerId
+              ? {}
+              : { expectedLeaseExpiresAt: task.leaseExpiresAt ?? null }),
           },
     );
-    if (!started) return true;
+    if (!started) {
+      this.releaseLocalSlot(taskId);
+      const current = await storage.getTask(taskId);
+      if (current?.status === 'pending' && current.ownerId === this.workerId && this.taskContexts.has(taskId)) {
+        this.localPendingTaskIds.add(taskId);
+        setTimeout(() => void this.drainPending(), 0).unref?.();
+      }
+      return true;
+    }
     this.ownedLeases.add(taskId);
     if (this.shuttingDown) return false;
 

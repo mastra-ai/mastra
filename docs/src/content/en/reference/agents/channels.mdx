@@ -320,7 +320,9 @@ With a `toolDisplay` function, the `approval` event is passed to your function
 in both streaming and static modes; return a non-blank `{ kind: 'post', message }`
 to replace the built-in card with your own message (for example, a localized
 one). Returning `undefined`, a blank message, or `{ kind: 'stream' }` falls back
-to the built-in card so the user can still approve or deny the request.
+to the built-in card so the user can still approve or deny the request. Keep the
+button ids in the format the default action handler expects. See [Custom
+approval cards](#custom-approval-cards).
 
 ```typescript title="src/mastra/agents/streaming.ts"
 import { Agent } from '@mastra/core/agent'
@@ -337,6 +339,75 @@ const agent = new Agent({
         adapter: createSlackAdapter(),
         streaming: true, // already the Slack default
         toolDisplay: 'timeline',
+      },
+    },
+  },
+})
+```
+
+### Custom approval cards
+
+A custom approval message replaces the built-in card, but Mastra's default
+`onAction` handler still handles the button action. It only resumes the suspended run
+when the button ids are exactly:
+
+- Approve: `tool_approve:<toolCallId>`
+- Deny: `tool_deny:<toolCallId>`
+
+`<toolCallId>` is `event.toolCallId` from the `approval` event. Any other id,
+including one with extra whitespace, doesn't match a pending approval. The run
+stays suspended. The default handler must also stay enabled: don't set
+`handlers.onAction: false`, and if you provide your own `onAction`, call
+`defaultHandler()` so approval clicks are processed.
+
+A custom `toolDisplay` function replaces the built-in renderer for every tool
+event. The example below only renders approvals, so other tool calls post
+nothing; return a message for `result` and `error` events as well if you want
+those visible.
+
+```typescript title="src/mastra/agents/localized-approval.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  id: 'localized-approval-agent',
+  name: 'Localized Approval Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        toolDisplay: event => {
+          if (event.kind !== 'approval') return undefined
+
+          return {
+            kind: 'post',
+            message: {
+              type: 'card',
+              title: `Approve ${event.displayName}?`,
+              children: [
+                {
+                  type: 'actions',
+                  children: [
+                    {
+                      type: 'button',
+                      id: `tool_approve:${event.toolCallId}`,
+                      label: 'Genehmigen',
+                      style: 'primary',
+                    },
+                    {
+                      type: 'button',
+                      id: `tool_deny:${event.toolCallId}`,
+                      label: 'Ablehnen',
+                      style: 'danger',
+                    },
+                  ],
+                },
+              ],
+            },
+          }
+        },
       },
     },
   },

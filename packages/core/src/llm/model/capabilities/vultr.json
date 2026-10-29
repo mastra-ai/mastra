@@ -44,6 +44,11 @@
         "type": "toggle"
       }
     ],
+    "nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
+      }
+    ],
     "qwen3.8-27b": [
       {
         "type": "toggle"
@@ -58,29 +63,10 @@
         "type": "toggle"
       }
     ],
-    "minimax-m3": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3-flash": [
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -91,9 +77,16 @@
         "type": "toggle"
       }
     ],
-    "laguna-s-2.1": [
+    "muse-glimmer-30b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -105,30 +98,37 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
     "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3.8-flash-next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       }
     ]
   }
