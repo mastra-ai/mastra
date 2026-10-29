@@ -6553,13 +6553,17 @@ export class AgentThreadStreamRuntime {
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
             }
-            const run = pendingRuns.shift()!;
+            // Cleared once the run is consumed: this generator idles between runs
+            // and must not keep the finished run (output, tools, processors) alive.
+            let run = pendingRuns.shift();
+            if (!run) continue;
             const displaced = state.displacedRecords.get(run);
             if (isSuperseded(run.runId, run.generation) || displaced) {
               abortedPendingStreamIds.delete(run.streamId);
               if (displaced === 'aborted' && !isSuperseded(run.runId, run.generation)) {
                 yield { type: 'abort', runId: run.runId } as any;
               }
+              run = undefined;
               continue;
             }
             // A local run can be read before its `run-registered` event arrives.
@@ -6688,6 +6692,7 @@ export class AgentThreadStreamRuntime {
               if (!readerReleased) {
                 reader.releaseLock();
               }
+              run = undefined;
             }
           }
         } finally {
