@@ -179,7 +179,7 @@ Tools, processors, and subagents receive the run's other scopes, but not its `re
 
 Long conversations can fill the context window with raw message history and reduce agent performance. [Observational Memory](../memory/observational-memory) uses background agents to compress older messages into observations. This reduces the context used by message history while retaining information for later turns.
 
-Compression loses exact wording, so the agent can also get a `recall` tool that goes back to the original messages. By default it lists and browses earlier messages, including other threads for the same resource when the scope allows. With `retrieval: { vector: true }`, it can also search them by meaning. See [retrieval mode](../memory/observational-memory#retrieval-mode).
+Compression loses exact wording, so Observational Memory can register a `recall` tool that goes back to the original messages. The tool is off by default: set `retrieval: true` to enable browsing, which lists earlier messages across the resource's threads unless you pass `scope: 'thread'`. With `retrieval: { vector: true }` plus a vector store and embedder on `Memory`, it can also search those messages by meaning. See [retrieval mode](../memory/observational-memory#retrieval-mode).
 
 <Inject>
   **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
