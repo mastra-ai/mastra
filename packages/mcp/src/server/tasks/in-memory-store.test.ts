@@ -17,12 +17,21 @@ describe('InMemoryMCPTaskStore', () => {
     vi.useRealTimers();
   });
 
-  it('keeps a task whose TTL is longer than the longest timer delay', async () => {
+  it('expires a task whose TTL is longer than the longest timer delay at its TTL', async () => {
+    vi.useFakeTimers({ now: 0 });
     store = new InMemoryMCPTaskStore();
     // 30 days: past setTimeout's 2^31-1 ms limit, where Node fires after 1 ms instead.
-    const { taskId } = await store.create({ ttlMs: 30 * 86_400_000, principal: 'alice' });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    const ttlMs = 30 * 86_400_000;
+    const { taskId } = await store.create({ ttlMs, principal: 'alice' });
+
+    await vi.advanceTimersByTimeAsync(2_147_483_647 + 1_000);
     expect(await store.get(taskId, alice)).toMatchObject({ status: 'working' });
+
+    await vi.advanceTimersByTimeAsync(ttlMs - 2_147_483_647 - 2_000);
+    expect(await store.get(taskId, alice)).toMatchObject({ status: 'working' });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await store.get(taskId, alice)).toMatchObject({ status: 'failed' });
   });
 
   it('is readable as soon as create resolves, with an unguessable id', async () => {
