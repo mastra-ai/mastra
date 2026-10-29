@@ -5,6 +5,7 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
@@ -15,6 +16,7 @@ import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
 import type { ProcessManagerOptions } from './process-manager/process-manager';
 import type { CommandResult } from './types';
+import { shellQuote } from './utils';
 
 const isWindows = process.platform === 'win32';
 
@@ -23,6 +25,31 @@ const TIMEOUT_KILL_GRACE_MS = 2_000;
 
 /** How long output may keep draining after the process exits before wait() settles without it. */
 const EXIT_OUTPUT_GRACE_MS = 2_000;
+
+/**
+ * Find a POSIX shell on Windows for commands built with POSIX quoting.
+ * Checks `MASTRA_WINDOWS_SHELL`, then Git Bash next to a `git.exe` on the command's PATH
+ * (Git for Windows puts `Git\cmd` on PATH, not `Git\bin`), then the default
+ * Git for Windows install location. Bare `bash` on PATH is skipped on purpose:
+ * it is often WSL's launcher, which can't see Windows paths.
+ */
+function findWindowsPosixShell(searchPath: string | undefined): string | undefined {
+  const candidates: string[] = [];
+  const configured = process.env.MASTRA_WINDOWS_SHELL?.trim();
+  // A bare `cmd`/`cmd.exe` opt-out resolves through PATH at spawn time, so there's no file to check.
+  if (configured && /^cmd(\.exe)?$/i.test(configured)) return configured;
+  if (configured) candidates.push(configured);
+  for (const dir of (searchPath ?? '').split(path.win32.delimiter)) {
+    if (dir && existsSync(path.win32.join(dir, 'git.exe'))) {
+      candidates.push(
+        path.win32.join(dir, '..', 'bin', 'bash.exe'),
+        path.win32.join(dir, '..', '..', 'bin', 'bash.exe'),
+      );
+    }
+  }
+  candidates.push(path.win32.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'bin', 'bash.exe'));
+  return candidates.find(candidate => existsSync(candidate));
+}
 
 // =============================================================================
 // Local Process Handle
@@ -290,8 +317,24 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
         cwd = isAlreadyWorkspacePath ? normalizedOptionsCwd : path.resolve(this.sandbox.workingDirectory, options.cwd);
       }
     }
-    const env = this.sandbox.buildEnv(options.env);
+    let env = this.sandbox.buildEnv(options.env);
     const invocation = options.originalInvocation;
+    // Argv invocations are joined with POSIX quoting (see MastraSandbox.executeCommand),
+    // which cmd.exe can't parse, so route them through a POSIX shell when one exists.
+    // Plain string commands are caller-authored and keep using cmd.exe, as do argv
+    // calls to Windows command interpreters, whose `/c`-style switches need cmd.exe.
+    const posixShell =
+      isWindows &&
+      this.sandbox.isolation === 'none' &&
+      invocation !== undefined &&
+      !/^(cmd|powershell|pwsh)(\.exe)?$/i.test(path.win32.basename(invocation.command))
+        ? findWindowsPosixShell(env.PATH)
+        : undefined;
+    const usesBash = posixShell !== undefined && !/^cmd(\.exe)?$/i.test(path.win32.basename(posixShell));
+    if (usesBash) {
+      // Stop Git Bash/MSYS2 from rewriting `/F`-style switches and paths passed to native tools.
+      env = { MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*', ...env };
+    }
     // Preserve the script as one argument instead of letting cmd.exe interpret its operators.
     const directShell =
       isWindows &&
@@ -300,7 +343,15 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       /^(sh|sh\.exe)$/i.test(path.win32.basename(invocation.command)) &&
       invocation.args[0] === '-c' &&
       invocation.args.length >= 2;
-    const wrapped = directShell ? invocation : this.sandbox.wrapCommandForIsolation(command);
+    const wrapped = directShell
+      ? {
+          command: usesBash && /^sh(\.exe)?$/i.test(invocation.command) ? posixShell : invocation.command,
+          args: invocation.args,
+        }
+      : usesBash && invocation
+        ? // Quote the program too: bash reads the backslashes in C:\tools\node.exe as escapes.
+          { command: [invocation.command, ...invocation.args].map(shellQuote).join(' '), args: [] }
+        : this.sandbox.wrapCommandForIsolation(command);
 
     // Base options shared across all platforms.
     //
@@ -328,14 +379,14 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
 
     if (isWindows) {
       // On Windows, `detached: true` opens a new console window (visible cmd.exe
-      // popup) and breaks stdout/stderr piping. `shell: true` without `detached`
-      // works correctly — it uses cmd.exe for shell interpretation and pipes
-      // stdout/stderr back to the parent process without any visible window.
+      // popup) and breaks stdout/stderr piping. A shell without `detached`
+      // pipes stdout/stderr back to the parent process without any visible window.
+      // Node runs a non-cmd shell as `<shell> -c "<command>"`.
       //
       // Process tree killing uses `taskkill /T` instead of Unix process groups.
       execaOptions = {
         ...baseOptions,
-        shell: !directShell && this.sandbox.isolation === 'none',
+        shell: !directShell && this.sandbox.isolation === 'none' && (posixShell ?? true),
         windowsHide: true,
       };
     } else {

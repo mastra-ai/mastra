@@ -42,6 +42,28 @@ function scripted(outcomes: Array<MCPDetailedTask | Error>, overrides: Partial<T
   return { port, options, sleeps, elapsed: () => clock };
 }
 
+describe('waitForTask near the task TTL', () => {
+  it('does not sleep past the TTL when the poll interval is longer, and expires at the deadline', async () => {
+    const working = { ...created, ttlMs: 10_000, pollIntervalMs: 60 * 60_000 } as MCPDetailedTask;
+    const { port, options, sleeps } = scripted([working]);
+
+    const error = await waitForTask(port, working, options).catch(e => e);
+
+    expect(error).toBeInstanceOf(TaskWaitError);
+    expect(error.reason).toBe('expired');
+    expect(sleeps).toEqual([10_000]);
+    expect(port.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('still returns a result that the poll at the deadline brings back', async () => {
+    const working = { ...created, ttlMs: 10_000, pollIntervalMs: 60 * 60_000 } as MCPDetailedTask;
+    const { port, options, sleeps } = scripted([{ ...completed, ttlMs: 10_000 } as MCPDetailedTask]);
+
+    await expect(waitForTask(port, working, options)).resolves.toMatchObject({ status: 'completed' });
+    expect(sleeps).toEqual([10_000]);
+  });
+});
+
 describe('waitForTask during a server outage', () => {
   it('reports the created task and each later status change once', async () => {
     const working = { ...created, statusMessage: 'still going' } as MCPDetailedTask;
@@ -110,6 +132,17 @@ describe('waitForTask during a server outage', () => {
     const { port, options, elapsed } = scripted([refused()]);
 
     const error = await waitForTask(port, { ...created, ttlMs: 20_000 }, options).catch(e => e);
+
+    expect(error).toMatchObject({ reason: 'unreachable' });
+    expect(elapsed()).toBe(20_000);
+  });
+
+  it('counts the TTL from when it first saw the task when createdAt does not parse', async () => {
+    const { port, options, elapsed } = scripted([refused()]);
+
+    const error = await waitForTask(port, { ...created, createdAt: 'not a date', ttlMs: 20_000 }, options).catch(
+      e => e,
+    );
 
     expect(error).toMatchObject({ reason: 'unreachable' });
     expect(elapsed()).toBe(20_000);

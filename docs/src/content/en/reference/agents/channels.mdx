@@ -710,6 +710,8 @@ The `ResolveThreadIdContext` passed to the function:
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
 
+Text-like attachments that don't match (`text/*`, JSON, YAML, XML, and similar) are downloaded through the adapter's authenticated fetch when one is available (for example, Slack private files) and given to the agent as text. Contents over 128 KB are truncated. Files the adapter reports as larger than 10 MB aren't downloaded.
+
 The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 
 Supported glob patterns:
