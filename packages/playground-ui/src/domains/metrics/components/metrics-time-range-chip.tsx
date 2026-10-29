@@ -1,7 +1,7 @@
 import { useMetrics } from '../hooks/use-metrics';
 import { useTraceRetentionMinDate } from '../hooks/use-trace-retention-min-date';
 import { fromPickerPreset, METRICS_PICKER_PRESETS, toPickerPreset } from '../metrics-date-presets';
-import { FilterBarTimeRange } from '@/ds/components/FilterBar';
+import { FilterBarTimeRange } from '@/ds/components/FilterBar/filter-bar-time-range';
 
 /**
  * The dashboard's date range as the filter bar's time range, the same control the Traces page shows.

@@ -14,8 +14,9 @@ import {
 } from '../../__tests__/fixtures/spans';
 import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } from '../../hooks';
 import { SpansFilterBar } from '../spans-filter-bar';
-import { FILTER_BAR_TIME_RANGE_FIELD_ID, FilterBar } from '@/ds/components/FilterBar';
+import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 

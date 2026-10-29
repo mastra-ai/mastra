@@ -4,8 +4,10 @@ import type { TraceDatePreset } from '../../types';
 import { DEFAULT_TRACES_FILTERS } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
 import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
-import { FILTER_BAR_TIME_RANGE_FIELD_ID, FilterBar } from '@/ds/components/FilterBar';
-import type { FilterBarTimeRangeProps, FilterBarItem } from '@/ds/components/FilterBar';
+import { FilterBar } from '@/ds/components/FilterBar';
+import type { FilterBarItem } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
+import type { FilterBarTimeRangeProps } from '@/ds/components/FilterBar/filter-bar-time-range';
 
 const TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
   'last-24h',

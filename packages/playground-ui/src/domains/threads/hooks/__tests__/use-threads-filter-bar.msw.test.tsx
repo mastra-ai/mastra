@@ -12,7 +12,10 @@ import {
 } from '../../__tests__/fixtures/threads';
 import { THREAD_FILTER_FIELD_IDS } from '../../thread-filters';
 import { useThreadsFilterBar, useThreadsFilterBarFields } from '../index';
-import { FILTER_BAR_TIME_RANGE_FIELD_ID, FILTER_BAR_TIME_RANGE_ITEM } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 import { server } from '@/test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '@/test/render';
 

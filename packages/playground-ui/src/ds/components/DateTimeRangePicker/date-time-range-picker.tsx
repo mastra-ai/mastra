@@ -1,6 +1,6 @@
 import { CalendarIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactElement, Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { CustomRangeEditor } from './custom-range-editor';
 import { Button, TriggerChevron } from '@/ds/components/Button/Button';
 import type { TextButtonSize } from '@/ds/components/Button/Button';
@@ -121,35 +121,30 @@ export function DateTimeRangePicker({
     setPresetMenuOpen(true);
   };
 
-  const reset =
-    defaultPreset !== undefined && shownPreset === 'custom' ? (
-      <Button
-        type="button"
-        size={`icon-${size}` as const}
-        tooltip="Reset time range"
-        disabled={disabled}
-        onClick={() => applyPreset(defaultPreset)}
-      >
-        <XIcon />
-      </Button>
-    ) : undefined;
-
+  const canReset = defaultPreset !== undefined && shownPreset === 'custom';
+  const editingCustomRange = shownPreset === 'custom' && !presetMenuOpen;
   const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
+  const label = shownPreset === 'custom' ? customLabel : datePresetLabel;
   const trigger = (
     <Button
       ref={ref}
       size={size}
       disabled={disabled}
       icon={<CalendarIcon />}
-      iconEnd={reset ? undefined : <TriggerChevron />}
+      iconEnd={canReset ? undefined : <TriggerChevron />}
     >
-      {shownPreset === 'custom' ? customLabel : datePresetLabel}
+      {label}
     </Button>
   );
 
-  if (shownPreset === 'custom' && !presetMenuOpen) {
-    return (
-      <JoinReset reset={reset} size={size}>
+  return (
+    <JoinReset
+      size={size}
+      reset={
+        canReset && <ResetRangeButton size={size} disabled={disabled} onReset={() => applyPreset(defaultPreset)} />
+      }
+    >
+      {editingCustomRange && (
         <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
           <PopoverTrigger render={trigger} />
           <PopoverContent align="start" className={cn('w-auto p-0')}>
@@ -164,37 +159,57 @@ export function DateTimeRangePicker({
             />
           </PopoverContent>
         </Popover>
-      </JoinReset>
-    );
-  }
-
-  return (
-    <JoinReset reset={reset} size={size}>
-      <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
-        <DropdownMenu.Trigger render={trigger} />
-        <DropdownMenu.Content align="start">
-          {/* Items select on click (not onValueChange) so re-picking the checked
-            "Custom range..." still reopens the range editor. */}
-          <DropdownMenu.RadioGroup value={shownPreset}>
-            {visiblePresets.map(p => (
-              <DropdownMenu.RadioItem
-                key={p.value}
-                value={p.value}
-                closeOnClick
-                onClick={() => handlePresetSelect(p.value)}
-              >
-                {p.label}
-              </DropdownMenu.RadioItem>
-            ))}
-          </DropdownMenu.RadioGroup>
-        </DropdownMenu.Content>
-      </DropdownMenu>
+      )}
+      {!editingCustomRange && (
+        <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
+          <DropdownMenu.Trigger render={trigger} />
+          <DropdownMenu.Content align="start">
+            {/* Items select on click (not onValueChange) so re-picking the checked
+              "Custom range..." still reopens the range editor. */}
+            <DropdownMenu.RadioGroup value={shownPreset}>
+              {visiblePresets.map(p => (
+                <DropdownMenu.RadioItem
+                  key={p.value}
+                  value={p.value}
+                  closeOnClick
+                  onClick={() => handlePresetSelect(p.value)}
+                >
+                  {p.label}
+                </DropdownMenu.RadioItem>
+              ))}
+            </DropdownMenu.RadioGroup>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
     </JoinReset>
   );
 }
 
+/** Switches a custom range back to the picker's default preset. */
+function ResetRangeButton({
+  size,
+  disabled,
+  onReset,
+}: {
+  size: TextButtonSize;
+  disabled?: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size={`icon-${size}` as const}
+      tooltip="Reset time range"
+      disabled={disabled}
+      onClick={onReset}
+    >
+      <XIcon />
+    </Button>
+  );
+}
+
 /** The trigger alone, or joined with the reset × as one pill. */
-function JoinReset({ reset, size, children }: { reset?: ReactElement; size: TextButtonSize; children: ReactElement }) {
+function JoinReset({ reset, size, children }: { reset: ReactNode; size: TextButtonSize; children: ReactNode }) {
   if (!reset) return children;
   return (
     <ButtonsGroup size={size}>

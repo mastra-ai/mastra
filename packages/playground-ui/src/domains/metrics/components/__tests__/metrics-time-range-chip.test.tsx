@@ -6,7 +6,11 @@ import { METRICS_FILTER_BAR_OPERATORS } from '../../metrics-filters';
 import { MetricsTimeRangeChip } from '../metrics-time-range-chip';
 import { olderServerCapabilities, traceAggregateCapabilities } from './fixtures/trace-aggregate';
 import { serveCapabilities } from './metrics-msw';
-import { FILTER_BAR_TIME_RANGE_FIELD, FILTER_BAR_TIME_RANGE_ITEM, FilterBar } from '@/ds/components/FilterBar';
+import { FilterBar } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 import { renderWithProviders } from '@/test/render';
 
 const DAY = 24 * 60 * 60 * 1000;

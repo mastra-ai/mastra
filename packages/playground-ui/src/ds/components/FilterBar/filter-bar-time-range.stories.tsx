@@ -2,8 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
 import type { DateRangePreset } from '@/ds/components/DateTimeRangePicker';
-import { FilterBarTimeRange, FILTER_BAR_TIME_RANGE_FIELD, FilterBar } from '@/ds/components/FilterBar';
+import { FilterBar } from '@/ds/components/FilterBar';
 import { DEFAULT_FILTER_OPERATORS } from '@/ds/components/FilterBar/default-operators';
+import { FilterBarTimeRange, FILTER_BAR_TIME_RANGE_FIELD } from '@/ds/components/FilterBar/filter-bar-time-range';
 import type { FilterBarItem } from '@/ds/components/FilterBar/types';
 
 const meta: Meta<typeof FilterBarTimeRange> = {

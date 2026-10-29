@@ -4,7 +4,8 @@ import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
 import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } from '../hooks/use-spans-filter-bar';
-import { FILTER_BAR_TIME_RANGE_FIELD_ID, FilterBar } from '@/ds/components/FilterBar';
+import { FilterBar } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 
 // Items are rebuilt from tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
 // draft that id so the chip survives the round trip without remounting.

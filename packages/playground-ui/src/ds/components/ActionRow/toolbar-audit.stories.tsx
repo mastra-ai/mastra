@@ -22,13 +22,13 @@ import { ComboboxContent, ComboboxItem, ComboboxList, ComboboxRoot, ComboboxTrig
 import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker';
 import type { DateRangePreset } from '@/ds/components/DateTimeRangePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { FilterBar } from '@/ds/components/FilterBar';
+import { DEFAULT_FILTER_OPERATORS } from '@/ds/components/FilterBar/default-operators';
 import {
   FILTER_BAR_TIME_RANGE_FIELD,
   FILTER_BAR_TIME_RANGE_FIELD_ID,
   FILTER_BAR_TIME_RANGE_ITEM,
-  FilterBar,
-} from '@/ds/components/FilterBar';
-import { DEFAULT_FILTER_OPERATORS } from '@/ds/components/FilterBar/default-operators';
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
 import { ListSearch } from '@/ds/components/ListSearch';
 import { SearchInput } from '@/ds/components/SearchInput';

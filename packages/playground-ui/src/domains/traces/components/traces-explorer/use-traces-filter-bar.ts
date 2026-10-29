@@ -12,13 +12,13 @@ import type { TraceQueryRelatedScope } from '../../trace-query-filters';
 import { getSelectedEntityOption } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
+import { isFilterBarGroup } from '@/ds/components/FilterBar';
+import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 import {
   FILTER_BAR_TIME_RANGE_FIELD,
   FILTER_BAR_TIME_RANGE_FIELD_ID,
   FILTER_BAR_TIME_RANGE_ITEM,
-  isFilterBarGroup,
-} from '@/ds/components/FilterBar';
-import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 
 const NO_SUGGESTIONS: string[] = [];
 

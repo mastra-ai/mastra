@@ -8,13 +8,13 @@ import {
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
 import { createThreadFilterBarFields } from '../thread-filters';
+import { isFilterBarGroup } from '@/ds/components/FilterBar';
+import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 import {
   FILTER_BAR_TIME_RANGE_FIELD,
   FILTER_BAR_TIME_RANGE_FIELD_ID,
   FILTER_BAR_TIME_RANGE_ITEM,
-  isFilterBarGroup,
-} from '@/ds/components/FilterBar';
-import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 
 /** The time range presets the threads filter bar offers. */
 export const THREAD_TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [

@@ -15,7 +15,10 @@ import {
 } from '../../__tests__/fixtures/spans';
 import { SPAN_CONTEXT_FILTER_FIELD_IDS, SPAN_CORE_FILTER_FIELD_IDS } from '../../span-filters';
 import { useSpansFilterBar, useSpansFilterBarFields } from '../index';
-import { FILTER_BAR_TIME_RANGE_FIELD_ID, FILTER_BAR_TIME_RANGE_ITEM } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 import { server } from '@/test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '@/test/render';
 
