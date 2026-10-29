@@ -28,7 +28,11 @@ import {
       item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
         <FilterBar.TimeRange
           preset={preset}
-          onPresetChange={setPreset}
+          // A preset, including the × reset, drops the applied custom dates.
+          onPresetChange={next => {
+            setPreset(next);
+            if (next !== 'custom') setRange({});
+          }}
           dateFrom={range.from}
           dateTo={range.to}
           onDateRangeChange={(from, to) => setRange({ from, to })}
