@@ -35,7 +35,7 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
       },
       publicPorts: {
         type: 'boolean',
-        description: 'Let anyone with a port URL reach it without signing in (E2B only)',
+        description: 'Let anyone with a port URL reach it without signing in',
         default: false,
       },
       env: { type: 'object', description: 'Environment variables', additionalProperties: { type: 'string' } },

@@ -112,7 +112,7 @@ const workspace = new Workspace({
 })
 ```
 
-Only E2B sandboxes support this. The setting is fixed when the sandbox is created.
+The port URL is the same either way; only whether it asks for sign-in changes. The setting is fixed when the sandbox is created.
 
 ### Reattaching to a running sandbox
 
@@ -424,7 +424,7 @@ A long-running process's output stream reconnects periodically, and the process 
     name: 'publicPorts',
     type: 'boolean',
     description:
-      "Let anyone with a port's URL reach it without signing in. Defaults to `false`. E2B only, fixed at creation.",
+      "Let anyone with a port's URL reach it without signing in. Defaults to `false`. Fixed when the sandbox is created.",
     isOptional: true,
   },
   {
