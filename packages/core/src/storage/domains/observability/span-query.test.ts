@@ -13,14 +13,13 @@ import {
 } from './span-query';
 import type { SpanQueryCostMetric, SpanQueryRow } from './span-query';
 import {
-  digestBinding,
   parseTraceQueryRequest,
-  planTraceQuery,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryCursorError,
 } from './trace-query';
+import { digestBinding, planTraceQuery } from './trace-query-plan';
 
 const timeRange = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
 const scope = { organizationId: 'org-a', resourceId: 'project-a' };

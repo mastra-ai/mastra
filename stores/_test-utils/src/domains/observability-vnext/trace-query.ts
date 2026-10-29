@@ -235,10 +235,16 @@ const feedbackReplacementRoot = (traceId: string, startedAt: string): RawTraceQu
     endedAt: new Date(new Date(startedAt).getTime() + 1000).toISOString(),
   });
 
+const quantified = (
+  quantifier: 'some' | 'none',
+  predicate: TraceQueryScalarPredicate,
+): { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } =>
+  quantifier === 'some' ? { some: predicate } : { none: predicate };
+
 const feedbackReplacementRequest = (
   traceId: string,
   quantifier: 'some' | 'none',
-  predicate: TraceQueryPredicate,
+  predicate: TraceQueryScalarPredicate,
   timeRange = feedbackReplacementRange,
 ): TraceQueryRequest => ({
   timeRange,
@@ -246,14 +252,14 @@ const feedbackReplacementRequest = (
     op: 'and',
     args: [
       { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
-      { feedback: { [quantifier]: predicate } },
+      { feedback: quantified(quantifier, predicate) },
     ],
   },
 });
 
 const feedbackReplacementAssertions = (args: {
-  oldPredicate: TraceQueryPredicate;
-  currentPredicate: TraceQueryPredicate;
+  oldPredicate: TraceQueryScalarPredicate;
+  currentPredicate: TraceQueryScalarPredicate;
   oldTraceId?: string;
   currentTraceId?: string;
   currentIsCorrelated?: boolean;
@@ -296,13 +302,13 @@ const feedbackReplacementAssertions = (args: {
   ];
 };
 
-const feedbackSourcePredicate = (value: string): TraceQueryPredicate => ({
+const feedbackSourcePredicate = (value: string): TraceQueryScalarPredicate => ({
   op: 'eq',
   left: { path: 'feedbackSource' },
   right: { literal: value },
 });
 
-const feedbackValuePredicate = (value: string | number): TraceQueryPredicate => ({
+const feedbackValuePredicate = (value: string | number): TraceQueryScalarPredicate => ({
   op: 'eq',
   left: { path: 'value' },
   right: { literal: value },
@@ -1456,19 +1462,19 @@ export interface TraceQueryConformanceCase {
 const scoreReplacementRequest = (
   traceId: string,
   quantifier: 'some' | 'none',
-  predicate: TraceQueryPredicate,
+  predicate: TraceQueryScalarPredicate,
 ): TraceQueryRequest => ({
   timeRange: fullRange,
   where: {
     op: 'and',
     args: [
       { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
-      { scores: { [quantifier]: predicate } },
+      { scores: quantified(quantifier, predicate) },
     ],
   },
 });
 
-const scoreAboveHalf: TraceQueryPredicate = {
+const scoreAboveHalf: TraceQueryScalarPredicate = {
   op: 'gt',
   left: { path: 'score' },
   right: { literal: 0.5 },

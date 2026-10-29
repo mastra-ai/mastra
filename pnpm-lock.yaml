@@ -4888,6 +4888,9 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.6.7
+      zod-v3:
+        specifier: npm:zod@3.25.76
+        version: zod@3.25.76
 
   packages/create-mastra:
     devDependencies:
