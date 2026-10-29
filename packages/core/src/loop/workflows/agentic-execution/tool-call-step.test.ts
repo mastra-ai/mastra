@@ -222,6 +222,12 @@ describe('createToolCallStep delegated run identity provenance', () => {
     expect(flushMessages).toHaveBeenCalledWith(expect.anything(), 'thread-1', undefined, { throwOnError: true });
     expect(suspend).toHaveBeenCalled();
     expect(enqueue.mock.calls.map(([chunk]: [any]) => chunk.type)).not.toContain('tool-call-suspended');
+    // The suspension is silent by design, so the flush failure itself must reach the
+    // stream: otherwise the caller sees a normal completion while the run stays parked.
+    const failureChunk = enqueue.mock.calls.map(([chunk]: [any]) => chunk).find(chunk => chunk.type === 'error');
+    expect(failureChunk).toBeDefined();
+    expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
+    expect(failureChunk.payload.error.cause).toBeInstanceOf(Error);
   });
 
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {

@@ -408,6 +408,29 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           return true;
         } catch (error) {
           logger?.error('Error flushing messages before suspension:', error);
+          // Suspending silently would leave the caller with a normal completion while the
+          // run stays parked on a call memory never received. Surface it on the stream so
+          // the client sees why there is no suspension event.
+          const failureChunk = {
+            type: 'error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              error: new Error(
+                'Failed to save the suspended tool call to memory before suspending; no suspension event was published',
+                { cause: error },
+              ),
+            },
+          } as ChunkType<OUTPUT>;
+          try {
+            if (outputWriter) {
+              await outputWriter(failureChunk);
+            } else {
+              safeEnqueue(controller, failureChunk);
+            }
+          } catch (publishError) {
+            logger?.error('Error publishing the suspension flush failure:', publishError);
+          }
           return false;
         }
       };
