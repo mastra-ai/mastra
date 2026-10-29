@@ -671,6 +671,8 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
 export const SPAN_QUERY_FIELD_REGISTRY = {
   name: textField(true),
   spanType: stringField(true),
+  model: stringField(true),
+  provider: stringField(true),
   status: stringField(true),
   error: presenceField(),
   startedAt: orderedField('timestamp'),

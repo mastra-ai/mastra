@@ -120,13 +120,19 @@ function predicateFields(
   return fields;
 }
 
+/** Selection and filter expressions read only columns; `model`/`provider` read their dedicated columns. */
 function fieldExpression(field: string): string {
-  if (field === 'model' || field === 'provider')
-    return `if(JSONType(e.attributes, '${field}') = 'String', JSONExtractString(e.attributes, '${field}'), NULL)`;
   if (field === 'durationMs') return "dateDiff('millisecond', e.startedAt, e.endedAt)";
   if (field === 'status') return "if(isNull(e.error), 'success', 'error')";
   if (field === 'error') return "if(isNull(e.error), NULL, 'error')";
   return `e.${field}`;
+}
+
+/** Returned values fall back to span attributes for rows written before the dedicated columns existed. */
+function displayExpression(field: string): string {
+  if (field === 'model' || field === 'provider')
+    return `coalesce(e.${field}, if(JSONType(e.attributes, '${field}') = 'String', JSONExtractString(e.attributes, '${field}'), NULL))`;
+  return fieldExpression(field);
 }
 
 export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
@@ -206,6 +212,8 @@ export const TRACE_BRANCHES_SPAN_FIELD_COLUMNS: Readonly<Record<string, readonly
       'rootEntityId',
       'rootEntityName',
       'rootEntityVersionId',
+      'model',
+      'provider',
     ].map(field => [field, sameColumn(field)]),
   ),
   status: ['error'],
@@ -365,7 +373,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
     rows.map(row => new TupleParam([...identityValues(row), row.endedAt.replace('T', ' ').replace(/Z$/, '')]));
   const rowsWithPreviews = await run<SpanQuerySelectedRow & StoredPreviewRow>({
     query: `SELECT ${identities}, ${[...displayFields, ...PREVIEW_COLUMNS].map((field, index) => `data.${index + 1} AS ${field}`).join(', ')}
-    FROM (SELECT ${identities}, any(tuple(${[...displayFields.map(fieldExpression), ...PREVIEW_COLUMNS].join(', ')})) AS data
+    FROM (SELECT ${identities}, any(tuple(${[...displayFields.map(displayExpression), ...PREVIEW_COLUMNS].join(', ')})) AS data
       FROM ${TABLE_SPAN_EVENTS} e WHERE ${payloadWhere} GROUP BY ${identities})`,
     query_params: { page: pageParameter(page) },
   });
