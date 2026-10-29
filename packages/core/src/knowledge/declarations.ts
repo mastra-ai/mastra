@@ -229,7 +229,9 @@ export function knowledgeRunScopes(compiled: CompiledKnowledgeScopes, scopes: re
           const params = matchPattern(declaration.pattern, scope, true);
           if (params) return bindKnowledgePattern(declaration.pattern, params)!;
         }
-        throw new KnowledgeDeclarationError(`Knowledge run scope "${scope}" does not match a declared scope type.`);
+        throw new KnowledgeDeclarationError(
+          `Knowledge run scope "${scope}" does not match a declared scope type. Declare it in Knowledge \`scopes\` (for Memory's resource:/thread: scopes, spread \`...knowledgeMemoryScopes()\`).`,
+        );
       }),
     ),
   ];
