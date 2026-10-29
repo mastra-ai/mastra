@@ -20,7 +20,6 @@ import type {
   ProcessInputArgs,
   ProcessInputResult,
 } from '../processors';
-import { STATE_SIGNAL_WITHOUT_MEMORY } from '../processors/state-signal-without-memory';
 import { PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, PINNED_KNOWLEDGE_STATE_ID } from './pinned';
 import type { PinEntry } from './pinned';
 import type { KnowledgeRunContext } from './run';
@@ -120,8 +119,6 @@ const MEMO_KEY = PINNED_READ_MEMO_KEY;
 export class PinnedStateProcessor implements Processor<typeof PINNED_KNOWLEDGE_STATE_ID> {
   readonly id = PINNED_KNOWLEDGE_STATE_ID;
   readonly stateId = PINNED_KNOWLEDGE_STATE_ID;
-  // Pins reach agents without Memory too: the snapshot is rebuilt from the store each call.
-  readonly [STATE_SIGNAL_WITHOUT_MEMORY] = true;
 
   constructor(private readonly deps: PinnedStateProcessorDeps) {}
 

@@ -4,14 +4,7 @@ import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { AgentStateSignalInput } from '../agent/signals';
-import {
-  applyStateSignal,
-  applyStateSignalInRun,
-  deriveStateSignalHistory,
-  getActiveStateSignals,
-  getStateSignalsMetadata,
-  resolveStateSignalHistory,
-} from '../agent/state-signals';
+import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
@@ -47,7 +40,6 @@ import {
   summarizeProcessorToolsForSpan,
   summarizeToolChoiceForSpan,
 } from './span-payload';
-import { runsStateSignalWithoutMemory } from './state-signal-without-memory';
 import type { ProcessorStepOutput } from './step-schema';
 import { isFailedStreamChunk, REPROCESS_PART_KEY, takeHeldParts } from './stream-reprocess';
 import { needsTrailingAssistantGuard, TrailingAssistantGuard } from './trailing-assistant-guard';
@@ -499,27 +491,6 @@ export class ProcessorRunner {
     const resolvedThreadId = threadId ?? memoryContext?.thread?.id;
     const resolvedResourceId = resourceId ?? memoryContext?.resourceId;
 
-    if (!resolvedMemory && runsStateSignalWithoutMemory(processor)) {
-      await this.runComputeStateSignalInRun({
-        processor,
-        computeStateSignal,
-        messageList,
-        stepNumber,
-        steps,
-        requestContext,
-        writer,
-        abort,
-        processorState,
-        abortSignal,
-        retryCount,
-        rotateResponseMessageId,
-        observabilityContext,
-        resourceId: resolvedResourceId ?? '',
-        threadId: resolvedThreadId ?? '',
-      });
-      return;
-    }
-
     if (!resolvedMemory) {
       throw new Error(
         `[Processor:${processor.id}] computeStateSignal requires Mastra memory with an active resourceId and threadId`,
@@ -622,91 +593,6 @@ export class ProcessorRunner {
     // what entered the model's context, and the work of computing it is already
     // timed by the enclosing processor span. Reached only when a signal was
     // produced, so a step where the lane computed no change stays silent.
-    observabilityContext?.tracingContext?.currentSpan?.createEventSpan<SpanType.AGENT_SIGNAL>({
-      type: SpanType.AGENT_SIGNAL,
-      name: `signal: ${result.id ?? stateId}`,
-      attributes: {
-        stateId: result.id ?? stateId,
-        mode: result.mode,
-        tagName: result.tagName,
-        processorId: processor.id,
-      },
-      output: { attributes: result.attributes, hasDelta: Boolean(result.delta) },
-    });
-  }
-
-  /** `computeStateSignal` for a processor that runs without Memory: history comes from the run's window only. */
-  private async runComputeStateSignalInRun({
-    processor,
-    computeStateSignal,
-    messageList,
-    stepNumber,
-    steps,
-    requestContext,
-    writer,
-    abort,
-    processorState,
-    abortSignal,
-    retryCount,
-    rotateResponseMessageId,
-    observabilityContext,
-    resourceId,
-    threadId,
-  }: {
-    processor: Processor;
-    computeStateSignal: NonNullable<Processor['computeStateSignal']>;
-    messageList: MessageList;
-    stepNumber: number;
-    steps: Array<StepResult<any>>;
-    requestContext?: RequestContext;
-    writer?: ProcessorStreamWriter;
-    abort: (reason?: string, options?: TripWireOptions) => never;
-    processorState: ProcessorState;
-    abortSignal?: AbortSignal;
-    retryCount: number;
-    rotateResponseMessageId?: () => string;
-    observabilityContext?: Partial<ObservabilityContext>;
-    resourceId: string;
-    threadId: string;
-  }): Promise<void> {
-    const stateId = processor.stateId ?? processor.id;
-    const { activeStateSignals, contextWindow, lastSnapshot, deltasSinceSnapshot } = deriveStateSignalHistory(
-      getActiveStateSignals(messageList, stateId, threadId),
-    );
-    const send = (stateSignal: Parameters<typeof applyStateSignalInRun>[0]['input']) =>
-      applyStateSignalInRun({
-        input: stateSignal,
-        threadId,
-        messageList,
-        defaultId: stateId,
-        beforeAddSignal: rotateResponseMessageId,
-        writeSignal: signal => writer?.custom(signal.toDataPart()),
-      });
-    const result = (await computeStateSignal({
-      ...createObservabilityContext({ currentSpan: observabilityContext?.tracingContext?.currentSpan }),
-      messages: messageList.get.all.db(),
-      messageList,
-      stepNumber,
-      steps,
-      state: processorState.customState,
-      requestContext,
-      writer,
-      abortSignal,
-      abort,
-      retryCount,
-      resourceId,
-      threadId,
-      activeStateSignals,
-      contextWindow,
-      lastSnapshot,
-      deltasSinceSnapshot,
-      sendStateSignal: async stateSignal => {
-        const sent = await send(stateSignal);
-        return sent.skipped ? sent : sent.signal;
-      },
-    } as Parameters<NonNullable<Processor['computeStateSignal']>>[0])) as ComputeStateSignalResult;
-    if (!result) return;
-    await send(result);
     observabilityContext?.tracingContext?.currentSpan?.createEventSpan<SpanType.AGENT_SIGNAL>({
       type: SpanType.AGENT_SIGNAL,
       name: `signal: ${result.id ?? stateId}`,
@@ -2102,17 +1988,6 @@ export class ProcessorRunner {
             const resolvedMemory = args.memory;
             const resolvedThreadId = args.threadId ?? memoryContext?.thread?.id;
             const resolvedResourceId = args.resourceId ?? memoryContext?.resourceId;
-            if (!resolvedMemory && runsStateSignalWithoutMemory(processor)) {
-              const sent = await applyStateSignalInRun({
-                input: stateSignal,
-                threadId: resolvedThreadId ?? '',
-                messageList,
-                defaultId: processor.stateId ?? processor.id,
-                beforeAddSignal: rotateResponseMessageId,
-                writeSignal: signal => writer?.custom(signal.toDataPart()),
-              });
-              return sent.skipped ? sent : sent.signal;
-            }
             if (!resolvedMemory || !resolvedThreadId || !resolvedResourceId) {
               throw new Error(
                 `[Processor:${processor.id}] sendStateSignal requires Mastra memory with an active resourceId and threadId`,

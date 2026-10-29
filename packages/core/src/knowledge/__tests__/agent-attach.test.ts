@@ -1,6 +1,7 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
+import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
@@ -215,5 +216,74 @@ describe('Knowledge attached to an Agent without Memory', () => {
     });
     const result = await agent.generate('q', { maxSteps: 2, ...runOptions() });
     expect(toolErrors(result).join('\n')).toMatch(/Read-only scope entries were removed/);
+  });
+
+  it('delivers pinned pages to an agent with Memory, on the next call after pinning', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'pins' }),
+      scopes,
+      tools: true,
+      pinnedContext: true,
+    });
+    const prompts: unknown[][] = [];
+    const agent = (calls: Call[]) =>
+      new Agent({
+        id: 'pinner',
+        name: 'pinner',
+        instructions: 'x',
+        model: scriptedModel(calls, prompts),
+        knowledge,
+        memory: new MockMemory(),
+        scopes: held('org:acme'),
+      });
+    const pinned = await agent([
+      {
+        toolName: 'knowledge_page',
+        input: { op: 'write', scope: 'org:acme', name: 'Tone', body: 'Answer in French.' },
+      },
+      { toolName: 'knowledge_pin', input: { op: 'pin', page: 'Tone', audience: ['org:acme'] } },
+    ]).generate('pin', { maxSteps: 3, ...runOptions() });
+    expect(toolErrors(pinned)).toEqual([]);
+    expect(JSON.stringify(prompts[0])).not.toContain('Answer in French.');
+
+    prompts.length = 0;
+    await agent([]).generate('hello', { maxSteps: 1, memory: { thread: 'thread-2', resource: 'user-1' } });
+    expect(JSON.stringify(prompts[0])).toContain('<pinned-knowledge');
+    expect(JSON.stringify(prompts[0])).toContain('Answer in French.');
+  });
+
+  it('warns and delivers no pins to an agent without Memory', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'no-mem' }),
+      scopes,
+      tools: true,
+      pinnedContext: true,
+    });
+    const prompts: unknown[][] = [];
+    const writer = new Agent({
+      id: 'no-mem',
+      name: 'no-mem',
+      instructions: 'x',
+      model: scriptedModel(
+        [
+          {
+            toolName: 'knowledge_page',
+            input: { op: 'write', scope: 'org:acme', name: 'Tone', body: 'Answer in French.' },
+          },
+          { toolName: 'knowledge_pin', input: { op: 'pin', page: 'Tone', audience: ['org:acme'] } },
+        ],
+        prompts,
+      ),
+      knowledge,
+      scopes: held('org:acme'),
+    });
+    const warn = vi.spyOn((writer as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
+    const result = await writer.generate('pin', { maxSteps: 4, ...runOptions() });
+    expect(toolErrors(result)).toEqual([]);
+    await writer.generate('again', { maxSteps: 1, ...runOptions() });
+    expect(JSON.stringify(prompts.at(-1))).not.toContain('<pinned-knowledge');
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('pinnedContext needs Memory'))).toHaveLength(
+      1,
+    );
   });
 });
