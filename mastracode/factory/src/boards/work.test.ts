@@ -32,6 +32,24 @@ function executeContext(source: FactoryRuleItemContext['source']): FactoryStageR
   };
 }
 
+describe('work board triage dispatch', () => {
+  it('passes the incident.io follow-up source key that incidentio_get_issue resolves', async () => {
+    const context = executeContext('incidentio-follow-up');
+    const decision = await workBoard.rules.triage?.incidentioFollowUp?.onEnter?.({
+      ...context,
+      item: { ...context.item, sourceKey: 'incidentio:follow-up:01HFOLLOWUP', metadata: { identifier: 'ENG-42' } },
+      source: 'incidentioFollowUp',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    });
+    if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected triage invocation.');
+    expect(decision.skillName).toBe('factory-triage');
+    expect(decision.arguments).toContain('incident.io follow-up ENG-42');
+    expect(decision.arguments).toContain('reference incidentio:follow-up:01HFOLLOWUP');
+  });
+});
+
 describe('work board build prompt', () => {
   it('hands a GitLab build to self-review without opening a merge request', async () => {
     const decision = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(executeContext('gitlab-issue'));

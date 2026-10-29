@@ -14,8 +14,15 @@ describe('factory-triage source branches', () => {
     expect(content).toContain('`gitlab_get_issue`');
   });
 
-  it('publishes Jira handoffs through jira_create_comment', () => {
-    expect(content).toContain('For Jira issues, publish the pending summary with `jira_create_comment`');
+  it('fetches incident.io follow-ups by their prefixed reference', () => {
+    expect(content).toContain('`incidentio_get_issue` with the `incidentio:follow-up:…` reference');
+  });
+
+  it('publishes only a plain-text, reporter-safe summary to Jira', () => {
+    expect(content).toContain('For Jira issues, post a plain-text `Triage in progress');
+    expect(content).toContain('so post only a reporter-safe summary');
+    expect(content).toContain('Keep file paths, code, reproduction steps, and repository history out of it');
+    expect(content).not.toContain('post the handoff as a new comment with `jira_create_comment`');
   });
 
   it('skips external publication for incident.io and GitLab, which have no writeback tool', () => {

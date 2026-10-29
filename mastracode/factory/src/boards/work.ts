@@ -31,7 +31,11 @@ function sourceRef(item: FactoryRuleItemContext): string {
   }
   if (item.source === 'incidentio-follow-up') {
     const identifier = sourceIdentifier(item);
-    return identifier ? `incident.io follow-up ${identifier}${link}` : `incident.io follow-up ${item.title}${link}`;
+    const label = identifier
+      ? `incident.io follow-up ${identifier}${link}`
+      : `incident.io follow-up ${item.title}${link}`;
+    // incidentio_get_issue only resolves the prefixed source key, not the display identifier.
+    return item.sourceKey ? `${label}, reference ${item.sourceKey}` : label;
   }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';

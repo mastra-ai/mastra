@@ -22,7 +22,7 @@ Parse the issue reference from `$ARGUMENTS` (issue number, URL, Linear identifie
 - GitHub issue → `gh issue view <number> --json title,body,labels,comments,assignees,state,author`
 - Linear issue → `linear_get_issue` with its identifier; use the returned description and comments as the issue thread, and skip GitHub-only author-history commands below.
 - Jira issue → `jira_get_issue` with its key; use the returned description and comments as the issue thread.
-- incident.io follow-up → `incidentio_get_issue` with the reference from the work item; use the returned title and description as the report.
+- incident.io follow-up → `incidentio_get_issue` with the `incidentio:follow-up:…` reference from the arguments (not the display identifier); use the returned title and description as the report.
 - GitLab issue → `gitlab_get_issue`; use the returned description as the report.
 
 Jira, incident.io, and GitLab issues, like Linear, skip the GitHub-only author-history commands below.
@@ -31,7 +31,7 @@ Gauge the people involved: the author's merged-PR/issue counts (`gh pr list --au
 
 If the issue is vague, do not stop to ask for clarification. Investigate the most plausible reading of it, record that reading as an assumption, and note what extra information from the reporter would firm it up as an open question.
 
-At the end of this phase, publish a small summary to the source issue as stated below. For GitHub issues, call `github_upsert_factory_triage_comment` with the issue number and the marker-prefixed pending summary; it updates Factory’s canonical marked comment or creates it when absent. For Linear issues, publish the pending summary through Linear. For Jira issues, publish the pending summary with `jira_create_comment`. incident.io has no writeback tool and GitLab has no issue-comment tool, so skip the pending summary for those sources; the handoff lives in this conversation.
+At the end of this phase, publish a small summary to the source issue as stated below. For GitHub issues, call `github_upsert_factory_triage_comment` with the issue number and the marker-prefixed pending summary; it updates Factory’s canonical marked comment or creates it when absent. For Linear issues, publish the pending summary through Linear. For Jira issues, post a plain-text `Triage in progress: <one or two sentences>` with `jira_create_comment`; Jira renders comments as plain text, so omit the HTML marker. incident.io has no writeback tool and GitLab has no issue-comment tool, so skip the pending summary for those sources; the handoff lives in this conversation.
 
 ```markdown
 <!-- mastra-factory-triage -->
@@ -208,7 +208,7 @@ Apply only these label mutations. Do not remove `status: needs approval` merely 
 For non-GitHub sources, use the same structured handoff without attempting GitHub publication or label mutations:
 
 - Linear issues → publish the handoff through Linear.
-- Jira issues → post the handoff as a new comment with `jira_create_comment`; Jira has no marked-comment upsert.
+- Jira issues → post a new plain-text comment with `jira_create_comment` (Jira has no marked-comment upsert and shows Markdown tables and HTML literally). The Jira audience may not have access to the target repository, so post only a reporter-safe summary: type, severity, route, and a few sentences on the conclusion and next step. Keep file paths, code, reproduction steps, and repository history out of it; the full handoff stays in this conversation.
 - incident.io follow-ups and GitLab issues → no external publication; the final conversation message is the handoff.
 
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
