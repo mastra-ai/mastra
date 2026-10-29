@@ -198,6 +198,55 @@ describe('TracesListView — time to first chunk column', () => {
   });
 });
 
+describe('TracesListView — time to first token column', () => {
+  const ttftOnly = { visibleColumns: ['timeToFirstToken'], customColumns: [], metadataKeys: [] } as const;
+
+  it('labels the column TTFT right after Status', () => {
+    const { container } = render(<TracesListView traces={[]} columnPreferences={ttftOnly} onTraceClick={vi.fn()} />);
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Status', 'TTFT']);
+  });
+
+  it('places TTFT right after TTFC when both are shown', () => {
+    const { container } = render(
+      <TracesListView
+        traces={[]}
+        columnPreferences={{
+          visibleColumns: ['timeToFirstToken', 'timeToFirstChunk'],
+          customColumns: [],
+          metadataKeys: [],
+        }}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Status', 'TTFC', 'TTFT']);
+  });
+
+  it("shows how long each root's model took to produce its first token, leaving rows without one empty", () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={ttftOnly}
+        traces={[
+          makeTrace({ traceId: 'trace-streamed', timeToFirstTokenMs: 538 }),
+          makeTrace({ traceId: 'trace-slow', timeToFirstTokenMs: 2140 }),
+          makeTrace({ traceId: 'trace-never-streamed', timeToFirstTokenMs: null }),
+          makeTrace({ traceId: 'trace-unreported' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const ttft = screen
+      .getAllByRole('button')
+      .filter(row => !top.contains(row))
+      .map(row => row.lastElementChild?.textContent);
+    expect(ttft).toEqual(['538ms', '2.14s', '', '']);
+  });
+});
+
 describe('TracesListView — name column', () => {
   it('shows the primitive name, falling back to the span name', () => {
     render(

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
-  THREAD_LIST_COLUMN_PREFERENCES,
   TRACE_COLUMN_CATALOGS,
   TRACE_OPTIONAL_COLUMNS,
   TRACE_USAGE_COLUMNS,
@@ -123,6 +122,23 @@ describe('trace list columns', () => {
       ]);
     });
 
+    it('places time to first token right after time to first chunk, in tracks and keys alike', () => {
+      const preferences: TraceColumnPreferences = {
+        visibleColumns: ['endTime', 'timeToFirstToken', 'timeToFirstChunk'],
+        customColumns: [],
+        metadataKeys: [],
+      };
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 7rem 7rem 11rem');
+      expect(buildTraceListColumnKeys(preferences)).toEqual([
+        'startTime',
+        'name',
+        'status',
+        'timeToFirstChunk',
+        'timeToFirstToken',
+        'endTime',
+      ]);
+    });
+
     it('places the trace count right after duration, in tracks and keys alike', () => {
       const preferences: TraceColumnPreferences = {
         visibleColumns: ['timeToFirstChunk', 'traceCount', 'duration'],
@@ -175,6 +191,7 @@ describe('trace list columns', () => {
         'duration',
         'traceCount',
         'timeToFirstChunk',
+        'timeToFirstToken',
         'endTime',
         'environment',
         'model',
@@ -188,7 +205,16 @@ describe('trace list columns', () => {
 
     it('offers traces their standard columns with usage and metadata', () => {
       expect(TRACE_COLUMN_CATALOGS.traces).toEqual({
-        standardColumns: ['type', 'input', 'output', 'duration', 'timeToFirstChunk', 'endTime', 'environment'],
+        standardColumns: [
+          'type',
+          'input',
+          'output',
+          'duration',
+          'timeToFirstChunk',
+          'timeToFirstToken',
+          'endTime',
+          'environment',
+        ],
         usage: true,
         metadata: true,
         defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,
@@ -197,10 +223,44 @@ describe('trace list columns', () => {
 
     it('offers spans their own columns, without usage or metadata they do not carry', () => {
       expect(TRACE_COLUMN_CATALOGS.spans).toEqual({
-        standardColumns: ['type', 'input', 'output', 'duration', 'endTime', 'environment', 'model', 'provider'],
+        standardColumns: [
+          'type',
+          'input',
+          'output',
+          'duration',
+          'timeToFirstChunk',
+          'timeToFirstToken',
+          'endTime',
+          'environment',
+          'model',
+          'provider',
+        ],
         usage: false,
         metadata: false,
         defaults: { visibleColumns: ['type', 'input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+      });
+    });
+
+    it('offers threads their own columns, with the message count but without usage or metadata', () => {
+      expect(TRACE_COLUMN_CATALOGS.threads).toEqual({
+        standardColumns: [
+          'type',
+          'input',
+          'output',
+          'duration',
+          'traceCount',
+          'timeToFirstChunk',
+          'timeToFirstToken',
+          'endTime',
+          'environment',
+        ],
+        usage: false,
+        metadata: false,
+        defaults: {
+          visibleColumns: ['type', 'input', 'output', 'duration', 'traceCount'],
+          customColumns: [],
+          metadataKeys: [],
+        },
       });
     });
 
@@ -217,11 +277,7 @@ describe('trace list columns', () => {
       });
     });
 
-    it('shows the trace count only on the threads list, which no column picker offers', () => {
-      expect(THREAD_LIST_COLUMN_PREFERENCES).toEqual({
-        ...DEFAULT_TRACE_COLUMN_PREFERENCES,
-        visibleColumns: [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns, 'traceCount'],
-      });
+    it('offers the message count only on the threads list', () => {
       expect(buildTraceListColumnKeys(DEFAULT_TRACE_COLUMN_PREFERENCES)).not.toContain('traceCount');
       expect(TRACE_COLUMN_CATALOGS.traces.standardColumns).not.toContain('traceCount');
       expect(TRACE_COLUMN_CATALOGS.spans.standardColumns).not.toContain('traceCount');

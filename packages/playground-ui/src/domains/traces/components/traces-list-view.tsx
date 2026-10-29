@@ -52,6 +52,8 @@ export type TracesListViewTrace = {
   endedAt?: Date | string | null;
   /** The root span's time to first chunk; `null` when it never streamed one. */
   timeToFirstChunkMs?: number | null;
+  /** The root span's time to first token; `null` when its model never produced one. */
+  timeToFirstTokenMs?: number | null;
   /** Thread rows only: every trace in the thread, regardless of the listed time range. */
   traceCount?: number;
   createdAt: Date | string;
@@ -88,15 +90,21 @@ function isFailedTrace(trace: TracesListViewTrace): trace is FailedTrace {
   return trace.status === 'error' && !!trace.errorPreview && !!trace.spanId;
 }
 
-/** The TTFC abbreviation, spelled out on hover; the sort button already names the column for screen readers. */
-function TimeToFirstChunkLabel() {
+/** An abbreviated header, spelled out on hover; the sort button already names the column for screen readers. */
+function AbbreviatedLabel({ abbreviation, title }: { abbreviation: string; title: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger render={<span />}>TTFC</TooltipTrigger>
-      <TooltipContent>Time to first chunk</TooltipContent>
+      <TooltipTrigger render={<span />}>{abbreviation}</TooltipTrigger>
+      <TooltipContent>{title}</TooltipContent>
     </Tooltip>
   );
 }
+
+/** Columns the list can be ordered by, named like the query `orderBy` fields. */
+export type TracesListSortField = 'startedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
+export type TracesListSort = { field: TracesListSortField; direction: DataListSort };
+
+const DEFAULT_SORTABLE_FIELDS: readonly TracesListSortField[] = ['startedAt'];
 
 export type TracesListViewProps = {
   traces: TracesListViewTrace[];
@@ -127,12 +135,11 @@ export type TracesListViewProps = {
   usageByTraceId?: ReadonlyMap<string, TraceUsageSummary>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
-  /** Current sort of the Created column. When `onSortChange` is provided the header becomes sortable. */
-  createdSort?: DataListSort;
-  onSortChange?: (direction: DataListSort, key: 'startedAt') => void;
-  /** Current sort of the TTFC column. When `onTimeToFirstChunkSortChange` is provided the header becomes sortable. */
-  timeToFirstChunkSort?: DataListSort;
-  onTimeToFirstChunkSortChange?: (direction: DataListSort) => void;
+  /** Current order of the list; only the header of `sort.field` shows a direction. */
+  sort?: TracesListSort;
+  /** Headers that become sortable when `onSortChange` is provided. Defaults to Start only. */
+  sortableFields?: readonly TracesListSortField[];
+  onSortChange?: (sort: TracesListSort) => void;
   /** When provided, custom column headers offer an `is <value>` filter for every value currently listed. */
   onFilterByField?: (field: TraceCustomColumn, value: string) => void;
   /** Storage id for the persisted column order. Use a distinct id per page so each keeps its own order. */
@@ -158,16 +165,19 @@ export function TracesListView({
   columnPreferences = DEFAULT_TRACE_COLUMN_PREFERENCES,
   usageByTraceId,
   onTraceClick,
-  createdSort,
+  sort,
+  sortableFields = DEFAULT_SORTABLE_FIELDS,
   onSortChange,
-  timeToFirstChunkSort,
-  onTimeToFirstChunkSortChange,
   onFilterByField,
   listId = 'all-traces',
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);
   const columnKeys = buildTraceListColumnKeys(columnPreferences);
+  const isSortable = (field: TracesListSortField) => !!onSortChange && sortableFields.includes(field);
+  const sortFor = (field: TracesListSortField) => (sort?.field === field ? sort.direction : undefined);
+  const handleSortChange = (direction: DataListSort, field: TracesListSortField) =>
+    onSortChange?.({ field, direction });
 
   const virtualizer = useVirtualizer({
     count: traces.length,
@@ -200,8 +210,12 @@ export function TracesListView({
       className="min-w-0"
     >
       <TracesDataList.Top>
-        {onSortChange ? (
-          <TracesDataList.SortableTopCell sortKey="startedAt" sort={createdSort} onSortChange={onSortChange}>
+        {isSortable('startedAt') ? (
+          <TracesDataList.SortableTopCell
+            sortKey="startedAt"
+            sort={sortFor('startedAt')}
+            onSortChange={handleSortChange}
+          >
             Start
           </TracesDataList.SortableTopCell>
         ) : (
@@ -224,19 +238,35 @@ export function TracesListView({
           </TracesDataList.TopCellWithTooltip>
         )}
         {hasTraceColumn(columnPreferences, 'timeToFirstChunk') &&
-          (onTimeToFirstChunkSortChange ? (
+          (isSortable('timeToFirstChunkMs') ? (
             <TracesDataList.SortableTopCell
               sortKey="timeToFirstChunkMs"
-              sort={timeToFirstChunkSort}
-              onSortChange={onTimeToFirstChunkSortChange}
+              sort={sortFor('timeToFirstChunkMs')}
+              onSortChange={handleSortChange}
               label="Time to first chunk"
               align="end"
             >
-              <TimeToFirstChunkLabel />
+              <AbbreviatedLabel abbreviation="TTFC" title="Time to first chunk" />
             </TracesDataList.SortableTopCell>
           ) : (
             <TracesDataList.TopCellWithTooltip tooltip="Time to first chunk" className="justify-end text-right">
               TTFC
+            </TracesDataList.TopCellWithTooltip>
+          ))}
+        {hasTraceColumn(columnPreferences, 'timeToFirstToken') &&
+          (isSortable('timeToFirstTokenMs') ? (
+            <TracesDataList.SortableTopCell
+              sortKey="timeToFirstTokenMs"
+              sort={sortFor('timeToFirstTokenMs')}
+              onSortChange={handleSortChange}
+              label="Time to first token"
+              align="end"
+            >
+              <AbbreviatedLabel abbreviation="TTFT" title="Time to first token" />
+            </TracesDataList.SortableTopCell>
+          ) : (
+            <TracesDataList.TopCellWithTooltip tooltip="Time to first token" className="justify-end text-right">
+              TTFT
             </TracesDataList.TopCellWithTooltip>
           ))}
         {hasTraceColumn(columnPreferences, 'endTime') && <TracesDataList.TopCell>End</TracesDataList.TopCell>}
@@ -361,6 +391,9 @@ export function TracesListView({
                 )}
                 {hasTraceColumn(columnPreferences, 'timeToFirstChunk') && (
                   <DataList.NumberCell font="mono">{formatDuration(trace.timeToFirstChunkMs)}</DataList.NumberCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'timeToFirstToken') && (
+                  <DataList.NumberCell font="mono">{formatDuration(trace.timeToFirstTokenMs)}</DataList.NumberCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'endTime') && (
                   <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} preset="day-time-seconds" />

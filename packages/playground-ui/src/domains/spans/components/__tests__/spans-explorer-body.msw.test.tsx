@@ -15,6 +15,8 @@ import {
   emptySpanRows,
   endedSpan,
   firstListedSpan,
+  noStreamingTimingsSortSpanCapabilities,
+  noStreamingTimingsSpanCapabilities,
   spanAggregateCapabilities,
   spanAggregateError,
   spanCountsAggregate,
@@ -36,9 +38,12 @@ import { SearchParamsHost } from '@/test/search-params-host';
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
 const SPANS_AGGREGATE_URL = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
 
-const setHandlers = (spans: QuerySpansResult) =>
+const setHandlers = (
+  spans: QuerySpansResult,
+  capabilities: GetObservabilityCapabilitiesResponse = spanQueryCapabilities,
+) =>
   server.use(
-    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(spanQueryCapabilities)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () => HttpResponse.json(emptyEntityNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () => HttpResponse.json(emptyEnvironments)),
     http.post(SPANS_QUERY_URL, () => HttpResponse.json(spans)),
@@ -96,6 +101,15 @@ const openColumnsMenu = async () => {
   await waitFor(() => expect(button.disabled).toBe(false));
   fireEvent.click(button);
 };
+
+const turnOnStreamingColumns = async () => {
+  await openColumnsMenu();
+  fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+  fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Time to first token' }));
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+};
+
+const currentSearchParams = () => new URLSearchParams(screen.getByTestId('search-params').textContent ?? '');
 
 describe('SpansExplorerBody', () => {
   useFixedChartSize(1200, 800);
@@ -270,6 +284,90 @@ describe('SpansExplorerBody', () => {
     });
   });
 
+  describe('when the user turns on the time to first chunk and time to first token columns', () => {
+    it('labels them TTFC and TTFT', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      await turnOnStreamingColumns();
+
+      expect(await screen.findByText('TTFC')).toBeTruthy();
+      expect(screen.getByText('TTFT')).toBeTruthy();
+    });
+
+    it('shows how long each span took to stream its first chunk and token', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      await turnOnStreamingColumns();
+
+      const row = (await screen.findByText('agent run: weather')).closest('[role="button"], button');
+      expect(row).toBeTruthy();
+      expect(within(row as HTMLElement).getByText('412ms')).toBeTruthy();
+      expect(within(row as HTMLElement).getByText('538ms')).toBeTruthy();
+    });
+  });
+
+  describe('when the stored columns include time to first chunk and token but the store records neither', () => {
+    it('leaves both columns out of the list', async () => {
+      window.localStorage.clear();
+      setHandlers(spanRowsPage);
+      const { unmount } = renderWithProviders(<BodyWithTracesColumns />);
+      await openColumnsMenu();
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+      fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Time to first token' }));
+      await screen.findByText('412ms');
+      unmount();
+
+      setHandlers(spanRowsPage, noStreamingTimingsSpanCapabilities);
+      renderBody();
+
+      expect(await screen.findByText('agent run: weather')).toBeTruthy();
+      expect(screen.queryByText('TTFC')).toBeNull();
+      expect(screen.queryByText('TTFT')).toBeNull();
+      expect(screen.queryByText('412ms')).toBeNull();
+    });
+  });
+
+  describe('when the URL filters on time to first chunk and time to first token', () => {
+    const STREAMING_FILTERS =
+      'filter.timeToFirstChunkMs=500&filter.timeToFirstChunkMs.op=lte&filter.timeToFirstTokenMs=800&filter.timeToFirstTokenMs.op=gt';
+    const paths = (where: unknown) => JSON.stringify(where ?? null);
+
+    it('sends both conditions when the store records both', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl(STREAMING_FILTERS);
+      await screen.findByText('agent run: weather');
+
+      await waitFor(() =>
+        expect(queries.map(query => paths(query.where))).toContainEqual(
+          expect.stringMatching(/"timeToFirstChunkMs".*"timeToFirstTokenMs"/),
+        ),
+      );
+    });
+
+    it('leaves both conditions out when the store does not record them', async () => {
+      const onCapabilities = vi.fn();
+      setHandlers(spanRowsPage, noStreamingTimingsSpanCapabilities);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => {
+          onCapabilities();
+          return HttpResponse.json(noStreamingTimingsSpanCapabilities);
+        }),
+      );
+
+      const { queries } = renderBodyAtUrl(STREAMING_FILTERS);
+      await screen.findByText('agent run: weather');
+      await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
+
+      for (const query of queries) {
+        expect(paths(query.where)).not.toContain('timeToFirstChunkMs');
+        expect(paths(query.where)).not.toContain('timeToFirstTokenMs');
+      }
+    });
+  });
+
   describe('when the URL holds a filter, a sort and a time range', () => {
     it('queries spans with them', async () => {
       setHandlers(spanRowsPage);
@@ -294,10 +392,83 @@ describe('SpansExplorerBody', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start, sorted descending/ }));
 
       await waitFor(() =>
-        expect(new URLSearchParams(screen.getByTestId('search-params').textContent ?? '')).toEqual(
+        expect(currentSearchParams()).toEqual(
           new URLSearchParams('traceId=trace-1&spanId=span-2&filter.name=tool%3A+get-weather&sort=startedAt&dir=asc'),
         ),
       );
+    });
+  });
+
+  describe('when the user sorts the list by time to first token', () => {
+    it('queries spans fastest first and writes the sort to the URL', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('');
+      await turnOnStreamingColumns();
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first token, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field: 'timeToFirstTokenMs', direction: 'asc' }]));
+      expect(currentSearchParams().get('sort')).toBe('timeToFirstTokenMs');
+      expect(currentSearchParams().get('dir')).toBe('asc');
+      expect(
+        screen.getByRole('button', { name: 'Time to first token, sorted ascending, sort descending' }),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Start, not sorted, sort ascending' })).toBeTruthy();
+    });
+  });
+
+  describe('when the user sorts by time to first chunk, then by time to first token', () => {
+    it('moves the order from one column to the other', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('');
+      await turnOnStreamingColumns();
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' }));
+      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field: 'timeToFirstChunkMs', direction: 'asc' }]));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Time to first token, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field: 'timeToFirstTokenMs', direction: 'asc' }]));
+      expect(screen.getByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' })).toBeTruthy();
+    });
+  });
+
+  describe('when the URL sorts by time to first chunk but the column is hidden', () => {
+    it("lists newest first instead of sorting by a column that isn't shown, without rewriting the URL", async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('sort=timeToFirstChunkMs&dir=asc');
+      await screen.findByText('agent run: weather');
+
+      expect(queries.map(query => query.orderBy)).toEqual(
+        queries.map(() => [{ field: 'startedAt', direction: 'desc' }]),
+      );
+      expect(queries.length).toBeGreaterThan(0);
+      expect(currentSearchParams().get('sort')).toBe('timeToFirstChunkMs');
+    });
+  });
+
+  describe('when the store records the timings but cannot sort spans by them', () => {
+    it('shows both columns without a sort control', async () => {
+      setHandlers(spanRowsPage, noStreamingTimingsSortSpanCapabilities);
+
+      renderBody();
+      await turnOnStreamingColumns();
+
+      expect(await screen.findByText('TTFT')).toBeTruthy();
+      expect(screen.getByText('TTFC')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Time to first (chunk|token),/ })).toBeNull();
+    });
+
+    it('lists newest first instead of the sort in the URL', async () => {
+      setHandlers(spanRowsPage, noStreamingTimingsSortSpanCapabilities);
+
+      const { queries } = renderBodyAtUrl('sort=timeToFirstTokenMs&dir=asc');
+      await turnOnStreamingColumns();
+      await screen.findByText('538ms');
+
+      expect(queries.at(-1)?.orderBy).toEqual([{ field: 'startedAt', direction: 'desc' }]);
+      expect(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' })).toBeTruthy();
     });
   });
 });
