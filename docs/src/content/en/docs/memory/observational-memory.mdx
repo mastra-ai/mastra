@@ -92,7 +92,7 @@ The agent now has humanlike long-term memory that persists across conversations.
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'deepseek/deepseek-reasoner',
+      model: 'deepseek/deepseek-flash',
     },
   },
 })
@@ -449,7 +449,7 @@ new Agent({
     options: {
       observationalMemory: {
         observation: {
-          model: 'deepseek/deepseek-reasoner',
+          model: 'deepseek/deepseek-flash',
           observeAttachments: false,
         },
       },
@@ -632,13 +632,13 @@ const memory = new Memory({
 
 Mastra recommends using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-To pin a model instead, set a concrete model ID. We've also successfully tested `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
+To pin a model instead, set a concrete model ID. We've also successfully tested `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, and `deepseek/deepseek-flash`.
 
 ```typescript
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'deepseek/deepseek-reasoner',
+      model: 'deepseek/deepseek-flash',
     },
   },
 })
@@ -650,7 +650,7 @@ See [model configuration](/reference/memory/observational-memory#custom-model) f
 
 Some models preserve detail in long output unusually well, including the Gemini Flash family that supplies the package default. As a result, the Reflector can produce reflections that stay above the configured `reflection.observationTokens` threshold even after the maximum compression retry. When this happens, the Reflector returns the smallest non-degenerate candidate produced during retries so the loop terminates instead of running forever.
 
-If you'd rather have more aggressive compression on the Reflector, pick a model that condenses more readily, such as `xai/grok-4-1-fast`, `deepseek/deepseek-v4-pro`, or `deepseek/deepseek-v4-flash`. You can use a detail-preserving model for the Observer and a condensing one for the Reflector. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
+If you'd rather have more aggressive compression on the Reflector, pick a model that condenses more readily, such as `deepseek/deepseek-flash`. You can use a detail-preserving model for the Observer and a condensing one for the Reflector. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
 
 :::
 
@@ -681,7 +681,7 @@ const memory = new Memory({
         model: new ModelByInputTokens({
           upTo: {
             20_000: '__GATEWAY_OPENAI_MODEL_LUNA__',
-            100_000: 'deepseek/deepseek-v4-flash',
+            100_000: 'deepseek/deepseek-flash',
           },
         }),
       },
