@@ -399,6 +399,33 @@ describe('ExperimentBundler', () => {
     },
   );
 
+  it('records pnpm-lock.yaml when the output also contains a package-lock.json', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-lockfiles-');
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await writeFile(join(output, 'pnpm-lock.yaml'), 'lockfile');
+    await writeFile(join(output, 'package-lock.json'), '{}');
+
+    await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
+
+    const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+    expect(manifest.dependencies.lockfile).toBe('pnpm-lock.yaml');
+  });
+
+  it('does not generate an npm lockfile next to the installed project lockfile', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-no-npm-lockfile-');
+    await writeFile(join(output, 'package.json'), JSON.stringify({ name: 'worker', dependencies: {} }));
+    await writeFile(join(output, 'pnpm-lock.yaml'), 'lockfile');
+
+    await (
+      new ExperimentBundler() as unknown as { generateNpmLockfile(dir: string): Promise<void> }
+    ).generateNpmLockfile(output);
+
+    await expect(readFile(join(output, 'package-lock.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('runs the protocol to completion in a fresh process', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
     const directory = await createTemporaryDirectory('mastra-experiment-process-');
