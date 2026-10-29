@@ -2412,8 +2412,10 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     /** Moves the clock in small steps, letting I/O (the aimock model server) run between them. */
     const advanceUntil = async (done: () => boolean) => {
-      for (let elapsed = 0; !done(); elapsed += 10) {
-        if (elapsed > 10_000) throw new Error('timed out on the fake clock');
+      // Bounded by real time: a slow model response can take many fake-clock steps to arrive.
+      const deadline = performance.now() + 10_000;
+      while (!done()) {
+        if (performance.now() > deadline) throw new Error('timed out waiting for the run');
         await vi.advanceTimersByTimeAsync(10);
         await new Promise(resolve => setImmediate(resolve));
       }
@@ -2479,6 +2481,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       // so the thread must be freed at once rather than stay held for a TTL.
       await advanceUntil(() => pubsub.grantedLate);
       await vi.advanceTimersByTimeAsync(30);
+      expect(shared.leases.has(key)).toBe(false);
       expect(shared.owner(key)).toBeUndefined();
     } finally {
       vi.useRealTimers();
