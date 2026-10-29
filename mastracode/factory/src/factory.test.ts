@@ -13,6 +13,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
+import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
@@ -29,6 +30,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { defineBoard } from './boards/index.js';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -424,6 +426,59 @@ describe('MastraFactory constructor', () => {
           boards: [createTestBoard({ id: 'work' })],
         }),
     ).toThrow("duplicate board id 'work'");
+  });
+
+  describe('app skills', () => {
+    const notesBoard = (skill: string, context = 'build') =>
+      defineBoard({
+        id: 'notes',
+        name: 'Notes',
+        initialPhase: 'queued',
+        phases: {
+          queued: { name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
+          drafting: { name: 'Drafting', kind: 'working', nextPhases: ['done'], runner: { skill, context } },
+          done: { name: 'Done', kind: 'terminal' },
+        },
+      });
+    const releaseNotes = createSkill({ name: 'release-notes', description: 'Draft notes', instructions: 'Draft.' });
+
+    it('rejects skills not made with createSkill() and duplicate names', () => {
+      expect(
+        () =>
+          new MastraFactory({
+            secretEncryption,
+            storage: fakeStorage(),
+            skills: [{ name: 'release-notes', instructions: 'Draft.' }] as never,
+          }),
+      ).toThrow('must be created with createSkill()');
+      expect(
+        () => new MastraFactory({ secretEncryption, storage: fakeStorage(), skills: [releaseNotes, releaseNotes] }),
+      ).toThrow("duplicate skill name 'release-notes'");
+    });
+
+    it('warns at startup when a board phase runs a skill that does not exist', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('release-notes')] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("Board 'notes' phase 'drafting' runs skill 'release-notes', but no such skill exists"),
+      );
+      warn.mockClear();
+
+      new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        boards: [notesBoard('release-notes')],
+        skills: [releaseNotes],
+      });
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('factory-plan')] });
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("Board 'notes'"));
+
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('factory-review')] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("runs review skill 'factory-review' in the 'build' context"),
+      );
+      warn.mockRestore();
+    });
   });
 
   it('allows replacing a built-in board when default boards are disabled', () => {
@@ -2692,8 +2747,8 @@ describe('MastraFactory.prepare integrations', () => {
     }
 
     /** Minimal valid FactoryChannelsConfig (config-form adapter entry). */
-    function fakeChannelsConfig() {
-      return { adapters: { fake: { adapter: { name: 'fake' } as never } } };
+    function fakeChannelsConfig(adapter: object = { name: 'fake' }) {
+      return { adapters: { fake: { adapter: adapter as never } } };
     }
 
     it("constructs an AgentControllerChannels from a ready integration's config and attaches it", async () => {
@@ -2718,6 +2773,70 @@ describe('MastraFactory.prepare integrations', () => {
       // default model, so it reads the same model-defaults handle the web routes use.
       expect(ctx.storage.modelDefaults).toBeDefined();
       expect(ctx.auth).toBeDefined();
+    });
+
+    it('makes concurrent shutdown callers wait for the same channel disconnect', async () => {
+      withController();
+      let finishDisconnect: (() => void) | undefined;
+      const disconnect = vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            finishDisconnect = resolve;
+          }),
+      );
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig({ name: 'fake', disconnect }));
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+      const firstShutdown = factory.shutdown();
+      const secondShutdown = factory.shutdown();
+      let secondFinished = false;
+      void secondShutdown.then(() => {
+        secondFinished = true;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(secondFinished).toBe(false);
+
+      finishDisconnect?.();
+      await Promise.all([firstShutdown, secondShutdown]);
+      await factory.shutdown();
+      expect(disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('settles synchronous disconnect failures and retries them during the next shutdown', async () => {
+      withController();
+      const disconnect = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('disconnect failed');
+        })
+        .mockResolvedValueOnce(undefined);
+      const otherDisconnect = vi.fn().mockResolvedValue(undefined);
+      const channels = vi.fn((_ctx: IntegrationContext) => ({
+        adapters: {
+          fake: { adapter: { name: 'fake', disconnect } as never },
+          other: { adapter: { name: 'other', disconnect: otherDisconnect } as never },
+        },
+      }));
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+      await expect(factory.shutdown()).rejects.toThrow('disconnect failed');
+      expect(otherDisconnect).toHaveBeenCalledOnce();
+      await expect(factory.shutdown()).resolves.toBeUndefined();
+
+      expect(disconnect).toHaveBeenCalledTimes(2);
+      expect(otherDisconnect).toHaveBeenCalledOnce();
     });
 
     it('exposes the source-control owner on the channels context when github is registered', async () => {

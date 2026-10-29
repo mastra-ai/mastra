@@ -1220,6 +1220,11 @@ describe('OM routes with a tenant', () => {
       provider?: string;
       defaultModelId?: string;
       withCustomProviders?: boolean;
+      user?: { workosId: string; organizationId: string };
+      /** Source-control sessions the runtime would find for a chat resource. */
+      sourceSessions?: Record<string, Record<string, unknown>>;
+      /** A run binding for any thread, mirroring a work-item thread's durable scope. */
+      runBinding?: Record<string, unknown> | null;
     } = {},
   ) {
     const controller = {
@@ -1230,10 +1235,11 @@ describe('OM routes with a tenant', () => {
     const app = new Hono();
     if (opts.authEnabled !== false) {
       app.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+        c.set('factoryAuthUser' as never, (opts.user ?? { workosId: 'user-a', organizationId: 'org1' }) as never);
         await next();
       });
     }
+    const sourceSessions = opts.sourceSessions ?? {};
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
@@ -1241,6 +1247,12 @@ describe('OM routes with a tenant', () => {
         controller,
         modelCredentials: seed.credentials,
         ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings, factoryProjects: seed.projects }),
+        sourceControlSessions: {
+          getBySessionId: async (id: string) => sourceSessions[id] as never,
+        },
+        workItems: {
+          findRunBindingByThread: async () => (opts.runBinding ?? null) as never,
+        } as never,
         ...(opts.withCustomProviders ? { customProviders: seed.customProviders } : {}),
       }).routes(),
     );
@@ -1293,6 +1305,207 @@ describe('OM routes with a tenant', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('previews Auto from the scope a run resolves, not the union of both scopes', async () => {
+    // An organization-wide Google key, while the personal row (beforeEach) holds
+    // Anthropic only. A run without a Factory uses the personal scope, so Auto must
+    // not preview a provider only the organization can reach.
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'google', { type: 'api_key', key: 'sk-org-google' });
+
+    const res = await buildApp(null, { defaultModelId: 'anthropic/claude-opus-5' }).request('/web/config/om');
+
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
+    expect(config.observer).toMatchObject({ model: 'auto', providerStatus: 'available' });
+    expect(config.observer.effectiveModelId).toMatch(/^anthropic\/claude-haiku/);
+
+    // The store a run resolves from agrees with the preview.
+    const runStore = new TenantCredentialStore('org1', 'user-a', seed.credentials, 'user');
+    expect(await runStore.getApiKey('google')).toBeUndefined();
+    expect(await runStore.getApiKey('anthropic')).toBe('sk-anthropic');
+  });
+
+  it("previews Auto from the addressed Factory's scope, not the caller's", async () => {
+    // Google only on the personal row, Anthropic only organization-wide: a run under
+    // this factory-scoped Factory authenticates with the organization's key.
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
+      type: 'api_key',
+      key: 'sk-personal-google',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org-anthropic' });
+    const factory = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Company', modelScope: 'factory', defaultModelId: 'anthropic/claude-opus-5' },
+    });
+
+    const res = await buildApp(null, { defaultModelId: 'anthropic/claude-opus-5' }).request(
+      `/web/config/om?factoryId=${factory.id}`,
+    );
+
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
+    expect(config.observer).toMatchObject({ model: 'auto', providerStatus: 'available' });
+    expect(config.observer.effectiveModelId).toMatch(/^anthropic\/claude-haiku/);
+    expect(config.reflector.effectiveModelId).toBe(config.observer.effectiveModelId);
+
+    const runStore = new TenantCredentialStore('org1', 'user-a', seed.credentials, 'factory');
+    expect(await runStore.getApiKey('google')).toBeUndefined();
+    expect(await runStore.getApiKey('anthropic')).toBe('sk-org-anthropic');
+  });
+
+  it('previews the scope of the context it is addressing for a hybrid Factory', async () => {
+    // A `hybrid` Factory shares one settings row but resolves Auto from different
+    // credentials: its work items use the Factory's, a chat session its owner's. The
+    // two directions must disagree here, or the test proves nothing.
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
+      type: 'api_key',
+      key: 'sk-personal-google',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org-anthropic' });
+    const factory = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Hybrid', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-opus-5' },
+    });
+    const app = buildApp(null, {
+      defaultModelId: 'anthropic/claude-opus-5',
+      sourceSessions: {
+        r1: { orgId: 'org1', userId: 'user-a', visibility: 'shared', factoryProjectId: factory.id },
+      },
+    });
+
+    // The Factory settings page: no session, so this is what work items get.
+    const workItems = await app.request(`/web/config/om?factoryId=${factory.id}`);
+    expect(workItems.status).toBe(200);
+    expect((await workItems.json()).config.observer.effectiveModelId).toMatch(/^anthropic\/claude-haiku/);
+
+    // A chat in the same Factory: its owner's credentials, so Auto picks differently.
+    const session = await app.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t1`);
+    expect(session.status).toBe(200);
+    const { config } = await session.json();
+    expect(config.observer).toMatchObject({ model: 'auto', providerStatus: 'available' });
+    expect(config.observer.effectiveModelId).toMatch(/^google\/gemini/);
+    expect(config.reflector.effectiveModelId).toBe(config.observer.effectiveModelId);
+  });
+
+  it('previews a run-bound thread from the Factory, not from its chat scope', async () => {
+    // A work-item thread keeps the Factory's billing scope once a run is bound to
+    // it: the runtime resolves the run binding, not the page the reader is on.
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
+      type: 'api_key',
+      key: 'sk-personal-google',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org-anthropic' });
+    const factory = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Hybrid', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-opus-5' },
+    });
+    const app = buildApp(null, {
+      defaultModelId: 'anthropic/claude-opus-5',
+      sourceSessions: {
+        r1: { orgId: 'org1', userId: 'user-a', visibility: 'shared', factoryProjectId: factory.id },
+      },
+      runBinding: { factoryProjectId: factory.id },
+    });
+
+    const bound = await app.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t1`);
+    expect(bound.status).toBe(200);
+    expect((await bound.json()).config.observer.effectiveModelId).toMatch(/^anthropic\/claude-haiku/);
+
+    // The same session on an unbound thread is an ordinary chat, so the owner's
+    // own credentials are what a run would use.
+    const unboundApp = buildApp(null, {
+      defaultModelId: 'anthropic/claude-opus-5',
+      sourceSessions: {
+        r1: { orgId: 'org1', userId: 'user-a', visibility: 'shared', factoryProjectId: factory.id },
+      },
+    });
+    const unbound = await unboundApp.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t2`);
+    expect(unbound.status).toBe(200);
+    expect((await unbound.json()).config.observer.effectiveModelId).toMatch(/^google\/gemini/);
+  });
+
+  it("previews a shared session from its owner's credentials, not the viewer's", async () => {
+    // A teammate opening someone else's shared chat sees what that chat's runs use:
+    // the owner's personal providers, even though the viewer has different ones.
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
+      type: 'api_key',
+      key: 'sk-owner-google',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-b' }, 'openai', {
+      type: 'api_key',
+      key: 'sk-viewer-openai',
+    });
+    const factory = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Hybrid', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-opus-5' },
+    });
+    const app = buildApp(null, {
+      defaultModelId: 'anthropic/claude-opus-5',
+      user: { workosId: 'user-b', organizationId: 'org1' },
+      sourceSessions: {
+        r1: { orgId: 'org1', userId: 'user-a', visibility: 'shared', factoryProjectId: factory.id },
+      },
+    });
+
+    const res = await app.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t1`);
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
+    expect(config.observer).toMatchObject({ model: 'auto', providerStatus: 'available' });
+    expect(config.observer.effectiveModelId).toMatch(/^google\/gemini/);
+
+    // The store a run of that session resolves from agrees with the preview.
+    const runStore = new TenantCredentialStore('org1', 'user-a', seed.credentials, 'user');
+    expect(await runStore.getApiKey('google')).toBe('sk-owner-google');
+    expect(await runStore.getApiKey('openai')).toBeUndefined();
+  });
+
+  it('rejects an observation threshold the observation activation buffer would break', async () => {
+    const app = buildApp(makeOmSession());
+
+    const rejected = await putJson(app, '/web/config/om/thresholds', {
+      sessionId: 'r1',
+      observationThreshold: 500,
+    });
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()).error).toMatch(/greater than 2000 tokens/);
+    // The buffer is an absolute 2000 tokens, so the boundary value fails a run too.
+    expect(
+      (await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 2000 })).status,
+    ).toBe(400);
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
+
+    expect(
+      (await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 2001 })).status,
+    ).toBe(200);
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observationThreshold: 2001,
+    });
+  });
+
+  it('reports a stored threshold below the floor as the one the observer runs with', async () => {
+    // Rows written before the route enforced the floor still exist. Showing the
+    // stored number would name a value that takes the process down on the next
+    // message; the read path answers with what the observer will actually use.
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observationThreshold: 1 },
+    });
+
+    const app = buildApp(makeOmSession());
+    const res = await app.request('/web/config/om?sessionId=r1');
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.observationThreshold).toBe(2001);
+    // Reading does not rewrite the row; the next save does.
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observationThreshold: 1,
+    });
   });
 
   it('resolves auto roles from the live session model ahead of the Factory default', async () => {
@@ -1693,6 +1906,25 @@ describe('custom provider routes', () => {
 
     const { providers } = await (await buildApp(userOtherOrg).request('/web/config/custom-providers')).json();
     expect(providers).toEqual([]);
+  });
+
+  it('includes only the caller org custom providers in the provider catalog without exposing keys', async () => {
+    await postProvider(buildApp(userA), providerBody);
+    await postProvider(buildApp(userOtherOrg), {
+      name: 'Other LLM',
+      url: 'https://other.example.com/v1',
+      apiKey: 'sk-other',
+      models: ['other-model'],
+    });
+
+    const response = await buildApp(userA).request('/web/config/providers');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.providers).toContainEqual({ provider: 'my-llm', source: 'stored-org', custom: true });
+    expect(body.providers).not.toContainEqual(expect.objectContaining({ provider: 'other-llm' }));
+    expect(JSON.stringify(body)).not.toContain('sk-x');
+    expect(JSON.stringify(body)).not.toContain('sk-other');
   });
 
   it('deletes within the caller org only', async () => {

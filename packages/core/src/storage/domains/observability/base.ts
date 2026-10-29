@@ -128,6 +128,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-time-to-first-chunk-sort`: `orderBy` on `timeToFirstChunkMs` in trace and span queries
+ * - `trace-query-time-to-first-token`: `timeToFirstTokenMs` on trace, thread and span query results and predicates
+ * - `trace-query-time-to-first-token-sort`: `orderBy` on `timeToFirstTokenMs` in trace and span queries
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
@@ -158,7 +160,9 @@ export type ObservabilityStorageFeature =
   | 'trace-query-time-to-first-chunk'
   | 'trace-query-root-span-fields'
   | 'trace-query-root-entity-id'
-  | 'trace-query-time-to-first-chunk-sort';
+  | 'trace-query-time-to-first-chunk-sort'
+  | 'trace-query-time-to-first-token'
+  | 'trace-query-time-to-first-token-sort';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

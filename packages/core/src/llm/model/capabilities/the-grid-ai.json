@@ -29,19 +29,19 @@
     "text-standard"
   ],
   "reasoning": {
-    "code-prime": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "agent-prime": [
+    "code-standard": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -56,7 +56,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-latest": [
+    "text-max": [
       {
         "type": "toggle"
       },
@@ -65,19 +65,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "kimi-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-pro-latest": [
+    "agent-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "agent-standard": [
+    "code-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -89,13 +83,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "text-max": [
-      {
-        "type": "toggle"
-      },
+    "kimi-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-latest": [
@@ -110,13 +101,28 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "claude-opus-latest": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "text-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "minimax-latest": [
+    "agent-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -135,12 +141,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "code-standard": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ]
   }

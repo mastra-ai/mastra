@@ -14,6 +14,7 @@ export type {
   AgentChunkType,
   ThreadHistoryChunk,
   ThreadHistoryPayload,
+  ThreadRunStatusChunk,
   DataChunkType,
   UserMessagePendingChunk,
   UserMessageCancelledChunk,

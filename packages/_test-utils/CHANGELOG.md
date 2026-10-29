@@ -1,5 +1,12 @@
 # @internal/test-utils
 
+## 0.0.82
+
+### Patch Changes
+
+- Updated dependencies:
+  - @internal/ai-sdk-v5@0.0.93
+
 ## 0.0.81
 
 ### Patch Changes

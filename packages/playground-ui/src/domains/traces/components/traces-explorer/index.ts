@@ -5,6 +5,7 @@ import {
   TracesExplorerFilterChips,
   TracesExplorerTimeRangeChip,
 } from './traces-explorer-filter-bar';
+import { TracesExplorerHistogram } from './traces-explorer-histogram';
 import { TracesExplorerLayout } from './traces-explorer-layout';
 import { TracesExplorerList } from './traces-explorer-list';
 import { TracesExplorerPanel } from './traces-explorer-panel';
@@ -17,6 +18,7 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   FilterChips: TracesExplorerFilterChips,
   TimeRangeChip: TracesExplorerTimeRangeChip,
   ColumnsMenu: TracesExplorerColumnsMenu,
+  Histogram: TracesExplorerHistogram,
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
 });

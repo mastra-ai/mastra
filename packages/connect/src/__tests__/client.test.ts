@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -432,6 +434,26 @@ describe('proxyRequest', () => {
     expect(init.body).toBe(multipart);
     expect(init.headers['Content-Type']).toBe('multipart/form-data; boundary=b');
     expect(init.headers['content-type']).toBeUndefined();
+  });
+
+  it.each([
+    ['Buffer', Buffer.from([0, 1, 2, 255])],
+    ['Uint8Array', new Uint8Array([0, 1, 2, 255])],
+    ['ArrayBuffer', new Uint8Array([0, 1, 2, 255]).buffer],
+  ])('sends a %s body unchanged with the caller content type', async (_type, body) => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await proxyRequest(client, 'c_1', {
+      method: 'PUT',
+      path: 'documents/report.docx/content',
+      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+      body,
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.body).toBe(body);
+    expect(new Headers(init.headers).get('content-type')).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
   });
 
   it('keeps a provider 404 as proxy_error (never connection_not_found)', async () => {

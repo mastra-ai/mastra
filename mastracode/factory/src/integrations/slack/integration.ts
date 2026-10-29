@@ -39,15 +39,14 @@ import { createShareFileTool, isSlackThread } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
 
-/**
- * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
- * is required because the Slack adapter validates it at construction — an
- * integration constructed without it would throw during `prepare()` rather than
- * reporting itself unconfigured.
- */
+/** Slack app credentials, read from env ONCE by the deploy entry. */
 export interface SlackIntegrationConfig {
-  /** Verifies inbound Slack request signatures. Required. */
-  signingSecret: string;
+  /** Slack event transport. Defaults to webhook mode. */
+  mode?: 'webhook' | 'socket';
+  /** Verifies inbound Slack request signatures. Required in webhook mode. */
+  signingSecret?: string;
+  /** App-level token used to connect to Slack. Required in socket mode. */
+  appToken?: string;
   /** Bot token used to post replies and ephemeral cards. */
   botToken?: string;
   /**
@@ -181,10 +180,17 @@ export class SlackIntegration implements FactoryIntegration {
   #repoBackedSessions = false;
 
   constructor(config: SlackIntegrationConfig) {
-    if (!config.signingSecret) {
+    const mode = config.mode ?? 'webhook';
+    if (mode === 'webhook' && !config.signingSecret) {
       throw new Error(
-        "SlackIntegration: 'signingSecret' is required — Slack cannot verify inbound requests without it.",
+        "SlackIntegration: 'signingSecret' is required in webhook mode — Slack cannot verify inbound requests without it.",
       );
+    }
+    if (mode === 'socket' && !config.appToken) {
+      throw new Error("SlackIntegration: 'appToken' is required in socket mode — Slack cannot open a Socket Mode connection without it.");
+    }
+    if (mode === 'socket' && !config.botToken) {
+      throw new Error("SlackIntegration: 'botToken' is required in socket mode — Factory cannot reply without it.");
     }
     this.#config = config;
     this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
@@ -245,11 +251,15 @@ export class SlackIntegration implements FactoryIntegration {
     const sourceControls =
       ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
     this.#repoBackedSessions = sourceControls.length > 0;
+    const mode = this.#config.mode ?? 'webhook';
     return createSlackChannelsConfig({
       slack: {
-        clientId: this.#config.clientId,
-        clientSecret: this.#config.clientSecret,
+        mode: this.#config.mode,
+        ...(mode === 'webhook'
+          ? { clientId: this.#config.clientId, clientSecret: this.#config.clientSecret }
+          : {}),
         signingSecret: this.#config.signingSecret,
+        appToken: this.#config.appToken,
         botToken: this.#config.botToken,
       },
       accountLinks: ctx.storage.channelIdentity,

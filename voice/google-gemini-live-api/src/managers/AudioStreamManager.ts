@@ -373,17 +373,16 @@ export class AudioStreamManager {
           turnComplete: true,
         },
       };
-    } else {
-      // For real-time streaming
-      return {
-        realtime_input: {
-          audio: {
-            mime_type: `audio/pcm;rate=${this.audioConfig.inputSampleRate ?? DEFAULT_AUDIO_CONFIG.inputSampleRate}`,
-            data: audioData,
-          },
-        },
-      };
     }
+    // For real-time streaming
+    return {
+      realtime_input: {
+        audio: {
+          mime_type: `audio/pcm;rate=${this.audioConfig.inputSampleRate ?? DEFAULT_AUDIO_CONFIG.inputSampleRate}`,
+          data: audioData,
+        },
+      },
+    };
   }
 
   /**

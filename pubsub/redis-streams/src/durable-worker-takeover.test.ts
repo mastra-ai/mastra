@@ -75,7 +75,12 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
         await observer.subscribe(
           'workflows-finish',
           async (event, ack) => {
-            if (event.runId === runId) terminal = { type: event.type, data: event.data };
+            if (
+              event.runId === runId &&
+              (event.type === 'workflow.end' || event.type === 'workflow.fail' || event.type === 'workflow.cancel')
+            ) {
+              terminal = { type: event.type, data: event.data };
+            }
             await ack?.();
           },
           { startFrom: 'latest' },

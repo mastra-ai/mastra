@@ -578,18 +578,17 @@ export function createMcpManager(
         };
         serverStatuses.set(name, status);
         return status;
-      } else {
-        const status: McpServerStatus = {
-          name,
-          connected: false,
-          toolCount: 0,
-          toolNames: [],
-          transport,
-          error: 'Failed to connect',
-        };
-        serverStatuses.set(name, status);
-        return status;
       }
+      const status: McpServerStatus = {
+        name,
+        connected: false,
+        toolCount: 0,
+        toolNames: [],
+        transport,
+        error: 'Failed to connect',
+      };
+      serverStatuses.set(name, status);
+      return status;
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       const status: McpServerStatus = {

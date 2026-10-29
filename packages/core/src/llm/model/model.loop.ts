@@ -3,8 +3,11 @@ import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
+import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
+import { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import { createRunScope } from '../../mastra/run-scope';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
@@ -135,6 +138,9 @@ export class MastraLLMVNext extends MastraBase {
     toolCallConcurrency,
     eagerToolExecution,
     _internal,
+    onTracingTripwire,
+    onTracingTerminalError,
+    tracingScope = createRunScope(),
     agentId,
     agentVersionId,
     resolvedScopes,
@@ -191,6 +197,7 @@ export class MastraLLMVNext extends MastraBase {
     const modelSpan = parentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
+      outcome: null,
       input: {
         messages: [...messageList.getAllSystemMessages(), ...messages],
       },
@@ -232,6 +239,23 @@ export class MastraLLMVNext extends MastraBase {
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
+        tracingScope,
+        onTracingTerminalError: error => {
+          try {
+            modelSpanTracker?.reportGenerationError({ error, ...executionFailureTermination(error) });
+          } finally {
+            onTracingTerminalError?.(error);
+          }
+        },
+        onTracingTripwire: (tripwire, usage, text) => {
+          modelSpanTracker?.endGeneration({
+            ...agentLoopTermination({ tripwire }),
+            usage,
+            output: { text },
+            attributes: {},
+          });
+          onTracingTripwire?.(tripwire, text);
+        },
         resumeContext,
         runId,
         toolCallId,
@@ -278,6 +302,17 @@ export class MastraLLMVNext extends MastraBase {
         ...observabilityContext,
         options: {
           ...options,
+          onError: async event => {
+            const error = event.error instanceof Error ? event.error : new Error(String(event.error));
+            modelSpanTracker?.reportGenerationError({
+              error,
+              ...executionFailureTermination(error),
+              // The stream owner separately reports errors that cannot reach onFinish.
+              // Retain this span until usage/output arrive or that terminal notification.
+              endSpan: false,
+            });
+            await options?.onError?.(event);
+          },
           onStepFinish: async props => {
             try {
               await options?.onStepFinish?.({ ...props, runId: runId! });
@@ -301,7 +336,10 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
-              modelSpanTracker?.reportGenerationError({ error: mastraError });
+              modelSpanTracker?.reportGenerationError({
+                error: mastraError,
+                ...executionFailureTermination(mastraError),
+              });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -339,6 +377,20 @@ export class MastraLLMVNext extends MastraBase {
             // This ensures the model span ends before the agent span
             // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
             modelSpanTracker?.endGeneration({
+              ...(props.finishReason === 'error'
+                ? executionFailureTermination(props.error)
+                : agentLoopTermination({
+                    stopCause: tracingScope.get(CONTINUATION_STOP_CAUSE_KEY),
+                    delegationFailure: tracingScope.get(DELEGATION_FAILURE_KEY),
+                    finishReason: props.finishReason,
+                    tripwire: context?.outputResultTripwire ?? props.tripwire,
+                    maxSteps,
+                    suspension: {
+                      approvalRequired: props.suspendReason === 'tool-call-approval',
+                      toolCallId: props.toolCallId,
+                      toolName: props.toolName,
+                    },
+                  })),
               output: {
                 files: props?.files,
                 object: props?.object,
@@ -394,7 +446,10 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
-              modelSpanTracker?.reportGenerationError({ error: mastraError });
+              modelSpanTracker?.reportGenerationError({
+                error: mastraError,
+                ...executionFailureTermination(mastraError),
+              });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -431,7 +486,7 @@ export class MastraLLMVNext extends MastraBase {
         },
         e,
       );
-      modelSpanTracker?.reportGenerationError({ error: mastraError });
+      modelSpanTracker?.reportGenerationError({ error: mastraError, ...executionFailureTermination(mastraError) });
       throw mastraError;
     }
   }

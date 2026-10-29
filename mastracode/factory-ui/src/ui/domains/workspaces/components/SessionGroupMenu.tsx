@@ -6,8 +6,9 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, GripVertical, LayoutGrid } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 
-import { SESSION_GROUP_BY_LABELS, SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
+import { SESSION_GROUP_BY_LABELS } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
+import { SESSION_GROUP_MENU_OPTIONS } from './sessionPropertyOptions';
 
 const MOVE_STEP_BY_KEY: Record<string, -1 | 1> = { ArrowUp: -1, ArrowDown: 1 };
 
@@ -69,7 +70,8 @@ export function SessionGroupMenu({
       <DropdownMenu.SubContent>
         <DropdownMenu.RadioSub
           label="Group by"
-          options={SESSION_GROUP_BY_OPTIONS}
+          icon={<LayoutGrid aria-hidden />}
+          options={SESSION_GROUP_MENU_OPTIONS}
           value={groupBy}
           onValueChange={onGroupByChange}
         />

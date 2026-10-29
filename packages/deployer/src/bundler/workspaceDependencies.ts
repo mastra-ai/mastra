@@ -1,6 +1,6 @@
 import { join, dirname } from 'node:path';
+import type { IMastraLogger } from '@internal/core/logger';
 import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from '@internal/find-workspaces';
-import type { IMastraLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
 import { ensureDir } from 'fs-extra';
 import { slash } from '../build/utils';

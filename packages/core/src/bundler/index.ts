@@ -1,23 +1,9 @@
-import { readFile } from 'node:fs/promises';
-import { parse } from 'dotenv';
+import { loadEnvVars } from '@internal/deployer';
+import type { IBundler } from '@internal/deployer';
 
 import { MastraBase } from '../base';
 
-export type { BundlerConfig } from './types';
-
-export interface IBundler {
-  loadEnvVars(): Promise<Map<string, string>>;
-  getEnvFiles(): Promise<string[]>;
-  getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[]): (string | string[])[];
-  bundle(
-    entryFile: string,
-    outputDirectory: string,
-    options: { toolsPaths: (string | string[])[]; projectRoot: string },
-  ): Promise<void>;
-  prepare(outputDirectory: string): Promise<void>;
-  writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
-  lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void>;
-}
+export type { BundlerConfig, IBundler } from '@internal/deployer';
 
 export abstract class MastraBundler extends MastraBase implements IBundler {
   constructor({ name, component = 'BUNDLER' }: { name: string; component?: 'BUNDLER' | 'DEPLOYER' }) {
@@ -25,18 +11,7 @@ export abstract class MastraBundler extends MastraBase implements IBundler {
   }
 
   async loadEnvVars(): Promise<Map<string, string>> {
-    const envVars = new Map();
-
-    for (const file of await this.getEnvFiles()) {
-      const content = await readFile(file, 'utf-8');
-      const config = parse(content);
-
-      Object.entries(config).forEach(([key, value]) => {
-        envVars.set(key, value);
-      });
-    }
-
-    return envVars;
+    return loadEnvVars(await this.getEnvFiles());
   }
 
   abstract getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[]): (string | string[])[];

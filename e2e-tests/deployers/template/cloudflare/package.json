@@ -18,15 +18,15 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.110",
-    "@mastra/core": "deployers-e2e-test",
-    "@mastra/deployer-cloudflare": "deployers-e2e-test",
-    "@mastra/pg": "deployers-e2e-test",
-    "@mastra/loggers": "deployers-e2e-test",
+    "@mastra/core": "e2e-test",
+    "@mastra/deployer-cloudflare": "e2e-test",
+    "@mastra/pg": "e2e-test",
+    "@mastra/loggers": "e2e-test",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
-    "mastra": "deployers-e2e-test",
+    "mastra": "e2e-test",
     "wrangler": "^4.110.0",
     "typescript": "^7.0.2"
   }

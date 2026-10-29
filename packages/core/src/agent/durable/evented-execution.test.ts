@@ -63,46 +63,68 @@ it('detaches a registered shared coordinator on API shutdown without releasing i
   }
 });
 
-it('acknowledges unfenced terminal redelivery without releasing the coordinator lease', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-unfenced-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
-  const storage = new InMemoryStore();
-  const mastra = new Mastra({ storage, pubsub, logger: false });
-  const coordinator = await ExecutionFence.claim({
-    leaseProvider: pubsub,
-    agentId: 'agent',
-    runId: 'run',
-    mode: 'acquire',
-  });
-  const workflow = createWorkflow({ id: 'durable-agentic-loop', inputSchema: z.any(), outputSchema: z.any() }).commit();
-  mastra.__registerInternalWorkflow(workflow, 'run');
-  const event: Event = {
-    id: 'terminal',
-    type: 'workflow.end',
-    runId: 'run',
-    createdAt: new Date(),
-    data: {
-      workflowId: workflow.id,
-      executionPath: [],
-      resumeSteps: [],
-      stepResults: {},
-      activeStepsPath: {},
-      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
-      prevResult: { status: 'success', output: {}, payload: {}, startedAt: 1, endedAt: 2 },
-    },
-  };
-  try {
-    expect(await new WorkflowEventProcessor({ mastra }).handle(event)).toEqual({ ok: true });
-    expect(await pubsub.getLeaseOwner(executionLeaseKey('agent', 'run'))).toBe(coordinator.executionId);
-    await coordinator.settle(async () => {});
-    expect(await new WorkflowEventProcessor({ mastra }).handle(event)).toEqual({ ok: true });
-  } finally {
-    coordinator.stopHeartbeat();
-    await stopDurableExecutionParticipants(mastra);
-    await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+it.each([false, true])(
+  'acknowledges unfenced terminal redelivery without releasing the coordinator lease (stale fenced context=%s)',
+  async staleContext => {
+    const directory = await mkdtemp(join(tmpdir(), 'mastra-unfenced-'));
+    const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ storage, pubsub, logger: false });
+    const coordinator = await ExecutionFence.claim({
+      leaseProvider: pubsub,
+      agentId: 'agent',
+      runId: 'run',
+      mode: 'acquire',
+    });
+    const previous = await ExecutionFence.claim({
+      workflowsStore: (await storage.getStore('workflows'))!,
+      leaseProvider: pubsub,
+      agentId: 'agent',
+      runId: 'previous-run',
+      mode: 'acquire',
+    });
+    await previous.settle(async () => {});
+    const workflow = createWorkflow({
+      id: 'durable-agentic-loop',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+    }).commit();
+    mastra.__registerInternalWorkflow(workflow, 'run');
+    const event: Event = {
+      id: 'terminal',
+      type: 'workflow.end',
+      runId: 'run',
+      createdAt: new Date(),
+      data: {
+        workflowId: workflow.id,
+        runId: 'run',
+        executionPath: [],
+        resumeSteps: [],
+        stepResults: {},
+        activeStepsPath: {},
+        requestContext: {
+          [MASTRA_DURABLE_EXECUTIONS_KEY]: {
+            ...(staleContext ? { 'previous-run': previous.claim } : {}),
+            run: coordinator.claim,
+          },
+        },
+        prevResult: { status: 'success', output: {}, payload: {}, startedAt: 1, endedAt: 2 },
+      },
+    };
+    try {
+      expect(await new WorkflowEventProcessor({ mastra }).handle(event)).toEqual({ ok: true });
+      expect(mastra.__hasInternalWorkflow(workflow.id, 'run')).toBe(false);
+      expect(await pubsub.getLeaseOwner(executionLeaseKey('agent', 'run'))).toBe(coordinator.executionId);
+      await coordinator.settle(async () => {});
+      expect(await new WorkflowEventProcessor({ mastra }).handle(event)).toEqual({ ok: true });
+    } finally {
+      coordinator.stopHeartbeat();
+      await stopDurableExecutionParticipants(mastra);
+      await pubsub.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 const instances: Mastra[] = [];
 afterEach(async () => {

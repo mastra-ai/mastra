@@ -16,7 +16,17 @@ import type { ModelDefaults } from './models/routing/model-routes';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 
-export function MemorySettings({ factoryId, sessionId }: { factoryId: string; sessionId: string | undefined }) {
+export function MemorySettings({
+  factoryId,
+  sessionId,
+  threadId,
+  resourceId,
+}: {
+  factoryId: string;
+  sessionId: string | undefined;
+  threadId?: string;
+  resourceId?: string;
+}) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
 
   if (providersKnown && !anyConnected) {
@@ -42,7 +52,7 @@ export function MemorySettings({ factoryId, sessionId }: { factoryId: string; se
     >
       <div className="flex flex-col gap-3">
         <MemoryCard title="Personal memory" defaults="personal" factoryId={factoryId}>
-          <PersonalOMSection sessionId={sessionId} />
+          <PersonalOMSection sessionId={sessionId} threadId={threadId} resourceId={resourceId} />
         </MemoryCard>
         <MemoryCard title="Factory memory" defaults="factory" factoryId={factoryId}>
           <FactoryOMSection factoryId={factoryId} />
@@ -52,9 +62,19 @@ export function MemorySettings({ factoryId, sessionId }: { factoryId: string; se
   );
 }
 
-function PersonalOMSection({ sessionId }: { sessionId: string | undefined }) {
+function PersonalOMSection({
+  sessionId,
+  threadId,
+  resourceId,
+}: {
+  sessionId: string | undefined;
+  threadId: string | undefined;
+  resourceId: string | undefined;
+}) {
   const modelsQuery = useAvailableModelsQuery();
-  return <OMSection sessionId={sessionId} models={modelsQuery.data ?? []} />;
+  return (
+    <OMSection sessionId={sessionId} threadId={threadId} resourceId={resourceId} models={modelsQuery.data ?? []} />
+  );
 }
 
 function FactoryOMSection({ factoryId }: { factoryId: string }) {

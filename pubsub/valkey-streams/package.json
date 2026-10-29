@@ -1,6 +1,6 @@
 {
   "name": "@mastra/valkey-streams",
-  "version": "0.5.7-alpha.1",
+  "version": "0.5.7",
   "description": "Mastra Valkey Streams PubSub integration",
   "license": "Apache-2.0",
   "type": "module",
@@ -35,7 +35,7 @@
     "@valkey/valkey-glide": "2.5.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.135",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.137",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",

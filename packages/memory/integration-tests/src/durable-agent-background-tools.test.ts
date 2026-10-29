@@ -14,15 +14,9 @@
  *   - `adopt`: the harness variant where the tool itself calls `context.background.adopt()`.
  *     That process-local handle API is not exposed in-tree yet, so there is nothing to port.
  *   - `evented-redeliver`: owned by the redelivery ticket, not this one.
- *   - `durable-recover`: rerun for this ticket and **red** — not ported. `DurableAgent.recover()`
- *     validates the outer `durable-agentic-loop` snapshot and refuses with
- *     `DURABLE_AGENT_RECOVER_INVALID_SNAPSHOT` because, while a step is in flight, that row is
- *     still `pending` with no `context.input.__workflowKind` (the durable-agent input is stamped
- *     on the `durable-agentic-execution` row instead, and the loop row is deleted once the run
- *     settles). That held for the whole in-flight window, sampled to an 8s deadline, so the
- *     interruption the harness simulates — process death mid-step — leaves nothing restartable
- *     either. Tracked as COR-1493, which owns the fix and adds this cell back once `recover()`
- *     can restart a run that is mid-step.
+ *   - `durable-recover`: covered without provider recordings in
+ *     `durable-agent-recover-aimock.scenario.test.ts` (COR-1493), including recovery with
+ *     running checkpoints enabled and the specific refusal when no checkpoint is available.
  *
  * Like T78, this lives in `packages/memory/integration-tests` because the harness setup needs
  * a real `@mastra/memory` `Memory` over `@mastra/libsql`. Replay is the default: the committed

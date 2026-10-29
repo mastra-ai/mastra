@@ -22,6 +22,7 @@ function stubFactoryShell() {
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/decisions`, () => HttpResponse.json({ decisions: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
       HttpResponse.json({ modelId: null, thinkingLevel: null }),
     ),
@@ -70,7 +71,7 @@ describe('NewPage default-model guard', () => {
       '/factories/fp-1/settings/models#factory-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'What should we ship?' })).not.toBeInTheDocument();
   });
 
   it("points personal-routed chats at Personal defaults instead of starting on the Factory's model", async () => {
@@ -143,7 +144,7 @@ describe('NewPage default-model guard', () => {
 
     renderNewPage();
 
-    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What should we ship?' })).toBeInTheDocument();
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
 
     releaseProject();
@@ -159,7 +160,7 @@ describe('NewPage default-model guard', () => {
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What should we ship?' })).toBeInTheDocument();
   });
 
   it('fails open with a visible error when the factory project fetch errors', async () => {

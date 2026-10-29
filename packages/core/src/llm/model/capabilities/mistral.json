@@ -29,6 +29,7 @@
   "temperature": [
     "codestral-2508",
     "codestral-latest",
+    "deepseek-v4-1-flash-1017",
     "devstral-2512",
     "devstral-latest",
     "devstral-medium-latest",
@@ -62,6 +63,7 @@
   "structuredOutput": [
     "codestral-2508",
     "codestral-latest",
+    "deepseek-v4-1-flash-1017",
     "glm-5-2",
     "labs-leanstral-1-5-1",
     "ministral-14b-2512",
@@ -83,10 +85,10 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "zai-glm-5-3": [
+    "deepseek-v4-1-flash-1017": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "magistral-medium-latest": [
@@ -95,10 +97,10 @@
         "values": ["none", "high"]
       }
     ],
-    "mistral-medium-latest": [
+    "zai-glm-5-3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-glm-5-2": [
@@ -107,19 +109,7 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "mistral-small-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-medium-2604": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "labs-leanstral-1-5-1": [
+    "mistral-large-4": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -131,7 +121,25 @@
         "values": ["none", "high", "max"]
       }
     ],
+    "mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-small-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -143,7 +151,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mistral-large-4": [
+    "labs-leanstral-1-5-1": [
       {
         "type": "effort",
         "values": ["none", "high"]
