@@ -3,7 +3,7 @@ import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
+import { networkInterfaces, tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -565,6 +565,20 @@ export const environmentRoute = registerApiRoute('/environment', {
         environment: 'development',
         shared: 'shell',
       });
+    });
+
+    it('binds to localhost instead of every interface when no host is configured', async () => {
+      // A container/runner usually has one non-loopback IPv4. If it does not,
+      // there is no second address to probe and the default is unobservable.
+      const otherAddress = Object.values(networkInterfaces())
+        .flat()
+        .find(iface => iface && iface.family === 'IPv4' && !iface.internal)?.address;
+      if (!otherAddress) return;
+
+      // Bound to localhost, the address the machine answers on for its own
+      // hostname is not listening, so the connection is refused rather than
+      // returning a response.
+      await expect(fetch(`http://${otherAddress}:${port}/api`)).rejects.toThrow();
     });
 
     it(
