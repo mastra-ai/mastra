@@ -1295,7 +1295,11 @@ const LIST_CACHE_MAX_PROJECTS = 100;
 
 export class WorkItemsStorage extends FactoryStorageDomain {
   /** Last full card list per project, valid while the project's board version is unchanged. */
-  readonly #listCache = new Map<string, { version: string; takenAt: number; items: WorkItemRow[] }>();
+  readonly #listCache = new Map<
+    string,
+    { version: string; freshnessToken: string; takenAt: number; items: WorkItemRow[] }
+  >();
+  #freshnessCounter = 0;
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
   // Storage does not know boards. Until the host says which phases are terminal,
   // no card counts as finished, so the boot sweep never supersedes on a guess.
@@ -1569,23 +1573,39 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * as a cursor and non-deterministic for the callers that iterate this list.
    */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
+    const { items } = await this.listSnapshot({ orgId, factoryProjectId });
+    return items;
+  }
+
+  /**
+   * `list()` plus what makes that list current: the board version the rows were read under
+   * (null when the project has never been versioned, so the rows are never cached) and a
+   * freshness token that rotates every time the rows are actually re-read from storage. The
+   * token lets an HTTP validator built on top of this cache expire together with the TTL
+   * safety refresh instead of outliving it.
+   */
+  async listSnapshot({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<{
+    items: WorkItemRow[];
+    version: string | null;
+    freshnessToken: string | null;
+  }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
     // so the next call refetches instead of trusting a snapshot taken before that write.
     const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
     const cached = this.#listCache.get(key);
     if (version && cached?.version === version && Date.now() - cached.takenAt < LIST_CACHE_TTL_MS) {
-      return structuredClone(cached.items);
+      return { items: structuredClone(cached.items), version, freshnessToken: cached.freshnessToken };
     }
     const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
     this.#listCache.delete(key);
-    if (version) {
-      this.#listCache.set(key, { version, takenAt: Date.now(), items: structuredClone(items) });
-      if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
-        this.#listCache.delete(this.#listCache.keys().next().value!);
-      }
+    if (!version) return { items, version: null, freshnessToken: null };
+    const freshnessToken = `${Date.now().toString(36)}.${(++this.#freshnessCounter).toString(36)}`;
+    this.#listCache.set(key, { version, freshnessToken, takenAt: Date.now(), items: structuredClone(items) });
+    if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
+      this.#listCache.delete(this.#listCache.keys().next().value!);
     }
-    return items;
+    return { items, version, freshnessToken };
   }
 
   async listByIds({

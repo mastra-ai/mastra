@@ -2051,10 +2051,11 @@ describe('MastraFactory.prepare', () => {
 
   it('lets browser MCP clients send the MCP headers and read the sign-in challenge', async () => {
     // The deployer merges these into its default allow/expose lists, so
-    // Factory only adds what MCP 2026-07-28 clients need on top.
+    // Factory only adds what MCP 2026-07-28 clients and the board poller's
+    // conditional requests need on top.
     const mcpCors = {
-      allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
-      exposeHeaders: ['WWW-Authenticate'],
+      allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name', 'If-None-Match'],
+      exposeHeaders: ['WWW-Authenticate', 'ETag'],
     };
 
     const withOrigins = await prepareFactory({

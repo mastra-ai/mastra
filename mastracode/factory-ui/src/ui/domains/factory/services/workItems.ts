@@ -8,7 +8,7 @@
 
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 
-import { requestJson } from './request';
+import { request, RequestError, requestJson } from './request';
 
 export type WorkItemSource =
   | 'github-issue'
@@ -236,23 +236,56 @@ export interface BoardSnapshot {
   runningSessionIds: string[];
   /** Sessions parked on a tool until someone answers, read live with the cards. */
   parkedSessionIds: string[];
+  /**
+   * What the server said this snapshot is, so the next poll can ask whether
+   * it has changed. Absent on boards patched locally, which are no longer what
+   * the server sent and must be read in full.
+   */
+  validator?: { url: string; etag: string };
 }
 
-/** List the org's work items for a Factory project. */
+const WORK_ITEMS_FETCH: RequestInit = {
+  // The browser cache must not answer the poll: freshness is negotiated with the server.
+  cache: 'no-store',
+};
+
+/**
+ * List the org's work items for a Factory project.
+ *
+ * With a previous snapshot of the same URL the read is conditional: the server
+ * answers 304 when the board is unchanged, and the previous snapshot is
+ * returned as is, without a body to parse.
+ */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
+  previous?: BoardSnapshot,
 ): Promise<BoardSnapshot> {
-  const data = await requestJson<{
+  const url = `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`;
+  const etag = previous?.validator?.url === url ? previous.validator.etag : undefined;
+  let res = await request(url, {
+    ...WORK_ITEMS_FETCH,
+    signal,
+    ...(etag ? { headers: { 'If-None-Match': etag } } : {}),
+  });
+  if (res.status === 304) {
+    if (etag && previous) return previous;
+    // A 304 was not asked for: read once more without a validator rather than show nothing.
+    res = await request(url, { ...WORK_ITEMS_FETCH, signal });
+    if (res.status === 304) throw new RequestError('Server answered 304 to an unconditional request', 304);
+  }
+  const data = (await res.json()) as {
     workItems: WireWorkItem[];
     runningSessionIds?: string[];
     parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
+  };
+  const nextEtag = res.headers.get('ETag');
   return {
     workItems: data.workItems.map(fromWireWorkItem),
     runningSessionIds: data.runningSessionIds ?? [],
     parkedSessionIds: data.parkedSessionIds ?? [],
+    ...(nextEtag ? { validator: { url, etag: nextEtag } } : {}),
   };
 }
 

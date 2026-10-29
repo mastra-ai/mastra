@@ -10,12 +10,14 @@ export class RequestError extends Error {
   }
 }
 
-export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+/** Fetch a Factory endpoint and resolve the response, throwing the server's message on failure. */
+export async function request(url: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   if (init?.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
   const res = await fetch(url, { ...init, headers, credentials: 'include' });
-  if (!res.ok) {
+  // 304 is not `ok` but carries no error: callers that sent a validator handle it.
+  if (!res.ok && res.status !== 304) {
     let message = `Request failed (${res.status})`;
     try {
       const body = (await res.json()) as { error?: string; message?: string };
@@ -26,5 +28,11 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
     }
     throw new RequestError(message, res.status);
   }
+  return res;
+}
+
+export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await request(url, init);
+  if (res.status === 304) throw new RequestError('Unexpected 304 for an unconditional request', 304);
   return (await res.json()) as T;
 }

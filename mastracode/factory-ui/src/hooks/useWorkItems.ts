@@ -35,8 +35,9 @@ function requireFactoryProjectId(factoryProjectId: string | undefined): string {
 /** Rewrite the cached board's cards, keeping the session activity read alongside them. */
 function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: WorkItem[]) => WorkItem[]) {
   // Returning undefined skips the write: never seed a partial board before the list query loads.
+  // A patched board is no longer what the server sent, so the next poll reads in full.
   queryClient.setQueryData<BoardSnapshot>(listKey, board =>
-    board ? { ...board, workItems: patch(board.workItems) } : undefined,
+    board ? { ...board, workItems: patch(board.workItems), validator: undefined } : undefined,
   );
 }
 
@@ -61,7 +62,11 @@ const NO_SESSIONS: ReadonlySet<string> = new Set();
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
-    queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
+    queryFn: factoryProjectId
+      ? ({ signal, client, queryKey }) =>
+          // The last board this client read; the poll asks the server whether it changed.
+          listWorkItems(baseUrl, factoryProjectId, signal, client.getQueryData<BoardSnapshot>(queryKey))
+      : skipToken,
     // Relationships can be created by GitHub ingestion or another open tab.
     // Keep thread-page counterpart links current without requiring a reload.
     refetchInterval: 5_000,

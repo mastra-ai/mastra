@@ -7,6 +7,8 @@
  * the same cards while `created_by` / stage history record who acted.
  */
 
+import { createHash } from 'node:crypto';
+
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
@@ -98,6 +100,51 @@ function sessionIdsWhere(items: WorkItemRow[], predicate: (sessionId: string) =>
 
 function loose(c: unknown): Context {
   return c as Context;
+}
+
+/** Bumped whenever the list wire format changes, so a validator from an older build never matches. */
+const WORK_ITEM_LIST_WIRE_VERSION = '1';
+
+/**
+ * A weak validator for the board list: the persisted version says whether any card changed, the
+ * freshness token expires it together with storage's safety re-read, and the live marker arrays
+ * change without any write at all. Hashing those is cheap; hashing every card on every poll is not.
+ */
+function workItemListEtag(input: {
+  orgId: string;
+  factoryProjectId: string;
+  version: string;
+  freshnessToken: string;
+  runningSessionIds: string[];
+  parkedSessionIds: string[];
+}): string {
+  const digest = createHash('sha256')
+    .update(
+      JSON.stringify([
+        WORK_ITEM_LIST_WIRE_VERSION,
+        input.orgId,
+        input.factoryProjectId,
+        input.version,
+        input.freshnessToken,
+        input.runningSessionIds,
+        input.parkedSessionIds,
+      ]),
+    )
+    .digest('base64url')
+    .slice(0, 27);
+  return `W/"${digest}"`;
+}
+
+/** RFC 9110 `If-None-Match` weak comparison: any listed tag, ignoring `W/`, or `*`. */
+function ifNoneMatchMatches(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  const opaque = etag.replace(/^W\//, '');
+  for (const raw of header.split(',')) {
+    const candidate = raw.trim();
+    if (candidate === '*') return true;
+    if (candidate.replace(/^W\//, '') === opaque) return true;
+  }
+  return false;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -375,14 +422,31 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const { items, version, freshnessToken } = await workItems.listSnapshot({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
+          const runningSessionIds = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
+          const parkedSessionIds = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
+          // A never-written project has no version to validate against: answer in full, with no
+          // validator, rather than invent one or create a version row during a read.
+          if (version && freshnessToken) {
+            const etag = workItemListEtag({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              version,
+              freshnessToken,
+              runningSessionIds,
+              parkedSessionIds,
+            });
+            c.header('ETag', etag);
+            c.header('Cache-Control', 'private, no-cache');
+            if (ifNoneMatchMatches(c.req.header('if-none-match'), etag)) return c.body(null, 304);
+          }
           return c.json({
             workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+            runningSessionIds,
+            parkedSessionIds,
           });
         },
       }),

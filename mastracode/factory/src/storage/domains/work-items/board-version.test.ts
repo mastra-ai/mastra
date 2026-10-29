@@ -227,3 +227,99 @@ describe('board list cache', () => {
     }
   });
 });
+
+describe('board list snapshot', () => {
+  const snapshot = (workItems: WorkItemsStorage, factoryProjectId = PROJECT) =>
+    workItems.listSnapshot({ orgId: ORG, factoryProjectId });
+
+  it('returns the same version and freshness token while the board is unchanged', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seedCard(seed.workItems);
+
+    const first = await snapshot(seed.workItems);
+    const second = await snapshot(seed.workItems);
+
+    expect(first.version).toEqual(expect.any(String));
+    expect(first.freshnessToken).toEqual(expect.any(String));
+    expect(second.version).toBe(first.version);
+    expect(second.freshnessToken).toBe(first.freshnessToken);
+    expect(second.items).toEqual(first.items);
+  });
+
+  it('changes the version after a write', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    const before = await snapshot(seed.workItems);
+
+    await seed.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: 'Edited' } });
+    const after = await snapshot(seed.workItems);
+
+    expect(after.version).not.toBe(before.version);
+    expect(after.items[0]?.title).toBe('Edited');
+  });
+
+  it('rotates the freshness token when the safety window re-reads the rows', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const seed = await createFactoryStorageForTests();
+      await seedCard(seed.workItems);
+      const before = await snapshot(seed.workItems);
+
+      vi.setSystemTime(Date.now() + 61_000);
+      const after = await snapshot(seed.workItems);
+
+      expect(after.version).toBe(before.version);
+      expect(after.freshnessToken).not.toBe(before.freshnessToken);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports no version for a project that was never written, and never caches it', async () => {
+    const seed = await createFactoryStorageForTests();
+    const cardReads = countCardReads(seed);
+
+    const first = await snapshot(seed.workItems, 'untouched');
+    const second = await snapshot(seed.workItems, 'untouched');
+
+    expect(first).toEqual({ items: [], version: null, freshnessToken: null });
+    expect(second).toEqual({ items: [], version: null, freshnessToken: null });
+    expect(cardReads()).toBe(2);
+  });
+
+  it('isolates the returned rows from callers that mutate them', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seedCard(seed.workItems);
+
+    const first = await snapshot(seed.workItems);
+    first.items[0]!.title = 'mutated';
+    const second = await snapshot(seed.workItems);
+
+    expect(second.items[0]?.title).toBe('Fix login');
+  });
+
+  it('never labels rows read before a concurrent write with the version written after it', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+
+    // Interleave: the version is read, then a write lands, then the rows are read.
+    const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+    let interleaved = false;
+    vi.spyOn(seed.storage.ops, 'findMany').mockImplementation(async (collection, ...rest) => {
+      if (collection === 'work_items' && !interleaved) {
+        interleaved = true;
+        await seed.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: 'Raced' } });
+      }
+      return findMany(collection, ...rest);
+    });
+
+    const racing = await snapshot(seed.workItems);
+    vi.restoreAllMocks();
+    const settled = await snapshot(seed.workItems);
+
+    // The racing snapshot may carry either title, but its version must be the pre-write one,
+    // so the next poll sees a new version and re-reads rather than trusting the raced rows.
+    expect(settled.version).not.toBe(racing.version);
+    expect(settled.items[0]?.title).toBe('Raced');
+  });
+});

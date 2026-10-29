@@ -2330,6 +2330,217 @@ describe('run activity on the work-item listing', () => {
   });
 });
 
+describe('conditional work-item listing', () => {
+  const listPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+
+  async function startRun(sessionId: string) {
+    const { item } = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
+      role: 'execute',
+      session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
+      resourceId: sessionId,
+      kickoffKey: `kickoff-${sessionId}`,
+      kickoffMessage: null,
+    });
+    return item;
+  }
+
+  /** One client polling one app: the previous ETag rides along on the next request. */
+  function poller(app: Hono, path = listPath()) {
+    let etag: string | null = null;
+    return async () => {
+      const res = await app.request(path, etag ? { headers: { 'if-none-match': etag } } : undefined);
+      etag = res.headers.get('etag') ?? etag;
+      return res;
+    };
+  }
+
+  it('answers an unchanged poll with a bodyless 304 and the same validator', async () => {
+    await json('POST', listPath(), createBody());
+    const poll = poller(buildApp(orgUser));
+
+    const first = await poll();
+    expect(first.status).toBe(200);
+    const etag = first.headers.get('etag');
+    expect(etag).toMatch(/^W\/"[A-Za-z0-9_-]+"$/);
+    expect(first.headers.get('cache-control')).toBe('private, no-cache');
+    expect((await first.json()).workItems).toHaveLength(1);
+
+    const second = await poll();
+    expect(second.status).toBe(304);
+    expect(second.headers.get('etag')).toBe(etag);
+    expect(second.headers.get('cache-control')).toBe('private, no-cache');
+    expect(await second.text()).toBe('');
+  });
+
+  it('answers in full when the validator is stale, malformed, or missing', async () => {
+    await json('POST', listPath(), createBody());
+    const app = buildApp(orgUser);
+    const etag = (await app.request(listPath())).headers.get('etag')!;
+
+    for (const header of ['W/"stale"', 'not-a-tag', '', etag.slice(0, -1)]) {
+      const res = await app.request(listPath(), { headers: { 'if-none-match': header } });
+      expect(res.status, `If-None-Match: ${header}`).toBe(200);
+      expect((await res.json()).workItems).toHaveLength(1);
+    }
+  });
+
+  it('compares weakly: strong form, lists, and wildcard all match', async () => {
+    await json('POST', listPath(), createBody());
+    const app = buildApp(orgUser);
+    const etag = (await app.request(listPath())).headers.get('etag')!;
+    const strong = etag.replace(/^W\//, '');
+
+    for (const header of [strong, `"other", ${etag}`, `W/"other",${strong}`, '*']) {
+      const res = await app.request(listPath(), { headers: { 'if-none-match': header } });
+      expect(res.status, `If-None-Match: ${header}`).toBe(304);
+    }
+  });
+
+  it('answers in full after a card is edited, created, deleted, or moved', async () => {
+    const { workItem: created } = await (await json('POST', listPath(), createBody())).json();
+    const poll = poller(buildApp(orgUser));
+    await poll();
+    expect((await poll()).status).toBe(304);
+
+    await json('PATCH', `/web/factory/work-items/${created.id}`, { title: 'Edited' });
+    const afterEdit = await poll();
+    expect(afterEdit.status).toBe(200);
+    expect((await afterEdit.json()).workItems[0].title).toBe('Edited');
+    expect((await poll()).status).toBe(304);
+
+    await json('POST', listPath(), createBody({ externalSource: undefined, title: 'Second' }));
+    expect((await poll()).status).toBe(200);
+    expect((await poll()).status).toBe(304);
+
+    const moved = await json('POST', `${listPath()}/${created.id}/transition`, {
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: (await listItems()).find(item => item.id === created.id)!.revision,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+      cause: 'board_drag',
+    });
+    expect(moved.status).toBe(200);
+    const afterMove = await poll();
+    expect(afterMove.status).toBe(200);
+    expect((await afterMove.json()).workItems.find((item: { id: string }) => item.id === created.id).stages).toEqual([
+      'execute',
+    ]);
+    expect((await poll()).status).toBe(304);
+
+    await json('DELETE', `/web/factory/work-items/${created.id}`);
+    const afterDelete = await poll();
+    expect(afterDelete.status).toBe(200);
+    expect((await afterDelete.json()).workItems.map((item: { title: string }) => item.title)).toEqual(['Second']);
+  });
+
+  it('answers in full when a comment changes the card feed, though only the comment domain wrote', async () => {
+    const { workItem: created } = await (await json('POST', listPath(), createBody())).json();
+    const poll = poller(buildApp(orgUser));
+    await poll();
+    expect((await poll()).status).toBe(304);
+
+    const scope = { orgId: 'org1', factoryProjectId: PROJECT_ID, workItemId: created.id };
+    await seed.comments.create({
+      ...scope,
+      author: { kind: 'user', id: 'u1', displayName: 'Alice' },
+      body: 'on it',
+    });
+    await seed.comments.refreshWorkItemFeedActivity(scope);
+
+    const res = await poll();
+    expect(res.status).toBe(200);
+    expect((await res.json()).workItems[0].commentCount).toBe(1);
+  });
+
+  it('answers in full when a session starts or parks, though nothing was written', async () => {
+    await startRun('session-a');
+    const running = new Set<string>();
+    const parked = new Set<string>();
+    const poll = poller(buildApp(orgUser, undefined, undefined, running, undefined, parked));
+    await poll();
+    expect((await poll()).status).toBe(304);
+
+    running.add('session-a');
+    const started = await poll();
+    expect(started.status).toBe(200);
+    expect((await started.json()).runningSessionIds).toEqual(['session-a']);
+    expect((await poll()).status).toBe(304);
+
+    running.delete('session-a');
+    parked.add('session-a');
+    const parkedRes = await poll();
+    expect(parkedRes.status).toBe(200);
+    expect((await parkedRes.json()).parkedSessionIds).toEqual(['session-a']);
+    expect((await poll()).status).toBe(304);
+  });
+
+  it('never matches a validator from another project', async () => {
+    await json('POST', listPath(), createBody());
+    const firstProject = PROJECT_ID;
+    const app = buildApp(orgUser);
+    const etag = (await app.request(listPath())).headers.get('etag')!;
+
+    await seedProject();
+    await json('POST', listPath(), createBody());
+    expect(PROJECT_ID).not.toBe(firstProject);
+
+    const res = await app.request(listPath(), { headers: { 'if-none-match': etag } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('etag')).not.toBe(etag);
+  });
+
+  it('checks authorization before the validator', async () => {
+    await json('POST', listPath(), createBody());
+    const etag = (await buildApp(orgUser).request(listPath())).headers.get('etag')!;
+
+    const anonymous = await buildApp(null).request(listPath(), { headers: { 'if-none-match': etag } });
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers.get('etag')).toBeNull();
+
+    const outsider = await buildApp({ workosId: 'u9', organizationId: 'other-org' }).request(listPath(), {
+      headers: { 'if-none-match': etag },
+    });
+    expect(outsider.status).toBe(404);
+    expect(outsider.headers.get('etag')).toBeNull();
+  });
+
+  it('sends no validator for a project that has never been written, and validates once it has', async () => {
+    const app = buildApp(orgUser);
+    const res = await app.request(listPath(), { headers: { 'if-none-match': '*' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('etag')).toBeNull();
+    expect(res.headers.get('cache-control')).toBeNull();
+    expect((await res.json()).workItems).toEqual([]);
+
+    const { workItem: created } = await (await json('POST', listPath(), createBody())).json();
+    await json('DELETE', `/web/factory/work-items/${created.id}`);
+    const poll = poller(app);
+    const empty = await poll();
+    expect(empty.status).toBe(200);
+    expect(empty.headers.get('etag')).not.toBeNull();
+    expect((await empty.json()).workItems).toEqual([]);
+    expect((await poll()).status).toBe(304);
+  });
+
+  it('retires the validator when storage re-reads the board after its safety window', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    await json('POST', listPath(), createBody());
+    const poll = poller(buildApp(orgUser));
+    const first = await poll();
+    expect((await poll()).status).toBe(304);
+
+    vi.setSystemTime(Date.now() + 61_000);
+    const refreshed = await poll();
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.headers.get('etag')).not.toBe(first.headers.get('etag'));
+    expect((await poll()).status).toBe(304);
+  });
+});
+
 describe('GET /web/factory/projects/:id/health/thresholds', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`, undefined, null)).status).toBe(

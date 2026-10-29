@@ -1795,11 +1795,12 @@ export class MastraFactory {
         ],
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
-          // read the OAuth challenge from `WWW-Authenticate`; the deployer
+          // read the OAuth challenge from `WWW-Authenticate`; the board poller
+          // revalidates with `If-None-Match` and reads `ETag` back. The deployer
           // merges these into its default allow/expose lists.
           const mcpCors = {
-            allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
-            exposeHeaders: ['WWW-Authenticate'],
+            allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name', 'If-None-Match'],
+            exposeHeaders: ['WWW-Authenticate', 'ETag'],
           };
           const cors = {
             cors: allowedOrigins.length ? { origin: allowedOrigins, credentials: true, ...mcpCors } : mcpCors,
