@@ -249,7 +249,8 @@ type ComboboxContentProps = BaseCombobox.Popup.Props &
 /**
  * The popup. Under a field (ComboboxInput or ComboboxChips) it opens at the field's width; under a
  * compact ComboboxTrigger it takes the trigger's width, at least 11rem. Either way the width never
- * follows the filtered items, so it holds still while you type; long labels truncate.
+ * follows the filtered items, so it holds still while you type; long labels truncate. (`Combobox`'s
+ * `popupWidth="content"` widens it to the longest option instead.)
  */
 function ComboboxContent({
   className,

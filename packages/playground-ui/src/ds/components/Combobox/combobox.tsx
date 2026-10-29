@@ -62,6 +62,11 @@ type ComboboxSharedProps = {
   'aria-describedby'?: string;
   /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
   align?: 'start' | 'center' | 'end';
+  /**
+   * `anchor` (default) opens the popup at the trigger's width, at least 11rem. `content` fits it to the longest
+   * option (e.g. model ids), measured over all options so it holds still while you type, within the screen.
+   */
+  popupWidth?: 'anchor' | 'content';
   showChevron?: boolean;
   iconOnlyValue?: boolean;
   allowCustomValue?: boolean;
@@ -222,6 +227,30 @@ function ComboboxClearFooter({ label, onClear }: { label: string; onClear: () =>
   );
 }
 
+/** The option with the most characters: a close enough stand-in for the widest row, without measuring them all. */
+function longestOption(options: ComboboxOption[]) {
+  return options.reduce<ComboboxOption | undefined>(
+    (longest, option) => (!longest || optionText(option).length > optionText(longest).length ? option : longest),
+    undefined,
+  );
+}
+
+/** An invisible copy of the longest row (list padding included): a `content`-width popup sizes to it, whatever the search shows. */
+function ComboboxPopupSizer({ option }: { option: ComboboxOption }) {
+  return (
+    <div aria-hidden className="invisible h-0 overflow-hidden px-1">
+      <div className={comboboxStyles.item}>
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          {option.start}
+          <ComboboxOptionText option={option} />
+          {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
+        </span>
+        <span className={comboboxStyles.checkContainer} />
+      </div>
+    </div>
+  );
+}
+
 /** The popup: the search row for a compact trigger (a field searches in itself), then the options. */
 function ComboboxOptionsContent({
   showSearch,
@@ -230,6 +259,7 @@ function ComboboxOptionsContent({
   align,
   container,
   footer,
+  sizerOption,
 }: {
   showSearch: boolean;
   searchPlaceholder: string;
@@ -237,10 +267,13 @@ function ComboboxOptionsContent({
   align: 'start' | 'center' | 'end';
   container?: PortalContainer;
   footer?: React.ReactNode;
+  /** Set for a `content`-width popup: the option whose row sets the width. */
+  sizerOption?: ComboboxOption;
 }) {
   return (
-    <ComboboxContent align={align} container={container}>
+    <ComboboxContent align={align} container={container} className={cn(sizerOption && 'w-max')}>
       {showSearch ? <ComboboxSearch placeholder={searchPlaceholder} /> : null}
+      {sizerOption ? <ComboboxPopupSizer option={sizerOption} /> : null}
       <ComboboxEmpty>{emptyText}</ComboboxEmpty>
       <ComboboxList>
         {(option: ComboboxOption) => (
@@ -369,6 +402,7 @@ function SingleCombobox({
   onOpenChange,
   container,
   align = 'start',
+  popupWidth = 'anchor',
   showChevron = true,
   iconOnlyValue = false,
   allowCustomValue = false,
@@ -423,6 +457,7 @@ function SingleCombobox({
         emptyText={emptyText}
         align={align}
         container={container}
+        sizerOption={popupWidth === 'content' ? longestOption(options) : undefined}
       />
     </ComboboxRoot>
   );
@@ -446,6 +481,7 @@ function MultipleCombobox({
   onOpenChange,
   container,
   align = 'start',
+  popupWidth = 'anchor',
   showChevron = true,
   iconOnlyValue = false,
 }: ComboboxMultipleProps & ShapeProps) {
@@ -483,6 +519,7 @@ function MultipleCombobox({
         align={align}
         container={container}
         footer={footer}
+        sizerOption={popupWidth === 'content' ? longestOption(options) : undefined}
       />
     </ComboboxRoot>
   );

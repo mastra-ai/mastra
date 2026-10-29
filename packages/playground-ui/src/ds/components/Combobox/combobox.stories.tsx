@@ -144,6 +144,24 @@ export const ModelSelector: Story = {
   },
 };
 
+/** `popupWidth="content"`: the popup fits the longest id and keeps that width while you search. */
+export const ContentWidthPopup: Story = {
+  args: {
+    options: [
+      'moonshotai/kimi-k2',
+      'moonshotai/kimi-k2-0905',
+      'moonshotai/kimi-k2-thinking',
+      'moonshotai/kimi-k3.1-pro',
+      'cognitivecomputations/dolphin-mistral-24b-venice-edition',
+    ].map(id => ({ label: id, value: id })),
+    placeholder: 'Select model...',
+    searchPlaceholder: 'Search models...',
+    variant: 'ghost',
+    popupWidth: 'content',
+    className: 'w-auto max-w-40',
+  },
+};
+
 export const Disabled: Story = {
   args: {
     options: frameworkOptions,
