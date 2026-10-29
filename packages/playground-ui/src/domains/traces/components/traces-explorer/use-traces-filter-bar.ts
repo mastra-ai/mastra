@@ -9,11 +9,15 @@ import {
   traceTokensToFilterBarItems,
 } from '../../trace-filters';
 import type { TraceQueryRelatedScope } from '../../trace-query-filters';
-import { TRACE_TIME_RANGE_FIELD, TRACE_TIME_RANGE_FIELD_ID, TRACE_TIME_RANGE_ITEM } from '../trace-time-range-chip';
 import { getSelectedEntityOption } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
-import { isFilterBarGroup } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+  isFilterBarGroup,
+} from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 
 const NO_SUGGESTIONS: string[] = [];
@@ -33,7 +37,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
   // editor's Combobox `items`, which loops if handed a new array on every render.
   return useMemo(
     () => [
-      TRACE_TIME_RANGE_FIELD,
+      FILTER_BAR_TIME_RANGE_FIELD,
       ...createTraceFilterBarFields({
         availableRootEntityNames: rootEntityNames,
         availableEnvironments: environments,
@@ -77,15 +81,15 @@ export function useTracesFilterBar() {
   const groupsExpression = traceFiltersToFilterBarExpression([], filters.groups);
   const filterBarValue: FilterBarExpression = {
     ...groupsExpression,
-    nodes: [TRACE_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes],
+    nodes: [FILTER_BAR_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes],
   };
   // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs flat.
-  const flatFilterBarValue = [TRACE_TIME_RANGE_ITEM, ...items];
+  const flatFilterBarValue = [FILTER_BAR_TIME_RANGE_ITEM, ...items];
 
   const onFilterBarChange = (expression: FilterBarExpression) => {
     const { tokens, groups } = filterBarExpressionToTraceFilters({
       ...expression,
-      nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+      nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID),
     });
     setFilterTokens(tokens, groups);
   };

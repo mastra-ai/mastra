@@ -115,7 +115,7 @@ describe('Metrics page filter bar', () => {
 
       expect(screen.getByRole('group', { name: 'Metrics filters' })).toBeTruthy();
       expect(getChipLabels()).toEqual(['Time']);
-      expect(within(getChip('Time')).getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+      expect(within(getChip('Time')).getByRole('button', { name: 'Time range: Last 24 hours' })).toBeTruthy();
       expect(within(getChip('Time')).queryByRole('button', { name: /remove/i })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
     });
@@ -202,7 +202,7 @@ describe('Metrics page filter bar', () => {
       expect(getChipLabels()).toEqual(['Time']);
       // Clear hands focus to the input, which opens its field list over the bar.
       pressFilterKey('Escape');
-      expect(within(getChip('Time')).getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(within(getChip('Time')).getByRole('button', { name: 'Time range: Last 7 days' })).toBeTruthy();
     });
 
     it('forgets the saved filters', async () => {
@@ -234,11 +234,11 @@ describe('Metrics page filter bar', () => {
       setupHandlers();
       await renderSettledPage();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Value: Last 24 hours' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Time range: Last 24 hours' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
 
       await waitFor(() => expect(getLocation()).toBe('/metrics?period=7d'));
-      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Time range: Last 7 days' })).toBeTruthy();
     });
   });
 
@@ -247,7 +247,7 @@ describe('Metrics page filter bar', () => {
       setupHandlers();
       await renderSettledPage('/metrics?period=custom&dateFrom=2026-01-01T12:00:00Z&dateTo=2026-01-06T12:00:00Z');
 
-      fireEvent.click(within(getChip('Time')).getByRole('button', { name: /^Value: / }));
+      fireEvent.click(within(getChip('Time')).getByRole('button', { name: /^Time range: / }));
       fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
 
       // The editor applies its default 12:00 AM – 11:59 PM times to the picked days.

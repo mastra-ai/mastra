@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { CustomRangeEditor } from './custom-range-editor';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron/disclosure-chevron';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
@@ -126,7 +127,7 @@ export function DateTimeRangePicker({
           <PopoverTrigger render={renderTrigger({ label: customLabel, disabled })} />
         ) : (
           <PopoverTrigger asChild>
-            <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
+            <Button size={size} disabled={disabled} icon={<CalendarIcon />} iconEnd={<DisclosureChevron />}>
               {customLabel}
             </Button>
           </PopoverTrigger>
@@ -154,7 +155,7 @@ export function DateTimeRangePicker({
         <DropdownMenu.Trigger render={renderTrigger({ label: triggerLabel, disabled })} />
       ) : (
         <DropdownMenu.Trigger asChild>
-          <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
+          <Button size={size} disabled={disabled} icon={<CalendarIcon />} iconEnd={<DisclosureChevron />}>
             {triggerLabel}
           </Button>
         </DropdownMenu.Trigger>

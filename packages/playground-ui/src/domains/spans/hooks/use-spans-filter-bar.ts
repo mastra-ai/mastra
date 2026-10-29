@@ -4,11 +4,6 @@ import { createTraceQueryValuesResolver, useEntityNames, useEnvironments } from 
 import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo } from 'react';
 import {
-  TRACE_TIME_RANGE_FIELD,
-  TRACE_TIME_RANGE_FIELD_ID,
-  TRACE_TIME_RANGE_ITEM,
-} from '../../traces/components/trace-time-range-chip';
-import {
   filterBarExpressionToTraceFilters,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
@@ -16,7 +11,12 @@ import {
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
 import { createSpanFilterBarFields } from '../span-filters';
-import { isFilterBarGroup } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+  isFilterBarGroup,
+} from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 
 /** The time range presets the spans filter bar offers. */
@@ -51,7 +51,7 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
   // `items`, which loops if handed a new array on every render.
   return useMemo(
     () => [
-      TRACE_TIME_RANGE_FIELD,
+      FILTER_BAR_TIME_RANGE_FIELD,
       ...createSpanFilterBarFields({
         withContextFields,
         entityNames,
@@ -83,14 +83,16 @@ export function useSpansFilterBar({ tokens, groups, onFiltersChange }: UseSpansF
 
   const filterBarValue = useMemo<FilterBarExpression>(() => {
     const groupsExpression = traceFiltersToFilterBarExpression([], groups);
-    return { ...groupsExpression, nodes: [TRACE_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes] };
+    return { ...groupsExpression, nodes: [FILTER_BAR_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes] };
   }, [items, groups]);
 
   const onFilterBarChange = useCallback(
     (expression: FilterBarExpression) => {
       const next = filterBarExpressionToTraceFilters({
         ...expression,
-        nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+        nodes: expression.nodes.filter(
+          node => isFilterBarGroup(node) || node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID,
+        ),
       });
       onFiltersChange(next.tokens, next.groups);
     },

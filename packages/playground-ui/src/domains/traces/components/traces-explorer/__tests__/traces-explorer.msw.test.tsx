@@ -486,7 +486,9 @@ describe('TracesExplorer', () => {
       await screen.findByRole('dialog', { name: 'Trace details' });
       onChange.mockClear();
 
-      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
+      fireEvent.click(
+        within(getFilterChips()[0]).getByRole('button', { name: 'Time range: Last 7 days', hidden: true }),
+      );
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
       return { onChange };
     };
@@ -522,7 +524,7 @@ describe('TracesExplorer', () => {
       });
       await settle(queryClient);
 
-      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: /^Value:/, hidden: true }));
+      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: /^Time range:/, hidden: true }));
       fireEvent.click(await screen.findByRole('button', { name: /Presets/, hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
       return { onChange };
@@ -637,7 +639,9 @@ describe('TracesExplorer', () => {
         const onChange = vi.fn<(next: TracesExplorerState) => void>();
         await renderWithGroup(onChange);
 
-        fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
+        fireEvent.click(
+          within(getFilterChips()[0]).getByRole('button', { name: 'Time range: Last 7 days', hidden: true }),
+        );
         fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
 
         expect(onChange.mock.calls.at(-1)?.[0].filters).toMatchObject({
@@ -991,7 +995,9 @@ describe('TracesExplorer', () => {
       });
       await settle(queryClient);
 
-      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Value: Last 24 hours', hidden: true }));
+      fireEvent.click(
+        within(getFilterChips()[0]).getByRole('button', { name: 'Time range: Last 24 hours', hidden: true }),
+      );
 
       const options = await screen.findAllByRole('menuitemradio', { hidden: true });
       expect(options.map(option => option.textContent)).toEqual(['Last 24 hours', 'Last 3 days']);
@@ -1025,7 +1031,7 @@ describe('TracesExplorer', () => {
 
       expect(getFilterChips().map(chip => chip.textContent)).toEqual([
         expect.stringContaining('Region'),
-        expect.stringContaining('Time'),
+        'Last 7 days',
         expect.stringContaining('trace-a'),
       ]);
     });

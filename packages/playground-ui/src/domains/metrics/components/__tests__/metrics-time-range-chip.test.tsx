@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { TRACE_TIME_RANGE_FIELD, TRACE_TIME_RANGE_ITEM } from '../../../traces/components/trace-time-range-chip';
 import { MetricsProvider } from '../../hooks/use-metrics';
 import { METRICS_FILTER_BAR_OPERATORS } from '../../metrics-filters';
 import { MetricsTimeRangeChip } from '../metrics-time-range-chip';
 import { olderServerCapabilities, traceAggregateCapabilities } from './fixtures/trace-aggregate';
 import { serveCapabilities } from './metrics-msw';
-import { FilterBar } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD, FILTER_BAR_TIME_RANGE_ITEM, FilterBar } from '@/ds/components/FilterBar';
 import { renderWithProviders } from '@/test/render';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -24,9 +23,9 @@ function renderChip(onCustomRangeChange = vi.fn()) {
       onCustomRangeChange={onCustomRangeChange}
     >
       <FilterBar
-        fields={[TRACE_TIME_RANGE_FIELD]}
+        fields={[FILTER_BAR_TIME_RANGE_FIELD]}
         operators={METRICS_FILTER_BAR_OPERATORS}
-        value={[TRACE_TIME_RANGE_ITEM]}
+        value={[FILTER_BAR_TIME_RANGE_ITEM]}
         onValueChange={() => {}}
         aria-label="Metrics filters"
       >

@@ -3,7 +3,6 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { TRACE_TIME_RANGE_FIELD_ID, TraceTimeRangeChip } from '../../../traces/components/trace-time-range-chip';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
 import {
@@ -15,7 +14,7 @@ import {
 } from '../../__tests__/fixtures/spans';
 import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } from '../../hooks';
 import { SpansFilterBar } from '../spans-filter-bar';
-import { FilterBar } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID, FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -62,8 +61,8 @@ function HostSpansFilterBar({
     >
       <FilterBar.Chips
         renderChip={item =>
-          item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-            <TraceTimeRangeChip
+          item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
+            <FilterBar.TimeRange
               preset="last-24h"
               onPresetChange={() => {}}
               onDateChange={() => {}}

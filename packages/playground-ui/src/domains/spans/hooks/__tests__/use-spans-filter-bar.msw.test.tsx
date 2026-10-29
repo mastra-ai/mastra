@@ -3,7 +3,6 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { TRACE_TIME_RANGE_FIELD_ID, TRACE_TIME_RANGE_ITEM } from '../../../traces/components/trace-time-range-chip';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
 import {
   emptyEntityNames,
@@ -16,6 +15,7 @@ import {
 } from '../../__tests__/fixtures/spans';
 import { SPAN_CONTEXT_FILTER_FIELD_IDS, SPAN_CORE_FILTER_FIELD_IDS } from '../../span-filters';
 import { useSpansFilterBar, useSpansFilterBarFields } from '../index';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID, FILTER_BAR_TIME_RANGE_ITEM } from '@/ds/components/FilterBar';
 import { server } from '@/test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -43,7 +43,7 @@ describe('useSpansFilterBarFields', () => {
       await waitFor(() =>
         expect(fieldIds(result.current)).toEqual(
           expect.arrayContaining([
-            TRACE_TIME_RANGE_FIELD_ID,
+            FILTER_BAR_TIME_RANGE_FIELD_ID,
             ...SPAN_CORE_FILTER_FIELD_IDS,
             ...SPAN_CONTEXT_FILTER_FIELD_IDS,
           ]),
@@ -68,7 +68,7 @@ describe('useSpansFilterBarFields', () => {
       const { result } = await renderFields();
 
       expect(fieldIds(result.current)).toEqual(
-        expect.arrayContaining([TRACE_TIME_RANGE_FIELD_ID, ...SPAN_CORE_FILTER_FIELD_IDS]),
+        expect.arrayContaining([FILTER_BAR_TIME_RANGE_FIELD_ID, ...SPAN_CORE_FILTER_FIELD_IDS]),
       );
     });
 
@@ -93,7 +93,7 @@ describe('useSpansFilterBar', () => {
     it('only holds the time range item', () => {
       const { result } = renderFilterBar([], []);
 
-      expect(result.current.filterBarValue.nodes).toEqual([TRACE_TIME_RANGE_ITEM]);
+      expect(result.current.filterBarValue.nodes).toEqual([FILTER_BAR_TIME_RANGE_ITEM]);
     });
 
     it('writes back no filters when the bar keeps only the time range', () => {
@@ -109,7 +109,7 @@ describe('useSpansFilterBar', () => {
     it('puts the time range item first', () => {
       const { result } = renderFilterBar(statusAndTraceTokens, [spanTypeGroup]);
 
-      expect(result.current.filterBarValue.nodes[0]).toBe(TRACE_TIME_RANGE_ITEM);
+      expect(result.current.filterBarValue.nodes[0]).toBe(FILTER_BAR_TIME_RANGE_ITEM);
     });
 
     it('writes the same tokens and groups back, without the time range', () => {
@@ -126,7 +126,7 @@ describe('useSpansFilterBar', () => {
       act(() => result.current.onFilterBarChange(result.current.filterBarValue));
 
       const [tokens] = onFiltersChange.mock.calls[0] ?? [[]];
-      expect(tokens.map(token => token.fieldId)).not.toContain(TRACE_TIME_RANGE_FIELD_ID);
+      expect(tokens.map(token => token.fieldId)).not.toContain(FILTER_BAR_TIME_RANGE_FIELD_ID);
     });
   });
 
