@@ -17,16 +17,14 @@ export const CHART_CURSOR_PROPS = { stroke: 'var(--border)', strokeDasharray: '3
  * - No animation: the tooltip snaps to the hovered point, like the hover line and dots.
  * - `filterNull: false`: a bucket with no readings still gets a tooltip (with dashes); Recharts
  *   otherwise drops every empty reading and renders nothing.
- * - The wrapper stays at the chart's origin and may leave the plot; `ChartTooltipPosition` places
- *   the box itself.
+ * - The wrapper stays at the chart's origin and may leave the plot; `ChartTooltipPosition` portals
+ *   the box to `document.body` and places it there.
  */
 export const CHART_TOOLTIP_PROPS = {
   isAnimationActive: false,
   filterNull: false,
   position: { x: 0, y: 0 },
   allowEscapeViewBox: { x: true, y: true },
-  // Above the cards that follow it on the page.
-  wrapperStyle: { zIndex: 50 },
 };
 
 /**

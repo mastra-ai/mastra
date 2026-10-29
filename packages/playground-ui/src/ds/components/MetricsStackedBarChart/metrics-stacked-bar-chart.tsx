@@ -1,15 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  LabelList,
-  Line,
-  Rectangle,
-  ReferenceLine,
-  Tooltip,
-  usePlotArea,
-} from 'recharts';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Bar, CartesianGrid, ComposedChart, LabelList, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
 import type { LabelProps } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
@@ -31,6 +21,8 @@ import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
+import { DragSelectionBand, activeIndex, useDragSelection } from '@/ds/primitives/charts/drag-selection';
+import type { DragSelectionRange } from '@/ds/primitives/charts/drag-selection';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
 
@@ -101,9 +93,6 @@ function segmentShape({
   };
 }
 
-/** Inclusive column indices, ordered. */
-export type MetricsStackedBarChartRange = { start: number; end: number };
-
 /**
  * Dims every column outside the hovered one, or outside the range being dragged. Its own tiny
  * state, so a move only re-renders this <style> tag: with hundreds of buckets, re-rendering the
@@ -114,9 +103,9 @@ function HoverDim({
   setter,
 }: {
   scope: string;
-  setter: { current: (range: MetricsStackedBarChartRange | undefined) => void };
+  setter: { current: (range: DragSelectionRange | undefined) => void };
 }) {
-  const [lit, setLit] = useState<MetricsStackedBarChartRange>();
+  const [lit, setLit] = useState<DragSelectionRange>();
   useLayoutEffect(() => {
     setter.current = setLit;
   }, [setter]);
@@ -127,47 +116,6 @@ function HoverDim({
     (_, i) => `${columns}[data-bucket="${lit.start + i}"]`,
   ).join(',');
   return <style>{`${columns}{opacity:${DIMMED}}${kept}{opacity:1}`}</style>;
-}
-
-const ordered = (a: number, b: number): MetricsStackedBarChartRange => ({ start: Math.min(a, b), end: Math.max(a, b) });
-
-/**
- * The band behind the columns being dragged, full plot height, so the selection shows even over
- * empty buckets. Like `HoverDim`, it owns its state: a drag repaints the band, never the bars.
- */
-function DragSelection({
-  count,
-  setter,
-}: {
-  count: number;
-  setter: { current: (range: MetricsStackedBarChartRange | undefined) => void };
-}) {
-  const [range, setRange] = useState<MetricsStackedBarChartRange>();
-  const area = usePlotArea();
-  useLayoutEffect(() => {
-    setter.current = setRange;
-  }, [setter]);
-  if (!range || !area || count === 0) return null;
-  // A category axis gives every column an equal slot across the plot.
-  const slot = area.width / count;
-  return (
-    <rect
-      data-slot="chart-drag-selection"
-      x={area.x + range.start * slot}
-      y={area.y}
-      width={(range.end - range.start + 1) * slot}
-      height={area.height}
-      rx={RADIUS}
-      fill="var(--fill)"
-      stroke="var(--fill-strong)"
-      pointerEvents="none"
-    />
-  );
-}
-
-function activeIndex(state: { activeTooltipIndex?: unknown } | undefined) {
-  const index = state?.activeTooltipIndex;
-  return index === undefined || index === null ? undefined : Number(index);
 }
 
 /** A line drawn over the bars on its own scale, e.g. average wake time over cold starts. */
@@ -217,7 +165,7 @@ export type MetricsStackedBarChartProps = {
    * Drag across two or more columns to select them (e.g. to zoom into that time span); reports the
    * first and last selected row indices. A press and release on one column stays a click.
    */
-  onZoom?: (range: MetricsStackedBarChartRange) => void;
+  onZoom?: (range: DragSelectionRange) => void;
   /** One dashed line over the bars, on its own hidden scale (e.g. a duration over counts). */
   overlay?: MetricsStackedBarChartOverlay;
   /** Show a ghost of the chart while data loads, in the chart's own footprint. */
@@ -262,34 +210,10 @@ function BarPlot({
   overlay,
   id,
 }: MetricsStackedBarChartProps & { id: string }) {
-  const setLit = useRef<(range: MetricsStackedBarChartRange | undefined) => void>(() => {});
-  const setSelection = useRef<(range: MetricsStackedBarChartRange | undefined) => void>(() => {});
+  const setLit = useRef<(range: DragSelectionRange | undefined) => void>(() => {});
   const { size, onResize, ref } = useChartSize();
-  // Drag state lives in refs: a drag only repaints the dimming rule, never the bars.
-  const drag = useRef<{ anchor: number; current: number }>(undefined);
-  const justZoomed = useRef(false);
-  const stopListening = useRef<() => void>(undefined);
-  useEffect(() => () => stopListening.current?.(), []);
-
-  const startDrag = (index: number | undefined) => {
-    justZoomed.current = false;
-    if (!onZoom || index === undefined) return;
-    drag.current = { anchor: index, current: index };
-    // On the window, so a release outside the chart still ends the drag.
-    const finish = () => {
-      stopListening.current = undefined;
-      const range = drag.current;
-      drag.current = undefined;
-      setLit.current(undefined);
-      setSelection.current(undefined);
-      if (range && range.anchor !== range.current) {
-        justZoomed.current = true;
-        onZoom(ordered(range.anchor, range.current));
-      }
-    };
-    window.addEventListener('mouseup', finish, { once: true });
-    stopListening.current = () => window.removeEventListener('mouseup', finish);
-  };
+  // The dragged columns stay lit through the same rule as hover, so a drag never re-renders the bars.
+  const selection = useDragSelection({ onSelect: onZoom, onPreview: range => setLit.current(range) });
 
   const keyList = series.map(s => s.dataKey).join('\u0000');
   const colorList = series.map(s => s.color).join('\u0000');
@@ -319,40 +243,24 @@ function BarPlot({
         height={height}
         plotRef={ref}
         onResize={onResize}
-        clickable={!!onBucketClick && !onZoom}
-        className={cn(onZoom && 'select-none [&_.recharts-surface]:cursor-crosshair')}
+        clickable={!!onBucketClick && !selection.enabled}
+        className={selection.className}
       >
         <ComposedChart
           data={data}
           margin={margin}
-          onMouseDown={(state, event) => {
-            // Keeps the drag from selecting the axis labels.
-            if (onZoom) event.preventDefault();
-            startDrag(activeIndex(state));
-          }}
+          onMouseDown={selection.onMouseDown}
           onMouseMove={state => {
+            if (selection.isDragging()) return selection.onMouseMove(state);
             const index = activeIndex(state);
-            const dragging = drag.current;
-            if (!dragging) {
-              setLit.current(index === undefined ? undefined : { start: index, end: index });
-              return;
-            }
-            if (index !== undefined) dragging.current = index;
-            const range = ordered(dragging.anchor, dragging.current);
-            setLit.current(range);
-            // One column is still a click; the band appears once the drag spans two.
-            setSelection.current(range.start === range.end ? undefined : range);
+            setLit.current(index === undefined ? undefined : { start: index, end: index });
           }}
           onMouseLeave={() => {
             // Mid-drag the selection stays lit until the release.
-            if (!drag.current) setLit.current(undefined);
+            if (!selection.isDragging()) setLit.current(undefined);
           }}
           onClick={state => {
-            // The release of a drag is also a click on the column under the pointer.
-            if (justZoomed.current) {
-              justZoomed.current = false;
-              return;
-            }
+            if (selection.consumeReleaseClick()) return;
             const i = activeIndex(state);
             const row = i === undefined ? undefined : data[i];
             if (onBucketClick && row && i !== undefined) onBucketClick(row, i);
@@ -367,7 +275,7 @@ function BarPlot({
             ))}
           </defs>
           <CartesianGrid {...CHART_GRID_PROPS} />
-          {onZoom && <DragSelection count={data.length} setter={setSelection} />}
+          {selection.enabled && <DragSelectionBand selection={selection} count={data.length} />}
           {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
           {valueYAxis({
             show: showYAxis,

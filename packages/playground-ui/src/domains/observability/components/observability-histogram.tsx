@@ -4,8 +4,8 @@ import { BUCKET_AXIS } from '@/domains/metrics/lib/chart-axis';
 import { CHART_COLORS } from '@/domains/metrics/lib/chart-colors';
 import { formatCount } from '@/domains/metrics/lib/chart-format';
 import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
-import type { MetricsStackedBarChartRange } from '@/ds/components/MetricsStackedBarChart';
 import { Txt } from '@/ds/components/Txt';
+import type { DragSelectionRange } from '@/ds/primitives/charts/drag-selection';
 import { cn } from '@/lib/utils';
 
 /** A thin strip: about 34px of bars above the time axis, so the list keeps its vertical space. */
@@ -27,7 +27,7 @@ export type ObservabilityHistogramProps = {
   /** Previous buckets stay on screen, dimmed, while a new selection loads. */
   isUpdating?: boolean;
   /** Dragging across bars reports the first and last selected bar; turn it into a window with `zoomWindow`. */
-  onZoom?: (range: MetricsStackedBarChartRange) => void;
+  onZoom?: (range: DragSelectionRange) => void;
 };
 
 /**

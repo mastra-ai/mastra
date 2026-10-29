@@ -1,5 +1,1 @@
-export {
-  MetricsStackedBarChart,
-  type MetricsStackedBarChartOverlay,
-  type MetricsStackedBarChartRange,
-} from './metrics-stacked-bar-chart';
+export { MetricsStackedBarChart, type MetricsStackedBarChartOverlay } from './metrics-stacked-bar-chart';
