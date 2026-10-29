@@ -73,7 +73,7 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     text: executionOutput.output.text,
     content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults,
+    toolResults: executionOutput.toolResults?.map(({ stepSpanData: _stepSpanData, ...result }) => result),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
