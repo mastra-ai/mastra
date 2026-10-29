@@ -2094,8 +2094,8 @@ export class DurableAgent<
     return this.#wrappedAgent.listInputProcessors(requestContext);
   }
 
-  override async listOutputProcessors(requestContext?: any) {
-    return this.#wrappedAgent.listOutputProcessors(requestContext);
+  override async listOutputProcessors(requestContext?: any, configuredProcessorOverrides?: any) {
+    return this.#wrappedAgent.listOutputProcessors(requestContext, configuredProcessorOverrides);
   }
 
   override async listErrorProcessors(requestContext?: any) {

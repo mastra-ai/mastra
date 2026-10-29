@@ -178,6 +178,55 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
+  it("resolves a worker's output processors with the run's memory context", async () => {
+    const runId = 'rebuild-memory-context';
+    const memoryConfig = { lastMessages: false as const };
+    let seen: unknown;
+    const agent = {
+      ...makeAgent(),
+      getMemory: vi.fn().mockResolvedValue({ getMergedThreadConfig: () => memoryConfig }),
+      listConfiguredOutputProcessors: vi.fn().mockResolvedValue([]),
+      listOutputProcessors: vi.fn(async (requestContext: RequestContext) => {
+        seen = requestContext.get('MastraMemory');
+        return [];
+      }),
+    };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: { threadId: 'thread-1', resourceId: 'user-1', memoryConfig } as any,
+        rehydrateProcessors: true,
+      });
+
+      expect(seen).toEqual({ thread: { id: 'thread-1' }, resourceId: 'user-1', memoryConfig });
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
+  it('a durable agent passes the resolved configured processors through instead of resolving them again', async () => {
+    const { Agent } = await import('../../agent');
+    const { createDurableAgent } = await import('../create-durable-agent');
+    const resolver = vi.fn(() => []);
+    const agent = new Agent({
+      id: 'resolver-agent',
+      name: 'resolver-agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini',
+      outputProcessors: resolver,
+    });
+    const durable = createDurableAgent({ agent });
+    const requestContext = new RequestContext();
+
+    const configured = await durable.listConfiguredOutputProcessors(requestContext);
+    await durable.listOutputProcessors(requestContext, configured);
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['persistence-only', 'live-pipeline'] as const)(
     'keeps runtime resolution failures non-fatal for a %s rebuild',
     async registryState => {

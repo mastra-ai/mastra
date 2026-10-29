@@ -164,10 +164,28 @@ async function rebuildProcessorPipeline(options: {
   processorStates?: Map<string, ProcessorState>;
   memory?: MastraMemory;
   memoryConfig?: MemoryConfig;
+  threadId?: string;
+  resourceId?: string;
   logger?: { error?: (...args: any[]) => void };
 }) {
-  const { agent, agentId, requestContext, emptyErrorProcessorOverride, processorStates, memory, memoryConfig, logger } =
-    options;
+  const {
+    agent,
+    agentId,
+    requestContext,
+    emptyErrorProcessorOverride,
+    processorStates,
+    memory,
+    memoryConfig,
+    threadId,
+    resourceId,
+    logger,
+  } = options;
+
+  // Snapshots drop MastraMemory, but memory decides which processors to add from it.
+  // Restore the run's memory context first, as preparation sets it before resolving.
+  if (threadId && !requestContext.has('MastraMemory')) {
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId, memoryConfig });
+  }
 
   try {
     const inputProcessors = await agent.listInputProcessors?.(requestContext);
@@ -357,6 +375,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         processorStates: globalEntry?.processorStates,
         memory,
         memoryConfig: input.state?.memoryConfig,
+        threadId: input.state?.threadId,
+        resourceId: input.state?.resourceId,
         logger,
       });
       inputProcessors = rebuiltProcessors.inputProcessors;
@@ -563,6 +583,8 @@ export async function rebuildRunToolsFromMastra(options: {
               processorStates: existing?.processorStates,
               memory,
               memoryConfig: state.memoryConfig,
+              threadId: state.threadId,
+              resourceId: state.resourceId,
               logger,
             });
 
