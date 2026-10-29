@@ -2933,8 +2933,8 @@ importers:
   observability/arize:
     dependencies:
       '@arizeai/openinference-genai':
-        specifier: 0.3.0
-        version: 0.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/semantic-conventions@1.43.0)
+        specifier: 0.4.0
+        version: 0.4.0(@opentelemetry/api@1.10.0)(@opentelemetry/semantic-conventions@1.43.0)
       '@arizeai/openinference-semantic-conventions':
         specifier: ^2.15.0
         version: 2.15.0
@@ -2988,8 +2988,8 @@ importers:
   observability/arthur:
     dependencies:
       '@arizeai/openinference-genai':
-        specifier: 0.3.0
-        version: 0.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/semantic-conventions@1.43.0)
+        specifier: 0.4.0
+        version: 0.4.0(@opentelemetry/api@1.10.0)(@opentelemetry/semantic-conventions@1.43.0)
       '@arizeai/openinference-semantic-conventions':
         specifier: ^2.15.0
         version: 2.15.0
@@ -3264,8 +3264,8 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       langsmith:
-        specifier: ^0.8.12
-        version: 0.8.12(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.43.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(google-auth-library@10.9.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
+        specifier: ^0.11.0
+        version: 0.11.3(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.43.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(google-auth-library@10.9.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
@@ -10880,17 +10880,17 @@ packages:
     resolution: {integrity: sha512-DLpvvDBvRNjzVmFYJ+upPrUJ8YRBoGWqPfzhuFp2+lh5Shxm0l9qLwe1Ah4pKvuCatU7TLOOTkFpICitTuuJeQ==}
     hasBin: true
 
-  '@arizeai/openinference-genai@0.3.0':
-    resolution: {integrity: sha512-aCmE4F1o25GdFuXX5FVM26IPKi7j5w7rEDax5W6Qh4whX3J67cAEnYVbCCGqnJBRw2dycOk1Yd7Z93TjcRqOaA==}
+  '@arizeai/openinference-genai@0.4.0':
+    resolution: {integrity: sha512-zBAm1N1znyFE1M0CTQOp47v1Ht3WNlBKOjHH5KbzFgCoNmnayv5lPORWSO3CQjq+bMgYp2n2+3t4EtijDyiNEQ==}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0'
       '@opentelemetry/semantic-conventions': '>=1.41.1'
 
+  '@arizeai/openinference-semantic-conventions@2.14.0':
+    resolution: {integrity: sha512-j2YNZttUxqOG/yNixSRJNpFaeooUN5FuRv2/JDdIBPjvaFIkQEHL63mwXHuJmAV0tsNHkCkJ0egZbeHJ0DjQ2g==}
+
   '@arizeai/openinference-semantic-conventions@2.15.0':
     resolution: {integrity: sha512-apIjbl1CqPEXPfvft5rNn7VpxjbktkvAwOJMhhrl6OMsSBwiOK7uf5qFFz0RI3IePa3xldn7TmiAkJMiRN2hug==}
-
-  '@arizeai/openinference-semantic-conventions@2.5.0':
-    resolution: {integrity: sha512-4ZeSwiFX3YxB0WSE6x568wM4PVHiYmz3yiOxic6WGKVrE/KIGggMFP/eqUNQhikBKP68IDV0qiILlZAIYnheAQ==}
 
   '@ark/schema@0.56.8':
     resolution: {integrity: sha512-R05TOe85oQBGFFw2zKMuZpqkXibLKuC/aJt6VwFn5Cjc4x3NkWfhvGRpRDycNkj3ddcHnOPtIsmjVowJO9Yxdw==}
@@ -26216,8 +26216,8 @@ packages:
     resolution: {integrity: sha512-fmIq+7kv4WbFm2tcfznRzikqB4cuNpgZ40PSU2fAJ2/OO5XhojqnTPrmgrCjYSRJVwBln03XcRXJGnw9H099IQ==}
     engines: {node: '>=22.0.0'}
 
-  langsmith@0.8.12:
-    resolution: {integrity: sha512-8tt8JamkMVcrVV/4drIAKlBbgyzUmbeCWW3wy5ZeOaXzSmSBv/tiKzuL/cJKsLM4RxPx1MZ49f7pj2CRJhEpuA==}
+  langsmith@0.11.3:
+    resolution: {integrity: sha512-PKvl+msl8gj1qWBgHyfm76H/y6AcIUwhbW013jAHdFQTIuFmGk/2Ns3YTIlnOQT31EFRU+xVDbVGcBlbNQDFTQ==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -32693,15 +32693,15 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  '@arizeai/openinference-genai@0.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/semantic-conventions@1.43.0)':
+  '@arizeai/openinference-genai@0.4.0(@opentelemetry/api@1.10.0)(@opentelemetry/semantic-conventions@1.43.0)':
     dependencies:
-      '@arizeai/openinference-semantic-conventions': 2.5.0
+      '@arizeai/openinference-semantic-conventions': 2.14.0
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/semantic-conventions': 1.43.0
 
-  '@arizeai/openinference-semantic-conventions@2.15.0': {}
+  '@arizeai/openinference-semantic-conventions@2.14.0': {}
 
-  '@arizeai/openinference-semantic-conventions@2.5.0': {}
+  '@arizeai/openinference-semantic-conventions@2.15.0': {}
 
   '@ark/schema@0.56.8':
     dependencies:
@@ -50652,7 +50652,7 @@ snapshots:
 
   kysely@0.29.7: {}
 
-  langsmith@0.8.12(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.43.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(google-auth-library@10.9.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)):
+  langsmith@0.11.3(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.43.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(google-auth-library@10.9.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
