@@ -55,11 +55,11 @@ export const knowledge = new Knowledge({
 })
 ```
 
-Pass both or neither. Passing only one throws ``Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.`` `embedderOptions` is passed to the embedder on every call.
+Pass both or neither. Passing only one throws ``Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.`` `embedderOptions` (`maxRetries`, `headers`, `providerOptions`, `telemetry`) applies to every embedding call, the same way it does in Memory. `maxRetries` retries transient provider errors.
 
 `knowledge_search` then blends keyword and semantic results into one ranked list. Every semantic hit is read again with the run's access before it can take a place in the results. A run never sees content it can't read, and that content never takes a slot from content it can.
 
-Pages and notes written through the tools are embedded as they're written. Scope pages aren't embedded. Run `reindex()` to re-embed every page and note. It returns how many it indexed. Run it after:
+Pages and notes written through the tools are embedded as they're written. Scope pages aren't embedded, but notes on them are. Run `reindex()` to re-embed every page and note. It returns how many it indexed. Run it after:
 
 - Content written straight to the store, outside the tools.
 - A write that logged `Knowledge semantic index update failed; run knowledge.reindex() to repair`. The write itself succeeded. Only search by meaning misses it until you reindex.
