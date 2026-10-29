@@ -289,3 +289,11 @@ export function createKnowledgePagesCoreLoader(
     return core;
   };
 }
+
+/**
+ * Keyword-search words: the query split on whitespace, lowercased, deduplicated. Every word must
+ * appear (as a case-insensitive substring) in a hit; an empty list means the search returns nothing.
+ */
+export function knowledgeSearchWords(query: string): string[] {
+  return [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
+}

@@ -673,41 +673,99 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         );
       });
 
-      it('ranks name hits first, then description/body hits, then notes, and matches the whole query', async () => {
+      it('matches every query word anywhere in a page, ranking phrase-in-name, then words-in-name, then other pages, then notes', async () => {
         const acme = await scope('org:acme', ORG);
         await scope('org:refund', ORG);
         const pause = () => new Promise(resolve => setTimeout(resolve, 15));
-        const named = await page(acme.id, 'Refund window');
+        const phrase = await page(acme.id, 'Refund approval rules');
         await pause();
-        const inBody = await page(acme.id, 'Billing', { body: 'Every refund needs approval.' });
+        const scattered = await page(acme.id, 'Approval of a refund');
         await pause();
-        const inDescription = await page(acme.id, 'Support', { description: 'Refund escalations' });
+        const acrossFields = await page(acme.id, 'Refunds', { description: 'Who gives APPROVAL' });
         await pause();
-        await page(acme.id, 'Unrelated', { body: 'Window cleaning schedule for the refunds office.' });
-        const note = await store.addNote({
-          pageId: inBody.id,
-          text: 'A refund over $500 needs a second approver.',
+        const inBody = await page(acme.id, 'Billing', { body: 'Each refund requires approval from finance.' });
+        await pause();
+        const nameOnly = await page(acme.id, 'Refund window');
+        await pause();
+        await page(acme.id, 'Unrelated', { body: 'Window cleaning schedule.' });
+        const noteBoth = await store.addNote({
+          pageId: nameOnly.id,
+          text: 'Every refund needs approval.',
+          stampScopeIds: [acme.id],
+          mentions: [],
+          provenance: alex,
+        });
+        await store.addNote({
+          pageId: nameOnly.id,
+          text: 'Approval is logged.',
           stampScopeIds: [acme.id],
           mentions: [],
           provenance: alex,
         });
         const r = read(['org:acme', 'org:refund']);
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
-          hit.type === 'page' ? `page:${hit.page.name}` : `note:${hit.note.id}`;
+          hit.type === 'page' ? `page:${hit.page.name}` : `note:${hit.note.text}`;
 
-        expect((await store.searchPages({ query: 'refund', read: r })).map(label)).toEqual([
-          `page:${named.name}`,
-          'page:Unrelated',
-          `page:${inDescription.name}`,
+        // 'Refund window' has "refund" in its name and "approval" only in a note: not a page hit,
+        // but the note containing both words is. Scope pages (org:refund) never hit.
+        expect((await store.searchPages({ query: '  refund   APPROVAL refund ', read: r })).map(label)).toEqual([
+          `page:${phrase.name}`,
+          `page:${scattered.name}`,
           `page:${inBody.name}`,
-          `note:${note.id}`,
+          `page:${acrossFields.name}`,
+          `note:${noteBoth.text}`,
         ]);
-        expect((await store.searchPages({ query: 'refund', read: r, limit: 1 })).map(label)).toEqual([
-          `page:${named.name}`,
+        expect((await store.searchPages({ query: 'refund approval', read: r, limit: 2 })).map(label)).toEqual([
+          `page:${phrase.name}`,
+          `page:${scattered.name}`,
         ]);
-        expect((await store.searchPages({ query: 'REFUND WINDOW', read: r })).map(label)).toEqual([
-          `page:${named.name}`,
+        // One word: substring, case-insensitive ("refund" matches "Refunds"), newest first per tier.
+        expect((await store.searchPages({ query: 'REFUND', read: r })).map(label)).toEqual([
+          `page:${nameOnly.name}`,
+          `page:${acrossFields.name}`,
+          `page:${scattered.name}`,
+          `page:${phrase.name}`,
+          `page:${inBody.name}`,
+          `note:${noteBoth.text}`,
         ]);
+        expect(await store.searchPages({ query: '   ', read: r })).toEqual([]);
+      });
+
+      it('never counts a hidden note toward search results or the limit', async () => {
+        const acme = await scope('org:acme', ORG);
+        const user = await scope('resource:u1', RESOURCE);
+        const p = await page(acme.id, 'Launch');
+        const pause = () => new Promise(resolve => setTimeout(resolve, 15));
+        const visible = await store.addNote({
+          pageId: p.id,
+          text: 'launch checklist approved',
+          stampScopeIds: [acme.id],
+          mentions: [],
+          provenance: alex,
+        });
+        await pause();
+        await store.addNote({
+          pageId: p.id,
+          text: 'launch checklist private draft',
+          stampScopeIds: [user.id],
+          mentions: [],
+          provenance: alex,
+        });
+        const hits = await store.searchPages({ query: 'checklist launch', read: read(['org:acme']), limit: 1 });
+        expect(hits.map(hit => (hit.type === 'note' ? hit.note.id : hit.page.id))).toEqual([visible.id]);
+      });
+
+      it('treats % and _ in the query as literal characters', async () => {
+        const acme = await scope('org:acme', ORG);
+        const percent = await page(acme.id, 'Discount 50% off');
+        const underscore = await page(acme.id, 'Flag a_b');
+        await page(acme.id, 'Discount 500 off');
+        await page(acme.id, 'Flag axb');
+        const r = read(['org:acme']);
+        const ids = async (query: string) =>
+          (await store.searchPages({ query, read: r })).map(hit => (hit.type === 'page' ? hit.page.id : hit.note.id));
+        expect(await ids('50%')).toEqual([percent.id]);
+        expect(await ids('a_b')).toEqual([underscore.id]);
       });
 
       it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {

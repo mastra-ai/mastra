@@ -1,3 +1,4 @@
+import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { KnowledgeConflictError, KnowledgeNotFoundError } from './base';
 import {
   assertKnowledgeNoteTextWithinBound,
@@ -598,20 +599,33 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   // Search and activity
 
   async searchPages(input: Parameters<Store['searchPages']>[0]): Promise<KnowledgePageSearchHit[]> {
-    const query = input.query.trim().toLowerCase();
-    if (!query) return [];
+    const words = knowledgeSearchWords(input.query);
+    if (!words.length) return [];
+    const phrase = words.join(' ');
     const limit = input.limit === undefined ? DEFAULT_SEARCH_LIMIT : pageSize(input.limit);
     const inScope = (page: KnowledgePage) => !input.scopeIds || input.scopeIds.includes(page.scopeId);
-    const contains = (text: string | undefined) => !!text && text.toLowerCase().includes(query);
-    const readablePages = [...this.#pages.values()].filter(
-      page => !page.isScope && !page.deletedAt && inScope(page) && this.#pageReadable(page, input.read),
-    );
-    const byRecency = (a: KnowledgePage, b: KnowledgePage) =>
-      b.updatedAt.getTime() - a.updatedAt.getTime() || (a.id < b.id ? -1 : 1);
-    const nameHits = readablePages.filter(page => contains(page.name)).sort(byRecency);
-    const otherHits = readablePages
-      .filter(page => !contains(page.name) && (contains(page.description) || contains(page.body)))
-      .sort(byRecency);
+    const hasAll = (...texts: Array<string | undefined>) => {
+      const haystack = texts.filter(Boolean).join('\n').toLowerCase();
+      return words.every(word => haystack.includes(word));
+    };
+    const tier = (page: KnowledgePage) =>
+      page.name.toLowerCase().replace(/\s+/g, ' ').includes(phrase) ? 0 : hasAll(page.name) ? 1 : 2;
+    const pageHits = [...this.#pages.values()]
+      .filter(
+        page =>
+          !page.isScope &&
+          !page.deletedAt &&
+          inScope(page) &&
+          hasAll(page.name, page.description, page.body) &&
+          this.#pageReadable(page, input.read),
+      )
+      .map(page => ({ page, tier: tier(page) }))
+      .sort(
+        (a, b) =>
+          a.tier - b.tier ||
+          b.page.updatedAt.getTime() - a.page.updatedAt.getTime() ||
+          (a.page.id < b.page.id ? -1 : 1),
+      );
     const noteHits = [...this.#notes.values()]
       .filter(note => {
         const page = this.#pages.get(note.pageId)!;
@@ -619,13 +633,13 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
           !note.deletedAt &&
           !page.deletedAt &&
           inScope(page) &&
-          contains(note.text) &&
+          hasAll(note.text) &&
           this.#noteVisible(note, input.read)
         );
       })
-      .sort(newestFirst);
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
     return [
-      ...[...nameHits, ...otherHits].map(page => ({ type: 'page' as const, page: clone(page) })),
+      ...pageHits.map(({ page }) => ({ type: 'page' as const, page: clone(page) })),
       ...noteHits.map(note => ({
         type: 'note' as const,
         note: clone(note),
