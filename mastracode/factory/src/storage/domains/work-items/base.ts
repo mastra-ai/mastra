@@ -27,6 +27,7 @@ import {
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
+import { FACTORY_BOARD_ITEMS_SCHEMA, FACTORY_WORK_ITEMS_SCHEMA } from './work-item-schema.js';
 
 export type WorkItemStage = string;
 
@@ -724,7 +725,7 @@ function toWorkItemSubscription(row: WorkItemSubscriptionDbRow): WorkItemSubscri
   };
 }
 
-interface WorkItemDbRow extends Record<string, unknown> {
+export interface WorkItemDbRow extends Record<string, unknown> {
   id: string;
   org_id: string;
   factory_project_id: string;
@@ -1352,6 +1353,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     // purge feed rows regardless of domain init order.
     await this.ensureCollections([
       WORK_ITEMS_SCHEMA,
+      FACTORY_WORK_ITEMS_SCHEMA,
+      FACTORY_BOARD_ITEMS_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
       ...FACTORY_GOVERNANCE_SCHEMAS,
       WORK_ITEM_COMMENTS_SCHEMA,
