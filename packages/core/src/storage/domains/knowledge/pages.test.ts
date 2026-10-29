@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalKnowledgeName, knowledgePositionBetween, knowledgeScopeReadable } from './pages';
+import {
+  assertKnowledgeNoteTextWithinBound,
+  assertKnowledgePageDescriptionWithinBound,
+  canonicalKnowledgeName,
+  knowledgePositionBetween,
+  knowledgeScopeReadable,
+} from './pages';
 
 describe('knowledgePositionBetween', () => {
   it('always returns a key strictly between its neighbours, never ending in 0', () => {
@@ -135,5 +141,15 @@ describe('canonicalKnowledgeName', () => {
   it('folds case, width and whitespace for non-ASCII names the same everywhere', () => {
     expect(canonicalKnowledgeName('  Ünïcode   Pölicy ')).toBe(canonicalKnowledgeName('ünïcode pölicy'));
     expect(canonicalKnowledgeName('Ｒｅｆｕｎｄ')).toBe('refund');
+  });
+});
+
+describe('page and note token bounds', () => {
+  it('accepts text inside the bound and refuses text past it', () => {
+    expect(() => assertKnowledgePageDescriptionWithinBound(undefined)).not.toThrow();
+    expect(() => assertKnowledgePageDescriptionWithinBound('Support policy for refunds')).not.toThrow();
+    expect(() => assertKnowledgePageDescriptionWithinBound('word '.repeat(200))).toThrow(/100 token limit/);
+    expect(() => assertKnowledgeNoteTextWithinBound('Refunds over $500 need a manager.')).not.toThrow();
+    expect(() => assertKnowledgeNoteTextWithinBound('word '.repeat(400))).toThrow(/250 token limit/);
   });
 });
