@@ -20,7 +20,7 @@ const NO_SUGGESTIONS: string[] = [];
 
 /** The fields the trace filter bar offers: time range, trace fields, and discovered metadata. */
 export function useTracesFilterBarFields(): FilterBarField[] {
-  const { hiddenFieldIds, withQueryTrace, withRootDuration, discoveryTimeRange } = useTracesConfig();
+  const { hiddenFieldIds, withQueryTrace, withRootDuration, withOutcomeFields, discoveryTimeRange } = useTracesConfig();
   const { filters } = useTracesFilters();
   const selectedEntityType = getSelectedEntityOption(filters.tokens)?.entityType as EntityType | undefined;
 
@@ -46,6 +46,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
           : undefined,
         withQueryTrace,
         withRootDuration,
+        withOutcomeFields,
       }),
     ],
     [
@@ -56,6 +57,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
       canonicalFields,
       withQueryTrace,
       withRootDuration,
+      withOutcomeFields,
       client,
       discoveryTimeRange,
     ],
