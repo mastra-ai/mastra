@@ -637,21 +637,21 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * Fetch a single repo's metadata through an installation token and confirm
-   * the installation actually has access to it. Returns `null` when the repo
-   * is not accessible to the installation, so a client can't link an arbitrary
-   * repo under an installation id it merely owns. Other upstream failures throw.
-   *
-   * An installation token can read any public repo, so a public repo is only
-   * accepted once GitHub agrees to mint a token scoped to it.
+   * Fetch a single repo's metadata and confirm the installation was granted
+   * it. Returns `null` when the repo belongs to another installation or none
+   * (GitHub answers 404), so a client can't link an arbitrary repo under an
+   * installation id it merely owns. `repos.get` alone isn't enough: it returns
+   * any public repo to any token. Other upstream failures throw.
    */
   async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return null;
-    const octokit = this.getInstallationOctokit(installationId);
     try {
-      const { data } = await octokit.repos.get(parts);
-      if (!data.private && !(await this.#installationGrantsRepo(installationId, data.id))) return null;
+      const [{ data: installation }, { data }] = await Promise.all([
+        this.getAppOctokit().apps.getRepoInstallation(parts),
+        this.getInstallationOctokit(installationId).repos.get(parts),
+      ]);
+      if (installation.id !== installationId) return null;
       return {
         id: data.id,
         fullName: data.full_name,
@@ -663,21 +663,6 @@ export class GithubIntegration implements FactoryIntegration {
       };
     } catch (error) {
       if ((error as { status?: number }).status === 404) return null;
-      throw error;
-    }
-  }
-
-  async #installationGrantsRepo(installationId: number, repositoryId: number): Promise<boolean> {
-    try {
-      await this.getAppOctokit().apps.createInstallationAccessToken({
-        installation_id: installationId,
-        repository_ids: [repositoryId],
-        permissions: { metadata: 'read' },
-      });
-      return true;
-    } catch (error) {
-      // GitHub refuses (422) to scope a token to a repo outside the installation.
-      if ((error as { status?: number }).status === 422) return false;
       throw error;
     }
   }

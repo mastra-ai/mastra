@@ -232,21 +232,10 @@ describe('GithubIntegration.getInstallationRepo', () => {
     const json = (status: number, body: unknown) =>
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
     const repoRequests: string[] = [];
-    const scopedTokenRequests: number[][] = [];
-    const grantedRepositoryIds = new Set([790]);
-    const publicRepo = (id: number, name: string) =>
-      json(200, { id, full_name: `acme/${name}`, name, owner: { login: 'acme' }, default_branch: 'main', private: false });
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string, init?: RequestInit) => {
+      vi.fn(async (url: string) => {
         if (url.endsWith('/app/installations/7/access_tokens')) {
-          const repositoryIds = (JSON.parse(String(init?.body ?? '{}')) as { repository_ids?: number[] }).repository_ids;
-          if (repositoryIds) {
-            scopedTokenRequests.push(repositoryIds);
-            if (!repositoryIds.every(id => grantedRepositoryIds.has(id))) {
-              return json(422, { message: 'There is at least one repository that does not exist or is not accessible to the parent installation.' });
-            }
-          }
           return json(201, {
             token: 'ghs_1',
             expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
@@ -256,27 +245,35 @@ describe('GithubIntegration.getInstallationRepo', () => {
         }
         const path = new URL(url).pathname;
         repoRequests.push(path);
-        if (path === '/repos/acme/api') {
+        const repo = (fullName: string, isPrivate: boolean) => {
+          const [owner, name] = fullName.split('/');
           return json(200, {
             id: 456,
-            full_name: 'acme/api',
-            name: 'api',
-            owner: { login: 'acme' },
+            full_name: fullName,
+            name,
+            owner: { login: owner },
             default_branch: 'main',
-            private: true,
+            private: isPrivate,
           });
-        }
+        };
+        // Installation 7 was granted acme/api only; acme/public is public but outside the grant,
+        // and other/public belongs to a different installation.
+        if (path === '/repos/acme/api/installation') return json(200, { id: 7 });
+        if (path === '/repos/other/public/installation') return json(200, { id: 9 });
+        if (path === '/repos/acme/boom/installation') return json(200, { id: 7 });
+        if (path.endsWith('/installation')) return json(404, { message: 'Not Found' });
+        if (path === '/repos/acme/api') return repo('acme/api', true);
+        if (path === '/repos/acme/public') return repo('acme/public', false);
+        if (path === '/repos/other/public') return repo('other/public', false);
         if (path === '/repos/acme/gone') return json(404, { message: 'Not Found' });
-        if (path === '/repos/acme/docs') return publicRepo(790, 'docs');
-        if (path === '/repos/acme/outsider') return publicRepo(789, 'outsider');
         return json(500, { message: 'Server Error' });
       }),
     );
-    return { repoRequests, scopedTokenRequests };
+    return repoRequests;
   }
 
-  it('reads one repository with a single request', async () => {
-    const { repoRequests, scopedTokenRequests } = stubRepoApi();
+  it('reads one repository and its installation in a single round trip', async () => {
+    const repoRequests = stubRepoApi();
     const github = new GithubIntegration(validConfig());
 
     await expect(github.getInstallationRepo(7, 'acme/api')).resolves.toEqual({
@@ -288,17 +285,15 @@ describe('GithubIntegration.getInstallationRepo', () => {
       private: true,
       installationId: 7,
     });
-    expect(repoRequests).toEqual(['/repos/acme/api']);
-    expect(scopedTokenRequests).toEqual([]);
+    expect(repoRequests.sort()).toEqual(['/repos/acme/api', '/repos/acme/api/installation']);
   });
 
-  it('accepts a public repository only when the installation has been granted it', async () => {
-    const { scopedTokenRequests } = stubRepoApi();
+  it('returns null for a public repository the installation was not granted', async () => {
+    stubRepoApi();
     const github = new GithubIntegration(validConfig());
 
-    await expect(github.getInstallationRepo(7, 'acme/docs')).resolves.toMatchObject({ id: 790, fullName: 'acme/docs' });
-    await expect(github.getInstallationRepo(7, 'acme/outsider')).resolves.toBeNull();
-    expect(scopedTokenRequests).toEqual([[790], [789]]);
+    await expect(github.getInstallationRepo(7, 'acme/public')).resolves.toBeNull();
+    await expect(github.getInstallationRepo(7, 'other/public')).resolves.toBeNull();
   });
 
   it('returns null when the installation cannot see the repository, and throws on upstream failures', async () => {

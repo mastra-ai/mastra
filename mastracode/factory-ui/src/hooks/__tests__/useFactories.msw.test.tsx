@@ -273,15 +273,22 @@ describe('useLinkRepositoryMutation', () => {
     expect(result.current.environment.data?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
   });
 
-  it('given a slow Factory list, when a repository is linked, then the link settles only once the list shows it', async () => {
+  it('given a link, when the intake config is slow, then the Factory list refresh starts without waiting for it', async () => {
     let linked = false;
+    const events: string[] = [];
+    let markRefresh!: () => void;
+    const refreshStarted = new Promise<void>(resolve => (markRefresh = resolve));
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
         await new Promise(resolve => setTimeout(resolve, 100));
         return HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Factory' }] });
       }),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () => {
+        if (linked) {
+          events.push('list refresh');
+          markRefresh();
+        }
+        return HttpResponse.json({
           connections: [
             {
               id: 'conn-1',
@@ -289,15 +296,18 @@ describe('useLinkRepositoryMutation', () => {
               repositories: linked ? [{ id: 'ghp_1', repository: { slug: 'octo/hello' } }] : [],
             },
           ],
-        }),
-      ),
+        });
+      }),
       http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () => {
         linked = true;
         return HttpResponse.json({ projectRepository: { id: 'ghp_1', repository: { slug: 'octo/hello' } } });
       }),
-      http.get(CONFIG_URL, () =>
-        HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['octo/hello'] } } }),
-      ),
+      // Hold the intake read until the list refresh starts (or give up after 1s).
+      http.get(CONFIG_URL, async () => {
+        await Promise.race([refreshStarted, new Promise(resolve => setTimeout(resolve, 1_000))]);
+        events.push('intake answered');
+        return HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['octo/hello'] } } });
+      }),
     );
 
     const { client, result } = renderHookWithProviders(() => ({
@@ -308,6 +318,7 @@ describe('useLinkRepositoryMutation', () => {
 
     await act(() => result.current.link.mutateAsync({ factoryProjectId: 'fp-1', repo }));
 
+    expect(events.slice(0, 2)).toEqual(['list refresh', 'intake answered']);
     const factories = client.getQueryData<FactoryProject[]>(queryKeys.factories());
     expect(factories?.[0]?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
   });
