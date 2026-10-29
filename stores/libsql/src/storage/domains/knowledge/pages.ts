@@ -8,6 +8,7 @@ import {
   KnowledgeNotFoundError,
   KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
+  KnowledgePageKeyConflictError,
   knowledgePositionBetween,
   MAX_KNOWLEDGE_MOVE_PAGES,
   MAX_KNOWLEDGE_PAGE_DEPTH,
@@ -585,7 +586,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         `SELECT id FROM "${T.pages}" WHERE scopeId = ? AND key = ? AND deletedAt IS NULL`,
         [scopeId, input.key],
       );
-      if (clash.length > 0) throw new Error(`A page with key '${input.key}' already exists in scope ${scopeId}`);
+      if (clash.length > 0) throw new KnowledgePageKeyConflictError(input.key, scopeId);
     }
     const position = input.position ?? knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
     const now = new Date().toISOString();
@@ -672,7 +673,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const live = subtree.filter(row => !row.deletedAt);
     if (live.length > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(options.countLimitId, live.length);
     const shift = newDepth - Number(root.depth);
-    const deepest = Math.max(...subtree.map(row => Number(row.depth)));
+    const deepest = Math.max(...live.map(row => Number(row.depth)));
     if (deepest + shift > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(String(root.id));
     if (newScopeId !== String(root.scopeId)) {
       const keys = live.filter(row => row.key !== null).map(row => String(row.key));
@@ -682,7 +683,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           `SELECT key FROM "${T.pages}" WHERE scopeId = ? AND deletedAt IS NULL AND key IN (SELECT value FROM json_each(?)) AND substr(path, 1, length(?)) <> ?`,
           [newScopeId, jsonList(keys), oldPath, oldPath],
         );
-        if (clash.length > 0) throw new KnowledgeConflictError(`${newScopeId}#${String(clash[0]!.key)}`);
+        if (clash.length > 0) throw new KnowledgePageKeyConflictError(String(clash[0]!.key), newScopeId);
       }
     }
     const newPath = `${String(parent.path)}${String(root.id)}/`;
