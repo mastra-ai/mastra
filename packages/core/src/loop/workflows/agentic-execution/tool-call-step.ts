@@ -618,11 +618,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // in memory instead of racing the flush still in flight. When the
             // flush failed, publishing would send that consumer after a call the store
             // never received, so the run suspends without announcing it.
+            // A writer that throws must not stop the suspension: the call is already
+            // persisted, and failing here would return an error instead of parking it.
             if (flushed) {
-              if (outputWriter) {
-                await outputWriter(approvalChunk);
-              } else {
-                safeEnqueue(controller, approvalChunk);
+              try {
+                if (outputWriter) {
+                  await outputWriter(approvalChunk);
+                } else {
+                  safeEnqueue(controller, approvalChunk);
+                }
+              } catch (error) {
+                logger?.error('Error publishing approval chunk before suspension:', error);
               }
             }
 
@@ -776,11 +782,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // Publish only after the approval state is persisted. A failed flush
             // means the parked call never reached the store, so the run suspends quietly
             // rather than inviting an approval that cannot be resolved.
+            // A writer that throws must not stop the suspension for the same reason as
+            // the approval path above: the call is persisted and must stay resolvable.
             if (flushed) {
-              if (outputWriter) {
-                await outputWriter(approvalChunk);
-              } else {
-                safeEnqueue(controller, approvalChunk);
+              try {
+                if (outputWriter) {
+                  await outputWriter(approvalChunk);
+                } else {
+                  safeEnqueue(controller, approvalChunk);
+                }
+              } catch (error) {
+                logger?.error('Error publishing approval chunk before suspension:', error);
               }
             }
 

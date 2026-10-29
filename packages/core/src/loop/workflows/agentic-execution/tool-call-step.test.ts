@@ -1822,6 +1822,35 @@ describe('createToolCallStep tool approval workflow', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
+  it('still suspends when publishing the approval chunk fails', async () => {
+    // The call is already persisted at this point; a writer that throws (a processor
+    // rejecting the chunk, a closed stream) must not turn the suspension into an error.
+    const outputWriter = vi.fn().mockRejectedValue(new Error('processor rejected approval'));
+    toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState,
+      outputWriter,
+    } as any);
+
+    const executePromise = toolCallStep.execute(makeExecuteParams());
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-call-approval' }));
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requireToolApproval: expect.objectContaining({ toolCallId: 'test-call-id' }),
+      }),
+      { resumeLabel: 'test-call-id' },
+    );
+    expectNoToolExecution();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
   it.each([{}, { approved: 'true' }])('re-suspends malformed workflow approval data: %j', async resumeData => {
     suspend.mockResolvedValueOnce('suspended');
 
