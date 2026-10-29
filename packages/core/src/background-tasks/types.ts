@@ -139,6 +139,36 @@ export interface TaskPayload {
 }
 
 /**
+ * Options for `BackgroundTaskManager.enqueue()`.
+ */
+export interface EnqueueOptions {
+  /**
+   * Pin the `pending` row to this worker. Use it when work for the task is
+   * already in flight on this worker, for example an execution the caller
+   * started before enqueueing that the task's executor adopts. Requires a
+   * `context`.
+   *
+   * The row is written with this worker's owner ID and an execution lease,
+   * which the lease heartbeat renews while the row waits for a local slot.
+   * While the lease is live, other workers' recovery and dispatch skip the row.
+   *
+   * If this worker dies and the lease lapses, the in-flight work is lost, so the
+   * row counts as a lost attempt, like a `running` task whose worker died: it
+   * consumes a retry and is re-dispatched if `retryCount < maxRetries`,
+   * otherwise it fails. It never re-runs on another worker for free, so a task
+   * with `maxRetries: 0` is never run elsewhere. Workers with
+   * `recoverStaleTasksOnStart` check for lapsed pins at startup and then every
+   * `leaseDurationMs`.
+   *
+   * A lapsed lease only proves this worker stopped renewing it, not that the
+   * adopted work stopped (for example, an event loop stalled past the lease).
+   * Pinned work must be idempotent, or fence its side effects, if it can be
+   * retried on another worker.
+   */
+  pinToWorker?: boolean;
+}
+
+/**
  * Options for `BackgroundTaskManager.resume()`.
  */
 export interface ResumeOptions {
@@ -267,7 +297,9 @@ export interface BackgroundTaskManagerConfig {
    * Whether to recover running and pending tasks during manager startup.
    * Recovery is fenced by persisted execution leases: a running task is only
    * reclaimed once its owner's lease has expired, so it is safe when multiple
-   * live managers share storage. Set to false to skip recovery entirely.
+   * live managers share storage. When enabled, the manager also checks every
+   * `leaseDurationMs` for `pinToWorker` tasks whose worker stopped renewing
+   * their lease. Set to false to skip recovery entirely.
    * Default: true.
    */
   recoverStaleTasksOnStart?: boolean;
