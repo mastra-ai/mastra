@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MCPDetailedTask, MCPTask } from '../../shared/tasks';
 import { isRecoverableTaskPollError } from '../error-utils';
-import { MIN_TASK_POLL_INTERVAL_MS, TaskWaitError, waitForTask } from './wait';
+import { MAX_TASK_POLL_INTERVAL_MS, MIN_TASK_POLL_INTERVAL_MS, TaskWaitError, waitForTask } from './wait';
 import type { TaskWaitPort } from './wait';
 
 const created: MCPTask = {
@@ -157,6 +157,14 @@ describe('waitForTask with a server-chosen poll interval', () => {
       MIN_TASK_POLL_INTERVAL_MS,
       MIN_TASK_POLL_INTERVAL_MS,
     ]);
+  });
+
+  it('waits at most the maximum between polls when the server asks for longer than a timer allows', async () => {
+    const lazy = { ...eager, pollIntervalMs: 30 * 86_400_000 } as MCPDetailedTask;
+    const { port, options, sleeps } = scripted([lazy, completed]);
+
+    await expect(waitForTask(port, lazy, options)).resolves.toMatchObject({ status: 'completed' });
+    expect(sleeps).toEqual([MAX_TASK_POLL_INTERVAL_MS, MAX_TASK_POLL_INTERVAL_MS]);
   });
 
   it('backs off from the minimum, not from 0, during an outage', async () => {
