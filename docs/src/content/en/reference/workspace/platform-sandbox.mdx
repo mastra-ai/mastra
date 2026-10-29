@@ -100,6 +100,20 @@ const workspace = new Workspace({
 
 The default `ISOLATED` mode allows outbound internet access only, with no private network connectivity.
 
+### Public ports
+
+Ports are private by default: opening one needs a signed-in preview link. Set `publicPorts` to let anyone with a port's URL reach it, for example a webhook receiver:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new PlatformSandbox({
+    publicPorts: true,
+  }),
+})
+```
+
+Only E2B sandboxes support this. The setting is fixed when the sandbox is created.
+
 ### Reattaching to a running sandbox
 
 Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one:
@@ -404,6 +418,13 @@ A long-running process's output stream reconnects periodically, and the process 
     type: "'ISOLATED' | 'PRIVATE'",
     description:
       "Network mode. 'ISOLATED' (default) allows outbound internet only. 'PRIVATE' joins the platform environment's private network.",
+    isOptional: true,
+  },
+  {
+    name: 'publicPorts',
+    type: 'boolean',
+    description:
+      "Let anyone with a port's URL reach it without signing in. Defaults to `false`. E2B only, fixed at creation.",
     isOptional: true,
   },
   {
