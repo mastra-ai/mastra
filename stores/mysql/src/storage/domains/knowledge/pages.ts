@@ -225,6 +225,14 @@ function decodeCursor(cursor: string | undefined, length: number): string[] | un
   throw new Error('Invalid Knowledge cursor');
 }
 
+function isDuplicateEntry(error: unknown): boolean {
+  for (let current = error; current && typeof current === 'object'; current = (current as { cause?: unknown }).cause) {
+    const { code, errno } = current as { code?: unknown; errno?: unknown };
+    if (code === 'ER_DUP_ENTRY' || errno === 1062) return true;
+  }
+  return false;
+}
+
 function escapeLike(value: string): string {
   return value.replace(/[=%_]/g, match => `=${match}`);
 }
@@ -355,6 +363,19 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
   // Scopes
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult> {
+    // Two racing materializations can both pass their existence checks and then collide on a unique
+    // index (scope address or live sibling key). The loser's transaction rolls back; running it again
+    // sees the winner's committed rows and treats them as already there.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.#materializeScopeOnce(input);
+      } catch (error) {
+        if (attempt >= 5 || !isDuplicateEntry(error)) throw error;
+      }
+    }
+  }
+
+  async #materializeScopeOnce(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult> {
     const core = await loadPagesCore();
     await assertKnowledgePageDescriptionWithinBound(input.description);
     return this.#transaction(async tx => {
