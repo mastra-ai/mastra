@@ -50,6 +50,20 @@ describe('compileKnowledgeScopes: matching', () => {
   it('matches literal segments exactly', () => {
     expect(compiled.match('role:acme:admin')?.params).toEqual({ orgId: 'acme' });
     expect(compiled.match('role:acme:member')).toBeNull();
+    expect(compiled.match('role:acme:admin:x')).toBeNull();
+  });
+
+  it('loads disjoint patterns of the same type and resolves their unique declaration', () => {
+    const roles = ['admin', 'support', 'sales', 'member'];
+    const multi = compileKnowledgeScopes(Object.fromEntries(roles.map(role => [`role:$orgId:${role}`, {}])));
+    for (const role of roles) {
+      expect(multi.match(`role:acme:${role}`)).toMatchObject({
+        declaration: `role:$orgId:${role}`,
+        params: { orgId: 'acme' },
+      });
+    }
+    expect(multi.match('role:acme:admin:x')).toBeNull();
+    expect(multi.match('role:acme:unknown')).toBeNull();
   });
 
   it('matches template children by their parent and name', () => {
@@ -116,9 +130,34 @@ describe('binding params into patterns', () => {
 });
 
 describe('compileKnowledgeScopes: validation', () => {
-  it('refuses two patterns for one type', () => {
+  it('refuses overlapping patterns for one type', () => {
     expect(() => compileKnowledgeScopes({ 'team:$orgId:$teamId': {}, 'team:$teamId': {} })).toThrow(
       KnowledgeDeclarationError,
+    );
+  });
+
+  it('names both overlapping patterns, including final-parameter overlap with longer patterns', () => {
+    for (const [left, right] of [
+      ['role:$orgId:$role', 'role:$orgId:admin'],
+      ['kb:$orgId:$name', 'kb:$orgId:public'],
+      ['role:$orgId', 'role:$orgId:admin'],
+    ]) {
+      let error: unknown;
+      try {
+        compileKnowledgeScopes({ [left!]: {}, [right!]: {} });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(KnowledgeDeclarationError);
+      expect((error as Error).message).toContain(left);
+      expect((error as Error).message).toContain(right);
+    }
+  });
+
+  it('refuses concrete addresses without a matching declared pattern', () => {
+    expect(() => compileKnowledgeScopes({ 'role:acme:admin': {} })).toThrow(/role:acme:admin.*pattern/);
+    expect(() => compileKnowledgeScopes({ 'role:$orgId:support': {}, 'role:acme:admin': {} })).toThrow(
+      /role:acme:admin.*pattern/,
     );
   });
 

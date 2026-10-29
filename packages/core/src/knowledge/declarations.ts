@@ -258,15 +258,27 @@ function sampleAddress(pattern: KnowledgeScopePattern): string {
   return bindKnowledgePattern(pattern, Object.fromEntries(pattern.params.map((param, i) => [param, `p${i}`])))!;
 }
 
+function patternsOverlap(a: KnowledgeScopePattern, b: KnowledgeScopePattern): boolean {
+  if (a.type !== b.type) return false;
+  for (let i = 0; i < Math.min(a.segments.length, b.segments.length); i++) {
+    const left = a.segments[i]!;
+    const right = b.segments[i]!;
+    if ('literal' in left && 'literal' in right && left.literal !== right.literal) return false;
+  }
+  if (a.segments.length === b.segments.length) return true;
+  const shorter = a.segments.length < b.segments.length ? a : b;
+  return 'param' in shorter.segments[shorter.segments.length - 1]!;
+}
+
 /**
- * Compiles and checks declarations: one pattern per type, valid keys, every rule principal of a
+ * Compiles and checks declarations: disjoint patterns per type, valid keys, every rule principal of a
  * declared type with params the target can bind, and every rule reach indexable (an address prefix
  * or a `belongsTo` parent).
  *
  * @experimental
  */
 export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations): CompiledKnowledgeScopes {
-  const byType = new Map<string, CompiledKnowledgeDeclaration>();
+  const byType = new Map<string, CompiledKnowledgeDeclaration[]>();
   const all = new Map<string, CompiledKnowledgeDeclaration>();
   const concreteEntries: Array<[string, KnowledgeScopeDeclaration]> = [];
 
@@ -276,38 +288,32 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
       concreteEntries.push([key, declaration]);
       continue;
     }
-    const existing = byType.get(pattern.type);
-    if (existing) {
+    const existing = byType.get(pattern.type) ?? [];
+    const overlap = existing.find(candidate => patternsOverlap(candidate.pattern, pattern));
+    if (overlap) {
       throw new KnowledgeDeclarationError(
-        `Knowledge scope type "${pattern.type}" is declared twice ("${existing.key}" and "${key}"); declare one pattern per type.`,
+        `Knowledge scope patterns "${overlap.key}" and "${key}" overlap; patterns of a type must be pairwise disjoint.`,
       );
     }
     const compiled: CompiledKnowledgeDeclaration = { key, pattern, declaration, rules: [], children: [] };
-    byType.set(pattern.type, compiled);
+    byType.set(pattern.type, [...existing, compiled]);
     all.set(key, compiled);
   }
 
   const concrete = new Map<string, { declaration: KnowledgeScopeDeclaration; rules: CompiledKnowledgeRule[] }>();
   for (const [address, declaration] of concreteEntries) {
     const pattern = parsePattern(address, 'Knowledge scope key');
-    const owner = byType.get(pattern.type);
-    if (owner && !matchKnowledgePattern(owner.pattern, address)) {
+    const owner = byType.get(pattern.type)?.find(candidate => matchKnowledgePattern(candidate.pattern, address));
+    if (!owner) {
       throw new KnowledgeDeclarationError(
-        `Knowledge scope "${address}" doesn't fit its type's pattern "${owner.key}".`,
+        `Knowledge scope "${address}" doesn't match a declared pattern; declare its pattern first.`,
       );
     }
-    if (owner) {
-      const unsupported = (['belongsTo', 'children', 'pages'] as const).filter(
-        field => declaration[field] !== undefined,
+    const unsupported = (['belongsTo', 'children', 'pages'] as const).filter(field => declaration[field] !== undefined);
+    if (unsupported.length) {
+      throw new KnowledgeDeclarationError(
+        `Knowledge scope "${address}" is an address of "${owner.key}" and can only add description, access, pins and pinPriority; declare ${unsupported.join(', ')} on "${owner.key}".`,
       );
-      if (unsupported.length) {
-        throw new KnowledgeDeclarationError(
-          `Knowledge scope "${address}" is an address of "${owner.key}" and can only add description, access, pins and pinPriority; declare ${unsupported.join(', ')} on "${owner.key}".`,
-        );
-      }
-    } else {
-      const compiled: CompiledKnowledgeDeclaration = { key: address, pattern, declaration, rules: [], children: [] };
-      all.set(address, compiled);
     }
     concrete.set(address, { declaration, rules: [] });
   }
@@ -340,8 +346,10 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     }
   }
 
-  const slashInLast = (type: string) => !byType.get(type)?.declaration.children?.length;
-  for (const compiled of byType.values()) compiled.pattern.slashInLast = slashInLast(compiled.pattern.type);
+  const slashInLast = (type: string) => !byType.get(type)?.some(candidate => candidate.declaration.children?.length);
+  for (const patterns of byType.values()) {
+    for (const compiled of patterns) compiled.pattern.slashInLast = slashInLast(compiled.pattern.type);
+  }
   const typedPattern = (key: string, what: string) => {
     const pattern = parsePattern(key, what);
     pattern.slashInLast = slashInLast(pattern.type);
@@ -362,10 +370,9 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
       const colon = address.indexOf(':');
       if (colon === -1) return null;
       const extra = concrete.get(address);
-      const typed = byType.get(address.slice(0, colon));
-      if (typed) {
+      for (const typed of byType.get(address.slice(0, colon)) ?? []) {
         const params = matchKnowledgePattern(typed.pattern, address);
-        if (!params) return null;
+        if (!params) continue;
         return {
           declaration: typed.key,
           compiled: typed,
@@ -374,9 +381,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
           ...(extra ? { concrete: extra.declaration } : {}),
         };
       }
-      const standalone = all.get(address);
-      if (!standalone) return null;
-      return { declaration: address, compiled: standalone, params: {}, concreteRules: [] };
+      return null;
     },
   };
 
