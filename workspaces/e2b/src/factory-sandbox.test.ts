@@ -152,6 +152,16 @@ describe('E2BFactorySandbox', () => {
     expect(advertised(new E2BFactorySandbox({}))).toBe(5);
   });
 
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new E2BFactorySandbox({
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    const envOf = (factoryId: string) =>
+      (sandbox.create({ ...context(), factoryId }, {}) as any)._constructorOptions.env;
+    expect(envOf('fac-platform')).toEqual({ TOKEN: 't' });
+    expect(envOf('fac-mastra')).toEqual({});
+  });
+
   describe('builds', () => {
     const sandbox = new E2BFactorySandbox({ apiKey: 'e2b_test' });
     const ref = repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA });

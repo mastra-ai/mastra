@@ -4,7 +4,6 @@ import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
-import type { SpanTab } from '../../types';
 import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
@@ -136,7 +135,7 @@ export function TracesExplorerPanel({
         spanView={selection.spanView}
         onSpanViewChange={setSpanView}
         spanActiveTab={selection.spanTab ?? 'details'}
-        onSpanTabChange={tab => setSpanTab(tab as SpanTab)}
+        onSpanTabChange={setSpanTab}
         spanFeedbackTabBadge={withFeedback ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
         spanFeedbackTabSlot={
           withFeedback

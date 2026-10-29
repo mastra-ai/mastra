@@ -255,8 +255,8 @@ describe.each<Engine>(['agent', 'durable', 'evented'])('%s: model on agent run a
     await run('hi');
 
     expect(identity(spansOf(exporter, SpanType.AGENT_RUN)[0])).toEqual(acmeLarge);
-    // Only the regular agent opens its step before the input processors run.
-    expect(spansOf(exporter, SpanType.MODEL_STEP).map(identity)).toEqual(engine === 'agent' ? [none] : []);
+    // Every engine opens the logical step before its input processors run.
+    expect(spansOf(exporter, SpanType.MODEL_STEP).map(identity)).toEqual([none]);
   });
 
   it('a run whose processor returns invalid timeout settings names the model on the agent run and none on a step', async () => {

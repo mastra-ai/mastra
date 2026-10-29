@@ -1,3 +1,7 @@
+import { spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
@@ -7,6 +11,7 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConst
     send: vi.fn().mockResolvedValue({}),
     on: vi.fn(),
     off: vi.fn(),
+    onTransportClosed: vi.fn(),
   };
 
   const mockPage = {
@@ -64,6 +69,9 @@ vi.mock('@browserbasehq/stagehand', () => ({
     act = mockStagehand.act;
     extract = mockStagehand.extract;
     observe = mockStagehand.observe;
+    get state() {
+      return (mockStagehand as any).state;
+    }
   },
 }));
 
@@ -300,6 +308,43 @@ describe('StagehandBrowser', () => {
       targetDestroyedHandler?.({ targetId: 'page-target-123' });
 
       expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
+    });
+
+    describe('when the CDP connection closes', () => {
+      // Fires every transport-close handler the provider registered (none on a provider that never listened).
+      const closeTransport = (why: string) => {
+        for (const [handler] of mockCdpSession.onTransportClosed.mock.calls) handler(why);
+      };
+
+      it('treats Chrome killed outside Mastra as a disconnect', async () => {
+        await browser.launch();
+        const closed = vi.fn();
+        browser.onBrowserClosed(closed);
+
+        // Stagehand reacts to the lost socket first, with close({ force: true }).
+        void (browser as any).sharedManager.close({ force: true });
+        closeTransport('socket-close code=1006');
+
+        expect(browser.status).toBe('closed');
+        expect(browser.getLastBrowserState()?.closeReason).toBe('user');
+        expect(closed).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not treat its own close as an external disconnect', async () => {
+        await browser.launch();
+        const closed = vi.fn();
+        browser.onBrowserClosed(closed);
+        mockStagehand.close.mockImplementationOnce(async () => {
+          closeTransport('socket-close code=1000');
+        });
+        browser.markBrowserCloseReason('agent');
+
+        await browser.close();
+
+        expect(browser.status).toBe('closed');
+        expect(browser.getLastBrowserState()?.closeReason).toBe('agent');
+        expect(closed).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('should handle close when not launched', async () => {
@@ -916,6 +961,103 @@ describe('StagehandBrowser', () => {
       });
     });
   });
+});
+
+describe('StagehandBrowser thread scope on a profile', () => {
+  let profileDir: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    profileDir = mkdtempSync(join(tmpdir(), 'stagehand-profile-'));
+  });
+
+  afterEach(() => {
+    rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  // Issue #28664: while another thread's Chrome is alive, a new thread's Chrome starts
+  // without launch() running again. chrome-launcher would then read a dead port from the log.
+  it('clears stale launcher logs before starting another thread browser', async () => {
+    const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+    browser.setCurrentThread('thread-1');
+    await browser.ensureReady();
+    const staleLog = join(profileDir, 'chrome-err.log');
+    writeFileSync(staleLog, 'DevTools listening on ws://127.0.0.1:50047/devtools/browser/old\n');
+    let logAtChromeStart: boolean | undefined;
+    mockStagehand.init.mockImplementationOnce(async () => {
+      logAtChromeStart = existsSync(staleLog);
+    });
+
+    browser.setCurrentThread('thread-2');
+    await browser.ensureReady();
+
+    expect(mockStagehandConstructor).toHaveBeenCalledTimes(2);
+    expect(logAtChromeStart).toBe(false);
+  });
+
+  // A tool or screencast still holding a retired browser reaches getManagerForThread()
+  // without ensureReady(), so it must not start a Chrome that nothing tracks.
+  it('does not start a thread browser after retire()', async () => {
+    const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+    browser.setCurrentThread('thread-1');
+    await browser.ensureReady();
+    await browser.retire();
+    mockStagehandConstructor.mockClear();
+    mockStagehand.init.mockClear();
+
+    await expect(browser.getManagerForThread('thread-2')).rejects.toThrow(/was retired/);
+
+    expect(mockStagehandConstructor).not.toHaveBeenCalled();
+    expect(mockStagehand.init).not.toHaveBeenCalled();
+  });
+
+  it('closes a thread browser whose Chrome finished starting after retire()', async () => {
+    const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+    browser.setCurrentThread('thread-1');
+    await browser.ensureReady();
+    let retiring: Promise<void> | undefined;
+    mockStagehand.init.mockImplementationOnce(async () => {
+      retiring = browser.retire();
+    });
+    mockStagehand.close.mockClear();
+
+    await expect(browser.getManagerForThread('thread-2')).rejects.toThrow(/was retired/);
+    await retiring;
+
+    // thread-1's Chrome (closed by retire()) and thread-2's late one.
+    expect(mockStagehand.close).toHaveBeenCalledTimes(2);
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'kills a Chrome that finished starting after retire() when closing it fails',
+    async () => {
+      const chrome = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      const exited = new Promise<NodeJS.Signals | null>(r => chrome.once('exit', (_code, signal) => r(signal)));
+      const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+      browser.setCurrentThread('thread-1');
+      await browser.ensureReady();
+      let retiring: Promise<void> | undefined;
+      mockStagehand.init.mockImplementationOnce(async () => {
+        // thread-2's local Chrome is up, but nothing has registered its PID yet.
+        (mockStagehand as any).state = { kind: 'LOCAL', chrome: { pid: chrome.pid } };
+        retiring = browser.retire();
+        await retiring;
+        mockStagehand.close.mockRejectedValueOnce(new Error('CDP gone'));
+      });
+      try {
+        await expect(browser.getManagerForThread('thread-2')).rejects.toThrow(/was retired/);
+
+        expect(await exited).toBe('SIGKILL');
+      } finally {
+        delete (mockStagehand as any).state;
+        chrome.kill('SIGKILL');
+      }
+    },
+    10_000,
+  );
 });
 
 describe('createStagehandTools', () => {

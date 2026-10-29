@@ -185,6 +185,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
+  'repository_sandbox_unresponsive',
   'repository_egress_blocked',
   'repository_clone_failed',
   'repository_pull_failed',

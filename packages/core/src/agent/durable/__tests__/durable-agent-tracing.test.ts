@@ -477,6 +477,9 @@ describe('DurableAgent observability tracing', () => {
             id: 'AGENT_INPUT_PROCESSOR_ERROR',
             message: '[Agent:Trace Agent (input error)] - Input processor error',
           }),
+          outcome: 'error',
+          stopReason: 'runtime_error',
+          stopReasonContext: null,
           endTree: true,
         });
 

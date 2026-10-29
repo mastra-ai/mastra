@@ -1,35 +1,50 @@
 /**
  * Read-only catalog of the Factory skills.
  *
- * These are the built-in skills the Factory pipeline invokes at each stage
- * (triage, plan, review, …). The catalog reads each `SKILL.md` (repo-local
- * override first, then bundled) so the settings UI can show users exactly what
- * each skill instructs the agent to do — and whether the runtime can load it.
+ * Lists every skill the Factory skill mount serves — the built-in skills the
+ * pipeline invokes at each stage (triage, plan, review, …) and the app's own
+ * skills from `MastraFactory({ skills })` or its `factory-skills/` folder. It
+ * reads them through the same `FactorySkillSource` sessions use, so the
+ * settings UI shows exactly what each skill instructs the agent to do — and
+ * whether the runtime can load it.
  */
-import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { InlineSkill } from '@mastra/core/skills';
 import { validateSkillContent } from '@mastra/core/skills';
+import type { SkillSource } from '@mastra/core/workspace';
 
-import { BUNDLED_FACTORY_SKILLS_PATH, FACTORY_SKILL_NAMES, resolveLocalFactorySkillsPath } from '../workspace.js';
+import {
+  FACTORY_SKILL_NAMES,
+  FACTORY_SKILLS_MOUNT,
+  FactorySkillSource,
+  resolveLocalFactorySkillsPath,
+} from '../workspace.js';
+
+/** Where a skill comes from: shipped with Factory, the app's `factory-skills/` folder, or `MastraFactory({ skills })`. */
+export type FactorySkillOrigin = 'bundled' | 'folder' | 'code';
 
 export interface FactorySkillInfo {
   name: string;
   description: string;
   /** SKILL.md body with the frontmatter block removed. */
   content: string;
+  origin: FactorySkillOrigin;
+  /** True for the skills Factory ships, including when the app overrides one. */
+  builtIn: boolean;
   /** Set when the SKILL.md fails the runtime's parsing/validation, so the agent will not be able to load it. */
   error?: string;
 }
 
-function parseSkillMarkdown(name: string, raw: string): FactorySkillInfo {
+function parseSkillMarkdown(name: string, raw: string): Pick<FactorySkillInfo, 'description' | 'content' | 'error'> {
   // Use the same parser and validation the runtime applies when loading skills,
   // so the catalog never shows a skill as healthy that the agent will drop.
   const result = validateSkillContent({ content: raw, directoryName: name });
   const description = typeof result.metadata?.description === 'string' ? result.metadata.description : '';
   const content = result.instructions ?? stripFrontmatter(raw);
-  if (!result.valid) return { name, description, content, error: result.errors.join('\n') };
-  return { name, description, content };
+  if (!result.valid) return { description, content, error: result.errors.join('\n') };
+  return { description, content };
 }
 
 /** Best-effort body extraction when the frontmatter cannot be parsed, so users can still read the file they need to fix. */
@@ -38,27 +53,40 @@ function stripFrontmatter(raw: string): string {
   return (match ? raw.slice(match[0].length) : raw).trim();
 }
 
+const NO_REPOSITORY_SKILLS: SkillSource = {
+  exists: async () => false,
+  stat: async path => {
+    throw new Error(`ENOENT: no such file or directory, '${path}'`);
+  },
+  readFile: async path => {
+    throw new Error(`ENOENT: no such file or directory, '${path}'`);
+  },
+  readdir: async () => [],
+};
+
 /**
- * List the Factory skills, preferring repo-local versions over bundled ones and
- * skipping any skill missing from both roots.
+ * List the skills the Factory skill mount serves, sorted by name. Code skills
+ * win over folder skills, which win over bundled skills of the same name.
  */
-export async function listFactorySkills(): Promise<FactorySkillInfo[]> {
-  const skills: FactorySkillInfo[] = [];
+export async function listFactorySkills(codeSkills: readonly InlineSkill[] = []): Promise<FactorySkillInfo[]> {
   const localRoot = resolveLocalFactorySkillsPath();
-  const roots = localRoot ? [localRoot, BUNDLED_FACTORY_SKILLS_PATH] : [BUNDLED_FACTORY_SKILLS_PATH];
-  for (const name of [...FACTORY_SKILL_NAMES].sort()) {
-    let raw: string | undefined;
-    // Repo-local skills override the bundled versions, matching runtime resolution.
-    for (const root of roots) {
-      try {
-        raw = await readFile(join(root, name, 'SKILL.md'), 'utf8');
-        break;
-      } catch {
-        continue;
-      }
+  const source = new FactorySkillSource(NO_REPOSITORY_SKILLS, [], localRoot, async () => true, codeSkills);
+  const codeNames = new Set(codeSkills.map(skill => skill.name));
+  const entries = (await source.readdir(FACTORY_SKILLS_MOUNT)).filter(entry => entry.type === 'directory');
+  const skills: FactorySkillInfo[] = [];
+  for (const name of entries.map(entry => entry.name).sort()) {
+    let raw: string;
+    try {
+      raw = String(await source.readFile(join(FACTORY_SKILLS_MOUNT, name, 'SKILL.md')));
+    } catch {
+      continue;
     }
-    if (raw === undefined) continue;
-    skills.push(parseSkillMarkdown(name, raw));
+    const origin: FactorySkillOrigin = codeNames.has(name)
+      ? 'code'
+      : localRoot && existsSync(join(localRoot, name, 'SKILL.md'))
+        ? 'folder'
+        : 'bundled';
+    skills.push({ name, ...parseSkillMarkdown(name, raw), origin, builtIn: FACTORY_SKILL_NAMES.has(name) });
   }
   return skills;
 }

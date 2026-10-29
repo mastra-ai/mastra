@@ -34,6 +34,9 @@ import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
 import { getStagehandChromePid, patchProfileExitType } from './utils';
 
+/** How long to wait for a Chrome started after retire() to close before killing it. */
+const RETIRED_CLOSE_TIMEOUT_MS = 5000;
+
 // Type for Stagehand v3 Page
 type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
 
@@ -188,9 +191,38 @@ export class StagehandBrowser extends MastraBrowser {
    * Used by thread manager for 'thread' scope.
    */
   private async createStagehandInstance(): Promise<Stagehand> {
+    // While another thread's Chrome is alive, a new thread's Chrome starts without
+    // launch() running again, so the profile must be prepared here too.
+    // Thread sessions are also created outside ensureReady(), so check retirement
+    // here, before and after the awaits, so a retired browser starts no Chrome.
+    this.assertNotRetired();
+    if (this.getScope() === 'thread') {
+      await this.prepareLocalProfile();
+    }
     const stagehandOptions = await this.buildStagehandOptions();
+    this.assertNotRetired();
     const stagehand = new Stagehand(stagehandOptions);
     await stagehand.init();
+    // retire() may have closed the browser while init() was starting Chrome.
+    try {
+      this.assertNotRetired();
+    } catch (error) {
+      // Nothing tracks this Chrome yet, so if close fails or hangs, kill it.
+      const pid = this.isConnectedToRemoteBrowser() ? undefined : getStagehandChromePid(stagehand);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const closed = await Promise.race([
+        stagehand.close().then(
+          () => true,
+          () => false,
+        ),
+        new Promise<boolean>(resolve => {
+          timer = setTimeout(() => resolve(false), RETIRED_CLOSE_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (!closed) this.killBrowserProcessGroup(pid);
+      throw error;
+    }
     return stagehand;
   }
 
@@ -230,6 +262,10 @@ export class StagehandBrowser extends MastraBrowser {
     return config.env === 'BROWSERBASE' || config.cdpUrl != null;
   }
 
+  protected override getLocalProfilePath(): string | undefined {
+    return this.isConnectedToRemoteBrowser() ? undefined : this.stagehandConfig.profile;
+  }
+
   /**
    * Set up close event listener for a shared Stagehand instance.
    * Listens to both context and page close events for robust detection.
@@ -240,7 +276,8 @@ export class StagehandBrowser extends MastraBrowser {
    * Tracks page targets via CDP `Target.targetCreated` / `Target.targetDestroyed`.
    * When all page targets are gone the `onDisconnect` callback fires. This is more
    * reliable than Playwright's `context.close` / `page.close` events which don't
-   * fire when Chrome is killed externally (SIGTERM/SIGKILL).
+   * fire when Chrome is killed externally (SIGTERM/SIGKILL). A CDP transport close
+   * that we did not cause is also treated as a disconnect.
    */
   private setupCloseListener(stagehand: Stagehand, onDisconnect: () => void, threadId?: string): void {
     // Only capture the PID for browsers we launched locally. A Browserbase
@@ -293,6 +330,20 @@ export class StagehandBrowser extends MastraBrowser {
           pageTargets.delete(params.targetId);
           if (pageTargets.size === 0) handleDisconnect();
         }
+      });
+
+      // When Chrome is killed outside Mastra the websocket dies before any
+      // target event arrives, so the transport close is the only signal.
+      // It also fires when we close Stagehand ourselves; skip that case.
+      // Stagehand's own reaction to a lost transport calls close({ force: true }).
+      let closingOnPurpose = false;
+      const close = stagehand.close.bind(stagehand);
+      stagehand.close = (opts?: { force?: boolean }) => {
+        if (!opts?.force) closingOnPurpose = true;
+        return close(opts);
+      };
+      conn.onTransportClosed?.(() => {
+        if (!closingOnPurpose) handleDisconnect();
       });
     } catch {
       // Ignore errors setting up close listener

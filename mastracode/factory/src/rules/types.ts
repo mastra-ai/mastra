@@ -622,6 +622,13 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
+  /**
+   * Start this run even when the card was moved by the agent already running in
+   * this role's session. The prompt is queued onto that agent's run, so a phase
+   * that shares its context with the one before it still gets its own work.
+   * Without it, an agent's own move into a phase of its role starts nothing.
+   */
+  startsAfterOwnMove?: boolean;
 }
 
 /**

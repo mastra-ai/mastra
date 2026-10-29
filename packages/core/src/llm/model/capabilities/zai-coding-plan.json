@@ -22,12 +22,7 @@
         "type": "toggle"
       }
     ],
-    "glm-5-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.2-highspeed": [
+    "glm-5.2": [
       {
         "type": "toggle"
       },
@@ -42,7 +37,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.2": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.2-highspeed": [
       {
         "type": "toggle"
       },
@@ -51,10 +52,9 @@
         "values": ["high", "max"]
       }
     ],
-    "glm-5.3": [
+    "glm-5-turbo": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ]
   }
