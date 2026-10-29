@@ -208,6 +208,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   readonly #firstAttempts = new Map<string, (reason: unknown) => void>();
   readonly #executors = new Set<string>();
   #sweepTimer?: ReturnType<typeof setInterval>;
+  #closed = false;
   #sweeping?: Promise<void>;
   /** The page of open rows the next sweep checks. */
   #sweepPage = 0;
@@ -458,6 +459,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
 
   /** Unregisters this store's executors. Rows stay in storage. */
   close(): void {
+    this.#closed = true;
     for (const key of this.#executors) this.#manager.unregisterStaticExecutor(key);
     this.#executors.clear();
     clearInterval(this.#sweepTimer);
@@ -472,6 +474,14 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   sweep(): Promise<void> {
     this.#sweeping ??= this.#sweep().finally(() => (this.#sweeping = undefined));
     return this.#sweeping;
+  }
+
+  /**
+   * Starts the periodic sweep before any task request, so this instance settles rows a dead worker
+   * left behind even if no client ever asks it about a task. Does nothing once the store is closed.
+   */
+  startSweeping(): void {
+    if (!this.#closed) this.#startSweeping();
   }
 
   #startSweeping(): void {
