@@ -52,11 +52,10 @@ describe('MongoKnowledgePages (schema 4)', () => {
       address: 'org:acme',
       declaration: 'org:$orgId',
       name: 'Acme',
-      parentId: org.scope.id,
       provenance,
     });
     expect(again.created).toBe(false);
-    expect(again.parentConflict).toEqual({ existingParentId: null, requestedParentId: org.scope.id });
+    expect(again.parentConflict).toBeUndefined();
     const children = await store.listChildScopes({ parentId: org.scope.id });
     expect(children.pages.map(page => page.address)).toEqual(['org:acme/internal']);
     expect(await store.getPageByKey({ scopeId: org.scope.id, key: 'org:acme#policy', read: 'all' })).not.toBeNull();
@@ -184,6 +183,19 @@ describe('MongoKnowledgePages (schema 4)', () => {
     const hits = await store.searchPages({ query: 'ZEBRA', read: readOf('team:e') });
     expect(hits.map(hit => hit.type)).toEqual(['page', 'note']);
     expect(await store.searchPages({ query: 'zebra', read: readOf('team:a') })).toEqual([]);
+  });
+
+  it('links an unlinked scope on a later run with a parent; a different parent is a conflict', async () => {
+    const p1 = (await store.materializeScope({ address: 'org:p1', declaration: 'org:$o', name: 'P1', provenance })).scope;
+    const p2 = (await store.materializeScope({ address: 'org:p2', declaration: 'org:$o', name: 'P2', provenance })).scope;
+    const orphan = (await store.materializeScope({ address: 'team:late', declaration: 'team:$t', name: 'Late', provenance })).scope;
+    expect(orphan.parentId).toBeNull();
+    const linked = await store.materializeScope({ address: 'team:late', declaration: 'team:$t', name: 'Late', parentId: p1.id, provenance });
+    expect(linked.scope.parentId).toBe(p1.id);
+    expect(linked.parentConflict).toBeUndefined();
+    const again = await store.materializeScope({ address: 'team:late', declaration: 'team:$t', name: 'Late', parentId: p2.id, provenance });
+    expect(again.scope.parentId).toBe(p1.id);
+    expect(again.parentConflict).toEqual({ existingParentId: p1.id, requestedParentId: p2.id });
   });
 
   it('refuses moving or merging into a scope that already has the page key; deleted descendants do not count toward the cap', async () => {

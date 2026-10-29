@@ -451,6 +451,21 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           at: now,
         });
         created = true;
+      } else if (input.parentId && scope.parentId === null) {
+        // Late link: the first non-null parent wins; the conditional update makes it atomic.
+        await this.#requireLivePage(input.parentId, session);
+        const linked = await (
+          await this.#c('pages')
+        ).findOneAndUpdate(
+          { id: scope.id, parentId: null },
+          { $set: { parentId: input.parentId } },
+          { returnDocument: 'after', projection: { _id: 0 }, session },
+        );
+        const current = linked ?? (await this.#scopeByAddress(input.address, session))!;
+        scope = toPage(current);
+        if (!linked && input.parentId !== scope.parentId) {
+          parentConflict = { existingParentId: scope.parentId, requestedParentId: input.parentId };
+        }
       } else if (input.parentId !== undefined && (input.parentId ?? null) !== scope.parentId) {
         parentConflict = { existingParentId: scope.parentId, requestedParentId: input.parentId ?? null };
       }
@@ -901,6 +916,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
             deletedAt: now,
             deletedBy: input.provenance.author,
             mergedInto: target.id,
+            scopeId: target.scopeId,
             updatedAt: now,
             updatedBy: input.provenance,
           },
@@ -910,10 +926,11 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         { session },
       );
       if (deleted.matchedCount === 0) throw new KnowledgeConflictError(input.sourceId);
+      await (await this.#c('activity')).updateMany({ pageId: source.id }, { $set: { pageScopeId: target.scopeId } }, { session });
       await this.#log(session, {
         action: 'page-merged',
         scopeId: target.scopeId,
-        pageScopeId: source.scopeId,
+        pageScopeId: target.scopeId,
         pageId: source.id,
         provenance: input.provenance,
         at: now,
