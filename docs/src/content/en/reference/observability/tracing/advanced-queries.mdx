@@ -176,7 +176,7 @@ const hitALimit = {
 }
 ```
 
-Spans written by an SDK that predates these fields, or a root span that is still running, have no outcome. A missing outcome means "not recorded", never success. Select those spans with `{ op: 'notExists', path: 'outcome' }`. As with other optional string fields, `ne` and `notIn` match spans with no value.
+Spans written by an SDK that predates these fields, or a root span that's still running, have no outcome. A missing outcome means "not recorded", never success. Select those spans with `{ op: 'notExists', path: 'outcome' }`. As with other optional string fields, `ne` and `notIn` match spans with no value.
 
 Both fields support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`, group trace and span aggregates, and return values from value discovery. They can't be used in `orderBy`. Results also return `stopReasonContext`, an object with details about the stop reason such as `{ maxSteps: 5 }`. `stopReasonContext` is returned only and can't be filtered, grouped, or sorted.
 
