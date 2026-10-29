@@ -125,6 +125,19 @@ export function mergeWorkflowStepResult({
     };
   }
 
+  // Child writes and delayed occurrences must not erase another delivery's authorization.
+  if (existingResult?.metadata?.authorizedEventIds || result.metadata?.authorizedEventIds) {
+    snapshot.context[stepId]!.metadata = {
+      ...snapshot.context[stepId]!.metadata,
+      authorizedEventIds: [
+        ...new Set([
+          ...(existingResult?.metadata?.authorizedEventIds ?? []),
+          ...(result.metadata?.authorizedEventIds ?? []),
+        ]),
+      ],
+    };
+  }
+
   if (state !== undefined) {
     (snapshot.context as Record<string, unknown>).__state = state;
   }

@@ -45,6 +45,29 @@ describe('mergeWorkflowStepResult', () => {
     expect(snapshot.context.foreach?.metadata?.foreachNestedRunIds).toEqual({ 0: 'child-0', 1: 'child-1' });
   });
 
+  it('preserves authorization occurrences across stale and metadata-free child writes', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    const write = (authorizedEventIds?: string[]) =>
+      mergeWorkflowStepResult({
+        snapshot,
+        stepId: 'child',
+        result: {
+          status: 'running',
+          startedAt: 1,
+          payload: {},
+          ...(authorizedEventIds && { metadata: { authorizedEventIds } }),
+        },
+        requestContext: {},
+      });
+
+    write(['older']);
+    write(['newer']);
+    write(['older']);
+    write();
+
+    expect(snapshot.context.child?.metadata?.authorizedEventIds).toEqual(['older', 'newer']);
+  });
+
   it('merges forEach array outputs without clobbering completed iterations', () => {
     const snapshot = createEmptyWorkflowSnapshot('run-1');
     snapshot.context.foreach = {

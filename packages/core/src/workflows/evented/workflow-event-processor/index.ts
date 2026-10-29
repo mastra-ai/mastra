@@ -2017,9 +2017,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     } catch (error) {
       // A concurrent delivery may have finished while authorization was pending.
       if (await continueRedelivery()) return false;
-      if (canDropRunningDenial && workflowsStore) {
+      if (workflowsStore) {
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: args.runId });
         const leaf = snapshot?.context[nestedWorkflowStep.id];
+        if (args.eventId && leaf?.metadata?.authorizedEventIds?.includes(args.eventId)) return false;
         // Foreach pre-writes running before authorization; only the child's start
         // handler records an iteration's run ID. A single start owns its running leaf.
         const claimed =
@@ -2027,13 +2028,34 @@ export class WorkflowEventProcessor extends EventProcessor {
             ? !!leaf?.metadata?.foreachNestedRunIds?.[iterationIndex]
             : leaf?.status === 'running';
         // If the authorized delivery crashed, leave its child for recovery.
-        if (claimed) return false;
+        if (canDropRunningDenial && claimed) return false;
       }
       await this.errorWorkflow(args, getErrorFromUnknown(error));
       return false;
     }
     // Another delivery may have denied the parent while authorization was pending.
     if (await continueRedelivery()) return false;
+    if (workflowsStore && args.eventId) {
+      const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: args.runId });
+      const leaf = snapshot?.context[nestedWorkflowStep.id] ?? args.stepResults[nestedWorkflowStep.id];
+      await workflowsStore.updateWorkflowResults({
+        workflowName: workflow.id,
+        runId: args.runId,
+        stepId: nestedWorkflowStep.id,
+        result: {
+          ...(leaf ?? {
+            status: 'running',
+            startedAt: Date.now(),
+            payload: args.prevResult.status === 'success' ? args.prevResult.output : undefined,
+          }),
+          metadata: {
+            ...leaf?.metadata,
+            authorizedEventIds: [...new Set([...(leaf?.metadata?.authorizedEventIds ?? []), args.eventId])],
+          },
+        },
+        requestContext: withoutAuthToken(args.requestContext),
+      });
+    }
     return true;
   }
 

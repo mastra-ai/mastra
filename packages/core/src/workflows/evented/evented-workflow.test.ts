@@ -1909,6 +1909,110 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     }, 15000);
 
+    it.each(['automatic resume', 'explicit resume', 'restart', 'time travel'])(
+      'preserves an authorized $0 child after denied redelivery',
+      async mode => {
+        const entered = Promise.withResolvers<void>();
+        const effect = Promise.withResolvers<void>();
+        let block = false;
+        const resuming = mode.includes('resume');
+        const fixture = await setup({
+          suspend: resuming,
+          fail: mode === 'restart',
+          beforeEffect: async () => {
+            if (block) {
+              entered.resolve();
+              await effect.promise;
+            }
+          },
+        });
+        try {
+          const initial = await fixture.run.start({
+            inputData: { value: 'ok' },
+            requestContext: fixture.requestContext,
+          });
+          expect(initial.status).toBe(resuming ? 'suspended' : mode === 'restart' ? 'failed' : 'success');
+          const previousEffects = fixture.effects();
+          fixture.policy.fail = false;
+          const store = (await fixture.storage.getStore('workflows'))!;
+          if (mode === 'restart') {
+            const children = await store.listWorkflowRuns({ workflowName: fixture.child.id });
+            const childRunId = children.runs[0]!.runId;
+            for (const [workflow, runId, stepId] of [
+              [fixture.parent, fixture.run.runId, fixture.child.id],
+              [fixture.child, childRunId, 'nested-fga-effect'],
+            ] as const) {
+              const snapshot = (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId }))!;
+              await store.persistWorkflowSnapshot({
+                workflowName: workflow.id,
+                runId,
+                resourceId: 'tenant-1',
+                snapshot: {
+                  ...snapshot,
+                  status: 'running',
+                  activePaths: [0],
+                  activeStepsPath: { [stepId]: [0] },
+                  context: {
+                    ...snapshot.context,
+                    [stepId]: {
+                      ...snapshot.context[stepId],
+                      status: 'running',
+                      ...(workflow === fixture.parent ? { metadata: { nestedRunId: childRunId } } : {}),
+                    },
+                  },
+                },
+              });
+            }
+          }
+          fixture.deliveries.length = 0;
+          fixture.publish.mockClear();
+          block = true;
+          const run = await fixture.parent.createRun({ runId: fixture.run.runId });
+          const starting =
+            mode === 'restart'
+              ? run.restart({ requestContext: fixture.requestContext })
+              : mode === 'time travel'
+                ? run.timeTravel({
+                    step: [fixture.child.id, 'nested-fga-effect'],
+                    inputData: { value: 'ok' },
+                    nestedStepsContext: { [fixture.child.id]: { 'nested-fga-effect': { payload: { value: 'ok' } } } },
+                    requestContext: fixture.requestContext,
+                  })
+                : run.resume({
+                    step: mode === 'automatic resume' ? fixture.child.id : [fixture.child.id, 'nested-fga-effect'],
+                    resumeData: { approved: true },
+                    requestContext: fixture.requestContext,
+                  });
+          await entered.promise;
+          fixture.policy.allowed = false;
+          const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+          const lease = fixture.leases.mock.calls.find(
+            ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+          )!;
+          await fixture.pubsub.releaseLease(lease[0], lease[1]);
+          fixture.emitter.emit('workflows', delivery);
+          await fixture.waitForDelivery(delivery, 2);
+          const snapshot = await store.loadWorkflowSnapshot({
+            workflowName: fixture.parent.id,
+            runId: fixture.run.runId,
+          });
+          expect(snapshot?.status).toBe('running');
+          expect(
+            fixture.publish.mock.calls.filter(
+              ([, event]) => event.type === 'workflow.fail' && event.runId === fixture.run.runId,
+            ),
+          ).toHaveLength(0);
+          effect.resolve();
+          await expect(starting).resolves.toMatchObject({ status: 'success' });
+          expect(fixture.effects()).toBe(previousEffects + 1);
+        } finally {
+          effect.resolve();
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
     it.each([
       { mode: 'automatic resume', allowed: false },
       { mode: 'automatic resume', allowed: true },

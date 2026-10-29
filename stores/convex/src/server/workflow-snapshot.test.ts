@@ -2,6 +2,29 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
 
 describe('mergeWorkflowStepResult', () => {
+  it('preserves authorization occurrences across stale and metadata-free child writes', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    const write = (authorizedEventIds?: string[]) =>
+      mergeWorkflowStepResult({
+        snapshot,
+        stepId: 'child',
+        result: {
+          status: 'running',
+          startedAt: 1,
+          payload: {},
+          ...(authorizedEventIds && { metadata: { authorizedEventIds } }),
+        },
+        requestContext: {},
+      });
+
+    write(['older']);
+    write(['newer']);
+    write(['older']);
+    write();
+
+    expect(snapshot.context.child?.metadata?.authorizedEventIds).toEqual(['older', 'newer']);
+  });
+
   it('claims queued recovery slots without applying stale child metadata', () => {
     const snapshot = createEmptyWorkflowSnapshot('run-1');
     snapshot.context.foreach = {
