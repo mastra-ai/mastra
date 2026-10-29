@@ -4,7 +4,12 @@ import {
   retrySettledDurableExecution,
   settleEventedDurableExecution,
 } from '../../../agent/durable/evented-execution';
-import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from '../../../agent/durable/execution-fence';
+import {
+  DurableExecutionFenceError,
+  EXECUTION_SUPERSEDED_ERROR_ID,
+  getExecutionClaim,
+  MASTRA_DURABLE_EXECUTIONS_KEY,
+} from '../../../agent/durable/execution-fence';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -4161,6 +4166,12 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     if (this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub) return this.#handleDelivery(event);
+    const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
+    const claims = context.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY);
+    const storageFenced = Object.keys(claims ?? {}).some(
+      runId => getExecutionClaim(context, runId)?.generation !== undefined,
+    );
+    if (!storageFenced) return this.#handleDelivery(event);
     try {
       if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
       const execute = async () => {

@@ -107,24 +107,7 @@ export class EventedAgent<
     return 'evented';
   }
 
-  protected override resolveWorkflowEngine(): 'default' | 'evented' {
-    const engine = super.resolveWorkflowEngine();
-    const mastra = this.getMastraInstance();
-    if (engine === 'evented' && mastra && !(mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)) {
-      if (!(mastra.getStorage()?.stores?.workflows?.supportsRunFencing() ?? false)) {
-        throw new Error(
-          `EventedAgent '${this.id}': shared evented execution requires storage-backed run fencing ` +
-            '(`supportsRunFencing()`). Use a fencing-capable storage adapter before dispatching runs to workers.',
-        );
-      }
-      if (this.hasOwnPubSub() && this.agent.getPubSub()?.__rawBus() !== mastra.pubsub.__rawBus()) {
-        throw new Error(
-          `EventedAgent '${this.id}': shared evented execution requires the agent and Mastra host to use the same pubsub transport.`,
-        );
-      }
-    }
-    return engine;
-  }
+  #warnedUnfencedSharedExecution = false;
 
   /**
    * EventedAgent owns its snapshot-persistence policy and always persists the
@@ -182,16 +165,19 @@ export class EventedAgent<
     const entry = getRunRegistryEntry(runId, this.getMastraInstance());
     const executionFence = entry?.executionFence;
     const pubsub = this.getMastraInstance()?.pubsub ?? this.getPubSub();
-    const sharedExecution =
+    const sharedTransport =
       this.resolveWorkflowEngine() === 'evented' &&
       pubsub !== undefined &&
       !(pubsub.__rawBus() instanceof EventEmitterPubSub);
+    const sharedExecution = sharedTransport && executionFence?.generation !== undefined;
     if (entry) entry.eventedExecution = sharedExecution;
     try {
-      if (sharedExecution && executionFence?.generation === undefined) {
-        throw new Error(
-          `EventedAgent '${this.id}': shared evented execution requires storage-backed run fencing ` +
-            '(`supportsRunFencing()`). Use a fencing-capable storage adapter before dispatching runs to workers.',
+      if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
+        this.#warnedUnfencedSharedExecution = true;
+        this.guardrailLogger?.warn(
+          `EventedAgent '${this.id}': shared execution without storage-backed run fencing keeps its existing ` +
+            'behavior: API shutdown or loss can interrupt remote workers. Use a shared fencing-capable storage adapter ' +
+            'to keep workers running independently of the API process.',
         );
       }
       const workflow = this.getWorkflow();
@@ -206,17 +192,15 @@ export class EventedAgent<
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
       const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-      if (entry?.requestContext && executionFence && threadId) {
-        if (sharedExecution) {
-          await agentThreadStreamRuntime.claimDurableThreadLease(
-            pubsub,
-            runId,
-            threadId,
-            workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-            executionFence.generation,
-            executionFence.executionId,
-          );
-        }
+      if (sharedExecution && entry?.requestContext && executionFence && threadId) {
+        await agentThreadStreamRuntime.claimDurableThreadLease(
+          pubsub,
+          runId,
+          threadId,
+          workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+          executionFence.generation,
+          executionFence.executionId,
+        );
         setExecutionClaim(entry.requestContext, runId, {
           ...executionFence.claim,
           threadId,

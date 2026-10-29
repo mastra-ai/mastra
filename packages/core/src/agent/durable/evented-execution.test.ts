@@ -1,9 +1,16 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
+import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
+import { createWorkflow } from '../../workflows/evented';
+import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
   participateInDurableExecution,
@@ -22,6 +29,80 @@ import {
   executionLeaseKey,
   MASTRA_DURABLE_EXECUTIONS_KEY,
 } from './execution-fence';
+
+import { abandonDurableAgentExecutions, deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+
+it('detaches a registered shared coordinator on API shutdown without releasing its live claim', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-shutdown-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const fence = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'shutdown-run',
+    mode: 'acquire',
+  });
+  try {
+    setRunRegistryEntry(
+      'shutdown-run',
+      { tools: {}, model: 'openai/gpt-4o', executionFence: fence, eventedExecution: true },
+      mastra,
+    );
+    await abandonDurableAgentExecutions(mastra);
+    const ownership = await workflowsStore.getRunOwnership({ runId: 'shutdown-run' });
+    expect(ownership).toMatchObject({ live: true, ownerId: fence.executionId, generation: fence.generation });
+    expect(ownership?.leaseExpiresAt).not.toBeNull();
+  } finally {
+    fence.stopHeartbeat();
+    deleteRunRegistryEntry('shutdown-run', mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('acknowledges unfenced terminal redelivery without releasing the coordinator lease', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-unfenced-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const coordinator = await ExecutionFence.claim({
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  const workflow = createWorkflow({ id: 'durable-agentic-loop', inputSchema: z.any(), outputSchema: z.any() }).commit();
+  mastra.__registerInternalWorkflow(workflow, 'run');
+  const event: Event = {
+    id: 'terminal',
+    type: 'workflow.end',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: workflow.id,
+      executionPath: [],
+      resumeSteps: [],
+      stepResults: {},
+      activeStepsPath: {},
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+      prevResult: { status: 'success', output: {}, payload: {}, startedAt: 1, endedAt: 2 },
+    },
+  };
+  try {
+    expect(await new WorkflowEventProcessor({ mastra }).handle(event)).toEqual({ ok: true });
+    expect(await pubsub.getLeaseOwner(executionLeaseKey('agent', 'run'))).toBe(coordinator.executionId);
+    await coordinator.settle(async () => {});
+    expect(await new WorkflowEventProcessor({ mastra }).handle(event)).toEqual({ ok: true });
+  } finally {
+    coordinator.stopHeartbeat();
+    await stopDurableExecutionParticipants(mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 const instances: Mastra[] = [];
 afterEach(async () => {

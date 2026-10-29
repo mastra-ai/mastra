@@ -55,42 +55,40 @@ function buildEventedAgent(id: string) {
 }
 
 describe('EventedAgent on storage without atomic concurrent updates', () => {
-  it('rejects shared execution without storage-backed run fencing before dispatch', async () => {
-    const pubsub = new UnixSocketPubSub(join(tmpdir(), `fencing-${randomUUID()}.sock`));
-    const storage = new MockStore();
-    vi.spyOn(storage.stores.workflows, 'supportsRunFencing').mockReturnValue(false);
-    try {
-      expect(
-        () => new Mastra({ storage, pubsub, agents: { agent: buildEventedAgent('unfenced') }, logger: false }),
-      ).toThrow(/shared evented execution requires storage-backed run fencing/);
-    } finally {
-      await pubsub.close();
-    }
-  });
-
-  it('rejects an asynchronously unsupported fencing backend before workflow dispatch', async () => {
-    const pubsub = new UnixSocketPubSub(join(tmpdir(), `async-fencing-${randomUUID()}.sock`));
-    const storage = new MockStore();
-    const workflows: WorkflowsStorage = storage.stores.workflows;
-    vi.spyOn(workflows, 'supportsRunFencing').mockResolvedValue(false);
-    const agent = buildEventedAgent('async-unfenced');
-    const mastra = new Mastra({ storage, pubsub, agents: { agent }, logger: false });
-    const publish = vi.spyOn(pubsub, 'publish');
-    try {
-      const { output, cleanup } = await agent.stream('Hi');
+  it.each(['sync', 'async'] as const)(
+    'keeps streaming with a warning when shared storage reports no fencing (%s)',
+    async probe => {
+      const pubsub = new UnixSocketPubSub(join(tmpdir(), `fencing-${randomUUID()}.sock`));
+      const storage = new MockStore();
+      const workflows: WorkflowsStorage = storage.stores.workflows;
+      const capability = vi.spyOn(workflows, 'supportsRunFencing');
+      if (probe === 'async') capability.mockResolvedValue(false);
+      else capability.mockReturnValue(false);
+      const agent = buildEventedAgent(`unfenced-${probe}`);
+      const warn = captureWarnings(agent);
+      let mastra: Mastra | undefined;
       try {
-        await expect(output.text).rejects.toThrow(/shared evented execution requires storage-backed run fencing/);
-        expect(publish.mock.calls.some(([topic]) => topic === 'workflows')).toBe(false);
+        mastra = new Mastra({ storage, pubsub, agents: { agent }, logger: { ...noopLogger, warn } });
+        for (let i = 0; i < 2; i++) {
+          const { output, cleanup } = await agent.stream('Hi');
+          try {
+            await output.consumeStream();
+            expect(await output.text).toBe('hello');
+          } finally {
+            await cleanup();
+          }
+        }
+        const warnings = warn.mock.calls.filter(([message]) => String(message).includes('storage-backed run fencing'));
+        expect(warnings).toHaveLength(1);
+        expect(String(warnings[0]![0])).toMatch(/API shutdown/);
       } finally {
-        await cleanup();
+        await mastra?.shutdown();
+        await pubsub.close();
       }
-    } finally {
-      await mastra.shutdown();
-      await pubsub.close();
-    }
-  });
+    },
+  );
 
-  it('rejects a private agent transport on a shared evented host', async () => {
+  it('keeps streaming with a private agent transport on a shared evented host', async () => {
     const pubsub = new UnixSocketPubSub(join(tmpdir(), `mixed-bus-${randomUUID()}.sock`));
     const agent = createEventedAgent({
       agent: new Agent({
@@ -101,11 +99,18 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
         pubsub: new EventEmitterPubSub(),
       }),
     });
+    let mastra: Mastra | undefined;
     try {
-      expect(() => new Mastra({ storage: new MockStore(), pubsub, agents: { agent }, logger: false })).toThrow(
-        /same pubsub transport/,
-      );
+      mastra = new Mastra({ storage: new MockStore(), pubsub, agents: { agent }, logger: false });
+      const { output, cleanup } = await agent.stream('Hi');
+      try {
+        await output.consumeStream();
+        expect(await output.text).toBe('hello');
+      } finally {
+        await cleanup();
+      }
     } finally {
+      await mastra?.shutdown();
       await pubsub.close();
     }
   });
