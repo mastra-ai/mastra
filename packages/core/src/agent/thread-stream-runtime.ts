@@ -5816,6 +5816,11 @@ export class AgentThreadStreamRuntime {
 
       const watchToken = Symbol(streamId);
       remoteRunLeaseWatchTokens.set(streamId, watchToken);
+      // Set after one check finds the lease no longer under this run. A finished
+      // producer releases its lease after publishing its last parts, and pub/sub
+      // can still be delivering those parts and `run-completed` when the check
+      // fires, so a single empty read is not proof the producer died.
+      let lapsedOnce = false;
       const scheduleCheck = () => {
         if (remoteRunLeaseWatchTokens.get(streamId) !== watchToken) return;
         remoteRunLeaseTimers.set(
@@ -5852,6 +5857,13 @@ export class AgentThreadStreamRuntime {
           return;
         }
         if (owner === runId) {
+          lapsedOnce = false;
+          scheduleCheck();
+          return;
+        }
+        if (!lapsedOnce) {
+          // Give the terminal event one more interval to arrive; it stops this watch.
+          lapsedOnce = true;
           scheduleCheck();
           return;
         }
