@@ -10,6 +10,7 @@ import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
+import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
@@ -32,11 +33,13 @@ export type SpansExplorerBodyProps = {
   onSelectionChange: (selection: SpanSelection | undefined) => void;
   /** Renders the open span's panel in the host's own side panel or drawer. */
   renderPanel: (args: SpansExplorerPanelArgs) => ReactNode;
+  /** The host's search params, so the time range, filters and sort survive a reload. Omitted: kept in memory. */
+  urlState?: ObservabilityListUrlState;
 };
 
 /** The spans page body: filter bar, span list and the host's span panel. Router-agnostic. */
-export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }: SpansExplorerBodyProps) {
-  const filters = useObservabilityListFilters();
+export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, urlState }: SpansExplorerBodyProps) {
+  const filters = useObservabilityListFilters(urlState);
   const { timeRange, tokens, groups, sort } = filters;
   const columns = useTraceColumnPreferences({ scope: 'spans' });
 
