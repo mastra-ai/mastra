@@ -100,14 +100,22 @@ export class ExperimentBundler extends Bundler {
     await removePnpmInstallMetadata(join(outputDirectory, this.outputDir));
   }
 
+  /**
+   * The worker resolver installs from the lockfile the project's package manager wrote. An npm
+   * lockfile re-resolved from the registry would take precedence over it and lose that pinning.
+   */
+  protected override async generateNpmLockfile(): Promise<void> {}
+
   async writeArtifactManifest(outputDirectory: string, cliVersion: string): Promise<void> {
     await Promise.all([
       removePnpmInstallMetadata(outputDirectory),
       rm(join(outputDirectory, this.analyzeOutputDir), { recursive: true, force: true }),
     ]);
     const files = await collectFileDigests(outputDirectory);
-    const lockfileNames = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb']);
-    const lockfile = files.find(file => lockfileNames.has(file.path))?.path;
+    // Same precedence the deployer uses to pick the package manager that installed the output.
+    const lockfile = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock', 'bun.lockb'].find(name =>
+      files.some(file => file.path === name),
+    );
     const contentDigest = Buffer.from(
       await globalThis.crypto.subtle.digest(
         'SHA-256',
