@@ -155,7 +155,7 @@ overrides:
   '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.40
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.42
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
   '@ai-sdk/provider@>=3.0.0 <3.0.18': 3.0.18
   '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
@@ -2135,7 +2135,7 @@ importers:
         version: 2.0.106(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@3.25.76)
+        version: 2.0.137(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^2.0.5
         version: 2.0.5
@@ -3269,7 +3269,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@4.6.7)
+        version: 2.0.137(zod@4.6.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -6482,7 +6482,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@4.6.7)
+        version: 2.0.137(zod@4.6.7)
       '@copilotkit/aimock':
         specifier: ^1.46.0
         version: 1.46.0(vitest@4.1.12)
@@ -6558,7 +6558,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@4.6.7)
+        version: 2.0.137(zod@4.6.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -6634,7 +6634,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@4.6.7)
+        version: 2.0.137(zod@4.6.7)
       '@fastify/swagger':
         specifier: ^9.9.2
         version: 9.9.2(supports-color@10.2.2)
@@ -6704,7 +6704,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@4.6.7)
+        version: 2.0.137(zod@4.6.7)
       '@copilotkit/aimock':
         specifier: ^1.46.0
         version: 1.46.0(vitest@4.1.12)
@@ -6774,7 +6774,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@4.6.7)
+        version: 2.0.137(zod@4.6.7)
       '@copilotkit/aimock':
         specifier: ^1.46.0
         version: 1.46.0(vitest@4.1.12)
@@ -6847,7 +6847,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.136(zod@3.25.76)
+        version: 2.0.137(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -9233,7 +9233,7 @@ importers:
         version: 1.3.24(zod@4.6.7)
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@^2.0.136
-        version: '@ai-sdk/openai@2.0.136(zod@4.6.7)'
+        version: '@ai-sdk/openai@2.0.137(zod@4.6.7)'
       '@copilotkit/aimock':
         specifier: ^1.46.0
         version: 1.46.0(vitest@4.1.12)
@@ -16606,10 +16606,6 @@ packages:
 
   '@opentelemetry/api-logs@0.220.0':
     resolution: {integrity: sha512-CmVa4ImJ+ynfrPMNaAXHET6Bhb44SwzmfyVJFq9ni2jgXJR/l7C6gfVFddNmHP+ZOkP9cf4f9DBe68qVLTHc9w==}
-    engines: {node: '>=8.0.0'}
-
-  '@opentelemetry/api-logs@0.221.0':
-    resolution: {integrity: sha512-OlanaW1vv7ufTqQ3/fPLI4arGt5ZoM+P8abOMki6uEYnpRazepSWDwDnnw+la7kE26SHVC18//SMccrDvLKOXQ==}
     engines: {node: '>=8.0.0'}
 
   '@opentelemetry/api-logs@0.222.0':
@@ -27587,9 +27583,6 @@ packages:
   onnxruntime-common@1.24.3:
     resolution: {integrity: sha512-GeuPZO6U/LBJXvwdaqHbuUmoXiEdeCjWi/EG7Y1HNnDwJYuk6WUbNXpF6luSUY8yASul3cmUlLGrCCL1ZgVXqA==}
 
-  onnxruntime-common@1.27.0:
-    resolution: {integrity: sha512-3KxL5wIVqa8Ex08jxSzncm9CMgw8CjOFyOQ7SxvG9o0cVLlhTNKXyIQuTbtX4tGPJEf73OER2xrjt4HJSBL4ow==}
-
   onnxruntime-common@1.30.0:
     resolution: {integrity: sha512-7fdVWjAID1dVhH/G8qK3APARunV4VkBFoCQAP7qp4Wkab0mrorvmc+sqiT+mKXOzDqdjN5j+/Z9nb4gzNPWcyA==}
 
@@ -32164,17 +32157,17 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.6.7)
       zod: 4.6.7
 
-  '@ai-sdk/openai@2.0.136(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.5
-      '@ai-sdk/provider-utils': 3.0.42(zod@3.25.76)
-      zod: 3.25.76
-
   '@ai-sdk/openai@2.0.136(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 2.0.5
       '@ai-sdk/provider-utils': 3.0.42(zod@4.6.7)
       zod: 4.6.7
+
+  '@ai-sdk/openai@2.0.137(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.5
+      '@ai-sdk/provider-utils': 3.0.42(zod@3.25.76)
+      zod: 3.25.76
 
   '@ai-sdk/openai@2.0.137(zod@4.6.7)':
     dependencies:
@@ -37806,7 +37799,7 @@ snapshots:
   '@huggingface/transformers@3.0.2(@types/node@22.19.15)':
     dependencies:
       '@huggingface/jinja': 0.3.4
-      onnxruntime-common: 1.27.0
+      onnxruntime-common: 1.30.0
       onnxruntime-node: 1.24.3
       onnxruntime-web: 1.21.0-dev.20241024-d9ca84ef96
       sharp: 0.35.5(@types/node@22.19.15)
@@ -37818,7 +37811,7 @@ snapshots:
     dependencies:
       '@huggingface/jinja': 0.5.10
       '@huggingface/tokenizers': 0.1.3
-      onnxruntime-common: 1.27.0
+      onnxruntime-common: 1.30.0
       onnxruntime-node: 1.24.3
       onnxruntime-web: 1.26.0-dev.20260416-b7804b056c
       sharp: 0.35.5(@types/node@22.19.15)
@@ -39995,18 +39988,13 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.10.0
 
-  '@opentelemetry/api-logs@0.221.0':
-    dependencies:
-      '@opentelemetry/api': 1.10.0
-    optional: true
-
   '@opentelemetry/api-logs@0.222.0':
     dependencies:
-      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api': 1.10.0
 
   '@opentelemetry/api-logs@0.223.0':
     dependencies:
-      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api': 1.10.0
 
   '@opentelemetry/api@1.10.0': {}
 
@@ -47276,7 +47264,7 @@ snapshots:
       '@datadog/pprof': 5.20.0
       '@datadog/wasm-js-rewriter': 5.0.4
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/api-logs': 0.221.0
+      '@opentelemetry/api-logs': 0.223.0
       oxc-parser: 0.132.0
 
   debounce-fn@6.0.0:
@@ -52306,8 +52294,6 @@ snapshots:
   onnxruntime-common@1.24.0-dev.20251116-b39e144322: {}
 
   onnxruntime-common@1.24.3: {}
-
-  onnxruntime-common@1.27.0: {}
 
   onnxruntime-common@1.30.0: {}
 

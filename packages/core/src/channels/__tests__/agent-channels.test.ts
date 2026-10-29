@@ -867,6 +867,31 @@ describe('AgentChannels', () => {
         expect(adapter.editMessage).not.toHaveBeenCalled();
       });
 
+      it('does not resolve an approval when the action id has a suffix after the tool call id', async () => {
+        const { dispatchApproval, dispatchDecline, click } = await setup({ requesterId: 'alice' });
+
+        await click('tool_approve:tool-call-1:extra', 'alice');
+        await click('tool_deny:tool-call-1:extra', 'alice');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(dispatchDecline).not.toHaveBeenCalled();
+      });
+
+      it('resolves an approval when the tool call id contains a colon', async () => {
+        const ctx = await setup({ requesterId: 'alice' });
+        (ctx.channels as any).pendingApprovalCards.set('call:1', {
+          runId: 'run-2',
+          toolName: 'lookup',
+          args: {},
+          requesterId: 'alice',
+        });
+
+        await ctx.click('tool_approve:call:1', 'alice');
+
+        expect(ctx.dispatchApproval).toHaveBeenCalledTimes(1);
+        expect(ctx.dispatchApproval).toHaveBeenCalledWith(expect.objectContaining({ toolCallId: 'call:1' }));
+      });
+
       it('lets the requester approve', async () => {
         const { dispatchApproval, click } = await setup({ requesterId: 'alice' });
         await click('tool_approve:tool-call-1', 'alice');

@@ -1,4 +1,3 @@
-import { MastraFGAPermissions } from '../../auth/ee';
 import type { MastraServerCache } from '../../cache/base';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
@@ -9,9 +8,11 @@ import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import { LOCAL_MODEL_REQUEST_KEY } from '../../loop/run-scope-keys';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
+import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
 import type { MemoryConfig } from '../../memory';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
@@ -62,7 +63,6 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import {
   EXECUTION_ABANDONED_ERROR_ID,
   ExecutionFence,
-  assertExecutionOwned,
   executionLeaseKey,
   fencePubSub,
   readRunGeneration,
@@ -73,7 +73,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
-import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from './memory-fga';
+import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { recordRunSavedMessages } from './run-message-refs';
@@ -114,6 +114,17 @@ import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
+
+function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
+  const scope = (entry.runScope ??= createRunScope());
+  scope.delete(LOCAL_MODEL_REQUEST_KEY);
+  const fence = entry.executionFence;
+  return () => {
+    const current = getRunRegistryEntry(runId, mastra);
+    if (current?.runScope !== scope || current.executionFence !== fence || fence?.isLost()) return undefined;
+    return scope.get(LOCAL_MODEL_REQUEST_KEY);
+  };
+}
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
@@ -2404,43 +2415,7 @@ export class DurableAgent<
   }
 
   private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    const entry = getRunRegistryEntry(runId, this.#mastra);
-    const state = workflowInput.state;
-    if (
-      !entry?.saveQueueManager ||
-      !entry.memory ||
-      !entry.messageList ||
-      !state?.threadId ||
-      !state.resourceId ||
-      state.memoryConfig?.readOnly ||
-      entry.tripwire
-    ) {
-      return;
-    }
-
-    const requestContext = entry.requestContext;
-    await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
-      mastra: this.#mastra,
-      user: requestContext?.get('user'),
-      threadId: state.threadId,
-      resourceId: state.resourceId,
-      agentId: workflowInput.agentId,
-      requestContext,
-      permission: MastraFGAPermissions.MEMORY_WRITE,
-      actor: workflowInput.options?.actor,
-    });
-    // Input membership is also used by OM and tool context, not just persistence.
-    // Save a clone so later consumers still see the accepted request; saves upsert by ID.
-    await entry.saveQueueManager.flushMessages(entry.messageList.clone(), state.threadId, state.memoryConfig, {
-      throwOnError: true,
-      beforePersist: () =>
-        assertExecutionOwned({
-          runId,
-          agentId: workflowInput.agentId,
-          mastra: this.#mastra,
-          requestContext,
-        }),
-    });
+    await persistDurableRunInput(runId, workflowInput, this.#mastra);
   }
 
   /**
@@ -3142,6 +3117,9 @@ export class DurableAgent<
     }
     this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
+    // Share the scope before either registry copies the entry.
+    const readLocalRequest = createLocalRequestReader(runId, registryEntry, this.#mastra);
+
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
@@ -3213,6 +3191,7 @@ export class DurableAgent<
       pubsub: this.pubsub,
       runId,
       minGeneration: executionFence.generation,
+      readLocalRequest,
       messageId,
       model: {
         modelId: workflowInput.modelConfig.modelId,
@@ -4765,6 +4744,9 @@ export class DurableAgent<
     }
     this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
+    // Share the scope before either registry copies the entry.
+    const readLocalRequest = createLocalRequestReader(runId, registryEntry, this.#mastra);
+
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
@@ -4809,6 +4791,7 @@ export class DurableAgent<
       pubsub: this.pubsub,
       runId,
       minGeneration: executionFence.generation,
+      readLocalRequest,
       messageId,
       model: {
         modelId: workflowInput.modelConfig.modelId,

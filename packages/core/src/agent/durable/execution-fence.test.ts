@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
+import { MastraTimeoutError } from '../../loop/timeout';
 import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
@@ -16,6 +17,7 @@ import {
   EXECUTION_LEASE_RENEW_INTERVAL_MS,
   EXECUTION_LEASE_TTL_MS,
   EXECUTION_SUPERSEDED_ERROR_ID,
+  EXECUTION_TIMED_OUT_ERROR_ID,
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   executionLeaseKey,
@@ -25,6 +27,8 @@ import {
   setExecutionClaim,
   withExecutionFence,
 } from './execution-fence';
+import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import type { RunRegistryEntry } from './run-registry';
 
 const agentId = 'agent-1';
 const key = (runId: string) => executionLeaseKey(agentId, runId);
@@ -288,6 +292,33 @@ describe('assertExecutionOwned', () => {
     await expect(
       assertExecutionOwned({ runId: 'run-1', agentId, requestContext: new RequestContext(), mastra: undefined }),
     ).resolves.toBeUndefined();
+  });
+
+  describe('a run without an execution claim', () => {
+    const runId = 'claimless-run';
+    const withAbortReason = (reason: unknown) => {
+      const controller = new AbortController();
+      controller.abort(reason);
+      setRunRegistryEntry(runId, { abortSignal: controller.signal } as unknown as RunRegistryEntry, undefined);
+    };
+    const assertOwned = () =>
+      assertExecutionOwned({ runId, agentId, requestContext: new RequestContext(), mastra: undefined });
+
+    afterEach(() => deleteRunRegistryEntry(runId, undefined));
+
+    it('loses ownership once its total timeout fires', async () => {
+      withAbortReason(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 1_000 }));
+      await expect(assertOwned()).rejects.toMatchObject({ id: EXECUTION_TIMED_OUT_ERROR_ID });
+    });
+
+    it('keeps ownership after an abort that is not a timeout', async () => {
+      withAbortReason(new Error('user stopped the run'));
+      await expect(assertOwned()).resolves.toBeUndefined();
+    });
+
+    it('keeps ownership without a registry entry', async () => {
+      await expect(assertOwned()).resolves.toBeUndefined();
+    });
   });
 
   it('always passes under NoopLeaseProvider', async () => {

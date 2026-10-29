@@ -11,7 +11,7 @@ import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import { resolveApiProviderId } from '../../../../llm/model/router';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
-import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
+import { LOCAL_MODEL_REQUEST_KEY, STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
@@ -366,6 +366,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
       }
 
+      let request: any = {};
+
       // Emit error + step-finish chunks and return a bail response. This
       // mirrors the regular agent which sets stepResult.reason = 'error' and
       // emits a deferred error chunk rather than crashing the loop. Used by
@@ -376,6 +378,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         signalPreempted = false,
       ): Promise<DurableLLMStepOutput> => {
         ownership?.throwIfLost();
+        // Even an empty failing request must replace the previous step's request.
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.runScope?.set(LOCAL_MODEL_REQUEST_KEY, request);
         const usage = {
           inputTokens: undefined,
           outputTokens: undefined,
@@ -685,6 +689,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           ownership?.throwIfLost();
+          request = {};
           // Capture this attempt before processors can rotate the active id. The
           // fallback callback covers failures before a stream can materialize;
           // it resolves currentMessageId only when the terminal error is known.
@@ -1241,7 +1246,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 7. Track state during streaming
             let warnings: any[] = [];
-            let request: any = {};
             let rawResponse: any = {};
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';
@@ -2038,6 +2042,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // Set when output processors ran on this chunk: the processed chunk
                 // (what the client received), or null when a processor dropped it.
                 let processedChunk: typeof clientChunk | null | undefined;
+                if (rawChunk.type === 'step-finish') {
+                  registryEntry?.runScope?.set(LOCAL_MODEL_REQUEST_KEY, request);
+                }
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     // The rewritten provider 'finish' chunk carries no response metadata;
@@ -2844,7 +2851,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 isContinued: shouldRetry || (!processOutputStepTripwire && isContinued),
                 totalUsage: usage,
                 headers: rawResponse?.headers,
-                request,
                 tripwire: stepTripwire,
                 // The id may have rotated in this step (retry feedback, signals, processors);
                 // the next iteration must continue and roll back that message, not the old one.
@@ -2856,7 +2862,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 timestamp: responseMetadata.timestamp || new Date().toISOString(),
                 providerMetadata: responseMetadata,
                 headers: rawResponse?.headers,
-                request,
               },
               state: typedInput.state,
               // Pass span data so tool calls can be children of model_step

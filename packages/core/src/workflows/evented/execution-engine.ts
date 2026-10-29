@@ -116,6 +116,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       isForeignExecution = undefined;
     }
 
+    let pendingCleanupFinish: Event | undefined;
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
       // Another execution of this run (one that lost it to recover(), say) still
       // publishes its finish under the same runId; it isn't this caller's result.
@@ -124,9 +125,34 @@ export class EventedExecutionEngine extends ExecutionEngine {
         return;
       }
 
-      if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
+      if (
+        [
+          'workflow.end',
+          'workflow.fail',
+          'workflow.suspend',
+          'workflow.publish-failed',
+          'workflow.finish-cleanup-complete',
+        ].includes(event.type)
+      ) {
         await ack?.();
+        if (
+          (event.type === 'workflow.end' ||
+            event.type === 'workflow.fail' ||
+            event.type === 'workflow.publish-failed') &&
+          event.data.finishPendingCleanup
+        ) {
+          pendingCleanupFinish = event;
+          return;
+        }
+        if (event.type === 'workflow.finish-cleanup-complete') {
+          if (!pendingCleanupFinish) return;
+          event = pendingCleanupFinish;
+        }
         await pubsub.unsubscribe('workflows-finish', finishCb);
+        if (event.type === 'workflow.publish-failed') {
+          rejectResult(new Error(event.data.message));
+          return;
+        }
         // Re-hydrate serialized errors back to Error instances when workflow fails
         if (event.type === 'workflow.fail' && event.data.stepResults) {
           event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);

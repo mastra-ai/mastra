@@ -6,6 +6,7 @@ import {
   resolveLaunchViewport,
 } from '@mastra/core/browser';
 import type {
+  BrowserCookie,
   BrowserState,
   BrowserTabState,
   BrowserToolError,
@@ -103,6 +104,8 @@ export class AgentBrowser extends MastraBrowser {
         // `isRemoteThreadBrowser`.
         this.setupCloseListenerForThread(manager, threadId, this.isRemoteThreadBrowser());
       },
+      // Cookies go in before saved tabs reload, so restored pages load signed in.
+      onBrowserOpened: (threadId: string) => this.addPendingCookies(threadId),
     };
     const createTm =
       config.createThreadManager ??
@@ -159,7 +162,16 @@ export class AgentBrowser extends MastraBrowser {
       // Fall through to create a session for DEFAULT_THREAD_ID
     }
 
-    return this.threadManager.getManagerForThread(effectiveThreadId);
+    const manager = await this.threadManager.getManagerForThread(effectiveThreadId);
+    await this.addPendingCookies(effectiveThreadId);
+    return manager;
+  }
+
+  protected override async addCookiesToOpenBrowser(cookies: BrowserCookie[], threadId: string): Promise<boolean> {
+    const context = this.threadManager.getExistingManagerForThread(threadId)?.getContext();
+    if (!context) return false;
+    await context.addCookies(cookies);
+    return true;
   }
 
   // ---------------------------------------------------------------------------
@@ -413,9 +425,12 @@ export class AgentBrowser extends MastraBrowser {
     const threadId = explicitThreadId ?? this.getCurrentThread();
     // For thread scope, always use threadManager.getPageForThread
     if (scope === 'thread') {
-      return this.threadManager.getPageForThread(threadId);
+      const manager = await this.threadManager.getManagerForThread(threadId);
+      await this.addPendingCookies(threadId);
+      return manager.getPage();
     }
     if (!this.sharedManager) throw new Error('Browser not launched');
+    await this.addPendingCookies(threadId);
     return this.sharedManager.getPage();
   }
 

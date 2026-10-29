@@ -498,3 +498,153 @@ describe('resolveLaunchViewport', () => {
     expect(resolveLaunchViewport(undefined)).toEqual({ viewport: undefined });
   });
 });
+
+describe('MastraBrowser.setCookies', () => {
+  class NoCookieBrowser extends MastraBrowser {
+    readonly id = 'no-cookies';
+    readonly name = 'NoCookieBrowser';
+    readonly provider = 'no-cookies';
+    protected async doLaunch() {}
+    protected async doClose() {}
+    protected async getActivePage() {
+      return null;
+    }
+    protected getBrowserStateForThread() {
+      return null;
+    }
+    getTools() {
+      return {};
+    }
+  }
+
+  class QueueingBrowser extends NoCookieBrowser {
+    open = false;
+    added: string[] = [];
+    values: Record<string, string> = {};
+    protected override async addCookiesToOpenBrowser(cookies: { name: string; value: string }[]) {
+      // Like a real browser, answering takes a moment.
+      await new Promise(resolve => setTimeout(resolve, 1));
+      if (!this.open) return false;
+      const rejected = cookies.find(cookie => cookie.value === 'rejected');
+      if (rejected) throw new Error(`browser rejected ${rejected.name}`);
+      for (const cookie of cookies) {
+        this.added.push(cookie.name);
+        this.values[cookie.name] = cookie.value;
+      }
+      return true;
+    }
+    async openThread(threadId: string) {
+      this.open = true;
+      await this.addPendingCookies(threadId);
+    }
+  }
+
+  it('forgets a cookie the browser rejected, so later cookies still get added', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+    await browser.setCookies([{ name: 'bad', value: 'rejected', url: 'https://example.com' }], 'thread-1');
+
+    await expect(browser.openThread('thread-1')).rejects.toThrow('browser rejected bad');
+    await browser.setCookies([{ name: 'good', value: 'v', url: 'https://example.com' }], 'thread-1');
+
+    expect(browser.added).toEqual(['good']);
+  });
+
+  it("doesn't keep a record for every thread that closes", async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+    for (const id of ['a', 'b', 'c']) {
+      await browser.setCookies([{ name: 'n', value: 'v', url: 'https://example.com' }], id);
+      await browser.closeThreadSession(id);
+    }
+
+    expect(browser['cookieQueueGenerations'].size).toBe(0);
+    expect(browser['pendingCookies'].size).toBe(0);
+  });
+
+  it('keeps the newest value when a cookie set before the browser opens is set again after', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'shared' });
+    await browser.setCookies([{ name: 'session', value: 'old', url: 'https://example.com' }]);
+    browser.open = true;
+
+    await browser.setCookies([{ name: 'session', value: 'new', url: 'https://example.com' }]);
+    await browser.openThread('thread-1');
+
+    expect(browser.values.session).toBe('new');
+  });
+
+  it('keeps every cookie from calls that overlap before the browser opens', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+
+    await Promise.all([
+      browser.setCookies([{ name: 'a', value: 'v', url: 'https://example.com' }], 'thread-1'),
+      browser.setCookies([{ name: 'b', value: 'v', url: 'https://example.com' }], 'thread-1'),
+    ]);
+    await browser.openThread('thread-1');
+
+    expect(browser.added.sort()).toEqual(['a', 'b']);
+  });
+
+  it('rejects a cookie with neither a url nor a domain and path', async () => {
+    const browser = new QueueingBrowser({ headless: true });
+
+    await expect(browser.setCookies([{ name: 'bad', value: 'v', domain: 'example.com' }])).rejects.toThrow(
+      'Cookie "bad" needs a url, or a domain and a path',
+    );
+    browser.open = true;
+    await browser.openThread('thread-1');
+    expect(browser.added).toEqual([]);
+  });
+
+  it.each(['closeThreadSession', 'close'] as const)(
+    "doesn't bring back cookies from a setCookies call still running when %s is called",
+    async method => {
+      const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+
+      const pending = browser.setCookies([{ name: 'secret', value: 'v', url: 'https://example.com' }], 'thread-1');
+      await (method === 'close' ? browser.close() : browser.closeThreadSession('thread-1'));
+      await pending;
+      await browser.openThread('thread-1');
+
+      expect(browser.added).toEqual([]);
+    },
+  );
+
+  it('drops cookies queued for a thread that closes before its browser opens', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+    await browser.setCookies([{ name: 'kept', value: 'v', url: 'https://example.com' }], 'thread-1');
+    await browser.setCookies([{ name: 'dropped', value: 'v', url: 'https://example.com' }], 'thread-2');
+
+    await browser.closeThreadSession('thread-2');
+    await browser.openThread('thread-1');
+    await browser.openThread('thread-2');
+
+    expect(browser.added).toEqual(['kept']);
+  });
+
+  it('shares one queue across threads with a shared browser', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'shared' });
+    await browser.setCookies([{ name: 'shared', value: 'v', url: 'https://example.com' }], 'thread-1');
+
+    await browser.closeThreadSession('thread-1');
+    await browser.openThread('thread-2');
+
+    expect(browser.added).toEqual(['shared']);
+  });
+
+  it('drops every queued cookie when the browser closes', async () => {
+    const browser = new QueueingBrowser({ headless: true });
+    await browser.setCookies([{ name: 'dropped', value: 'v', url: 'https://example.com' }], 'thread-1');
+
+    await browser.close();
+    await browser.openThread('thread-1');
+
+    expect(browser.added).toEqual([]);
+  });
+
+  it('fails for a provider that cannot set cookies', async () => {
+    const browser = new NoCookieBrowser({ headless: true });
+
+    await expect(browser.setCookies([{ name: 'a', value: 'b', url: 'https://example.com' }])).rejects.toThrow(
+      'no-cookies does not support setting cookies',
+    );
+  });
+});

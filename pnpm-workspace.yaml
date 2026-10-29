@@ -463,7 +463,7 @@ overrides:
   '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.40
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.42
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
   # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
   # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.
