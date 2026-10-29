@@ -72,7 +72,7 @@ const STATUS_OPTIONS = [
 
 const PanelContent = ({ title, description }: { title: string; description: string }) => (
   <div className="grid gap-1">
-    <h2 className={'text-subheading text-foreground'}>{title}</h2>
+    <h2 className="text-subheading text-foreground">{title}</h2>
     <p className="text-caption text-muted-foreground">{description}</p>
   </div>
 );
@@ -161,7 +161,7 @@ export const SearchAndFilter: Story = {
         <TabbedContainer defaultTab="overview">
           <TabbedContainer.Panel value="overview" label="Overview">
             <div className="grid gap-1">
-              <h2 className={'text-subheading text-foreground'}>Evaluation overview</h2>
+              <h2 className="text-subheading text-foreground">Evaluation overview</h2>
               <p className="text-caption text-muted-foreground">
                 Any product content can share the frame with data-heavy tabs.
               </p>
@@ -336,7 +336,7 @@ export const OverflowAndClosable: Story = {
             tab.value === 'overview' ? (
               <TabbedContainer.Panel key={tab.value} value={tab.value} label={tab.label} onClose={closeTab(tab.value)}>
                 <div className="grid gap-1">
-                  <h2 className={'text-subheading text-foreground'}>Workspace overview</h2>
+                  <h2 className="text-subheading text-foreground">Workspace overview</h2>
                   <p className="text-caption text-muted-foreground">
                     Arbitrary content shares the same closable tab rail.
                   </p>

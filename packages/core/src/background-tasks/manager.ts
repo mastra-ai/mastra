@@ -6,6 +6,7 @@ import type {
   BackgroundTaskManagerConfig,
   BackgroundTaskStatus,
   EnqueueResult,
+  ResumeOptions,
   TaskContext,
   TaskFilter,
   TaskPayload,
@@ -79,6 +80,15 @@ export class BackgroundTaskManager {
   // recoverable once its owner stops renewing the lease.
   private localReservations = new Map<string, string>();
   private localPendingTaskIds = new Set<string>();
+  // Resumes requested with `onNoSlot: 'queue'` while no slot was free, keyed by
+  // task ID. The rows stay `suspended`; `drainPending()` publishes them first.
+  private localPendingResumes = new Map<string, { resumeData: unknown; suspendedAt: number | null }>();
+  // Portable resumes this process has published that no worker has picked up
+  // yet. The row stays `suspended` until `handleResume` runs, so storage-wide
+  // running counts miss them; `checkConcurrency()` adds them back so one free
+  // slot can't admit several queued resumes. Entries expire after a lease
+  // duration in case the event is lost.
+  private inFlightPortableResumes = new Map<string, { agentId: string; suspendedAt: number | null; until: number }>();
   private drainingPending = false;
 
   // Task IDs this manager currently holds an execution lease for. Populated on
@@ -94,6 +104,11 @@ export class BackgroundTaskManager {
   // process restart. This timer re-runs recovery once the earliest such lease
   // lapses, which lets a crashed owner's tasks settle without a restart.
   private staleRecoveryTimeout?: ReturnType<typeof setTimeout>;
+
+  // Settlement chains of workflow runs started by this manager, plus the run
+  // deletes they spawn. Shutdown drains these so they finish while storage is
+  // still open — Mastra closes storage right after the manager stops.
+  #settlingRuns = new Set<Promise<unknown>>();
 
   // Pubsub callbacks (kept for unsubscribe)
   private workerCallback?: EventCallback;
@@ -131,6 +146,13 @@ export class BackgroundTaskManager {
       throw new Error(
         `BackgroundTaskManager leaseDurationMs must be a finite number of at least 3000ms (received: ${leaseDurationMs})`,
       );
+    }
+    for (const [owner, limit] of Object.entries(config.perOwnerConcurrency ?? {})) {
+      if (!Number.isFinite(limit) || limit < 1) {
+        throw new Error(
+          `BackgroundTaskManager perOwnerConcurrency["${owner}"] must be a finite number of at least 1 (received: ${limit})`,
+        );
+      }
     }
     this.config = {
       ...config,
@@ -209,7 +231,11 @@ export class BackgroundTaskManager {
         if (event.type === 'task.dispatch' || event.type === 'task.restart') {
           handled = await this.handleDispatch(event);
         } else if (event.type === 'task.resume') {
-          handled = await this.handleResume(event);
+          // Tracked so shutdown waits for a resume caught mid-preparation to
+          // decline before storage closes.
+          const resuming = this.handleResume(event);
+          this.#trackSettlingRun(resuming);
+          handled = await resuming;
         } else if (event.type === 'task.cancel') {
           this.handleCancel(event);
         }
@@ -279,7 +305,9 @@ export class BackgroundTaskManager {
     if (cleanupConfig && !this.shuttingDown) {
       const intervalMs = cleanupConfig.cleanupIntervalMs ?? 60_000;
       this.cleanupInterval = setInterval(() => {
-        void this.cleanup();
+        void this.cleanup().catch(error => {
+          this.#mastra?.getLogger?.()?.warn('Background task cleanup failed:', error);
+        });
       }, intervalMs);
     }
 
@@ -384,6 +412,8 @@ export class BackgroundTaskManager {
       maxRetries: payload.maxRetries ?? this.config.defaultRetries?.maxRetries ?? 0,
       timeoutMs: payload.timeoutMs ?? this.config.defaultTimeoutMs,
       createdAt: new Date(),
+      ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {}),
+      ...(payload.metadata ? { metadata: payload.metadata } : {}),
     };
 
     // Register per-task context if provided
@@ -476,6 +506,7 @@ export class BackgroundTaskManager {
         continue;
       }
       this.ownedLeases.delete(taskId);
+      this.localPendingResumes.delete(taskId);
 
       if (previousStatus === 'pending') {
         this.localPendingTaskIds.delete(taskId);
@@ -540,7 +571,7 @@ export class BackgroundTaskManager {
    * `resumeData` is forwarded to the tool's `execute` options on the
    * resumed run.
    */
-  async resume(taskId: string, resumeData?: unknown): Promise<BackgroundTask> {
+  async resume(taskId: string, resumeData?: unknown, options?: ResumeOptions): Promise<BackgroundTask> {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot resume tasks');
     }
@@ -562,13 +593,33 @@ export class BackgroundTaskManager {
     const isProcessAffine = this.taskContexts.has(taskId);
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
-      // Resume sits outside the queue/fallback-sync paths — there's no
-      // synchronous caller to fall back to, and silently leaving the task
+      if (options?.onNoSlot === 'queue') {
+        // The row stays `suspended` until a slot frees and `drainPending()`
+        // publishes the resume. Only this process holds the queued resume, so
+        // if it exits first the task is still a resumable suspended row.
+        // The suspension token ties the queued data to this suspension: if the
+        // task is resumed elsewhere and suspends again, the entry is dropped.
+        this.localPendingResumes.set(taskId, { resumeData, suspendedAt: suspensionToken(task) });
+        return task;
+      }
+      // By default resume sits outside the queue/fallback-sync paths — there's
+      // no synchronous caller to fall back to, and silently leaving the task
       // suspended hides the failure from the caller. Throw and let the
       // caller retry once a slot frees.
       throw new Error(`Concurrency limit reached, cannot resume task "${taskId}" — retry once a slot is available`);
     }
 
+    this.localPendingResumes.delete(taskId);
+    await this.#publishResume(task, resumeData, isProcessAffine);
+    return task;
+  }
+
+  async #publishResume(task: BackgroundTask, resumeData: unknown, isProcessAffine: boolean): Promise<void> {
+    const taskId = task.id;
+    if (this.shuttingDown) {
+      if (isProcessAffine) this.releaseLocalSlot(taskId);
+      throw new Error('BackgroundTaskManager is shutting down, cannot resume tasks');
+    }
     // Resume publishes directly (not via dispatch()), so it needs its own
     // lazy worker start for the library-mode process-restart case.
     await this.#ensureExecutionWorkersStarted();
@@ -586,8 +637,13 @@ export class BackgroundTaskManager {
       if (isProcessAffine) this.releaseLocalSlot(taskId);
       throw error;
     }
-
-    return task;
+    if (!isProcessAffine) {
+      this.inFlightPortableResumes.set(taskId, {
+        agentId: task.agentId,
+        suspendedAt: suspensionToken(task),
+        until: Date.now() + this.config.leaseDurationMs,
+      });
+    }
   }
 
   /**
@@ -659,14 +715,41 @@ export class BackgroundTaskManager {
     const now = Date.now();
 
     const storage = await this.getStorage();
+    if (!storage.supportsTaskExpiry) {
+      // Adapters written before `expiresAt` existed ignore `hasExpiresAt` and
+      // treat an unknown `dateFilterBy` as `createdAt`, so the expiry pass
+      // would delete every finished row. Keep the global TTLs only.
+      await storage.deleteTasks({
+        status: ['completed'],
+        toDate: new Date(now - completedTtlMs),
+        dateFilterBy: 'completedAt',
+      });
+      await storage.deleteTasks({
+        status: ['failed', 'cancelled', 'timed_out'],
+        toDate: new Date(now - failedTtlMs),
+        dateFilterBy: 'completedAt',
+      });
+      return;
+    }
+    // Rows with their own `expiresAt` are retained until that deadline instead
+    // of the global TTLs. Only terminal rows are deleted, so a live row is never
+    // removed from under its lease owner.
+    await storage.deleteTasks({
+      status: ['completed', 'failed', 'cancelled', 'timed_out'],
+      toDate: new Date(now),
+      dateFilterBy: 'expiresAt',
+    });
+
     await storage.deleteTasks({
       status: ['completed'],
+      hasExpiresAt: false,
       toDate: new Date(now - completedTtlMs),
       dateFilterBy: 'completedAt',
     });
 
     await storage.deleteTasks({
       status: ['failed', 'cancelled', 'timed_out'],
+      hasExpiresAt: false,
       toDate: new Date(now - failedTtlMs),
       dateFilterBy: 'completedAt',
     });
@@ -987,6 +1070,9 @@ export class BackgroundTaskManager {
     // Retryable running tasks intentionally remain `running` in storage so
     // the next process can recover them through recoverStaleTasks(). Tasks
     // without retries retain the existing terminal cancellation behavior.
+    // Snapshot the held leases now: waiting for runs to settle below removes
+    // them from `ownedLeases`, but their leases still need handing back.
+    const leasesToRelease = new Set(this.ownedLeases);
     const activeTaskIds = [...this.activeAbortControllers.keys()];
     this.#abortActiveControllers();
     const cancellationResults = await this.#waitForShutdownStep(
@@ -1000,6 +1086,18 @@ export class BackgroundTaskManager {
           ?.warn(`Failed to cancel background task ${activeTaskIds[index]} during shutdown:`, result.reason as any);
       }
     });
+
+    // Aborted runs settle asynchronously and then delete their workflow run.
+    // Let them finish while storage is still open — Mastra closes it as soon
+    // as this returns. Re-snapshot because a settling run adds its delete.
+    const awaitedRuns = new Set<Promise<unknown>>();
+    for (;;) {
+      const pending = [...this.#settlingRuns].filter(run => !awaitedRuns.has(run));
+      if (pending.length === 0) break;
+      pending.forEach(run => awaitedRuns.add(run));
+      const settled = await this.#waitForShutdownStep('background task run settlement', Promise.allSettled(pending));
+      if (!settled) break;
+    }
 
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
@@ -1035,6 +1133,8 @@ export class BackgroundTaskManager {
     this.taskContexts.clear();
     this.localReservations.clear();
     this.localPendingTaskIds.clear();
+    this.localPendingResumes.clear();
+    this.inFlightPortableResumes.clear();
     this.staticExecutors.clear();
 
     // Stop renewing leases and hand back the ones still held so another worker
@@ -1048,9 +1148,10 @@ export class BackgroundTaskManager {
       clearTimeout(this.staleRecoveryTimeout);
       this.staleRecoveryTimeout = undefined;
     }
-    if (this.ownedLeases.size > 0) {
-      const ownedTaskIds = [...this.ownedLeases];
-      this.ownedLeases.clear();
+    for (const taskId of this.ownedLeases) leasesToRelease.add(taskId);
+    this.ownedLeases.clear();
+    if (leasesToRelease.size > 0) {
+      const ownedTaskIds = [...leasesToRelease];
       try {
         const storage = await this.getStorage();
         // Fenced on `ownerId` so a task already reclaimed or finished elsewhere
@@ -1316,25 +1417,27 @@ export class BackgroundTaskManager {
       if (this.shuttingDown) return false;
       const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
       const action = shouldRestart ? 'restart' : 'start';
-      void runPromise
-        .then(
-          result => {
-            if (result.status !== 'suspended') {
-              void workflow.deleteWorkflowRunById(taskId);
-            }
-            if (result.status !== 'success' && result.status !== 'suspended') {
-              return this.failUnsettledTask(taskId, action, workflowRunError(result));
-            }
-          },
-          err => this.failUnsettledTask(taskId, action, err),
-        )
-        .finally(() => {
-          // The run has settled (suspended or terminal), so this worker no
-          // longer owns the lease: stop renewing it.
-          this.ownedLeases.delete(taskId);
-          this.releaseLocalSlot(taskId);
-          void this.drainPending();
-        });
+      this.#trackSettlingRun(
+        runPromise
+          .then(
+            result => {
+              if (result.status !== 'suspended') {
+                this.#deleteSettledRun(workflow, taskId);
+              }
+              if (result.status !== 'success' && result.status !== 'suspended') {
+                return this.failUnsettledTask(taskId, action, workflowRunError(result));
+              }
+            },
+            err => this.failUnsettledTask(taskId, action, err),
+          )
+          .finally(() => {
+            // The run has settled (suspended or terminal), so this worker no
+            // longer owns the lease: stop renewing it.
+            this.ownedLeases.delete(taskId);
+            this.releaseLocalSlot(taskId);
+            void this.drainPending();
+          }),
+      );
     } catch (error) {
       this.releaseLocalSlot(taskId);
       this.ownedLeases.delete(taskId);
@@ -1368,6 +1471,7 @@ export class BackgroundTaskManager {
   private async handleResume(event: Event): Promise<boolean> {
     if (this.shuttingDown) return false;
     const { taskId, resumeData } = event.data;
+    this.inFlightPortableResumes.delete(taskId);
 
     const storage = await this.getStorage();
     if (this.shuttingDown) return false;
@@ -1399,6 +1503,8 @@ export class BackgroundTaskManager {
       void this.drainPending();
       return true;
     }
+    // This suspension is answered; a resume queued here for it is now stale.
+    this.localPendingResumes.delete(taskId);
     this.ownedLeases.add(taskId);
     const resumedTask = await storage.getTask(taskId);
     if (resumedTask) {
@@ -1414,27 +1520,72 @@ export class BackgroundTaskManager {
     // `createRun({ runId })` reattaches to the existing snapshot when given a
     // stable runId — we don't want a fresh run.
     const run = await workflow.createRun({ runId: taskId });
-    void run
-      .resume({ resumeData })
-      .then(
-        result => {
-          if (result.status !== 'suspended') {
-            void workflow.deleteWorkflowRunById(taskId);
-          }
-          if (result.status !== 'success' && result.status !== 'suspended') {
-            return this.failUnsettledTask(taskId, 'resume', workflowRunError(result));
-          }
-        },
-        err => this.failUnsettledTask(taskId, 'resume', err),
-      )
-      .finally(() => {
-        // The resumed run has settled (suspended or terminal): stop renewing
-        // the lease this worker held for it.
-        this.ownedLeases.delete(taskId);
-        this.releaseLocalSlot(taskId);
-        void this.drainPending();
-      });
+    if (this.shuttingDown) {
+      // Starting the run now would outlive shutdown and leave the task
+      // `running`, where recovery restarts it from scratch. Put it back to
+      // `suspended` and leave the event unacked so the resume can be retried.
+      this.ownedLeases.delete(taskId);
+      this.releaseLocalSlot(taskId);
+      await storage
+        .updateTask(
+          taskId,
+          {
+            status: 'suspended',
+            startedAt: task.startedAt,
+            suspendPayload: task.suspendPayload,
+            suspendedAt: task.suspendedAt,
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          },
+          { expectedStatus: 'running' },
+        )
+        .catch(error => {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn(`Failed to restore suspended background task ${taskId} during shutdown:`, error);
+        });
+      return false;
+    }
+    this.#trackSettlingRun(
+      run
+        .resume({ resumeData })
+        .then(
+          result => {
+            if (result.status !== 'suspended') {
+              this.#deleteSettledRun(workflow, taskId);
+            }
+            if (result.status !== 'success' && result.status !== 'suspended') {
+              return this.failUnsettledTask(taskId, 'resume', workflowRunError(result));
+            }
+          },
+          err => this.failUnsettledTask(taskId, 'resume', err),
+        )
+        .finally(() => {
+          // The resumed run has settled (suspended or terminal): stop renewing
+          // the lease this worker held for it.
+          this.ownedLeases.delete(taskId);
+          this.releaseLocalSlot(taskId);
+          void this.drainPending();
+        }),
+    );
     return true;
+  }
+
+  /** Track a run settlement (or its follow-up delete) so shutdown can drain it before storage closes. */
+  #trackSettlingRun(promise: Promise<unknown>): void {
+    const tracked = promise.finally(() => this.#settlingRuns.delete(tracked));
+    this.#settlingRuns.add(tracked);
+    void tracked.catch(error => {
+      this.#mastra?.getLogger?.()?.error('Background task workflow run settlement failed:', error);
+    });
+  }
+
+  #deleteSettledRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
+    this.#trackSettlingRun(
+      workflow.deleteWorkflowRunById(taskId).catch(error => {
+        this.#mastra?.getLogger?.()?.warn(`Failed to delete workflow run for background task ${taskId}:`, error);
+      }),
+    );
   }
 
   /**
@@ -1810,16 +1961,27 @@ export class BackgroundTaskManager {
 
   /**
    * Called when a lease renewal loses its compare-and-set. Renewal normally
-   * fails because the task left `running` (it completed, failed, suspended or
-   * was cancelled), which needs no action. When the task is *still running under
-   * a different owner*, another worker has taken it over, so the local run is
-   * aborted to stop a superseded executor from doing further work. Its fenced
-   * terminal writes would be rejected anyway; aborting just stops the wasted run.
+   * fails because the task left `running` (it completed, failed or suspended),
+   * which needs no action. Two cases still have a local executor to stop:
+   * - The task was *cancelled*, possibly by another process whose `task.cancel`
+   *   event never reached this one. The local run is aborted the same way a
+   *   local `cancel()` aborts it, so it settles as cancelled.
+   * - The task is *still running under a different owner*: another worker has
+   *   taken it over. Its fenced terminal writes would be rejected anyway;
+   *   aborting just stops the wasted run.
    */
   async #abortSupersededRun(taskId: string): Promise<void> {
     try {
       const storage = await this.getStorage();
       const current = await storage.getTask(taskId);
+      if (current?.status === 'cancelled') {
+        const controller = this.activeAbortControllers.get(taskId);
+        if (!controller) return;
+        controller.abort(new Error('Task cancelled'));
+        this.activeAbortControllers.delete(taskId);
+        this.deregisterTaskContext(taskId);
+        return;
+      }
       if (current?.status !== 'running') return;
       if (current.ownerId === this.workerId || !current.ownerId) return;
       const controller = this.activeAbortControllers.get(taskId);
@@ -1835,6 +1997,9 @@ export class BackgroundTaskManager {
     const intervalMs = Math.max(1_000, Math.floor(this.config.leaseDurationMs / 3));
     this.heartbeatInterval = setInterval(() => {
       void this.#renewOwnedLeases();
+      // Storage-wide admission can be freed by another process, which never
+      // triggers a local drain. Retry queued resumes on each tick.
+      if (this.localPendingResumes.size > 0) void this.drainPending();
     }, intervalMs);
     // Never keep the process alive just to renew leases.
     this.heartbeatInterval.unref?.();
@@ -1848,10 +2013,15 @@ export class BackgroundTaskManager {
     for (const agentId of this.localReservations.values()) {
       if (agentId === task.agentId) agentRunning++;
     }
-    if (agentRunning >= this.config.perAgentConcurrency) return false;
+    if (agentRunning >= this.#ownerLimit(task.agentId)) return false;
 
     this.localReservations.set(task.id, task.agentId);
     return true;
+  }
+
+  #ownerLimit(agentId: string): number {
+    const overrides = this.config.perOwnerConcurrency;
+    return overrides && Object.hasOwn(overrides, agentId) ? overrides[agentId]! : this.config.perAgentConcurrency;
   }
 
   private releaseLocalSlot(taskId: string): void {
@@ -1860,17 +2030,40 @@ export class BackgroundTaskManager {
 
   private async checkConcurrency(agentId: string): Promise<boolean> {
     const storage = await this.getStorage();
-    const globalRunning = await storage.getRunningCount();
+    // Another worker may already have handled a resume this manager published.
+    await this.#pruneInFlightResumes();
+    let inFlightForAgent = 0;
+    for (const entry of this.inFlightPortableResumes.values()) {
+      if (entry.agentId === agentId) inFlightForAgent++;
+    }
+    const globalRunning = (await storage.getRunningCount()) + this.inFlightPortableResumes.size;
     if (globalRunning >= this.config.globalConcurrency) {
       return false;
     }
 
-    const agentRunning = await storage.getRunningCountByAgent(agentId);
-    if (agentRunning >= this.config.perAgentConcurrency) {
+    const agentRunning = (await storage.getRunningCountByAgent(agentId)) + inFlightForAgent;
+    if (agentRunning >= this.#ownerLimit(agentId)) {
       return false;
     }
 
     return true;
+  }
+
+  async #pruneInFlightResumes(): Promise<void> {
+    if (this.inFlightPortableResumes.size === 0) return;
+    const storage = await this.getStorage();
+    const now = Date.now();
+    for (const [taskId, entry] of [...this.inFlightPortableResumes]) {
+      if (entry.until <= now) {
+        this.inFlightPortableResumes.delete(taskId);
+        continue;
+      }
+      // Once the row leaves this suspension, storage counts it (or it is done).
+      const task = await storage.getTask(taskId);
+      if (!task || task.status !== 'suspended' || suspensionToken(task) !== entry.suspendedAt) {
+        this.inFlightPortableResumes.delete(taskId);
+      }
+    }
   }
 
   private async drainPending(): Promise<void> {
@@ -1879,6 +2072,31 @@ export class BackgroundTaskManager {
 
     try {
       const storage = await this.getStorage();
+      // Queued resumes go first: they continue work that already started.
+      for (const [taskId, entry] of [...this.localPendingResumes]) {
+        const task = await storage.getTask(taskId);
+        // Drop the entry if the task left the suspension it was queued for —
+        // including being resumed elsewhere and suspending again.
+        if (!task || task.status !== 'suspended' || suspensionToken(task) !== entry.suspendedAt) {
+          this.localPendingResumes.delete(taskId);
+          continue;
+        }
+
+        const isProcessAffine = this.taskContexts.has(taskId);
+        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
+        if (!canRun) continue;
+        if (this.shuttingDown) return;
+
+        this.localPendingResumes.delete(taskId);
+        try {
+          await this.#publishResume(task, entry.resumeData, isProcessAffine);
+        } catch (error) {
+          this.localPendingResumes.set(taskId, entry);
+          this.#mastra?.getLogger?.()?.warn(`background-task resume failed while draining ${taskId}:`, error as any);
+          return;
+        }
+      }
+
       for (const taskId of [...this.localPendingTaskIds]) {
         const task = await storage.getTask(taskId);
         if (!task || task.status !== 'pending') {
@@ -2011,4 +2229,8 @@ export class BackgroundTaskManager {
     // Never keep the process alive just to sweep for stale tasks.
     this.staleRecoveryTimeout.unref?.();
   }
+}
+
+function suspensionToken(task: BackgroundTask): number | null {
+  return task.suspendedAt?.getTime() ?? null;
 }

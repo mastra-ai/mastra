@@ -5,6 +5,7 @@ import {
   TracesExplorerFilterChips,
   TracesExplorerTimeRangeChip,
 } from './traces-explorer-filter-bar';
+import { TracesExplorerHistogram } from './traces-explorer-histogram';
 import { TracesExplorerLayout } from './traces-explorer-layout';
 import { TracesExplorerList } from './traces-explorer-list';
 import { TracesExplorerPanel } from './traces-explorer-panel';
@@ -17,6 +18,7 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   FilterChips: TracesExplorerFilterChips,
   TimeRangeChip: TracesExplorerTimeRangeChip,
   ColumnsMenu: TracesExplorerColumnsMenu,
+  Histogram: TracesExplorerHistogram,
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
 });
@@ -30,12 +32,20 @@ export type {
   TracesExplorerTimeRangeChipProps,
 } from './traces-explorer-filter-bar';
 export type { TracesExplorerPanelProps } from './traces-explorer-panel';
-export { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION, resolveTracesDateWindow } from './traces-explorer-actions';
+export {
+  DEFAULT_TRACES_FILTERS,
+  DEFAULT_TRACES_SORT,
+  EMPTY_TRACES_SELECTION,
+  TRACES_SORT_FIELDS,
+  resolveTracesDateWindow,
+} from './traces-explorer-actions';
 export type {
   TracesExplorerState,
   TracesFilters,
   TracesSelection,
+  TracesSort,
   TracesSortDirection,
+  TracesSortField,
 } from './traces-explorer-actions';
 export {
   useTraceUsageColumns,

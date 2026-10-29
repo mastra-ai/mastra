@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   BookOpen,
   Bot,
-  Box,
   Brain,
   Building2,
   Cable,
@@ -56,7 +55,8 @@ export const ACCOUNT_SETTINGS_GROUP = {
       id: 'connections',
       label: SETTINGS_SECTION_LABELS.connections,
       icon: Cable,
-      searchText: 'your personal connections connected accounts slack communication integrations mcp claude chatgpt',
+      searchText:
+        'personal organization connections connected accounts slack integrations github gitlab tokens pat mcp claude chatgpt',
     },
   ],
 } satisfies SettingsNavGroup;
@@ -103,13 +103,8 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
         icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
-      },
-      {
-        id: 'environment',
-        label: SETTINGS_SECTION_LABELS.environment,
-        icon: Box,
-        searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
+        searchText:
+          'repositories source control git branches remotes code worktrees clone order pre-clone setup teardown github gitlab',
       },
       {
         id: 'intake',
@@ -121,7 +116,8 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,
         icon: Building2,
-        searchText: 'factory project organization manage remove delete danger',
+        searchText:
+          'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
       },
     ],
   },

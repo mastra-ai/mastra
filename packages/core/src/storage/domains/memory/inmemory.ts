@@ -812,9 +812,8 @@ export class InMemoryMemory extends MemoryStorage {
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         if (direction === 'ASC') {
           return aValue - bValue;
-        } else {
-          return bValue - aValue;
         }
+        return bValue - aValue;
       }
       return direction === 'ASC'
         ? String(aValue).localeCompare(String(bValue))

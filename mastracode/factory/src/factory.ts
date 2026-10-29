@@ -33,6 +33,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
@@ -64,6 +65,7 @@ import {
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
+import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
@@ -123,6 +125,7 @@ import { createSourceControlTools } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
+import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -303,6 +306,13 @@ export interface MastraFactoryConfig {
   configVersion?: string;
   /** Board definitions installed for this Factory instance. */
   boards?: readonly InstalledBoard[];
+  /**
+   * App skills written in code with `createSkill()` from `@mastra/core/skills`.
+   * Every Factory session can load them, and a board phase runs one through
+   * `runner.skill`. A skill here wins over a `factory-skills/` folder skill or
+   * a bundled skill of the same name. Names must be unique.
+   */
+  skills?: readonly InlineSkill[];
   /** Whether the built-in Work and Review boards are installed. Default: true. */
   includeDefaultBoards?: boolean;
 
@@ -450,11 +460,14 @@ export class MastraFactory {
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
   readonly #boards: BoardRegistry;
+  readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #channelShutdowns: Array<() => Promise<void>> = [];
+  #shutdownPromise: Promise<void> | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
@@ -478,6 +491,10 @@ export class MastraFactory {
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
           'rules on the owning board via defineBoard({ tools }).',
       );
+    }
+    this.#skills = assertFactorySkills(config.skills);
+    for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
+      console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
@@ -809,7 +826,7 @@ export class MastraFactory {
       | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
-    );
+    ) as GitLabIntegrationBase | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
@@ -1057,9 +1074,8 @@ export class MastraFactory {
                   id: installationId,
                 });
                 if (!installation) return null;
-                const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
-                const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
-                if (!selected) return null;
+                const selected = await githubIntegration.getInstallationRepo(Number(installation.externalId), slug);
+                if (!selected || selected.id.toString() !== externalId || selected.fullName !== slug) return null;
                 return githubIntegration.sourceControlStorage.repositories.upsert({
                   orgId,
                   input: {
@@ -1110,14 +1126,36 @@ export class MastraFactory {
             },
           }
         : {}),
-      ...(typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function'
+      ...(githubIntegration || gitlabIntegration
         ? {
             onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
-              void githubIntegration
-                .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
-                .catch(error => {
-                  console.warn('[factory] Failed to import a linked repository backlog:', error);
-                });
+              void (async () => {
+                const linkedInGithub =
+                  githubIntegration &&
+                  (await sourceControlStorage.forIntegration('github').projectRepositories.get({
+                    orgId,
+                    id: projectRepository.id,
+                  }));
+                if (linkedInGithub) {
+                  await githubIntegration.ingestLinkedRepositoryBacklog({
+                    orgId,
+                    projectRepositoryId: projectRepository.id,
+                  });
+                } else if (gitlabIntegration) {
+                  const linkedInGitlab = await sourceControlStorage.forIntegration('gitlab').projectRepositories.get({
+                    orgId,
+                    id: projectRepository.id,
+                  });
+                  if (linkedInGitlab) {
+                    await gitlabIntegration.ingestLinkedRepositoryBacklog({
+                      orgId,
+                      projectRepositoryId: projectRepository.id,
+                    });
+                  }
+                }
+              })().catch(error => {
+                console.warn('[factory] Failed to import a linked repository backlog:', error);
+              });
             },
           }
         : {}),
@@ -1257,6 +1295,7 @@ export class MastraFactory {
         subagents: [],
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
+          skills: this.#skills,
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           sourceControls: integrations.flatMap(integration =>
@@ -1690,6 +1729,7 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             deploymentModelProviders,
+            skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
@@ -1939,6 +1979,7 @@ export class MastraFactory {
           .join(', ')}] all provide channels, but only one may. Remove all but one.`,
       );
     }
+    this.#channelShutdowns = [];
     for (const { integration } of channelRegistrations) {
       const context = buildIntegrationContext(
         {
@@ -1960,8 +2001,13 @@ export class MastraFactory {
         },
         integration.id,
       );
-      // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
+      // Integrations return a channels CONFIG; the factory owns construction and teardown.
+      const channels = new AgentControllerChannels(integration.channels!(context));
+      prepared.base.controller.setChannels(channels);
+      for (const adapter of Object.values(channels.adapters)) {
+        const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
+        if (disconnect) this.#channelShutdowns.push(() => disconnect.call(adapter));
+      }
     }
 
     // Feed publishers mirror web-feed comments outward (a chat bridge, a
@@ -2067,8 +2113,28 @@ export class MastraFactory {
     this.#dispatcher?.start();
   }
 
-  /** Stop Factory-owned background dispatch before the host process shuts down. */
+  /** Stop Factory-owned background work and channel transports before the host process shuts down. */
   async shutdown(): Promise<void> {
-    await this.#dispatcher?.stop();
+    if (this.#shutdownPromise) return this.#shutdownPromise;
+
+    const channelShutdowns = this.#channelShutdowns;
+    this.#channelShutdowns = [];
+    const shutdownPromise = (async () => {
+      const results = await Promise.allSettled([
+        this.#dispatcher?.stop() ?? Promise.resolve(),
+        ...channelShutdowns.map(async shutdown => shutdown()),
+      ]);
+      results.slice(1).forEach((result, index) => {
+        if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);
+      });
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure) throw failure.reason;
+    })();
+    this.#shutdownPromise = shutdownPromise;
+    try {
+      await shutdownPromise;
+    } finally {
+      if (this.#shutdownPromise === shutdownPromise) this.#shutdownPromise = undefined;
+    }
   }
 }

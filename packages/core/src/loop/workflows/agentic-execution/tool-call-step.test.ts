@@ -1515,10 +1515,9 @@ describe('createToolCallStep tool execution error handling', () => {
     });
   });
 
-  it('should return aborted (not error/result) when the request was aborted while the tool threw', async () => {
-    // A throw caused by request cancellation must NOT become a tool result, or the call is
-    // persisted as completed (result = abort message) and reads as success on resume. The
-    // step flags it `aborted` instead. CoreToolBuilder wraps the throw in a MastraError, so
+  it('should return aborted with a cancellation notice when the request was aborted while the tool threw', async () => {
+    // Preserve the abort classification while recording that the tool ran and its
+    // effects are unknown. CoreToolBuilder wraps the throw in a MastraError, so
     // the abort signal — not the error type — is the evidence.
     const abortedTool = createTool({
       id: 'failing-tool',
@@ -1558,7 +1557,10 @@ describe('createToolCallStep tool execution error handling', () => {
 
     expect(result).toHaveProperty('aborted', true);
     expect(result).not.toHaveProperty('error');
-    expect(result).not.toHaveProperty('result');
+    expect(result).toHaveProperty(
+      'result',
+      'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.',
+    );
   });
 
   it('should still return error (not aborted) when a tool throws and the request was NOT aborted', async () => {
@@ -3418,5 +3420,81 @@ describe('createToolCallStep malformed JSON args (issue #9815)', () => {
     // Should return a descriptive error
     expect(result.error).toBeDefined();
     expect(result.error.message).toMatch(/invalid|malformed|json|args|arguments/i);
+  });
+});
+
+describe('data chunks written by a tool', () => {
+  it('persist under the step response message, not the run-level message id', async () => {
+    const tool = createTool({
+      id: 'emit-metadata',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-workspace-metadata', data: { toolName: 'emit-metadata' } });
+        return { ok: true };
+      },
+    });
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'emit-metadata', agentId: 'agent' },
+    }).build();
+    const outputWriter = vi.fn(async () => {});
+    const step = createToolCallStep({
+      tools: { 'emit-metadata': built },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter,
+      _internal: { stepResponseMessageId: 'msg-rotated' },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'metadata-call', toolName: 'emit-metadata', args: {} },
+      }),
+    );
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-workspace-metadata' }), {
+      messageId: 'msg-rotated',
+    });
+  });
+
+  it('prefer the step writer over a writer captured when the tool was built', async () => {
+    // Tools added by an input processor are converted before the step runs, so their
+    // build-time writer still points at the run-level message id.
+    const tool = createTool({
+      id: 'emit-metadata',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-workspace-metadata', data: { toolName: 'emit-metadata' } });
+        return { ok: true };
+      },
+    });
+    const buildTimeWriter = vi.fn(async () => {});
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'emit-metadata', agentId: 'agent', outputWriter: buildTimeWriter },
+    }).build();
+    const stepWriter = vi.fn(async () => {});
+    const step = createToolCallStep({
+      tools: { 'emit-metadata': built },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter: stepWriter,
+      _internal: { stepResponseMessageId: 'msg-rotated' },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'metadata-call', toolName: 'emit-metadata', args: {} },
+      }),
+    );
+
+    expect(stepWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-workspace-metadata' }), {
+      messageId: 'msg-rotated',
+    });
+    expect(buildTimeWriter).not.toHaveBeenCalled();
   });
 });

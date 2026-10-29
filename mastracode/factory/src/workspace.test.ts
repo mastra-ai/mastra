@@ -464,32 +464,43 @@ describe('bundled Factory skill assets', () => {
     // The skill carries two marked blocks: the abbreviated pending summary and
     // the final handoff contract. Scope the field assertions to the final one
     // (the marked block that introduces the narrative sections) so a field
-    // present only in the pending table cannot satisfy them.
-    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Understanding'));
+    // present only in the pending summary cannot satisfy them.
+    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('| Type'));
     const handoff = triage.slice(markerIndex);
-    // The verdict is a markdown table, so each field is a bolded cell label
-    // rather than a `**Field:**` prose lead-in.
-    const typeIndex = handoff.indexOf('**Type**');
-    const routeIndex = handoff.indexOf('**Route**');
-    const severityIndex = handoff.indexOf('**Severity**');
+    // A ratings table with a real header row leads, then the plain summary,
+    // the next step, and collapsed rating reasons, root cause, reproduction
+    // and assumptions; only open questions stay expanded.
+    const headerIndex = handoff.search(/^\| Type +\| Severity +\| Confidence +\| Effort +\| Impact +\| Route +\|$/m);
+    const typeIndex = handoff.indexOf('| <Type>');
+    const severityIndex = handoff.indexOf('<Severity>');
+    const routeIndex = handoff.indexOf('<Route>');
+    const summaryIndex = handoff.indexOf('### Summary');
+    const nextStepIndex = handoff.indexOf('**Next step:**');
+    const ratingsIndex = handoff.indexOf('<strong>Why these ratings</strong>');
     const confidenceIndex = handoff.indexOf('**Confidence**');
     const effortIndex = handoff.indexOf('**Effort**');
     const impactIndex = handoff.indexOf('**Impact**');
-    const nextStepIndex = handoff.indexOf('**Next step**');
-    const understandingIndex = handoff.indexOf('### Understanding');
-    const assumptionsIndex = handoff.indexOf('### Assumptions');
+    const rootCauseIndex = handoff.indexOf('<strong>Root cause</strong>');
+    const reproductionIndex = handoff.indexOf('<strong>Reproduction</strong>');
+    const assumptionsIndex = handoff.indexOf('<strong>Assumptions</strong>');
     const questionsIndex = handoff.indexOf('### Open questions');
 
+    // GitHub renders an empty header row as a blank band above the table.
+    expect(triage).not.toMatch(/^\|\s+\|\s+\|$/m);
     expect(markerIndex).toBeGreaterThanOrEqual(0);
-    expect(typeIndex).toBeGreaterThan(0);
-    expect(routeIndex).toBeGreaterThan(typeIndex);
-    expect(severityIndex).toBeGreaterThan(routeIndex);
-    expect(confidenceIndex).toBeGreaterThan(severityIndex);
+    expect(headerIndex).toBeGreaterThan(0);
+    expect(typeIndex).toBeGreaterThan(headerIndex);
+    expect(severityIndex).toBeGreaterThan(typeIndex);
+    expect(routeIndex).toBeGreaterThan(severityIndex);
+    expect(summaryIndex).toBeGreaterThan(routeIndex);
+    expect(nextStepIndex).toBeGreaterThan(summaryIndex);
+    expect(ratingsIndex).toBeGreaterThan(nextStepIndex);
+    expect(confidenceIndex).toBeGreaterThan(ratingsIndex);
     expect(effortIndex).toBeGreaterThan(confidenceIndex);
     expect(impactIndex).toBeGreaterThan(effortIndex);
-    expect(nextStepIndex).toBeGreaterThan(impactIndex);
-    expect(understandingIndex).toBeGreaterThan(nextStepIndex);
-    expect(assumptionsIndex).toBeGreaterThan(understandingIndex);
+    expect(rootCauseIndex).toBeGreaterThan(impactIndex);
+    expect(reproductionIndex).toBeGreaterThan(rootCauseIndex);
+    expect(assumptionsIndex).toBeGreaterThan(reproductionIndex);
     expect(questionsIndex).toBeGreaterThan(assumptionsIndex);
     expect(triage).toContain('Severity guide:');
     expect(triage).toContain('Effort guide:');
@@ -1253,6 +1264,20 @@ describe('GitHub session workspace preparation', () => {
     await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
+  });
+
+  it("names the provider's physical sandbox in a start failure, since the logical id survives a recreate", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(
+      new SetupCommandError('Setup command failed (exit 124)', 'setup-failed'),
+    );
+
+    const error = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }).catch(
+      e => e,
+    );
+    expect(error.message).toMatch(/Setup command failed \(exit 124\).*\(provider sandbox vm-session-a\)$/);
   });
 
   it('persists no sandbox id for a provider without a physical one, so resume provisions by logical id', async () => {
@@ -3342,6 +3367,23 @@ describe('FactorySkillSource layering', () => {
     // No local root anywhere.
     expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src'))).toBeUndefined();
   });
+
+  it('resolveLocalFactorySkillsPath finds src/mastra/factory-skills ahead of the public folder', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-mastra-dir-skills-'));
+    const skillsDir = path.join(tmpDir, 'src', 'mastra', 'factory-skills');
+    const publicSkillsDir = path.join(tmpDir, 'src', 'mastra', 'public', 'factory-skills');
+    await fs.mkdir(skillsDir, { recursive: true });
+    await fs.mkdir(publicSkillsDir, { recursive: true });
+
+    // cwd = repo root
+    expect(resolveLocalFactorySkillsPath(tmpDir)).toBe(skillsDir);
+    // cwd = src/mastra/public (mastra dev)
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(skillsDir);
+    // Without the new folder, the public folder still works.
+    await fs.rm(skillsDir, { recursive: true });
+    expect(resolveLocalFactorySkillsPath(tmpDir)).toBe(publicSkillsDir);
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(publicSkillsDir);
+  });
 });
 
 describe('factory environment sandbox context', () => {
@@ -3397,6 +3439,7 @@ describe('factory environment sandbox context', () => {
     const project = {
       id: 'factory-1',
       orgId: 'org-1',
+      name: 'Platform',
       sandboxWorkingDirectory: '/workspace',
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
@@ -3536,6 +3579,8 @@ describe('factory environment sandbox context', () => {
     const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
     expect(ctx).toMatchObject({
       sessionId: 'session-a',
+      factoryId: 'factory-1',
+      factoryName: 'Platform',
       repoFullName: 'octocat/hello',
       workspaceSetupCommand: 'touch .workspace-ready',
       continueOnSetupFailure: true,
@@ -3547,6 +3592,8 @@ describe('factory environment sandbox context', () => {
     expect('idleTimeoutMinutes' in ctx).toBe(false);
     expect(Object.keys(ctx).sort()).toEqual([
       'continueOnSetupFailure',
+      'factoryId',
+      'factoryName',
       'getRepositoryAccess',
       'repoFullName',
       'repos',
@@ -3610,18 +3657,17 @@ describe('factory environment sandbox context', () => {
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
+    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand'];
     for (const call of mocks.createSandbox.mock.calls) {
       const ctx = call[0] as any;
       expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
       expect(typeof ctx.getRepositoryAccess).toBe('function');
-      expect(Object.keys(ctx).sort()).toEqual([
-        'getRepositoryAccess',
-        'repoFullName',
-        'sandboxId',
-        'sessionId',
-        'setupCommand',
-      ]);
     }
+    // The factory session still names its factory; the session without one carries neither field.
+    const [factoryCtx, legacyCtx] = mocks.createSandbox.mock.calls.map(call => call[0] as any);
+    expect(factoryCtx).toMatchObject({ factoryId: 'factory-1', factoryName: 'Platform' });
+    expect(Object.keys(factoryCtx).sort()).toEqual(['factoryId', 'factoryName', ...singleRepoKeys]);
+    expect(Object.keys(legacyCtx).sort()).toEqual(singleRepoKeys);
     // The settings belong to the project: the factory session boots with them
     // in single-repository form too; a session without a factory gets none.
     expect(sandbox.calls.map(call => call.settings)).toEqual([{ memoryMb: 4096 }, {}]);

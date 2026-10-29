@@ -54,7 +54,7 @@ A schedule sets exactly one execution mode. Setting both, or neither, fails the 
 
 ### Prompt mode
 
-`prompt` runs the owning agent with a fixed message. This is fire-and-forget: nothing waits for the result.
+`prompt` runs the owning agent with a fixed message. When the schedule targets a thread, the fire sends a wake signal and returns without waiting for the run because the thread-stream runtime drives the run to completion, while a threadless schedule awaits `agent.generate` and doesn't finish until the run does.
 
 ```typescript title="src/mastra/agents/support/schedules/digest.ts"
 import { defineSchedule } from '@mastra/core/agent'

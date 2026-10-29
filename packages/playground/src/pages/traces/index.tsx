@@ -46,8 +46,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       selection={route.selection}
       filters={route.filters}
       onChange={route.setState}
-      sortDirection={route.sortDirection}
-      onSortDirectionChange={route.setSortDirection}
+      sort={route.sort}
+      onSortChange={route.setSort}
       scope={scope}
       features={STUDIO_TRACES_FEATURES}
     >

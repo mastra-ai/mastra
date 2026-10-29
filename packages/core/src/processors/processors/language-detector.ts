@@ -420,10 +420,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
         if (result.translated_text) {
           console.info(`[LanguageDetector] Translated from ${detectedLanguage}: ${alertMessage}`);
           return this.createTranslatedMessage(message, result);
-        } else {
-          console.warn(`[LanguageDetector] No translation available, keeping original: ${alertMessage}`);
-          return this.addLanguageMetadata(message, result);
         }
+        console.warn(`[LanguageDetector] No translation available, keeping original: ${alertMessage}`);
+        return this.addLanguageMetadata(message, result);
 
       default:
         return this.addLanguageMetadata(message, result);

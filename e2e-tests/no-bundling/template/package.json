@@ -18,18 +18,18 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/core": "no-bundling-test",
-    "@mastra/evals": "no-bundling-test",
-    "@mastra/libsql": "no-bundling-test",
-    "@mastra/loggers": "no-bundling-test",
-    "@mastra/memory": "no-bundling-test",
-    "@mastra/observability": "no-bundling-test",
+    "@mastra/core": "e2e-test",
+    "@mastra/evals": "e2e-test",
+    "@mastra/libsql": "e2e-test",
+    "@mastra/loggers": "e2e-test",
+    "@mastra/memory": "e2e-test",
+    "@mastra/observability": "e2e-test",
     "ai": "^5.0.124",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
-    "mastra": "no-bundling-test",
+    "mastra": "e2e-test",
     "typescript": "^5.9.3"
   }
 }

@@ -14,14 +14,14 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 describeForAllEngines('AIMock loop scenario: structured output validation failure', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it('emits error chunk with validation details when schema validation fails', async () => {
+  it('emits error chunk with validation details and rejects the object promise when schema validation fails', async () => {
     const schema = z.object({
       name: z.string().min(3),
       age: z.number().positive(),
       email: z.string().email(),
     });
 
-    const { chunks } = await runLoopScenario({
+    const { chunks, output } = await runLoopScenario({
       engine,
       llm: getMock(),
       // Agents now resolve the shared stability error processors, whose retry would change the
@@ -48,6 +48,10 @@ describeForAllEngines('AIMock loop scenario: structured output validation failur
     expect(errorMessage).toContain('name');
     expect(errorMessage).toContain('age');
     expect(errorMessage).toContain('email');
+
+    // The object promise rejects with the same validation error instead of resolving.
+    const object = (output as unknown as { object: Promise<unknown> }).object;
+    await expect(object).rejects.toThrow('Structured output validation failed');
   });
 
   it('successfully parses valid structured output from streaming response', async () => {

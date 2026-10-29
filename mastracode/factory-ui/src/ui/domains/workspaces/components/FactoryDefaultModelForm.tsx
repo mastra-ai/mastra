@@ -3,7 +3,7 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { ProviderInfo } from '../../../../api/types';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
@@ -36,7 +36,23 @@ export function FactoryDefaultModelForm({
     ? (choice.models.find(model => model.id === selectedModelId)?.id ?? '')
     : (choice.suggestedModelId ?? '');
 
-  if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
+  if (choice.isPending)
+    return (
+      <div role="status" aria-label="Loading models">
+        <div aria-hidden className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-2">
+            <SkeletonText line="text-body" className="w-32 motion-reduce:before:animate-none" />
+            <Skeleton className="h-control-md w-28 rounded-full motion-reduce:before:animate-none" />
+          </div>
+          <Field>
+            <FieldLabel>{scope === 'user' ? 'Your default model' : 'Factory default model'}</FieldLabel>
+            <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
+          </Field>
+          <SkeletonText line="text-meta" className="w-3/4 motion-reduce:before:animate-none" />
+          <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
+        </div>
+      </div>
+    );
   if (choice.catalogError || choice.models.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3">

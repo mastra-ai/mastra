@@ -161,13 +161,18 @@ Call tools inside a step's `.execute()` function. You get more control over the 
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testTool } from '../tools/test-tool'
+import { isValidationError } from '@mastra/core/tools'
 import { createStep } from '@mastra/core/workflows'
 
 const step2 = createStep({
   execute: async ({ inputData, requestContext }) => {
     const { text } = inputData
 
-    const response = await testTool.execute({ text }, { requestContext })
+    const response = await testTool.execute?.({ text }, { requestContext })
+
+    if (!response || isValidationError(response)) {
+      throw new Error('testTool did not return a result')
+    }
 
     return {
       emphasized: response.emphasized,

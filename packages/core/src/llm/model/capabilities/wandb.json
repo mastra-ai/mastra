@@ -62,6 +62,11 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+      {
+        "type": "toggle"
+      }
+    ],
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
       {
         "type": "toggle"
@@ -72,22 +77,7 @@
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "ibm-granite/granite-4.2-8b": [
       {
         "type": "toggle"
       }
@@ -100,6 +90,12 @@
     "Qwen/Qwen3.6-35B-A3B": [
       {
         "type": "toggle"
+      }
+    ],
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -123,15 +119,19 @@
         "type": "toggle"
       }
     ],
-    "ibm-granite/granite-4.2-8b": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "toggle"
       }
     ],
-    "reflection/Beam-1.0-501B-A23B": [
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
       }
     ]
   }

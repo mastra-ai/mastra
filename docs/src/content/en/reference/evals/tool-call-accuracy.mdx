@@ -323,6 +323,8 @@ The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/pre
 ]}
 />
 
+Pass the tools available for the specific agent run in `availableTools`. If tool availability changes between runs, create a scorer with each run's tool snapshot. A global superset can cause the judge to report unavailable tools as missing and lower the score.
+
 ### Features
 
 The LLM-based scorer provides:
@@ -337,12 +339,13 @@ The LLM-based scorer provides:
 
 1. **Extract Tool Calls**: Identifies tools mentioned in agent output
 1. **Analyze Appropriateness**: Evaluates each tool against user request
-1. **Generate Score**: Calculates score based on appropriate vs total tool calls
+1. **Generate Score**: Divides appropriate calls by the number of actual calls plus judge-reported missing tools
 1. **Generate Reasoning**: Provides human-readable explanation
 
 ## LLM-based scoring details
 
-- **Fractional scores**: Returns values between 0.0 and 1.0
+- **Fractional scores**: Returns values between 0.0 and 1.0, rounded to two decimal places. The score counts appropriate evaluations only when they match actual calls to that tool, so extra evaluations don't increase it. The denominator counts all actual calls plus judge-reported missing tools.
+- **No tool calls**: Returns 0 if the judge reports missing tools, or 1 if no tools were needed.
 - **Context-aware**: Considers user intent and appropriateness
 - **Explanatory**: Provides reasoning for scores
 
@@ -474,8 +477,8 @@ const inappropriateOutput = [
 const run = createAgentTestRun({ inputMessages, output: inappropriateOutput })
 const result = await llmScorer.run(run)
 
-console.log(result.score) // 0.5 - partially appropriate
-console.log(result.reason) // "The agent used search-tool when weather-tool would have been more appropriate for a direct weather query."
+console.log(result.score) // 0 - if the judge marks search-tool inappropriate and reports weather-tool as missing
+console.log(result.reason) // The judge explains why search-tool was inappropriate for this weather request.
 ```
 
 ### Evaluating clarification requests

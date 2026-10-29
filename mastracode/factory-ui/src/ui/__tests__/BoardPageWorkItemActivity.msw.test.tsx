@@ -584,4 +584,27 @@ describe('Board work-item activity', () => {
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByText('Changes requested')).toBeVisible();
   });
+
+  it('keeps the full self-review verdict on hover when a narrow row truncates it', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...reviewItem,
+              sessions: {},
+              metadata: { ...reviewItem.metadata, selfReviewVerdict: 'approve', selfReviewRounds: 1 },
+            },
+          ],
+        }),
+      ),
+    );
+    renderBoard('review');
+
+    const row = await screen.findByRole('article', { name: reviewItem.title });
+    expect(within(row).getByTitle('Self-review: approved (round 1)')).toHaveTextContent(
+      'Self-review: approved (round 1)',
+    );
+  });
 });

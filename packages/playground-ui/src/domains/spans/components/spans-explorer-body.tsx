@@ -1,21 +1,22 @@
-import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useSpansListSource } from '../hooks/use-spans-list-source';
 import { buildSpanQueryWhere } from '../span-filters';
 import { spanToListRow } from '../span-list-row';
 import type { SpanSelection } from './span-detail-panel';
+import { SpansExplorerHistogram } from './spans-explorer-histogram';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
-import {
-  observabilityListQueryOptions,
-  useObservabilityListFilters,
-} from '@/domains/observability/hooks/use-observability-list-filters';
+import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
+import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
+import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export type SpansExplorerPanelArgs = {
@@ -32,25 +33,35 @@ export type SpansExplorerBodyProps = {
   onSelectionChange: (selection: SpanSelection | undefined) => void;
   /** Renders the open span's panel in the host's own side panel or drawer. */
   renderPanel: (args: SpansExplorerPanelArgs) => ReactNode;
+  /** The host's search params, so the time range, filters and sort survive a reload. Omitted: kept in memory. */
+  urlState?: ObservabilityListUrlState;
 };
 
 /** The spans page body: filter bar, span list and the host's span panel. Router-agnostic. */
-export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }: SpansExplorerBodyProps) {
-  const filters = useObservabilityListFilters();
+export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, urlState }: SpansExplorerBodyProps) {
+  const filters = useObservabilityListFilters(urlState);
   const { timeRange, tokens, groups, sort } = filters;
+  const columns = useTraceColumnPreferences({ scope: 'spans' });
 
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
 
-  const query = useMemo<SpanQueryArgs>(() => {
-    const where = buildSpanQueryWhere(tokens, groups, { withContextFields });
-    return { timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) };
-  }, [timeRange, sort, tokens, groups, withContextFields]);
+  const where = useMemo(
+    () => buildSpanQueryWhere(tokens, groups, { withContextFields, withOutcomeFields }),
+    [tokens, groups, withContextFields, withOutcomeFields],
+  );
+  const query = useMemo<SpanQueryArgs>(
+    () => ({ timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) }),
+    [timeRange, sort, where],
+  );
 
-  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useQuerySpans({
-    query,
-    queryOptions: observabilityListQueryOptions,
-  });
+  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
+    {
+      query,
+      rolling: filters.rolling,
+    },
+  );
 
   const rows = useMemo(() => (spans ?? []).map(spanToListRow), [spans]);
   const panelSpans = useMemo(
@@ -75,6 +86,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
         toolbar={
           <ActionRow>
             <ActionRow.Start>
+              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
               <SpansFilterBar
                 datePreset={filters.datePreset}
                 dateFrom={filters.dateFrom}
@@ -90,6 +102,16 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
               />
             </ActionRow.Start>
           </ActionRow>
+        }
+        chart={
+          <SpansExplorerHistogram
+            timeRange={timeRange}
+            where={where}
+            onZoom={({ from, to }) => {
+              filters.onDatePresetChange('custom');
+              filters.onDateRangeChange(from, to);
+            }}
+          />
         }
         error={
           isError ? <TracesErrorContent error={error} resource="spans" errorTitle="Failed to load spans" /> : undefined
@@ -108,6 +130,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
         <TracesListView
           listId="all-spans"
           traces={rows}
+          columnPreferences={columns.preferences}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}

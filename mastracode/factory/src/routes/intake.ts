@@ -488,7 +488,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           }
 
           await intake.ensureReady();
-          await intake.saveConfig({ orgId: tenant.orgId, config: registeredConfig });
+          await intake.mergeConfig({ orgId: tenant.orgId, config: registeredConfig });
           await audit.emit({
             context: loose(c),
             input: {
@@ -502,7 +502,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               ),
             },
           });
-          return c.json({ config: registeredConfig });
+          return c.json({ config: await intake.getConfig({ orgId: tenant.orgId, integrationIds }) });
         },
       }),
       registerApiRoute('/web/intake/bindings', {

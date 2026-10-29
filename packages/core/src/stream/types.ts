@@ -303,6 +303,8 @@ export interface ThreadHistoryPayload {
   messages: MastraDBMessage[];
   /** Whether older messages exist beyond this page. */
   hasMore: boolean;
+  /** Run holding the thread lease at hydration, or null when idle. */
+  activeRunId: string | null;
 }
 
 interface StartPayload {
@@ -920,6 +922,12 @@ export type NetworkChunkType<OUTPUT = undefined> =
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
 export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
 
+/** A thread run's outcome, independent of stored-message replay. Suspension is resumable. */
+export type ThreadRunStatusChunk = BaseChunkType & {
+  type: 'thread-run-status';
+  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' };
+};
+
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
@@ -1195,6 +1203,10 @@ export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
 ) => Promise<void> | void;
 
 export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
+  /** Present when execution ends at a tool suspension boundary. */
+  suspendReason?: 'tool-call-approval' | 'tool-call-suspended';
+  toolCallId?: string;
+  toolName?: string;
   error?: Error | string | { message: string; stack: string };
   object?: OUTPUT;
   /**

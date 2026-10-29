@@ -57,6 +57,12 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
+    "anthropic/claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "anthropic/claude-sonnet-4.6": [
       {
         "type": "budget_tokens",
@@ -64,7 +70,7 @@
         "max": 63999
       }
     ],
-    "anthropic/claude-opus-4.8": [
+    "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -75,12 +81,6 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 127999
-      }
-    ],
-    "anthropic/claude-opus-4.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "MiniMaxAI/MiniMax-M3": [

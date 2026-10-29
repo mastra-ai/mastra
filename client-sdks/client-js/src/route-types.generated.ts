@@ -3520,6 +3520,28 @@ type Shared_Type_61 = {
   errorPreview?: (string | null) | undefined;
   /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
   timeToFirstChunkMs?: (number | null) | undefined;
+  /** Immediate parent span owned by an external tracing system; null when Mastra owns the parent */
+  externalParentSpanId?: (string | null) | undefined;
+  /** Span id of the initial invocation a resumed execution continues; null on the initial execution */
+  resumedFromSpanId?: (string | null) | undefined;
+  /** Model identity for this span, where applicable */
+  model?: (string | null) | undefined;
+  /** Provider paired with model */
+  provider?: (string | null) | undefined;
+  /** How this execution ended; null while it is still running */
+  outcome?: (string | null) | undefined;
+  /** Machine-readable cause of stopping, when known */
+  stopReason?: (string | null) | undefined;
+  /** Structured details behind stopReason, such as the limit that was hit; null when unknown */
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
+  /** Milliseconds from the model call to the first token received; null when unknown */
+  timeToFirstTokenMs?: (number | null) | undefined;
+  /** Errors in this span and all nested spans; null when unknown */
+  errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3637,6 +3659,28 @@ type Shared_Type_63 = {
   errorPreview?: (string | null) | undefined;
   /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
   timeToFirstChunkMs?: (number | null) | undefined;
+  /** Immediate parent span owned by an external tracing system; null when Mastra owns the parent */
+  externalParentSpanId?: (string | null) | undefined;
+  /** Span id of the initial invocation a resumed execution continues; null on the initial execution */
+  resumedFromSpanId?: (string | null) | undefined;
+  /** Model identity for this span, where applicable */
+  model?: (string | null) | undefined;
+  /** Provider paired with model */
+  provider?: (string | null) | undefined;
+  /** How this execution ended; null while it is still running */
+  outcome?: (string | null) | undefined;
+  /** Machine-readable cause of stopping, when known */
+  stopReason?: (string | null) | undefined;
+  /** Structured details behind stopReason, such as the limit that was hit; null when unknown */
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
+  /** Milliseconds from the model call to the first token received; null when unknown */
+  timeToFirstTokenMs?: (number | null) | undefined;
+  /** Errors in this span and all nested spans; null when unknown */
+  errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3665,6 +3709,14 @@ type Shared_Type_64 = {
   environment: string | null;
   status: 'success' | 'error';
   timeToFirstChunkMs?: (number | null) | undefined;
+  timeToFirstTokenMs?: (number | null) | undefined;
+  outcome?: (string | null) | undefined;
+  stopReason?: (string | null) | undefined;
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3762,6 +3814,10 @@ type Shared_Type_67 = {
   traceQueryRootEntityId: boolean;
   /** Sorting trace and span queries by `timeToFirstChunkMs` */
   traceQueryTimeToFirstChunkSort: boolean;
+  /** `timeToFirstTokenMs` in trace, thread and span query results, and predicates on it in trace, thread and span queries */
+  traceQueryTimeToFirstToken: boolean;
+  /** Sorting trace and span queries by `timeToFirstTokenMs` */
+  traceQueryTimeToFirstTokenSort: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -3778,6 +3834,12 @@ type Shared_Type_67 = {
   spanQuery: boolean;
   /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
   spanQueryContextFields: boolean;
+  /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
+  spanQueryModelFields: boolean;
+  /** `outcome` and `stopReason` predicates in span queries and span aggregates (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows. Treat a missing value as unavailable. */
+  spanQueryOutcomeFields: boolean;
+  /** The root span's `outcome` and `stopReason` in trace-scope predicates and trace aggregates, both fields in `spans.some`/`spans.none` predicates and value discovery, and the root span's `outcome`, `stopReason` and `stopReasonContext` on trace rows. Treat a missing value as unavailable. */
+  traceQueryOutcomeFields: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
@@ -5572,6 +5634,8 @@ export type PostAgentsAgentIdThreadsSubscribe_PathParams = GetAgentsAgentId_Path
 export type PostAgentsAgentIdThreadsSubscribe_Body = {
   resourceId?: string | undefined;
   threadId: string;
+  /** Emit thread-run-status chunks, including retained outcomes */
+  withRunStatus?: boolean | undefined;
   /** Emit one thread-history chunk with stored messages before live parts */
   withInitialHistory?:
     | (
@@ -10591,7 +10655,7 @@ export type PostObservabilityTracesQuery_Body = {
     | undefined;
   orderBy?:
     | {
-        field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
+        field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
         direction: 'asc' | 'desc';
       }[]
     | undefined;
@@ -10859,12 +10923,11 @@ export type PostObservabilityThreadsQuery_Response =
         startedAt: string;
         endedAt: string;
         timeToFirstChunkMs: number | null;
+        timeToFirstTokenMs?: (number | null) | undefined;
         inputPreview: string | null;
         outputPreview: string | null;
         errorPreview: string | null;
         traceCount: number;
-        model: string | null;
-        provider: string | null;
       }[];
       page: {
         next: string | null;
@@ -10908,7 +10971,7 @@ export type PostObservabilitySpansQuery_Body = {
   };
   where?: InputShared_Auxiliary_231 | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -10957,6 +11020,14 @@ export type PostObservabilitySpansQuery_Response = {
     outputPreview: string | null;
     errorPreview: string | null;
     timeToFirstChunkMs?: (number | null) | undefined;
+    timeToFirstTokenMs?: (number | null) | undefined;
+    outcome?: (string | null) | undefined;
+    stopReason?: (string | null) | undefined;
+    stopReasonContext?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
   }[];
   page: {
     next: string | null;
@@ -23611,8 +23682,10 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdM
 export type GetAgentControllerControllerIdSessionsSessionIdStream_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
-export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams =
-  PostAgentControllerControllerIdSessions_QueryParams;
+export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams = {
+  sessionScope?: never | undefined;
+  displayState?: boolean | undefined;
+};
 
 export type GetAgentControllerControllerIdSessionsSessionIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsSessionIdStream_PathParams extends never

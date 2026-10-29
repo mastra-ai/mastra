@@ -644,6 +644,26 @@ describe('Observability Methods', () => {
       );
     });
 
+    it('should stop the request when a per-call abort signal aborts', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockImplementationOnce(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+          }),
+      );
+
+      const pending = client.aggregateTraces(request, { signal: controller.signal });
+      controller.abort();
+
+      await expect(pending).rejects.toThrow();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/aggregate`,
+        expect.objectContaining({ signal: controller.signal }),
+      );
+    });
+
     it('should retry server errors and use the configured abort signal, like queryTraces()', async () => {
       const controller = new AbortController();
       const retryingClient = new MastraClient({

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
@@ -10,6 +11,7 @@ import { boardCardState } from '../boardCardState';
 import { candidatePayload, setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
+import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import { cardMoves } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
@@ -100,7 +102,10 @@ export function CandidateCard({
         data-testid="candidate-card"
         onDragStart={event => setDragPayload(event, candidatePayload(candidate))}
         // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
-        className="group border-surface-rim bg-fill-subtle hover:bg-fill-hover rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
+        className={cn(
+          BOARD_CARD_LAYOUT_CLASS,
+          'group cursor-grab transition-colors outline-none hover:bg-fill-hover [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing',
+        )}
       >
         <button
           type="button"
