@@ -111,7 +111,7 @@ describe('message meta', () => {
     expect(container.querySelectorAll('time')).toHaveLength(2);
   });
 
-  it('leaves a message with nothing to copy unstamped, though its tool row still keeps its own clock', () => {
+  it('leaves a message with nothing to copy unstamped, though its tool line still keeps its own clock', () => {
     const { container } = renderEntries([
       messageEntry('assistant-1', 'assistant', [
         {
@@ -124,7 +124,7 @@ describe('message meta', () => {
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
     const times = container.querySelectorAll('time');
     expect(times).toHaveLength(1);
-    expect(screen.getByRole('group', { name: 'Tool: read' })).toContainElement(times[0]);
+    expect(screen.getByRole('group', { name: 'Read' })).toContainElement(times[0]);
   });
 
   it('names the model that closed a live reply, not one an earlier step ran on', () => {

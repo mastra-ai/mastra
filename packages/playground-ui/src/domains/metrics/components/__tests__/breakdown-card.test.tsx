@@ -83,13 +83,23 @@ function serveSpans(previous: AggregateTracesResponse = previousAgentRunsByName)
   return requests;
 }
 
+/** Body rows' names; the first row is the header. */
 const rowNames = () =>
-  screen.getAllByRole('listitem').map(item => item.querySelector('[title]')?.getAttribute('title'));
+  screen
+    .getAllByRole('row')
+    .slice(1)
+    .map(row => row.querySelector('[title]')?.getAttribute('title'));
+
+/** The text a column header's tooltip gives screen readers. */
+const headerDescription = (name: string) => {
+  const id = screen.getByRole('button', { name }).getAttribute('aria-describedby');
+  return id ? document.getElementById(id)?.textContent : undefined;
+};
 
 const rowOf = async (name: string) => {
-  const li = (await screen.findByTitle(name)).closest('li');
-  if (!li) throw new Error(`${name} row not found`);
-  return li;
+  const row = (await screen.findByTitle(name)).closest<HTMLElement>('[role="row"]');
+  if (!row) throw new Error(`${name} row not found`);
+  return row;
 };
 
 describe('BreakdownCard', () => {
@@ -136,9 +146,9 @@ describe('BreakdownCard', () => {
       await screen.findByTitle('Code Agent');
 
       const headers = screen.getAllByRole('columnheader').map(h => h.textContent);
-      expect(headers).toEqual(['Errors', 'P95 latency', 'Tokens', 'Cost', 'Traces ↓', '% Change']);
+      expect(headers).toEqual(['Agent', 'Errors', 'P95 latency', 'Tokens', 'Cost', 'Traces', '% Change']);
       // A plain table: no share strip, and no colour swatch on the rows.
-      expect(screen.queryAllByTestId('metrics-share-segment')).toHaveLength(0);
+      expect(screen.queryAllByTestId('share-bar-segment')).toHaveLength(0);
       expect((await rowOf('Code Agent')).querySelector('.size-2')).toBeNull();
     });
 
@@ -148,10 +158,9 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard />);
       await screen.findByTitle('Code Agent');
 
-      expect(screen.getByRole('button', { name: 'About Traces' })).toBeDefined();
-      expect(screen.getByText('A trace is one end-to-end request, with every step it took.')).toBeDefined();
+      expect(headerDescription('Traces')).toBe('A trace is one end-to-end request, with every step it took.');
       expect(screen.queryByText(/A span is/)).toBeNull();
-      expect(screen.getByRole('button', { name: 'About % Change' })).toBeDefined();
+      expect(headerDescription('% Change')).toMatch(/^Change in traces/);
       expect(screen.getByText(/^Change in traces from the previous range of the same length/)).toBeDefined();
       expect(screen.getByText(/^Selected: /)).toBeDefined();
       expect(screen.getByText(/^Previous: /)).toBeDefined();
@@ -184,8 +193,7 @@ describe('BreakdownCard', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Tools' }));
       const search = await rowOf('search');
       expect(within(search).getByText('300')).toBeDefined();
-      expect(screen.getByRole('button', { name: 'About Spans' })).toBeDefined();
-      expect(screen.getByText(/^A span is one step inside a trace/)).toBeDefined();
+      expect(headerDescription('Spans')).toMatch(/^A span is one step inside a trace/);
       expect(screen.queryByText(/A trace is one end-to-end request/)).toBeNull();
       expect(spans.at(-1)?.where).toEqual({
         op: 'in',
@@ -310,11 +318,11 @@ describe('BreakdownCard', () => {
   });
 
   describe('when the Models tab opens', () => {
-    it('ranks models by their spans with tokens and cost, without errors, and opens one from its row', async () => {
+    it('ranks models by their spans with tokens and cost, names each one’s provider, and opens one from its row', async () => {
       serveCapabilities(aggregateCapabilities);
       serveSpans();
       const totals = serveUsageTotals(request => {
-        if (!request.current || request.groupBy[0] !== 'model') return agentTotals(request);
+        if (!request.current || !request.groupBy.includes('model')) return agentTotals(request);
         return request.aggregation === 'count' ? modelSpansByModel : usageByModel;
       });
       const onRowClick = vi.fn();
@@ -327,10 +335,11 @@ describe('BreakdownCard', () => {
       const haiku = await rowOf('claude-haiku-4-5');
       expect(within(haiku).getByText('900')).toBeDefined();
       expect(within(haiku).getByText('$4.00')).toBeDefined();
+      expect(haiku.textContent).toContain('anthropic›claude-haiku-4-5');
       expect(screen.getByRole('button', { name: 'Spans' })).toBeDefined();
       expect(screen.queryByRole('button', { name: 'Errors' })).toBeNull();
       expect(totals).toContainEqual(
-        expect.objectContaining({ groupBy: ['model'], aggregation: 'count', current: false }),
+        expect.objectContaining({ groupBy: ['provider', 'model'], aggregation: 'count', current: false }),
       );
       expect(onRowClick).toHaveBeenCalledWith({ model: 'gpt-5' });
     });
@@ -376,7 +385,8 @@ describe('BreakdownCard', () => {
       fireEvent.click(await screen.findByTitle('Project p2'));
       expect(rowNames()).toEqual(['Project p1', 'Project p2']);
       expect(screen.getByRole('tab', { name: 'Projects', selected: true })).toBeDefined();
-      expect(screen.queryByRole('columnheader', { name: 'Project' })).toBeNull();
+      // Only the name column: the rows are the projects.
+      expect(screen.getAllByRole('columnheader', { name: 'Project' })).toHaveLength(1);
       expect(onRowClick).toHaveBeenCalledWith({ projectId: 'p2' });
     });
 
@@ -397,7 +407,7 @@ describe('BreakdownCard', () => {
       const code = await rowOf('Code Agent');
       // Right after the name: the row's texts start with the name, then its project.
       expect(code.textContent?.startsWith('Code AgentProject p1')).toBe(true);
-      expect(screen.getAllByRole('columnheader')[0]?.textContent).toBe('Project');
+      expect(screen.getAllByRole('columnheader')[1]?.textContent).toBe('Project');
       expect(within(code).getByTitle('Project p1')).toBeDefined();
       fireEvent.click(screen.getByTitle('Code Agent'));
       expect(new Set(groupings.map(g => g.join()))).toEqual(new Set(['projectId,entityName']));
@@ -428,7 +438,7 @@ describe('BreakdownCard', () => {
         screen
           .getAllByRole('columnheader')
           .map(h => h.textContent)
-          .slice(0, 2),
+          .slice(1, 3),
       ).toEqual(['Project', 'Resource']);
       expect(new Set(groupings)).toEqual(new Set(['projectId', 'projectId,threadId', 'resourceId,threadId']));
       fireEvent.click(screen.getByTitle('thread-a'));

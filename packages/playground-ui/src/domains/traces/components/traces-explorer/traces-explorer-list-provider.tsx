@@ -28,8 +28,14 @@ export const TracesListProvider = memo(function TracesListProvider({
   onSortChange,
   children,
 }: TracesListProviderProps) {
-  const { withQueryTrace, withRootDuration, withTimeToFirstChunkSort, withDeltaPolling, isCapabilitiesLoading } =
-    useTracesConfig();
+  const {
+    withQueryTrace,
+    withRootDuration,
+    withOutcomeFields,
+    withTimeToFirstChunkSort,
+    withDeltaPolling,
+    isCapabilitiesLoading,
+  } = useTracesConfig();
   const { filters, dateFrom, dateTo } = useTracesFilters();
   const { displayedPreferences } = useTraceUsageColumns();
   // A TTFC sort the store can't run, or on a column that isn't shown, lists newest first instead.
@@ -40,7 +46,7 @@ export const TracesListProvider = memo(function TracesListProvider({
   const sort = sortable ? hostSort : DEFAULT_TRACES_SORT;
   const list = useTracesListSource({
     rolling: !dateTo,
-    query: now => buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, now }),
+    query: now => buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, withOutcomeFields, now }),
     orderBy: [sort],
     withQueryTrace,
     withDeltaPolling,

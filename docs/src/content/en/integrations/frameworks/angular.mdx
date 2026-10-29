@@ -1,0 +1,269 @@
+---
+title: "Angular | Frameworks"
+description: "Build an Angular chat interface for a tool-calling Mastra agent, configure the standalone server, and stream responses with AI SDK's Angular bindings."
+packages:
+  - '@mastra/core'
+---
+
+# Angular
+
+Build a tool-calling AI agent using Mastra, then connect it to Angular by calling the agent from Mastra's standalone server.
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and its [Angular bindings](https://ai-sdk.dev/docs/getting-started/angular) to stream responses into a chat interface.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models/). If you don't have a preference, use [OpenAI](/models/providers/openai).
+- Install Node.js `v22.22.3` or later, or `v24.15.0` or later if you're on the 24.x line, or `v26.0.0` or later if you're on the 26.x line. These are the ranges Angular 22 supports.
+
+## Create a new Angular app (optional)
+
+If you already have an Angular app, skip to the next step.
+
+Run the following command to [create a new Angular app](https://angular.dev/cli/new):
+
+```bash npm2yarn
+npm create @angular@latest mastra-angular -- --defaults --ssr=false
+```
+
+This creates a client-side rendered project called `mastra-angular`, but you can replace it with any name you want.
+
+Navigate to your project directory:
+
+```bash
+cd mastra-angular
+```
+
+## Initialize Mastra
+
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash npm2yarn
+npx mastra@latest init
+```
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+- `index.ts`: Mastra config, including memory
+- `tools/weather-tool.ts`: A tool to fetch weather for a given location
+- `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your chat UI in the next steps.
+
+## Exclude Mastra from the Angular build
+
+Angular's default `tsconfig.app.json` compiles every file under `src/`, including the `src/mastra` server code. Its default `tsconfig.json` also enables `noPropertyAccessFromIndexSignature`, which makes the generated `process.env` access in `src/mastra/index.ts` fail the build.
+
+Keep the server code out of the browser build by adding `src/mastra/**` to the `exclude` list in `tsconfig.app.json`:
+
+```json title="tsconfig.app.json" {7}
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts", "src/mastra/**"]
+}
+```
+
+## Install AI SDK UI
+
+Install AI SDK UI along with the Mastra adapter and the Angular bindings:
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/angular ai
+```
+
+## Create a chat route
+
+Open `src/mastra/index.ts` and add a [chatRoute()](/reference/ai-sdk/chat-route) to your config. This creates an API route your Angular frontend can call for AI SDK-compatible chat responses, which you'll use with the `Chat` class next.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+// Existing imports...
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  // Existing config...
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId',
+        version: 'v7',
+      }),
+    ],
+  },
+})
+```
+
+## Add the chat UI
+
+Replace `src/app/app.ts` with the following component:
+
+```ts title="src/app/app.ts"
+import { JsonPipe } from '@angular/common'
+import { Component, signal } from '@angular/core'
+import { Chat } from '@ai-sdk/angular'
+import { DefaultChatTransport } from 'ai'
+
+@Component({
+  selector: 'app-root',
+  imports: [JsonPipe],
+  template: `
+    <main class="chat">
+      @for (message of chat.messages; track message.id) {
+        <article class="message" [class.user]="message.role === 'user'">
+          <strong>{{ message.role === 'user' ? 'You' : 'Assistant' }}</strong>
+          @for (part of message.parts; track $index) {
+            @if (part.type === 'text') {
+              <p class="text">{{ part.text }}</p>
+            } @else if (part.type.startsWith('tool-')) {
+              <details class="tool">
+                <summary>{{ part.type.replace('tool-', '') }}</summary>
+                <pre>{{ part | json }}</pre>
+              </details>
+            }
+          }
+        </article>
+      }
+
+      @if (chat.status === 'submitted') {
+        <p class="status">Waiting for a response...</p>
+      }
+
+      @if (chat.error; as error) {
+        <p class="error" role="alert">{{ error.message }}</p>
+      }
+
+      <form (submit)="sendMessage($event)">
+        <label for="message">Your message</label>
+        <textarea
+          id="message"
+          #messageInput
+          rows="2"
+          [value]="input()"
+          (input)="input.set(messageInput.value)"
+          placeholder="Ask about the weather..."
+        ></textarea>
+        <button
+          type="submit"
+          [disabled]="chat.status === 'submitted' || chat.status === 'streaming'"
+        >
+          Send
+        </button>
+        @if (chat.status === 'submitted' || chat.status === 'streaming') {
+          <button type="button" (click)="chat.stop()">Stop</button>
+        }
+      </form>
+    </main>
+  `,
+  styles: `
+    .chat {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      max-width: 48rem;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid #d4d4d8;
+      border-radius: 0.5rem;
+    }
+
+    .message.user {
+      background: #f4f4f5;
+    }
+
+    .text {
+      margin: 0;
+      white-space: pre-wrap;
+    }
+
+    .tool pre {
+      overflow-x: auto;
+      margin: 0.5rem 0 0;
+    }
+
+    .error {
+      color: #b91c1c;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    button {
+      align-self: flex-start;
+      padding: 0.5rem 1rem;
+    }
+  `,
+})
+export class App {
+  readonly chat = new Chat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat/weather-agent',
+    }),
+  })
+
+  readonly input = signal('')
+
+  sendMessage(event: Event) {
+    event.preventDefault()
+
+    const text = this.input().trim()
+    if (!text || this.chat.status === 'submitted' || this.chat.status === 'streaming') {
+      return
+    }
+
+    this.chat.sendMessage({ text })
+    this.input.set('')
+  }
+}
+```
+
+This component creates a [`Chat`](https://ai-sdk.dev/docs/getting-started/angular) instance and points its transport at the `chat/weather-agent` endpoint. The `Chat` class sends prompts there and streams the response into `chat.messages`.
+
+It renders text parts as they arrive and shows tool calls in a collapsible `<details>` element. The status and error messages use the reactive `chat.status` and `chat.error` properties, and the **Stop** option cancels the active response.
+
+:::note
+Older Angular projects may name the root component file `app.component.ts` and its class `AppComponent`. If you're using an existing project, keep its file and class names so the imports in `src/main.ts` continue to work.
+:::
+
+## Test your agent
+
+To test your agent with the chat interface, run both the Mastra server and the Angular development server.
+
+1. Start the Mastra development server:
+
+   ```bash npm2yarn
+   npx mastra dev
+   ```
+1. In a separate terminal window, start the Angular development server:
+
+   ```bash npm2yarn
+   npm start
+   ```
+1. Open your application at [http://localhost:4200](http://localhost:4200)
+1. Try asking about the weather. If your API key is set up correctly, you'll get a response
+
+## Next steps
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/tools)
+- Add human-like [memory](/docs/memory/overview) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and Angular, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/deployment/overview)

@@ -18,7 +18,7 @@ import {
   TABLE_SPAN_EVENTS,
 } from './ddl';
 import * as discoveryOps from './discovery';
-import { ensurePartmanHypertables } from './partitioning';
+import { ensurePartmanHypertables, listPartitions } from './partitioning';
 import { decodeDeltaCursor } from './polling';
 import { compilePostgresTraceQuery, runWithPostgresTraceQueryTimeout } from './trace-query';
 import { ObservabilityStoragePostgresVNext } from './index';
@@ -701,6 +701,52 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         );
 
         expect(Number(rows[0]?.count ?? 0)).toBe(ALL_SIGNAL_TABLES.length);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('ensurePartitions() leaves pg_partman-managed partitions alone', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(PARTMAN_URL),
+        schemaPrefix: 'obs_vnext_partman_ensure',
+        setupDatabase: ensurePartman,
+        partitioning: { futureDays: 30 },
+      });
+
+      try {
+        const before = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        await harness.domain.ensurePartitions();
+        expect(await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toEqual(before);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('never creates a day partition by hand on a table pg_partman manages', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(PARTMAN_URL),
+        schemaPrefix: 'obs_vnext_partman_hands_off',
+        setupDatabase: ensurePartman,
+      });
+
+      try {
+        expect(harness.domain.partitionMode).toBe('partman');
+        const parent = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+        const defaultPartition = qualifiedTable(harness.schema, `${TABLE_SPAN_EVENTS}_default`);
+        await harness.baseClient.none(`ALTER TABLE ${parent} DETACH PARTITION ${defaultPartition}`);
+        await harness.baseClient.none(`DROP TABLE ${defaultPartition}`);
+
+        const beyondPremake = dayAt(10, 11);
+        await expect(
+          harness.domain.batchCreateSpans({
+            records: [
+              makeSpan({ traceId: 'partman-hands-off', spanId: 'partman-hands-off', startedAt: beyondPremake }),
+            ],
+          }),
+        ).rejects.toThrow(/no partition of relation/);
+        const partitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        expect(partitions).not.toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(10))}`);
       } finally {
         await harness.close();
       }
@@ -2031,6 +2077,248 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         expect(Number(row.count)).toBe(0);
       } finally {
         await harness.close();
+      }
+    });
+  });
+
+  describe('native partition maintenance', () => {
+    it('keeps storing signals after the pre-created day partitions run out', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_partition_runout',
+        partitioning: { mode: 'native' },
+      });
+
+      try {
+        const parent = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+        const todayPartition = qualifiedTable(harness.schema, `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`);
+        await harness.baseClient.none(`ALTER TABLE ${parent} DETACH PARTITION ${todayPartition}`);
+        await harness.baseClient.none(`DROP TABLE ${todayPartition}`);
+
+        await harness.domain.batchCreateSpans({
+          records: [makeSpan({ traceId: 'runout-today-trace', spanId: 'runout-today-span' })],
+        });
+        const today = await harness.domain.getTrace({ traceId: 'runout-today-trace' });
+        expect(today?.spans.map(span => span.spanId)).toEqual(['runout-today-span']);
+
+        for (const table of ALL_SIGNAL_TABLES) {
+          const futurePartition = qualifiedTable(harness.schema, `${table}_p${yyyymmdd(dayAt(10))}`);
+          await harness.baseClient.none(
+            `ALTER TABLE ${qualifiedTable(harness.schema, table)} DETACH PARTITION ${futurePartition}`,
+          );
+          await harness.baseClient.none(`DROP TABLE ${futurePartition}`);
+        }
+        const future = dayAt(10, 11);
+        await harness.domain.batchCreateSpans({
+          records: [makeSpan({ traceId: 'runout-future-trace', spanId: 'runout-future-span', startedAt: future })],
+        });
+        await harness.domain.batchCreateMetrics({
+          metrics: [makeMetric({ metricId: 'runout-metric', timestamp: future })],
+        });
+        await harness.domain.batchCreateLogs({ logs: [makeLog({ logId: 'runout-log', timestamp: future })] });
+        await harness.domain.batchCreateScores({ scores: [makeScore({ scoreId: 'runout-score', timestamp: future })] });
+        await harness.domain.batchCreateFeedback({
+          feedbacks: [makeFeedback({ feedbackId: 'runout-feedback', timestamp: future })],
+        });
+
+        const futureDay = { timestamp: { start: dayAt(10, 0), end: dayAt(11, 0) } };
+        const trace = await harness.domain.getTrace({ traceId: 'runout-future-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['runout-future-span']);
+        const metrics = await harness.domain.listMetrics({ filters: futureDay });
+        expect(metrics.metrics.map(metric => metric.metricId)).toEqual(['runout-metric']);
+        const logs = await harness.domain.listLogs({ filters: futureDay });
+        expect(logs.logs.map(log => log.logId)).toEqual(['runout-log']);
+        const scores = await harness.domain.listScores({ filters: futureDay });
+        expect(scores.scores.map(score => score.scoreId)).toEqual(['runout-score']);
+        const feedback = await harness.domain.listFeedback({ filters: futureDay });
+        expect(feedback.feedback.map(item => item.feedbackId)).toEqual(['runout-feedback']);
+
+        const spanPartitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        expect(spanPartitions).toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`);
+        for (const table of ALL_SIGNAL_TABLES) {
+          const partitions = await listPartitions(harness.baseClient, harness.schema, table);
+          expect(partitions).toContain(`${harness.schema}.${table}_p${yyyymmdd(dayAt(10))}`);
+        }
+
+        const beyondWindow = dayAt(20, 11);
+        await expect(
+          harness.domain.batchCreateSpans({
+            records: [
+              makeSpan({ traceId: 'runout-beyond-trace', spanId: 'runout-beyond-span', startedAt: beyondWindow }),
+            ],
+          }),
+        ).rejects.toThrow(/no partition of relation/);
+        const spanPartitionsAfter = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        expect(spanPartitionsAfter).not.toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(20))}`);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('creates the partition for a write after the window init() created has passed', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_partition_slide',
+        partitioning: { mode: 'native', futureDays: 3 },
+      });
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(Date.now() + 30 * 86_400_000);
+        const partition = `${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`;
+        expect(await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).not.toContain(partition);
+
+        await harness.domain.batchCreateSpans({
+          records: [makeSpan({ traceId: 'slide-trace', spanId: 'slide-span' })],
+        });
+
+        const trace = await harness.domain.getTrace({ traceId: 'slide-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['slide-span']);
+        expect(await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toContain(partition);
+      } finally {
+        vi.useRealTimers();
+        await harness.close();
+      }
+    });
+
+    it('ensurePartitions() recreates a missing day in the window every time it runs on one store', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_ensure_partitions',
+        partitioning: { mode: 'native', futureDays: 3 },
+      });
+
+      try {
+        const parent = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+        const child = qualifiedTable(harness.schema, `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(2))}`);
+        for (let run = 0; run < 2; run++) {
+          await harness.baseClient.none(`ALTER TABLE ${parent} DETACH PARTITION ${child}`);
+          await harness.baseClient.none(`DROP TABLE ${child}`);
+
+          await harness.domain.ensurePartitions();
+
+          const partitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+          expect(partitions).toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(2))}`);
+        }
+
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.now() + 30 * 86_400_000);
+        await harness.domain.ensurePartitions();
+        const partitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        expect(partitions).toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`);
+      } finally {
+        vi.useRealTimers();
+        await harness.close();
+      }
+    });
+
+    it('a store that never ran init() (disableInit deployments) still creates the missing day', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_partition_no_init',
+        partitioning: { mode: 'native' },
+      });
+
+      try {
+        const pod = new ObservabilityStoragePostgresVNext({ client: harness.client, schemaName: harness.schema });
+        const parent = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+        const partition = qualifiedTable(harness.schema, `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(5))}`);
+        await harness.baseClient.none(`ALTER TABLE ${parent} DETACH PARTITION ${partition}`);
+        await harness.baseClient.none(`DROP TABLE ${partition}`);
+
+        await pod.batchCreateSpans({
+          records: [makeSpan({ traceId: 'no-init-trace', spanId: 'no-init-span', startedAt: dayAt(5, 11) })],
+        });
+        const trace = await pod.getTrace({ traceId: 'no-init-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['no-init-span']);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('a write by a role that can create tables but does not own them leaves nothing behind', async () => {
+      const schema = schemaName('obs_vnext_partition_owner');
+      const ownerRole = `${schema}_owner`;
+      const appRole = `${schema}_app`;
+      const adminPool = new Pool({ connectionString, max: 2 });
+      const admin = new PoolAdapter(adminPool);
+      const poolFor = (user: string) =>
+        new Pool({
+          host: defaultConnection.host,
+          port: defaultConnection.port,
+          database: defaultConnection.database,
+          user,
+          password: 'app',
+          max: 2,
+        });
+
+      await admin.none(`CREATE SCHEMA IF NOT EXISTS ${quotedIdentifier(schema)}`);
+      for (const role of [ownerRole, appRole]) {
+        await admin.none(`CREATE ROLE ${quotedIdentifier(role)} LOGIN PASSWORD 'app'`);
+        await admin.none(`GRANT USAGE, CREATE ON SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(role)}`);
+      }
+      const ownerPool = poolFor(ownerRole);
+      const appPool = poolFor(appRole);
+      const ownerDomain = () =>
+        new ObservabilityStoragePostgresVNext({
+          client: new PoolAdapter(ownerPool),
+          schemaName: schema,
+          partitioning: { mode: 'native', futureDays: 25 },
+        });
+      const appDomain = new ObservabilityStoragePostgresVNext({
+        client: new PoolAdapter(appPool),
+        schemaName: schema,
+        partitioning: { mode: 'native', futureDays: 25 },
+      });
+
+      try {
+        await new ObservabilityStoragePostgresVNext({
+          client: new PoolAdapter(ownerPool),
+          schemaName: schema,
+          partitioning: { mode: 'native' },
+        }).init();
+        await admin.none(
+          `GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(appRole)}`,
+        );
+        await admin.none(
+          `GRANT USAGE ON ALL SEQUENCES IN SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(appRole)}`,
+        );
+
+        await expect(
+          appDomain.batchCreateSpans({
+            records: [
+              makeSpan({ traceId: 'owner-mixed-trace', spanId: 'owner-mixed-today' }),
+              makeSpan({ traceId: 'owner-mixed-trace', spanId: 'owner-mixed-beyond', startedAt: dayAt(40, 11) }),
+            ],
+          }),
+        ).rejects.toThrow(/no partition of relation/);
+
+        const future = dayAt(20, 11);
+        const write = () =>
+          appDomain.batchCreateSpans({
+            records: [makeSpan({ traceId: 'owner-trace', spanId: 'owner-span', startedAt: future })],
+          });
+        const day = future.toISOString().slice(0, 10);
+        await expect(write()).rejects.toThrow(
+          new RegExp(`${TABLE_SPAN_EVENTS} partition for ${day} \\(UTC\\): must be owner.*ensurePartitions\\(\\)`),
+        );
+        await expect(write()).rejects.toMatchObject({ cause: { cause: { code: '42501' } } });
+        const child = `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(20))}`;
+        const leftover = await admin.oneOrNone(
+          `SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2`,
+          [schema, child],
+        );
+        expect(leftover).toBeNull();
+
+        await expect(ownerDomain().ensurePartitions()).resolves.toBeUndefined();
+        await expect(write()).resolves.toBeUndefined();
+        const trace = await appDomain.getTrace({ traceId: 'owner-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['owner-span']);
+      } finally {
+        await appPool.end();
+        await ownerPool.end();
+        await admin.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        for (const role of [appRole, ownerRole]) {
+          await admin.none(`DROP OWNED BY ${quotedIdentifier(role)}`);
+          await admin.none(`DROP ROLE IF EXISTS ${quotedIdentifier(role)}`);
+        }
+        await adminPool.end();
       }
     });
   });
