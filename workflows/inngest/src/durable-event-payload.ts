@@ -103,6 +103,8 @@ export function buildDurableResumeEventData(
       steps: string[];
       resumePayload: any;
       resumePath?: any;
+      label?: string;
+      forEachIndex?: number;
     };
     tracingOptions?: TracingOptions;
     workflowId?: string;

@@ -172,6 +172,17 @@ const STREAM_CLEANUP = Symbol('mastra.durable.inngest.streamCleanup');
 const RESUME_SNAPSHOT_WAIT_MS = 10_000;
 const RESUME_SNAPSHOT_POLL_MS = 100;
 
+/** Tail of the resume queue per run id; see `resume()`. */
+const resumeTurns = new Map<string, Promise<void>>();
+/**
+ * Suspended snapshot each run's latest resume was dispatched against. Inngest
+ * starts the resumed segment asynchronously, so until it writes a new snapshot
+ * the stored one is stale: resuming against it again races the segment just
+ * dispatched (#27925). Entries only matter for the snapshot wait window, so
+ * older ones are pruned.
+ */
+const dispatchedSnapshots = new Map<string, { timestamp: unknown; at: number }>();
+
 /**
  * Merges the wrapped agent's `defaultOptions` under the call options, matching
  * core `DurableAgent`, so lifecycle callbacks configured as defaults fire unless
@@ -1520,448 +1531,475 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
-      const existingRegistryEntry = getRunRegistryEntry(runId, mastra);
-      const priorExecution = existingRegistryEntry?.workflowExecution;
-
-      // Settle the prior segment before reading its snapshot or event offset. Otherwise a late
-      // suspension event can be replayed into the new segment and close it early.
-      await priorExecution?.catch(() => {
-        /* errors already handled by the prior segment */
+      // Resumes of one run take turns. Approving two parked tool calls back to back
+      // otherwise dispatches both against the same suspended snapshot, and the two
+      // segments race on the nested foreach snapshot (#27925).
+      const priorResume = resumeTurns.get(runId);
+      let releaseTurn!: () => void;
+      const turn = new Promise<void>(resolve => {
+        releaseTurn = resolve;
       });
+      const turnTail = (priorResume ?? Promise.resolve()).then(() => turn);
+      resumeTurns.set(runId, turnTail);
+      await priorResume;
+      try {
+        const existingRegistryEntry = getRunRegistryEntry(runId, mastra);
+        const priorExecution = existingRegistryEntry?.workflowExecution;
 
-      // The suspension reaches the caller's stream before the loop's finalize step
-      // persists the suspended snapshot. Resuming inside that window used to find no
-      // suspended step and dispatch a fresh run whose input was the resume payload,
-      // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
-      // After a resume re-suspends, the stored snapshot is still the previous suspended
-      // one until the new suspension is persisted, so a named tool call must also wait
-      // for its label to appear rather than failing against the stale labels (#25158).
-      const resumableSnapshot = (async (): Promise<{ hasStore: boolean; snapshot?: any; nestedSnapshot?: any }> => {
-        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-        if (!workflowsStore) return { hasStore: false };
-        const loadSnapshot = async (): Promise<any> =>
-          workflowsStore.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
-        const toolCallId = resumeOptions?.toolCallId;
-        // Kept so loadSuspendedIteration reuses the nested read of the accepted snapshot.
-        let nestedSnapshot: any;
-        // After a second suspension the nested execution snapshot can persist
-        // before the outer one, leaving the outer snapshot `suspended` on the
-        // previous call. Wait until the nested snapshot carries the outer labels.
-        const isReady = async (s: any) => {
-          nestedSnapshot = undefined;
-          if (s?.status !== 'suspended' || (toolCallId && !s.resumeLabels?.[toolCallId])) return false;
-          const labelIds = Object.keys(s.resumeLabels ?? {});
-          if (labelIds.length === 0) return true;
-          nestedSnapshot = await workflowsStore.loadWorkflowSnapshot({
-            workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
-            runId:
-              s.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.suspendPayload?.__workflow_meta?.runId ?? runId,
-          });
-          return !nestedSnapshot || labelIds.every(id => !!nestedSnapshot.resumeLabels?.[id]);
-        };
-        let snapshot: any = await loadSnapshot();
-        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
-        while (!(await isReady(snapshot)) && Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
-          snapshot = await loadSnapshot();
-        }
-        return { hasStore: true, snapshot, nestedSnapshot };
-      })();
-      // Storage failures surface through dispatch; don't let them go unhandled meanwhile.
-      resumableSnapshot.catch(() => {});
+        // Settle the prior segment before reading its snapshot or event offset. Otherwise a late
+        // suspension event can be replayed into the new segment and close it early.
+        await priorExecution?.catch(() => {
+          /* errors already handled by the prior segment */
+        });
 
-      // Resolve defaults against the run's saved request context with the
-      // caller's values on top, matching core `DurableAgent.resume`, so dynamic
-      // defaults pick the same callbacks they did for the original run. A resume
-      // in a fresh process has no registry entry, so use the suspended snapshot
-      // that dispatch resumes from.
-      const savedRequestContext: Iterable<readonly [string, unknown]> =
-        existingRegistryEntry?.requestContext?.entries() ??
-        Object.entries((await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext ?? {});
-      const callbackOptions = await withDefaultOptions(agent, {
-        ...resumeOptions,
-        requestContext: new RequestContext([
-          ...savedRequestContext,
-          ...(resumeOptions?.requestContext?.entries() ?? []),
-        ]),
-      });
-      validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
-      const { hasStore, snapshot: suspendedSnapshot, nestedSnapshot } = await resumableSnapshot;
-      if (hasStore && suspendedSnapshot?.status !== 'suspended') {
-        throw new NonRetriableError(
-          `Cannot resume run ${runId}: it is not suspended` +
-            (suspendedSnapshot?.status ? ` (status: ${suspendedSnapshot.status}).` : ' (no snapshot found).'),
-        );
-      }
-      // Resolve the suspended leaf before loading its history. Invalid or ambiguous
-      // tool IDs should fail as non-resumable, not as missing nested history.
-      const suspendedStepIds = suspendedSnapshot?.suspendedPaths ? Object.keys(suspendedSnapshot.suspendedPaths) : [];
-      const resumeLabels: Record<string, { stepId?: string } | undefined> = suspendedSnapshot?.resumeLabels ?? {};
-      const expandToLeafPath = (stepId: string): string[] => {
-        const stepResult = (suspendedSnapshot?.context ?? {})[stepId];
-        const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
-        return Array.isArray(nestedPath) ? [stepId, ...nestedPath] : [stepId];
-      };
-      const toolCallId = resumeOptions?.toolCallId;
-      let steps: string[];
-      if (toolCallId) {
-        const targetStepId = resumeLabels[toolCallId]?.stepId;
-        if (!targetStepId) {
-          const available = Object.keys(resumeLabels);
-          throw new NonRetriableError(
-            `Cannot resume run ${runId}: no suspended tool call with id "${toolCallId}". ` +
-              (available.length > 0
-                ? `Suspended tool call ids: ${available.join(', ')}.`
-                : `No tool calls are currently suspended.`),
-          );
-        }
-        steps = expandToLeafPath(targetStepId);
-      } else {
-        const available = Object.keys(resumeLabels);
-        if (suspendedStepIds.length > 1 || available.length > 1) {
-          throw new NonRetriableError(
-            `Cannot resume run ${runId}: more than one suspension is parked. ` +
-              `Pass "toolCallId" to choose which suspended tool call to resume.` +
-              (available.length > 0 ? ` Suspended tool call ids: ${available.join(', ')}.` : ''),
-          );
-        }
-        steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
-      }
-      const resumeOffset = await getPubsubOffset(runId);
-      // The resumed segment only receives new pubsub chunks, so output state from
-      // before the suspension is restored from the suspended iteration snapshot.
-      const { toolCalls: initialToolCalls, resumedText } = await loadSuspendedIteration(
-        runId,
-        suspendedSnapshot,
-        nestedSnapshot,
-      );
-
-      // Install a fresh abort controller scoped to the resumed segment and
-      // attach it to the run-registry entry so the durable LLM step (when
-      // co-located) can react. The previous run's controller is no longer
-      // relevant.
-      const abortController = new AbortController();
-      const stopForwardingAbort = resumeOptions?.abortSignal
-        ? forwardExternalAbort(resumeOptions.abortSignal, abortController, runId)
-        : undefined;
-      // Ensure a registry entry exists for this resumed segment. On Inngest,
-      // a resume frequently runs in a fresh process where no prior stream()
-      // entry is in memory — without this, the abort controller would be
-      // silently dropped and the durable LLM step (when co-located) would
-      // have nothing to react to.
-      let existingEntry = existingRegistryEntry;
-      if (!existingEntry) {
-        existingEntry = {
-          mastra,
-          // Minimal placeholder fields. The durable LLM step recreates tools
-          // and model from the workflow input; this slot exists primarily to
-          // carry the abort controller across the resumed segment. The
-          // explicit flag tells resolveRuntimeDependencies to rebuild runtime
-          // state from the Mastra instance instead of trusting this entry.
-          isPlaceholder: true,
-          tools: {},
-          model: undefined as any,
-        };
-        globalRunRegistry.set(runId, existingEntry);
-      }
-      existingEntry.abortController = abortController;
-      // Steps and stream-side processors on this segment see the merged
-      // context, as core `DurableAgent.resume` does.
-      existingEntry.requestContext = callbackOptions.requestContext;
-      // Re-arm the run-level budget for the resumed session, as core does: a
-      // budget on the resume call wins, otherwise the original run's budget from
-      // its registry entry (warm) or persisted workflow input (cold).
-      const clearTotalTimeout = armTotalTimeout(
-        existingEntry,
-        abortController,
-        runId,
-        callbackOptions.modelSettings?.timeout?.totalMs ??
-          existingRegistryEntry?.timeoutTotalMs ??
-          (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input?.options?.modelSettings?.timeout
-            ?.totalMs,
-      );
-
-      // A warm resume reuses the tools built for the first request, which close
-      // over that request's request context and tool hooks (#25960). Rebuild them
-      // for this call and swap in only entries still holding a request-built tool,
-      // so tools a processor added or replaced are kept, and rebuild
-      // processor-added tools for this call's request context (matches core
-      // DurableAgent.resume). Runs after loadSuspendedIteration, which can reject,
-      // so a rejected resume leaves the parked run's tools untouched.
-      if (
-        existingRegistryEntry &&
-        !existingRegistryEntry.isPlaceholder &&
-        (resumeOptions?.requestContext || resumeOptions?.hooks)
-      ) {
-        try {
-          const snapshotMemoryInfo = (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input
-            ?.messageListState?.memoryInfo as { threadId?: string; resourceId?: string } | undefined;
-          const resumeRequestContext = callbackOptions.requestContext;
-          const execOptions = callbackOptions as AgentExecutionOptions<TOutput>;
-          const requestTools = await agent.getToolsForExecution({
-            toolsets: execOptions.toolsets,
-            clientTools: execOptions.clientTools,
-            threadId: resumeOptions.threadId ?? snapshotMemoryInfo?.threadId,
-            resourceId: resumeOptions.resourceId ?? snapshotMemoryInfo?.resourceId,
-            runId,
-            requestContext: resumeRequestContext,
-            memoryConfig: execOptions.memory?.options,
-            autoResumeSuspendedTools: execOptions.autoResumeSuspendedTools,
-            // Resume options carry no delegation, so execOptions.delegation is only the
-            // agent default; the first call parked its own delegation on the entry.
-            delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
-            hooks: resumeOptions.hooks ?? execOptions.hooks,
-            methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
-            backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
-            backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
-            model: existingRegistryEntry.model,
-          });
-          const previous = existingRegistryEntry.requestTools;
-          const refresh = (current: Record<string, CoreTool>) => {
-            const next = { ...current };
-            for (const [name, tool] of Object.entries(requestTools)) {
-              // A name missing from current but present in previous was withheld by a processor.
-              const configured =
-                name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
-              if (configured) next[name] = tool;
-            }
-            return next;
+        // The suspension reaches the caller's stream before the loop's finalize step
+        // persists the suspended snapshot. Resuming inside that window used to find no
+        // suspended step and dispatch a fresh run whose input was the resume payload,
+        // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
+        // After a resume re-suspends, the stored snapshot is still the previous suspended
+        // one until the new suspension is persisted, so a named tool call must also wait
+        // for its label to appear rather than failing against the stale labels (#25158).
+        const resumableSnapshot = (async (): Promise<{ hasStore: boolean; snapshot?: any; nestedSnapshot?: any }> => {
+          const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+          if (!workflowsStore) return { hasStore: false };
+          const loadSnapshot = async (): Promise<any> =>
+            workflowsStore.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
+          const toolCallId = resumeOptions?.toolCallId;
+          // Kept so loadSuspendedIteration reuses the nested read of the accepted snapshot.
+          let nestedSnapshot: any;
+          // After a second suspension the nested execution snapshot can persist
+          // before the outer one, leaving the outer snapshot `suspended` on the
+          // previous call. Wait until the nested snapshot carries the outer labels.
+          const isReady = async (s: any) => {
+            nestedSnapshot = undefined;
+            if (s?.status !== 'suspended' || (toolCallId && !s.resumeLabels?.[toolCallId])) return false;
+            if (s.timestamp !== undefined && dispatchedSnapshots.get(runId)?.timestamp === s.timestamp) return false;
+            const labelIds = Object.keys(s.resumeLabels ?? {});
+            if (labelIds.length === 0) return true;
+            nestedSnapshot = await workflowsStore.loadWorkflowSnapshot({
+              workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+              runId:
+                s.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.suspendPayload?.__workflow_meta?.runId ?? runId,
+            });
+            return !nestedSnapshot || labelIds.every(id => !!nestedSnapshot.resumeLabels?.[id]);
           };
-          existingRegistryEntry.tools = rebindProcessorTools(
-            refresh(existingRegistryEntry.tools ?? {}),
-            resumeRequestContext,
+          let snapshot: any = await loadSnapshot();
+          const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+          while (!(await isReady(snapshot)) && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+            snapshot = await loadSnapshot();
+          }
+          return { hasStore: true, snapshot, nestedSnapshot };
+        })();
+        // Storage failures surface through dispatch; don't let them go unhandled meanwhile.
+        resumableSnapshot.catch(() => {});
+
+        // Resolve defaults against the run's saved request context with the
+        // caller's values on top, matching core `DurableAgent.resume`, so dynamic
+        // defaults pick the same callbacks they did for the original run. A resume
+        // in a fresh process has no registry entry, so use the suspended snapshot
+        // that dispatch resumes from.
+        const savedRequestContext: Iterable<readonly [string, unknown]> =
+          existingRegistryEntry?.requestContext?.entries() ??
+          Object.entries((await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext ?? {});
+        const callbackOptions = await withDefaultOptions(agent, {
+          ...resumeOptions,
+          requestContext: new RequestContext([
+            ...savedRequestContext,
+            ...(resumeOptions?.requestContext?.entries() ?? []),
+          ]),
+        });
+        validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
+        const { hasStore, snapshot: suspendedSnapshot, nestedSnapshot } = await resumableSnapshot;
+        if (hasStore && suspendedSnapshot?.status !== 'suspended') {
+          throw new NonRetriableError(
+            `Cannot resume run ${runId}: it is not suspended` +
+              (suspendedSnapshot?.status ? ` (status: ${suspendedSnapshot.status}).` : ' (no snapshot found).'),
           );
-          if (existingRegistryEntry.baseTools)
-            existingRegistryEntry.baseTools = rebindProcessorTools(
-              refresh(existingRegistryEntry.baseTools),
+        }
+        // Resolve the suspended leaf before loading its history. Invalid or ambiguous
+        // tool IDs should fail as non-resumable, not as missing nested history.
+        const suspendedStepIds = suspendedSnapshot?.suspendedPaths ? Object.keys(suspendedSnapshot.suspendedPaths) : [];
+        const resumeLabels: Record<string, { stepId?: string } | undefined> = suspendedSnapshot?.resumeLabels ?? {};
+        const expandToLeafPath = (stepId: string): string[] => {
+          const stepResult = (suspendedSnapshot?.context ?? {})[stepId];
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          return Array.isArray(nestedPath) ? [stepId, ...nestedPath] : [stepId];
+        };
+        const toolCallId = resumeOptions?.toolCallId;
+        let steps: string[];
+        if (toolCallId) {
+          const targetStepId = resumeLabels[toolCallId]?.stepId;
+          if (!targetStepId) {
+            const available = Object.keys(resumeLabels);
+            throw new NonRetriableError(
+              `Cannot resume run ${runId}: no suspended tool call with id "${toolCallId}". ` +
+                (available.length > 0
+                  ? `Suspended tool call ids: ${available.join(', ')}.`
+                  : `No tool calls are currently suspended.`),
+            );
+          }
+          steps = expandToLeafPath(targetStepId);
+        } else {
+          const available = Object.keys(resumeLabels);
+          if (suspendedStepIds.length > 1 || available.length > 1) {
+            throw new NonRetriableError(
+              `Cannot resume run ${runId}: more than one suspension is parked. ` +
+                `Pass "toolCallId" to choose which suspended tool call to resume.` +
+                (available.length > 0 ? ` Suspended tool call ids: ${available.join(', ')}.` : ''),
+            );
+          }
+          steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
+        }
+        const resumeOffset = await getPubsubOffset(runId);
+        // The resumed segment only receives new pubsub chunks, so output state from
+        // before the suspension is restored from the suspended iteration snapshot.
+        const { toolCalls: initialToolCalls, resumedText } = await loadSuspendedIteration(
+          runId,
+          suspendedSnapshot,
+          nestedSnapshot,
+        );
+
+        // Install a fresh abort controller scoped to the resumed segment and
+        // attach it to the run-registry entry so the durable LLM step (when
+        // co-located) can react. The previous run's controller is no longer
+        // relevant.
+        const abortController = new AbortController();
+        const stopForwardingAbort = resumeOptions?.abortSignal
+          ? forwardExternalAbort(resumeOptions.abortSignal, abortController, runId)
+          : undefined;
+        // Ensure a registry entry exists for this resumed segment. On Inngest,
+        // a resume frequently runs in a fresh process where no prior stream()
+        // entry is in memory — without this, the abort controller would be
+        // silently dropped and the durable LLM step (when co-located) would
+        // have nothing to react to.
+        let existingEntry = existingRegistryEntry;
+        if (!existingEntry) {
+          existingEntry = {
+            mastra,
+            // Minimal placeholder fields. The durable LLM step recreates tools
+            // and model from the workflow input; this slot exists primarily to
+            // carry the abort controller across the resumed segment. The
+            // explicit flag tells resolveRuntimeDependencies to rebuild runtime
+            // state from the Mastra instance instead of trusting this entry.
+            isPlaceholder: true,
+            tools: {},
+            model: undefined as any,
+          };
+          globalRunRegistry.set(runId, existingEntry);
+        }
+        existingEntry.abortController = abortController;
+        // Steps and stream-side processors on this segment see the merged
+        // context, as core `DurableAgent.resume` does.
+        existingEntry.requestContext = callbackOptions.requestContext;
+        // Re-arm the run-level budget for the resumed session, as core does: a
+        // budget on the resume call wins, otherwise the original run's budget from
+        // its registry entry (warm) or persisted workflow input (cold).
+        const clearTotalTimeout = armTotalTimeout(
+          existingEntry,
+          abortController,
+          runId,
+          callbackOptions.modelSettings?.timeout?.totalMs ??
+            existingRegistryEntry?.timeoutTotalMs ??
+            (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input?.options?.modelSettings?.timeout
+              ?.totalMs,
+        );
+
+        // A warm resume reuses the tools built for the first request, which close
+        // over that request's request context and tool hooks (#25960). Rebuild them
+        // for this call and swap in only entries still holding a request-built tool,
+        // so tools a processor added or replaced are kept, and rebuild
+        // processor-added tools for this call's request context (matches core
+        // DurableAgent.resume). Runs after loadSuspendedIteration, which can reject,
+        // so a rejected resume leaves the parked run's tools untouched.
+        if (
+          existingRegistryEntry &&
+          !existingRegistryEntry.isPlaceholder &&
+          (resumeOptions?.requestContext || resumeOptions?.hooks)
+        ) {
+          try {
+            const snapshotMemoryInfo = (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input
+              ?.messageListState?.memoryInfo as { threadId?: string; resourceId?: string } | undefined;
+            const resumeRequestContext = callbackOptions.requestContext;
+            const execOptions = callbackOptions as AgentExecutionOptions<TOutput>;
+            const requestTools = await agent.getToolsForExecution({
+              toolsets: execOptions.toolsets,
+              clientTools: execOptions.clientTools,
+              threadId: resumeOptions.threadId ?? snapshotMemoryInfo?.threadId,
+              resourceId: resumeOptions.resourceId ?? snapshotMemoryInfo?.resourceId,
+              runId,
+              requestContext: resumeRequestContext,
+              memoryConfig: execOptions.memory?.options,
+              autoResumeSuspendedTools: execOptions.autoResumeSuspendedTools,
+              // Resume options carry no delegation, so execOptions.delegation is only the
+              // agent default; the first call parked its own delegation on the entry.
+              delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
+              hooks: resumeOptions.hooks ?? execOptions.hooks,
+              methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
+              backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
+              backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
+              model: existingRegistryEntry.model,
+            });
+            const previous = existingRegistryEntry.requestTools;
+            const refresh = (current: Record<string, CoreTool>) => {
+              const next = { ...current };
+              for (const [name, tool] of Object.entries(requestTools)) {
+                // A name missing from current but present in previous was withheld by a processor.
+                const configured =
+                  name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+                if (configured) next[name] = tool;
+              }
+              return next;
+            };
+            existingRegistryEntry.tools = rebindProcessorTools(
+              refresh(existingRegistryEntry.tools ?? {}),
               resumeRequestContext,
             );
-          // Tools this rebuild did not produce still hold their earlier build, so
-          // keep that as their baseline; otherwise a later resume can never refresh them.
-          existingRegistryEntry.requestTools = { ...previous, ...requestTools };
-        } catch (error) {
-          mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) tool resolution failed: ${error}`);
+            if (existingRegistryEntry.baseTools)
+              existingRegistryEntry.baseTools = rebindProcessorTools(
+                refresh(existingRegistryEntry.baseTools),
+                resumeRequestContext,
+              );
+            // Tools this rebuild did not produce still hold their earlier build, so
+            // keep that as their baseline; otherwise a later resume can never refresh them.
+            existingRegistryEntry.requestTools = { ...previous, ...requestTools };
+          } catch (error) {
+            mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) tool resolution failed: ${error}`);
+          }
         }
-      }
 
-      // Track cleanup state for the resumed segment so terminal events
-      // (finish/error/abort/cleanup) always tear down the registry entry.
-      let resumeCleanedUp = false;
-      const finalizeResumeRegistry = () => {
-        clearTotalTimeout();
-        if (resumeCleanedUp) return;
-        resumeCleanedUp = true;
-        stopForwardingAbort?.();
-        // A run stopped by its deadline keeps executing until its in-flight step
-        // returns. Keep its entry, whose signal is aborted, so the next
-        // co-located step stops instead of calling the model again; the
-        // registry TTL evicts it.
-        if (isMastraTimeoutError(existingEntry.abortSignal?.reason)) return;
-        deleteRunRegistryEntry(runId, mastra);
-      };
-
-      // The segment being resumed publishes its SUSPENDED event after its
-      // snapshot is saved, so it can land after `resumeOffset`. Every real
-      // re-suspension of this segment streams its own chunk first, so a
-      // SUSPENDED event seen before any chunk belongs to the earlier segment
-      // and must not close (or be reported by) this stream.
-      let resumedChunkSeen = false;
-      // Re-subscribe to the stream
-      const {
-        output,
-        cleanup: streamCleanup,
-        detach: detachStream,
-        ready,
-      } = createDurableAgentStream<TOutput>({
-        pubsub: getPubsub(),
-        runId,
-        offset: resumeOffset,
-        initialToolCalls,
-        messageId: crypto.randomUUID(),
-        resumedText,
-        model: {
-          modelId: undefined,
-          provider: undefined,
-          version: 'v3',
-        },
-        threadId: resumeOptions?.threadId,
-        resourceId: resumeOptions?.resourceId,
-        structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
-        messageList: existingEntry.messageList,
-        outputProcessors: existingEntry.outputProcessors,
-        processorStates: existingEntry.processorStates,
-        requestContext: callbackOptions.requestContext,
-        onChunk: chunk => {
-          resumedChunkSeen = true;
-          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
-          return callbackOptions.onChunk?.(chunk);
-        },
-        onStepFinish: callbackOptions.onStepFinish,
-        onFinish: async result => {
-          try {
-            await callbackOptions.onFinish?.(result);
-          } finally {
-            finalizeResumeRegistry();
-          }
-        },
-        onError: async errorArg => {
-          try {
-            await callbackOptions.onError?.(errorArg);
-          } finally {
-            finalizeResumeRegistry();
-          }
-        },
-        onSuspended: async data => {
-          if (!resumedChunkSeen) return;
+        // Track cleanup state for the resumed segment so terminal events
+        // (finish/error/abort/cleanup) always tear down the registry entry.
+        let resumeCleanedUp = false;
+        const finalizeResumeRegistry = () => {
           clearTotalTimeout();
+          if (resumeCleanedUp) return;
+          resumeCleanedUp = true;
+          stopForwardingAbort?.();
+          // A run stopped by its deadline keeps executing until its in-flight step
+          // returns. Keep its entry, whose signal is aborted, so the next
+          // co-located step stops instead of calling the model again; the
+          // registry TTL evicts it.
+          if (isMastraTimeoutError(existingEntry.abortSignal?.reason)) return;
+          deleteRunRegistryEntry(runId, mastra);
+        };
+
+        // The segment being resumed publishes its SUSPENDED event after its
+        // snapshot is saved, so it can land after `resumeOffset`. Every real
+        // re-suspension of this segment streams its own chunk first, so a
+        // SUSPENDED event seen before any chunk belongs to the earlier segment
+        // and must not close (or be reported by) this stream.
+        let resumedChunkSeen = false;
+        // Re-subscribe to the stream
+        const {
+          output,
+          cleanup: streamCleanup,
+          detach: detachStream,
+          ready,
+        } = createDurableAgentStream<TOutput>({
+          pubsub: getPubsub(),
+          runId,
+          offset: resumeOffset,
+          initialToolCalls,
+          messageId: crypto.randomUUID(),
+          resumedText,
+          model: {
+            modelId: undefined,
+            provider: undefined,
+            version: 'v3',
+          },
+          threadId: resumeOptions?.threadId,
+          resourceId: resumeOptions?.resourceId,
+          structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
+          messageList: existingEntry.messageList,
+          outputProcessors: existingEntry.outputProcessors,
+          processorStates: existingEntry.processorStates,
+          requestContext: callbackOptions.requestContext,
+          onChunk: chunk => {
+            resumedChunkSeen = true;
+            if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
+            return callbackOptions.onChunk?.(chunk);
+          },
+          onStepFinish: callbackOptions.onStepFinish,
+          onFinish: async result => {
+            try {
+              await callbackOptions.onFinish?.(result);
+            } finally {
+              finalizeResumeRegistry();
+            }
+          },
+          onError: async errorArg => {
+            try {
+              await callbackOptions.onError?.(errorArg);
+            } finally {
+              finalizeResumeRegistry();
+            }
+          },
+          onSuspended: async data => {
+            if (!resumedChunkSeen) return;
+            clearTotalTimeout();
+            try {
+              await callbackOptions.onSuspended?.(data);
+            } finally {
+              if (resumeOptions?.closeOnSuspend) detachStream();
+            }
+          },
+          onAbort: async data => {
+            try {
+              await (callbackOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+            } finally {
+              finalizeResumeRegistry();
+            }
+          },
+          // Closing on suspend is handled in onSuspended above.
+          closeOnSuspend: false,
+        });
+
+        // Dispatch to the same trigger name, not a .resume suffix.
+        const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
+
+        // Set when the run is not resumable: that rejection belongs to this caller only
+        // and must not be published to the run's shared stream topic, which would close
+        // the original run's stream too.
+        let notResumable = false;
+        const didThreadRunPublishTerminal = agentThreadStreamRuntime.captureThreadRunTerminalPublish(
+          runId,
+          agent.getPubSub(),
+        );
+
+        const dispatch = ready.then(async () => {
+          const snapshot = suspendedSnapshot;
+          const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
           try {
-            await callbackOptions.onSuspended?.(data);
-          } finally {
-            if (resumeOptions?.closeOnSuspend) detachStream();
+            keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
+          } catch (error) {
+            // A scope rejection belongs to this caller; the parked run stays resumable.
+            notResumable = true;
+            throw error;
           }
-        },
-        onAbort: async data => {
-          try {
-            await (callbackOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
-          } finally {
-            finalizeResumeRegistry();
-          }
-        },
-        // Closing on suspend is handled in onSuspended above.
-        closeOnSuspend: false,
-      });
+          const tracingOptions = snapshot?.tracingContext
+            ? {
+                traceId: snapshot.tracingContext.traceId,
+                parentSpanId: snapshot.tracingContext.spanId,
+              }
+            : undefined;
 
-      // Dispatch to the same trigger name, not a .resume suffix.
-      const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
+          await inngest.send({
+            name: eventName,
+            data: buildDurableResumeEventData({
+              inputData: resumeData,
+              runId,
+              resourceId: resumeOptions?.resourceId,
+              requestContext,
+              tracingOptions,
+              actor: resumeOptions?.actor,
+              resume: {
+                steps,
+                resumePayload: resumeData,
+                resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
+                // Each nested level resolves the foreach iteration from this label, so
+                // approving one parked tool call doesn't resume its siblings (#27925).
+                label: toolCallId,
+              },
+            }),
+          });
+        });
 
-      // Set when the run is not resumable: that rejection belongs to this caller only
-      // and must not be published to the run's shared stream topic, which would close
-      // the original run's stream too.
-      let notResumable = false;
-      const didThreadRunPublishTerminal = agentThreadStreamRuntime.captureThreadRunTerminalPublish(
-        runId,
-        agent.getPubSub(),
-      );
+        // The registry entry still tracks the whole dispatch so watchers keep seeing
+        // dispatch failures as a stream error, exactly as before.
+        const workflowExecution = dispatch.catch(error => {
+          if (!notResumable) void emitError(runId, error);
+        });
+        existingEntry.workflowExecution = workflowExecution;
 
-      const dispatch = ready.then(async () => {
-        const snapshot = suspendedSnapshot;
-        const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        // Await the dispatch itself (not workflow completion) so a failure to hand the
+        // resume event to Inngest rejects the caller. Previously it was fire-and-forget:
+        // resume() resolved successfully while the run stayed parked and resumable, and
+        // the only signal was a terminal error on the stream.
         try {
-          keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
+          await dispatch;
+          const now = Date.now();
+          for (const [id, entry] of dispatchedSnapshots) {
+            if (now - entry.at > RESUME_SNAPSHOT_WAIT_MS) dispatchedSnapshots.delete(id);
+          }
+          if (suspendedSnapshot?.timestamp !== undefined) {
+            dispatchedSnapshots.set(runId, { timestamp: suspendedSnapshot.timestamp, at: now });
+          }
         } catch (error) {
-          // A scope rejection belongs to this caller; the parked run stays resumable.
-          notResumable = true;
+          // A run that was never resumed must not keep its registry entry or stream
+          // subscription, otherwise a later resume of the same runId is blocked.
+          streamCleanup();
+          finalizeResumeRegistry();
           throw error;
         }
-        const tracingOptions = snapshot?.tracingContext
-          ? {
-              traceId: snapshot.tracingContext.traceId,
-              parentSpanId: snapshot.tracingContext.spanId,
-            }
-          : undefined;
 
-        await inngest.send({
-          name: eventName,
-          data: buildDurableResumeEventData({
-            inputData: resumeData,
-            runId,
-            resourceId: resumeOptions?.resourceId,
-            requestContext,
-            tracingOptions,
-            actor: resumeOptions?.actor,
-            resume: {
-              steps,
-              resumePayload: resumeData,
-              resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
-            },
-          }),
-        });
-      });
-
-      // The registry entry still tracks the whole dispatch so watchers keep seeing
-      // dispatch failures as a stream error, exactly as before.
-      const workflowExecution = dispatch.catch(error => {
-        if (!notResumable) void emitError(runId, error);
-      });
-      existingEntry.workflowExecution = workflowExecution;
-
-      // Await the dispatch itself (not workflow completion) so a failure to hand the
-      // resume event to Inngest rejects the caller. Previously it was fire-and-forget:
-      // resume() resolved successfully while the run stayed parked and resumable, and
-      // the only signal was a terminal error on the stream.
-      try {
-        await dispatch;
-      } catch (error) {
-        // A run that was never resumed must not keep its registry entry or stream
-        // subscription, otherwise a later resume of the same runId is blocked.
-        streamCleanup();
-        finalizeResumeRegistry();
-        throw error;
-      }
-
-      const resumeMemory = (
-        resumeOptions as InngestAgentResumeOptions<TOutput> & {
-          memory?: AgentExecutionOptions<TOutput>['memory'];
-        }
-      )?.memory;
-      const thread = resumeOptions?.threadId ?? resumeMemory?.thread;
-      const resumeStreamOptions = {
-        ...(resumeOptions ?? {}),
-        runId,
-        ...(thread
-          ? {
-              memory: {
-                ...(resumeMemory ?? {}),
-                thread,
-                resource: resumeMemory?.resource ?? resumeOptions?.resourceId,
-              },
-            }
-          : {}),
-      } as AgentExecutionOptions<TOutput>;
-      const continued = agentThreadStreamRuntime.continueRun(
-        proxyRef as unknown as Agent<any, any, any, any>,
-        output,
-        resumeStreamOptions,
-        agent.getPubSub(),
-      );
-      const terminalPublishedDuringDispatch = !resumeOptions?.closeOnSuspend && didThreadRunPublishTerminal?.();
-      if (!continued && !terminalPublishedDuringDispatch) {
-        await agentThreadStreamRuntime.registerRun(
+        const resumeMemory = (
+          resumeOptions as InngestAgentResumeOptions<TOutput> & {
+            memory?: AgentExecutionOptions<TOutput>['memory'];
+          }
+        )?.memory;
+        const thread = resumeOptions?.threadId ?? resumeMemory?.thread;
+        const resumeStreamOptions = {
+          ...(resumeOptions ?? {}),
+          runId,
+          ...(thread
+            ? {
+                memory: {
+                  ...(resumeMemory ?? {}),
+                  thread,
+                  resource: resumeMemory?.resource ?? resumeOptions?.resourceId,
+                },
+              }
+            : {}),
+        } as AgentExecutionOptions<TOutput>;
+        const continued = agentThreadStreamRuntime.continueRun(
           proxyRef as unknown as Agent<any, any, any, any>,
           output,
           resumeStreamOptions,
           agent.getPubSub(),
-          resumeOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
         );
-      }
-
-      const abort = async (reason?: unknown) => {
-        if (!abortController.signal.aborted) {
-          abortController.abort(reason);
+        const terminalPublishedDuringDispatch = !resumeOptions?.closeOnSuspend && didThreadRunPublishTerminal?.();
+        if (!continued && !terminalPublishedDuringDispatch) {
+          await agentThreadStreamRuntime.registerRun(
+            proxyRef as unknown as Agent<any, any, any, any>,
+            output,
+            resumeStreamOptions,
+            agent.getPubSub(),
+            resumeOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+          );
         }
-        // The step worker is a different process — see `requestRemoteAbort`.
-        await requestRemoteAbort(runId);
-      };
 
-      const cleanup = () => {
-        streamCleanup();
-        finalizeResumeRegistry();
-      };
+        const abort = async (reason?: unknown) => {
+          if (!abortController.signal.aborted) {
+            abortController.abort(reason);
+          }
+          // The step worker is a different process — see `requestRemoteAbort`.
+          await requestRemoteAbort(runId);
+        };
 
-      return {
-        output,
-        get fullStream() {
-          return output.fullStream as ReadableStream<any>;
-        },
-        runId,
-        threadId: resumeOptions?.threadId,
-        resourceId: resumeOptions?.resourceId,
-        cleanup,
-        abort,
-        // Internal: stream-only cleanup for resumeGenerate() to release the
-        // subscription on suspend without dropping the resumed registry entry.
-        [STREAM_CLEANUP]: streamCleanup,
-      } as InngestAgentStreamResult<TOutput>;
+        const cleanup = () => {
+          streamCleanup();
+          finalizeResumeRegistry();
+        };
+
+        return {
+          output,
+          get fullStream() {
+            return output.fullStream as ReadableStream<any>;
+          },
+          runId,
+          threadId: resumeOptions?.threadId,
+          resourceId: resumeOptions?.resourceId,
+          cleanup,
+          abort,
+          // Internal: stream-only cleanup for resumeGenerate() to release the
+          // subscription on suspend without dropping the resumed registry entry.
+          [STREAM_CLEANUP]: streamCleanup,
+        } as InngestAgentStreamResult<TOutput>;
+      } finally {
+        releaseTurn();
+        if (resumeTurns.get(runId) === turnTail) resumeTurns.delete(runId);
+      }
     },
 
     async prepare(messages, prepareOptions) {

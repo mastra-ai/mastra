@@ -1973,6 +1973,9 @@ describe('InngestAgent parity surface', () => {
         expect(sentEvent?.data.resume.steps).toEqual(['agentic-loop', 'ask-human']);
         expect(sentEvent?.data.resume.resumePath).toEqual([0]);
         expect(sentEvent?.data.resume.resumePayload).toEqual({ answer: 'yes' });
+        // The nested foreach resolves its iteration from this label; without it both
+        // parked tool calls resume with this approval (#27925).
+        expect(sentEvent?.data.resume.label).toBe('tool-call-a');
       } finally {
         result.cleanup();
         sendSpy.mockRestore();

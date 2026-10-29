@@ -519,6 +519,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       steps: string[];
       resumePayload: any;
       runId?: string;
+      label?: string;
+      forEachIndex?: number;
     };
     timeTravel?: TimeTravelExecutionParams;
     prevOutput: any;
@@ -635,6 +637,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     resumePath: nestedResumeStepId
                       ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any)
                       : undefined,
+                    // Like core's nested resume, the child resolves which foreach
+                    // iteration to resume from its own label. Without it every
+                    // suspended iteration resumes with this payload (#27925).
+                    label: resume.label,
+                    forEachIndex:
+                      resume.forEachIndex ??
+                      (resume.label ? snapshot?.resumeLabels?.[resume.label]?.foreachIndex : undefined),
                   },
                 }),
             outputOptions: { includeState: true, includeResumeLabels: true },

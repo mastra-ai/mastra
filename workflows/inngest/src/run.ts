@@ -578,6 +578,8 @@ export class InngestRun<
             steps,
             resumePayload: resumeDataToUse,
             resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
+            label: params.label,
+            forEachIndex: snapshotResumeLabel?.foreachIndex,
           },
           requestContext: mergedRequestContext,
           actor: params.actor,
