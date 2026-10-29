@@ -2001,6 +2001,8 @@ export class EventedRun<
   }
 
   #cancelPublished = false;
+  /** True while resumeStream() drives resume(); it closes the stream after setting its result. */
+  #resumeStreamOwnsClose = false;
 
   /**
    * Publish the workflow.cancel event that tells the event processor owning this run to stop it.
@@ -2437,6 +2439,7 @@ export class EventedRun<
           }
         };
 
+        self.#resumeStreamOwnsClose = true;
         try {
           const executionResults = await self.resume({
             resumeData,
@@ -2458,6 +2461,8 @@ export class EventedRun<
         } catch (err) {
           self.streamOutput?.rejectResults(err as Error);
           self.closeStreamAction?.().catch(() => {});
+        } finally {
+          self.#resumeStreamOwnsClose = false;
         }
       },
     });
@@ -2769,7 +2774,8 @@ export class EventedRun<
 
         this.releaseWorkflowTracing(workflowSpan);
         if (result.status !== 'suspended') {
-          this.closeStreamAction?.().catch(() => {});
+          // Closing here would finish the stream before resumeStream() sets its result.
+          if (!this.#resumeStreamOwnsClose) this.closeStreamAction?.().catch(() => {});
           this.cleanup?.();
         }
 
