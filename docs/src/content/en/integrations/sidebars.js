@@ -40,6 +40,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'channels/ring',
+          label: 'Ring',
+          customProps: { icon: 'https://cdn.simpleicons.org/ring?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'channels/slack',
           label: 'Slack',
           customProps: { icon: 'https://svgl.app/library/slack.svg' },
