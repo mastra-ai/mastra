@@ -218,9 +218,12 @@ export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>):
   );
 }
 
-/** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */
-export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<string> {
-  const keys = new Set<string>();
+/**
+ * Source keys already materialized as cards, in either workflow — candidates matching one are dropped.
+ * `extraKeys` carries the keys of cards the list left out (done, canceled), which the server computes.
+ */
+export function persistedSourceKeys(items: readonly WorkItem[], extraKeys: Iterable<string> = []): ReadonlySet<string> {
+  const keys = new Set<string>(extraKeys);
   for (const item of items) {
     if (item.sourceKey) keys.add(item.sourceKey);
     const candidateSourceKey = candidateSourceKeyForItem(item);

@@ -324,6 +324,34 @@ export const metricsQuerySchema = z.object({
   to: z.string().optional(),
 });
 
+export const workItemListQuerySchema = z.object({
+  threadId: z.string().min(1).optional(),
+});
+
+export const WORK_ITEM_TERMINAL_PAGE_LIMIT = 50;
+
+export const workItemTerminalListQuerySchema = z.object({
+  board: z.string().min(1),
+  stage: z.string().min(1),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(200).default(WORK_ITEM_TERMINAL_PAGE_LIMIT),
+});
+
+/**
+ * What the board needs to know about the cards it did not receive: how many
+ * rest in each terminal phase, the keys that keep their issues out of Intake,
+ * and the timestamps the activity panel counts.
+ */
+export const excludedCardsSchema = z.object({
+  board: z.string(),
+  stage: z.string(),
+  count: z.number().int(),
+  sourceKeys: z.array(z.string()),
+  /** Cards created or closed within the activity window, oldest trimmed. */
+  recent: z.array(z.object({ createdAt: z.string(), closedAt: z.string() })),
+});
+export type ExcludedCards = z.infer<typeof excludedCardsSchema>;
+
 const decisionStatusSchema = z.enum([
   'pending',
   'proposed',
@@ -627,12 +655,27 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description:
+      'List the open Factory work items and running sessions. Cards in a terminal phase (done, canceled) are left out and summarized in `excludedCards`; read them through workItemTerminalList. With `threadId`, returns only the cards bound to that thread, whatever their phase.',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       workItems: z.array(entitySchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
+      excludedCards: z.array(excludedCardsSchema),
+    }),
+  },
+  workItemTerminalList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/terminal',
+    description: 'Page through the work items resting in one terminal phase of a board, most recently closed first',
+    pathSchema: projectPathSchema,
+    querySchema: workItemTerminalListQuerySchema,
+    responseSchema: z.object({
+      workItems: z.array(entitySchema),
+      total: z.number().int(),
+      hasMore: z.boolean(),
     }),
   },
   workItemCreate: {

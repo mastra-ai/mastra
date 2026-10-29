@@ -1,6 +1,6 @@
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
@@ -32,11 +32,23 @@ function wireItem(id: string, sessions: Record<string, WorkItemSessionRef>) {
   };
 }
 
-function stubBoard(items: ReturnType<typeof wireItem>[]) {
+let threadRequests: string[] = [];
+beforeEach(() => {
+  threadRequests = [];
+});
+
+/** The default list carries `items`; `closed` cards only answer a `?threadId` read, as on the server. */
+function stubBoard(items: ReturnType<typeof wireItem>[], closed: ReturnType<typeof wireItem>[] = []) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: items, runningSessionIds: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, ({ request }) => {
+      const threadId = new URL(request.url).searchParams.get('threadId');
+      if (threadId === null) return HttpResponse.json({ workItems: items, runningSessionIds: [] });
+      threadRequests.push(threadId);
+      const onThread = [...items, ...closed].filter(card =>
+        Object.values(card.sessions).some(ref => ref.threadId === threadId),
+      );
+      return HttpResponse.json({ workItems: onThread, runningSessionIds: [] });
+    }),
   );
 }
 
@@ -69,6 +81,27 @@ describe('useThreadWorkItem', () => {
     const { result } = renderHookWithProviders(() => useThreadWorkItem(PROJECT_ID, 'thread-1'));
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeUndefined();
+    // A miss asks the server by thread once; nothing closed carries the thread either.
+    await waitFor(() => expect(threadRequests).toEqual(['thread-1']));
+  });
+
+  it('falls back to the thread read when the board snapshot omits a closed card', async () => {
+    const done = { ...wireItem('item-done', { work: sessionRef('thread-1', 'session-done') }), stages: ['done'] };
+    stubBoard([wireItem('item-a', { work: sessionRef('thread-other', 'session-a') })], [done]);
+
+    const { result } = renderHookWithProviders(() => useThreadWorkItem(PROJECT_ID, 'thread-1', 'session-done'));
+    await waitFor(() => expect(result.current.data?.id).toBe('item-done'));
+    expect(result.current.data?.stages).toEqual(['done']);
+    expect(threadRequests).toEqual(['thread-1']);
+  });
+
+  it('does not read by thread while the board snapshot still carries the card', async () => {
+    stubBoard([wireItem('item-b', { work: sessionRef('thread-1', 'session-b') })]);
+
+    const { result } = renderHookWithProviders(() => useThreadWorkItem(PROJECT_ID, 'thread-1'));
+    await waitFor(() => expect(result.current.data?.id).toBe('item-b'));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(threadRequests).toEqual([]);
   });
 
   it('stays pending without a project id and makes no request', async () => {

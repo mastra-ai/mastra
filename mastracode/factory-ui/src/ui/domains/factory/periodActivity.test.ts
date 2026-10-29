@@ -78,6 +78,39 @@ describe('periodActivity', () => {
     expect(slotTotals(week)).toEqual(week.totals);
   });
 
+  it('counts closed cards the board snapshot only summarizes, shipping the done ones but not the canceled', () => {
+    const at = (time: number) => new Date(time).toISOString();
+    const week = periodActivity({
+      period: 'week',
+      now: NOW,
+      cards: [],
+      excluded: [
+        {
+          board: 'work',
+          stage: 'done',
+          count: 40,
+          sourceKeys: [],
+          recent: [
+            { createdAt: at(NOW - 2 * DAY), closedAt: at(NOW - DAY) },
+            { createdAt: at(NOW - 20 * DAY), closedAt: at(NOW - 3 * DAY) },
+            { createdAt: at(NOW - 20 * DAY), closedAt: at(NOW - 9 * DAY) },
+          ],
+        },
+        {
+          board: 'work',
+          stage: 'canceled',
+          count: 12,
+          sourceKeys: [],
+          recent: [{ createdAt: at(NOW - 4 * DAY), closedAt: at(NOW - HOUR) }],
+        },
+      ],
+      runStarts: allRunStarts(),
+    });
+
+    expect(week.totals).toEqual({ cameIn: 2, ran: 0, shipped: 2 });
+    expect(slotTotals(week)).toEqual(week.totals);
+  });
+
   it('starts Today at local midnight and shows no slot after now', () => {
     const today = periodActivity({
       period: 'today',

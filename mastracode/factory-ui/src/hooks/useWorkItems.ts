@@ -21,6 +21,7 @@ import {
 import type {
   BoardSnapshot,
   CreateWorkItemInput,
+  ExcludedCards,
   FactoryBoard,
   UpdateWorkItemInput,
   WorkItem,
@@ -75,6 +76,16 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
+}
+
+const selectExcludedCards = (board: BoardSnapshot) => board.excludedCards;
+const NO_EXCLUDED: ExcludedCards[] = [];
+
+/** Done and canceled cards the list leaves out, summarized per board phase (counts and source keys). */
+export function useExcludedCards(factoryProjectId: string | undefined): ExcludedCards[] {
+  const { baseUrl } = useApiConfig();
+  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectExcludedCards });
+  return data ?? NO_EXCLUDED;
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */

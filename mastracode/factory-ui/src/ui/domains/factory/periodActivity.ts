@@ -1,6 +1,6 @@
 import { sessionRowStatus } from '../workspaces/services/sessionStatus';
 import { doneAt } from './boardItems';
-import type { WorkItem } from './services/workItems';
+import type { ExcludedCards, WorkItem } from './services/workItems';
 
 export type ActivityPeriod = 'today' | 'week' | 'month';
 export type ActivityKind = 'cameIn' | 'ran' | 'shipped';
@@ -86,20 +86,31 @@ export function periodActivity({
   period,
   now,
   cards,
+  excluded = [],
   runStarts,
 }: {
   period: ActivityPeriod;
   now: number;
   cards: readonly WorkItem[];
+  /** Done and canceled cards are not in `cards`; their recent dates arrive summarized. */
+  excluded?: readonly ExcludedCards[];
   runStarts: RunStarts;
 }): Activity {
   const from = activityStart(period, now);
   const slots = activitySlots(period, now, runStarts.completeAfter);
   const totals = noCounts();
   const times: Record<ActivityKind, ReadonlyArray<number | undefined>> = {
-    cameIn: cards.map(card => Date.parse(card.createdAt)),
+    cameIn: [
+      ...cards.map(card => Date.parse(card.createdAt)),
+      ...excluded.flatMap(group => group.recent.map(card => Date.parse(card.createdAt))),
+    ],
     ran: runStarts.starts,
-    shipped: cards.map(doneAt),
+    shipped: [
+      ...cards.map(doneAt),
+      ...excluded
+        .filter(group => group.stage === 'done')
+        .flatMap(group => group.recent.map(card => Date.parse(card.closedAt))),
+    ],
   };
   for (const kind of ACTIVITY_KIND_ORDER) {
     for (const time of times[kind]) {

@@ -48,6 +48,7 @@ import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/wor
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
+import { cardsForThread, partitionBoardCards, terminalCardPage } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -372,18 +373,53 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
         requiresAuth: false,
         handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
           if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
+            threadId: context.req.query('threadId'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_work_item_query' }, 400);
           await workItems.ensureReady();
           const items = await workItems.list({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
+          const { open, excluded } =
+            query.data.threadId === undefined
+              ? partitionBoardCards(this.#boards, items)
+              : { open: cardsForThread(items, query.data.threadId), excluded: [] };
           return c.json({
-            workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+            workItems: open.map(toWireWorkItem),
+            runningSessionIds: sessionIdsWhere(open, sessionId => liveSessions.isRunning(sessionId)),
+            parkedSessionIds: sessionIdsWhere(open, sessionId => liveSessions.parked(sessionId) !== undefined),
+            excludedCards: excluded,
           });
+        },
+      }),
+
+      // ── One page of a board's done/canceled cards, loaded when the column opens ─
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemTerminalList.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemTerminalList.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemTerminalList.querySchema.safeParse({
+            board: context.req.query('board'),
+            stage: context.req.query('stage'),
+            offset: context.req.query('offset'),
+            limit: context.req.query('limit'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_terminal_query' }, 400);
+          await workItems.ensureReady();
+          const items = await workItems.list({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          const page = terminalCardPage(this.#boards, items, query.data);
+          return c.json({ workItems: page.workItems.map(toWireWorkItem), total: page.total, hasMore: page.hasMore });
         },
       }),
 

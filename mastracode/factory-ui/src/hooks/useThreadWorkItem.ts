@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
+import { queryKeys } from '../api/keys';
+import { listThreadWorkItems } from '../ui/domains/factory/services/workItems';
 import type { BoardSnapshot, WorkItem } from '../ui/domains/factory/services/workItems';
 import { boardQueryOptions } from './useWorkItems';
 
@@ -25,14 +27,30 @@ export function findThreadWorkItem(
   return running ?? onThread[0];
 }
 
+/**
+ * The board snapshot leaves done and canceled cards behind, so a thread whose
+ * card has closed misses there; one further read by thread finds it. That read
+ * only fires once the board has loaded without the card.
+ */
 export function useThreadWorkItem(
   factoryProjectId: string | undefined,
   threadId: string | undefined,
   sessionId?: string,
 ) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
+  const fromBoard = useQuery({
     ...boardQueryOptions(baseUrl, factoryProjectId),
     select: (board: BoardSnapshot) => findThreadWorkItem(board.workItems, threadId, sessionId),
   });
+  const missedOnBoard = fromBoard.isSuccess && fromBoard.data === undefined;
+  const fromThread = useQuery({
+    queryKey: queryKeys.threadWorkItems(factoryProjectId, threadId),
+    queryFn: ({ signal }) => listThreadWorkItems(baseUrl, factoryProjectId!, threadId!, signal),
+    enabled: Boolean(factoryProjectId && threadId && missedOnBoard),
+    select: (board: BoardSnapshot) => findThreadWorkItem(board.workItems, threadId, sessionId),
+    // A closed card rarely changes; the board poll keeps live ones current.
+    staleTime: 60_000,
+  });
+  if (!missedOnBoard) return fromBoard;
+  return fromThread;
 }

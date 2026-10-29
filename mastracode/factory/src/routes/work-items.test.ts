@@ -2330,6 +2330,117 @@ describe('run activity on the work-item listing', () => {
   });
 });
 
+describe('GET /web/factory/projects/:id/work-items — terminal cards', () => {
+  const url = (query = '') => `/web/factory/projects/${PROJECT_ID}/work-items${query}`;
+
+  async function createCard(stage: string, overrides: Record<string, unknown> = {}) {
+    return seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: { ...createBody({ stages: [stage], ...overrides }) } as never,
+    });
+  }
+
+  it('leaves done and canceled cards out of the default list and summarizes them per board phase', async () => {
+    await createCard('execute', { externalSource: null, title: 'Open card', metadata: null });
+    await createCard('done', { metadata: { number: 42, githubRepositoryId: 7 } });
+    await createCard('canceled', {
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: '43',
+        url: 'https://github.com/acme/app/issues/43',
+      },
+      metadata: { number: 43 },
+    });
+    await createCard('done', {
+      board: 'review',
+      externalSource: {
+        integrationId: 'github',
+        type: 'pull-request',
+        externalId: '99',
+        url: 'https://github.com/acme/app/pull/99',
+      },
+      metadata: { number: 99 },
+    });
+
+    const res = await json('GET', url());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.workItems.map((item: { title: string }) => item.title)).toEqual(['Open card']);
+    expect(body.excludedCards).toHaveLength(3);
+    expect(body.excludedCards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          board: 'work',
+          stage: 'done',
+          count: 1,
+          sourceKeys: ['42', 'github:7:issue:42', 'https://github.com/acme/app/issues/42'],
+        }),
+        expect.objectContaining({
+          board: 'work',
+          stage: 'canceled',
+          count: 1,
+          sourceKeys: ['43', 'github-issue:43', 'https://github.com/acme/app/issues/43'],
+        }),
+        expect.objectContaining({ board: 'review', stage: 'done', count: 1 }),
+      ]),
+    );
+    const workDone = body.excludedCards.find(
+      (group: { board: string; stage: string }) => group.stage === 'done' && group.board === 'work',
+    );
+    expect(workDone.recent).toHaveLength(1);
+    expect(workDone.recent[0].closedAt).toBeTruthy();
+  });
+
+  it('returns every card bound to a thread, done or not, when asked for one', async () => {
+    const { item: done } = await createCard('done', {
+      sessions: { execute: { sessionId: 'session-done', branch: 'factory/done', threadId: 'thread-done' } },
+    });
+    await createCard('execute', {
+      externalSource: null,
+      sessions: { execute: { sessionId: 'session-open', branch: 'factory/open', threadId: 'thread-open' } },
+    });
+
+    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-done'])).request(
+      url('?threadId=thread-done'),
+    );
+    const body = await res.json();
+    expect(body.workItems.map((item: { id: string }) => item.id)).toEqual([done.id]);
+    expect(body.runningSessionIds).toEqual(['session-done']);
+    expect(body.excludedCards).toEqual([]);
+    expect((await (await json('GET', url('?threadId=thread-none'))).json()).workItems).toEqual([]);
+  });
+
+  it('pages one board phase most recently closed first', async () => {
+    const terminal = `${url('/terminal')}?board=work&stage=done`;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      for (const [i, closedAt] of ['2030-01-02', '2030-01-01', '2030-01-03'].entries()) {
+        vi.setSystemTime(new Date(`${closedAt}T00:00:00.000Z`));
+        await createCard('done', { externalSource: null, title: `Done ${i}`, metadata: null });
+      }
+      await createCard('canceled', { externalSource: null, title: 'Canceled', metadata: null });
+      await createCard('done', { board: 'review', externalSource: null, title: 'Review done', metadata: null });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const first = await (await json('GET', `${terminal}&limit=2`)).json();
+    expect(first.total).toBe(3);
+    expect(first.hasMore).toBe(true);
+    expect(first.workItems.map((item: { title: string }) => item.title)).toEqual(['Done 2', 'Done 0']);
+
+    const second = await (await json('GET', `${terminal}&limit=2&offset=2`)).json();
+    expect(second.hasMore).toBe(false);
+    expect(second.workItems.map((item: { title: string }) => item.title)).toEqual(['Done 1']);
+
+    expect((await json('GET', url('/terminal?board=work'))).status).toBe(400);
+    expect((await json('GET', url('/terminal?board=work&stage=done'), undefined, null)).status).toBe(401);
+  });
+});
+
 describe('GET /web/factory/projects/:id/health/thresholds', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`, undefined, null)).status).toBe(

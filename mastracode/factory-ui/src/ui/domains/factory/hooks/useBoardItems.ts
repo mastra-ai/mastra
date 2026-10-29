@@ -1,11 +1,14 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { findLoadedTerminalWorkItem } from '../../../../hooks/useTerminalWorkItems';
 import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
+  useExcludedCards,
   useUpsertWorkItemMutation,
   useWorkItemsQuery,
 } from '../../../../hooks/useWorkItems';
@@ -38,7 +41,9 @@ export function useBoardItems({
   onFailure?: (message: string) => void;
 }) {
   const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
   const items = useWorkItemsQuery(factoryProjectId);
+  const excluded = useExcludedCards(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -49,10 +54,25 @@ export function useBoardItems({
   const movingRef = useRef<Set<string>>(new Set());
 
   const all = useMemo(() => items.data ?? [], [items.data]);
-  const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
+  // Done and canceled cards stay off the list, but their sources are still
+  // materialized: the feed must keep hiding them, so their keys arrive separately.
+  const knownSourceKeys = useMemo(
+    () =>
+      persistedSourceKeys(
+        all,
+        excluded.flatMap(group => group.sourceKeys),
+      ),
+    [all, excluded],
+  );
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
+  const elsewhereSourceKeys = persistedSourceKeys(
+    all.filter(item => !belongsToBoard(item, kind)),
+    excluded.filter(group => group.board !== kind).flatMap(group => group.sourceKeys),
+  );
   const visible = all.filter(item => belongsToBoard(item, kind));
+  // Done and canceled cards are not in `all`; a column that opened has them in its own pages.
+  const findCard = (id: string) =>
+    all.find(candidate => candidate.id === id) ?? findLoadedTerminalWorkItem(queryClient, factoryProjectId, id);
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
@@ -83,7 +103,7 @@ export function useBoardItems({
   };
 
   const move = (id: string, toStage: string, options: MoveOptions = {}) => {
-    const item = all.find(candidate => candidate.id === id);
+    const item = findCard(id);
     // Held in a ref, not in mutation state: two clicks can land in the same render
     // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
@@ -114,7 +134,7 @@ export function useBoardItems({
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
     if (payload.kind === 'work-item') {
-      const item = all.find(candidate => candidate.id === payload.id);
+      const item = findCard(payload.id);
       if (!item || !belongsToBoard(item, kind) || payload.fromStage === toStage) return;
       move(payload.id, toStage, { cause });
       return;
@@ -153,6 +173,9 @@ export function useBoardItems({
   return {
     all,
     visible,
+    /** Done and canceled cards per board phase: counts and source keys, not the cards. */
+    excluded,
+    findCard,
     knownSourceKeys,
     elsewhereSourceKeys,
     isPending: items.isPending,

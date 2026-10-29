@@ -97,6 +97,13 @@ export const queryKeys = {
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  // Nested under the board key so a transition's invalidation reaches them too.
+  /** The done/canceled cards of one board phase, paged in as the column scrolls. */
+  terminalWorkItems: (factoryProjectId: string | undefined, board: string, stage: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'terminal', board, stage] as const,
+  /** The cards bound to one thread — the fallback when the board snapshot left them out. */
+  threadWorkItems: (factoryProjectId: string | undefined, threadId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'thread', threadId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
   /** Every comment read for a work item — the invalidation target for a feed event. */

@@ -194,8 +194,27 @@ describe('Factory route contracts', () => {
         workItems: [{ id: projectId }],
         runningSessionIds: ['session-1'],
         parkedSessionIds: ['session-2'],
+        excludedCards: [
+          {
+            board: 'work',
+            stage: 'done',
+            count: 1,
+            sourceKeys: ['github-issue:7'],
+            recent: [{ createdAt: '2026-10-01T00:00:00.000Z', closedAt: '2026-10-02T00:00:00.000Z' }],
+          },
+        ],
       }).success,
     ).toBe(true);
+    expect(
+      FACTORY_ROUTE_CONTRACTS.workItemTerminalList.responseSchema.safeParse({
+        workItems: [{ id: projectId }],
+        total: 1,
+        hasMore: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      FACTORY_ROUTE_CONTRACTS.workItemTerminalList.querySchema.parse({ board: 'work', stage: 'done', offset: '50' }),
+    ).toEqual({ board: 'work', stage: 'done', offset: 50, limit: 50 });
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse({
         items: [],

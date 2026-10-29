@@ -236,24 +236,97 @@ export interface BoardSnapshot {
   runningSessionIds: string[];
   /** Sessions parked on a tool until someone answers, read live with the cards. */
   parkedSessionIds: string[];
+  /** The done/canceled cards the server kept back, summarized per board phase. */
+  excludedCards: ExcludedCards[];
 }
 
-/** List the org's work items for a Factory project. */
+/**
+ * What the board knows about the cards it did not load: how many rest in a
+ * terminal phase, the source keys that keep their issues out of Intake, and
+ * the timestamps the activity panel counts.
+ */
+export interface ExcludedCards {
+  board: string;
+  stage: string;
+  count: number;
+  sourceKeys: string[];
+  recent: Array<{ createdAt: string; closedAt: string }>;
+}
+
+interface WireBoardSnapshot {
+  workItems: WireWorkItem[];
+  runningSessionIds?: string[];
+  parkedSessionIds?: string[];
+  excludedCards?: ExcludedCards[];
+}
+
+function fromWireSnapshot(data: WireBoardSnapshot): BoardSnapshot {
+  return {
+    workItems: data.workItems.map(fromWireWorkItem),
+    runningSessionIds: data.runningSessionIds ?? [],
+    parkedSessionIds: data.parkedSessionIds ?? [],
+    excludedCards: data.excludedCards ?? [],
+  };
+}
+
+/**
+ * List a Factory project's open work items. Done and canceled cards stay on
+ * the server (see {@link BoardSnapshot.excludedCards}); read them with
+ * {@link listTerminalWorkItems}.
+ */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
 ): Promise<BoardSnapshot> {
-  const data = await requestJson<{
-    workItems: WireWorkItem[];
-    runningSessionIds?: string[];
-    parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
-  return {
-    workItems: data.workItems.map(fromWireWorkItem),
-    runningSessionIds: data.runningSessionIds ?? [],
-    parkedSessionIds: data.parkedSessionIds ?? [],
-  };
+  const data = await requestJson<WireBoardSnapshot>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
+    { signal },
+  );
+  return fromWireSnapshot(data);
+}
+
+/** The cards bound to one thread, whatever phase they rest in. */
+export async function listThreadWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  threadId: string,
+  signal?: AbortSignal,
+): Promise<BoardSnapshot> {
+  const params = new URLSearchParams({ threadId });
+  const data = await requestJson<WireBoardSnapshot>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items?${params}`,
+    { signal },
+  );
+  return fromWireSnapshot(data);
+}
+
+export const TERMINAL_PAGE_SIZE = 50;
+
+export interface TerminalWorkItemsPage {
+  workItems: WorkItem[];
+  total: number;
+  hasMore: boolean;
+}
+
+/** One page of the cards resting in a board's terminal phase, most recently closed first. */
+export async function listTerminalWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  input: { board: string; stage: string; offset: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<TerminalWorkItemsPage> {
+  const params = new URLSearchParams({
+    board: input.board,
+    stage: input.stage,
+    offset: String(input.offset),
+    limit: String(input.limit ?? TERMINAL_PAGE_SIZE),
+  });
+  const data = await requestJson<{ workItems: WireWorkItem[]; total: number; hasMore: boolean }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/terminal?${params}`,
+    { signal },
+  );
+  return { workItems: data.workItems.map(fromWireWorkItem), total: data.total, hasMore: data.hasMore };
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

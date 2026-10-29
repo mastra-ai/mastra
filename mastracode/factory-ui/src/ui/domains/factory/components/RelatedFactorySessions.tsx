@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { useThreadWorkItem } from '../../../../hooks/useThreadWorkItem';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
@@ -44,18 +45,6 @@ function externalWorkItemLabel(item: WorkItem): string {
   return 'Work item';
 }
 
-function activeWorkItem(
-  items: WorkItem[],
-  factoryId?: string,
-  sessionId?: string,
-  threadId?: string,
-): WorkItem | undefined {
-  if (!factoryId || !sessionId || !threadId) return undefined;
-  return items.find(item =>
-    Object.values(item.sessions).some(session => session.threadId === threadId && session.sessionId === sessionId),
-  );
-}
-
 /** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
 export function FactorySessionPage({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
@@ -68,7 +57,8 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const workspaces = useWorkspacesQuery(factoryId);
 
   const allItems = items.data ?? [];
-  const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
+  // Looked up by thread rather than in `allItems`: a done card is no longer on the board snapshot.
+  const currentItem = useThreadWorkItem(factoryId, sessionId ? threadId : undefined, sessionId).data;
   // Prefer the list row: PageTitle patches it with the generated title, the detail cache is not updated.
   const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;

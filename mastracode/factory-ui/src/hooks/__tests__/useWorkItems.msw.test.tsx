@@ -8,7 +8,12 @@ import { queryKeys } from '../../api/keys';
 import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
 import { useDeleteWorkItemMutation, useParkedSessions, useTransitionWorkItemMutation } from '../useWorkItems';
 
-const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
+const board = (workItems: WorkItem[]): BoardSnapshot => ({
+  workItems,
+  runningSessionIds: [],
+  parkedSessionIds: [],
+  excludedCards: [],
+});
 
 const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';

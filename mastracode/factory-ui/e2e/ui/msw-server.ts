@@ -54,6 +54,10 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  // Done and canceled columns page their cards separately; tests that render closed cards override it.
+  http.get('*/web/factory/projects/:id/work-items/terminal', () =>
+    HttpResponse.json({ workItems: [], total: 0, hasMore: false }),
+  ),
   http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),
   // Ambient feed stream: `FactoryLayout` mounts it on every routed surface. It
   // must never close — a closing stream puts every test into the retry loop.

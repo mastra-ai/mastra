@@ -48,6 +48,7 @@ import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoard
 import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
+import { TerminalStageCards } from '../../domains/factory/components/TerminalStageCards';
 import { BoardStages } from './BoardStages';
 import { cardProjectRepositoryId } from '../../domains/factory/boardRepository';
 
@@ -98,7 +99,7 @@ export function BoardContent({
   const repositoryChoice = useRepositoryChoice(factory, definition);
   const cardForDrop = (payload: DragPayload) => {
     if (payload.kind === 'candidate') return payload.candidate;
-    return items.all.find(item => item.id === payload.id);
+    return items.findCard(payload.id);
   };
   const dropWithRepository = (
     payload: DragPayload,
@@ -239,7 +240,12 @@ export function BoardContent({
     const loading = loadingStages.has(stage.id);
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
-    const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
+    const terminal = stage.kind === 'terminal';
+    // Closed cards are not in the snapshot; the server counts them per phase instead.
+    const excludedCount = terminal
+      ? (items.excluded.find(group => group.board === kind && group.stage === stage.id)?.count ?? 0)
+      : 0;
+    const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates) + excludedCount;
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
@@ -255,6 +261,40 @@ export function BoardContent({
       !feedFailed &&
       !columnFeed?.hasNextPage &&
       taskCount === 0;
+    const renderCard = (item: WorkItem) => (
+      <WorkItemCard
+        layout={layout}
+        item={item}
+        deepLinkRef={registerDeepLinkedCard(item.id)}
+        highlighted={targetItemId === item.id}
+        columnStage={stage.id}
+        relatedItems={relatedItemsFor(item)}
+        sessionStatus={sessionStatuses.get(item.id)}
+        projectRepositoryId={cardProjectRepositoryId(factory.repositories, item, repository.projectRepositoryId)}
+        activityPage={activityPage}
+        preparing={runs.preparingFor(item.id)}
+        evaluatingStage={items.evaluatingStages.get(item.id)}
+        transitionReason={items.transitionReasons[item.id]}
+        decision={decisions.effectByItem.get(item.id)}
+        proposal={decisions.proposalByItem.get(item.id)}
+        approvingDecisionId={decisions.approvingId}
+        retryingDecisionId={decisions.retryingId}
+        onApproveProposal={decisions.approve}
+        onDismissProposal={decisions.dismiss}
+        onRetryDecision={decisions.retry}
+        onCreateSession={() => void runs.openOrCreateSession(item)}
+        onMove={toStage =>
+          void repositoryChoice.choose(
+            item.source,
+            item.metadata,
+            toStage,
+            slug => items.move(item.id, toStage, { repositorySlug: slug }),
+            () => items.move(item.id, toStage),
+          )
+        }
+        onRemove={() => items.remove(item.id)}
+      />
+    );
     return {
       stage,
       phaseKind: builtin ? undefined : stage.kind,
@@ -308,50 +348,30 @@ export function BoardContent({
             )
           }
         >
-          <VirtualBoardItems
-            items={stageWorkItems}
-            itemKey={item => workItemCardKey(stage.id, item.id)}
-            layout={layout}
-            pinnedKey={targetItemId && workItemCardKey(stage.id, targetItemId)}
-            renderItem={item => (
-              <WorkItemCard
-                layout={layout}
-                item={item}
-                deepLinkRef={registerDeepLinkedCard(item.id)}
-                highlighted={targetItemId === item.id}
-                columnStage={stage.id}
-                relatedItems={relatedItemsFor(item)}
-                sessionStatus={sessionStatuses.get(item.id)}
-                projectRepositoryId={cardProjectRepositoryId(
-                  factory.repositories,
-                  item,
-                  repository.projectRepositoryId,
-                )}
-                activityPage={activityPage}
-                preparing={runs.preparingFor(item.id)}
-                evaluatingStage={items.evaluatingStages.get(item.id)}
-                transitionReason={items.transitionReasons[item.id]}
-                decision={decisions.effectByItem.get(item.id)}
-                proposal={decisions.proposalByItem.get(item.id)}
-                approvingDecisionId={decisions.approvingId}
-                retryingDecisionId={decisions.retryingId}
-                onApproveProposal={decisions.approve}
-                onDismissProposal={decisions.dismiss}
-                onRetryDecision={decisions.retry}
-                onCreateSession={() => void runs.openOrCreateSession(item)}
-                onMove={toStage =>
-                  void repositoryChoice.choose(
-                    item.source,
-                    item.metadata,
-                    toStage,
-                    slug => items.move(item.id, toStage, { repositorySlug: slug }),
-                    () => items.move(item.id, toStage),
-                  )
-                }
-                onRemove={() => items.remove(item.id)}
-              />
-            )}
-          />
+          {terminal ? (
+            <TerminalStageCards
+              factoryProjectId={factoryProjectId}
+              board={kind}
+              stage={stage}
+              layout={layout}
+              enabled={!loading && (layout !== 'list' || collapsedStages.isStageOpen(stage.id))}
+              liveItems={stageWorkItems}
+              select={loaded =>
+                orderWorkItemsForStage(loaded.filter(workItemMatchesView), stage.id, sort, currentUserId)
+              }
+              itemKey={item => workItemCardKey(stage.id, item.id)}
+              pinnedKey={targetItemId && workItemCardKey(stage.id, targetItemId)}
+              renderItem={renderCard}
+            />
+          ) : (
+            <VirtualBoardItems
+              items={stageWorkItems}
+              itemKey={item => workItemCardKey(stage.id, item.id)}
+              layout={layout}
+              pinnedKey={targetItemId && workItemCardKey(stage.id, targetItemId)}
+              renderItem={renderCard}
+            />
+          )}
           <BoardStageCandidates
             candidates={stageCandidates}
             afterWorkItems={stageWorkItems.length > 0}
