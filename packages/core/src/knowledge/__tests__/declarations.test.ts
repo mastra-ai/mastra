@@ -147,6 +147,13 @@ describe('binding params into patterns', () => {
 });
 
 describe('compileKnowledgeScopes: validation', () => {
+  it('refuses reserved characters in literal segments, so a raw run scope cannot spell an encoded value', () => {
+    for (const key of ['lit:a%2Fb:$p', 'lit:a/b:$p', 'lit:a#b:$p']) {
+      expect(() => compileKnowledgeScopes({ [key]: {} }), key).toThrow(KnowledgeDeclarationError);
+    }
+    expect(() => compileKnowledgeScopes({ 'lit:ab:$p': {} })).not.toThrow();
+  });
+
   it('refuses overlapping patterns for one type', () => {
     expect(() => compileKnowledgeScopes({ 'team:$orgId:$teamId': {}, 'team:$teamId': {} })).toThrow(
       KnowledgeDeclarationError,

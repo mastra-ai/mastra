@@ -163,8 +163,10 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
     .slice(colon + 1)
     .split(':')
     .map(part => {
-      if (!part || part.includes('/') || part.includes('#')) {
-        throw new KnowledgeDeclarationError(`${what} "${key}" has an empty or invalid segment.`);
+      if (!part || part.includes('/') || part.includes('#') || part.includes('%')) {
+        throw new KnowledgeDeclarationError(
+          `${what} "${key}" has an empty or invalid segment; segments can't contain "/", "#" or "%".`,
+        );
       }
       if (part.startsWith('$')) {
         if (!PARAM_PATTERN.test(part))
