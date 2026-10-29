@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { escapeIdentifier } from 'pg';
 import type { DbClient } from '../client';
 import { backoffAfterDeadlock, IndexBuildError, isDuplicateRelationError, isRetryableDeadlock } from './pg-errors';
@@ -17,6 +18,7 @@ export async function buildIndex(
   schemaName: string,
   indexName: string,
   build: () => Promise<void>,
+  logger: Pick<IMastraLogger, 'warn'>,
 ): Promise<boolean> {
   const deadline = performance.now() + 30000;
   let attempts = 0;
@@ -58,7 +60,14 @@ export async function buildIndex(
       // Redacted progress still identifies a builder PID: corroborate its table
       // lock, rather than treating unrelated progress or ordinary maintenance as a build.
       // Defer to the table's active builder without certifying this index's validity.
-      if (builder) return false;
+      if (builder) {
+        logger.warn(`Index ${indexName} is being built by another session; skipping`);
+        return false;
+      }
+      if (performance.now() >= deadline && state === 'table busy during invalid-index repair') {
+        logger.warn(`Index ${indexName} could not be repaired because its table is busy; skipping`);
+        return false;
+      }
       if (attempts >= 3 || performance.now() >= deadline) break;
       state = 'abandoned invalid index';
       // Reserve the replacement before any destructive work. A committed DROP
@@ -81,6 +90,7 @@ export async function buildIndex(
           if (current?.valid) return 'valid';
           const locked = await tx.one<{ oid: number }>('SELECT to_regclass($1)::oid AS oid', [table]);
           if (!current || current.oid !== relation.oid || current.table_oid !== locked.oid) return 'changed';
+          logger.warn(`Dropping invalid index ${indexName} left by an interrupted build; rebuilding it`);
           await tx.none(`DROP INDEX ${escapeIdentifier(schemaName)}.${escapeIdentifier(indexName)}`);
           return 'dropped';
         });
@@ -95,7 +105,6 @@ export async function buildIndex(
         if (lockUnavailable) {
           state = 'table busy during invalid-index repair';
           failure ??= error;
-          if (performance.now() >= deadline) break;
           await delay(100);
           continue;
         }

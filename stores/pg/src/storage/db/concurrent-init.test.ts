@@ -446,6 +446,33 @@ describe('concurrent first boot (COR-1495)', () => {
     60000,
   );
 
+  it('boots with an unavailable abandoned index and repairs it after the reader commits', async () => {
+    const name = await schema();
+    const pool = new Pool({ connectionString, max: 1 });
+    const reader = await admin.connect();
+    const store = new PostgresStore({ id: 'busy-index', pool, schemaName: name });
+    try {
+      await store.init();
+      await admin.query('UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass($1)', [
+        `"${name}".idx_favorites_entity`,
+      ]);
+      await reader.query('BEGIN');
+      await reader.query(`SELECT * FROM "${name}".mastra_favorites`);
+      const restarting = new PostgresStore({ id: 'busy-index-restart', pool, schemaName: name });
+      await expect(restarting.init()).resolves.toBeUndefined();
+      expect(await validIndexes(name)).toContainEqual({ name: 'idx_favorites_entity', valid: false });
+      await expect(restarting.db.one('SELECT 42 AS answer')).resolves.toEqual({ answer: 42 });
+      await reader.query('COMMIT');
+      const db = new PgDB({ client: new PoolAdapter(pool), schemaName: name });
+      await db.createIndex({ name: 'idx_favorites_entity', table: 'mastra_favorites', columns: ['entityId'] });
+      expect(await validIndexes(name)).toContainEqual({ name: 'idx_favorites_entity', valid: true });
+    } finally {
+      await reader.query('ROLLBACK');
+      reader.release();
+      await pool.end();
+    }
+  }, 90000);
+
   it('rolls back the repair lock when cancelled before dropping the index', async () => {
     const name = await schema();
     await admin.query(`CREATE TABLE "${name}".items (value text);
