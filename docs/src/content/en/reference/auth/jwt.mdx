@@ -57,7 +57,7 @@ export const mastra = new Mastra({
     name: 'jwksUri',
     type: 'string',
     description:
-      'URL of a JWKS endpoint. Tokens are verified with the public key matching their `kid` header, using the algorithm of that key. Falls back to `JWT_AUTH_JWKS_URI`. Not combinable with `secret`.',
+      'URL of a JWKS endpoint. Tokens are verified with the public key matching their `kid` header, using the algorithm of that key. Keys are cached, and fetches for unknown key IDs are limited to 10 per minute. Falls back to `JWT_AUTH_JWKS_URI`. Not combinable with `secret`: the constructor throws if both are set, either as options or as `JWT_AUTH_SECRET` and `JWT_AUTH_JWKS_URI`.',
     isOptional: true,
     defaultValue: 'process.env.JWT_AUTH_JWKS_URI',
   },

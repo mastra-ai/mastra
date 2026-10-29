@@ -126,6 +126,7 @@ export function createBuiltinMCPOAuthTestSuite(config: BuiltinMCPOAuthTestSuiteC
         const metadata = await fetch(resourceMetadataUrl(challenge)!);
         expect(metadata.status).toBe(200);
         expect(metadata.headers.get('content-type')).toContain('application/json');
+        expect(metadata.headers.get('cache-control')).toBe('no-store');
         const document = await metadata.json();
         expect(document).toEqual({
           resource: `${server.url}/api/mcp`,
@@ -213,6 +214,26 @@ export function createBuiltinMCPOAuthTestSuite(config: BuiltinMCPOAuthTestSuiteC
       >;
       expect(document.authorization_servers).toEqual(['https://login.example.com']);
       expect(document.scopes_supported).toEqual(['mastra']);
+    });
+
+    it('sends no challenge and serves no metadata while the built-in MCP server is disabled', async () => {
+      const server = await serve({
+        auth: new MastraJwtAuth({ jwksUri: jwks.jwksUri, issuer: ISSUER }),
+        mcp: { enabled: false },
+      });
+      const response = await postMCP(server.url);
+      expect(response.headers.get('www-authenticate')).toBeNull();
+      expect((await fetch(`${server.url}/.well-known/oauth-protected-resource/api/mcp`)).status).toBe(404);
+    });
+
+    it('turns discovery and audience checks off for an invalid resource instead of failing requests', async () => {
+      const server = await serveWithJwt({ resource: 'mcp.example.com/api/mcp' });
+      const anonymous = await postMCP(server.url);
+      expect(anonymous.status).toBe(401);
+      expect(anonymous.headers.get('www-authenticate')).toBeNull();
+      expect((await fetch(`${server.url}/.well-known/oauth-protected-resource`)).status).toBe(404);
+      const tools = await listTools(server.url, await jwks.sign({ aud: 'https://other-api.example.com' }));
+      expect(tools).toContain('mastra_tool_echo');
     });
 
     it('serves no discovery routes without server.auth', async () => {

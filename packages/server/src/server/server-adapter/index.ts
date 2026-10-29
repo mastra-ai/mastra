@@ -63,7 +63,7 @@ export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-a
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
 export { propagateRequestAbort } from './mcp-disconnect';
 export { BUILTIN_MCP_HTTP_ROUTE, resolveServerRoute } from '../mcp/route';
-export { checkMCPAudience, mcpWWWAuthenticate } from '../mcp/oauth';
+export { checkMCPAudience, isMCPOAuthDiscoveryEnabled, mcpWWWAuthenticate } from '../mcp/oauth';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -940,6 +940,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }),
       },
     );
+
+    if (!isMCPOAuthDiscoveryEnabled(this.mastra)) return result;
 
     const requestUrl = context.request?.url ?? `http://localhost${context.path}`;
     const prefix = this.prefix ?? '';

@@ -50,18 +50,21 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> implements IUserP
   constructor(options?: MastraJwtAuthOptions) {
     super({ name: options?.name ?? 'jwt' });
 
-    if (options?.secret && options?.jwksUri) {
+    // An explicit option wins over the other kind's env var; two values of the same precedence conflict.
+    const secret = options?.secret ?? (options?.jwksUri ? undefined : process.env.JWT_AUTH_SECRET);
+    const jwksUri = options?.jwksUri ?? (options?.secret ? undefined : process.env.JWT_AUTH_JWKS_URI);
+    if (secret && jwksUri) {
       throw new Error('JWT auth accepts either a secret or a jwksUri, not both');
     }
-    const jwksUri = options?.jwksUri ?? (options?.secret ? undefined : process.env.JWT_AUTH_JWKS_URI);
-    this.secret = jwksUri ? '' : (options?.secret ?? process.env.JWT_AUTH_SECRET ?? '');
+    this.secret = secret ?? '';
 
     if (!this.secret && !jwksUri) {
       throw new Error('JWT auth secret is required (or a jwksUri for asymmetric tokens)');
     }
 
     if (jwksUri) {
-      this.jwks = jwksClient({ jwksUri, cache: true });
+      // Rate-limit and time out key fetches so tokens with random `kid`s cannot hammer the JWKS endpoint.
+      this.jwks = jwksClient({ jwksUri, cache: true, rateLimit: true, jwksRequestsPerMinute: 10, timeout: 10_000 });
     }
     this.issuer = options?.issuer ?? process.env.JWT_AUTH_ISSUER;
     this.mapUser = options?.mapUser ?? defaultMapUser;

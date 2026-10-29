@@ -104,4 +104,17 @@ describe('NestJS built-in MCP OAuth challenge and audience', () => {
     await start({ auth: new AudienceAuth() });
     expect((await postMCP('aud=https://other.example.com')).status).toBe(200);
   });
+
+  it('sends no challenge while the built-in MCP server is disabled', async () => {
+    await start({ auth: new AudienceAuth(), mcp: { enabled: false } });
+    expect((await postMCP()).headers['www-authenticate']).toBeUndefined();
+  });
+
+  it('turns the challenge and audience checks off for an invalid resource instead of failing requests', async () => {
+    await start({ auth: new AudienceAuth(), mcp: { oauth: { resource: 'mcp.example.com/api/mcp' } } });
+    const anonymous = await postMCP();
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers['www-authenticate']).toBeUndefined();
+    expect((await postMCP('aud=https://other.example.com')).status).toBe(200);
+  });
 });

@@ -159,7 +159,8 @@ A client reads `authorization_servers`, runs the OAuth flow against your identit
 
 Mastra fills the metadata from `server.mcp.oauth` and from your auth provider:
 
-- `resource` defaults to the endpoint URL derived from the request. Behind a proxy or load balancer, the request may carry an internal host, so set `server.mcp.oauth.resource` to the public URL.
+- `resource` defaults to the endpoint URL derived from the request. Behind a proxy or load balancer, the request may carry an internal host, so set `server.mcp.oauth.resource` to the public URL. It must be an absolute `https` URL (`http` is allowed for `localhost`) without a fragment. An invalid value logs an error and turns OAuth discovery and the audience check off.
+- The metadata URL in the challenge uses the origin of `resource` with the endpoint's path on the server, for example `/.well-known/oauth-protected-resource/api/mcp`. If your proxy serves the endpoint under a different public path, it must also forward that well-known URL to Mastra.
 - `authorization_servers` comes from the provider when it knows its issuer (see the table below). Otherwise set `server.mcp.oauth.authorizationServers`. Without either, the field is left out and clients need a token configured by hand.
 - `scopes_supported` is only included when you set `server.mcp.oauth.scopesSupported`.
 
@@ -184,14 +185,14 @@ export const mastra = new Mastra({
 
 Setting `server.mcp.oauth.resource` also makes the endpoint check that a token was issued for it: the token's `aud` claim must include the `resource` value. A token for another API gets a `401` with `error="invalid_token"`, so a token leaked from a different service can't be replayed against your MCP endpoint. Without `resource`, any token your auth provider accepts works, as it did before. The check only applies to `/api/mcp`, never to other routes.
 
-Configure your identity provider to issue tokens with that audience, for example by registering the `resource` URL as an API identifier in Auth0.
+Configure your identity provider to issue tokens with that audience, for example by registering the `resource` URL as an API identifier in Auth0. Auth0 also verifies its own `audience` option (`AUTH0_AUDIENCE`), so either set that option to the `resource` URL or issue tokens whose `aud` includes both values.
 
 | Provider | Authorization server advertised | Audience checked against `resource` |
 | - | - | - |
 | [`MastraJwtAuth`](/reference/auth/jwt) | `issuer` option | Yes |
 | [Auth0](/reference/auth/auth0) | `https://<domain>/` | Yes |
 | [Okta](/reference/auth/okta) | `issuer` option | No. Okta checks the token against its own `audience` option, so set that to the `resource` URL. |
-| [Clerk](/reference/auth/clerk) | Frontend API URL from the publishable key | No |
+| [Clerk](/reference/auth/clerk) | Frontend API URL from the publishable key. Your OAuth application must issue JWT access tokens (the default for applications created since January 2026); opaque tokens are rejected. | No |
 | [Supabase](/reference/auth/supabase) | `<url>/auth/v1` | No |
 | [`CompositeAuth`](/docs/auth/composite-auth) | All inner providers' servers | Delegated to the provider that authenticated the token |
 | WorkOS, Google, Neon, Firebase, Better Auth, custom providers | Set `authorizationServers` | No |

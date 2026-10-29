@@ -7,6 +7,7 @@ import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   checkMCPAudience,
+  isMCPOAuthDiscoveryEnabled,
   isStudioClientTypeHeader,
   mcpWWWAuthenticate,
 } from '@mastra/server/server-adapter';
@@ -142,7 +143,7 @@ export class AuthService {
       }
     }
 
-    if (bearerOnly) {
+    if (bearerOnly && isMCPOAuthDiscoveryEnabled(this.mastra)) {
       await this.applyBearerChallenge(request, webRequest.url, requestContext, result, options.response);
     }
 

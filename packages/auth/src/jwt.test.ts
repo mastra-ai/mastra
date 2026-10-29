@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 
 import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import jwt from 'jsonwebtoken';
-import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 
 import { MastraJwtAuth } from './jwt';
 
@@ -215,6 +215,16 @@ describe('MastraJwtAuth', () => {
     it('rejects both a secret and a jwksUri', () => {
       expect(() => new MastraJwtAuth({ secret: SECRET, jwksUri: 'http://localhost/jwks' })).toThrow(/either/);
     });
+
+    it('rejects JWT_AUTH_SECRET and JWT_AUTH_JWKS_URI set together', () => {
+      vi.stubEnv('JWT_AUTH_SECRET', SECRET);
+      vi.stubEnv('JWT_AUTH_JWKS_URI', 'http://localhost/jwks');
+      try {
+        expect(() => new MastraJwtAuth()).toThrow(/either/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 
   describe('JWKS', () => {
@@ -223,6 +233,7 @@ describe('MastraJwtAuth', () => {
     let jwksUri: string;
     let privateKey: CryptoKey;
     let otherPrivateKey: CryptoKey;
+    let jwksRequests = 0;
 
     beforeAll(async () => {
       const pair = await generateKeyPair('RS256');
@@ -230,6 +241,7 @@ describe('MastraJwtAuth', () => {
       otherPrivateKey = (await generateKeyPair('RS256')).privateKey;
       const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
       server = createServer((_req, res) => {
+        jwksRequests++;
         res.setHeader('content-type', 'application/json');
         res.end(JSON.stringify({ keys: [jwk] }));
       });
@@ -249,6 +261,24 @@ describe('MastraJwtAuth', () => {
         .setExpirationTime('5m')
         .sign(key);
     }
+
+    it('rate-limits JWKS fetches for tokens with unknown key ids', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      const before = jwksRequests;
+      const tokens = await Promise.all(
+        Array.from({ length: 30 }, (_, i) =>
+          new SignJWT({ sub: 'attacker' })
+            .setProtectedHeader({ alg: 'RS256', kid: `random-${i}-${Math.random()}` })
+            .setIssuer(ISSUER)
+            .setExpirationTime('5m')
+            .sign(otherPrivateKey),
+        ),
+      );
+      for (const token of tokens) {
+        await expect(auth.authenticateToken(token)).rejects.toThrow();
+      }
+      expect(jwksRequests - before).toBeLessThanOrEqual(10);
+    });
 
     it('verifies tokens signed by a key in the JWKS', async () => {
       const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });

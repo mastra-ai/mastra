@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   checkMCPAudience,
   createMCPOAuthMetadataRoutes,
+  isMCPOAuthDiscoveryEnabled,
   mcpResourceMetadataUrl,
   mcpWWWAuthenticate,
   resolveMCPResourceMetadata,
@@ -143,5 +144,33 @@ describe('warnOnUnenforcedMCPAudience', () => {
     warnOnUnenforcedMCPAudience(enforced);
     warnOnUnenforcedMCPAudience(unset);
     for (const warn of warns) expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('server.mcp.oauth.resource validation', () => {
+  const withResource = (resource: string) =>
+    mastraWith({ mcp: { oauth: { resource } }, auth: new TestAuth('jwt', { audience: true }) });
+
+  it.each(['https://mcp.example.com/api/mcp', 'http://localhost:4111/api/mcp', 'http://127.0.0.1:4111/api/mcp'])(
+    'accepts %s',
+    resource => {
+      expect(isMCPOAuthDiscoveryEnabled(withResource(resource))).toBe(true);
+    },
+  );
+
+  it.each([
+    'mcp.example.com/api/mcp',
+    '/api/mcp',
+    'http://mcp.example.com/api/mcp',
+    'https://mcp.example.com/api/mcp#frag',
+    'ftp://mcp.example.com/api/mcp',
+  ])('rejects %s: logs one error and turns off discovery and audience checks', async resource => {
+    const mastra = withResource(resource);
+    const error = vi.spyOn(mastra.getLogger(), 'error');
+    expect(isMCPOAuthDiscoveryEnabled(mastra)).toBe(false);
+    expect(isMCPOAuthDiscoveryEnabled(mastra)).toBe(false);
+    expect(await checkMCPAudience(mastra, { aud: 'other' })).toBe(true);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]![0]).toContain('server.mcp.oauth.resource');
   });
 });

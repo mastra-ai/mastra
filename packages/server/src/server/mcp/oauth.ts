@@ -8,6 +8,8 @@ import { isBuiltinMCPEnabled, resolveBuiltinMCPPath } from './config';
 export const OAUTH_PROTECTED_RESOURCE_PATH = '/.well-known/oauth-protected-resource';
 
 const warnedAudience = new WeakSet<Mastra>();
+const resourceValidity = new WeakMap<Mastra, boolean>();
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /** `server.auth` when it is a provider instance (only providers carry the OAuth hooks). */
 function getAuthProvider(mastra: Mastra): IMastraAuthProvider | undefined {
@@ -21,11 +23,44 @@ function getOAuthConfig(mastra: Mastra) {
   return mastra.getServer()?.mcp?.oauth ?? {};
 }
 
+/** RFC 9728 resource identifier: absolute https URL (http only for loopback hosts) without a fragment. */
+function isValidResourceUrl(resource: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(resource);
+  } catch {
+    return false;
+  }
+  if (resource.includes('#')) return false;
+  return url.protocol === 'https:' || (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname));
+}
+
+/** Whether `server.mcp.oauth.resource` is unset or valid. Logs one error per instance when it isn't. */
+function hasValidResource(mastra: Mastra): boolean {
+  const { resource } = getOAuthConfig(mastra);
+  if (resource === undefined) return true;
+  let valid = resourceValidity.get(mastra);
+  if (valid === undefined) {
+    valid = isValidResourceUrl(resource);
+    resourceValidity.set(mastra, valid);
+    if (!valid) {
+      mastra
+        .getLogger()
+        ?.error(
+          `server.mcp.oauth.resource "${resource}" is not an absolute https URL without a fragment ` +
+            '(http is only allowed for localhost). OAuth discovery and token audience checks for the built-in MCP server are disabled.',
+        );
+    }
+  }
+  return valid;
+}
+
 /**
- * Whether the OAuth discovery routes are served: the built-in MCP endpoint is on and requires auth.
+ * Whether OAuth discovery applies: the built-in MCP endpoint is on, requires auth, and any configured
+ * `server.mcp.oauth.resource` is valid. Gates the well-known routes, the 401 challenge, and audience checks.
  */
 export function isMCPOAuthDiscoveryEnabled(mastra: Mastra): boolean {
-  return Boolean(mastra.getServer()?.auth) && isBuiltinMCPEnabled(mastra);
+  return Boolean(mastra.getServer()?.auth) && isBuiltinMCPEnabled(mastra) && hasValidResource(mastra);
 }
 
 /** Canonical URL of the MCP endpoint: `server.mcp.oauth.resource`, else derived from the request. */
@@ -79,7 +114,7 @@ export async function mcpWWWAuthenticate(
 export async function checkMCPAudience(mastra: Mastra, user: unknown): Promise<boolean> {
   const { resource } = getOAuthConfig(mastra);
   const provider = getAuthProvider(mastra);
-  if (!resource || typeof provider?.verifyAudience !== 'function') return true;
+  if (!resource || !hasValidResource(mastra) || typeof provider?.verifyAudience !== 'function') return true;
   return provider.verifyAudience(user, resource);
 }
 
@@ -90,7 +125,7 @@ function leafProviders(provider: IMastraAuthProvider): IMastraAuthProvider[] {
 
 /** Warns once when `server.mcp.oauth.resource` is set but some provider cannot check token audience. */
 export function warnOnUnenforcedMCPAudience(mastra: Mastra): void {
-  if (warnedAudience.has(mastra) || !getOAuthConfig(mastra).resource) return;
+  if (warnedAudience.has(mastra) || !getOAuthConfig(mastra).resource || !hasValidResource(mastra)) return;
   warnedAudience.add(mastra);
   const auth = mastra.getServer()?.auth;
   if (!auth) return;
@@ -122,13 +157,16 @@ export function createMCPOAuthMetadataRoutes(mastra: Mastra, prefix: string): Se
     createRoute({
       method: 'GET',
       path,
-      responseType: 'json',
+      // A Response so the metadata can carry `Cache-Control: no-store` (its `resource` may echo the Host header).
+      responseType: 'datastream-response',
       summary: 'OAuth protected-resource metadata',
       description: 'RFC 9728 metadata for the built-in MCP endpoint',
       tags: ['MCP'],
       requiresAuth: false,
       handler: async ({ mastra, request }) =>
-        resolveMCPResourceMetadata(mastra, prefix, request?.url ?? `http://localhost${path}`),
+        Response.json(await resolveMCPResourceMetadata(mastra, prefix, request?.url ?? `http://localhost${path}`), {
+          headers: { 'Cache-Control': 'no-store' },
+        }),
     }),
   );
 }
