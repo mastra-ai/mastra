@@ -620,6 +620,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // never received, so the run suspends without announcing it.
             // A writer that throws must not stop the suspension: the call is already
             // persisted, and failing here would return an error instead of parking it.
+            // The writer only throws before enqueuing (a processor rejecting the chunk),
+            // so fall back to the step controller: otherwise the caller sees a normal
+            // completion while the run sits parked, waiting for an approval it never got.
             if (flushed) {
               try {
                 if (outputWriter) {
@@ -628,7 +631,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   safeEnqueue(controller, approvalChunk);
                 }
               } catch (error) {
-                logger?.error('Error publishing approval chunk before suspension:', error);
+                logger?.error(
+                  'Error publishing approval chunk before suspension; delivering it directly instead:',
+                  error,
+                );
+                safeEnqueue(controller, approvalChunk);
               }
             }
 
@@ -784,6 +791,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // rather than inviting an approval that cannot be resolved.
             // A writer that throws must not stop the suspension for the same reason as
             // the approval path above: the call is persisted and must stay resolvable.
+            // Deliver the chunk directly in that case so the caller still learns that an
+            // approval is pending instead of seeing a normal completion.
             if (flushed) {
               try {
                 if (outputWriter) {
@@ -792,7 +801,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   safeEnqueue(controller, approvalChunk);
                 }
               } catch (error) {
-                logger?.error('Error publishing approval chunk before suspension:', error);
+                logger?.error(
+                  'Error publishing approval chunk before suspension; delivering it directly instead:',
+                  error,
+                );
+                safeEnqueue(controller, approvalChunk);
               }
             }
 

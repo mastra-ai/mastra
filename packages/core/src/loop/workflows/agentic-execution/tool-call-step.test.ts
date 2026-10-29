@@ -1822,9 +1822,11 @@ describe('createToolCallStep tool approval workflow', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
-  it('still suspends when publishing the approval chunk fails', async () => {
+  it('still suspends and still delivers the approval chunk when the writer fails', async () => {
     // The call is already persisted at this point; a writer that throws (a processor
     // rejecting the chunk, a closed stream) must not turn the suspension into an error.
+    // It must not swallow the approval request either: the caller would otherwise see a
+    // normal completion while the run is parked waiting for an approval it never saw.
     const outputWriter = vi.fn().mockRejectedValue(new Error('processor rejected approval'));
     toolCallStep = createToolCallStep({
       tools,
@@ -1840,6 +1842,12 @@ describe('createToolCallStep tool approval workflow', () => {
     await new Promise(resolve => setImmediate(resolve));
 
     expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-call-approval' }));
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-call-approval',
+        payload: expect.objectContaining({ toolCallId: 'test-call-id', toolName: 'test-tool' }),
+      }),
+    );
     expect(suspend).toHaveBeenCalledWith(
       expect.objectContaining({
         requireToolApproval: expect.objectContaining({ toolCallId: 'test-call-id' }),
