@@ -2,7 +2,13 @@
 // MastraBrowser Base Class
 // ============================================================================
 
-export { MastraBrowser, DEFAULT_BROWSER_VIEWPORT, resolveViewportSize, resolveLaunchViewport } from './browser';
+export {
+  MastraBrowser,
+  BrowserProfileInUseError,
+  DEFAULT_BROWSER_VIEWPORT,
+  resolveViewportSize,
+  resolveLaunchViewport,
+} from './browser';
 export type {
   BrowserStatus,
   BrowserLifecycleHook,

@@ -1,8 +1,23 @@
-import { existsSync, writeFileSync, symlinkSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  symlinkSync,
+  readdirSync,
+  mkdtempSync,
+  rmSync,
+  lstatSync,
+  readlinkSync,
+} from 'node:fs';
+import { createServer } from 'node:net';
+import type { Server } from 'node:net';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
+  BrowserProfileInUseError,
   MastraBrowser,
   cleanupProfileLockFiles,
   killProcessGroup,
@@ -109,6 +124,445 @@ describe('killProcessGroup', () => {
     killProcessGroup(pid as number);
     expect(killSpy).not.toHaveBeenCalled();
     killSpy.mockRestore();
+  });
+});
+
+describe('MastraBrowser retire', () => {
+  class ClosableBrowser extends MastraBrowser {
+    readonly id = 'closable';
+    readonly name = 'Closable';
+    readonly provider = 'closable';
+    doLaunch = vi.fn(async () => {});
+    finishClose: () => void = () => {};
+    protected doClose() {
+      return new Promise<void>(resolve => {
+        this.finishClose = resolve;
+      });
+    }
+    protected async getActivePage() {
+      return null;
+    }
+    protected getBrowserStateForThread() {
+      return null;
+    }
+    getTools() {
+      return {};
+    }
+    adoptPid(pid: number) {
+      this.sharedBrowserPid = pid;
+    }
+  }
+
+  it('does not relaunch for a caller that reaches ensureReady while the browser is being retired', async () => {
+    const browser = new ClosableBrowser({ headless: true });
+    await browser.ensureReady();
+    expect(browser.doLaunch).toHaveBeenCalledOnce();
+
+    // A tool that captured the browser before it was replaced calls in mid-close.
+    const retiring = browser.retire();
+    await vi.waitFor(() => expect(browser.status).toBe('closing'));
+    const lateToolCall = browser.ensureReady();
+    browser.finishClose();
+    await retiring;
+
+    await expect(lateToolCall).rejects.toThrow('was retired');
+    await expect(browser.ensureReady()).rejects.toThrow('was retired');
+    expect(browser.doLaunch).toHaveBeenCalledOnce();
+    expect(browser.status).toBe('closed');
+  });
+
+  it('still relaunches after a plain close', async () => {
+    const browser = new ClosableBrowser({ headless: true });
+    await browser.ensureReady();
+    const closing = browser.close();
+    await vi.waitFor(() => expect(browser.status).toBe('closing'));
+    const nextCall = browser.ensureReady();
+    browser.finishClose();
+    await closing;
+    await nextCall;
+    expect(browser.doLaunch).toHaveBeenCalledTimes(2);
+    expect(browser.status).toBe('ready');
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'killProcesses ends the browser process group without waiting for close',
+    async () => {
+      const browser = new ClosableBrowser({ headless: true });
+      // Detached like chrome-launcher's Chrome, so it leads its own process group.
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      const exited = new Promise<NodeJS.Signals | null>(resolve =>
+        child.once('exit', (_code, signal) => resolve(signal)),
+      );
+      browser.adoptPid(child.pid!);
+
+      browser.killProcesses();
+
+      expect(await exited).toBe('SIGKILL');
+    },
+  );
+});
+
+describe('MastraBrowser launch with a locked profile', () => {
+  // A minimal provider: doLaunch stands in for Chrome starting on the profile.
+  class FakeBrowser extends MastraBrowser {
+    readonly id = 'fake';
+    readonly name = 'Fake';
+    readonly provider = 'fake';
+    doLaunch = vi.fn(async () => {});
+    protected async doClose() {}
+    protected async getActivePage() {
+      return null;
+    }
+    protected getBrowserStateForThread() {
+      return null;
+    }
+    getTools() {
+      return {};
+    }
+  }
+
+  let profileDir: string;
+  let socketDir: string;
+  let server: Server | undefined;
+
+  beforeEach(() => {
+    profileDir = mkdtempSync(join(tmpdir(), 'browser-profile-'));
+    // Chrome keeps the real socket in a short temp dir and links to it from the profile.
+    socketDir = mkdtempSync(join(tmpdir(), 'sock-'));
+  });
+
+  afterEach(async () => {
+    if (server?.listening) await new Promise(r => server!.close(r));
+    server = undefined;
+    rmSync(profileDir, { recursive: true, force: true });
+    rmSync(socketDir, { recursive: true, force: true });
+  });
+
+  /** Lay out the lock files Chrome leaves in a profile it holds. */
+  async function lockProfile(holder: string, { listening }: { listening: boolean }) {
+    const socketPath = join(socketDir, 'SingletonSocket');
+    server = createServer(socket => socket.destroy());
+    await new Promise<void>(r => server!.listen(socketPath, r));
+    if (!listening) {
+      // The holder died: its socket is no longer accepting connections.
+      await new Promise(r => server!.close(r));
+    }
+    symlinkSync(holder, join(profileDir, 'SingletonLock'));
+    symlinkSync(socketPath, join(profileDir, 'SingletonSocket'));
+    symlinkSync('12345', join(profileDir, 'SingletonCookie'));
+  }
+
+  it.skipIf(process.platform === 'win32')(
+    'fails with an error naming the profile and holding PID when a browser holds the profile',
+    async () => {
+      await lockProfile(`${hostname()}-4242`, { listening: true });
+      const browser = new FakeBrowser({ profile: profileDir });
+
+      const error = await browser.launch().catch(e => e);
+
+      expect(error).toBeInstanceOf(BrowserProfileInUseError);
+      expect(error.message).toContain(profileDir);
+      expect(error.message).toContain('PID 4242');
+      expect(browser.doLaunch).not.toHaveBeenCalled();
+      // The live holder's lock is left alone.
+      expect(readlinkSync(join(profileDir, 'SingletonLock'))).toBe(`${hostname()}-4242`);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')('removes a stale lock left by a dead browser and launches', async () => {
+    await lockProfile(`${hostname()}-4242`, { listening: false });
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    for (const file of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+      expect(() => lstatSync(join(profileDir, file))).toThrow();
+    }
+  });
+
+  // The lock's PID now belongs to an unrelated live process (PID reuse). Chrome
+  // treats that as a held profile, but nothing serves the profile.
+  it.skipIf(process.platform === 'win32')('removes a stale lock whose PID was reused by another process', async () => {
+    await lockProfile(`${hostname()}-${process.pid}`, { listening: false });
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'treats a live local holder that starts listening shortly after locking as holding the profile',
+    async () => {
+      // Chrome creates SingletonLock before it listens on SingletonSocket.
+      await lockProfile(`${hostname()}-${process.pid}`, { listening: false });
+      const socketPath = join(socketDir, 'SingletonSocket');
+      const startListening = setTimeout(() => {
+        server = createServer(socket => socket.destroy());
+        server.listen(socketPath);
+      }, 300);
+      const browser = new FakeBrowser({ profile: profileDir });
+
+      const error = await browser.launch().catch(e => e);
+      clearTimeout(startListening);
+
+      expect(error).toBeInstanceOf(BrowserProfileInUseError);
+      expect(browser.doLaunch).not.toHaveBeenCalled();
+      expect(readlinkSync(join(profileDir, 'SingletonLock'))).toBe(`${hostname()}-${process.pid}`);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')('removes a stale lock left under a different hostname', async () => {
+    await lockProfile('old-hostname.local-4242', { listening: false });
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'removes a stale lock whose holder was SIGKILLed and left its socket file behind',
+    async () => {
+      // Like a crashed Chrome: the socket file stays on disk, connecting to it gets ECONNREFUSED.
+      const socketPath = join(socketDir, 'SingletonSocket');
+      const child = spawn(process.execPath, [
+        '-e',
+        `require('net').createServer().listen(${JSON.stringify(socketPath)}, () => console.log('ready'))`,
+      ]);
+      await new Promise<void>(r => child.stdout.once('data', () => r()));
+      child.kill('SIGKILL');
+      await new Promise(r => child.once('exit', r));
+      expect(existsSync(socketPath)).toBe(true);
+      symlinkSync(`${hostname()}-${child.pid}`, join(profileDir, 'SingletonLock'));
+      symlinkSync(socketPath, join(profileDir, 'SingletonSocket'));
+      const browser = new FakeBrowser({ profile: profileDir });
+
+      await browser.launch();
+
+      expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+      expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'keeps the lock of a browser that took the profile while an older browser was still closing',
+    async () => {
+      let finishClose = () => {};
+      class SlowCloseBrowser extends FakeBrowser {
+        protected doClose() {
+          return new Promise<void>(resolve => {
+            finishClose = resolve;
+          });
+        }
+      }
+      const old = new SlowCloseBrowser({ profile: profileDir });
+      await old.launch();
+      const closing = old.close();
+      await vi.waitFor(() => expect(old.status).toBe('closing'));
+
+      // The replacement now holds the profile; the old close finishes late.
+      await lockProfile(`${hostname()}-4242`, { listening: true });
+      finishClose();
+      await closing;
+
+      expect(readlinkSync(join(profileDir, 'SingletonLock'))).toBe(`${hostname()}-4242`);
+      expect(lstatSync(join(profileDir, 'SingletonSocket')).isSymbolicLink()).toBe(true);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')('removes its own lock files after closing', async () => {
+    const browser = new FakeBrowser({ profile: profileDir });
+    await browser.launch();
+    // Chrome died without unlinking its socket; nothing listens anymore.
+    await lockProfile(`${hostname()}-4242`, { listening: false });
+
+    await browser.close();
+
+    expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+  });
+
+  it.skipIf(process.platform === 'win32').each([
+    { label: 'close', disconnectsDuringClose: false },
+    // Closing Chrome fires the disconnect handler, which clears the tracked PIDs mid-close.
+    { label: 'close that fires the disconnect handler', disconnectsDuringClose: true },
+  ])(
+    'removes its lock after a $label whose Chrome takes a moment to exit, so it can relaunch at once',
+    async ({ disconnectsDuringClose }) => {
+      // Fake Chrome: holds the profile's socket and, like real Chrome, keeps
+      // serving it for a moment after being told to die.
+      const socketPath = join(socketDir, 'SingletonSocket');
+      const chrome = spawn(process.execPath, [
+        '-e',
+        `require('net').createServer(s => s.destroy()).listen(${JSON.stringify(socketPath)}, () => console.log('ready'));
+         process.on('SIGTERM', () => setTimeout(() => process.exit(0), 500));`,
+      ]);
+      await new Promise<void>(r => chrome.stdout.once('data', () => r()));
+      class SlowExitBrowser extends FakeBrowser {
+        adoptPid(pid: number) {
+          this.sharedBrowserPid = pid;
+        }
+        killProcesses() {
+          if (this.sharedBrowserPid) process.kill(this.sharedBrowserPid, 'SIGTERM');
+          this.sharedBrowserPid = undefined;
+        }
+        protected async doClose() {
+          if (disconnectsDuringClose) {
+            // Chrome is told to quit, then reports the disconnect.
+            process.kill(this.sharedBrowserPid!, 'SIGTERM');
+            this.handleBrowserDisconnected();
+          }
+        }
+      }
+      try {
+        const browser = new SlowExitBrowser({ profile: profileDir });
+        browser.doLaunch.mockImplementationOnce(async () => {
+          browser.adoptPid(chrome.pid!);
+          symlinkSync(`${hostname()}-${chrome.pid}`, join(profileDir, 'SingletonLock'));
+          symlinkSync(socketPath, join(profileDir, 'SingletonSocket'));
+          symlinkSync('12345', join(profileDir, 'SingletonCookie'));
+        });
+        await browser.launch();
+
+        await browser.close();
+
+        for (const file of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+          expect(() => lstatSync(join(profileDir, file))).toThrow();
+        }
+        await browser.ensureReady();
+        expect(browser.doLaunch).toHaveBeenCalledTimes(2);
+      } finally {
+        chrome.kill('SIGKILL');
+      }
+    },
+    10_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'does not kill a browser relaunched while close was still releasing the profile lock',
+    async () => {
+      class RelaunchingBrowser extends FakeBrowser {
+        // Relaunch skips profile prep so it lands inside close()'s lock release.
+        protected getLocalProfilePath() {
+          return undefined;
+        }
+        adoptPid(pid: number) {
+          this.sharedBrowserPid = pid;
+        }
+      }
+      const browser = new RelaunchingBrowser({ profile: profileDir });
+      await browser.launch();
+      // A live local PID holds the lock but is not listening, so close()'s lock
+      // release waits out the starting-holder grace after status is 'closed'.
+      await lockProfile(`${hostname()}-${process.pid}`, { listening: false });
+
+      const closing = browser.close();
+      await vi.waitFor(() => expect(browser.status).toBe('closed'));
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      let killedBy: NodeJS.Signals | null = null;
+      child.once('exit', (_code, signal) => (killedBy = signal));
+      try {
+        browser.doLaunch.mockImplementationOnce(async () => browser.adoptPid(child.pid!));
+        await browser.ensureReady();
+        await closing;
+        // Give a SIGKILL from close() time to be reported.
+        await new Promise(r => setTimeout(r, 200));
+
+        expect(browser.status).toBe('ready');
+        expect(killedBy).toBeNull();
+      } finally {
+        child.kill('SIGKILL');
+      }
+    },
+    10_000,
+  );
+
+  it('launches normally when the profile is not locked', async () => {
+    writeFileSync(join(profileDir, 'Preferences'), '{}');
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    expect(existsSync(join(profileDir, 'Preferences'))).toBe(true);
+  });
+
+  // Issue #28664: chrome-launcher appends Chrome's stderr to <profile>/chrome-err.log
+  // and takes the DevTools port from the first match in the whole file. On a reused
+  // profile that is the first launch's port, which is dead, so the launch fails with
+  // ECONNREFUSED on the old port even though no lock files are left behind.
+  describe('relaunching on a reused profile', () => {
+    const DEVTOOLS_PORT = /DevTools listening on ws:\/\/.*?:(\d+)\//;
+
+    /** Behaves like chrome-launcher: append Chrome's stderr, then discover the port from the file. */
+    class LauncherLikeBrowser extends FakeBrowser {
+      discoveredPort?: number;
+      constructor(
+        profile: string,
+        private readonly chromePort: number,
+      ) {
+        super({ profile });
+      }
+      doLaunch = vi.fn(async () => {
+        const errLog = join(profileDir, 'chrome-err.log');
+        appendFileSync(errLog, `\nDevTools listening on ws://127.0.0.1:${this.chromePort}/devtools/browser/abc\n`);
+        appendFileSync(join(profileDir, 'chrome-out.log'), 'out\n');
+        this.discoveredPort = Number(readFileSync(errLog, 'utf-8').match(DEVTOOLS_PORT)![1]);
+      });
+    }
+
+    it('reads the new DevTools port when launching again after a clean close', async () => {
+      const first = new LauncherLikeBrowser(profileDir, 50047);
+      await first.launch();
+      expect(first.discoveredPort).toBe(50047);
+      await first.close();
+
+      const second = new LauncherLikeBrowser(profileDir, 61234);
+      await second.launch();
+
+      expect(second.discoveredPort).toBe(61234);
+    });
+
+    it('clears launcher logs left by an earlier launch before launching', async () => {
+      writeFileSync(
+        join(profileDir, 'chrome-err.log'),
+        'DevTools listening on ws://127.0.0.1:50047/devtools/browser/old\n',
+      );
+      writeFileSync(join(profileDir, 'chrome-out.log'), 'old\n');
+      writeFileSync(join(profileDir, 'Preferences'), '{}');
+      const browser = new FakeBrowser({ profile: profileDir });
+      browser.doLaunch.mockImplementation(async () => {
+        expect(existsSync(join(profileDir, 'chrome-err.log'))).toBe(false);
+        expect(existsSync(join(profileDir, 'chrome-out.log'))).toBe(false);
+      });
+
+      await browser.launch();
+
+      expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+      expect(existsSync(join(profileDir, 'Preferences'))).toBe(true);
+    });
+
+    it.skipIf(process.platform === 'win32')(
+      'leaves launcher logs alone when a live browser holds the profile',
+      async () => {
+        writeFileSync(join(profileDir, 'chrome-err.log'), 'live\n');
+        await lockProfile(`${hostname()}-4242`, { listening: true });
+        const browser = new FakeBrowser({ profile: profileDir });
+
+        await expect(browser.launch()).rejects.toBeInstanceOf(BrowserProfileInUseError);
+
+        expect(readFileSync(join(profileDir, 'chrome-err.log'), 'utf-8')).toBe('live\n');
+      },
+    );
   });
 });
 

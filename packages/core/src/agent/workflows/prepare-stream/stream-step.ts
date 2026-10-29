@@ -14,7 +14,7 @@ import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../t
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
-import type { CreatedAgentSignal } from '../../signals';
+import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
 import { LOOP_OPTIONS_KEY } from './run-scope-keys';
@@ -54,7 +54,7 @@ interface StreamStepOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
-  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
+  subscribePendingSignals?: (runId: string, listener: PendingSignalListener) => () => void;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 

@@ -44,6 +44,7 @@ import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
+import { agentLoopTermination, generationUsage } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
@@ -209,6 +210,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           modelSpanData: state.modelSpanData,
           // First-chunk clock carried from earlier iterations (first write wins)
           completionStartTime: state.completionStartTime,
+          timeToFirstTokenMs: state.timeToFirstTokenMs,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
           accumulatedSteps: state.accumulatedSteps,
@@ -226,6 +228,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
+          timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
@@ -368,6 +371,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .dowhile(singleIterationWorkflow, async params => {
         const { inputData, engine, mastra } = params;
         const state = inputData as IterationState;
+        const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const { step } = engine as { step: BaseContext<Inngest>['step'] };
 
@@ -396,6 +400,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
+          if (tracingRegistry)
+            tracingRegistry.tracingStopCause = state.lastStepResult?.isContinued ? 'delegation' : 'model_finished';
           await emitStepFinish(false);
           return false;
         }
@@ -407,6 +413,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
+          if (tracingRegistry) {
+            tracingRegistry.tracingStopCause = shouldContinue ? 'max_steps' : 'model_finished';
+          }
           await emitStepFinish(false);
           return false;
         }
@@ -449,6 +458,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return conditions.some(Boolean);
         });
 
+        if (stopped && tracingRegistry) tracingRegistry.tracingStopCause = 'stop_condition';
         await emitStepFinish(!stopped);
         return !stopped;
       })
@@ -457,6 +467,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         async params => {
           const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
+          const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
           // Access pubsub via symbol to emit finish event
@@ -548,13 +559,25 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
-          // Rebuilt spans end from snapshots taken at run start, so the clock the
-          // steps carried through the loop state is applied here.
-          const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
+          // Resumed segments carry their own clocks beside their fresh spans.
+          const registry = getRunRegistryEntry(state.runId, mastra);
+          const completionClock = registry?.resumeModelSpanData
+            ? registry.resumeCompletionStartTime
+            : state.completionStartTime;
+          const timeToFirstTokenMs = registry?.resumeModelSpanData
+            ? registry.resumeTimeToFirstTokenMs
+            : state.timeToFirstTokenMs;
+          const clocks = {
+            ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
+            ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
+          };
           if (state.modelSpanData) {
-            const modelSpan = observability?.rebuildSpan(
-              state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
-            ) as AIModelGenerationSpan | undefined;
+            const modelSpan =
+              registry?.resumeModelSpan ??
+              registry?.modelSpan ??
+              (observability?.rebuildSpan(state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
+                | AIModelGenerationSpan
+                | undefined);
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -562,22 +585,45 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                 args: tc.args,
               })),
             );
+            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
+              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
-                ...(completionStartTime ? { completionStartTime } : {}),
+                ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                ...clocks,
               },
-              usage: state.accumulatedUsage,
+              usage,
             });
           }
 
           // End AGENT_RUN span with final output
           if (state.agentSpanData) {
-            const agentSpan = observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+            const agentSpan =
+              registry?.resumeAgentSpan ??
+              registry?.agentSpan ??
+              observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
+              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText },
-              ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+              ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });
           }
 
