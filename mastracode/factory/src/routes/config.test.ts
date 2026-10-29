@@ -349,7 +349,10 @@ describe('buildProviderAccess', () => {
 describe('resolveDeploymentModelProviders', () => {
   it('keeps supported providers and warns about the rest', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect([...resolveDeploymentModelProviders([' amazon-bedrock', 'openai', ''])]).toEqual(['amazon-bedrock']);
+    expect([...resolveDeploymentModelProviders([' amazon-bedrock', ' google-vertex ', 'openai', ''])]).toEqual([
+      'amazon-bedrock',
+      'google-vertex',
+    ]);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('"openai"'));
     expect(resolveDeploymentModelProviders(undefined).size).toBe(0);
     warn.mockRestore();

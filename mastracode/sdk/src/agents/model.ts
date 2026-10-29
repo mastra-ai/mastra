@@ -15,6 +15,7 @@ import {
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
+import { GOOGLE_VERTEX_GATEWAY_ID, createGoogleVertexGateway } from '../providers/google-vertex-gateway.js';
 import { normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
@@ -264,6 +265,37 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
       providerId: AMAZON_BEDROCK_GATEWAY_ID,
       modelId: bareModelId,
       apiKey: auth?.apiKey ?? '',
+      headers,
+    });
+  }
+
+  if (providerId === GOOGLE_VERTEX_GATEWAY_ID) {
+    if (
+      tenantCredentialStore?.allowEnvironmentFallback === false &&
+      !tenantCredentialStore.allowsDeploymentCredentials?.(GOOGLE_VERTEX_GATEWAY_ID)
+    ) {
+      throw new ProviderAuthRequiredError(
+        'Google Vertex AI is not enabled for this Factory deployment. The operator must configure Application Default Credentials, GOOGLE_VERTEX_PROJECT, GOOGLE_VERTEX_LOCATION, and FACTORY_DEPLOYMENT_MODEL_PROVIDERS=google-vertex.',
+      );
+    }
+
+    const vertexGateway = createGoogleVertexGateway();
+    const auth = vertexGateway.resolveAuth({
+      gatewayId: GOOGLE_VERTEX_GATEWAY_ID,
+      providerId: GOOGLE_VERTEX_GATEWAY_ID,
+      modelId: bareModelId,
+      routerId: normalizedModelId,
+    });
+    if (!auth) {
+      throw new Error(
+        'Google Vertex ADC requires GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION. Configure Application Default Credentials in the deployment environment.',
+      );
+    }
+
+    return vertexGateway.resolveLanguageModel({
+      providerId: GOOGLE_VERTEX_GATEWAY_ID,
+      modelId: bareModelId,
+      apiKey: auth.apiKey ?? '',
       headers,
     });
   }

@@ -118,6 +118,7 @@ import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.j
 import { setAuthStorage } from './providers/claude-max.js';
 import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
+import { createGoogleVertexGateway } from './providers/google-vertex-gateway.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
@@ -656,6 +657,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     settingsPath: config?.settingsPath,
   });
   const amazonBedrockGateway = createAmazonBedrockGateway();
+  const googleVertexGateway = createGoogleVertexGateway();
   const githubCopilotGateway = createGitHubCopilotGateway();
 
   // Project detection
@@ -1749,11 +1751,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       routesToOtherGateway(
         modelId,
         Object.values(controller.getMastra()?.listGateways() ?? {}),
-        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
+        new Set([
+          mastraCodeGateway.id,
+          amazonBedrockGateway.id,
+          googleVertexGateway.id,
+          githubCopilotGateway.id,
+          'models.dev',
+        ]),
       )
         ? modelId
         : resolveModel(modelId, { requestContext }),
-    gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
+    gateways: [amazonBedrockGateway, googleVertexGateway, githubCopilotGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,

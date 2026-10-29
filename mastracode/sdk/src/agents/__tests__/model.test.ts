@@ -118,6 +118,18 @@ vi.mock('@ai-sdk/amazon-bedrock', () => ({
   }),
 }));
 
+vi.mock('@ai-sdk/google-vertex', () => ({
+  createVertex: vi.fn((opts: Record<string, unknown>) => {
+    return (modelId: string) => ({
+      __provider: 'google-vertex',
+      modelId,
+      project: opts.project,
+      location: opts.location,
+      headers: opts.headers,
+    });
+  }),
+}));
+
 // Mock @aws-sdk/credential-providers
 const mockCredentialProvider = vi.hoisted(() => vi.fn());
 vi.mock('@aws-sdk/credential-providers', () => ({
@@ -208,6 +220,7 @@ vi.mock('../../onboarding/settings.js', async importOriginal => {
 
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createVertex } from '@ai-sdk/google-vertex';
 import { createOpenAI } from '@ai-sdk/openai';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
@@ -971,6 +984,64 @@ describe('resolveModel', () => {
 
       expect(result.__provider).toBe('amazon-bedrock');
       expect(result.credentialProvider).toBe(mockCredentialProvider);
+    });
+  });
+
+  describe('google-vertex/* models', () => {
+    const modelId = 'google-vertex/gemini-3.8-flash';
+
+    beforeEach(() => {
+      process.env.GOOGLE_VERTEX_PROJECT = 'test-project';
+      process.env.GOOGLE_VERTEX_LOCATION = 'us-central1';
+    });
+
+    it('uses the native Vertex provider so Gemini thought signatures stay in provider metadata', () => {
+      const result = resolveModel(modelId) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        __provider: 'google-vertex',
+        modelId: 'gemini-3.8-flash',
+        project: 'test-project',
+        location: 'us-central1',
+      });
+      expect(createVertex).toHaveBeenCalled();
+    });
+
+    it('requires project and location configuration', () => {
+      delete process.env.GOOGLE_VERTEX_LOCATION;
+
+      expect(() => resolveModel(modelId)).toThrow('GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION');
+      expect(createVertex).not.toHaveBeenCalled();
+    });
+
+    it('refuses Vertex for a signed-in Factory tenant unless the deployment opted in', () => {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      expect(() => resolveModel(modelId, { requestContext })).toThrow(ProviderAuthRequiredError);
+      expect(createVertex).not.toHaveBeenCalled();
+    });
+
+    it('resolves Vertex for a signed-in Factory tenant when the deployment opted in', () => {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        allowsDeploymentCredentials: provider => provider === 'google-vertex',
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      expect(resolveModel(modelId, { requestContext })).toMatchObject({ __provider: 'google-vertex' });
     });
   });
 
