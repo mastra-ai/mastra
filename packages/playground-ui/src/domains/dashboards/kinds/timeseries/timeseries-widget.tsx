@@ -130,7 +130,7 @@ function TimeseriesView({ widget, views, view, index, onChoose, page, onDrilldow
   const yDomain = shaped.flat && options.flatYDomain ? options.flatYDomain : options.yDomain;
 
   return (
-    <ChartCard {...layout} summary={summary || undefined} isUpdating={sent.some(r => r.isPlaceholderData)}>
+    <ChartCard {...layout} summary={summary || undefined} isUpdating={sent.some(r => r.isRefetching)}>
       <ChartArea isEmpty={!isLoading && shaped.empty} emptyMessage={options.emptyMessage}>
         {options.chart === 'stackedBar' ? (
           <MetricsStackedBarChart {...chart} />

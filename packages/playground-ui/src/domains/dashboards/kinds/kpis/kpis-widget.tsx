@@ -53,7 +53,7 @@ function KpisView({ view, page }: { view: ResolvedView<KpisOptions>; page: Dashb
             previous={figures.previous == null ? undefined : format(figures.previous)}
             comparison={comparisonLabel}
             isLoading={used.some(r => r.isLoading)}
-            isUpdating={used.some(r => r.isPlaceholderData)}
+            isUpdating={used.some(r => r.isRefetching)}
             isError={used.some(r => r.isError)}
           />
         );

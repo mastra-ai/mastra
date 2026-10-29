@@ -716,12 +716,14 @@ describe('Latency switching tabs, drawn at real size', () => {
     widget: await renderWidget(latencyWidget, undefined),
   });
 
-  it('keeps the last tab’s chart, dimmed, while the next loads, as the card does', async () => {
+  // Unlike the card, which keeps the last tab's chart dimmed: that chart reads as the next tab's.
+  it('shows a skeleton, not the last tab’s chart, while the next loads', async () => {
     holdPercentiles('mastra_workflow_duration_ms');
     const { card, widget } = await both();
     await switchWhileLoading(card, widget, 'Workflows');
-    expect(widget.root.querySelector('.recharts-area-curve')).not.toBeNull();
-    expectSame(card, widget);
+    expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
+    expect(within(widget.root).getByRole('status', { name: 'Loading chart' })).toBeTruthy();
+    expect(widget.root.querySelector('.recharts-surface')).toBeNull();
   });
 
   it('shows the next tab once it loads, as the card does', async () => {
@@ -735,7 +737,19 @@ describe('Latency switching tabs, drawn at real size', () => {
 
   it('refetches a tab opened again, as the card does', async () => {
     const { card, widget } = await both();
-    await expectSameTab(card, widget, 'Workflows');
+    // Workflows has no runs. The card's chart stays mounted from Agents and keeps that tab's
+    // y-axis under the empty message; the widget's mounts fresh after its skeleton. Same message,
+    // different leftover markup, so this step compares requests and what the reader sees.
+    for (const side of [card, widget]) {
+      const recorder = recordRequests();
+      fireEvent.click(within(side.root).getByRole('tab', { name: 'Workflows' }));
+      await settle(recorder);
+      recorder.stop();
+      side.sent = recorder.sent;
+    }
+    expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
+    expect(within(widget.root).getByText('No workflow runs in this range.')).toBeTruthy();
+    expect(within(card.root).getByText('No workflow runs in this range.')).toBeTruthy();
     await expectSameTab(card, widget, 'Agents');
     expect(widget.sent).toHaveLength(1);
   });

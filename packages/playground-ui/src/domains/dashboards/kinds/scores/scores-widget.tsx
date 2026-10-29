@@ -1,6 +1,6 @@
 import type { DashboardQuery } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ChartArea } from '../../../metrics/components/chart-area';
 import { ChartCard } from '../../../metrics/components/chart-card';
 import { ChartCardError } from '../../../metrics/components/chart-card-error';
@@ -46,7 +46,6 @@ function useScorers(view: ResolvedView<ScoresOptions>, page: DashboardPageContex
   const recent = useQuery({
     queryKey: ['dashboards', 'listScores', args],
     queryFn: () => client.listScores(args),
-    placeholderData: keepPreviousData,
     enabled: discover,
   });
   if (!discover) {
@@ -112,14 +111,16 @@ function ScoresView({
     stepHours,
   );
   const indexOf = gridIndex(buckets, stepHours);
-  const lines: MetricsLineChartSeries[] = shown.map(({ scorerId, name }, i) => {
-    const mean = valueOf(means[i]?.data)?.value ?? 0;
+  shown.forEach(({ scorerId }, i) => {
     for (const s of seriesOf(points[i]?.data) ?? []) {
       for (const p of s.points) {
         const bucket = buckets[indexOf(p) ?? -1];
         if (bucket) bucket[scorerId] = p.value;
       }
     }
+  });
+  const lines: MetricsLineChartSeries[] = shown.map(({ scorerId, name }, i) => {
+    const mean = valueOf(means[i]?.data)?.value ?? 0;
     return {
       dataKey: scorerId,
       label: name,
@@ -138,7 +139,7 @@ function ScoresView({
           isLoading={isLoading}
         />
       }
-      isUpdating={all.some(r => r.isPlaceholderData)}
+      isUpdating={all.some(r => r.isRefetching)}
     >
       <ChartArea isEmpty={!isLoading && shown.length === 0} emptyMessage={options.emptyMessage}>
         <MetricsLineChart

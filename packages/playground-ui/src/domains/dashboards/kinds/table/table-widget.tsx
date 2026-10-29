@@ -207,7 +207,7 @@ function TableView(props: TabProps & { page: DashboardPageContext }) {
       : undefined;
 
   return (
-    <TableFrame {...props} isUpdating={aggregates.length ? aggregates.some(r => r?.isPlaceholderData) : undefined}>
+    <TableFrame {...props} isUpdating={aggregates.length ? aggregates.some(r => r?.isRefetching) : undefined}>
       <ChartArea>
         <MetricsTable
           aria-label={options.ariaLabel}
