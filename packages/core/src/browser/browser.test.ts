@@ -389,6 +389,51 @@ describe('MastraBrowser launch with a locked profile', () => {
   });
 
   it.skipIf(process.platform === 'win32')(
+    'removes its lock after a close whose Chrome takes a moment to exit, so it can relaunch at once',
+    async () => {
+      // Fake Chrome: holds the profile's socket and, like real Chrome, keeps
+      // serving it for a moment after being told to die.
+      const socketPath = join(socketDir, 'SingletonSocket');
+      const chrome = spawn(process.execPath, [
+        '-e',
+        `require('net').createServer(s => s.destroy()).listen(${JSON.stringify(socketPath)}, () => console.log('ready'));
+         process.on('SIGTERM', () => setTimeout(() => process.exit(0), 500));`,
+      ]);
+      await new Promise<void>(r => chrome.stdout.once('data', () => r()));
+      class SlowExitBrowser extends FakeBrowser {
+        adoptPid(pid: number) {
+          this.sharedBrowserPid = pid;
+        }
+        killProcesses() {
+          if (this.sharedBrowserPid) process.kill(this.sharedBrowserPid, 'SIGTERM');
+          this.sharedBrowserPid = undefined;
+        }
+      }
+      try {
+        const browser = new SlowExitBrowser({ profile: profileDir });
+        browser.doLaunch.mockImplementationOnce(async () => {
+          browser.adoptPid(chrome.pid!);
+          symlinkSync(`${hostname()}-${chrome.pid}`, join(profileDir, 'SingletonLock'));
+          symlinkSync(socketPath, join(profileDir, 'SingletonSocket'));
+          symlinkSync('12345', join(profileDir, 'SingletonCookie'));
+        });
+        await browser.launch();
+
+        await browser.close();
+
+        for (const file of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+          expect(() => lstatSync(join(profileDir, file))).toThrow();
+        }
+        await browser.ensureReady();
+        expect(browser.doLaunch).toHaveBeenCalledTimes(2);
+      } finally {
+        chrome.kill('SIGKILL');
+      }
+    },
+    10_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
     'does not kill a browser relaunched while close was still releasing the profile lock',
     async () => {
       class RelaunchingBrowser extends FakeBrowser {

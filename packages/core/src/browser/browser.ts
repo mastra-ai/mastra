@@ -153,6 +153,17 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+/** How long close() waits for a killed browser to exit before releasing its profile lock. */
+const BROWSER_EXIT_TIMEOUT_MS = 2000;
+
+/** Wait until every PID has exited, or the deadline passes. */
+async function waitForProcessesToExit(pids: Array<number | undefined>, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (pids.some(pid => pid !== undefined && isProcessAlive(pid)) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
 /** Read a symlink's target, or undefined if `path` is missing or not a symlink. */
 function readLinkTarget(path: string): string | undefined {
   try {
@@ -893,9 +904,14 @@ export abstract class MastraBrowser extends MastraBase {
    * Remove this browser's profile lock after it closed, unless another browser
    * now holds the profile. A close that finishes late (after a replacement
    * already launched on the same profile) must not delete the live lock.
+   *
+   * Killing Chrome only sends a signal: until it exits its socket still
+   * accepts and the lock looks held. So wait for the closed browser's
+   * processes (`pids`) to exit first.
    */
-  private async releaseProfileLockAfterClose(): Promise<void> {
+  private async releaseProfileLockAfterClose(pids: Array<number | undefined> = []): Promise<void> {
     if (!this.config.profile) return;
+    await waitForProcessesToExit(pids, BROWSER_EXIT_TIMEOUT_MS);
     try {
       await releaseStaleProfileLock(this.config.profile, this.logger);
     } catch (err) {
@@ -1021,6 +1037,7 @@ export abstract class MastraBrowser extends MastraBase {
       try {
         await this.doClose();
         closed = true;
+        const pids = [this.sharedBrowserPid, ...this.threadBrowserPids.values()];
         // Kill orphaned child processes (GPU, renderer, crashpad, etc.) before
         // any further await: once status is 'closed', ensureReady() can relaunch
         // and register new PIDs that must not be killed.
@@ -1029,7 +1046,7 @@ export abstract class MastraBrowser extends MastraBase {
         this.notifyBrowserClosed();
         // Clean up stale lock files only after confirmed shutdown.
         // Removing them from a live profile (if doClose threw) could cause corruption.
-        await this.releaseProfileLockAfterClose();
+        await this.releaseProfileLockAfterClose(pids);
       } catch (err) {
         this.status = 'error';
         this.error = err instanceof Error ? err.message : String(err);
@@ -1044,12 +1061,6 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Close the browser for good. Unlike close(), a retired browser never
-   * relaunches, so a caller still holding it (e.g. a tool call that started
-   * before the browser was replaced) gets an error instead of a new Chrome
-   * that nothing tracks.
-   */
-  /**
    * Throw if retire() was called. Subclasses that start browsers outside
    * launch()/ensureReady() (e.g. per-thread sessions) must call this first.
    */
@@ -1059,6 +1070,12 @@ export abstract class MastraBrowser extends MastraBase {
     }
   }
 
+  /**
+   * Close the browser for good. Unlike close(), a retired browser never
+   * relaunches, so a caller still holding it (e.g. a tool call that started
+   * before the browser was replaced) gets an error instead of a new Chrome
+   * that nothing tracks.
+   */
   async retire(): Promise<void> {
     this.retired = true;
     await this.close();
@@ -1263,10 +1280,12 @@ export abstract class MastraBrowser extends MastraBase {
   handleBrowserDisconnected(): void {
     const scope = this.threadManager?.getScope();
     const threadId = this.getCurrentThread();
+    let closedPid: number | undefined;
 
     if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
       // Kill orphaned child processes for this thread
       const pid = this.threadBrowserPids.get(threadId);
+      closedPid = pid;
       killProcessGroup(pid, this.logger);
       this.threadBrowserPids.delete(threadId);
       // Only clear the specific thread's session - other threads have independent browsers
@@ -1277,6 +1296,7 @@ export abstract class MastraBrowser extends MastraBase {
       this.notifyBrowserClosed(threadId);
     } else {
       // Kill orphaned child processes for the shared browser
+      closedPid = this.sharedBrowserPid;
       killProcessGroup(this.sharedBrowserPid, this.logger);
       this.sharedBrowserPid = undefined;
       // For 'shared' scope or default thread, the shared browser is gone
@@ -1294,7 +1314,7 @@ export abstract class MastraBrowser extends MastraBase {
 
     // Clean up stale lock files in the profile directory
     // This is especially important for external/manual close which may leave locks behind
-    void this.releaseProfileLockAfterClose().catch(err => {
+    void this.releaseProfileLockAfterClose([closedPid]).catch(err => {
       this.logger.debug?.(`Failed to release profile lock: ${err}`);
     });
   }
@@ -1676,9 +1696,11 @@ export abstract class MastraBrowser extends MastraBase {
     // Notify callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
     // Clean up any stale lock files in the profile directory
-    void this.releaseProfileLockAfterClose().catch(err => {
+    try {
+      await this.releaseProfileLockAfterClose([pid]);
+    } catch (err) {
       this.logger.debug?.(`Failed to release profile lock: ${err}`);
-    });
+    }
   }
 
   /**
@@ -1702,7 +1724,7 @@ export abstract class MastraBrowser extends MastraBase {
     // Notify only the callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
     // Clean up any stale lock files in the profile directory
-    void this.releaseProfileLockAfterClose().catch(err => {
+    void this.releaseProfileLockAfterClose([pid]).catch(err => {
       this.logger.debug?.(`Failed to release profile lock: ${err}`);
     });
   }
