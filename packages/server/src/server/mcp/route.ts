@@ -28,7 +28,7 @@ const MISSING_MCP_MESSAGE = 'Built-in MCP server needs @mastra/mcp: npm install 
 const reportedMissingMCP = new WeakSet<Mastra>();
 
 /** Whether `error` (or an error it wraps) says `@mastra/mcp` itself can't be resolved, not a module inside it. */
-function isMissingMCPPackage(error: unknown): boolean {
+export function isMissingMCPPackage(error: unknown): boolean {
   for (let current = error; current instanceof Error; current = current.cause) {
     const code = (current as { code?: unknown }).code;
     if (
@@ -135,13 +135,19 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     server.__setLogger(mastra.getLogger());
     return {
       server,
-      httpPath: mountedPaths.get(mastra) ?? resolveBuiltinMCPPath(mastra),
+      httpPath: getBuiltinMCPMountedPath(mastra),
       mcpOptions: getBuiltinMCPTransportOptions(mastra),
     };
   },
 });
 
 const mountedPaths = new WeakMap<Mastra, string>();
+
+/** Path the built-in MCP route is served on (without the API prefix), after collision fallback. */
+export function getBuiltinMCPMountedPath(mastra: Mastra): string {
+  return mountedPaths.get(mastra) ?? resolveBuiltinMCPPath(mastra);
+}
+
 const warnedCollision = new WeakSet<Mastra>();
 
 /** Whether `path` would be served by `route` (`:param` matches one segment, `*` the rest). */
