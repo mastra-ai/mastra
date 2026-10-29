@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
+import { workLaneForRole } from '../boards/legacy-plan-role.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
@@ -381,8 +382,12 @@ export function createFactorySessionTools(
     const item = await findWorkItem(deps.workItems, scope, workItem);
     if (!item) throw workItemNotFound(workItem);
     const label = workItemLabel(item);
-    const board = deps.boards.get(boardForWorkItem(item));
-    if (!board?.phaseForRole(role)) throw new Error(`${label}'s board has no ${role} role.`);
+    const boardId = boardForWorkItem(item);
+    const board = deps.boards.get(boardId);
+    // Work's old `plan` role still names Planning, though no phase runs in a `plan` context any more.
+    if (!workLaneForRole(boardId, role, board) && !board?.phaseForRole(role)) {
+      throw new Error(`${label}'s board has no ${role} role.`);
+    }
     const seated = item.sessions[role];
     if (seated) {
       throw new Error(
