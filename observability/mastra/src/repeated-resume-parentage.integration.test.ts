@@ -384,7 +384,14 @@ it.each(['normal', 'durable'] as const)(
 );
 
 /** Crash a durable run mid-tool, recover it in a fresh process, then resume its approval. */
-async function recoverThenResume({ sampleCrashedRun }: { sampleCrashedRun: boolean }) {
+async function recoverThenResume({
+  sampleCrashedRun,
+  underInternalSpan,
+}: {
+  sampleCrashedRun: boolean;
+  /** Start the run under an internal span that has the external parent, exported with this setting. */
+  underInternalSpan?: { includeInternalSpans: boolean };
+}) {
   const exporter = new TestExporter();
   const storage = new InMemoryStore();
   const runId = 'recovered-resume';
@@ -434,6 +441,7 @@ async function recoverThenResume({ sampleCrashedRun }: { sampleCrashedRun: boole
             serviceName: 'recovered-resume',
             exporters: [exporter],
             sampling: { type: SamplingStrategyType.CUSTOM, sampler: () => sampleCrashedRun || !crashes },
+            includeInternalSpans: underInternalSpan?.includeInternalSpans,
           },
         },
       }),
@@ -444,12 +452,23 @@ async function recoverThenResume({ sampleCrashedRun }: { sampleCrashedRun: boole
   let recovering: ReturnType<typeof openProcess> | undefined;
   const cleanups: Array<() => void> = [];
   try {
+    const internalParent = underInternalSpan
+      ? crashed.host.observability!.getDefaultInstance()!.startSpan({
+          name: 'internal parent',
+          type: SpanType.WORKFLOW_RUN,
+          tracingPolicy: { internal: InternalSpans.ALL },
+          externalParentSpanId: EXTERNAL_AT_START,
+        })
+      : undefined;
     const started = await crashed.agent.stream('Start.', {
       runId,
       maxSteps: 10,
-      tracingOptions: { parentSpanId: EXTERNAL_AT_START },
+      ...(internalParent
+        ? { tracingContext: { currentSpan: internalParent } }
+        : { tracingOptions: { parentSpanId: EXTERNAL_AT_START } }),
     });
     await crashReached;
+    internalParent?.end();
     // The first process stops responding mid-tool; this one knows nothing of its execution.
     started.cleanup();
     globalRunRegistry.clear();
@@ -501,6 +520,24 @@ it('recovering a run whose start was not sampled starts a new lineage at the rec
   expect(recoveredRun.resumedFromSpanId).toBeUndefined();
   expect(laterResume).toMatchObject({ parentSpanId: recoveredRun.id, resumedFromSpanId: recoveredRun.id });
 }, 30_000);
+
+it.each([
+  [true, null],
+  [false, EXTERNAL_AT_START],
+] as const)(
+  'a recovered run keeps the external parent its initial run exported (includeInternalSpans: %s)',
+  async (includeInternalSpans, expected) => {
+    const { initial, recoveredRun, laterResume } = await recoverThenResume({
+      sampleCrashedRun: true,
+      underInternalSpan: { includeInternalSpans },
+    });
+    expect(recoveredRun.resumedFromSpanId).toBe(initial!.id);
+    expect([initial, recoveredRun, laterResume].map(span => span!.externalParentSpanId ?? null)).toEqual(
+      Array(3).fill(expected),
+    );
+  },
+  30_000,
+);
 
 it('stores the resume lineage of a resumed run in the trace store', async () => {
   const storage = new InMemoryStore();

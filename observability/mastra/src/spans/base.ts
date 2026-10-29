@@ -768,7 +768,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
     return {
-      ...this.exportSpan(),
+      // As exporters see it, so a rebuilt span exports the same parent and external parent.
+      ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
       ...(this.traceState ? { traceState: this.traceState } : {}),
     };
