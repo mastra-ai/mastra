@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -306,6 +306,25 @@ describe('DashboardRenderer', () => {
       expect(container.querySelector('[data-widget-id="project"]')).toBeNull();
       expect(screen.getByTestId('note-org')).toBeDefined();
       expect(screen.getByTestId('note-tabs').textContent).toBe('projects / agents');
+    });
+
+    it('draws no row for a row whose widgets are all hidden, so the grid keeps no gap for it', () => {
+      const rows: DashboardDefinition = {
+        schemaVersion: 1,
+        rows: [
+          { widgets: [note('everywhere', 'x')] },
+          { widgets: [note('project-only', 'x', { scope: 'project' })] },
+          { widgets: [note('org-only', 'x', { scope: 'org' }), note('also-org', 'x', { scope: 'org' })] },
+        ],
+      };
+      const rowsOf = (container: HTMLElement) =>
+        [...(container.firstElementChild?.children ?? [])].map(row =>
+          [...row.querySelectorAll('[data-widget-id]')].map(c => c.getAttribute('data-widget-id')),
+        );
+      expect(rowsOf(renderDashboard(rows).container)).toEqual([['everywhere'], ['project-only']]);
+      cleanup();
+      const org = renderDashboard(rows, { scope: { metrics: { projectLabel: id => id }, dashboard: 'org' } });
+      expect(rowsOf(org.container)).toEqual([['everywhere'], ['org-only', 'also-org']]);
     });
   });
 
