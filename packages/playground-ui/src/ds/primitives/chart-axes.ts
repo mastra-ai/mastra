@@ -103,9 +103,9 @@ const LABEL_GAP = 48;
 export const labelWidth = (text: string) => text.length * CHART_AXIS_FONT_SIZE * 0.58;
 
 /**
- * Which buckets get a label: the smallest round step whose labels fit the width, on
- * clock-aligned times (hours divisible by the step, days on local midnight or, for daily
- * buckets, on their local date). Without
+ * Which buckets get a label: the smallest round step whose labels fit the width, on the first
+ * bucket at or after each clock-aligned time (hours divisible by the step, days on local
+ * midnight or, for daily buckets, on their local date). Without
  * timestamps, evenly spaced buckets that fit; when fewer than three would show, just the
  * first and last bucket.
  */
@@ -141,16 +141,17 @@ export function pickTimeTicks(
     return even.size < 3 ? ends : even;
   }
   const picked = new Set<number>();
+  const bucketMinutes = bucket / MINUTE;
   ts.forEach((t, i) => {
     const d = new Date(t);
     const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    // Daily buckets are often cut on UTC midnight, which isn't local midnight: they align by
-    // local date. Shorter buckets need the clock time itself.
-    const onClock = bucket >= DAY || (d.getHours() === 0 && d.getMinutes() === 0);
+    // Buckets are cut on UTC, so in a zone off the step (Paris in winter, Kolkata) none starts on
+    // the round local time: label the first bucket that starts at or after it.
+    const sinceMidnight = (t - midnight) / MINUTE;
+    // Daily buckets align by local date.
+    const onClock = bucket >= DAY || sinceMidnight < bucketMinutes;
     const onStep =
-      step < 1440
-        ? d.getSeconds() === 0 && (d.getHours() * 60 + d.getMinutes()) % step === 0
-        : onClock && Math.round(midnight / DAY) % (step / 1440) === 0;
+      step < 1440 ? sinceMidnight % step < bucketMinutes : onClock && Math.round(midnight / DAY) % (step / 1440) === 0;
     if (onStep) picked.add(i);
   });
   // Two clock labels land off-centre (one mid-plot, one at an edge): label the ends instead.

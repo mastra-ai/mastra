@@ -81,39 +81,10 @@ export const exceedsAggregateWindow = ({ from, to }: TimeRange) =>
   Date.parse(to) - Date.parse(from) > MAX_TIME_RANGE_MS;
 
 /**
- * Whether bars can follow the local clock: only when every local bar edge is also an edge of the
- * API's UTC-aligned buckets. True in whole-hour zones; false for hourly buckets in Kolkata (+5:30)
- * or Kathmandu (+5:45), where a local grid would split API buckets and drop the ones at the edge.
+ * The start of the bar holding `ms`, on the same UTC grid as the API's buckets: every bar holds
+ * whole API buckets in any time zone. Only the labels are local.
  */
-function onLocalClock({ from, to }: TimeRange, { interval, stepMs }: HistogramPlan) {
-  if (stepMs >= DAY) return false;
-  const intervalMinutes = INTERVAL_MS[interval] / MINUTE;
-  return [from, to].every(iso => new Date(iso).getTimezoneOffset() % intervalMinutes === 0);
-}
-
-/**
- * The start of the bar holding `ms`. On the local clock, bars are step-aligned from local midnight
- * so they land on round clock times; otherwise they are UTC-aligned, like the API's buckets.
- */
-function barStart(ms: number, stepMs: number, local: boolean) {
-  if (!local) return Math.floor(ms / stepMs) * stepMs;
-  const d = new Date(ms);
-  const stepMinutes = stepMs / MINUTE;
-  const minutes = Math.floor((d.getHours() * 60 + d.getMinutes()) / stepMinutes) * stepMinutes;
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, minutes).getTime();
-}
-
-/** The next bar's start. Local bars step in local time so a DST change doesn't drift the grid. */
-function nextBar(ms: number, stepMs: number, local: boolean) {
-  if (!local) return ms + stepMs;
-  const d = new Date(ms);
-  const next = barStart(
-    new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes() + stepMs / MINUTE).getTime(),
-    stepMs,
-    local,
-  );
-  return next > ms ? next : ms + stepMs;
-}
+const barStart = (ms: number, stepMs: number) => Math.floor(ms / stepMs) * stepMs;
 
 const fmtDay = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const fmtClock = (d: Date) =>
@@ -124,29 +95,27 @@ function barLabels(ts: number, stepMs: number, multiDay: boolean): BucketLabels 
   const d = new Date(ts);
   const edgeLabel = `${fmtDay(d)}, ${fmtClock(d)}`;
   if (!multiDay) return { ts, label: fmtClock(d), edgeLabel, time: edgeLabel };
-  // The day's first bar: local midnight on the local clock, just after it on the UTC grid.
+  // The day's first bar, which off whole-hour zones starts just after local midnight.
   const firstOfDay = d.getHours() * 60 + d.getMinutes() < stepMs / MINUTE;
   return { ts, label: firstOfDay ? fmtDay(d) : edgeLabel, edgeLabel, time: edgeLabel };
 }
 
 /** Every bar of the window, quiet ones as zero, with non-error and error counts summed per bar. */
 export function bucketCountRows(rows: CountRow[], timeRange: TimeRange): HistogramBucket[] {
-  const plan = histogramPlan(timeRange);
-  const { stepMs } = plan;
-  const local = onLocalClock(timeRange, plan);
+  const { stepMs } = histogramPlan(timeRange);
   const start = new Date(timeRange.from);
   const end = new Date(timeRange.to);
   const multiDay = isMultiDay(start, end);
   const buckets: HistogramBucket[] = [];
   const index = new Map<number, HistogramBucket>();
-  for (let ts = barStart(start.getTime(), stepMs, local); ts < end.getTime(); ts = nextBar(ts, stepMs, local)) {
+  for (let ts = barStart(start.getTime(), stepMs); ts < end.getTime(); ts += stepMs) {
     const bucket = { ...barLabels(ts, stepMs, multiDay), ok: 0, errors: 0 };
     buckets.push(bucket);
     index.set(ts, bucket);
   }
   for (const row of rows) {
     if (!row.bucket) continue;
-    const bucket = index.get(barStart(Date.parse(row.bucket), stepMs, local));
+    const bucket = index.get(barStart(Date.parse(row.bucket), stepMs));
     if (!bucket) continue;
     const count = row.measures.count ?? 0;
     const errors = row.measures.errorCount ?? 0;

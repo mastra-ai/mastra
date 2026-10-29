@@ -58,161 +58,142 @@ describe('histogramPlan', () => {
   );
 });
 
+/** Runs `fn` with the browser in `timeZone`. */
+const inTimeZone = (timeZone: string) => {
+  const original = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = timeZone;
+  });
+  afterAll(() => {
+    process.env.TZ = original;
+  });
+};
+
+/** One row per API bucket the server answers for the window (UTC-aligned), each with 2 spans, 1 failed. */
+const serverRows = ({ from, to }: { from: string; to: string }, intervalMs: number) => {
+  const rows = [];
+  for (let ms = Math.floor(Date.parse(from) / intervalMs) * intervalMs; ms < Date.parse(to); ms += intervalMs) {
+    rows.push({ bucket: new Date(ms).toISOString(), measures: { count: 2, errorCount: 1 } });
+  }
+  return rows;
+};
+
+const utc = (iso: string) => Date.parse(`${iso}Z`);
+
 describe('bucketCountRows', () => {
-  describe.each(['America/New_York', 'Asia/Tokyo', 'Europe/Paris'])('when the browser is in %s', timeZone => {
-    const original = process.env.TZ;
-    beforeAll(() => {
-      process.env.TZ = timeZone;
-    });
-    afterAll(() => {
-      process.env.TZ = original;
-    });
+  describe.each(['UTC', 'Europe/Paris', 'America/New_York', 'Asia/Tokyo', 'Asia/Kolkata', 'Asia/Kathmandu'])(
+    'when the browser is in %s',
+    timeZone => {
+      inTimeZone(timeZone);
 
-    const at = (day: number, hour: number, minute = 0) => new Date(2026, 9, day, hour, minute);
-    const sevenDays = () => range(at(14, 0), at(21, 0));
+      // Local midnights, like a date picked in the browser. Paris and New York each cross a DST change.
+      describe.each([
+        { name: 'a 7-day window', from: [2026, 9, 22], to: [2026, 9, 29], intervalMs: HOUR },
+        { name: 'a 7-day window', from: [2026, 9, 28], to: [2026, 10, 4], intervalMs: HOUR },
+        { name: 'a 1-day window', from: [2026, 5, 1, 9, 37], to: [2026, 5, 2, 9, 37], intervalMs: 5 * MINUTE },
+      ])('over $name from $from', ({ from, to, intervalMs }) => {
+        const window = () => range(new Date(...(from as [number, number])), new Date(...(to as [number, number])));
 
-    describe('when the window is 7 days', () => {
-      it('merges hourly rows into 2h buckets', () => {
-        const buckets = bucketCountRows(
-          [
-            { bucket: at(14, 0).toISOString(), measures: { count: 3, errorCount: 1 } },
-            { bucket: at(14, 1).toISOString(), measures: { count: 4, errorCount: 0 } },
-            { bucket: at(14, 3).toISOString(), measures: { count: 2, errorCount: 2 } },
-          ],
-          sevenDays(),
-        );
+        it('keeps every count and error the server sends', () => {
+          const rows = serverRows(window(), intervalMs);
+          const buckets = bucketCountRows(rows, window());
 
-        expect(buckets).toHaveLength(84);
-        expect(buckets[0]).toMatchObject({ ts: at(14, 0).getTime(), ok: 6, errors: 1 });
-        expect(buckets[1]).toMatchObject({ ts: at(14, 2).getTime(), ok: 0, errors: 2 });
-      });
-    });
+          expect(buckets.reduce((sum, bucket) => sum + bucket.ok, 0)).toBe(rows.length);
+          expect(buckets.reduce((sum, bucket) => sum + bucket.errors, 0)).toBe(rows.length);
+        });
 
-    describe('when the window is a day', () => {
-      const oneDay = () => range(at(20, 9, 37), at(21, 9, 37));
+        it('starts every bar on a UTC step', () => {
+          const { stepMs } = histogramPlan(window());
+          for (const bucket of bucketCountRows([], window())) expect(bucket.ts % stepMs).toBe(0);
+        });
 
-      it('merges 5-minute rows into 20-minute buckets aligned on the local clock', () => {
-        const buckets = bucketCountRows(
-          [
-            { bucket: at(20, 10, 0).toISOString(), measures: { count: 1, errorCount: 0 } },
-            { bucket: at(20, 10, 15).toISOString(), measures: { count: 2, errorCount: 1 } },
-          ],
-          oneDay(),
-        );
+        it('zooms onto API bucket edges', () => {
+          const { from: zoomFrom, to: zoomTo } = zoomWindow(
+            bucketCountRows([], window()),
+            { start: 10, end: 20 },
+            window(),
+          );
 
-        expect(buckets[0]).toMatchObject({ ts: at(20, 9, 20).getTime() });
-        expect(buckets.find(bucket => bucket.ts === at(20, 10, 0).getTime())).toMatchObject({ ok: 2, errors: 1 });
+          expect(zoomFrom.getTime() % intervalMs).toBe(0);
+          expect(zoomTo.getTime() % intervalMs).toBe(0);
+        });
       });
 
-      it('labels buckets with their minutes, and round hours without', () => {
-        const buckets = bucketCountRows([], oneDay());
+      describe('when the window is 7 days', () => {
+        const sevenDays = () => range(new Date(utc('2026-10-14T00:00')), new Date(utc('2026-10-21T00:00')));
 
-        expect(buckets.find(bucket => bucket.ts === at(20, 14, 20).getTime())).toMatchObject({
+        it('merges hourly rows into 2h bars', () => {
+          const buckets = bucketCountRows(
+            [
+              { bucket: '2026-10-14T00:00:00.000Z', measures: { count: 3, errorCount: 1 } },
+              { bucket: '2026-10-14T01:00:00.000Z', measures: { count: 4, errorCount: 0 } },
+              { bucket: '2026-10-14T03:00:00.000Z', measures: { count: 2, errorCount: 2 } },
+            ],
+            sevenDays(),
+          );
+
+          expect(buckets).toHaveLength(84);
+          expect(buckets[0]).toMatchObject({ ts: utc('2026-10-14T00:00'), ok: 6, errors: 1 });
+          expect(buckets[1]).toMatchObject({ ts: utc('2026-10-14T02:00'), ok: 0, errors: 2 });
+          expect(buckets[2]).toMatchObject({ ts: utc('2026-10-14T04:00'), ok: 0, errors: 0 });
+        });
+
+        it('counts a null errorCount as 0', () => {
+          const buckets = bucketCountRows(
+            [{ bucket: '2026-10-14T01:00:00.000Z', measures: { count: 5, errorCount: null } }],
+            sevenDays(),
+          );
+
+          expect(buckets[0]).toMatchObject({ ok: 5, errors: 0 });
+        });
+
+        it('ignores a row without a bucket', () => {
+          const buckets = bucketCountRows([{ measures: { count: 9, errorCount: 9 } }], sevenDays());
+
+          expect(buckets.every(bucket => bucket.ok === 0 && bucket.errors === 0)).toBe(true);
+        });
+      });
+    },
+  );
+
+  describe('labels', () => {
+    describe('when the browser is in Paris', () => {
+      inTimeZone('Europe/Paris');
+
+      it('shows each bar in local time, with minutes only when it has some', () => {
+        // Oct 20 is UTC+2 in Paris: 12:20Z is 2:20 PM.
+        const buckets = bucketCountRows(
+          [],
+          range(new Date(utc('2026-10-20T07:37')), new Date(utc('2026-10-21T07:37'))),
+        );
+
+        expect(buckets.find(bucket => bucket.ts === utc('2026-10-20T12:20'))).toMatchObject({
           label: '2:20 PM',
           time: 'Oct 20, 2:20 PM',
         });
-        expect(buckets.find(bucket => bucket.ts === at(20, 14, 0).getTime())?.label).toBe('2 PM');
+        expect(buckets.find(bucket => bucket.ts === utc('2026-10-20T12:00'))?.label).toBe('2 PM');
+      });
+
+      it('names the day on its first bar', () => {
+        const buckets = bucketCountRows([], range(new Date(2026, 9, 14), new Date(2026, 9, 21)));
+
+        // 22:00Z is midnight on Oct 16 in Paris.
+        expect(buckets.find(bucket => bucket.ts === utc('2026-10-15T22:00'))?.label).toBe('Oct 16');
+        expect(buckets.find(bucket => bucket.ts === utc('2026-10-16T00:00'))?.label).toBe('Oct 16, 2 AM');
       });
     });
 
-    describe('when a period has no rows', () => {
-      it('keeps a zero bucket', () => {
-        const buckets = bucketCountRows(
-          [{ bucket: at(20, 13).toISOString(), measures: { count: 1, errorCount: 0 } }],
-          sevenDays(),
-        );
+    describe('when the browser is in Kolkata', () => {
+      inTimeZone('Asia/Kolkata');
 
-        expect(buckets[2]).toMatchObject({ ts: at(14, 4).getTime(), ok: 0, errors: 0 });
-      });
-    });
+      it('keeps the half hour in the labels', () => {
+        const buckets = bucketCountRows([], range(new Date(2026, 5, 1), new Date(2026, 5, 8)));
+        const bar = buckets.find(bucket => bucket.ts === utc('2026-06-02T08:00'));
 
-    describe('when errorCount is null', () => {
-      it('counts it as 0', () => {
-        const buckets = bucketCountRows(
-          [{ bucket: at(14, 1).toISOString(), measures: { count: 5, errorCount: null } }],
-          sevenDays(),
-        );
-
-        expect(buckets[0]).toMatchObject({ ok: 5, errors: 0 });
-      });
-    });
-
-    describe('when a row has no bucket', () => {
-      it('ignores it', () => {
-        const buckets = bucketCountRows([{ measures: { count: 9, errorCount: 9 } }], sevenDays());
-
-        expect(buckets.every(bucket => bucket.ok === 0 && bucket.errors === 0)).toBe(true);
-      });
-    });
-  });
-});
-
-describe('when the browser is in a zone off the whole hour', () => {
-  describe.each(['Asia/Kolkata', 'Asia/Kathmandu'])('in %s', timeZone => {
-    const original = process.env.TZ;
-    beforeAll(() => {
-      process.env.TZ = timeZone;
-    });
-    afterAll(() => {
-      process.env.TZ = original;
-    });
-
-    // Local June 1–8: 2h bars over hourly API buckets, which the server floors to UTC hours.
-    const sevenDays = () => range(new Date(2026, 5, 1), new Date(2026, 5, 8));
-    /** One row per UTC hour the server answers for the window, each with 2 spans, 1 failed. */
-    const serverRows = ({ from, to }: { from: string; to: string }) => {
-      const rows = [];
-      for (let ms = Math.floor(Date.parse(from) / HOUR) * HOUR; ms < Date.parse(to); ms += HOUR) {
-        rows.push({ bucket: new Date(ms).toISOString(), measures: { count: 2, errorCount: 1 } });
-      }
-      return rows;
-    };
-
-    it('keeps every count and error', () => {
-      const rows = serverRows(sevenDays());
-      const buckets = bucketCountRows(rows, sevenDays());
-
-      expect(buckets.reduce((sum, bucket) => sum + bucket.ok, 0)).toBe(rows.length);
-      expect(buckets.reduce((sum, bucket) => sum + bucket.errors, 0)).toBe(rows.length);
-    });
-
-    it('puts each API bucket in the bar that holds it', () => {
-      const buckets = bucketCountRows(
-        [
-          { bucket: '2026-05-31T18:00:00.000Z', measures: { count: 1, errorCount: 1 } },
-          { bucket: '2026-05-31T20:00:00.000Z', measures: { count: 1, errorCount: 1 } },
-        ],
-        sevenDays(),
-      );
-
-      expect(buckets[0]).toMatchObject({ ts: Date.parse('2026-05-31T18:00:00.000Z'), errors: 1 });
-      expect(buckets[1]).toMatchObject({ ts: Date.parse('2026-05-31T20:00:00.000Z'), errors: 1 });
-    });
-
-    it('zooms onto API bucket edges', () => {
-      const buckets = bucketCountRows([], sevenDays());
-      const { from, to } = zoomWindow(buckets, { start: 10, end: 20 }, sevenDays());
-
-      expect(from.getTime() % HOUR).toBe(0);
-      expect(to.getTime() % HOUR).toBe(0);
-    });
-
-    it('labels bars with their minutes', () => {
-      const buckets = bucketCountRows([], sevenDays());
-      const bar = buckets.find(bucket => bucket.ts === Date.parse('2026-06-02T08:00:00.000Z'));
-      const clock = new Date('2026-06-02T08:00:00.000Z').toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-
-      expect(bar?.time).toBe(`Jun 2, ${clock}`);
-    });
-
-    describe('when the window is a day', () => {
-      it('keeps 20-minute bars on the local clock, since 5-minute API buckets line up with it', () => {
-        const buckets = bucketCountRows([], range(new Date(2026, 5, 1, 9, 37), new Date(2026, 5, 2, 9, 37)));
-
-        expect(buckets[0]?.ts).toBe(new Date(2026, 5, 1, 9, 20).getTime());
+        expect(bar).toMatchObject({ label: 'Jun 2, 1:30 PM', time: 'Jun 2, 1:30 PM' });
+        // 18:00Z is 11:30 PM; 20:00Z, 1:30 AM, is the first bar of Jun 3.
+        expect(buckets.find(bucket => bucket.ts === utc('2026-06-02T18:00'))?.label).toBe('Jun 2, 11:30 PM');
+        expect(buckets.find(bucket => bucket.ts === utc('2026-06-02T20:00'))?.label).toBe('Jun 3');
       });
     });
   });
