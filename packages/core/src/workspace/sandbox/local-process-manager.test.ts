@@ -180,6 +180,24 @@ describe('LocalProcessManager Windows POSIX shell for argv commands', () => {
     expect(execa.mock.calls[1]?.[0]).toBe('sh');
   });
 
+  it('accepts a bare cmd.exe in MASTRA_WINDOWS_SHELL as the opt-out', async () => {
+    const sandbox = await setup([gitBash]);
+    vi.stubEnv('MASTRA_WINDOWS_SHELL', 'cmd.exe');
+
+    await sandbox.executeCommand!('dir', ['/b']);
+
+    expect(execa).toHaveBeenCalledWith('dir /b', [], expect.objectContaining({ shell: 'cmd.exe' }));
+    expect(execa.mock.calls[0]?.[2]?.env?.MSYS_NO_PATHCONV).toBeUndefined();
+  });
+
+  it('keeps a relative path to an explicitly chosen sh', async () => {
+    const sandbox = await setup([gitBash]);
+
+    await sandbox.executeCommand!('.\\tools\\sh.exe', ['-c', 'echo ok']);
+
+    expect(execa.mock.calls[0]?.[0]).toBe('.\\tools\\sh.exe');
+  });
+
   it('prefers MASTRA_WINDOWS_SHELL', async () => {
     const sandbox = await setup(['E:\\msys64\\usr\\bin\\bash.exe', gitBash]);
     vi.stubEnv('MASTRA_WINDOWS_SHELL', 'E:\\msys64\\usr\\bin\\bash.exe');

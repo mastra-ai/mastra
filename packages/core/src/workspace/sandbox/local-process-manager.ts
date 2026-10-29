@@ -35,6 +35,8 @@ const EXIT_OUTPUT_GRACE_MS = 2_000;
 function findWindowsPosixShell(searchPath: string | undefined): string | undefined {
   const candidates: string[] = [];
   const configured = process.env.MASTRA_WINDOWS_SHELL?.trim();
+  // A bare `cmd`/`cmd.exe` opt-out resolves through PATH at spawn time, so there's no file to check.
+  if (configured && /^cmd(\.exe)?$/i.test(configured)) return configured;
   if (configured) candidates.push(configured);
   for (const dir of (searchPath ?? '').split(path.win32.delimiter)) {
     if (dir && existsSync(path.win32.join(dir, 'git.exe'))) {
@@ -342,7 +344,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const wrapped = directShell
       ? {
           command:
-            path.win32.isAbsolute(invocation.command) ||
+            !/^sh(\.exe)?$/i.test(invocation.command) ||
             !posixShell ||
             /^cmd(\.exe)?$/i.test(path.win32.basename(posixShell))
               ? invocation.command
