@@ -8,7 +8,10 @@ import { describe, expect, it } from 'vitest';
 const distDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 const esmEntry = path.join(distDir, 'storage/dashboards.js');
 const cjsEntry = path.join(distDir, 'storage/dashboards.cjs');
-const zodEntry = createRequire(import.meta.url).resolve('zod/v4');
+const require = createRequire(import.meta.url);
+// `@mastra/core` accepts zod ^3.25 or ^4 as a peer and imports `zod/v4`, so the entry must load with
+// either package behind that specifier.
+const zodEntries = { 'zod 4': require.resolve('zod/v4'), 'zod 3.25': require.resolve('zod-v3/v4') };
 
 function collectBareImports(entry: string): string[] {
   const visited = new Set<string>();
@@ -30,9 +33,9 @@ function collectBareImports(entry: string): string[] {
 /**
  * Loads a CommonJS graph into a fresh context that has only the globals a browser shares with
  * plain JavaScript: no `process`, `Buffer`, global `require` or Node built-ins. Each module gets
- * a `require` that resolves files inside `dist` and zod, like a browser bundler would.
+ * a `require` that resolves files inside `dist` and the given zod `v4` entry, like a browser bundler would.
  */
-function loadInBrowserLikeContext(entry: string): Record<string, unknown> {
+function loadInBrowserLikeContext(entry: string, zodEntry = zodEntries['zod 4']): Record<string, unknown> {
   const context = vm.createContext({ TextEncoder, TextDecoder, URL, console });
   const cache = new Map<string, { exports: unknown }>();
   const resolveFile = (from: string, specifier: string) => {
@@ -66,7 +69,20 @@ const having = { op: 'eq', left: { path: 'rootEntityName' }, right: { literal: '
 
 const definition = {
   schemaVersion: 1,
-  defaults: { datePreset: '24h', filters: [{ fieldId: 'environment', value: 'production' }] },
+  defaults: {
+    datePreset: '24h',
+    filters: [
+      { fieldId: 'environment', value: 'production' },
+      {
+        id: 'g1',
+        logic: 'or',
+        nodes: [
+          { id: 't1', fieldId: 'rootEntityName', value: ['support-agent'] },
+          { id: 'g2', logic: 'and', nodes: [{ id: 't2', fieldId: 'status', value: 'error', operatorId: 'is' }] },
+        ],
+      },
+    ],
+  },
   rows: [
     {
       widgets: [
@@ -112,14 +128,17 @@ describe.skipIf(!existsSync(esmEntry))('storage/dashboards build output', () => 
     expect(collectBareImports(esmEntry).filter(line => !line.endsWith('-> zod/v4'))).toEqual([]);
   });
 
-  it('loads and parses every query source without Node globals or built-ins', () => {
-    const entry = loadInBrowserLikeContext(cjsEntry);
-    const full = (entry.dashboardDefinitionSchema as SafeParse).safeParse(definition);
-    expect(full.error?.issues).toBeUndefined();
-    expect(full.success).toBe(true);
-    expect((entry.dashboardDefinitionEnvelopeSchema as SafeParse).safeParse(definition).success).toBe(true);
-    expect(typeof entry.migrateDashboardDefinition).toBe('function');
-  });
+  it.each(Object.entries(zodEntries))(
+    'loads and parses every query source without Node globals or built-ins (%s)',
+    (_, zodEntry) => {
+      const entry = loadInBrowserLikeContext(cjsEntry, zodEntry);
+      const full = (entry.dashboardDefinitionSchema as SafeParse).safeParse(definition);
+      expect(full.error?.issues).toBeUndefined();
+      expect(full.success).toBe(true);
+      expect((entry.dashboardDefinitionEnvelopeSchema as SafeParse).safeParse(definition).success).toBe(true);
+      expect(typeof entry.migrateDashboardDefinition).toBe('function');
+    },
+  );
 
   it('really has no Node globals in that context', () => {
     expect(() => loadInBrowserLikeContext(path.join(distDir, 'storage/index.cjs'))).toThrow();

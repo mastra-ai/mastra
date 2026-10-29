@@ -1010,7 +1010,8 @@
     "vitest": "catalog:",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.18.5",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-v3": "npm:zod@3.25.76"
   },
   "engines": {
     "node": ">=22.13.0"

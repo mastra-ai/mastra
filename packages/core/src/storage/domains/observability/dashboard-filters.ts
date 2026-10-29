@@ -29,15 +29,15 @@ export type DashboardFilterGroup = {
 
 export type DashboardFilterNode = DashboardFilterToken | DashboardFilterGroup;
 
-export const dashboardFilterGroupSchema: z.ZodType<DashboardFilterGroup, DashboardFilterGroup> = z
-  .object({
-    id: z.string().min(1),
-    logic: z.enum(DASHBOARD_FILTER_LOGICS),
-    get nodes() {
-      return z.array(dashboardFilterNodeSchema);
-    },
-  })
-  .strict();
+// `z.strictObject`, not `.object().strict()`: under zod 3.25's `zod/v4`, `.strict()` copies the
+// shape at once, which reads `nodes` before `dashboardFilterNodeSchema` exists and throws on load.
+export const dashboardFilterGroupSchema: z.ZodType<DashboardFilterGroup, DashboardFilterGroup> = z.strictObject({
+  id: z.string().min(1),
+  logic: z.enum(DASHBOARD_FILTER_LOGICS),
+  get nodes() {
+    return z.array(dashboardFilterNodeSchema);
+  },
+});
 
 export const dashboardFilterNodeSchema: z.ZodType<DashboardFilterNode, DashboardFilterNode> = z.union([
   dashboardFilterTokenSchema,
