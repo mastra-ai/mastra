@@ -236,13 +236,12 @@ The response is `{ threads, page: { next } }`, without a total count. Each entry
 | `inputPreview` | First trace's input preview. |
 | `outputPreview`, `errorPreview` | Last-started trace's previews. |
 | `timeToFirstChunkMs` | First trace's root agent time to first chunk, in milliseconds. `null` when unavailable or the root isn't an agent. |
-| `model`, `provider` | Model/provider from the first completed model generation directly under the first trace's root agent. `null` when unavailable. |
 
 An earlier-started trace can finish last. In that case, it supplies `endedAt`, while the last-started trace still supplies status and output/error previews. Missing first-trace values aren't replaced with values from a later trace.
 
 ### Thread ordering and pagination
 
-Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 100 rows and allow at most 1,000. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. A `null` cursor means no more pages are available. Pagination reflects live data, so new traces can move a thread between pages.
+Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 25 rows and allow at most 100. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. A `null` cursor means no more pages are available. Pagination reflects live data, so new traces can move a thread between pages.
 
 To load the traces within a thread, use [`queryTraces()`](#querying-traces) with a `threadId` filter and a time range covering the thread's activity.
 

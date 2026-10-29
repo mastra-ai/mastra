@@ -187,9 +187,8 @@ async function getInputPlugins(
             ...[...transpilePackagesMap.values()].map(p => {
               if (path.isAbsolute(p)) {
                 return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
-              } else {
-                return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
               }
+              return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
             }),
             // Also match workspace packages resolved through node_modules symlinks
             // (common in pnpm workspaces). Match by package name in node_modules path.

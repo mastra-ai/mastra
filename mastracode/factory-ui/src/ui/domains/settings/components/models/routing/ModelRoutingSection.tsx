@@ -4,7 +4,7 @@ import {
   useFactoryProjectQuery,
   useSetFactoryModelScopeMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
-import { SkeletonRows } from '../../../../../ui/SkeletonRows';
+import { ModelRoutingSkeleton } from './ModelRoutingSkeleton';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
 import { SettingsSubsection } from '../../SettingsSubsection';
 import { savedModelScope } from './model-routes';
@@ -41,7 +41,7 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
             {error.message}
           </Txt>
         )}
-        {projectQuery.isPending && <SkeletonRows label="Loading model routing" rows={2} rowClassName="h-36 w-full" />}
+        {projectQuery.isPending && <ModelRoutingSkeleton />}
         {modelScope && <ModelRoutingMap factoryId={factoryId} modelScope={modelScope} />}
       </div>
     </SettingsSubsection>

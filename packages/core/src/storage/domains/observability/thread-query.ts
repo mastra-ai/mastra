@@ -17,7 +17,8 @@ import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPre
 export { THREAD_QUERY_FIELD_REGISTRY } from './trace-query';
 export type { ThreadQueryField } from './trace-query';
 
-export const THREAD_QUERY_MAX_LIMIT = 1000;
+export const THREAD_QUERY_MAX_LIMIT = 100;
+export const THREAD_QUERY_DEFAULT_LIMIT = 25;
 const MAX_CURSOR_BYTES = 8192;
 const timestamp = z.string().datetime({ offset: true });
 const identifier = z.string().min(1).max(512);
@@ -45,11 +46,11 @@ const requestSchema = z
       .default([{ field: 'endedAt', direction: 'desc' }]),
     page: z
       .object({
-        limit: z.number().int().min(1).max(THREAD_QUERY_MAX_LIMIT).default(100),
+        limit: z.number().int().min(1).max(THREAD_QUERY_MAX_LIMIT).default(THREAD_QUERY_DEFAULT_LIMIT),
         after: z.string().min(1).max(MAX_CURSOR_BYTES).optional(),
       })
       .strict()
-      .default({ limit: 100 }),
+      .default({ limit: THREAD_QUERY_DEFAULT_LIMIT }),
   })
   .strict();
 
@@ -94,10 +95,9 @@ export const threadQueryRowSchema = threadQueryIdentitySchema
     outputPreview: z.string().nullable(),
     errorPreview: z.string().nullable(),
     traceCount: z.number().int().positive(),
-    model: z.string().nullable(),
-    provider: z.string().nullable(),
   })
-  .strict();
+  // Strips unknown keys so stores that still return removed fields (`model`, `provider`) keep parsing.
+  .strip();
 
 export const threadQueryResponseSchema = z
   .object({

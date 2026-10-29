@@ -143,7 +143,7 @@ The `WeaviateVector` class provides vector search using [Weaviate](https://weavi
     name: 'queryVector',
     type: 'number[]',
     description:
-      'Query vector to find similar vectors for. At least one of `queryVector` or `filter` must be provided.',
+      'Query vector to find similar vectors for. When omitted, returns up to `topK` objects matching `filter` (or any objects if no filter is given).',
     isOptional: true,
   },
   {

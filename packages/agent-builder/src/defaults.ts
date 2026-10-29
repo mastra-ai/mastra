@@ -1107,9 +1107,8 @@ export const mastra = new Mastra({
 
     if (mode === 'template') {
       return AgentBuilderDefaults.filterToolsForTemplateBuilder(allTools);
-    } else {
-      return AgentBuilderDefaults.filterToolsForCodeEditor(allTools);
     }
+    return AgentBuilderDefaults.filterToolsForCodeEditor(allTools);
   }
 
   /**
@@ -1441,14 +1440,13 @@ export const mastra = new Mastra({
           url: `http://localhost:${port}`,
           message: 'Mastra server is running and healthy',
         };
-      } else {
-        return {
-          success: false,
-          status: 'unknown' as const,
-          port,
-          message: `Server responding but not healthy (status: ${response.status})`,
-        };
       }
+      return {
+        success: false,
+        status: 'unknown' as const,
+        port,
+        message: `Server responding but not healthy (status: ${response.status})`,
+      };
     } catch {
       // Check if process exists on port
       try {

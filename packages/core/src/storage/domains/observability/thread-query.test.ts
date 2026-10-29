@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { encodeThreadQueryCursor, planThreadRowsQuery, threadQueryRequestSchema } from './thread-query';
+import {
+  encodeThreadQueryCursor,
+  planThreadRowsQuery,
+  threadQueryRequestSchema,
+  threadQueryRowSchema,
+} from './thread-query';
 import { planThreadQuery, queryThreadsInputSchema } from './trace-query';
 
 const range = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
@@ -11,7 +16,7 @@ describe('thread row contract', () => {
     expect(planThreadRowsQuery(request)).toMatchObject({
       result: 'threadRows',
       orderBy: { field: 'endedAt', direction: 'desc' },
-      limit: 100,
+      limit: 25,
     });
     for (const timeRange of [
       {},
@@ -25,6 +30,46 @@ describe('thread row contract', () => {
       mode: 'threads',
       field: 'startedAt',
     });
+  });
+
+  it('allows pages of at most 100 threads', () => {
+    expect(planThreadRowsQuery({ ...request, page: { limit: 100 } }).limit).toBe(100);
+    expect(() => planThreadRowsQuery({ ...request, page: { limit: 101 } })).toThrow();
+  });
+
+  it('drops fields a row no longer has, such as model and provider', () => {
+    const row = {
+      organizationId: 'org',
+      threadId: 'thread',
+      firstTraceId: 'first',
+      lastTraceId: 'last',
+      ...Object.fromEntries(
+        [
+          'resourceId',
+          'userId',
+          'entityType',
+          'entityId',
+          'entityName',
+          'entityVersionId',
+          'runId',
+          'sessionId',
+          'requestId',
+          'serviceName',
+          'experimentId',
+          'environment',
+          'executionSource',
+          'timeToFirstChunkMs',
+          'inputPreview',
+          'outputPreview',
+          'errorPreview',
+        ].map(field => [field, null]),
+      ),
+      status: 'success',
+      startedAt: range.from,
+      endedAt: range.to,
+      traceCount: 1,
+    };
+    expect(threadQueryRowSchema.parse({ ...row, model: 'gpt-4o', provider: 'openai' })).toEqual(row);
   });
 
   it('keeps legacy identity planning separate from full-history row requests', () => {

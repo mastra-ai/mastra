@@ -63,6 +63,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'JIRA_API_BASE_URL',
       'INCIDENT_IO_API_KEY',
       'SLACK_APP_SIGNING_SECRET',
+      'SLACK_APP_TOKEN',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');
@@ -236,6 +237,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'JIRA_API_TOKEN',
         'INCIDENT_IO_API_KEY',
         'SLACK_APP_SIGNING_SECRET',
+        'SLACK_APP_TOKEN',
       ]) {
         vi.stubEnv(name, '');
       }
@@ -447,6 +449,15 @@ describe('platform entry (src/mastra/index.ts)', () => {
       const mod = await import('./index.js');
       const controller = mod.mastra.getAgentController('code');
       expect(controller?.getChannels()).toBeNull();
+    });
+
+    it('does not use a whitespace-only Slack app token to sign state', { timeout: 60_000 }, async () => {
+      vi.stubEnv('SLACK_APP_TOKEN', '   ');
+
+      await import('./index.js');
+
+      expect(factoryConfigs[0]?.stateSecret).toBeUndefined();
+      expect(factoryConfigs[0]?.integrations?.some(integration => integration.id === 'slack')).toBe(false);
     });
 
     it(

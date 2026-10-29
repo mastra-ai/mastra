@@ -674,10 +674,9 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
         // First execution - suspend
         await suspend({ waitingFor: 'user-input', originalValue: inputData.value });
         return { result: '' }; // Should not be reached
-      } else {
-        // Resume execution
-        return { result: `processed-${(resumeData as any).extraData}` };
       }
+      // Resume execution
+      return { result: `processed-${(resumeData as any).extraData}` };
     });
 
     const completeStepAction = vi.fn().mockImplementation(async ({ inputData }) => {

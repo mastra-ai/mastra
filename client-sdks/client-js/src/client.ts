@@ -730,9 +730,8 @@ export class MastraClient extends BaseResource {
 
     if (searchParams.size) {
       return this.request(`/logs?${searchParams}`);
-    } else {
-      return this.request(`/logs`);
     }
+    return this.request(`/logs`);
   }
 
   /**
@@ -779,9 +778,8 @@ export class MastraClient extends BaseResource {
 
     if (searchParams.size) {
       return this.request(`/logs/${runId}?${searchParams}`);
-    } else {
-      return this.request(`/logs/${runId}`);
     }
+    return this.request(`/logs/${runId}`);
   }
 
   /**

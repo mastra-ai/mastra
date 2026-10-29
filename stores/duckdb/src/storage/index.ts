@@ -102,6 +102,8 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   private delegate: ObservabilityStoreImpl | null = null;
   private loadPromise: Promise<ObservabilityStoreImpl | null> | null = null;
   private unavailableError: MastraError | null = null;
+  private pendingInits = new Set<Promise<void>>();
+  private closed = false;
 
   constructor(config: ObservabilityDuckDBConfig) {
     super();
@@ -182,12 +184,28 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   }
 
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
-    const delegate = await this.loadDelegate();
-    if (!delegate) {
-      return;
+    if (this.closed) {
+      throw new Error('DuckDB observability storage is closed');
     }
 
-    return delegate.init(...args);
+    const init = (async () => {
+      const delegate = await this.loadDelegate();
+      if (delegate && !this.closed) {
+        await delegate.init(...args);
+      }
+    })();
+    this.pendingInits.add(init);
+    try {
+      await init;
+    } finally {
+      this.pendingInits.delete(init);
+    }
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    await Promise.allSettled(this.pendingInits);
+    await this.db.close();
   }
 
   async migrateSpans(
@@ -672,6 +690,6 @@ export class DuckDBStore extends MastraCompositeStore {
    * Safe to call more than once; subsequent calls are no-ops.
    */
   async close(): Promise<void> {
-    await this.db.close();
+    await this.observabilityStore.close();
   }
 }

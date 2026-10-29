@@ -606,9 +606,10 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
       {
         name: 'noRedundantCalls',
         type: 'boolean',
-        description: 'Whether to penalize redundant calls (same tool with same args).',
+        description:
+          'Whether to penalize redundant calls (same tool with same args). Only checked when the efficiency dimension is active, i.e. when at least one of `maxSteps`, `maxTotalTokens`, `maxTotalDurationMs` or `noRedundantCalls` is set.',
         isOptional: true,
-        defaultValue: 'true',
+        defaultValue: 'true (when the efficiency dimension is active)',
       },
       {
         name: 'blacklistedTools',

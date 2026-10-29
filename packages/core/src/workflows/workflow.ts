@@ -2064,6 +2064,14 @@ export class Workflow<
 
   __markInternal() {
     this.isInternal = true;
+    // Nested workflows of an internal workflow are its own plumbing (e.g. the
+    // background-task attempt body, the agentic loop iteration), not resources
+    // end users are granted access to.
+    for (const step of Object.values(this.steps)) {
+      if (step instanceof Workflow && !step.isInternal) {
+        step.__markInternal();
+      }
+    }
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -3192,9 +3200,9 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
-    // FGA authorization check
+    // FGA authorization check (internal workflows are exempt, matching Run.start)
     const fgaProvider = mastra?.getServer()?.fga;
-    if (fgaProvider) {
+    if (fgaProvider && !this.isInternal) {
       const user = requestContext?.get('user' as any);
       await requireFGA({
         fgaProvider,

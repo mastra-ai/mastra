@@ -25,6 +25,7 @@ import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
+import { withSpanPreviews } from './span-previews';
 
 /** Configuration for the MastraStorageExporter's batching, retry, and strategy behavior. */
 export interface MastraStorageExporterConfig extends BaseExporterConfig {
@@ -620,7 +621,7 @@ export class MastraStorageExporter extends BaseExporter {
       return;
     }
 
-    this.#eventBuffer.addEvent(event);
+    this.#eventBuffer.addEvent({ ...event, exportedSpan: withSpanPreviews(event.exportedSpan) });
     await this.handleBatchedFlush();
   }
 

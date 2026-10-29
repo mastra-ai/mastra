@@ -7014,41 +7014,40 @@ export class Mastra<
         this.#logger?.debug(`MCP server with logical ID '${serverId}' found, but not version '${version}'.`);
       }
       return specificVersionServer as TMCPServers[TMCPServerName] | undefined;
-    } else {
-      // No version specified, find the one with the most recent releaseDate
-      if (matchingLogicalIdServers.length === 1) {
-        return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
-      }
-
-      matchingLogicalIdServers.sort((a, b) => {
-        // Ensure releaseDate exists and is a string before creating a Date object
-        const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
-        const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
-
-        if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
-        if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
-        if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
-
-        return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
-      });
-
-      // After sorting, the first element should be the latest if its date is valid
-      if (matchingLogicalIdServers.length > 0) {
-        const latestServer = matchingLogicalIdServers[0];
-        if (
-          latestServer &&
-          latestServer.releaseDate &&
-          typeof latestServer.releaseDate === 'string' &&
-          !isNaN(new Date(latestServer.releaseDate).getTime())
-        ) {
-          return latestServer as TMCPServers[TMCPServerName];
-        }
-      }
-      this.#logger?.warn(
-        `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
-      );
-      return undefined;
     }
+    // No version specified, find the one with the most recent releaseDate
+    if (matchingLogicalIdServers.length === 1) {
+      return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
+    }
+
+    matchingLogicalIdServers.sort((a, b) => {
+      // Ensure releaseDate exists and is a string before creating a Date object
+      const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
+      const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
+
+      if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
+      if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
+      if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
+
+      return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
+    });
+
+    // After sorting, the first element should be the latest if its date is valid
+    if (matchingLogicalIdServers.length > 0) {
+      const latestServer = matchingLogicalIdServers[0];
+      if (
+        latestServer &&
+        latestServer.releaseDate &&
+        typeof latestServer.releaseDate === 'string' &&
+        !isNaN(new Date(latestServer.releaseDate).getTime())
+      ) {
+        return latestServer as TMCPServers[TMCPServerName];
+      }
+    }
+    this.#logger?.warn(
+      `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
+    );
+    return undefined;
   }
 
   /**
@@ -7937,13 +7936,14 @@ export class Mastra<
       }
     }
 
+    // Flush observability exporters while their storage is still open.
+    await this.#observability.shutdown();
+
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
     if (this.#storage?.close) {
       await this.#storage.close();
     }
-    // Shutdown observability registry, exporters, etc...
-    await this.#observability.shutdown();
 
     this.#logger?.info('Mastra shutdown completed');
   }

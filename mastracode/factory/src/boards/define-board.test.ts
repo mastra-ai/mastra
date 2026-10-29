@@ -180,8 +180,8 @@ describe('defineBoard', () => {
       expect(board.roleForPhase('shipped')).toBeUndefined();
       expect(board.phaseForRole('release')).toBe('shipping');
       expect(board.phaseForRole('work')).toBeUndefined();
-      expect(board.phases.shipping.role).toBe('release');
-      expect('role' in board.phases.queued).toBe(false);
+      expect(board.phases.shipping.kind === 'working' && board.phases.shipping.runner.context).toBe('release');
+      expect('runner' in board.phases.queued).toBe(false);
     });
 
     it('ignores inherited property names', () => {
@@ -201,15 +201,15 @@ describe('defineBoard', () => {
       expect(() => looseBoard({ queued: { title: 'Queued', kind: 'idle' } })).toThrow(BoardDefinitionError);
     });
 
-    it('rejects working phases without a valid role', () => {
-      const cases: unknown[] = [undefined, '', 'has space', 'x'.repeat(33), 42];
+    it('rejects working phases with an invalid role', () => {
+      const cases: unknown[] = ['', 'has space', 'x'.repeat(33), 42];
       for (const role of cases) {
         expect(() =>
           looseBoard({
             queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
             shipping: { title: 'Shipping', kind: 'working', role },
           }),
-        ).toThrow(new BoardDefinitionError('Working phase "shipping" must declare a valid role.'));
+        ).toThrow(new BoardDefinitionError('Working phase "shipping" must declare a valid context.'));
       }
     });
 
@@ -333,8 +333,8 @@ describe('defineBoard tool-result rules', () => {
     expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
   });
 
-  it('declares Work’s submit_plan rule and nothing on Review', () => {
-    expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
+  it('declares Work’s submit_plan and review-verdict rules and nothing on Review', () => {
+    expect(Object.keys(workBoard.tools)).toEqual(['submit_plan', 'factory_record_review_verdict']);
     expect(Object.keys(reviewBoard.tools)).toEqual([]);
   });
 });

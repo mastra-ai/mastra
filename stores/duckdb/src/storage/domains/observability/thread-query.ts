@@ -237,7 +237,7 @@ export async function queryThreadRows(
     }),
   );
   const payloads = await run<Record<string, unknown>>(
-    `SELECT organizationId, traceId, cursorId, spanType,
+    `SELECT organizationId, traceId, cursorId,
     ${contextFields.map(field => (field === 'executionSource' ? 'source AS executionSource' : field)).join(', ')},
     CASE WHEN spanType = 'agent_run' THEN timeToFirstChunkMs END AS timeToFirstChunkMs,
     CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
@@ -247,51 +247,10 @@ export async function queryThreadRows(
   );
   const key = (org: unknown, trace: unknown, version: unknown) => JSON.stringify([org, trace, String(version)]);
   const byRoot = new Map(payloads.map(row => [key(row.organizationId, row.traceId, row.cursorId), row]));
-  const agents = page.filter(
-    row => byRoot.get(key(row.organizationId, row.firstTraceId, row.firstCursorId))?.spanType === 'agent_run',
-  );
-  const models = new Map<string, { model: string | null; provider: string | null }>();
-  if (agents.length) {
-    const modelValues: unknown[] = [];
-    const predicates = agents.map(
-      row =>
-        `(${Object.entries({
-          organizationId: row.organizationId,
-          resourceId: row.resourceId,
-          traceId: row.firstTraceId,
-          parentSpanId: row.firstSpanId,
-        })
-          .map(([field, value]) => {
-            modelValues.push(value);
-            const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
-            return `${field} ${operator} ?`;
-          })
-          .join(' AND ')})`,
-    );
-    const rows = await run<{
-      organizationId: string | null;
-      traceId: string;
-      model: string | null;
-      provider: string | null;
-    }>(
-      `WITH generations AS (
-        SELECT organizationId, traceId, spanId, endedAt, cursorId, attributes,
-          min(timestamp) FILTER (WHERE eventType = 'start') OVER (PARTITION BY organizationId, traceId, spanId) AS startedAt
-        FROM span_events WHERE spanType = 'model_generation' AND (${predicates.join(' OR ')})
-      ) SELECT organizationId, traceId,
-        CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END AS model,
-        CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END AS provider
-        FROM generations WHERE endedAt IS NOT NULL
-        QUALIFY row_number() OVER (PARTITION BY organizationId, traceId ORDER BY startedAt, spanId, cursorId DESC) = 1`,
-      modelValues,
-    );
-    for (const row of rows) models.set(JSON.stringify([row.organizationId, row.traceId]), row);
-  }
   const threads = page.flatMap(row => {
     const first = byRoot.get(key(row.organizationId, row.firstTraceId, row.firstCursorId));
     const last = byRoot.get(key(row.organizationId, row.lastTraceId, row.lastCursorId));
     if (!first || !last) return [];
-    const model = models.get(JSON.stringify([row.organizationId, row.firstTraceId]));
     return [
       coreStorage.threadQueryRowSchema.parse({
         organizationId: row.organizationId,
@@ -304,8 +263,6 @@ export async function queryThreadRows(
         endedAt: row.endedAt.toISOString(),
         traceCount: Number(row.traceCount),
         timeToFirstChunkMs: first.timeToFirstChunkMs,
-        model: model?.model ?? null,
-        provider: model?.provider ?? null,
         inputPreview: readPreview(first.inputPreview, first.input, true),
         outputPreview: readPreview(last.outputPreview, last.output, true),
         errorPreview: readPreview(last.errorPreview, last.error, true),

@@ -13,6 +13,23 @@ export const CHART_GRID_PROPS = {
 export const CHART_CURSOR_PROPS = { stroke: 'var(--border)', strokeDasharray: '3 3', strokeWidth: 0.8 } as const;
 
 /**
+ * Recharts `<Tooltip>` settings for the metrics charts, used with `ChartTooltipPosition`:
+ * - No animation: the tooltip snaps to the hovered point, like the hover line and dots.
+ * - `filterNull: false`: a bucket with no readings still gets a tooltip (with dashes); Recharts
+ *   otherwise drops every empty reading and renders nothing.
+ * - The wrapper stays at the chart's origin and may leave the plot; `ChartTooltipPosition` places
+ *   the box itself.
+ */
+export const CHART_TOOLTIP_PROPS = {
+  isAnimationActive: false,
+  filterNull: false,
+  position: { x: 0, y: 0 },
+  allowEscapeViewBox: { x: true, y: true },
+  // Above the cards that follow it on the page.
+  wrapperStyle: { zIndex: 50 },
+};
+
+/**
  * How x-axis labels are placed.
  * - `auto`: as many labels as fit the width, on round clock times (12 AM, 6 AM, ...) when the
  *   rows carry timestamps, so every chart on a page shares one time grid.

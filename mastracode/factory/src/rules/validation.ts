@@ -17,7 +17,7 @@ const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
 export const MAX_ROLE_LENGTH = 32;
 export const MAX_TOOL_NAME_LENGTH = 128;
-const MAX_SKILL_NAME_LENGTH = 128;
+export const MAX_SKILL_NAME_LENGTH = 128;
 const MAX_SOURCE_KEY_LENGTH = 256;
 const MAX_URL_LENGTH = 2_048;
 const MAX_METADATA_JSON_LENGTH = 16_384;
@@ -27,7 +27,7 @@ const MAX_JSON_COLLECTION_SIZE = 100;
 export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
 export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
-const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'github-issue',
