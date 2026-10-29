@@ -30,6 +30,8 @@ interface Probe {
   aborted: string[];
   modelCalls: number;
   modelAborted: number;
+  /** What the `shaped` workflow's step was given, per call. */
+  shapedInputs: unknown[];
 }
 
 function untilAborted(signal: AbortSignal): Promise<void> {
@@ -201,7 +203,28 @@ function makeWorkflows(probe: Probe) {
     .dountil(question('vote'), async ({ inputData }) => inputData.answers.length >= 2)
     .commit();
 
-  return { doubler, report, approval, opaque, boom, hang, interview, poll };
+  // Optional and defaulted fields: the input a run gets depends on parsing the arguments.
+  const shapedInput = z.object({ n: z.number().optional(), label: z.string().default('x') });
+  const shaped = createWorkflow({
+    id: 'shaped',
+    description: 'Echoes its parsed input',
+    inputSchema: shapedInput,
+    outputSchema: z.object({ label: z.string() }),
+  })
+    .then(
+      createStep({
+        id: 'echo',
+        inputSchema: shapedInput,
+        outputSchema: z.object({ label: z.string() }),
+        execute: async ({ inputData }) => {
+          probe.shapedInputs.push(inputData);
+          return { label: inputData.label };
+        },
+      }),
+    )
+    .commit();
+
+  return { doubler, report, approval, opaque, boom, hang, interview, poll, shaped };
 }
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -294,7 +317,7 @@ describe.each([
   });
 
   async function start(tasks: MCPServerConfig['tasks']) {
-    const probe: Probe = { prepared: 0, slowRuns: 0, aborted: [], modelCalls: 0, modelAborted: 0 };
+    const probe: Probe = { prepared: 0, slowRuns: 0, aborted: [], modelCalls: 0, modelAborted: 0, shapedInputs: [] };
     const workflows = makeWorkflows(probe);
     const server = new MCPServer({
       id: 'tasks',
@@ -378,6 +401,21 @@ describe.each([
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toMatch(/release/);
         expect((await workflows.approval.listWorkflowRuns()).total).toBe(0);
+      },
+    );
+
+    it.each(['auto', 'always'] as const)(
+      "gives an '%s' workflow task the same parsed input as the plain tool, nulls and defaults included",
+      async mode => {
+        const { probe } = await start({ workflows: { shaped: mode } });
+        const plain = await call('run_shaped', { n: null }, { tasks: false });
+        expect(plain.result.isError).toBe(false);
+
+        const { result } = await call('run_shaped', { n: null });
+        const answer =
+          result.resultType === 'task' ? (await waitFor(await requester(), result.taskId, 'completed')).result : result;
+        expect(answer).toMatchObject({ isError: false });
+        expect(probe.shapedInputs).toEqual([{ label: 'x' }, { label: 'x' }]);
       },
     );
 
@@ -718,7 +756,14 @@ describe.each([
         name: 'Bad',
         version: '1.0.0',
         tools: {},
-        workflows: makeWorkflows({ prepared: 0, slowRuns: 0, aborted: [], modelCalls: 0, modelAborted: 0 }),
+        workflows: makeWorkflows({
+          prepared: 0,
+          slowRuns: 0,
+          aborted: [],
+          modelCalls: 0,
+          modelAborted: 0,
+          shapedInputs: [],
+        }),
         tasks: tasks as MCPServerConfig['tasks'],
       });
     expect(make({ workflows: { nope: 'always' } })).toThrow(/tasks.workflows names "nope"/);
@@ -731,7 +776,7 @@ describe.each([
   });
 
   it('rejects task configs for a workflow or agent that a same-named tool hides', () => {
-    const probe = { prepared: 0, slowRuns: 0, aborted: [], modelCalls: 0, modelAborted: 0 };
+    const probe = { prepared: 0, slowRuns: 0, aborted: [], modelCalls: 0, modelAborted: 0, shapedInputs: [] };
     const tool = createTool({ id: 'taken', description: 'Takes the name', execute: async () => 'tool' });
     const make = (tasks: MCPServerConfig['tasks']) => () =>
       new MCPServer({

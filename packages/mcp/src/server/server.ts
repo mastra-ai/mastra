@@ -1499,7 +1499,7 @@ export class MCPServer extends MCPServerBase {
     const start = (runTracing: TracingContext) => {
       const run = workflow.createRun({ runId: context.runId });
       const result: Promise<WorkflowRunView> = run.then(started =>
-        started.start({ inputData: args, requestContext, tracingContext: runTracing }),
+        started.start({ inputData: input.data, requestContext, tracingContext: runTracing }),
       );
       const cancel = () =>
         void run
