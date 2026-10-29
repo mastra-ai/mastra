@@ -11,6 +11,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import type {
   InputProcessorOrWorkflow,
   LLMRequestProcessorOrWorkflow,
@@ -251,6 +252,11 @@ export interface PreparationOptions<OUTPUT = undefined> {
    */
   scopesResolved?: boolean;
   /**
+   * The AGENT_RUN and MODEL_GENERATION spans a suspended run persisted when it started. A cold
+   * resume passes them so the run keeps its own trace instead of opening a new one.
+   */
+  resumedSpanData?: { agentSpanData?: unknown; modelSpanData?: unknown };
+  /**
    * Scopes the caller passed. When the property is absent, `options.scopes`; set it (even to
    * undefined) when `options` already include the agent defaults, so the Agent's own
    * `defaultOptions.scopes` are not treated as caller input.
@@ -304,6 +310,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     options: rawExecOptions,
     optionsAreResolved = false,
     scopesResolved = false,
+    resumedSpanData,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -586,35 +593,63 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const agentTracingPolicy =
     typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
   const startingSignal = signalSpanAttributes(messages);
-  const agentSpan = getOrCreateSpan({
-    type: SpanType.AGENT_RUN,
-    outcome: null,
-    name: `agent run: '${publicAgentId}'`,
-    entityType: EntityType.AGENT,
-    entityId: publicAgentId,
-    entityName: publicAgentName,
-    input: messages,
-    attributes: {
-      conversationId: threadId,
-      instructions: convertInstructionsToString(instructions),
-      ...modelSpanAttributes(model),
-      ...(startingSignal ? { signal: startingSignal } : {}),
-      // @deprecated — use entityVersionId (top-level span context field) instead.
-      // Kept for backward compatibility during migration.
-      ...(resolvedVersionId ? { resolvedVersionId } : {}),
-    },
-    metadata: {
-      runId,
-      resourceId,
-      threadId,
-      ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
-    },
-    tracingPolicy: agentTracingPolicy,
-    tracingContext: execOptions?.tracingContext,
-    tracingOptions: execOptions?.tracingOptions,
-    requestContext,
-    mastra,
-  });
+  // A cold resume reattaches to the spans the run opened when it started (ended as `suspended`)
+  // instead of opening a second root in a new trace. The resume then opens its own spans under them.
+  // A run that recorded no span stays unrecorded. An unsampled run saved a no-op span (id `no-op`),
+  // and rebuilding it would record spans the run never sampled.
+  const { agentSpanData, modelSpanData } = resumedSpanData ?? {};
+  const agentSpanId = (agentSpanData as { id?: unknown } | undefined)?.id;
+  const resumedObservability =
+    typeof agentSpanId === 'string' && agentSpanId !== 'no-op'
+      ? mastra?.observability?.getSelectedInstance({ requestContext })
+      : undefined;
+  let resumedSpans: { agentSpan?: Span<SpanType.AGENT_RUN>; modelSpan?: AIModelGenerationSpan } | undefined;
+  if (resumedSpanData) {
+    resumedSpans = {};
+    try {
+      resumedSpans.agentSpan = resumedObservability?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+      if (modelSpanData) {
+        resumedSpans.modelSpan = resumedObservability?.rebuildSpan(
+          modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
+        ) as AIModelGenerationSpan | undefined;
+      }
+    } catch (error) {
+      // Span bookkeeping must never block a resume, so a run whose spans cannot be rebuilt continues unrecorded.
+      resumedSpans = {};
+      (logger ?? mastra?.getLogger?.())?.warn?.(`[DurableAgent] Failed to rebuild the spans of run ${runId}: ${error}`);
+    }
+  }
+  const agentSpan = resumedSpans
+    ? resumedSpans.agentSpan
+    : getOrCreateSpan({
+        type: SpanType.AGENT_RUN,
+        outcome: null,
+        name: `agent run: '${publicAgentId}'`,
+        entityType: EntityType.AGENT,
+        entityId: publicAgentId,
+        entityName: publicAgentName,
+        input: messages,
+        attributes: {
+          conversationId: threadId,
+          instructions: convertInstructionsToString(instructions),
+          ...modelSpanAttributes(model),
+          ...(startingSignal ? { signal: startingSignal } : {}),
+          // @deprecated — use entityVersionId (top-level span context field) instead.
+          // Kept for backward compatibility during migration.
+          ...(resolvedVersionId ? { resolvedVersionId } : {}),
+        },
+        metadata: {
+          runId,
+          resourceId,
+          threadId,
+          ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
+        },
+        tracingPolicy: agentTracingPolicy,
+        tracingContext: execOptions?.tracingContext,
+        tracingOptions: execOptions?.tracingOptions,
+        requestContext,
+        mastra,
+      });
   // Run processInput (once, before execution) if we have any processors.
   // The MastraMemory context (thread + memoryConfig) was already established
   // above, before processor resolution, so processors that need it (working
@@ -662,11 +697,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           },
           error,
         );
-        agentSpan?.error({
-          error: inputProcessorError,
-          ...executionFailureTermination(inputProcessorError),
-          endTree: true,
-        });
+        // A rebuilt span ended when the run suspended. Ending it again would rewrite that record.
+        if (!resumedSpans)
+          agentSpan?.error({
+            error: inputProcessorError,
+            ...executionFailureTermination(inputProcessorError),
+            endTree: true,
+          });
         throw inputProcessorError;
       }
     }
@@ -839,22 +876,24 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
   // into the workflow input so each durable step can rebuild them. No-ops when
   // observability is off.
-  const modelSpan = agentSpan?.createChildSpan({
-    type: SpanType.MODEL_GENERATION,
-    outcome: null,
-    name: `llm: '${model.modelId}'`,
-    attributes: {
-      model: model.modelId,
-      provider: model.provider,
-      streaming: true,
-    },
-    metadata: {
-      runId,
-      threadId,
-      resourceId,
-    },
-    requestContext,
-  });
+  const modelSpan = resumedSpans
+    ? resumedSpans.modelSpan
+    : agentSpan?.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        outcome: null,
+        name: `llm: '${model.modelId}'`,
+        attributes: {
+          model: model.modelId,
+          provider: model.provider,
+          streaming: true,
+        },
+        metadata: {
+          runId,
+          threadId,
+          resourceId,
+        },
+        requestContext,
+      });
 
   // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
