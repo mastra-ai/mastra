@@ -57,7 +57,7 @@ const scopeListSchema = {
   minItems: 1,
 } as const;
 const pageRefDescription =
-  'A page id, a scope address (org:acme), a keyed page (<scope>#<key>, e.g. policy:acme#refund-policy), or an exact page name.';
+  'A page id, a scope address (org:acme), a key path (<scope>#<key>/<child key>, e.g. policy:acme#policies/refund), or an exact page name.';
 
 function limitOf(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
@@ -322,7 +322,12 @@ function pageTool(host: KnowledgePageToolHost) {
         scope: { type: 'string', minLength: 1, description: 'Create: the home scope. Move: the destination scope.' },
         parent: { type: 'string', minLength: 1, description: 'Create or move: a parent page in that scope.' },
         into: { type: 'string', minLength: 1, description: 'Merge: the page that remains.' },
-        key: { type: 'string', minLength: 1, description: 'Create: a stable key, unique in the scope.' },
+        key: {
+          type: 'string',
+          minLength: 1,
+          description:
+            'Create: one key segment, unique among the page\'s siblings, without "/", "#" or "%". `parent` gives the rest of its path.',
+        },
         name: { type: 'string', minLength: 1 },
         description: { type: 'string', description: 'A short synopsis (about 100 tokens). Empty clears it.' },
         body: { type: 'string', description: 'The curated long-form summary.' },
