@@ -122,6 +122,28 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.close();
   });
 
+  it('does no background work once closed, even when asked about a task', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const store = new BackgroundTaskMCPTaskStore({
+      manager: mastra.backgroundTaskManager!,
+      serverId: 's',
+      workFor: () => async () => ({ status: 'completed', result: { content: [] } }),
+      recoverFor: () => false,
+    });
+    const sweep = vi.spyOn(store, 'sweep');
+    store.close();
+
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      expect(await store.get('missing', { principal: 'alice' })).toBeUndefined();
+      store.startSweeping();
+      vi.advanceTimersByTime(mastra.backgroundTaskManager!.config.leaseDurationMs * 3);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(sweep).not.toHaveBeenCalled();
+  });
+
   async function setup(work: MCPTaskWork, recover = false, backgroundTasks: Record<string, unknown> = {}) {
     mastra = new Mastra({
       logger: false,
