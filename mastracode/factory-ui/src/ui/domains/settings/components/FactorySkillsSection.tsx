@@ -113,6 +113,22 @@ function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills
   );
 }
 
+/** A phase's skill while the skills catalog is loading or failed to load: we cannot tell whether it exists. */
+function UncheckedSkillCard({ title, name }: { title: string; name: string }) {
+  return (
+    <SettingsContainer>
+      <div className="px-4 py-3">
+        <Txt tone="ink" as="span" variant="body">
+          {title}
+          <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
+            {name}
+          </Txt>
+        </Txt>
+      </div>
+    </SettingsContainer>
+  );
+}
+
 function MissingSkillCard({ title, name }: { title: string; name: string }) {
   return (
     <SettingsContainer>
@@ -135,7 +151,15 @@ function MissingSkillCard({ title, name }: { title: string; name: string }) {
   );
 }
 
-function CustomBoardPhases({ board, skills }: { board: InstalledBoardInfo; skills: FactorySkillInfo[] }) {
+function CustomBoardPhases({
+  board,
+  skills,
+  skillsLoaded,
+}: {
+  board: InstalledBoardInfo;
+  skills: FactorySkillInfo[];
+  skillsLoaded: boolean;
+}) {
   const working = board.phases.filter(phase => phase.kind === 'working');
   const withSkill = working.flatMap(phase => (phase.skill ? [{ ...phase, skill: phase.skill }] : []));
   const roles = [
@@ -151,11 +175,9 @@ function CustomBoardPhases({ board, skills }: { board: InstalledBoardInfo; skill
       {withSkill.map(phase => {
         const title = phase.name ?? phase.title;
         const skill = skills.find(s => s.name === phase.skill);
-        return skill ? (
-          <SkillCard key={phase.id} title={title} skill={skill} />
-        ) : (
-          <MissingSkillCard key={phase.id} title={title} name={phase.skill} />
-        );
+        if (skill) return <SkillCard key={phase.id} title={title} skill={skill} />;
+        if (!skillsLoaded) return <UncheckedSkillCard key={phase.id} title={title} name={phase.skill} />;
+        return <MissingSkillCard key={phase.id} title={title} name={phase.skill} />;
       })}
       {(withSkill.length === 0 || roles.length > 0) && (
         <SettingsContainer>
@@ -188,7 +210,15 @@ function CustomBoardPhases({ board, skills }: { board: InstalledBoardInfo; skill
   );
 }
 
-function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: FactorySkillInfo[] }) {
+function BoardGroup({
+  board,
+  skills,
+  skillsLoaded,
+}: {
+  board: InstalledBoardInfo;
+  skills: FactorySkillInfo[];
+  skillsLoaded: boolean;
+}) {
   return (
     <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
       <Txt tone="ink" as="h4" variant="body" className="m-0">
@@ -197,7 +227,7 @@ function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: Fact
       {isBuiltInBoard(board.id) ? (
         <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} />
       ) : (
-        <CustomBoardPhases board={board} skills={skills} />
+        <CustomBoardPhases board={board} skills={skills} skillsLoaded={skillsLoaded} />
       )}
     </section>
   );
@@ -258,7 +288,7 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
       ) : (
         <div className="flex flex-col gap-5">
           {boards.map(board => (
-            <BoardGroup key={board.id} board={board} skills={skills} />
+            <BoardGroup key={board.id} board={board} skills={skills} skillsLoaded={skillsQuery.isSuccess} />
           ))}
           <OtherAppSkills skills={skills} boards={boards} />
         </div>

@@ -287,6 +287,38 @@ describe('FactorySkillsSection', () => {
     expect(screen.queryByRole('region', { name: / board$/ })).not.toBeInTheDocument();
   });
 
+  it('does not call a phase skill missing when the skills catalog failed to load', async () => {
+    const notesBoard: BoardCatalogResponse['boards'][number] = {
+      id: 'notes',
+      name: 'Notes',
+      title: 'Notes',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'drafting' }] },
+        {
+          id: 'drafting',
+          name: 'Drafting',
+          title: 'Drafting',
+          kind: 'working',
+          context: 'build',
+          skill: 'release-notes',
+          transitions: [],
+        },
+      ],
+    };
+    server.use(
+      http.get(SKILLS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+      http.get(BOARDS_URL, () => HttpResponse.json({ boards: [notesBoard] } satisfies BoardCatalogResponse)),
+    );
+
+    renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+    expect(await screen.findByText(/boom|Failed to load skills/)).toBeInTheDocument();
+    const notes = await screen.findByRole('region', { name: 'Notes board' });
+    expect(within(notes).getByText('release-notes')).toBeInTheDocument();
+    expect(within(notes).queryByText('Not found')).not.toBeInTheDocument();
+  });
+
   it('surfaces a load failure from the server', async () => {
     server.use(http.get(SKILLS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
 
