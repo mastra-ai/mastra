@@ -2012,9 +2012,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         context: { resourceId: parentRun?.resourceId },
         metadata: { workflowId: nestedWorkflowStep.id, runId: nestedRunId, resourceId: parentRun?.resourceId },
       });
-      // Another delivery may have denied the parent while authorization was pending.
-      if (await continueRedelivery()) return false;
-      return true;
     } catch (error) {
       // A concurrent delivery may have finished while authorization was pending.
       if (await continueRedelivery()) return false;
@@ -2027,6 +2024,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       await this.errorWorkflow(args, getErrorFromUnknown(error));
       return false;
     }
+    // Another delivery may have denied the parent while authorization was pending.
+    if (await continueRedelivery()) return false;
+    return true;
   }
 
   protected async runLeafStep(
