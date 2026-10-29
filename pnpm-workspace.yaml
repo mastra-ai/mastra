@@ -420,7 +420,8 @@ overrides:
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.4
-  mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
+  # Keep the security floor aligned with docs' Mermaid to avoid a second diagram runtime.
+  mermaid@>=11.0.0-alpha.1 <11.17.2: 11.17.2
   sharp@<0.35.5: 0.35.5
   # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
   proxy-addr@<2.0.8: 2.0.8

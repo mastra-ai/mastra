@@ -635,11 +635,14 @@ describe('Postgres advanced trace query', () => {
       ],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(20);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(23);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       timeToFirstChunkMs: null,
       timeToFirstTokenMs: null,
+      outcome: null,
+      stopReason: null,
+      stopReasonContext: null,
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',

@@ -11,6 +11,7 @@ import {
   TRACE_STRING_OPERATORS,
   TRACE_SYNTHETIC_OPERATORS,
   TRACE_TEXT_OPERATORS,
+  createOutcomeFilterBarFields,
   traceFilterFieldColor,
   traceFilterFieldIcon,
 } from '../traces/trace-filters';
@@ -58,8 +59,8 @@ export const SPAN_CONTEXT_FILTER_FIELD_IDS = [
   'rootEntityName',
 ] as const;
 
-const CORE_FIELD_IDS: ReadonlySet<string> = new Set(SPAN_CORE_FILTER_FIELD_IDS);
-const ALL_FIELD_IDS: ReadonlySet<string> = new Set([...SPAN_CORE_FILTER_FIELD_IDS, ...SPAN_CONTEXT_FILTER_FIELD_IDS]);
+/** Span query fields the server only accepts when the store declares `spanQueryOutcomeFields`. */
+export const SPAN_OUTCOME_FILTER_FIELD_IDS = ['outcome', 'stopReason'] as const;
 
 const NUMBER_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs', 'timeToFirstChunkMs']);
 /** The query can only test `error` for presence; any other operator is rejected. */
@@ -149,12 +150,15 @@ const STATUS_OPTIONS: FilterBarOption[] = TRACE_STATUS_OPTIONS.filter(option => 
 /** FilterBar fields for the spans page: only paths and operators `querySpans()` accepts. */
 export function createSpanFilterBarFields({
   withContextFields,
+  withOutcomeFields = false,
   entityNames,
   environments,
   valueSuggestions,
 }: {
   /** Offer the context fields. Only when the server declares `spanQueryContextFields`. */
   withContextFields: boolean;
+  /** Offer `outcome` and `stopReason`. Only when the server declares `spanQueryOutcomeFields`. */
+  withOutcomeFields?: boolean;
   entityNames: readonly string[];
   environments: readonly string[];
   /** Builds a lazy value resolver for a span field. Absent → free text. */
@@ -210,6 +214,7 @@ export function createSpanFilterBarFields({
   return [
     ...sortFields(SPAN_CORE_FILTER_FIELD_IDS),
     ...(withContextFields ? sortFields(SPAN_CONTEXT_FILTER_FIELD_IDS) : []),
+    ...(withOutcomeFields ? createOutcomeFilterBarFields(spanFieldBase, valueSuggestions) : []),
   ];
 }
 
@@ -271,9 +276,13 @@ function groupToSpanQueryPredicate(
 export function buildSpanQueryWhere(
   tokens: TraceFilterToken[],
   groups: TraceFilterGroup[],
-  { withContextFields }: { withContextFields: boolean },
+  { withContextFields, withOutcomeFields = false }: { withContextFields: boolean; withOutcomeFields?: boolean },
 ): TraceQueryScalarPredicate | undefined {
-  const allowedFieldIds = withContextFields ? ALL_FIELD_IDS : CORE_FIELD_IDS;
+  const allowedFieldIds: ReadonlySet<string> = new Set([
+    ...SPAN_CORE_FILTER_FIELD_IDS,
+    ...(withContextFields ? SPAN_CONTEXT_FILTER_FIELD_IDS : []),
+    ...(withOutcomeFields ? SPAN_OUTCOME_FILTER_FIELD_IDS : []),
+  ]);
   const args = [
     ...tokens.map(token => tokenToSpanQueryPredicate(token, allowedFieldIds)),
     ...groups.map(group => groupToSpanQueryPredicate(group, allowedFieldIds)),

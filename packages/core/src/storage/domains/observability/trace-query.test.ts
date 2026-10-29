@@ -1049,6 +1049,58 @@ describe('planTraceQuery', () => {
     }
   });
 
+  it('plans root and related-span outcome predicates with arbitrary strings and no sort', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'outcome' }, right: { literal: 'my-custom-outcome' } },
+            { op: 'notExists', path: 'stopReason' },
+            { spans: { some: { op: 'in', value: { path: 'outcome' }, set: ['limit', 'unknown'] } } },
+            { spans: { none: { op: 'eq', left: { path: 'stopReason' }, right: { literal: 'max_steps' } } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'comparison', field: 'outcome', operator: 'eq', value: 'my-custom-outcome' },
+        { type: 'presence', field: 'stopReason', operator: 'notExists' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'membership', field: 'outcome', operator: 'in', values: ['limit', 'unknown'] },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'none',
+          predicate: { type: 'comparison', field: 'stopReason', operator: 'eq', value: 'max_steps' },
+        },
+      ],
+    });
+    for (const scope of ['trace', 'spans'] as const) {
+      expect(isTraceQueryValueSuggestionsPath(scope, 'outcome')).toBe(true);
+      expect(isTraceQueryValueSuggestionsPath(scope, 'stopReason')).toBe(true);
+    }
+    for (const where of [
+      { op: 'exists', path: 'stopReasonContext' },
+      { spans: { some: { op: 'exists', path: 'stopReasonContext' } } },
+      { op: 'eq', left: { path: 'outcome' }, right: { literal: 1 } },
+      { op: 'matches', left: { path: 'outcome' }, right: { literal: 'limit' } },
+    ]) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, where })), JSON.stringify(where)).toThrow();
+    }
+    for (const field of ['outcome', 'stopReason', 'stopReasonContext']) {
+      expect(() => parsed({ ...baseRequest, orderBy: [{ field, direction: 'asc' }] }), field).toThrow();
+    }
+  });
+
   it('rejects inherited predicate field names in every predicate context', () => {
     const contexts = [
       { where: (field: string) => ({ op: 'exists', path: field }), issuePath: ['where', 'path'] },
@@ -2081,6 +2133,21 @@ describe('trace-query responses and storage capability', () => {
       status: 'success',
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [
+          { ...trace, outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps: 5 } },
+          { ...trace, outcome: null, stopReason: null, stopReasonContext: null },
+        ],
+        page: { next: null },
+      }).success,
+    ).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [{ ...trace, stopReasonContext: 'max_steps' }],
+        page: { next: null },
+      }).success,
+    ).toBe(false);
     expect(
       traceQueryPaginatedTraceResponseSchema.safeParse({
         traces: [trace],

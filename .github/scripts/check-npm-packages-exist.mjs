@@ -30,7 +30,7 @@
 //
 // Usage:
 //   node check-npm-packages-exist.mjs [--since <git-ref>] [--registry <url>]
-//                                     [--retry-404 <ms>] [--pnpm-filter <filter>]
+//                                     [--retry-404 <ms>] [--pnpm-filter <filter>]...
 //                                     [--oidc]
 //
 // Exit codes: 0 = all publishable packages exist on npm (and, with --oidc,
@@ -52,7 +52,7 @@ const CONCURRENCY = 8;
 const ID_TOKEN_ENV = ['ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN'];
 
 function parseArgs(argv) {
-  const options = { registry: DEFAULT_REGISTRY, retry404: 0, since: undefined, pnpmFilter: undefined, oidc: false };
+  const options = { registry: DEFAULT_REGISTRY, retry404: 0, since: undefined, pnpmFilters: [], oidc: false };
   const value = i => {
     if (argv[i] === undefined || argv[i].startsWith('--')) {
       console.error(`Missing value for ${argv[i - 1]}`);
@@ -65,11 +65,11 @@ function parseArgs(argv) {
     if (arg === '--since') options.since = value(++i);
     else if (arg === '--registry') options.registry = value(++i).replace(/\/+$/, '');
     else if (arg === '--retry-404') options.retry404 = Number(value(++i));
-    else if (arg === '--pnpm-filter') options.pnpmFilter = value(++i);
+    else if (arg === '--pnpm-filter') options.pnpmFilters.push(value(++i));
     else if (arg === '--oidc') options.oidc = true;
     else if (arg === '--help' || arg === '-h') {
       console.log(
-        'Usage: node check-npm-packages-exist.mjs [--since <git-ref>] [--registry <url>] [--retry-404 <ms>] [--pnpm-filter <filter>] [--oidc]',
+        'Usage: node check-npm-packages-exist.mjs [--since <git-ref>] [--registry <url>] [--retry-404 <ms>] [--pnpm-filter <filter>]... [--oidc]',
       );
       process.exit(0);
     } else {
@@ -85,9 +85,9 @@ function parseArgs(argv) {
 }
 
 // Same workspace discovery the publish workflow itself uses (npm-publish.yml).
-function discoverPublishablePackages(pnpmFilter) {
+function discoverPublishablePackages(pnpmFilters) {
   const args = ['m', 'ls', '--depth', '-1', '--json'];
-  if (pnpmFilter) args.push('--filter', pnpmFilter);
+  for (const filter of pnpmFilters) args.push('--filter', filter);
   const output = execFileSync('pnpm', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const packages = [];
   for (const pkg of JSON.parse(output)) {
@@ -301,7 +301,7 @@ if (options.oidc && ID_TOKEN_ENV.some(name => !process.env[name])) {
   process.exit(2);
 }
 
-let packages = discoverPublishablePackages(options.pnpmFilter);
+let packages = discoverPublishablePackages(options.pnpmFilters);
 
 if (options.since) {
   const changed = changedPackageDirectories(options.since);
