@@ -1,4 +1,8 @@
-import { createKnowledgePagesCoreLoader, knowledgePageKeyProblem, knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import {
+  createKnowledgePagesCoreLoader,
+  knowledgePageKeyProblem,
+  knowledgeSearchWords,
+} from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
