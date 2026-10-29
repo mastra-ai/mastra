@@ -50,9 +50,8 @@ describe('ActivityLine', () => {
     const { client } = renderThread();
     await ready(session.finishWorkspace, client);
     await send(user);
+    await session.emit({ type: 'agent_start' });
 
-    // An ask_user waits on its suspension prompt; until that lands the transcript shows no row,
-    // so the line is the only thing standing between the user and a blank screen.
     await session.emit({ type: 'tool_start', toolCallId: 'call-ask', toolName: 'ask_user', args: {} });
     await waitForMutationsIdle(client);
 
@@ -60,12 +59,13 @@ describe('ActivityLine', () => {
     expect(screen.getByText('Thinking')).toBeInTheDocument();
   });
 
-  it('steps aside as soon as the run draws its first row', async () => {
+  it('says a tool is running while one runs', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
     await ready(session.finishWorkspace, client);
     await send(user);
+    await session.emit({ type: 'agent_start' });
 
     await session.emit({
       type: 'tool_start',
@@ -75,15 +75,35 @@ describe('ActivityLine', () => {
     });
 
     await screen.findByRole('group', { name: 'Tool: view' }, { timeout: 3000 });
-    await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
+    expect(await screen.findByText('Calling a tool')).toBeInTheDocument();
+    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
-  it('steps aside while the answer streams', async () => {
+  it('names a web search while it runs', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
     await ready(session.finishWorkspace, client);
     await send(user);
+    await session.emit({ type: 'agent_start' });
+
+    await session.emit({
+      type: 'tool_start',
+      toolCallId: 'call-web',
+      toolName: 'web_search',
+      args: { query: 'oauth' },
+    });
+
+    expect(await screen.findByText('Searching the web')).toBeInTheDocument();
+  });
+
+  it('says it is writing while the answer streams', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
 
     await session.emit({ type: 'message_start', message: assistantText('') });
     await session.emit({
@@ -92,28 +112,75 @@ describe('ActivityLine', () => {
       event: { type: 'text-delta', delta: 'Auth starts at the composer' },
     });
 
-    // Streamed prose is split into per-word spans to fade in, so match the rendered text as a whole.
     await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
-    await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
+    expect(await screen.findByText('Writing')).toBeInTheDocument();
   });
 
-  it('lingers for a beat when output lands, letting its sweep settle instead of vanishing under it', async () => {
+  it('says the run is saving memory while memory holds it', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
     await ready(session.finishWorkspace, client);
     await send(user);
+    await session.emit({ type: 'agent_start' });
+
+    await session.emit({ type: 'om_observation_start' });
+
+    expect(await screen.findByText('Updating memory')).toBeInTheDocument();
+  });
+
+  it('waits on the user while an approval is pending', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+
+    await session.emit({
+      type: 'tool_start',
+      toolCallId: 'call-rm',
+      toolName: 'execute_command',
+      args: { command: 'rm -rf dist' },
+    });
+    await session.emit({
+      type: 'tool_approval_required',
+      toolCallId: 'call-rm',
+      toolName: 'execute_command',
+      args: { command: 'rm -rf dist' },
+    });
+
+    expect(await screen.findByText('Waiting for you')).toBeInTheDocument();
+  });
+
+  it('lands on done when the run ends, then leaves', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
     await screen.findByText('Thinking');
 
-    await session.emit({ type: 'message_start', message: assistantText('') });
-    await session.emit({
-      type: 'message_update',
-      id: 'assistant-1',
-      event: { type: 'text-delta', delta: 'Auth starts at the composer' },
-    });
+    await session.emit({ type: 'agent_end' });
 
-    expect(screen.getByText('Thinking')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
+    expect(await screen.findByText('Done')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Done')).not.toBeInTheDocument(), { timeout: 3000 });
+  });
+
+  it('lands on the failure when the run errors', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+
+    await session.emit({ type: 'error', error: { name: 'AI_APICallError', message: 'Bad Request', statusCode: 403 } });
+    await session.emit({ type: 'agent_end' });
+
+    expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
+    expect(screen.queryByText('Done')).not.toBeInTheDocument();
   });
 
   it('says nothing when the run is idle', async () => {
@@ -122,5 +189,6 @@ describe('ActivityLine', () => {
     await ready(session.finishWorkspace, client);
 
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+    expect(screen.queryByText('Done')).not.toBeInTheDocument();
   });
 });
