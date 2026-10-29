@@ -38,85 +38,56 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         const knowledge = await result.storage.getStore('knowledge');
         if (!knowledge) throw new Error('Knowledge storage unavailable in knowledge-browser E2E scenario.');
 
-        // The inspector reads the rung Knowledge writes under, not the session owner id.
-        const orgScope = [`org:${LOCAL_KNOWLEDGE_ORG_ID}`];
-        const resourceScope = [...orgScope, `resource:${resourceId}`];
-        const primaryScope = [...resourceScope, `thread:${primary.id}`];
-        const secondaryScope = [...resourceScope, `thread:${secondary.id}`];
-        const foreignScope = [...orgScope, 'resource:foreign-project'];
-
-        await knowledge.createNode({
-          id: 'kb-org-policy',
-          name: 'Organization policy',
-          kind: 'policy',
-          scope: orgScope,
-        });
-        const beta = await knowledge.createNode({
-          id: 'kb-beta',
-          name: 'Beta service',
-          kind: 'service',
-          scope: resourceScope,
-        });
-        const atlas = await knowledge.createNode({
-          id: 'kb-atlas',
-          name: 'Atlas launch',
-          kind: 'project',
-          scope: resourceScope,
-        });
-        await knowledge.createNode({
-          id: 'kb-primary-note',
-          name: 'Primary thread note',
-          kind: 'note',
-          scope: primaryScope,
-        });
-        await knowledge.createNode({
-          id: 'kb-secondary-note',
-          name: 'Secondary thread note',
-          kind: 'note',
-          scope: secondaryScope,
-        });
-        await knowledge.createNode({
-          id: 'kb-foreign-secret',
-          name: 'Foreign project secret',
-          kind: 'secret',
-          scope: foreignScope,
-        });
-        await knowledge.appendKnowledge({
-          id: '01KXKNOWLEDGEFACT0000000001',
-          node: atlas.id,
-          text: 'Atlas launch depends on [[Beta service]].',
-          scope: resourceScope,
-          sourceThreadId: primary.id,
-          resolutionScope: resourceScope,
-          defaultScope: resourceScope,
-        });
-        for (let index = 0; index < 25; index++) {
-          await knowledge.appendKnowledge({
-            id: `01KXKNOWLEDGEFILLER${String(index).padStart(8, '0')}`,
-            node: atlas.id,
-            text: `Atlas launch checkpoint ${index + 1} is complete.`,
-            scope: resourceScope,
-            sourceThreadId: primary.id,
-            resolutionScope: resourceScope,
-            defaultScope: resourceScope,
+        // Seed pages straight into the page store under the scopes the built-in Knowledge declares.
+        const provenance = { author: 'host' };
+        const scopes = new Map<string, string>();
+        const scope = async (address: string, declaration: string, parent?: string) => {
+          const known = scopes.get(address);
+          if (known) return known;
+          const { scope: page } = await knowledge.materializeScope({
+            address,
+            declaration,
+            name: address,
+            parentId: parent ? (scopes.get(parent) ?? null) : null,
+            provenance,
           });
+          scopes.set(address, page.id);
+          return page.id;
+        };
+        const org = `org:${LOCAL_KNOWLEDGE_ORG_ID}`;
+        const resource = `resource:${resourceId}`;
+        await scope(org, 'org:$orgId');
+        await scope(resource, 'resource:$resourceId', org);
+        await scope('resource:foreign-project', 'resource:$resourceId', org);
+        await scope(`thread:${primary.id}`, 'thread:$threadId', resource);
+        await scope(`thread:${secondary.id}`, 'thread:$threadId', resource);
+        const page = async (address: string, name: string, body?: string) =>
+          knowledge.createPage({ parentId: scopes.get(address)!, name, body, provenance });
+        const note = async (pageId: string, scopeId: string, text: string, mentions: string[] = []) =>
+          knowledge.addNote({
+            pageId,
+            text,
+            stampScopeIds: [scopeId],
+            mentions,
+            provenance: { author: 'agent:code', sourceThreadId: primary.id },
+          });
+
+        await page(org, 'Organization policy');
+        const beta = await page(resource, 'Beta service');
+        const atlas = await page(resource, 'Atlas launch');
+        await page(`thread:${primary.id}`, 'Primary thread note');
+        await page(`thread:${secondary.id}`, 'Secondary thread note');
+        await page('resource:foreign-project', 'Foreign project secret');
+        await note(atlas.id, atlas.scopeId, 'Atlas launch depends on [[Beta service]].', [beta.id]);
+        for (let index = 0; index < 25; index++) {
+          await note(atlas.id, atlas.scopeId, `Atlas launch checkpoint ${index + 1} is complete.`);
         }
-        await knowledge.appendKnowledge({
-          id: '01KXKNOWLEDGEFACT0000000002',
-          node: beta.id,
-          text: 'Beta service health checks are green.',
-          scope: resourceScope,
-          sourceThreadId: primary.id,
-          resolutionScope: resourceScope,
-          defaultScope: resourceScope,
-        });
-        await knowledge.createNode({
-          id: 'kb-launch-brief',
-          name: 'Atlas launch brief',
-          kind: 'document',
-          content: 'The launch uses [[Atlas launch]] and [[Beta service]]. [[No such node 9fca]] remains unresolved.',
-          scope: resourceScope,
-        });
+        await note(beta.id, beta.scopeId, 'Beta service health checks are green.');
+        await page(
+          resource,
+          'Atlas launch brief',
+          'The launch uses [[Atlas launch]] and [[Beta service]]. [[No such node 9fca]] remains unresolved.',
+        );
       },
     });
     return { stop: () => app.stop?.() };
@@ -133,19 +104,18 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/\[nodes\]/i, terminal);
-    await runtime.waitForScreenText(/Sort: Relevant.*recent window/i, terminal);
+    await runtime.waitForScreenText(/Sort: Name/i, terminal);
     await runtime.waitForScreenText(/Sources/i, terminal);
     await runtime.waitForScreenText(/Referenced only/i, terminal);
     await runtime.waitForScreenText(/Isolated/i, terminal);
     runtime.printScreen('knowledge node graph roles', terminal);
     terminal.write('\x13');
-    await runtime.waitForScreenText(/Sort: Recent/i, terminal);
+    await runtime.waitForScreenText(/Sort: Connected.*first 50 by name/i, terminal);
     terminal.write('\x13');
-    await runtime.waitForScreenText(/Sort: Connected.*recent window/i, terminal);
+    await runtime.waitForScreenText(/Sort: Name/i, terminal);
     terminal.write('Atlas launch');
     await runtime.waitForScreenText(/Atlas launch.*→1 ←0.*exact:resource/i, terminal);
     await runtime.waitForScreenTextAbsent(/Foreign project secret/i, terminal);
-    terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Atlas launch checkpoint/i, terminal);
     await runtime.waitForScreenText(/Source · 26 records · 1 outgoing · 0 incoming/i, terminal);
@@ -166,6 +136,7 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x7f');
     terminal.write('\x7f');
     await runtime.waitForScreenText(/Atlas launch brief/i, terminal);
+    terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Content/i, terminal);
     await runtime.waitForScreenText(/The launch uses \[\[Atlas launch\]\]/i, terminal);
@@ -175,7 +146,7 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x7f');
     terminal.write('\t');
     await runtime.waitForScreenText(/\[activity\]/i, terminal);
-    await runtime.waitForScreenText(/node-created:|record-created:/i, terminal);
+    await runtime.waitForScreenText(/page-created:|note-added:/i, terminal);
     runtime.printScreen('knowledge activity', terminal);
 
     terminal.write('\x1b');

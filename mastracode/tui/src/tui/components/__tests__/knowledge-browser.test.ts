@@ -25,13 +25,11 @@ function record(
   _type: 'node' = 'node',
   scope: 'org' | 'resource' | 'thread' = 'resource',
   relationshipCounts?: KnowledgeInspectorNodeSummary['relationshipCounts'],
-  kind = 'project',
 ): KnowledgeInspectorNodeSummary {
   return {
     handle: `node:${name}`,
     type: 'node',
     name,
-    kind,
     scope: { level: scope, id: `${scope}-id` },
     version: 1,
     updatedAt: '2026-07-15T00:00:00.000Z',
@@ -139,7 +137,7 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
 
-    expect(inspector.listNodes).toHaveBeenCalledWith({ level: 'resource', sort: 'relevant', limit: 12 });
+    expect(inspector.listNodes).toHaveBeenCalledWith({ level: 'resource', sort: 'name', limit: 12 });
     expect(text(browser)).toContain('[inherited:org]');
     expect(text(browser)).toContain('[exact:resource]');
   });
@@ -174,8 +172,8 @@ describe('KnowledgeBrowserComponent', () => {
         identityKey: 'identity-1',
         scopeLevel: 'resource' as const,
         nodes: [atlas],
-        sort: 'relevant' as const,
-        coverage: 'recent-window' as const,
+        sort: 'name' as const,
+        coverage: 'exact' as const,
       })),
       getNode: vi.fn(async ({ handle }) =>
         handle === atlas.handle ? nodeDetail(atlas, [], [portfolio]) : nodeDetail(portfolio),
@@ -198,13 +196,13 @@ describe('KnowledgeBrowserComponent', () => {
     expect(text(browser)).toContain('Referenced by');
   });
 
-  it('cycles node sorting between relevant, recent, and connected', async () => {
+  it('cycles node sorting between name and connected', async () => {
     const inspector = createInspector({
       listNodes: vi.fn(async input => ({
         identityKey: 'identity-1',
         scopeLevel: 'resource' as const,
         nodes: [
-          record(input.sort ?? 'relevant', 'node', 'resource', {
+          record(input.sort ?? 'name', 'node', 'resource', {
             records: 4,
             outgoing: 2,
             incoming: 1,
@@ -212,7 +210,7 @@ describe('KnowledgeBrowserComponent', () => {
           }),
         ],
         sort: input.sort,
-        coverage: input.sort === 'recent' ? ('exact' as const) : ('recent-window' as const),
+        coverage: input.sort === 'connected' ? ('window' as const) : ('exact' as const),
       })),
     });
     const { browser } = createBrowser(inspector);
@@ -220,18 +218,19 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('j');
     browser.handleInput('\r');
     await settle();
-    expect(text(browser)).toContain('Sort: Relevant · recent window');
+    expect(text(browser)).toContain('Sort: Name');
+    expect(text(browser)).not.toContain('first 50 by name');
     expect(text(browser)).toContain('→2 ←1');
 
     browser.handleInput('\x13');
     await settle();
-    expect(text(browser)).toContain('Sort: Recent');
+    expect(text(browser)).toContain('Sort: Connected · first 50 by name');
     expect(inspector.listNodes).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sort: 'recent', level: 'resource' }),
+      expect.objectContaining({ sort: 'connected', level: 'resource' }),
     );
     browser.handleInput('\x13');
     await settle();
-    expect(text(browser)).toContain('Sort: Connected · recent window');
+    expect(text(browser)).toContain('Sort: Name');
   });
 
   it('groups nodes by graph role and badges rows with directional counts', async () => {
@@ -255,8 +254,8 @@ describe('KnowledgeBrowserComponent', () => {
         identityKey: 'identity-1',
         scopeLevel: 'resource' as const,
         nodes: [isolated, source, bridge, referenced, sampledHub],
-        sort: 'relevant' as const,
-        coverage: 'recent-window' as const,
+        sort: 'name' as const,
+        coverage: 'exact' as const,
       })),
       getNode: vi.fn(async () => nodeDetail(bridge, [source], [referenced])),
     });
@@ -275,13 +274,14 @@ describe('KnowledgeBrowserComponent', () => {
     expect(sourcesAt).toBeGreaterThan(bridgesAt);
     expect(referencedAt).toBeGreaterThan(sourcesAt);
     expect(isolatedAt).toBeGreaterThan(referencedAt);
-    expect(rendered.indexOf('Bridge (project)')).toBeGreaterThan(bridgesAt);
-    expect(rendered.indexOf('Bridge (project)')).toBeLessThan(sourcesAt);
-    expect(rendered.indexOf('Source (project)')).toBeGreaterThan(sourcesAt);
-    expect(rendered.indexOf('Source (project)')).toBeLessThan(referencedAt);
-    expect(rendered.indexOf('Referenced (project)')).toBeGreaterThan(referencedAt);
-    expect(rendered.indexOf('Referenced (project)')).toBeLessThan(isolatedAt);
-    expect(rendered.indexOf('Isolated (project)')).toBeGreaterThan(isolatedAt);
+    const row = (name: string) => rendered.search(new RegExp(`${name}\\s+(?:\\(|→|←|·|\\d)`));
+    expect(row('Bridge')).toBeGreaterThan(bridgesAt);
+    expect(row('Bridge')).toBeLessThan(sourcesAt);
+    expect(row('Source')).toBeGreaterThan(sourcesAt);
+    expect(row('Source')).toBeLessThan(referencedAt);
+    expect(row('Referenced')).toBeGreaterThan(referencedAt);
+    expect(row('Referenced')).toBeLessThan(isolatedAt);
+    expect(row('Isolated')).toBeGreaterThan(isolatedAt);
     expect(rendered).toContain('→2 ←1');
     expect(rendered).toContain('→25 ←25+');
 
@@ -372,7 +372,7 @@ describe('KnowledgeBrowserComponent', () => {
 
     expect(inspector.listNodes).toHaveBeenLastCalledWith({
       level: 'resource',
-      sort: 'relevant',
+      sort: 'name',
       cursor: 'next-page',
       limit: 12,
     });
