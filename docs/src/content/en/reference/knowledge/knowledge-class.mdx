@@ -218,7 +218,7 @@ await knowledge.explainAccess(['org:globex'], { page: 'team:acme:support#refunds
 readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope>
 ```
 
-Returns what a holder of `principals` can read: the principals themselves plus every scope their rules reach in one hop. Pass the result as `read` to the store's read methods when host code reads Knowledge for a user. Undeclared principals throw; an empty list reads nothing.
+Returns what a holder of `principals` can read: the principals themselves plus every scope their rules reach in one hop. Pass the result as `read` to the store's read methods when host code reads Knowledge for a user. Undeclared principals throw. An empty list reads nothing.
 
 ### `getStorage()`
 
@@ -226,7 +226,7 @@ Returns what a holder of `principals` can read: the principals themselves plus e
 getStorage(): Promise<KnowledgeStorage>
 ```
 
-Returns the Knowledge store, for host code such as importers, admin pages and deletes. Store methods don't check roles: only the `read` argument from `readScopeFor()` limits what reads return.
+Host code such as importers, admin pages and deletes uses the returned Knowledge store directly. Its methods skip role checks, so pass the `read` value from `readScopeFor()` whenever a read should be limited to what a user can see.
 
 ```typescript
 const store = await knowledge.getStorage()

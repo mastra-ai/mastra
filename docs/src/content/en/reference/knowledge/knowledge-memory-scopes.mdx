@@ -62,7 +62,7 @@ export const knowledge = new Knowledge({
 | `resource:$resourceId` | `self` `owner` | `org:$orgId` | `1` |
 | `org:$orgId` | `self` `editor` | none | `0` |
 
-The tenant row uses the `org` and `orgRole` options. Pins delivered through a higher `pinPriority` scope come first, so a run's thread pins come before its resource pins, then tenant pins.
+The tenant row uses the `org` and `orgRole` options. Pins delivered through a higher `pinPriority` scope come first. A run's thread pins come before its resource pins, and tenant pins come last.
 
 ```typescript oxfmt:false
 knowledgeMemoryScopes({ org: 'workspace:$workspaceId', orgRole: 'contributor' })
