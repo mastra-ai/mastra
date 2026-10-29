@@ -290,7 +290,8 @@ export function buildOpenAICodexOAuthFetch(
 
     const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
     // Only JSON bodies are rewritten; anything else (e.g. multipart uploads) streams through untouched.
-    const isJson = headers.get('content-type')?.includes('application/json') ?? false;
+    const mediaType = headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+    const isJson = mediaType === 'application/json';
     let body: RequestInit['body'];
     if (hasBody && isJson) {
       body = stripCodexInputItemIds(await request.text());

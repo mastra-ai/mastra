@@ -116,3 +116,28 @@ describe('stripCodexInputItemIds', () => {
     expect(stripCodexInputItemIds(body)).toBe(body);
   });
 });
+
+describe('Codex fetch JSON detection', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('strips ids when content-type has parameters and mixed case', async () => {
+    let sent = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        sent = await request.text();
+        return new Response('{}', { status: 200 });
+      }),
+    );
+
+    await buildOpenAICodexOAuthFetch({ authStorage: storage as any })('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'Application/JSON; charset=utf-8' },
+      body: JSON.stringify({ store: false, input: [{ type: 'reasoning', id: 'rs_old', encrypted_content: 'x' }] }),
+    });
+
+    expect(sent).not.toContain('rs_old');
+  });
+});
