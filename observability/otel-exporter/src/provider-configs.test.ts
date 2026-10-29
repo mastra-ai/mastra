@@ -136,7 +136,6 @@ describe('Provider Configurations', () => {
 
     it('should require an endpoint for custom provider', () => {
       const config = resolveProviderConfig({
-        // @ts-expect-error Verify runtime validation for JavaScript callers.
         custom: {
           headers: { 'x-value': 'test' },
         },

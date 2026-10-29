@@ -265,7 +265,7 @@ type CustomConfig = {
   protocol?: 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'
   headers?: Record<string, string>
 } & (
-  | { endpoint: string; endpoints?: never }
+  | { endpoint?: string; endpoints?: never }
   | {
       endpoint?: never
       endpoints: { traces: string; logs?: string } | { traces?: string; logs: string }

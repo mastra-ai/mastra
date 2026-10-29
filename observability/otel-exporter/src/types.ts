@@ -48,7 +48,7 @@ export type CustomConfig = {
 } & (
   | {
       /** Legacy collector endpoint. Cannot be combined with endpoints. */
-      endpoint: string;
+      endpoint?: string;
       endpoints?: never;
     }
   | {
