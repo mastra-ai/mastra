@@ -13,14 +13,13 @@ import {
 } from './span-query';
 import type { SpanQueryCostMetric, SpanQueryRow } from './span-query';
 import {
-  digestBinding,
   parseTraceQueryRequest,
-  planTraceQuery,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryCursorError,
 } from './trace-query';
+import { digestBinding, planTraceQuery } from './trace-query-plan';
 
 const timeRange = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
 const scope = { organizationId: 'org-a', resourceId: 'project-a' };
@@ -198,22 +197,21 @@ describe('span query contract', () => {
     }
   });
 
-  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans).filter(field => !['model', 'provider'].includes(field)))(
-    'shares the existing span rule for %s',
-    field => {
-      const predicate = { op: 'exists', path: field };
-      const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
-      if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
-      expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
-    },
-  );
+  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans))('shares the existing span rule for %s', field => {
+    const predicate = { op: 'exists', path: field };
+    const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
+    if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
+    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
+  });
 
-  it.each(['model', 'provider'])('rejects direct %s filters while retaining nested trace support', field => {
+  it.each(['model', 'provider'])('plans direct %s filters', field => {
     const predicate = { op: 'eq', left: { path: field }, right: { literal: 'example' } };
-    expect(() => planSpanQuery({ timeRange, where: predicate })).toThrow();
-    expect(() =>
-      planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } })),
-    ).not.toThrow();
+    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual({
+      type: 'comparison',
+      field,
+      operator: 'eq',
+      value: 'example',
+    });
   });
 
   it.each([
@@ -335,44 +333,56 @@ describe('span cursor ownership', () => {
     }
   });
 
-  it('round trips numeric and empty time to first chunk cursors and rejects other kinds', () => {
-    const request = { timeRange, where, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] } as const;
-    const plan = planSpanQuery(request, options);
-    for (const sortValue of [250, 0, null]) {
-      const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue });
-      expect(planSpanQuery({ ...request, page: { after: cursor } }, options).cursor).toEqual({ ...values, sortValue });
-    }
-    const timestampCursor = encodeSpanQueryCursor(plan, values);
-    expect(() => planSpanQuery({ ...request, page: { after: timestampCursor } }, options)).toThrowError(
-      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
-    );
-    const numericCursor = encodeSpanQueryCursor(initial, { ...values, sortValue: 250 });
-    expect(() => planSpanQuery({ timeRange, where, page: { after: numericCursor } }, options)).toThrowError(
-      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
-    );
-    for (const orderBy of [
-      [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
-      [{ field: 'startedAt', direction: 'asc' }],
-    ] as const) {
-      const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue: 250 });
-      expect(() =>
-        planSpanQuery({ timeRange, where, orderBy: [...orderBy], page: { after: cursor } }, options),
-      ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
-    }
-  });
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'round trips numeric and empty %s cursors and rejects other kinds',
+    field => {
+      const request = { timeRange, where, orderBy: [{ field, direction: 'asc' }] } as const;
+      const plan = planSpanQuery(request, options);
+      for (const sortValue of [250, 0, null]) {
+        const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue });
+        expect(planSpanQuery({ ...request, page: { after: cursor } }, options).cursor).toEqual({
+          ...values,
+          sortValue,
+        });
+      }
+      const timestampCursor = encodeSpanQueryCursor(plan, values);
+      expect(() => planSpanQuery({ ...request, page: { after: timestampCursor } }, options)).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+      const numericCursor = encodeSpanQueryCursor(initial, { ...values, sortValue: 250 });
+      expect(() => planSpanQuery({ timeRange, where, page: { after: numericCursor } }, options)).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+      for (const orderBy of [
+        [{ field, direction: 'desc' }],
+        [{ field: field === 'timeToFirstChunkMs' ? 'timeToFirstTokenMs' : 'timeToFirstChunkMs', direction: 'asc' }],
+        [{ field: 'startedAt', direction: 'asc' }],
+      ] as const) {
+        const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue: 250 });
+        expect(() =>
+          planSpanQuery({ timeRange, where, orderBy: [...orderBy], page: { after: cursor } }, options),
+        ).toThrowError(
+          expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+        );
+      }
+    },
+  );
 
-  it('encodes an empty time to first chunk as a null cursor value', () => {
-    const plan = planSpanQuery({
-      timeRange,
-      orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
-      page: { limit: 1 },
-    });
-    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...selected } = row;
-    const rows = ['span-a', 'span-b'].map(spanId => ({ ...selected, spanId, timeToFirstChunkMs: null }));
-    const response = buildSpanQueryResponse(plan, rows, []);
-    const cursor = JSON.parse(Buffer.from(response.page.next!, 'base64url').toString());
-    expect(cursor.values.sortValue).toBeNull();
-  });
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'encodes an empty %s as a null cursor value',
+    field => {
+      const plan = planSpanQuery({
+        timeRange,
+        orderBy: [{ field, direction: 'desc' }],
+        page: { limit: 1 },
+      });
+      const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...selected } = row;
+      const rows = ['span-a', 'span-b'].map(spanId => ({ ...selected, spanId, [field]: null }));
+      const response = buildSpanQueryResponse(plan, rows, []);
+      const cursor = JSON.parse(Buffer.from(response.page.next!, 'base64url').toString());
+      expect(cursor.values.sortValue).toBeNull();
+    },
+  );
 
   it('supports local OSS spans with absent tenant fields without conflating null and empty IDs', () => {
     const plan = planSpanQuery({ timeRange });

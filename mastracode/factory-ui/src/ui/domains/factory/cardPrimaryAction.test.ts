@@ -93,14 +93,29 @@ describe('cardMoves', () => {
 });
 
 describe('resumeStage', () => {
-  it('re-enters the lane of the deepest seat a card parked in Intake has used', () => {
-    expect(resumeStage('intake', { triage: sessionRef('triage'), plan: sessionRef('plan') })).toBe('planning');
-    expect(resumeStage('intake', { plan: sessionRef('plan'), work: sessionRef('work') })).toBe('execute');
+  const history = (...stages: string[]) => stages.map(stage => ({ stage }));
+
+  it('re-enters the deepest working lane a card parked in Intake has been in', () => {
+    // Planning and Building share the `work` session, so the lane comes from the stage history.
+    expect(
+      resumeStage('intake', {
+        sessions: { triage: sessionRef('triage'), work: sessionRef('work') },
+        stageHistory: history('intake', 'triage', 'planning', 'intake'),
+      }),
+    ).toBe('planning');
+    expect(
+      resumeStage('intake', {
+        sessions: { work: sessionRef('work') },
+        stageHistory: history('triage', 'planning', 'execute', 'intake'),
+      }),
+    ).toBe('execute');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
-    expect(resumeStage('intake', {})).toBeUndefined();
-    expect(resumeStage('done', { review: sessionRef('review') })).toBeUndefined();
+    expect(resumeStage('intake', { sessions: {}, stageHistory: history('triage', 'intake') })).toBeUndefined();
+    expect(
+      resumeStage('done', { sessions: { review: sessionRef('review') }, stageHistory: history('review', 'done') }),
+    ).toBeUndefined();
   });
 });
 

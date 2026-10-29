@@ -588,55 +588,6 @@ const result = await agent.generate('message for agent')
             isOptional: true,
             description: 'Callback fired after each generation step.',
           },
-          {
-            name: 'telemetry',
-            type: 'TelemetrySettings',
-            isOptional: true,
-            description: 'Settings for OTLP telemetry collection during generation (not Tracing).',
-            properties: [
-              {
-                type: 'TelemetrySettings',
-                parameters: [
-                  {
-                    name: 'isEnabled',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Whether telemetry collection is enabled.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordInputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Whether to record input data in telemetry.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordOutputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Whether to record output data in telemetry.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'functionId',
-                    type: 'string',
-                    isOptional: true,
-                    description: 'Identifier for the function being executed.',
-                  },
-                ],
-              },
-            ],
-          },
           MODEL_SETTINGS_OBJECT,
           {
             name: 'toolChoice',

@@ -1,13 +1,15 @@
 import EventEmitter from 'node:events';
-import type { ActorSignal } from '../../../auth/ee';
+import type { ActorSignal, RequireFGAOptions } from '../../../auth/ee';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
+import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { resolveExportedSpanId } from '../../../observability';
+import { SpanType, getResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import { coverNestedRun } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
@@ -21,8 +23,11 @@ import type {
   StepSuccess,
   TimeTravelExecutionParams,
   WorkflowRunState,
+  WorkflowRunStatus,
+  WorkflowStateTracingContext,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
+import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
 import type { ScheduledWorkflowTrigger } from '../../scheduler/types';
 import {
@@ -548,28 +553,40 @@ export class WorkflowEventProcessor extends EventProcessor {
     return undefined;
   }
 
+  private endRunSpans(args: ProcessorArgs, status: WorkflowRunStatus) {
+    const failure = args.prevResult?.status === 'failed' ? args.prevResult : undefined;
+    const termination =
+      failure && args.workflow?.options?.isOwnershipLostError?.(failure.error)
+        ? { outcome: 'interrupted' as const, stopReason: null, stopReasonContext: null }
+        : workflowTermination({
+            status,
+            error: failure?.error,
+            tripwire: failure?.tripwire,
+          });
+    const root = this.mastra.__getRunTracingContext(args.runId)?.currentSpan;
+    if (root?.type === SpanType.WORKFLOW_RUN && root.entityId === args.workflowId) {
+      completeWorkflowSpan(
+        root,
+        failure && termination.outcome !== 'interrupted'
+          ? { error: { ...termination, error: getErrorFromUnknown(failure?.error), endTree: true } }
+          : {
+              end: {
+                ...termination,
+                output: args.prevResult?.status === 'success' ? args.prevResult.output : undefined,
+                endTree: true,
+              },
+            },
+      );
+      this.mastra.__unregisterRunTracingContext(args.runId);
+    }
+  }
+
   /**
-   * Snapshot of the run's current span as the {traceId, spanId, parentSpanId} shape that
-   * `UpdateWorkflowStateOptions.tracingContext` expects, so a suspend's persisted snapshot
-   * can stitch the resumed AGENT_RUN/WORKFLOW_RUN span back to the original trace. Mirrors
-   * `default.ts`'s `persistTracingContext`; the evented engine holds the live span on
-   * Mastra (since it can't ride pubsub events), so we resolve it via runId here.
+   * The evented engine holds the live span on Mastra (since it can't ride pubsub
+   * events), so we resolve it via runId here.
    */
-  private resolveSuspendTracingContext(
-    runId: string,
-  ): { traceId?: string; spanId?: string; parentSpanId?: string } | undefined {
-    const span = this.resolveRunTracingContext(runId)?.currentSpan as
-      | {
-          id?: string;
-          traceId?: string;
-          getParentSpanId?: () => string | undefined;
-          getExportedSpanId?: () => string | undefined;
-        }
-      | undefined;
-    if (!span) return undefined;
-    // See default.ts: the persisted spanId becomes the resumed span's parentSpanId,
-    // so it must reference a span that actually reaches exporters.
-    return { traceId: span.traceId, spanId: resolveExportedSpanId(span), parentSpanId: span.getParentSpanId?.() };
+  private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
+    return getResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
   }
 
   /**
@@ -1197,6 +1214,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    this.endRunSpans(args, finalStatus);
+
     if (perStep) {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
@@ -1231,6 +1250,47 @@ export class WorkflowEventProcessor extends EventProcessor {
         deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
       },
     });
+  }
+
+  private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
+    for (;;) {
+      try {
+        await this.mastra.pubsub.publish('workflows-finish', event);
+        return;
+      } catch (error) {
+        if (!(error instanceof PublisherQueueLimitError)) {
+          throw error;
+        }
+        if (error.waitForCapacity) {
+          await error.waitForCapacity();
+          continue;
+        }
+        // Only permanently oversized results need a compact notification. If
+        // the broker stays stalled, even this notification cannot be delivered.
+        const notification = {
+          type: 'workflow.publish-failed',
+          runId: event.runId,
+          data: {
+            message: error.message,
+            workflowId: event.data.workflowId,
+            runId: event.runId,
+            requestContext: event.data.requestContext,
+            finishPendingCleanup: event.data.finishPendingCleanup,
+          },
+        };
+        for (;;) {
+          try {
+            await this.mastra.pubsub.publish('workflows-finish', notification);
+            return;
+          } catch (notificationError) {
+            if (!(notificationError instanceof PublisherQueueLimitError) || !notificationError.waitForCapacity) {
+              throw notificationError;
+            }
+            await notificationError.waitForCapacity();
+          }
+        }
+      }
+    }
   }
 
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
@@ -1274,6 +1334,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
+
+    this.endRunSpans(args, perStep ? 'paused' : (args.prevResult?.status ?? 'pending'));
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
@@ -1362,10 +1424,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.end',
       runId,
-      data: { ...finishArgs, workflow: undefined, state: finalState },
+      data: {
+        ...finishArgs,
+        workflow: undefined,
+        state: finalState,
+        finishPendingCleanup: deleteSnapshotAfterEnd === true,
+      },
     });
 
     if (deleteSnapshotAfterEnd === true) {
@@ -1377,6 +1444,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
+      await this.publishFinishEvent({
+        type: 'workflow.finish-cleanup-complete',
+        runId,
+        data: { workflowId, requestContext },
+      });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1387,6 +1459,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
+    this.endRunSpans(args, 'suspended');
     const {
       workflow,
       executionPath,
@@ -1470,7 +1543,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.suspend',
       runId,
       data: { ...args, workflow: undefined, state: finalState },
@@ -1499,6 +1572,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowFail(args: ProcessorArgs) {
+    this.endRunSpans(args, 'failed');
     const {
       workflowId,
       runId,
@@ -1594,10 +1668,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.fail',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: { ...args, workflow: undefined, state: finalState, finishPendingCleanup: !ownershipLost && !shouldPersist },
     });
 
     if (!ownershipLost && !shouldPersist) {
@@ -1607,6 +1681,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
+      await this.publishFinishEvent({
+        type: 'workflow.finish-cleanup-complete',
+        runId,
+        data: { workflowId, requestContext },
+      });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1973,6 +2052,70 @@ export class WorkflowEventProcessor extends EventProcessor {
     );
   }
 
+  /**
+   * Nested dispatch publishes workflow.start/workflow.resume directly, bypassing
+   * Workflow.execute and its authorization gate. Require workflows:execute on
+   * the child workflow resource before any parent step record is written.
+   * False means errorWorkflow has settled the parent or the delivery was already
+   * handled and must be dropped instead of failed.
+   */
+  async #authorizeNestedDispatch({
+    args,
+    workflow,
+    fgaProvider,
+    nestedWorkflowStep,
+    nestedRunId,
+    canDropRunningDenial,
+    iterationIndex,
+    continueRedelivery,
+  }: {
+    args: ProcessorArgs;
+    workflow: Workflow;
+    fgaProvider: RequireFGAOptions['fgaProvider'];
+    nestedWorkflowStep: Workflow;
+    nestedRunId: string;
+    canDropRunningDenial: boolean;
+    iterationIndex: number | undefined;
+    continueRedelivery: () => Promise<boolean>;
+  }): Promise<boolean> {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const parentRun = await workflowsStore?.getWorkflowRunById({ runId: args.runId, workflowName: workflow.id });
+    const rc = new RequestContext(Object.entries(args.requestContext ?? {}));
+    try {
+      await requireFGA({
+        fgaProvider,
+        user: rc.get('user'),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(nestedWorkflowStep.id) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: rc,
+        actor: args.actor,
+        context: { resourceId: parentRun?.resourceId },
+        metadata: { workflowId: nestedWorkflowStep.id, runId: nestedRunId, resourceId: parentRun?.resourceId },
+      });
+    } catch (error) {
+      // A concurrent delivery may have finished while authorization was pending.
+      if (await continueRedelivery()) return false;
+      if (workflowsStore) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: args.runId });
+        const leaf = snapshot?.context[nestedWorkflowStep.id];
+        if (args.eventId && leaf?.metadata?.authorizedEventIds?.includes(args.eventId)) return false;
+        // Foreach pre-writes running before authorization; only the child's start
+        // handler records an iteration's run ID. A single start owns its running leaf.
+        const claimed =
+          iterationIndex !== undefined
+            ? !!leaf?.metadata?.foreachNestedRunIds?.[iterationIndex]
+            : leaf?.status === 'running';
+        // If the authorized delivery crashed, leave its child for recovery.
+        if (canDropRunningDenial && claimed) return false;
+      }
+      await this.errorWorkflow(args, getErrorFromUnknown(error));
+      return false;
+    }
+    // Another delivery may have denied the parent while authorization was pending.
+    if (await continueRedelivery()) return false;
+    return true;
+  }
+
   protected async runLeafStep(
     args: ProcessorArgs & {
       step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
@@ -2034,9 +2177,94 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    activeStepsPath[leafId] = executionPath;
-
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const nestedWorkflowStep = getEntryWorkflow(leaf);
+    const guardStart =
+      workflowsStore?.supportsWorkflowStepGuards() &&
+      args.eventId &&
+      !restart &&
+      !timeTravel &&
+      !resumeSteps?.length &&
+      step.type !== 'foreach';
+    let nestedRunId = '';
+    let authorizedEventId: string | undefined;
+    let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
+    if (nestedWorkflowStep) {
+      const continueRedelivery = async () => {
+        if (restart || timeTravel || resumeSteps?.length || step.type === 'foreach' || !workflowsStore) return false;
+        // Redeliveries that cannot execute a child must not make a new authorization decision.
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        if (snapshot && ['success', 'failed', 'canceled', 'tripwire'].includes(snapshot.status)) return true;
+        if (snapshot?.status === 'suspended' && snapshot.context[leafId]?.status === 'suspended') return true;
+        if (guardStart) {
+          try {
+            assertWorkflowStepGuard({
+              snapshot,
+              stepId: leafId,
+              startGuard: { eventId: args.eventId!, expectedStartedBy: stepResults[leafId]?.metadata?.startedBy },
+            });
+          } catch (error) {
+            if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
+            if (error.storedResult?.status === 'success') {
+              const continuation = {
+                ...args,
+                stepResults: { ...stepResults, ...error.storedSnapshot?.context },
+                requestContext: restoreLiveRequestContext(error.storedRequestContext, requestContext),
+                state: error.storedSnapshot?.context.__state ?? currentState,
+                prevResult: error.storedResult,
+              };
+              if (step.type === 'loop') await this.#processLoop(continuation, step, error.storedResult, args.eventId);
+              else await this.processWorkflowStepEnd(continuation);
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+      if (await continueRedelivery()) return;
+      // Classify once so authorization uses the dispatch's child run ID before
+      // the parent's running record or resume claim can be written.
+      if (resumeSteps?.length && resumeSteps[0] === leafId) {
+        // Resume the child run identified by the suspension payload.
+        nestedDispatch = resumeSteps.length === 1 ? 'resume-single' : 'resume-many';
+        nestedRunId = stepResults[leafId]?.suspendPayload?.__workflow_meta?.runId;
+      } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
+        // Time travel reuses the recorded child run, or creates one if absent.
+        nestedDispatch = 'time-travel';
+        nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
+      } else if (restart && !!restart.activeStepsPath?.[leafId]) {
+        // Restart reuses the iteration's or step's child run, if recorded.
+        nestedDispatch = 'restart';
+        nestedRunId =
+          (step.type === 'foreach'
+            ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
+            : undefined) ??
+          stepResults[leafId]?.metadata?.nestedRunId ??
+          globalThis.crypto.randomUUID();
+      } else {
+        // A fresh dispatch creates a new child run.
+        nestedDispatch = 'start';
+        nestedRunId = globalThis.crypto.randomUUID();
+      }
+      const fgaProvider = this.mastra.getServer()?.fga;
+      if (fgaProvider && !nestedWorkflowStep.isInternal) {
+        // Nested evented dispatch bypasses Workflow.execute, including its FGA gate.
+        const authorized = await this.#authorizeNestedDispatch({
+          args,
+          workflow,
+          fgaProvider,
+          nestedWorkflowStep,
+          nestedRunId,
+          canDropRunningDenial: nestedDispatch === 'start',
+          iterationIndex: step.type === 'foreach' ? executionPath[1] : undefined,
+          continueRedelivery,
+        });
+        if (!authorized) return;
+        authorizedEventId = args.eventId;
+      }
+    }
+
+    activeStepsPath[leafId] = executionPath;
 
     // Record "this step is running, with this input" BEFORE executing it —
     // mirroring the default engine's `persistStepUpdate` phase:'start' contract
@@ -2054,13 +2282,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: stepResults ?? {},
         workflowStatus: 'running',
       }) ?? true;
-    const guardStart =
-      workflowsStore?.supportsWorkflowStepGuards() &&
-      args.eventId &&
-      !restart &&
-      !timeTravel &&
-      !resumeSteps?.length &&
-      step.type !== 'foreach';
     let completedResult: StepResult<any, any, any, any> | undefined;
     if ((shouldPersistRunning || guardStart) && workflowsStore) {
       // A resumed step skips this generic write (it is claimed separately
@@ -2107,14 +2328,29 @@ export class WorkflowEventProcessor extends EventProcessor {
           payload: prevResult.status === 'success' ? prevResult.output : undefined,
           startedAt: Date.now(),
           status: 'running' as const,
-          ...(guardStart
+          ...(guardStart || authorizedEventId
             ? {
                 metadata: {
-                  ...stepResults[leafId]?.metadata,
-                  startedBy: args.eventId,
-                  __restartPending: undefined,
-                  __continuationStarted: undefined,
-                  loopCondition: undefined,
+                  ...(guardStart
+                    ? {
+                        ...stepResults[leafId]?.metadata,
+                        startedBy: args.eventId,
+                        __restartPending: undefined,
+                        __continuationStarted: undefined,
+                        loopCondition: undefined,
+                      }
+                    : {}),
+                  // Carry only authorization occurrences, not stale routing metadata.
+                  ...(authorizedEventId
+                    ? {
+                        authorizedEventIds: [
+                          ...new Set([
+                            ...(snapshot?.context[leafId]?.metadata?.authorizedEventIds ?? []),
+                            authorizedEventId,
+                          ]),
+                        ],
+                      }
+                    : {}),
                 },
               }
             : {}),
@@ -2199,6 +2435,16 @@ export class WorkflowEventProcessor extends EventProcessor {
               status: 'running',
               resumePayload: resumeData,
               resumedAt: Date.now(),
+              ...(authorizedEventId
+                ? {
+                    metadata: {
+                      ...storedResult.metadata,
+                      authorizedEventIds: [
+                        ...new Set([...(storedResult.metadata?.authorizedEventIds ?? []), authorizedEventId]),
+                      ],
+                    },
+                  }
+                : {}),
               // For a nested workflow step, the inner steps the caller resumed,
               // so restart can target them instead of guessing.
               ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
@@ -2235,14 +2481,41 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    // Authorization bookkeeping, not progress, and deliberately outside the
+    // `shouldPersistRunning` gate above: the child-start handler that records
+    // `foreachNestedRunIds` is itself gated on that policy, so it cannot carry
+    // this. Written regardless because a missing record makes a denied
+    // redelivery fail an already-authorized parent.
+    // (Compare `#claimRun` in workflows/workflow.ts, which trades the opposite way.)
+    if (step.type === 'foreach' && workflowsStore && authorizedEventId) {
+      const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+      const storedResult = snapshot?.context[leafId] ?? stepResults[leafId];
+      await workflowsStore.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: leafId,
+        requestContext: withoutAuthToken(requestContext),
+        result: {
+          ...(storedResult ?? {
+            status: 'running',
+            startedAt: Date.now(),
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+          }),
+          metadata: {
+            ...storedResult?.metadata,
+            authorizedEventIds: [
+              ...new Set([...(storedResult?.metadata?.authorizedEventIds ?? []), authorizedEventId]),
+            ],
+          },
+        },
+      });
+    }
+
     // Run nested workflow - only a plain `step` entry can wrap a live Workflow
-    const nestedWorkflowStep = getEntryWorkflow(leaf);
     if (nestedWorkflowStep) {
       const nestedWorkflow = nestedWorkflowStep;
       // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
-      if (resumeSteps?.length === 1 && resumeSteps[0] === leafId) {
-        const stepData = stepResults[leafId];
-        const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
+      if (nestedDispatch === 'resume-single') {
         if (!nestedRunId) {
           return this.errorWorkflow(
             {
@@ -2342,9 +2615,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             forEachIndex,
           },
         });
-      } else if (resumeSteps?.length > 1 && resumeSteps[0] === leafId) {
-        const stepData = stepResults[leafId];
-        const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
+      } else if (nestedDispatch === 'resume-many') {
         if (!nestedRunId) {
           return this.errorWorkflow(
             {
@@ -2417,8 +2688,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             forEachIndex,
           },
         });
-      } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
-        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
+      } else if (nestedDispatch === 'time-travel' && timeTravel) {
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2472,13 +2742,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else if (restart && !!restart.activeStepsPath?.[leafId]) {
-        const nestedRunId =
-          (step.type === 'foreach'
-            ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
-            : undefined) ??
-          stepResults[leafId]?.metadata?.nestedRunId ??
-          globalThis.crypto.randomUUID();
+      } else if (nestedDispatch === 'restart') {
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2590,8 +2854,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else {
-        const nestedRunId = globalThis.crypto.randomUUID();
+      } else if (nestedDispatch === 'start') {
         coverNestedRun(runId, nestedRunId);
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({

@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix, relative, resolve } from 'node:path';
-import { MastraBundler } from '@mastra/core/bundler';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { Config } from '@mastra/core/mastra';
+import { MastraBase } from '@internal/core/base';
+import { MastraError, ErrorDomain, ErrorCategory } from '@internal/core/error';
+import { loadEnvVars } from '@internal/deployer';
+import type { BundlerConfig, IBundler } from '@internal/deployer';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
@@ -288,7 +289,7 @@ async function toolIdForEntry(relativeEntryFile: string): Promise<string> {
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
 }
 
-export abstract class Bundler extends MastraBundler {
+export abstract class Bundler extends MastraBase implements IBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
@@ -297,6 +298,17 @@ export abstract class Bundler extends MastraBundler {
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
   }
+
+  async loadEnvVars(): Promise<Map<string, string>> {
+    return loadEnvVars(await this.getEnvFiles());
+  }
+
+  abstract getEnvFiles(): Promise<string[]>;
+  abstract bundle(
+    entryFile: string,
+    outputDirectory: string,
+    { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void>;
 
   async prepare(outputDirectory: string): Promise<void> {
     // Clean up the output directory first
@@ -355,11 +367,8 @@ export abstract class Bundler extends MastraBundler {
     return createBundlerUtil(inputOptions, outputOptions);
   }
 
-  protected async getUserBundlerOptions(
-    mastraEntryFile: string,
-    outputDirectory: string,
-  ): Promise<NonNullable<Config['bundler']>> {
-    const defaultBundlerOptions: Config['bundler'] = {
+  protected async getUserBundlerOptions(mastraEntryFile: string, outputDirectory: string): Promise<BundlerConfig> {
+    const defaultBundlerOptions: BundlerConfig = {
       externals: [],
       sourcemap: false,
       transpilePackages: [],
@@ -400,7 +409,7 @@ export abstract class Bundler extends MastraBundler {
     outputDirectory: string,
     rootDir = process.cwd(),
     pnpmOverrides?: Record<string, string>,
-    pnpmWorkspaceSettings?: NonNullable<Config['bundler']>['pnpmWorkspaceSettings'],
+    pnpmWorkspaceSettings?: BundlerConfig['pnpmWorkspaceSettings'],
   ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);

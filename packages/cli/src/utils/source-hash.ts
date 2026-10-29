@@ -124,6 +124,9 @@ export async function computeSourceHash(rootDir: string, mastraDir: string, proj
       'src/web/vite.config.{ts,js,mts,mjs}',
       // Static public assets consumed by Vite
       'src/web/public/**/*',
+      // App skills (SKILL.md and their reference files), copied into the build output
+      posix.join(normalizedMastraDir, 'factory-skills/**/*'),
+      posix.join(normalizedMastraDir, 'public/factory-skills/**/*'),
       // Exclude generated Factory UI output so it doesn't self-invalidate
       `!${posix.join(normalizedMastraDir, 'public/factory/**')}`,
     );

@@ -66,6 +66,7 @@ export interface RawTraceQuerySpan {
   sessionId?: string | null;
   experimentId?: string | null;
   timeToFirstChunkMs?: number | null;
+  timeToFirstTokenMs?: number | null;
   requestId?: string | null;
   parentEntityType?: string | null;
   parentEntityId?: string | null;
@@ -73,6 +74,9 @@ export interface RawTraceQuerySpan {
   rootEntityType?: string | null;
   rootEntityId?: string | null;
   rootEntityName?: string | null;
+  /** Dedicated span columns. Trace predicates fall back to string `attributes.model` / `attributes.provider`; span-query predicates read only the columns. */
+  model?: string | null;
+  provider?: string | null;
 }
 
 export interface RawTraceQueryScore {
@@ -231,10 +235,16 @@ const feedbackReplacementRoot = (traceId: string, startedAt: string): RawTraceQu
     endedAt: new Date(new Date(startedAt).getTime() + 1000).toISOString(),
   });
 
+const quantified = (
+  quantifier: 'some' | 'none',
+  predicate: TraceQueryScalarPredicate,
+): { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } =>
+  quantifier === 'some' ? { some: predicate } : { none: predicate };
+
 const feedbackReplacementRequest = (
   traceId: string,
   quantifier: 'some' | 'none',
-  predicate: TraceQueryPredicate,
+  predicate: TraceQueryScalarPredicate,
   timeRange = feedbackReplacementRange,
 ): TraceQueryRequest => ({
   timeRange,
@@ -242,14 +252,14 @@ const feedbackReplacementRequest = (
     op: 'and',
     args: [
       { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
-      { feedback: { [quantifier]: predicate } },
+      { feedback: quantified(quantifier, predicate) },
     ],
   },
 });
 
 const feedbackReplacementAssertions = (args: {
-  oldPredicate: TraceQueryPredicate;
-  currentPredicate: TraceQueryPredicate;
+  oldPredicate: TraceQueryScalarPredicate;
+  currentPredicate: TraceQueryScalarPredicate;
   oldTraceId?: string;
   currentTraceId?: string;
   currentIsCorrelated?: boolean;
@@ -292,13 +302,13 @@ const feedbackReplacementAssertions = (args: {
   ];
 };
 
-const feedbackSourcePredicate = (value: string): TraceQueryPredicate => ({
+const feedbackSourcePredicate = (value: string): TraceQueryScalarPredicate => ({
   op: 'eq',
   left: { path: 'feedbackSource' },
   right: { literal: value },
 });
 
-const feedbackValuePredicate = (value: string | number): TraceQueryPredicate => ({
+const feedbackValuePredicate = (value: string | number): TraceQueryScalarPredicate => ({
   op: 'eq',
   left: { path: 'value' },
   right: { literal: value },
@@ -716,7 +726,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-a',
       name: 'superseded_lookup',
       spanType: 'tool_call',
-      attributes: { provider: 'superseded-provider' },
+      provider: 'superseded-provider',
       entityType: 'tool',
       entityId: 'medication_lookup',
       entityName: 'Medication lookup',
@@ -742,7 +752,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-a',
       name: "llm: 'claude-sonnet-4-6'",
       spanType: 'model_generation',
-      attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      model: 'claude-sonnet-4-6',
+      provider: 'anthropic',
       startedAt: '2026-07-15T10:00:00.000Z',
       endedAt: '2026-07-15T10:00:06.250Z',
     }),
@@ -769,6 +780,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'root-b',
       name: "llm: 'gpt-5'",
       spanType: 'model_generation',
+      // Exported before the dedicated columns were filled: only the attributes carry model and provider.
       attributes: { model: 'gpt-5', provider: 'openai' },
       startedAt: '2026-08-05T10:00:00.250Z',
       endedAt: '2026-08-05T10:00:02.250Z',
@@ -822,7 +834,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentSpanId: 'other-root',
       name: 'medication_lookup',
       spanType: 'tool_call',
-      attributes: { model: 'uncorrelated-model', provider: 'uncorrelated-provider' },
+      model: 'uncorrelated-model',
+      provider: 'uncorrelated-provider',
       error: { message: 'must not correlate' },
     }),
     // Tenant-scoped roots live in September so the unscoped August cases stay untouched.
@@ -1449,19 +1462,19 @@ export interface TraceQueryConformanceCase {
 const scoreReplacementRequest = (
   traceId: string,
   quantifier: 'some' | 'none',
-  predicate: TraceQueryPredicate,
+  predicate: TraceQueryScalarPredicate,
 ): TraceQueryRequest => ({
   timeRange: fullRange,
   where: {
     op: 'and',
     args: [
       { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
-      { scores: { [quantifier]: predicate } },
+      { scores: quantified(quantifier, predicate) },
     ],
   },
 });
 
-const scoreAboveHalf: TraceQueryPredicate = {
+const scoreAboveHalf: TraceQueryScalarPredicate = {
   op: 'gt',
   left: { path: 'score' },
   right: { literal: 0.5 },
@@ -1756,6 +1769,22 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches provider from the dedicated column',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'in', value: { path: 'provider' }, set: ['anthropic'] } } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches model from string attributes on older spans',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5' } } } },
+    },
+    expected: [{ traceId: 'trace-b' }],
   },
   {
     name: 'applies nullable negative membership semantics to current spans',
@@ -2805,14 +2834,13 @@ export function selectSpanQuerySpans(data: TraceQueryFixtureData, selection: Spa
     .filter(span => !selection.where || evaluateScalarPredicate(selection.where, spanQueryValues(span)));
 }
 
-/**
- * Every value a direct span query or span aggregate can filter or group on. `model` and
- * `provider` come through `spanValues` but are not yet filterable or groupable here
- * (OBS-693); `queryTraces()` filters on them via `spans.some`.
- */
+/** Every value a direct span query or span aggregate can filter or group on. */
 function spanQueryValues(span: RawTraceQuerySpan): Record<string, unknown> {
   return {
     ...spanValues(span),
+    // Span-query predicates read only the dedicated columns.
+    model: span.model ?? null,
+    provider: span.provider ?? null,
     traceId: span.traceId,
     spanId: span.spanId,
     parentSpanId: span.parentSpanId,
@@ -3170,17 +3198,19 @@ function durationMsBetween(startedAt: string, endedAt: string | null): number | 
 }
 
 function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
-  const model = typeof span.attributes?.model === 'string' ? span.attributes.model : null;
-  const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : null;
+  const attributeString = (key: 'model' | 'provider') =>
+    typeof span.attributes?.[key] === 'string' ? span.attributes[key] : null;
   return {
     name: span.name,
     spanType: span.spanType,
-    model,
-    provider,
+    // Trace predicates fall back to the attributes older exporters wrote; span queries override this.
+    model: span.model ?? attributeString('model'),
+    provider: span.provider ?? attributeString('provider'),
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     durationMs: durationMsBetween(span.startedAt, span.endedAt),
     timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
     status: span.error === null ? 'success' : 'error',
     error: span.error,
     entityType: span.entityType,
@@ -3262,6 +3292,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),
     timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
+    timeToFirstTokenMs: root.timeToFirstTokenMs ?? null,
     entityId: traceQueryDimensionValue(root, 'entityId'),
     entityName: traceQueryDimensionValue(root, 'entityName'),
     entityType: traceQueryDimensionValue(root, 'entityType'),
@@ -3295,6 +3326,7 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     environment: root.environment,
     status: root.error === null ? 'success' : 'error',
     timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
+    timeToFirstTokenMs: root.timeToFirstTokenMs ?? null,
   };
 }
 
