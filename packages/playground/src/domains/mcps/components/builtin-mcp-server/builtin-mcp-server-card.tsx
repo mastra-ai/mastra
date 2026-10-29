@@ -6,10 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@mastra/playground-ui/
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useMastraClient } from '@mastra/react';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useBuiltinMcpServer } from '../../hooks/use-builtin-mcp-server';
 import { buildConnectSnippets } from './snippets';
 
@@ -19,29 +22,43 @@ type Descriptor = GetBuiltinMcpServerResponse;
 type EnabledDescriptor = Extract<Descriptor, { enabled: true }>;
 type DisabledDescriptor = Extract<Descriptor, { enabled: false }>;
 
-/** The built-in server card, or nothing while loading or when the server can't describe it (e.g. older servers). */
+/**
+ * The built-in server card. Hidden while loading, on 404 (servers that predate the descriptor route) and on
+ * 401/403 (callers without `mcp:read`); any other failure shows an error in the card.
+ */
 export function BuiltinMcpServerSection() {
-  const { data } = useBuiltinMcpServer();
-  if (!data) return null;
-  return <BuiltinMcpServerCard descriptor={data} />;
+  const { data, error } = useBuiltinMcpServer();
+  if (data) return <BuiltinMcpServerCard descriptor={data} />;
+  if (!error || is401UnauthorizedError(error) || is403ForbiddenError(error) || is404NotFoundError(error)) return null;
+  return (
+    <BuiltinMcpServerFrame>
+      <Notice variant="destructive">Couldn't load the built-in MCP server. Try reloading the page.</Notice>
+    </BuiltinMcpServerFrame>
+  );
 }
 
 export function BuiltinMcpServerCard({ descriptor }: { descriptor: Descriptor }) {
   return (
+    <BuiltinMcpServerFrame status={<StatusBadge descriptor={descriptor} />}>
+      {!descriptor.enabled ? (
+        <DisabledContent descriptor={descriptor} />
+      ) : !descriptor.mcpPackageInstalled ? (
+        <MissingPackageContent />
+      ) : (
+        <EnabledContent descriptor={descriptor} />
+      )}
+    </BuiltinMcpServerFrame>
+  );
+}
+
+function BuiltinMcpServerFrame({ status, children }: { status?: ReactNode; children: ReactNode }) {
+  return (
     <Card role="region" aria-label="Mastra (built-in) MCP server">
       <CardHeader className="flex-row flex-wrap items-center gap-3 space-y-0 border-b border-border">
         <CardTitle className="shrink-0">Mastra (built-in)</CardTitle>
-        <StatusBadge descriptor={descriptor} />
+        {status}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {!descriptor.enabled ? (
-          <DisabledContent descriptor={descriptor} />
-        ) : !descriptor.mcpPackageInstalled ? (
-          <MissingPackageContent />
-        ) : (
-          <EnabledContent descriptor={descriptor} />
-        )}
-      </CardContent>
+      <CardContent className="flex flex-col gap-4">{children}</CardContent>
     </Card>
   );
 }

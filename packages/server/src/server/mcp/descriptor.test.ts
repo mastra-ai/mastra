@@ -38,6 +38,22 @@ describe('built-in MCP descriptor', () => {
     });
   });
 
+  describe('when loading @mastra/mcp fails for another reason', () => {
+    it('fails the request, then recovers once the package loads', async () => {
+      vi.stubEnv('MASTRA_DEV', 'true');
+      vi.resetModules();
+      vi.doMock('@mastra/mcp', () => {
+        throw new Error('SyntaxError in @mastra/mcp');
+      });
+      const { describeBuiltinMCP } = await import('./descriptor');
+      const mastra = new Mastra({ logger: false });
+      await expect(describeBuiltinMCP(mastra, '/api')).rejects.toThrow();
+
+      vi.doUnmock('@mastra/mcp');
+      expect(await describeBuiltinMCP(mastra, '/api')).toMatchObject({ mcpPackageInstalled: true });
+    });
+  });
+
   describe('when server.auth is a named provider', () => {
     it("reports only the provider's name", async () => {
       const auth = new SimpleAuth({ name: 'acme-sso', tokens: { 'secret-token': { id: 'u' } } });

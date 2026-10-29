@@ -21,13 +21,14 @@ import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const CARD_NAME = 'Mastra (built-in) MCP server';
+const DESCRIPTOR_ERROR = "Couldn't load the built-in MCP server. Try reloading the page.";
 
 const useServers = ({
   builtin,
   registry = noUserServers,
   prefix = '/api',
 }: {
-  builtin: GetBuiltinMcpServerResponse | 404;
+  builtin: GetBuiltinMcpServerResponse | 403 | 404 | 500;
   registry?: McpServerListResponse;
   prefix?: string;
 }) => {
@@ -35,7 +36,9 @@ const useServers = ({
   server.use(
     http.get(`${TEST_BASE_URL}${prefix}/mcp/builtin`, ({ request }) => {
       onDescriptorRequest(request.url);
-      return builtin === 404 ? HttpResponse.json({ error: 'Not Found' }, { status: 404 }) : HttpResponse.json(builtin);
+      return typeof builtin === 'number'
+        ? HttpResponse.json({ error: 'Request failed' }, { status: builtin })
+        : HttpResponse.json(builtin);
     }),
     http.get(`${TEST_BASE_URL}${prefix}/mcp/v0/servers`, () => HttpResponse.json(registry)),
     http.get(`${TEST_BASE_URL}${prefix}/mcp/:serverId/tools`, () => HttpResponse.json({ tools: [] })),
@@ -255,6 +258,30 @@ describe('MCP servers page — built-in Mastra server', () => {
       expect(await screen.findByText('Notes MCP')).not.toBeNull();
       await waitFor(() => expect(onDescriptorRequest).toHaveBeenCalled());
       expect(screen.queryByRole('region', { name: CARD_NAME })).toBeNull();
+    });
+  });
+
+  describe('when the caller lacks mcp:read for the descriptor', () => {
+    it('hides the built-in card and still lists registered servers', async () => {
+      const { onDescriptorRequest } = useServers({ builtin: 403, registry: oneUserServer });
+      renderPage();
+
+      expect(await screen.findByText('Notes MCP')).not.toBeNull();
+      await waitFor(() => expect(onDescriptorRequest).toHaveBeenCalled());
+      expect(screen.queryByRole('region', { name: CARD_NAME })).toBeNull();
+      expect(screen.queryByText(DESCRIPTOR_ERROR)).toBeNull();
+    });
+  });
+
+  describe('when the descriptor request fails on the server', () => {
+    it('shows an error in the built-in card and still lists registered servers', async () => {
+      useServers({ builtin: 500, registry: oneUserServer });
+      renderPage();
+
+      const card = await findCard();
+      expect(within(card).getByText(DESCRIPTOR_ERROR)).not.toBeNull();
+      expect(within(card).queryByRole('figure')).toBeNull();
+      expect(screen.getByText('Notes MCP')).not.toBeNull();
     });
   });
 

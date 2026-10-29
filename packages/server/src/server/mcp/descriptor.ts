@@ -57,13 +57,18 @@ function isMCPPackageInstalled(): Promise<boolean> {
       return true;
     } catch (error) {
       if (isMissingMCPPackage(error)) return false;
+      // Don't cache other failures, so the route recovers once the package loads.
+      mcpPackageInstalled = undefined;
       throw error;
     }
   })();
   return mcpPackageInstalled;
 }
 
-/** Configured toolsets with at least one tool this server can serve (same capability checks as the catalogue). */
+/**
+ * Configured toolsets with at least one tool this server can serve (same capability checks as the catalogue).
+ * Doesn't reflect `include`/`exclude`, which narrow tools within a toolset.
+ */
 async function getServedToolsets(mastra: Mastra, configured: ReadonlySet<MastraMCPToolset>) {
   const [{ SERVER_ROUTES }, capabilities] = await Promise.all([
     import('../server-adapter/routes'),

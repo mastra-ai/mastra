@@ -62,7 +62,7 @@ The endpoint uses stateless Streamable HTTP and speaks both MCP `2026-07-28` and
 
 ### In Studio
 
-The **MCP Servers** page in Studio shows the built-in server as **Mastra (built-in)**, above the MCP servers you register yourself. It shows the endpoint URL (including a custom `server.mcp.path` or `apiPrefix`), whether the endpoint is open or protected by `server.auth`, the toolsets it serves, and copyable setup for Claude Code, Cursor, VS Code, and the MCP Inspector. The setup uses a `<your-token>` placeholder; replace it with your own bearer token. If the endpoint is turned off, or `@mastra/mcp` isn't installed, the card says why and how to fix it.
+The **MCP Servers** page in Studio shows the built-in server as **Mastra (built-in)**, above the MCP servers you register yourself. It shows the endpoint URL (including a custom `server.mcp.path` or `apiPrefix`), whether the endpoint is open or protected by `server.auth`, the toolsets it serves (`include` and `exclude` aren't reflected there), and copyable setup for Claude Code, Cursor, VS Code, and the MCP Inspector. The setup uses a `<your-token>` placeholder; replace it with your own bearer token. If the endpoint is turned off, or `@mastra/mcp` isn't installed, the card says why and how to fix it.
 
 Studio reads this from `GET /api/mcp/builtin`, which needs the `mcp:read` permission. Studio doesn't list the server's tools or let you try them, because the tool list depends on the caller's token. Connect a client to see your tools.
 
