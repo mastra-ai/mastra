@@ -92,7 +92,6 @@ import type {
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
-import { KNOWLEDGE_PAGE_DDL, LibSQLKnowledgePages } from './pages';
 import type { LibSQLDomainConfig } from '../../db';
 import type {
   SqliteClient as Client,
@@ -101,6 +100,7 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
+import { KNOWLEDGE_PAGE_DDL, LibSQLKnowledgePages } from './pages';
 
 const loadKnowledgeV2Core = createKnowledgeV2CoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
@@ -326,161 +326,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
     } as const;
-  }
-
-  async #inspectSchema(executor: Executor) {
-    const { inspectKnowledgeSchema } = await loadKnowledgeV2Core();
-    try {
-      const placeholders = KNOWLEDGE_TABLE_NAMES.map(() => '?').join(',');
-      const tables = await executor.execute({
-        sql: `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${placeholders})`,
-        args: [...KNOWLEDGE_TABLE_NAMES],
-      });
-      const tableNames = tables.rows.map(row => String(row.name));
-      if (tableNames.length === 0) return inspectKnowledgeSchema({ available: true, tableNames });
-
-      const missingTables = KNOWLEDGE_TABLE_NAMES.filter(table => !tableNames.includes(table));
-      if (missingTables.length > 0) {
-        return inspectKnowledgeSchema({
-          available: true,
-          tableNames,
-          reason: `Missing Knowledge v2 tables: ${missingTables.join(', ')}`,
-        });
-      }
-
-      for (const [table, schema] of knowledgeV2TableSchemas) {
-        const columns = await executor.execute(`PRAGMA table_info("${table}")`);
-        const actual = new Set(columns.rows.map(row => String(row.name)));
-        const missing = Object.keys(schema).filter(column => !actual.has(column));
-        if (missing.length > 0) {
-          return inspectKnowledgeSchema({
-            available: true,
-            tableNames,
-            reason: `Knowledge table ${table} is missing v2 columns: ${missing.join(', ')}`,
-          });
-        }
-      }
-      const accessState = await executor.execute(
-        `SELECT schemaVersion FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`,
-      );
-      if (Number(accessState.rows[0]?.schemaVersion) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
-        return inspectKnowledgeSchema({
-          available: true,
-          tableNames,
-          reason: 'Knowledge schema version marker is missing or incompatible',
-        });
-      }
-      return inspectKnowledgeSchema({
-        available: true,
-        tableNames,
-        schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
-      });
-    } catch (error) {
-      return inspectKnowledgeSchema({
-        available: false,
-        tableNames: [],
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  async #initializeSchema(tx: Executor): Promise<void> {
-    const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
-    let inspection = await this.#inspectSchema(tx);
-    if (inspection.status === 'incompatible-reset-required' && (await this.#isPublishedV1Layout(tx))) {
-      // Knowledge v1 was experimental and its data is not migrated: replace the published v1 layout,
-      // discarding any rows it holds.
-      for (const table of [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]) {
-        await tx.execute(`DROP TABLE IF EXISTS "${table}"`);
-      }
-      inspection = await this.#inspectSchema(tx);
-    }
-    assertKnowledgeSchemaCompatible(inspection);
-
-    const createTable = (input: Parameters<LibSQLDB['createTable']>[0]) =>
-      this.#db.createTable({ ...input, executor: tx });
-    await createTable({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_V2_NODES_SCHEMA });
-    await createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_V2_RECORDS_SCHEMA });
-    await createTable({
-      tableName: TABLE_KNOWLEDGE_MENTIONS,
-      schema: KNOWLEDGE_V2_MENTIONS_SCHEMA,
-      compositePrimaryKey: ['recordId', 'sourceId'],
-    });
-    await createTable({
-      tableName: TABLE_KNOWLEDGE_NODE_SCOPES,
-      schema: KNOWLEDGE_NODE_SCOPES_SCHEMA,
-      compositePrimaryKey: ['nodeId', 'scopeNodeId'],
-    });
-    await createTable({
-      tableName: TABLE_KNOWLEDGE_RECORD_SCOPES,
-      schema: KNOWLEDGE_RECORD_SCOPES_SCHEMA,
-      compositePrimaryKey: ['recordId', 'scopeNodeId'],
-    });
-    await createTable({
-      tableName: TABLE_KNOWLEDGE_SCOPE_GRANTS,
-      schema: KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
-      compositePrimaryKey: ['scopeNodeId', 'scopeRefId'],
-    });
-    await createTable({ tableName: TABLE_KNOWLEDGE_ACCESS_STATE, schema: KNOWLEDGE_ACCESS_STATE_SCHEMA });
-    await createTable({ tableName: TABLE_KNOWLEDGE_SCOPE_ADDRESSES, schema: KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA });
-    await createTable({
-      tableName: TABLE_KNOWLEDGE_NODE_ADDRESSES,
-      schema: KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
-      compositePrimaryKey: ['source', 'address'],
-    });
-    await createTable({
-      tableName: TABLE_KNOWLEDGE_IMPORT_STATE,
-      schema: KNOWLEDGE_IMPORT_STATE_SCHEMA,
-      compositePrimaryKey: ['importerId', 'binding', 'key'],
-    });
-    await createTable({ tableName: TABLE_KNOWLEDGE_IMPORT_RUNS, schema: KNOWLEDGE_IMPORT_RUNS_SCHEMA });
-    await createTable({ tableName: TABLE_KNOWLEDGE_PROPOSALS, schema: KNOWLEDGE_PROPOSALS_SCHEMA });
-    await createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_V2_ACTIVITY_SCHEMA });
-    await createTable({ tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA });
-    for (const statement of [
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_nodes_identity ON "${TABLE_KNOWLEDGE_NODES}" (type, scopeKey, canonicalName)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope ON "${TABLE_KNOWLEDGE_NODES}" (scopeKey, type)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON "${TABLE_KNOWLEDGE_NODES}" (type, canonicalName)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (node, id DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_records_thread_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (sourceThreadId, id DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId, sourceType, sourceId)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON "${TABLE_KNOWLEDGE_ACTIVITY}" (id DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON "${TABLE_KNOWLEDGE_RECORDS}" (scopeKey, id)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_scope ON "${TABLE_KNOWLEDGE_ACTIVITY}" (scopeKey, id DESC)`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (idempotencyKey)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (status, availableAt, createdAt)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_node_scopes_scope ON "${TABLE_KNOWLEDGE_NODE_SCOPES}" (scopeNodeId, nodeId)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_record_scopes_scope ON "${TABLE_KNOWLEDGE_RECORD_SCOPES}" (scopeNodeId, recordId)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_scope_grants_ref ON "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" (scopeRefId, scopeNodeId)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_node_addresses_node ON "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" (nodeId)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_import_runs_lookup ON "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (importerId, binding, queuedAt DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_import_run ON "${TABLE_KNOWLEDGE_ACTIVITY}" (importRunId, id DESC)`,
-    ]) {
-      await tx.execute(statement);
-    }
-    await tx.execute({
-      sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch, schemaVersion) VALUES ('global', 0, ?)`,
-      args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
-    });
-  }
-
-  /**
-   * True when the only Knowledge objects are the tables and indexes published v1 adapters created,
-   * with or without rows. Anything else (v2 tables, unknown tables, views, triggers) needs an
-   * explicit reset.
-   */
-  async #isPublishedV1Layout(executor: Executor): Promise<boolean> {
-    const objects = await executor.execute(
-      "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
-    );
-    for (const row of objects.rows) {
-      const type = String(row.type);
-      const name = String(row.name);
-      if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) continue;
-      const knownIndex = PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) || name.startsWith('sqlite_autoindex_');
-      if (type !== 'index' || !knownIndex) return false;
-    }
-    return true;
   }
 
   override async dangerouslyClearAll(): Promise<void> {
