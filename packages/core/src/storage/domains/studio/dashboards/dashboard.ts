@@ -12,9 +12,12 @@ import {
   scoresFilterSchema,
 } from '@internal/core/storage';
 import { z } from 'zod/v4';
-import { spanAggregateQueryObjectSchema } from '../observability/span-aggregate';
-import { traceAggregateQueryObjectSchema } from '../observability/trace-aggregate';
-import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from '../observability/trace-query';
+import { spanAggregateQueryObjectSchema } from '../../observability/span-aggregate';
+import { traceAggregateQueryObjectSchema } from '../../observability/trace-aggregate';
+import {
+  findPredicateComplexityIssue,
+  TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE,
+} from '../../observability/trace-query';
 import { filterNodeSchema } from '../saved-views/filter-node';
 import type { FilterNode } from '../saved-views/filter-node';
 

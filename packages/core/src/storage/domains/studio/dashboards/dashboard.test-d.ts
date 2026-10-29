@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { TraceAggregateMeasure } from '../observability/trace-aggregate';
-import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '../observability/trace-query';
+import type { TraceAggregateMeasure } from '../../observability/trace-aggregate';
+import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '../../observability/trace-query';
 import type { FilterNode } from '../saved-views/filter-node';
 import type {
   DashboardDefinition,
