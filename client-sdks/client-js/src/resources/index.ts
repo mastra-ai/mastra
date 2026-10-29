@@ -23,3 +23,4 @@ export * from './responses';
 export * from './channels';
 export * from './agent-controller';
 export * from './knowledge';
+export * from './knowledge-importers';
