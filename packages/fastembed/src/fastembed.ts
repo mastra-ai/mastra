@@ -198,10 +198,11 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
   const tokenizer = Tokenizer.fromFile(tokenizerPath);
 
   tokenizer.setTruncation(maxLength);
+  const padToken = tokenizerConfig['pad_token'];
   tokenizer.setPadding({
     maxLength,
     padId: config['pad_token_id'],
-    padToken: tokenizerConfig['pad_token'],
+    padToken: isAddedTokenMap(padToken) ? padToken.content : padToken,
   });
 
   for (const token of Object.values(tokensMap)) {
