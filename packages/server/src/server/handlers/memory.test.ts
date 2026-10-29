@@ -1155,6 +1155,7 @@ describe('Memory Handlers', () => {
           })) as MastraDBMessage[],
         });
         const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent }, storage });
+        const recall = vi.spyOn(mockMemory, 'recall');
 
         const result = await SEARCH_MEMORY_ROUTE.handler({
           ...createTestServerContext({ mastra }),
@@ -1162,9 +1163,20 @@ describe('Memory Handlers', () => {
           resourceId: 'test-resource',
           threadId: 'search-thread',
           searchQuery: 'message 3',
-          memoryConfig: { semanticRecall: range === undefined ? { topK: 1 } : { messageRange: range } },
+          memoryConfig: {
+            semanticRecall: range === undefined ? { topK: 1, scope: 'thread' } : { messageRange: range },
+          },
         });
 
+        expect(recall).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: 'search-thread',
+            resourceId: 'test-resource',
+            threadConfig: expect.objectContaining({
+              semanticRecall: range === undefined ? { topK: 1, scope: 'thread' } : { messageRange: 0 },
+            }),
+          }),
+        );
         const match = result.results.find(message => message.id === 'm3');
         expect(match?.context?.before.map(message => message.id)).toEqual(before);
         expect(match?.context?.after.map(message => message.id)).toEqual(after);
