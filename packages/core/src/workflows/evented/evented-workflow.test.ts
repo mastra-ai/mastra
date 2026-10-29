@@ -1508,7 +1508,11 @@ describe('Workflow (Evented Engine Specific)', () => {
       const pubsub = new EventEmitterPubSub(emitter);
       const handling = vi.spyOn(WorkflowEventProcessor.prototype, 'handle');
       // Observe the real handler's completion; emitter delivery and flush() do not await it.
-      const waitForDelivery = async (event: Event, occurrence: number) => {
+      const waitForDelivery = async (
+        event: Event,
+        occurrence: number,
+        expected: { ok: boolean; retry?: boolean } = { ok: true },
+      ) => {
         let index = -1;
         await vi.waitFor(() => {
           index =
@@ -1519,7 +1523,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         });
         const result = handling.mock.results[index]!;
         expect(result.type).toBe('return');
-        await expect(result.value).resolves.toMatchObject({ ok: true });
+        await expect(result.value).resolves.toMatchObject(expected);
       };
       const leases = vi.spyOn(pubsub, 'acquireLease');
       const publish = vi.spyOn(pubsub, 'publish');
@@ -1590,6 +1594,30 @@ describe('Workflow (Evented Engine Specific)', () => {
       },
       15000,
     );
+
+    it('retries an authorized child after a transient snapshot-read failure', async () => {
+      const fixture = await setup();
+      try {
+        const store = await fixture.storage.getStore('workflows');
+        const snapshots = vi.spyOn(store!, 'loadWorkflowSnapshot');
+        fixture.fga.require.mockImplementationOnce(async () => {
+          // Fail the post-authorization recheck, not an earlier snapshot read.
+          snapshots.mockRejectedValueOnce(new Error('Transient snapshot-read failure'));
+        });
+        const starting = fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalled());
+        const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+        await fixture.waitForDelivery(delivery, 1, { ok: false, retry: true });
+        expect(fixture.publish.mock.calls.filter(([, event]) => event.type === 'workflow.fail')).toHaveLength(0);
+        await expect(starting).resolves.toMatchObject({ status: 'success', result: { value: 'ok' } });
+        await fixture.waitForDelivery(delivery, 2);
+        expect(fixture.fga.require).toHaveBeenCalledTimes(2);
+        expect(fixture.effects()).toBe(1);
+        expect(fixture.publish.mock.calls.filter(([, event]) => event.type === 'workflow.fail')).toHaveLength(0);
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    });
 
     it('runs an authorized child with the caller and tenant context', async () => {
       const fixture = await setup();
