@@ -410,7 +410,7 @@ describe('dashboardDefinitionSchema', () => {
 
   it('limits filter group nesting before parsing, so deep trees fail instead of throwing', () => {
     const nested = (depth: number) => {
-      let node: Record<string, unknown> = { fieldId: 'status', value: 'error' };
+      let node: Record<string, unknown> = { id: 't', fieldId: 'status', value: 'error' };
       for (let level = 0; level < depth; level += 1) node = { id: `g${level}`, logic: 'and', nodes: [node] };
       return [node];
     };
@@ -444,13 +444,20 @@ describe('dashboardDefinitionSchema', () => {
   it('follows the shared filter node schema: unknown filter fields are dropped, unknown dashboard fields rejected', () => {
     const filters = [
       { fieldId: 'status', value: 'error', extra: true },
-      { id: 'g', logic: 'or', extra: true, nodes: [{ fieldId: 'env', value: ['prod'], extra: true }] },
+      { id: 'g', logic: 'or', extra: true, nodes: [{ id: 't', fieldId: 'env', value: ['prod'], extra: true }] },
     ];
     const result = dashboardDefinitionSchema.safeParse({ ...definition([[widget('w')]]), defaults: { filters } });
     expect(result.data?.defaults?.filters).toEqual([
       { fieldId: 'status', value: 'error' },
-      { id: 'g', logic: 'or', nodes: [{ fieldId: 'env', value: ['prod'] }] },
+      { id: 'g', logic: 'or', nodes: [{ id: 't', fieldId: 'env', value: ['prod'] }] },
     ]);
+
+    // A token inside a group needs an id; a top-level token doesn't.
+    const groupedWithoutId = dashboardDefinitionSchema.safeParse({
+      ...definition([[widget('w')]]),
+      defaults: { filters: [{ id: 'g', logic: 'and', nodes: [{ fieldId: 'env', value: 'prod' }] }] },
+    });
+    expect(groupedWithoutId.success).toBe(false);
 
     const operator = dashboardDefinitionSchema.safeParse({
       ...definition([[widget('w')]]),
