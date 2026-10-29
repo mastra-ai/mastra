@@ -104,6 +104,12 @@ export const queryKeys = {
   /** The cards bound to one thread — the fallback when the board snapshot left them out. */
   threadWorkItems: (factoryProjectId: string | undefined, threadId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'thread', threadId ?? null] as const,
+  /** The cards bound to sessions the board snapshot did not cover. */
+  sessionWorkItems: (factoryProjectId: string | undefined, sessionIds: readonly string[]) =>
+    [...queryKeys.workItems(factoryProjectId), 'sessions', ...sessionIds] as const,
+  /** Done and canceled cards matching a global search. */
+  terminalWorkItemSearch: (factoryProjectId: string | undefined, query: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'terminal-search', query] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
   /** Every comment read for a work item — the invalidation target for a feed event. */

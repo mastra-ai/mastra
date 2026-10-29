@@ -119,3 +119,59 @@ export function terminalCardPage(
 export function cardsForThread(items: readonly WorkItemRow[], threadId: string): WorkItemRow[] {
   return items.filter(item => Object.values(item.sessions).some(ref => ref.threadId === threadId));
 }
+
+/**
+ * The cards bound to any of the sessions, plus their parents and children so a
+ * session's linked pull request still resolves when its cards have closed.
+ */
+export function cardsForSessions(items: readonly WorkItemRow[], sessionIds: readonly string[]): WorkItemRow[] {
+  const wanted = new Set(sessionIds);
+  const bound = items.filter(item => Object.values(item.sessions).some(ref => wanted.has(ref.sessionId)));
+  const boundIds = new Set(bound.map(item => item.id));
+  const parentIds = new Set(bound.flatMap(item => (item.parentWorkItemId ? [item.parentWorkItemId] : [])));
+  return items.filter(
+    item =>
+      boundIds.has(item.id) ||
+      parentIds.has(item.id) ||
+      (item.parentWorkItemId !== null && boundIds.has(item.parentWorkItemId)),
+  );
+}
+
+function searchText(item: WorkItemRow): string {
+  const parts: string[] = [item.title];
+  const source = item.externalSource;
+  if (source?.externalId) parts.push(source.externalId);
+  if (source?.url) parts.push(source.url);
+  for (const value of Object.values(item.metadata ?? {})) {
+    if (typeof value === 'string' || typeof value === 'number') parts.push(String(value));
+  }
+  return parts.join(' ').toLowerCase();
+}
+
+/**
+ * Closed cards matching every word of the query, most recently closed first.
+ * A leading `#` is ignored so `#42` finds issue 42.
+ */
+export function searchTerminalCards(
+  boards: BoardRegistry,
+  items: readonly WorkItemRow[],
+  query: string,
+  limit: number,
+): WorkItemRow[] {
+  const words = query
+    .toLowerCase()
+    .split(/\s+/)
+    .map(word => word.replace(/^#/, ''))
+    .filter(word => word.length > 0);
+  if (words.length === 0) return [];
+  return items
+    .filter(item => {
+      if (!isTerminalWorkItem(boards, item)) return false;
+      const text = searchText(item);
+      return words.every(word => text.includes(word));
+    })
+    .map(item => ({ item, closed: closedAt(item).getTime() }))
+    .sort((a, b) => b.closed - a.closed || a.item.id.localeCompare(b.item.id))
+    .slice(0, limit)
+    .map(({ item }) => item);
+}

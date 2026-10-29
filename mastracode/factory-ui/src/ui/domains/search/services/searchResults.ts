@@ -192,9 +192,11 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
 export function createWorkItemSearchResults(input: {
   factoryId: string;
   workItems: WorkItem[];
+  /** Keys of closed cards the board snapshot only summarizes. */
+  excludedSourceKeys?: readonly string[];
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
 }): WorkItemSearchResult[] {
-  const filed = persistedSourceKeys(input.workItems);
+  const filed = persistedSourceKeys(input.workItems, input.excludedSourceKeys);
   const candidates = input.candidates.filter(({ candidate }) => !isPersistedCandidate(filed, candidate));
 
   return [

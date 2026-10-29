@@ -58,6 +58,9 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/work-items/terminal', () =>
     HttpResponse.json({ workItems: [], total: 0, hasMore: false }),
   ),
+  http.get('*/web/factory/projects/:id/work-items/terminal/search', () => HttpResponse.json({ workItems: [] })),
+  // Sessions whose card is not on the board snapshot are looked up by id.
+  http.post('*/web/factory/projects/:id/work-items/sessions', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),
   // Ambient feed stream: `FactoryLayout` mounts it on every routed surface. It
   // must never close — a closing stream puts every test into the retry loop.

@@ -1,10 +1,12 @@
+import { useMemo } from 'react';
 import { useLocation, useParams } from 'react-router';
 
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionWorkItems } from '../../../../hooks/useSessionWorkItems';
+import { useParkedSessions } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
@@ -25,7 +27,9 @@ export function useSessionListRows(factoryId: string | undefined): {
   const { pathname } = useLocation();
   const query = useWorkspacesQuery(factoryId);
   const factory = useFactoryQuery(factoryId);
-  const workItems = useWorkItemsQuery(factoryId);
+  const sessionIds = useMemo(() => allSessionRows(query.data).map(session => session.sessionId), [query.data]);
+  // Most sessions belong to closed cards, which the board snapshot leaves out.
+  const workItems = useSessionWorkItems(factoryId, sessionIds);
   const parkedSessions = useParkedSessions(factoryId);
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
   const catalog = useBoardCatalog(factoryId);
@@ -33,7 +37,7 @@ export function useSessionListRows(factoryId: string | undefined): {
   const pinnedSessions = usePinnedSessions();
   const runningById = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceIds: allSessionRows(query.data).map(session => session.sessionId),
+    resourceIds: sessionIds,
   });
 
   const loadState = {
@@ -44,7 +48,7 @@ export function useSessionListRows(factoryId: string | undefined): {
   };
   if (!factoryId) return { rows: [], ...loadState };
 
-  const workItemBySessionId = sessionWorkItemIndex(workItems.data ?? []);
+  const workItemBySessionId = sessionWorkItemIndex(workItems.items);
   const factoryRows = (query.data?.workspaces ?? []).flatMap(session => {
     const workItem = workItemBySessionId.get(session.sessionId);
     const running = runningById[session.sessionId] === true;

@@ -48,7 +48,13 @@ import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/wor
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { cardsForThread, partitionBoardCards, terminalCardPage } from './board-snapshot.js';
+import {
+  cardsForSessions,
+  cardsForThread,
+  partitionBoardCards,
+  searchTerminalCards,
+  terminalCardPage,
+} from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -420,6 +426,48 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           const page = terminalCardPage(this.#boards, items, query.data);
           return c.json({ workItems: page.workItems.map(toWireWorkItem), total: page.total, hasMore: page.hasMore });
+        },
+      }),
+
+      // ── Search the done/canceled cards the board snapshot leaves out ─────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemTerminalSearch.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemTerminalSearch.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemTerminalSearch.querySchema.safeParse({
+            q: context.req.query('q'),
+            limit: context.req.query('limit'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_terminal_search' }, 400);
+          await workItems.ensureReady();
+          const items = await workItems.list({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          const found = searchTerminalCards(this.#boards, items, query.data.q, query.data.limit);
+          return c.json({ workItems: found.map(toWireWorkItem) });
+        },
+      }),
+
+      // ── Cards bound to sessions the board snapshot did not cover ────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSessionLookup.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSessionLookup.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const body = FACTORY_ROUTE_CONTRACTS.workItemSessionLookup.bodySchema.safeParse(await readJson(context));
+          if (!body.success) return c.json({ error: 'invalid_session_lookup' }, 400);
+          await workItems.ensureReady();
+          const items = await workItems.list({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({ workItems: cardsForSessions(items, body.data.sessionIds).map(toWireWorkItem) });
         },
       }),
 

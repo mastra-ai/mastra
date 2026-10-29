@@ -329,6 +329,51 @@ export async function listTerminalWorkItems(
   return { workItems: data.workItems.map(fromWireWorkItem), total: data.total, hasMore: data.hasMore };
 }
 
+/** The server reads at most this many session ids per lookup. */
+const SESSION_LOOKUP_CHUNK = 5_000;
+
+/**
+ * The cards bound to the given sessions, whatever their phase, with their parent
+ * and child cards — how session lists resolve cards the board snapshot leaves out.
+ */
+export async function lookupSessionWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  sessionIds: readonly string[],
+  signal?: AbortSignal,
+): Promise<WorkItem[]> {
+  const chunks: string[][] = [];
+  for (let start = 0; start < sessionIds.length; start += SESSION_LOOKUP_CHUNK) {
+    chunks.push(sessionIds.slice(start, start + SESSION_LOOKUP_CHUNK));
+  }
+  const responses = await Promise.all(
+    chunks.map(chunk =>
+      requestJson<{ workItems: WireWorkItem[] }>(
+        `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/sessions`,
+        { method: 'POST', body: JSON.stringify({ sessionIds: chunk }), signal },
+      ),
+    ),
+  );
+  const byId = new Map<string, WorkItem>();
+  for (const item of responses.flatMap(data => data.workItems)) byId.set(item.id, fromWireWorkItem(item));
+  return [...byId.values()];
+}
+
+/** Done and canceled cards matching a search, most recently closed first. */
+export async function searchTerminalWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<WorkItem[]> {
+  const params = new URLSearchParams({ q: query });
+  const data = await requestJson<{ workItems: WireWorkItem[] }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/terminal/search?${params}`,
+    { signal },
+  );
+  return data.workItems.map(fromWireWorkItem);
+}
+
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */
 export async function createWorkItem(
   baseUrl: string,

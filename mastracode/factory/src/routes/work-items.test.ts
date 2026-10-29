@@ -2439,6 +2439,66 @@ describe('GET /web/factory/projects/:id/work-items — terminal cards', () => {
     expect((await json('GET', url('/terminal?board=work'))).status).toBe(400);
     expect((await json('GET', url('/terminal?board=work&stage=done'), undefined, null)).status).toBe(401);
   });
+
+  it('reads the cards bound to sessions, with their parent and child cards, whatever their phase', async () => {
+    const { item: issue } = await createCard('done', {
+      title: 'Closed issue',
+      sessions: { execute: { sessionId: 'session-done', branch: 'factory/done', threadId: 'thread-done' } },
+    });
+    const { item: pullRequest } = await createCard('done', {
+      board: 'review',
+      title: 'Merged PR',
+      parentWorkItemId: issue.id,
+      externalSource: {
+        integrationId: 'github',
+        type: 'pull-request',
+        externalId: '99',
+        url: 'https://github.com/acme/app/pull/99',
+      },
+      metadata: { number: 99 },
+    });
+    await createCard('canceled', {
+      title: 'Unrelated',
+      externalSource: null,
+      sessions: { execute: { sessionId: 'session-other', branch: 'factory/other', threadId: 'thread-other' } },
+    });
+
+    const res = await json('POST', url('/sessions'), { sessionIds: ['session-done', 'session-unknown'] });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.workItems.map((item: { id: string }) => item.id).sort()).toEqual([issue.id, pullRequest.id].sort());
+
+    expect((await json('POST', url('/sessions'), { sessionIds: [] })).status).toBe(400);
+    expect((await json('POST', url('/sessions'), { sessionIds: ['session-done'] }, null)).status).toBe(401);
+  });
+
+  it('searches closed cards by title or issue number, leaving open cards to the board', async () => {
+    await createCard('execute', { externalSource: null, title: 'Fix the login button', metadata: null });
+    await createCard('done', { title: 'Fix the login flow', metadata: { number: 42 } });
+    await createCard('canceled', {
+      title: 'Retire the legacy login page',
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: '43',
+        url: 'https://github.com/acme/app/issues/43',
+      },
+      metadata: { number: 43 },
+    });
+
+    const titles = async (query: string) => {
+      const res = await json('GET', url(`/terminal/search?q=${encodeURIComponent(query)}`));
+      expect(res.status).toBe(200);
+      return (await res.json()).workItems.map((item: { title: string }) => item.title).sort();
+    };
+    expect(await titles('login')).toEqual(['Fix the login flow', 'Retire the legacy login page']);
+    expect(await titles('LOGIN flow')).toEqual(['Fix the login flow']);
+    expect(await titles('#43')).toEqual(['Retire the legacy login page']);
+    expect(await titles('button')).toEqual([]);
+
+    expect((await json('GET', url('/terminal/search?q=%20'))).status).toBe(400);
+    expect((await json('GET', url('/terminal/search?q=login'), undefined, null)).status).toBe(401);
+  });
 });
 
 describe('GET /web/factory/projects/:id/health/thresholds', () => {

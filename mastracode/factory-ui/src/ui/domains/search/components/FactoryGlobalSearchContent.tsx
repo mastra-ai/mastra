@@ -7,7 +7,7 @@ import {
 } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -15,6 +15,7 @@ import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../facto
 import { itemStageLabel } from '../../factory/boardStages';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
+import { isTerminalStage } from '../../factory/stages';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
@@ -46,7 +47,15 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
   const sessions = useGlobalSearchSessions(searchableFactoryId);
-  const workItems = useGlobalSearchWorkItems(searchableFactoryId);
+  const [search, setSearch] = useState('');
+  const sessionIds = useMemo(
+    () =>
+      sessions.repositories.flatMap(repository =>
+        [...repository.workspaces, ...repository.userSessions].map(session => session.sessionId),
+      ),
+    [sessions.repositories],
+  );
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId, sessionIds, search);
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const workBoard = useBoardItems({
@@ -74,6 +83,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
     workItems: workItems.items,
+    excludedSourceKeys: workItems.excludedSourceKeys,
     candidates: intake.candidates,
   });
   const counts = createGlobalSearchScopeCounts({
@@ -83,7 +93,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     user: sessionGroups.user.length,
     factories: factories.length,
   });
-  const sessionsPending = sessions.pending || workItems.pending;
+  const sessionsPending = sessions.pending || workItems.pending || workItems.searching;
   const hasRepositories = repositoryIds.length > 0;
 
   return (
@@ -91,6 +101,8 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
       <CommandPaletteInput
         autoFocus
         placeholder="Search sessions, reviews, #issues, pages, and Factories…"
+        value={search}
+        onValueChange={setSearch}
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
@@ -133,6 +145,14 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   return;
                 }
                 const item = target.item;
+                // A closed card has nothing to start; show it on its board.
+                if (item.stages.some(isTerminalStage)) {
+                  selectPath(
+                    `${result.path}${result.path.includes('?') ? '&' : '?'}item=${encodeURIComponent(item.id)}`,
+                    false,
+                  );
+                  return;
+                }
                 const board = item.board === 'review' ? reviewBoard : workBoard;
                 const movingTo = board.evaluatingStages.get(item.id);
                 const { owner } = boardCardState({

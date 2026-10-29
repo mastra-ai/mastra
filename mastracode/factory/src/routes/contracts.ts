@@ -337,6 +337,20 @@ export const workItemTerminalListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(WORK_ITEM_TERMINAL_PAGE_LIMIT),
 });
 
+/** Sessions whose cards the caller could not find on the board snapshot. */
+export const workItemSessionLookupBodySchema = z
+  .object({
+    sessionIds: z.array(z.string().min(1)).min(1).max(5_000),
+  })
+  .strict();
+
+export const WORK_ITEM_TERMINAL_SEARCH_LIMIT = 20;
+
+export const workItemTerminalSearchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(200),
+  limit: z.coerce.number().int().min(1).max(50).default(WORK_ITEM_TERMINAL_SEARCH_LIMIT),
+});
+
 /**
  * What the board needs to know about the cards it did not receive: how many
  * rest in each terminal phase, the keys that keep their issues out of Intake,
@@ -677,6 +691,24 @@ export const FACTORY_ROUTE_CONTRACTS = {
       total: z.number().int(),
       hasMore: z.boolean(),
     }),
+  },
+  workItemSessionLookup: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/work-items/sessions',
+    description:
+      'Read the work items bound to the given sessions, whatever their phase, together with their parent and child cards. Lets session lists resolve cards the board snapshot leaves out.',
+    pathSchema: projectPathSchema,
+    bodySchema: workItemSessionLookupBodySchema,
+    responseSchema: z.object({ workItems: z.array(entitySchema) }),
+  },
+  workItemTerminalSearch: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/terminal/search',
+    description:
+      'Search the work items resting in a terminal phase (done, canceled) by title, source id or URL, most recently closed first',
+    pathSchema: projectPathSchema,
+    querySchema: workItemTerminalSearchQuerySchema,
+    responseSchema: z.object({ workItems: z.array(entitySchema) }),
   },
   workItemCreate: {
     method: 'POST',

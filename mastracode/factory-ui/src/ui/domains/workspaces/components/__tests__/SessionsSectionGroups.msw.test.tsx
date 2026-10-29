@@ -121,7 +121,8 @@ describe('Sessions sidebar groups', () => {
   it('groups sessions by board: Work, Review, custom boards, then User', async () => {
     renderSection();
 
-    await screen.findByRole('link', { name: 'Release old' });
+    // Sessions without a board card wait for the closed-card lookup before they list.
+    await screen.findByRole('link', { name: 'Work old' });
     expect(groupRegions()).toEqual(['Work sessions', 'Review sessions', 'Release Preview sessions', 'User sessions']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release old', 'Release new']);
   });
@@ -129,7 +130,7 @@ describe('Sessions sidebar groups', () => {
   it('applies one sort to every group', async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('link', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Work old' });
     expect(rowNamesIn('Work sessions')).toEqual(['Work old', 'Work new']);
     expect(rowNamesIn('Review sessions')).toEqual(['Review old', 'Review new']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release old', 'Release new']);

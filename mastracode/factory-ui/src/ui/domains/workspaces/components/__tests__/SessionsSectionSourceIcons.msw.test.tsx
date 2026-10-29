@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -112,5 +112,37 @@ describe('Sessions sidebar source icons', () => {
     expect(await iconFor('Add audit log')).toBe('linear-issue');
     expect(await iconFor('Review PR 12')).toBe('github-pr');
     expect(await iconFor('Answer deploy question')).toBe('slack-thread');
+  });
+
+  it("reads a closed card's source when the board snapshot leaves the card out", async () => {
+    const lookups: string[][] = [];
+    const doneLinear = {
+      ...workItem('linear-item', 'linear-run', 'factory/issue-4', {
+        integrationId: 'linear',
+        type: 'issue',
+        externalId: 'ENG-4',
+      }),
+      stages: ['done'],
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [],
+          runningSessionIds: [],
+          parkedSessionIds: [],
+          excludedCards: [{ board: 'work', stage: 'done', count: 1, sourceKeys: ['ENG-4'], recent: [] }],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items/sessions`, async ({ request }) => {
+        const { sessionIds } = (await request.json()) as { sessionIds: string[] };
+        lookups.push(sessionIds);
+        return HttpResponse.json({ workItems: sessionIds.includes('linear-run') ? [doneLinear] : [] });
+      }),
+    );
+
+    renderSection();
+
+    await waitFor(async () => expect(await iconFor('Add audit log')).toBe('linear-issue'));
+    expect(lookups).toEqual([[...sessions.map(row => row.sessionId)].sort()]);
   });
 });
