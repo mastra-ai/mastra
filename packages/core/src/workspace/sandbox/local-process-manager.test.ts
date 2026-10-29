@@ -149,6 +149,21 @@ describe('LocalProcessManager Windows POSIX shell for argv commands', () => {
     );
   });
 
+  it('quotes a backslashed program path so Git Bash keeps the backslashes', async () => {
+    const sandbox = await setup([gitBash]);
+
+    await sandbox.executeCommand!('C:\\tools\\node.exe', ['--version']);
+    await sandbox.executeCommand!('.\\bin\\tool.exe', ['run']);
+
+    expect(execa).toHaveBeenNthCalledWith(
+      1,
+      "'C:\\tools\\node.exe' --version",
+      [],
+      expect.objectContaining({ shell: gitBash }),
+    );
+    expect(execa).toHaveBeenNthCalledWith(2, "'.\\bin\\tool.exe' run", [], expect.objectContaining({ shell: gitBash }));
+  });
+
   it('finds Git Bash next to git.exe on PATH (Git\\cmd install layout)', async () => {
     const sandbox = await setup(['D:\\Tools\\Git\\cmd\\git.exe', 'D:\\Tools\\Git\\bin\\bash.exe', gitBash]);
     vi.stubEnv('PATH', 'C:\\Windows\\System32;D:\\Tools\\Git\\cmd');

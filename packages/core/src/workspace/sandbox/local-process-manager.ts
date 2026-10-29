@@ -16,6 +16,7 @@ import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
 import type { ProcessManagerOptions } from './process-manager/process-manager';
 import type { CommandResult } from './types';
+import { shellQuote } from './utils';
 
 const isWindows = process.platform === 'win32';
 
@@ -329,7 +330,8 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       !/^(cmd|powershell|pwsh)(\.exe)?$/i.test(path.win32.basename(invocation.command))
         ? findWindowsPosixShell(env.PATH)
         : undefined;
-    if (posixShell && !/^cmd(\.exe)?$/i.test(path.win32.basename(posixShell))) {
+    const usesBash = posixShell !== undefined && !/^cmd(\.exe)?$/i.test(path.win32.basename(posixShell));
+    if (usesBash) {
       // Stop Git Bash/MSYS2 from rewriting `/F`-style switches and paths passed to native tools.
       env = { MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*', ...env };
     }
@@ -343,15 +345,13 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       invocation.args.length >= 2;
     const wrapped = directShell
       ? {
-          command:
-            !/^sh(\.exe)?$/i.test(invocation.command) ||
-            !posixShell ||
-            /^cmd(\.exe)?$/i.test(path.win32.basename(posixShell))
-              ? invocation.command
-              : posixShell,
+          command: usesBash && /^sh(\.exe)?$/i.test(invocation.command) ? posixShell : invocation.command,
           args: invocation.args,
         }
-      : this.sandbox.wrapCommandForIsolation(command);
+      : usesBash && invocation
+        ? // Quote the program too: bash reads the backslashes in C:\tools\node.exe as escapes.
+          { command: [invocation.command, ...invocation.args].map(shellQuote).join(' '), args: [] }
+        : this.sandbox.wrapCommandForIsolation(command);
 
     // Base options shared across all platforms.
     //
