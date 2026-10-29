@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { compileKnowledgeScopes, KnowledgeDeclarationError, knowledgeMemoryScopes } from '../declarations';
+import {
+  bindKnowledgePattern,
+  compileKnowledgeScopes,
+  KnowledgeDeclarationError,
+  knowledgeMemoryScopes,
+  knowledgePatternPrefix,
+} from '../declarations';
 
 const scopes = {
   ...knowledgeMemoryScopes(),
@@ -64,6 +70,51 @@ describe('compileKnowledgeScopes: matching', () => {
   });
 });
 
+describe('binding params into patterns', () => {
+  const compiled = compileKnowledgeScopes(scopes);
+  const team = compiled.declarations.get('team:$orgId:$teamId')!.pattern;
+  const account = compiled.declarations.get('account:$orgId:$accountId')!.pattern;
+
+  it("won't bind a ':' value into a middle segment, which would reach another tenant", () => {
+    // org:a:b has orgId "a:b"; as a prefix it would be team:a:b:, matching team:a:b:support (org a).
+    expect(compiled.match('org:a:b')!.params).toEqual({ orgId: 'a:b' });
+    expect(knowledgePatternPrefix(team, { orgId: 'a:b' })).toBeNull();
+    expect(bindKnowledgePattern(team, { orgId: 'a:b', teamId: 'support' })).toBeNull();
+    expect(knowledgePatternPrefix(team, { orgId: 'a' })).toBe('team:a:');
+  });
+
+  it("allows ':' only in the last segment", () => {
+    expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b:c' })).toBe('team:a:b:c');
+    expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b/c' })).toBe('team:a:b/c');
+    expect(knowledgePatternPrefix(account, { orgId: 'a/b' })).toBeNull();
+  });
+
+  it("doesn't match an undeclared child as a param value", () => {
+    expect(compiled.match('account:acme:1/internal')!.declaration).toBe('account:$orgId:$accountId/internal');
+    expect(compiled.match('account:acme:1/foo')).toBeNull();
+  });
+
+  it("lets a Memory id with '/' or ':' fill the last segment of a type without children", () => {
+    // Users pass their own resource ids; resource:/thread: scopes are on every Knowledge run.
+    expect(compiled.match('resource:user/123')).toMatchObject({
+      declaration: 'resource:$resourceId',
+      params: { resourceId: 'user/123' },
+    });
+    expect(compiled.match('thread:a/b:c')!.params).toEqual({ threadId: 'a/b:c' });
+    const resource = compiled.declarations.get('resource:$resourceId')!.pattern;
+    expect(bindKnowledgePattern(resource, { resourceId: 'user/123' })).toBe('resource:user/123');
+  });
+
+  it("never lets '/' or ':' fill a middle segment, and keeps '/' out of types with children", () => {
+    expect(compiled.match('team:a/b:eng')).toBeNull();
+    expect(knowledgePatternPrefix(team, { orgId: 'a/b' })).toBeNull();
+    expect(bindKnowledgePattern(team, { orgId: 'a/b', teamId: 'eng' })).toBeNull();
+    // account has an `internal` child, so account:acme:x/internal must only ever be that child.
+    expect(bindKnowledgePattern(account, { orgId: 'acme', accountId: 'x/internal' })).toBeNull();
+    expect(compiled.match('account:acme:x/y')).toBeNull();
+  });
+});
+
 describe('compileKnowledgeScopes: validation', () => {
   it('refuses two patterns for one type', () => {
     expect(() => compileKnowledgeScopes({ 'team:$orgId:$teamId': {}, 'team:$teamId': {} })).toThrow(
@@ -110,6 +161,27 @@ describe('compileKnowledgeScopes: validation', () => {
 
   it('refuses a belongsTo of an undeclared type', () => {
     expect(() => compileKnowledgeScopes({ 'team:$teamId': { belongsTo: 'org:$orgId' } })).toThrow(/belongsTo/);
+  });
+
+  it('refuses duplicate child names', () => {
+    expect(() =>
+      compileKnowledgeScopes({ 'account:$id': { children: [{ name: 'internal' }, { name: 'internal' }] } }),
+    ).toThrow(/declared twice/);
+  });
+
+  it('refuses belongsTo, children or pages on a concrete address of a typed scope', () => {
+    for (const extra of [
+      { belongsTo: 'org:$orgId' },
+      { children: [{ name: 'x' }] },
+      { pages: [{ key: 'k', name: 'K' }] },
+    ]) {
+      expect(() => compileKnowledgeScopes({ ...knowledgeMemoryScopes(), 'org:acme': extra })).toThrow(
+        /can only add description, access, pins and pinPriority/,
+      );
+    }
+    expect(() =>
+      compileKnowledgeScopes({ ...knowledgeMemoryScopes(), 'org:acme': { description: 'Acme', pins: ['org:acme#p'] } }),
+    ).not.toThrow();
   });
 
   it('refuses an invalid key', () => {
