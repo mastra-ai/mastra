@@ -185,7 +185,7 @@ const formatContextValue = (value: unknown) => (typeof value === 'string' ? valu
 
 export interface TracesDataListOutcomeCellProps {
   outcome?: string | null;
-  /** Error-based status, shown muted when no outcome was recorded. */
+  /** Error-based status, shown when no outcome was recorded. */
   status?: string | null;
 }
 
@@ -193,7 +193,7 @@ export function TracesDataListOutcomeCell({ outcome, status }: TracesDataListOut
   if (!outcome) {
     const config = STATUS_CONFIG[(status ?? 'unset').toLowerCase()] ?? UNSET_STATUS_CONFIG;
     const badge = (
-      <Badge size="xs" variant={config.variant} emphasis="subtle">
+      <Badge size="xs" variant={config.variant}>
         {config.label}
       </Badge>
     );
