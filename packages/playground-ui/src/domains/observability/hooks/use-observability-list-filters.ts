@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
   readObservabilityListDates,
@@ -77,21 +77,20 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, new Date());
   }, [datePreset, fromMs, toMs]);
 
-  // A write that changes nothing is skipped: react-router resolves a functional update against the
-  // params of the last render, so a no-op right after a real write (the picker reports the range
-  // after a preset change) would otherwise undo it.
+  // react-router resolves even a functional update against the params of the last render, so writes
+  // made in the same tick (zoom sets `custom` then the range; the picker reports the range after a
+  // preset change) build on the pending params instead, like `useState` updaters would.
+  const pending = useRef<URLSearchParams | null>(null);
+  useLayoutEffect(() => {
+    pending.current = null;
+  }, [searchParams]);
   const update = (write: (next: URLSearchParams) => void) => {
-    const probe = new URLSearchParams(searchParams);
-    write(probe);
-    if (probe.toString() === searchParams.toString()) return;
-    setSearchParams(
-      prev => {
-        const next = new URLSearchParams(prev);
-        write(next);
-        return next;
-      },
-      { replace: true },
-    );
+    const base = pending.current ?? searchParams;
+    const next = new URLSearchParams(base);
+    write(next);
+    if (next.toString() === base.toString()) return;
+    pending.current = next;
+    setSearchParams(next, { replace: true });
   };
   const updateDates = (change: (current: ObservabilityListDates) => ObservabilityListDates) =>
     update(next => writeObservabilityListDates(next, change(readObservabilityListDates(next))));
