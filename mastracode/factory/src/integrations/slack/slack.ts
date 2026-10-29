@@ -41,7 +41,7 @@ import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource, Card as FactoryCard, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
@@ -900,7 +900,7 @@ async function findThreadWorkItem(
   workItems: WorkItemsStorage,
   thread: HandlerThread,
   teamId?: string,
-): Promise<WorkItemRow | null> {
+): Promise<FactoryCard | null> {
   const scoped = await workItems.getBySource(slackThreadSource(thread, teamId));
   if (scoped || !teamId) return scoped;
   return workItems.getBySource(slackThreadSource(thread));

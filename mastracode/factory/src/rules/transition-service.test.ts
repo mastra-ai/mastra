@@ -856,7 +856,7 @@ describe('FactoryTransitionService', () => {
       cause: 'board_drag',
     });
     // A card accepted before acceptance was recorded: in Planning, no stamp.
-    await seed.storage.ops.updateMany('work_items', { id: item.id }, { accepted_at: null });
+    await seed.storage.ops.updateMany('factory_board_items', { id: item.id }, { accepted_at: null });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
 
     const executed = await service.transition({

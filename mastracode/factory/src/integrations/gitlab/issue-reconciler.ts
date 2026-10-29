@@ -1,6 +1,6 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { IntakeIssue } from '../../capabilities/intake.js';
-import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
+import type { Card } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
@@ -11,12 +11,12 @@ import type { ParsedGitLabWebhook } from './webhook.js';
 
 export type GitLabIssueReconciler = IssueReconciler;
 
-function stringMetadata(item: WorkItemRow, key: string): string | undefined {
+function stringMetadata(item: Card, key: string): string | undefined {
   const value = item.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function numberMetadata(item: WorkItemRow, key: string): number | undefined {
+function numberMetadata(item: Card, key: string): number | undefined {
   const value = item.metadata?.[key];
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
@@ -25,7 +25,7 @@ function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
 }
 
-function identityForItem(item: WorkItemRow): { projectId: number; issueIid: number; host: string } | null {
+function identityForItem(item: Card): { projectId: number; issueIid: number; host: string } | null {
   const reference = decodeIssueReference(item.externalSource?.externalId ?? '');
   const projectId = Number(reference?.projectId);
   if (!reference || !Number.isSafeInteger(projectId) || projectId <= 0) return null;
@@ -99,7 +99,7 @@ export function attachGitLabIssueReconciler(
   const ingest = attachGitLabRules(gitlab, context);
   if (!ingest) return undefined;
   const boards = context.runtime.boards;
-  const reconciledMetadata = async (item: WorkItemRow, issue: IntakeIssue, sourceId: string) => {
+  const reconciledMetadata = async (item: Card, issue: IntakeIssue, sourceId: string) => {
     const identity = identityForItem(item);
     return {
       ...(identity && {

@@ -3,12 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 
-import { factoryDecisionHash, WORK_ITEMS_SCHEMA } from '../storage/domains/work-items/base.js';
+import { factoryDecisionHash } from '../storage/domains/work-items/base.js';
 import type { WorkItemDbRow } from '../storage/domains/work-items/base.js';
 import { bumpBoardVersions } from '../storage/domains/work-items/board-version.js';
 import type { BoardScope } from '../storage/domains/work-items/board-version.js';
 import {
+  WORK_ITEMS_SCHEMA,
   FACTORY_BOARD_ITEMS_SCHEMA,
+  FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
 } from '../storage/domains/work-items/work-item-schema.js';
@@ -294,8 +296,13 @@ export async function migrateWorkItemSplit(
       const rows = page.filter(row => Boolean(row.claim_key) === claimed);
       report.cards += rows.length;
       for (const row of rows) projects.add(`${row.org_id}\u0000${row.factory_project_id}`);
+      const tombstones = await ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, {
+        id: { in: rows.map(row => row.id) },
+      });
+      const deleted = new Set(tombstones.map(row => row.id));
+      report.unchanged += deleted.size;
       const plan = planWorkItemSplit(
-        rows,
+        rows.filter(row => !deleted.has(row.id)),
         await migratedBoardItems(
           ops,
           rows.map(row => row.id),

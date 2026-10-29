@@ -4,7 +4,11 @@
  * `FactoryStorage` and returns the typed domain handles.
  */
 
+import { randomUUID } from 'node:crypto';
+
+import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
@@ -23,8 +27,22 @@ import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
 
-export interface FactoryStorageTestSeed {
-  storage: LibSQLFactoryStorage;
+/** Keep migration tests from clearing tables another Postgres test is using. */
+export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
+  const admin = new PostgresStore({ id: 'factory-test-admin', connectionString, disableInit: true });
+  const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
+  await admin.pool.query(`CREATE SCHEMA "${schema}"`);
+  const url = new URL(connectionString);
+  url.searchParams.set('options', `-c search_path=${schema}`);
+  onTestFinished(async () => {
+    await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+    await admin.close();
+  });
+  return new PgFactoryStorage({ id: 'factory-test', connectionString: url.toString() });
+}
+
+export interface FactoryStorageTestSeed<T extends FactoryStorage = LibSQLFactoryStorage> {
+  storage: T;
   intake: IntakeStorage;
   audit: AuditStorage;
   workItems: WorkItemsStorage;
@@ -46,8 +64,11 @@ export interface FactoryStorageTestSeed {
  * registered. Call per test (state is per-instance). The backend closes
  * automatically when the current test finishes.
  */
-export async function createFactoryStorageForTests(): Promise<FactoryStorageTestSeed> {
-  const storage = new LibSQLFactoryStorage({ id: 'factory-test', url: ':memory:' });
+export function createFactoryStorageForTests(): Promise<FactoryStorageTestSeed>;
+export function createFactoryStorageForTests<T extends FactoryStorage>(storage: T): Promise<FactoryStorageTestSeed<T>>;
+export async function createFactoryStorageForTests(
+  storage: FactoryStorage = new LibSQLFactoryStorage({ id: 'factory-test', url: ':memory:' }),
+): Promise<FactoryStorageTestSeed<FactoryStorage>> {
   const intake = storage.registerDomain(new IntakeStorage());
   const audit = storage.registerDomain(new AuditStorage());
   const workItems = storage.registerDomain(new WorkItemsStorage());

@@ -1,6 +1,6 @@
 import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '../capabilities/intake.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 export const EXTERNAL_SOURCE_MISSING_KEY = 'externalSourceMissingAt';
 const MISSING_RECHECK_MS = 24 * 60 * 60_000;
@@ -23,7 +23,7 @@ export interface IssueReconcileSummary {
  */
 export interface IssueReconcileScope<TScope> {
   scopes: TScope[];
-  matches(item: WorkItemRow, scope: TScope): boolean;
+  matches(item: Card, scope: TScope): boolean;
 }
 
 export interface IssueReconcilerOptions<TScope = void> {
@@ -31,10 +31,10 @@ export interface IssueReconcilerOptions<TScope = void> {
   intake: Intake;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   storage: WorkItemsStorage;
-  externalSource?(item: WorkItemRow): { type: string; externalId: string };
-  issueId(item: WorkItemRow): string | undefined;
+  externalSource?(item: Card): { type: string; externalId: string };
+  issueId(item: Card): string | undefined;
   metadata(
-    item: WorkItemRow,
+    item: Card,
     issue: IntakeIssue,
     dispatch: ResolvedIntakeDispatch,
   ): Record<string, unknown> | Promise<Record<string, unknown>>;
@@ -44,13 +44,13 @@ export interface IssueReconcilerOptions<TScope = void> {
    * the provider's rules ingress.
    */
   onClosed?(
-    item: WorkItemRow,
+    item: Card,
     issue: IntakeIssue,
     project: FactoryProject,
     dispatch: ResolvedIntakeDispatch,
   ): Promise<Record<string, unknown> | void>;
   /** Whether the item already rests in a terminal phase of its board. Unknown phases are not terminal. */
-  isTerminal(item: WorkItemRow): boolean;
+  isTerminal(item: Card): boolean;
   now?: () => Date;
 }
 
@@ -109,7 +109,7 @@ function withoutMissingMarker(record: Record<string, unknown> | null): Record<st
   return metadata;
 }
 
-function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId: string): WorkItemRow[] {
+function issueItems(project: FactoryProject, items: Card[], integrationId: string): Card[] {
   return items.filter(
     item =>
       item.factoryProjectId === project.id &&

@@ -11,7 +11,7 @@ import { selectEventRule } from '../../rules/event-rules.js';
 import type { FactoryIncidentioRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import { incidentioClaimKey } from './claim.js';
 import type { IncidentioEventRules } from './default-rules.js';
@@ -103,7 +103,7 @@ export class IncidentioRules {
   }
 
   async #heldElsewhere(input: IncidentioRulesIngress, issue: IncidentioIssueIngress): Promise<boolean> {
-    const heldLive = (row: WorkItemRow) =>
+    const heldLive = (row: Card) =>
       row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row);
     const claimant = await this.options.storage.getByClaimKey({
       orgId: input.orgId,
@@ -121,7 +121,7 @@ export class IncidentioRules {
   async #ingestIssue(
     input: IncidentioRulesIngress,
     issue: IncidentioIssueIngress,
-    relatedItem: WorkItemRow | undefined,
+    relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `incidentio:${issue.id}:${issue.updatedAt}`;

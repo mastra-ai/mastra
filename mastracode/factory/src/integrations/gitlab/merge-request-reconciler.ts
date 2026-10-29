@@ -2,7 +2,7 @@ import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
 import type { FactoryProject } from '../../storage/domains/projects/base.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
-import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
+import type { Card } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { IssueReconcileSummary } from '../issue-reconciler.js';
 import { decodeMergeRequestReference, gitlabConnection, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
@@ -11,12 +11,12 @@ import { attachGitLabRules } from './rules.js';
 import { retireMergeRequestSubscriptions } from './subscriptions.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
 
-function stringMetadata(item: WorkItemRow, key: string): string | undefined {
+function stringMetadata(item: Card, key: string): string | undefined {
   const value = item.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function numberMetadata(item: WorkItemRow, key: string): number | undefined {
+function numberMetadata(item: Card, key: string): number | undefined {
   const value = item.metadata?.[key];
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
@@ -31,7 +31,7 @@ function reconciledOutcome(metadata: Record<string, unknown>): 'merged' | 'close
   return metadata.merged ? 'merged' : 'closed';
 }
 
-function identityForItem(item: WorkItemRow): { projectId: number; mergeRequestIid: number; host: string } | null {
+function identityForItem(item: Card): { projectId: number; mergeRequestIid: number; host: string } | null {
   const reference = decodeMergeRequestReference(item.externalSource?.externalId ?? '');
   if (!reference) return null;
   const metadataProjectId = numberMetadata(item, 'gitlabProjectId');
@@ -64,7 +64,7 @@ function projectPathFromUrl(url: string, host: string, mergeRequestIid: number):
 }
 
 function terminalEvent(
-  item: WorkItemRow,
+  item: Card,
   pullRequest: PullRequest,
   identity: { projectId: number; mergeRequestIid: number; host: string },
 ): ParsedGitLabWebhook {

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
-import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 import { moveCardToBoard } from './relocate.js';
 import { createTestBoard } from './test-utils.js';
 import { createBoardRegistry } from './index.js';
 
-function item(overrides: Partial<WorkItemRow> = {}): WorkItemRow {
+function item(overrides: Partial<Card> = {}): Card {
   return {
     id: 'item-1',
     orgId: 'org-1',
@@ -30,10 +30,10 @@ function item(overrides: Partial<WorkItemRow> = {}): WorkItemRow {
     acceptedAt: null,
     revision: 3,
     ...overrides,
-  } as WorkItemRow;
+  } as Card;
 }
 
-function harness(row: WorkItemRow) {
+function harness(row: Card) {
   const update = vi.fn().mockResolvedValue({ item: row, previous: row });
   const supersedeDecisionsForWorkItem = vi.fn().mockResolvedValue(0);
   return {
@@ -182,7 +182,7 @@ describe('moveCardToBoard', () => {
     ['an explicit board', { board: 'work', stages: ['canceled'] }],
     ['a legacy null board', { board: null, stages: ['done'] }],
   ])('leaves a card on an uninstalled board alone (%s)', async (_label, overrides) => {
-    const row = item(overrides as Partial<WorkItemRow>);
+    const row = item(overrides as Partial<Card>);
     const update = vi.fn();
     const boards = createBoardRegistry({ includeDefaultBoards: false, boards: [createTestBoard()] });
 

@@ -3,7 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 
@@ -159,7 +159,7 @@ function buildSessionUrl(input: {
   return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
 }
 
-function readReviewTarget(item: WorkItemRow): ReviewSourceOutput['reviewTarget'] {
+function readReviewTarget(item: Card): ReviewSourceOutput['reviewTarget'] {
   const source = item.externalSource;
   if (!source) return null;
   return {
@@ -170,7 +170,7 @@ function readReviewTarget(item: WorkItemRow): ReviewSourceOutput['reviewTarget']
   };
 }
 
-function readBoundRepository(item: WorkItemRow): ReviewSourceOutput['boundRepository'] {
+function readBoundRepository(item: Card): ReviewSourceOutput['boundRepository'] {
   const metadata = item.metadata;
   if (!metadata) return null;
   // Intake stamps repository identity on every PR/MR card:
@@ -189,7 +189,7 @@ function readBoundRepository(item: WorkItemRow): ReviewSourceOutput['boundReposi
   return null;
 }
 
-function readPullRequestAuthor(item: WorkItemRow): string | null {
+function readPullRequestAuthor(item: Card): string | null {
   const metadata = item.metadata;
   if (!metadata) return null;
   const author = metadata.author;
