@@ -32,6 +32,8 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
   onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
   /** Runs once a thread's browser is open, before saved tabs are restored (e.g. to add cookies) */
   onBrowserOpened?: (threadId: string) => Promise<void>;
+  /** Runs before a thread's local browser launches (e.g. to release a stale profile lock) */
+  beforeLaunch?: (threadId: string) => Promise<void>;
 }
 
 /**
@@ -52,6 +54,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   protected readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
   protected readonly onBrowserOpened?: (threadId: string) => Promise<void>;
+  protected readonly beforeLaunch?: (threadId: string) => Promise<void>;
 
   constructor(config: AgentBrowserThreadManagerConfig) {
     super(config);
@@ -59,6 +62,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
     this.resolveCdpUrl = config.resolveCdpUrl;
     this.onBrowserCreated = config.onBrowserCreated;
     this.onBrowserOpened = config.onBrowserOpened;
+    this.beforeLaunch = config.beforeLaunch;
   }
 
   /**
@@ -99,6 +103,10 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       }
       if (this.browserConfig.cdpHeaders) {
         launchOptions.cdpHeaders = this.browserConfig.cdpHeaders;
+      }
+
+      if (!launchOptions.cdpUrl) {
+        await this.beforeLaunch?.(threadId);
       }
 
       try {

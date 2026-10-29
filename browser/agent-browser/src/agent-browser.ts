@@ -106,6 +106,8 @@ export class AgentBrowser extends MastraBrowser {
       },
       // Cookies go in before saved tabs reload, so restored pages load signed in.
       onBrowserOpened: (threadId: string) => this.addPendingCookies(threadId),
+      // Thread browsers start Chrome outside launch(), so check the profile lock here too.
+      beforeLaunch: () => this.prepareThreadProfile(),
     };
     const createTm =
       config.createThreadManager ??
@@ -165,6 +167,30 @@ export class AgentBrowser extends MastraBrowser {
     const manager = await this.threadManager.getManagerForThread(effectiveThreadId);
     await this.addPendingCookies(effectiveThreadId);
     return manager;
+  }
+
+  /**
+   * In thread scope launch() starts no Chrome (each thread launches its own,
+   * sometimes before launch() runs), so the profile is only prepared right
+   * before a thread's browser starts.
+   */
+  protected override getLocalProfilePath(): string | undefined {
+    if (this.threadManager?.getScope() === 'thread' && !this.preparingThreadProfile) return undefined;
+    return super.getLocalProfilePath();
+  }
+
+  private preparingThreadProfile = false;
+
+  private async prepareThreadProfile(): Promise<void> {
+    // Cores before prepareLocalProfile() existed (still in the peer range) skip this.
+    const prepare = (this as unknown as { prepareLocalProfile?: () => Promise<void> }).prepareLocalProfile;
+    if (typeof prepare !== 'function') return;
+    this.preparingThreadProfile = true;
+    try {
+      await prepare.call(this);
+    } finally {
+      this.preparingThreadProfile = false;
+    }
   }
 
   protected override async addCookiesToOpenBrowser(cookies: BrowserCookie[], threadId: string): Promise<boolean> {
