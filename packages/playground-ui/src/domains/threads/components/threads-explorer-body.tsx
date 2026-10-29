@@ -7,6 +7,7 @@ import { ThreadsFilterBar } from './threads-filter-bar';
 import { useFeedbackAvailable, useTraceQueryAvailable } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
+import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
@@ -21,6 +22,8 @@ export type ThreadsExplorerBodyProps = {
   onSelectedThreadChange: (threadId: string | undefined) => void;
   /** Opens a score from the thread drawer; scores live on host routes. */
   onOpenScore: (traceId: string, scoreId: string) => void;
+  /** The host's search params, so the time range, filters and sort survive a reload. Omitted: kept in memory. */
+  urlState?: ObservabilityListUrlState;
 };
 
 /** The threads page body: filter bar, thread list and the thread drawer. Router-agnostic. */
@@ -28,8 +31,9 @@ export function ThreadsExplorerBody({
   selectedThreadId,
   onSelectedThreadChange,
   onOpenScore,
+  urlState,
 }: ThreadsExplorerBodyProps) {
-  const filters = useObservabilityListFilters();
+  const filters = useObservabilityListFilters(urlState);
   const { timeRange, tokens, groups, sort } = filters;
   const withQueryTrace = useTraceQueryAvailable().enabled;
   const withFeedback = useFeedbackAvailable().enabled;
@@ -100,6 +104,7 @@ export function ThreadsExplorerBody({
         <TracesListView
           listId="all-threads"
           columnPreferences={THREAD_LIST_COLUMN_PREFERENCES}
+          outcomeColumn={false}
           traces={rows}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}

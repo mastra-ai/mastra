@@ -1266,6 +1266,20 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
   });
 
+  it("names the provider's physical sandbox in a start failure, since the logical id survives a recreate", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(
+      new SetupCommandError('Setup command failed (exit 124)', 'setup-failed'),
+    );
+
+    const error = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }).catch(
+      e => e,
+    );
+    expect(error.message).toMatch(/Setup command failed \(exit 124\).*\(provider sandbox vm-session-a\)$/);
+  });
+
   it('persists no sandbox id for a provider without a physical one, so resume provisions by logical id', async () => {
     mocks.physicalId = false;
     try {
@@ -3353,6 +3367,23 @@ describe('FactorySkillSource layering', () => {
     // No local root anywhere.
     expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src'))).toBeUndefined();
   });
+
+  it('resolveLocalFactorySkillsPath finds src/mastra/factory-skills ahead of the public folder', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-mastra-dir-skills-'));
+    const skillsDir = path.join(tmpDir, 'src', 'mastra', 'factory-skills');
+    const publicSkillsDir = path.join(tmpDir, 'src', 'mastra', 'public', 'factory-skills');
+    await fs.mkdir(skillsDir, { recursive: true });
+    await fs.mkdir(publicSkillsDir, { recursive: true });
+
+    // cwd = repo root
+    expect(resolveLocalFactorySkillsPath(tmpDir)).toBe(skillsDir);
+    // cwd = src/mastra/public (mastra dev)
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(skillsDir);
+    // Without the new folder, the public folder still works.
+    await fs.rm(skillsDir, { recursive: true });
+    expect(resolveLocalFactorySkillsPath(tmpDir)).toBe(publicSkillsDir);
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(publicSkillsDir);
+  });
 });
 
 describe('factory environment sandbox context', () => {
@@ -3408,6 +3439,7 @@ describe('factory environment sandbox context', () => {
     const project = {
       id: 'factory-1',
       orgId: 'org-1',
+      name: 'Platform',
       sandboxWorkingDirectory: '/workspace',
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
@@ -3547,6 +3579,8 @@ describe('factory environment sandbox context', () => {
     const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
     expect(ctx).toMatchObject({
       sessionId: 'session-a',
+      factoryId: 'factory-1',
+      factoryName: 'Platform',
       repoFullName: 'octocat/hello',
       workspaceSetupCommand: 'touch .workspace-ready',
       continueOnSetupFailure: true,
@@ -3558,6 +3592,8 @@ describe('factory environment sandbox context', () => {
     expect('idleTimeoutMinutes' in ctx).toBe(false);
     expect(Object.keys(ctx).sort()).toEqual([
       'continueOnSetupFailure',
+      'factoryId',
+      'factoryName',
       'getRepositoryAccess',
       'repoFullName',
       'repos',
@@ -3621,18 +3657,17 @@ describe('factory environment sandbox context', () => {
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
+    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand'];
     for (const call of mocks.createSandbox.mock.calls) {
       const ctx = call[0] as any;
       expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
       expect(typeof ctx.getRepositoryAccess).toBe('function');
-      expect(Object.keys(ctx).sort()).toEqual([
-        'getRepositoryAccess',
-        'repoFullName',
-        'sandboxId',
-        'sessionId',
-        'setupCommand',
-      ]);
     }
+    // The factory session still names its factory; the session without one carries neither field.
+    const [factoryCtx, legacyCtx] = mocks.createSandbox.mock.calls.map(call => call[0] as any);
+    expect(factoryCtx).toMatchObject({ factoryId: 'factory-1', factoryName: 'Platform' });
+    expect(Object.keys(factoryCtx).sort()).toEqual(['factoryId', 'factoryName', ...singleRepoKeys]);
+    expect(Object.keys(legacyCtx).sort()).toEqual(singleRepoKeys);
     // The settings belong to the project: the factory session boots with them
     // in single-repository form too; a session without a factory gets none.
     expect(sandbox.calls.map(call => call.settings)).toEqual([{ memoryMb: 4096 }, {}]);

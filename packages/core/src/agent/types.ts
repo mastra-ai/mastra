@@ -44,7 +44,14 @@ import type {
   NotificationRecord,
   SendNotificationSignalInput,
 } from '../notifications/types';
-import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
+import type {
+  Span,
+  SpanType,
+  TracingOptions,
+  TracingPolicy,
+  ObservabilityContext,
+  SpanTermination,
+} from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -1276,6 +1283,8 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
+  /** Runtime terminal cause, applied only once finish-time work has completed. */
+  termination?: SpanTermination;
   runId: string;
   result: MastraOnFinishCallbackArgs & { object?: unknown };
   thread: StorageThreadType | null | undefined;
@@ -1356,6 +1365,13 @@ export interface DurableAgentLike {
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
+  /**
+   * Abort `runId` and resolve whether the abort was confirmed: by a local close
+   * in this process, or by the process executing the run answering over
+   * `pubsub`. Used by the server's run abort route.
+   * @internal
+   */
+  __abortRunAcknowledged?(runId: string): Promise<boolean>;
   /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.

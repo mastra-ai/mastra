@@ -1,4 +1,9 @@
-import type { GetObservabilityCapabilitiesResponse, MastraClient, QuerySpansResult } from '@mastra/client-js';
+import type {
+  AggregateSpansResponse,
+  GetObservabilityCapabilitiesResponse,
+  MastraClient,
+  QuerySpansResult,
+} from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
@@ -27,6 +32,12 @@ export const spanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     spanQueryContextFields: true,
     feedback: true,
   },
+};
+
+/** A store that records span outcomes and stop reasons and filters span queries on them. */
+export const spanOutcomeCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanQueryOutcomeFields: true },
 };
 
 export const spanQueryCoreOnlyCapabilities: GetObservabilityCapabilitiesResponse = {
@@ -169,6 +180,21 @@ export const spanRowsPage: QuerySpansResult = {
   page: { next: null },
 };
 
+/** An agent run stopped by its step limit. */
+export const limitedSpanPage: QuerySpansResult = {
+  spans: [
+    makeSpan({
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      name: 'agent run: weather',
+      outcome: 'limit',
+      stopReason: 'max_steps',
+      stopReasonContext: { maxSteps: 5 },
+    }),
+  ],
+  page: { next: null },
+};
+
 export const emptySpanRows: QuerySpansResult = { spans: [], page: { next: null } };
 
 /** A span that ended after the list loaded, newer than every listed span. */
@@ -200,3 +226,27 @@ export function fullSpanHeadPage(limit: number, endedAfter: string): QuerySpansR
     page: { next: 'burst-cursor' },
   };
 }
+
+/** A store that answers `aggregateSpans()` next to the span query API. */
+export const spanAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanAggregate: true },
+};
+
+const HOUR = 60 * 60 * 1000;
+
+const hourBefore = (timeRange: { to: string }, hoursAgo: number) =>
+  new Date((Math.floor(Date.parse(timeRange.to) / HOUR) - hoursAgo) * HOUR).toISOString();
+
+/** Two hourly buckets near the end of the window: 12 spans (2 failed), then 9 spans (1 failed). */
+export function spanCountsAggregate(timeRange: { to: string }): AggregateSpansResponse {
+  return {
+    rows: [
+      { bucket: hourBefore(timeRange, 3), measures: { count: 12, errorCount: 2 } },
+      { bucket: hourBefore(timeRange, 2), measures: { count: 9, errorCount: 1 } },
+    ],
+    truncated: false,
+  };
+}
+
+export const spanAggregateError = { error: 'Span aggregation failed' };

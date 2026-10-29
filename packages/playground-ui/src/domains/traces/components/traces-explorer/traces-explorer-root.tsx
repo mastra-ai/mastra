@@ -13,6 +13,7 @@ import {
   isSelectionEmpty,
   resolveTracesDateWindow,
   sanitizeTracesFilters,
+  selectsRunningStatus,
   selectScore,
   selectSpan,
   selectTrace,
@@ -106,9 +107,13 @@ export function TracesExplorerRoot({
   const withTimeToFirstChunk = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
   const withTimeToFirstChunkSort =
     withTimeToFirstChunk && (capabilities?.capabilities.traceQueryTimeToFirstChunkSort ?? false);
+  const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(() => sanitizeTracesFilters(rawFilters, withRootDuration), [rawFilters, withRootDuration]);
+  const filters = useMemo(
+    () => sanitizeTracesFilters(rawFilters, withRootDuration, withOutcomeFields),
+    [rawFilters, withRootDuration, withOutcomeFields],
+  );
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -199,6 +204,7 @@ export function TracesExplorerRoot({
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
       withDeltaPolling,
@@ -216,6 +222,7 @@ export function TracesExplorerRoot({
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
       withDeltaPolling,
@@ -228,6 +235,7 @@ export function TracesExplorerRoot({
 
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
+  const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
     () => ({
       ...filtersActions,
@@ -236,8 +244,9 @@ export function TracesExplorerRoot({
       dateTo,
       filtersApplied,
       contentFiltersApplied,
+      runningSelected,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
+    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list

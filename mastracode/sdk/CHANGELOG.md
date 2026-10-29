@@ -1,5 +1,49 @@
 # @mastra/code-sdk
 
+## 1.16.1-alpha.1
+
+### Patch Changes
+
+- Fixed OpenAI Codex (ChatGPT sign-in) threads failing with `Item with id 'rs_…' not found` after sitting idle. Earlier reasoning and message items are now replayed without their server ids, so a resumed thread no longer depends on Codex still caching them. ([#28786](https://github.com/mastra-ai/mastra/pull/28786))
+
+- Updated dependencies [[`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990), [`ec3ba11`](https://github.com/mastra-ai/mastra/commit/ec3ba11dad428caeb3b4afae77d1669462e8c129)]:
+  - @mastra/core@1.81.0-alpha.1
+  - @mastra/stagehand@0.4.0-alpha.1
+  - @mastra/client-js@1.57.1-alpha.1
+
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Export `CODE_AGENT_ID` from `@mastra/code-sdk/constants`, the id of the coding agent Mastra Code registers. ([#28604](https://github.com/mastra-ai/mastra/pull/28604))
+
+  ```ts
+  import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
+
+  const isCodeAgent = (agentId: string) => agentId === CODE_AGENT_ID;
+  ```
+
+- Flush observability exporters before closing storage on Mastra shutdown, so final spans persist when using DuckDB. Release DuckDB file locks on shutdown, including composed observability storage, concurrent operations, and public connection cleanup. Prevent closed DuckDB connections from reopening, and avoid leaving a connection open while checking Mastra Code's local observability store. ([#28656](https://github.com/mastra-ai/mastra/pull/28656))
+
+- Mastra Code now closes its browser when it exits, when it relaunches, and when `/browser` replaces or disables it, so a leftover Chrome no longer keeps the browser profile locked. A replaced browser cannot be relaunched by a tool call that was already running. If it does not close within 5 seconds, Mastra Code kills its Chrome on macOS and Linux. On Windows it cannot force-kill Chrome. ([#28675](https://github.com/mastra-ai/mastra/pull/28675))
+
+  `@mastra/code-sdk` now needs `@mastra/core` 1.81.0 or later, the first version that clears stale Chrome launcher logs and locks.
+
+- Improved type declaration formatting. Published `.d.ts` files are now generated with TypeScript 7, so some literal types use single quotes and some union members appear in a different order. The types themselves are unchanged. ([#28726](https://github.com/mastra-ai/mastra/pull/28726))
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`f054e9d`](https://github.com/mastra-ai/mastra/commit/f054e9d6d605e592965d1ecb2d6b26454a8f9a8f), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`1baf315`](https://github.com/mastra-ai/mastra/commit/1baf315b8bdb13c356d5d299177027cacd6d4ee9), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`cd1fcad`](https://github.com/mastra-ai/mastra/commit/cd1fcad126262ad6db5b486125fe4741c7d65171), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`d91fe23`](https://github.com/mastra-ai/mastra/commit/d91fe2386a1b40722599670faccf08b1f180fb55), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d), [`fd25560`](https://github.com/mastra-ai/mastra/commit/fd25560ca35dd7826b45e1d3dcff787a8b4d0cb0)]:
+  - @mastra/core@1.81.0-alpha.0
+  - @mastra/fastembed@1.3.6-alpha.0
+  - @mastra/agent-browser@0.6.0-alpha.0
+  - @mastra/observability@1.23.0-alpha.0
+  - @mastra/duckdb@1.17.0-alpha.0
+  - @mastra/pg@1.34.0-alpha.0
+  - @mastra/stagehand@0.4.0-alpha.0
+  - @mastra/memory@1.40.0-alpha.0
+  - @mastra/client-js@1.57.1-alpha.0
+  - @mastra/mcp@2.6.0
+  - @mastra/libsql@1.27.1
+
 ## 1.16.0
 
 ### Minor Changes
