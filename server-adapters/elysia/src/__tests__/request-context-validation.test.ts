@@ -39,6 +39,6 @@ describe('Elysia request context validation failure', () => {
 
     expect(response.status).toBe(400);
     expect(JSON.stringify(await response.json())).toContain('Request context validation failed');
-    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });

@@ -20,8 +20,7 @@ describe('Koa request context validation failure', () => {
     }
   });
 
-  it('responds 400 and does not log the failure as a server error', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  async function startServer() {
     const agent = new Agent({
       id: 'schema-agent',
       name: 'schema-agent',
@@ -45,15 +44,38 @@ describe('Koa request context validation failure', () => {
     });
     const address = server.address();
     const port = typeof address === 'object' && address ? address.port : 0;
-    const response = await fetch(`http://localhost:${port}/agents/schema-agent/generate`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], requestContext: {} }),
-    });
+    const send = () =>
+      fetch(`http://localhost:${port}/agents/schema-agent/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], requestContext: {} }),
+      });
+    return { app, logger, send };
+  }
+
+  it('responds 400 and does not log the failure as a server error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { logger, send } = await startServer();
+
+    const response = await send();
 
     expect(response.status).toBe(400);
     expect(JSON.stringify(await response.json())).toContain('Request context validation failed');
-    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('delivers the 400 to an app error listener added after listen without console.error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { app, send } = await startServer();
+    const appListener = vi.fn();
+    app.on('error', appListener);
+
+    const response = await send();
+
+    expect(response.status).toBe(400);
+    expect(appListener).toHaveBeenCalledTimes(1);
+    expect(appListener.mock.calls[0]![0]).toMatchObject({ status: 400 });
     expect(consoleError).not.toHaveBeenCalled();
   });
 });
