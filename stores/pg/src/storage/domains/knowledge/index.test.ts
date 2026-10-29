@@ -1,6 +1,6 @@
 import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { Pool } from 'pg';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PoolAdapter } from '../../client';
 import type { DbClient } from '../../db';
@@ -97,6 +97,10 @@ describe('KnowledgePG storage isolation', () => {
       new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey(),
     );
   });
+});
+
+beforeAll(async () => {
+  await pool.query('CREATE SCHEMA IF NOT EXISTS knowledge_contract_test');
 });
 
 createKnowledgePageStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
