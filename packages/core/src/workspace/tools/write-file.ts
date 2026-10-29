@@ -40,8 +40,10 @@ export const writeFileTool = createTool({
       let output = `Wrote ${size} bytes to ${path}`;
       // An absolute path can be mapped somewhere else (e.g. `/tmp/x` into
       // `<workspace>/tmp/x`). Name the real location so later commands find it.
+      // Compare without normalizing: a shell can't follow `missing/../x` when
+      // `missing` doesn't exist, so that path still needs the resolved form.
       const resolvedPath = nodePath.isAbsolute(path) ? filesystem.resolveAbsolutePath?.(path) : undefined;
-      if (resolvedPath && nodePath.normalize(resolvedPath) !== nodePath.normalize(path)) {
+      if (resolvedPath && resolvedPath !== path) {
         output += ` (resolved to ${resolvedPath})`;
       }
       output += await getEditDiagnosticsText(workspace, path, content);

@@ -202,6 +202,22 @@ describe('write_file output (local shell)', () => {
 
     expect(result).toBe(`Wrote 5 bytes to ${realPath}`);
   });
+
+  it('reports the real path when the requested path walks through a missing directory', async () => {
+    const filesystem = createSandboxFilesystem();
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+    const requestedPath = `${filesystem.basePath}/missing/../note.txt`;
+    const realPath = join(filesystem.basePath, 'note.txt');
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+      { path: requestedPath, content: 'hello' },
+      { workspace },
+    );
+
+    expect(readFileSync(realPath, 'utf8')).toBe('hello');
+    expect(result).toBe(`Wrote 5 bytes to ${requestedPath} (resolved to ${realPath})`);
+  });
 });
 
 describe('SandboxFilesystem.walk ignore options (local shell)', () => {
