@@ -443,9 +443,13 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const workflowsStore = (await sharedAgent.mastra.getStorage().getStore('workflows'))!;
       const saveMessages = memory.saveMessages.bind(memory);
       const heldSaves: Promise<unknown>[] = [];
+      const saveAttempts: unknown[] = [];
       const takenOver = Promise.withResolvers<void>();
       const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
         if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        // Count every input save, fenced or not, before anything here can throw.
+        saveAttempts.push(args);
+        if (saveAttempts.length > 1) return saveMessages(args);
         // Another process recovers the run while its input save is in flight.
         const { runId } = resolveRunFence(memoryStore, undefined)!;
         const held = (async () => {
@@ -496,7 +500,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         }
         // Past the deadline, so its settlement has had the chance to save.
         await new Promise(resolve => setTimeout(resolve, 500));
-        expect(heldSaves).toHaveLength(1);
+        expect(saveAttempts).toHaveLength(1);
         expect(llm.getRequests()).toHaveLength(0);
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
         expect(messages).toEqual([]);
