@@ -342,7 +342,7 @@ The LLM-based scorer provides:
 
 ## LLM-based scoring details
 
-- **Fractional scores**: Returns values between 0.0 and 1.0, rounded to two decimal places. Each appropriate evaluation counts only if it matches an actual call to that tool; extra evaluations cannot increase the score. The denominator counts all actual calls plus judge-reported missing tools.
+- **Fractional scores**: Returns values between 0.0 and 1.0, rounded to two decimal places. Only appropriate evaluations matching actual calls count toward the score. Extra evaluations don't increase it. The denominator counts all actual calls plus judge-reported missing tools.
 - **No tool calls**: Returns 0 if the judge reports missing tools, or 1 if no tools were needed.
 - **Context-aware**: Considers user intent and appropriateness
 - **Explanatory**: Provides reasoning for scores
