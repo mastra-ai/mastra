@@ -161,6 +161,124 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
 ]}
 />
 
+## `saveMessages()`
+
+`agent.generate()` and `agent.stream()` persist messages for you. Call `memory.saveMessages()` when you need to write messages yourself, for example to seed a thread, to import a transcript, or to store messages that originated outside Mastra. Each message needs a `threadId` and a `resourceId`, so create the thread with [`createThread()`](/reference/memory/createThread) before saving into it.
+
+```typescript
+await memory.saveMessages({
+  messages: [
+    {
+      id: 'msg-1',
+      threadId: 'thread-123',
+      resourceId: 'user-456',
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Where is my order?' }],
+      },
+    },
+  ],
+})
+```
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'messages',
+    type: 'MastraDBMessage[]',
+    description: 'The messages to save. Every message must include a `threadId` and a `resourceId`.',
+  },
+  {
+    name: 'memoryConfig',
+    type: 'MemoryConfig',
+    description: 'Per-call memory options. Merged over the options passed to the constructor.',
+    isOptional: true,
+  },
+  {
+    name: 'observabilityContext',
+    type: 'Partial<ObservabilityContext>',
+    description: 'Tracing context attached to the save operation.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns `Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>`. `usage` is present when the embedder reports token usage while indexing messages for semantic recall.
+
+### `MastraDBMessage`
+
+Storage uses a single message shape, `MastraDBMessage`. It is sent to and returned from every memory method, including [`recall()`](/reference/memory/recall) and [`deleteMessages()`](/reference/memory/deleteMessages).
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Message identifier.',
+  },
+  {
+    name: 'role',
+    type: "'user' | 'assistant' | 'system' | 'signal'",
+    description: 'Who produced the message. System messages and transient signals are not persisted.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread the message belongs to. Required when saving.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Resource (usually a user or tenant) the message belongs to. Required when saving.',
+    isOptional: true,
+  },
+  {
+    name: 'createdAt',
+    type: 'Date',
+    description: 'Message timestamp.',
+  },
+  {
+    name: 'content',
+    type: 'MastraMessageContentV2',
+    description: 'The message body. Its `parts` array holds the text, reasoning, tool calls, and attachments.',
+  },
+]}
+/>
+
+`content.parts` is the part the agent actually reads. `content.format` is always `2` for stored messages, and `content.metadata` carries arbitrary custom data. `content.toolInvocations`, `content.reasoning`, and `content.experimental_attachments` are flat mirrors kept for AI SDK v4 compatibility; write to `parts` instead.
+
+```typescript
+const assistantMessage = {
+  id: 'msg-2',
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [
+      { type: 'text', text: 'It ships tomorrow.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'lookupOrder',
+          args: { orderId: 'A-1' },
+          result: { eta: '2026-10-30' },
+        },
+      },
+    ],
+    metadata: { source: 'import' },
+  },
+}
+```
+
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/test-agent.ts"
