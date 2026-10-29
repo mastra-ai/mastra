@@ -8,7 +8,7 @@ import {
 } from '@internal/storage-test-utils';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import sql from 'mssql';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MemoryMSSQL } from './domains/memory';
 import { ScoresMSSQL } from './domains/scores';
@@ -50,6 +50,15 @@ const DOMAIN_CONFIG = {
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
+// Domains treat a supplied pool as already connected and never call connect().
+const domainPool = createTestPool();
+beforeAll(async () => {
+  await domainPool.connect();
+});
+afterAll(async () => {
+  await domainPool.close();
+});
+
 createTestSuite(new MSSQLStore(TEST_CONFIG), {
   deterministicScorePagination: true,
   workflowResultsNoopWhenRunMissing: false,
@@ -69,9 +78,9 @@ createClientAcceptanceTests({
 // Domain-level pre-configured client tests (using pool directly)
 createDomainDirectTests({
   storeName: 'MSSQL',
-  createMemoryDomain: () => new MemoryMSSQL({ pool: createTestPool() }),
-  createWorkflowsDomain: () => new WorkflowsMSSQL({ pool: createTestPool() }),
-  createScoresDomain: () => new ScoresMSSQL({ pool: createTestPool() }),
+  createMemoryDomain: () => new MemoryMSSQL({ pool: domainPool }),
+  createWorkflowsDomain: () => new WorkflowsMSSQL({ pool: domainPool }),
+  createScoresDomain: () => new ScoresMSSQL({ pool: domainPool }),
 });
 
 // MSSQL-specific: schemaName option for domains
@@ -104,7 +113,7 @@ describe('MSSQL Domain schemaName Option', () => {
 
   it('should allow domains to use pool with custom schemaName', async () => {
     const memoryDomain = new MemoryMSSQL({
-      pool: createTestPool(),
+      pool: domainPool,
       schemaName: 'pool_schema_test',
     });
 
