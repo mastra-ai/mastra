@@ -185,18 +185,11 @@ const formatContextValue = (value: unknown) => (typeof value === 'string' ? valu
 
 export interface TracesDataListOutcomeCellProps {
   outcome?: string | null;
-  stopReason?: string | null;
-  stopReasonContext?: Record<string, unknown> | null;
   /** Error-based status, shown muted when no outcome was recorded. */
   status?: string | null;
 }
 
-export function TracesDataListOutcomeCell({
-  outcome,
-  stopReason,
-  stopReasonContext,
-  status,
-}: TracesDataListOutcomeCellProps) {
+export function TracesDataListOutcomeCell({ outcome, status }: TracesDataListOutcomeCellProps) {
   if (!outcome) {
     const config = STATUS_CONFIG[(status ?? 'unset').toLowerCase()] ?? UNSET_STATUS_CONFIG;
     const badge = (
@@ -219,39 +212,50 @@ export function TracesDataListOutcomeCell({
   }
 
   const config = OUTCOME_CONFIG[outcome.toLowerCase()] ?? { label: outcome, variant: 'neutral' };
-  const contextEntries = stopReasonContext ? Object.entries(stopReasonContext) : [];
-  const content = (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
+  return (
+    <DataListCell>
       <Badge size="xs" variant={config.variant}>
         {config.label}
       </Badge>
-      {stopReason && (
-        <Txt as="span" variant="body-sm" tone="muted" font="mono" className="min-w-0 truncate">
-          · {stopReason}
-        </Txt>
-      )}
-    </span>
+    </DataListCell>
   );
+}
+
+// ---------------------------------------------------------------------------
+// StopReasonCell
+// ---------------------------------------------------------------------------
+
+export interface TracesDataListStopReasonCellProps {
+  stopReason?: string | null;
+  /** Listed as key/value pairs when hovering the stop reason. */
+  stopReasonContext?: Record<string, unknown> | null;
+}
+
+export function TracesDataListStopReasonCell({ stopReason, stopReasonContext }: TracesDataListStopReasonCellProps) {
+  const contextEntries = stopReasonContext ? Object.entries(stopReasonContext) : [];
+  if (!stopReason || contextEntries.length === 0) {
+    return <DataListTextCell font="mono">{stopReason || '-'}</DataListTextCell>;
+  }
 
   return (
     <DataListCell className="flex min-w-0 items-center">
-      {contextEntries.length > 0 ? (
-        <Tooltip>
-          <TooltipTrigger render={<span className="inline-flex min-w-0" />}>{content}</TooltipTrigger>
-          <TooltipContent>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-              {contextEntries.map(([key, value]) => (
-                <Fragment key={key}>
-                  <dt>{key}</dt>
-                  <dd>{formatContextValue(value)}</dd>
-                </Fragment>
-              ))}
-            </dl>
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        content
-      )}
+      <Tooltip>
+        <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
+          <Txt as="span" variant="body-sm" tone="muted" font="mono" className="min-w-0 truncate">
+            {stopReason}
+          </Txt>
+        </TooltipTrigger>
+        <TooltipContent>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            {contextEntries.map(([key, value]) => (
+              <Fragment key={key}>
+                <dt>{key}</dt>
+                <dd>{formatContextValue(value)}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </TooltipContent>
+      </Tooltip>
     </DataListCell>
   );
 }

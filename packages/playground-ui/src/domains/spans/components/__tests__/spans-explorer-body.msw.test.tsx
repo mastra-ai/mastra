@@ -132,7 +132,7 @@ describe('SpansExplorerBody', () => {
 
       const row = await screen.findByRole('button', { name: /agent run: weather/ });
       expect(within(row).getByText('Limit')).toBeTruthy();
-      expect(within(row).getByText('· max_steps')).toBeTruthy();
+      expect(within(row).getByText('max_steps')).toBeTruthy();
     });
 
     it('queries spans with no recorded outcome', async () => {

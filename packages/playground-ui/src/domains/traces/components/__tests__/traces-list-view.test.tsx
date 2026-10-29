@@ -92,12 +92,15 @@ describe('TracesListView columns', () => {
         'Input',
         'Output',
         'Outcome',
+        'Stop reason',
         'Duration',
         'Est. cost',
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe(
+        '11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 7rem 9rem 7rem 8rem',
+      );
     });
   });
 
@@ -125,13 +128,15 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe(
+        '11rem minmax(8rem,1fr) 7rem 9rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)',
+      );
     });
   });
 });
 
 describe('TracesListView — status column', () => {
-  // Status is the last default column only when the trailing optional ones are hidden.
+  // Outcome is followed only by Stop reason when the trailing optional columns are hidden.
   const statusLast = { visibleColumns: [], customColumns: [], metadataKeys: [] } as const;
 
   it('renders the computed status carried by lightweight rows', () => {
@@ -147,7 +152,7 @@ describe('TracesListView — status column', () => {
       />,
     );
 
-    const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
+    const statuses = screen.getAllByRole('button').map(row => row.children[row.children.length - 2]?.textContent);
     expect(statuses).toEqual(['ERR', 'OK', 'RUN']);
   });
 
@@ -160,20 +165,24 @@ describe('TracesListView — status column', () => {
       />,
     );
 
-    const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
+    const statuses = screen.getAllByRole('button').map(row => row.children[row.children.length - 2]?.textContent);
     expect(statuses).toEqual(['-']);
   });
 });
 
 describe('TracesListView — outcome column', () => {
   const outcomeLast = { visibleColumns: [], customColumns: [], metadataKeys: [] } as const;
-  const outcomeCell = (traceName: string) => {
-    const cell = screen.getByRole('button', { name: new RegExp(traceName) }).lastElementChild;
+  // Outcome and Stop reason are the last two cells when no optional columns follow them.
+  const cellFromEnd = (traceName: string, fromEnd: number) => {
+    const cells = screen.getByRole('button', { name: new RegExp(traceName) }).children;
+    const cell = cells[cells.length - 1 - fromEnd];
     assert(cell instanceof HTMLElement);
     return cell;
   };
+  const outcomeCell = (traceName: string) => cellFromEnd(traceName, 1);
+  const stopReasonCell = (traceName: string) => cellFromEnd(traceName, 0);
 
-  it('shows the outcome badge followed by the stop reason', () => {
+  it('shows the outcome and the stop reason in their own columns', () => {
     render(
       <TracesListView
         columnPreferences={outcomeLast}
@@ -182,7 +191,8 @@ describe('TracesListView — outcome column', () => {
       />,
     );
 
-    expect(outcomeCell('run limited').textContent).toBe('Limit· max_steps');
+    expect(outcomeCell('run limited').textContent).toBe('Limit');
+    expect(stopReasonCell('run limited').textContent).toBe('max_steps');
   });
 
   it('shows only the badge when no stop reason was recorded', () => {
@@ -194,12 +204,12 @@ describe('TracesListView — outcome column', () => {
       />,
     );
 
-    const cell = outcomeCell('run ok');
-    expect(cell.textContent).toBe('OK');
-    expect(cell.querySelector('[data-base-ui-tooltip-trigger]')).toBeNull();
+    expect(outcomeCell('run ok').textContent).toBe('OK');
+    expect(stopReasonCell('run ok').textContent).toBe('-');
+    expect(screen.getByRole('button', { name: /run ok/ }).querySelector('[data-base-ui-tooltip-trigger]')).toBeNull();
   });
 
-  it('lists the stop reason context when hovering the outcome', async () => {
+  it('lists the stop reason context when hovering the stop reason', async () => {
     const user = userEvent.setup();
     render(
       <TracesListView
@@ -216,7 +226,7 @@ describe('TracesListView — outcome column', () => {
       />,
     );
 
-    await user.hover(screen.getByText('Limit'));
+    await user.hover(screen.getByText('max_steps'));
 
     expect(await screen.findByText('limit')).toBeTruthy();
     expect(screen.getByText('5')).toBeTruthy();
@@ -235,6 +245,7 @@ describe('TracesListView — outcome column', () => {
     );
 
     expect(outcomeCell('run legacy').textContent).toBe('ERR');
+    expect(stopReasonCell('run legacy').textContent).toBe('-');
     await user.hover(screen.getByText('ERR'));
 
     expect(await screen.findByText('Outcome not recorded; status from error')).toBeTruthy();
@@ -267,7 +278,8 @@ describe('TracesListView — outcome column', () => {
     );
 
     expect(headerTexts(container)).toContain('Status');
-    expect(outcomeCell('run thread').textContent).toBe('ERR');
+    expect(headerTexts(container)).not.toContain('Stop reason');
+    expect(cellFromEnd('run thread', 0).textContent).toBe('ERR');
   });
 });
 
@@ -277,7 +289,7 @@ describe('TracesListView — time to first chunk column', () => {
   it('labels the column TTFC right after Outcome', () => {
     const { container } = render(<TracesListView traces={[]} columnPreferences={ttfcOnly} onTraceClick={vi.fn()} />);
 
-    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Outcome', 'TTFC']);
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'TTFC']);
   });
 
   it('shows how long each root took to stream its first chunk, leaving rows that never streamed empty', () => {
@@ -598,7 +610,7 @@ describe('TracesListView — usage cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Total tokens']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'Total tokens']);
       expect(screen.getByText('12.4K')).toBeTruthy();
     });
 
@@ -692,7 +704,7 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Environment']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'Environment']);
       expect(screen.getByText('production')).toBeTruthy();
       expect(screen.getByText('—')).toBeTruthy();
     });
@@ -742,7 +754,7 @@ describe('TracesListView — custom columns', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Thread ID']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'Thread ID']);
       expect(screen.getByText('thread-42')).toBeTruthy();
     });
 
@@ -949,6 +961,7 @@ describe('TracesListView column reordering', () => {
         'Primitive type',
         'Primitive name',
         'Input',
+        'Stop reason',
         'Duration',
       ]);
 
@@ -959,7 +972,15 @@ describe('TracesListView column reordering', () => {
           onTraceClick={vi.fn()}
         />,
       );
-      expect(visualHeaders(container)).toEqual(['Outcome', 'Start', 'Primitive name', 'Input', 'Duration', 'tenant']);
+      expect(visualHeaders(container)).toEqual([
+        'Outcome',
+        'Start',
+        'Primitive name',
+        'Input',
+        'Stop reason',
+        'Duration',
+        'tenant',
+      ]);
     });
   });
 });

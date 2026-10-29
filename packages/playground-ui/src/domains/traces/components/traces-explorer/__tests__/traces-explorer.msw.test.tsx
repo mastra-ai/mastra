@@ -637,7 +637,7 @@ describe('TracesExplorer', () => {
 
       const limited = await screen.findByRole('button', { name: /What is the weather in Paris\?/ });
       expect(within(limited).getByText('Limit')).toBeTruthy();
-      expect(within(limited).getByText('· max_steps')).toBeTruthy();
+      expect(within(limited).getByText('max_steps')).toBeTruthy();
       expect(within(traceRow('Book a table for two')).getByText('ERR')).toBeTruthy();
     });
 

@@ -173,8 +173,8 @@ export function TracesListView({
   outcomeColumn = true,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const columns = buildTraceListColumns(columnPreferences);
-  const columnKeys = buildTraceListColumnKeys(columnPreferences);
+  const columns = buildTraceListColumns(columnPreferences, { outcomeColumn });
+  const columnKeys = buildTraceListColumnKeys(columnPreferences, { outcomeColumn });
 
   const virtualizer = useVirtualizer({
     count: traces.length,
@@ -218,7 +218,14 @@ export function TracesListView({
         <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'output') && <TracesDataList.TopCell>Output</TracesDataList.TopCell>}
-        <TracesDataList.TopCell>{outcomeColumn ? 'Outcome' : 'Status'}</TracesDataList.TopCell>
+        {outcomeColumn ? (
+          <>
+            <TracesDataList.TopCell>Outcome</TracesDataList.TopCell>
+            <TracesDataList.TopCell>Stop reason</TracesDataList.TopCell>
+          </>
+        ) : (
+          <TracesDataList.TopCell>Status</TracesDataList.TopCell>
+        )}
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
         )}
@@ -356,12 +363,13 @@ export function TracesListView({
                     />
                   ))}
                 {outcomeColumn ? (
-                  <TracesDataList.OutcomeCell
-                    outcome={trace.outcome}
-                    stopReason={trace.stopReason}
-                    stopReasonContext={trace.stopReasonContext}
-                    status={trace.status}
-                  />
+                  <>
+                    <TracesDataList.OutcomeCell outcome={trace.outcome} status={trace.status} />
+                    <TracesDataList.StopReasonCell
+                      stopReason={trace.stopReason}
+                      stopReasonContext={trace.stopReasonContext}
+                    />
+                  </>
                 ) : (
                   <TracesDataList.StatusCell status={trace.status} />
                 )}
