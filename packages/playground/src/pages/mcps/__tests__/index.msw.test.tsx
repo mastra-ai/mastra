@@ -223,7 +223,9 @@ describe('MCP servers page — built-in Mastra server', () => {
 
       const card = await findCard();
       expect(within(card).getByText('Disabled')).not.toBeNull();
-      expect(within(card).getByText(/server\.mcp\.enabled is false/)).not.toBeNull();
+      expect(within(card).getByText(/is turned off because/).textContent).toBe(
+        'The built-in MCP server is turned off because server.mcp.enabled is false.',
+      );
     });
 
     it('offers no endpoint or snippets', async () => {
@@ -241,9 +243,7 @@ describe('MCP servers page — built-in Mastra server', () => {
       useServers({ builtin: disabledInProduction });
       renderPage();
 
-      expect(
-        within(await findCard()).getByText(/Configure server\.auth, or set server\.mcp\.enabled to true/),
-      ).not.toBeNull();
+      expect((await findCard()).textContent).toContain('Configure server.auth, or set server.mcp.enabled to true.');
     });
   });
 

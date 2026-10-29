@@ -5,6 +5,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@mastra/playground-ui/components/Card';
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMastraClient } from '@mastra/react';
 import { ExternalLinkIcon } from 'lucide-react';
@@ -70,9 +71,18 @@ function DisabledContent({ descriptor }: { descriptor: DisabledDescriptor }) {
   return (
     <>
       <Txt tone="muted">
-        {descriptor.disabledReason === 'config'
-          ? 'The built-in MCP server is turned off because server.mcp.enabled is false.'
-          : 'The built-in MCP server only runs under mastra dev unless the server has auth. Configure server.auth, or set server.mcp.enabled to true.'}
+        {descriptor.disabledReason === 'config' ? (
+          <>
+            The built-in MCP server is turned off because <InlineCode>server.mcp.enabled</InlineCode> is{' '}
+            <InlineCode>false</InlineCode>.
+          </>
+        ) : (
+          <>
+            The built-in MCP server only runs under <InlineCode>mastra dev</InlineCode> unless the server has auth.
+            Configure <InlineCode>server.auth</InlineCode>, or set <InlineCode>server.mcp.enabled</InlineCode> to{' '}
+            <InlineCode>true</InlineCode>.
+          </>
+        )}
       </Txt>
       <DocsLink />
     </>
@@ -83,7 +93,8 @@ function MissingPackageContent() {
   return (
     <>
       <Txt tone="muted">
-        The built-in MCP server is enabled, but it needs the @mastra/mcp package. Install it and restart the server.
+        The built-in MCP server is enabled, but it needs the <InlineCode>@mastra/mcp</InlineCode> package. Install it
+        and restart the server.
       </Txt>
       <CodeBlock code="npm install @mastra/mcp" lang="bash" copyTooltip="Copy install command" />
       <DocsLink />
