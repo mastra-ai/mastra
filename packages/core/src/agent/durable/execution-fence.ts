@@ -37,7 +37,6 @@ import type { RunFence, RunFenceScope } from '../../storage/run-fencing';
 import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
-import { isRunPastDeadline } from './run-deadline';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
 
@@ -1045,9 +1044,8 @@ async function resolveRemoteBackend(
 /**
  * Assert that the execution recorded in `requestContext` for `runId` still
  * owns the run. Runs without a claim (started by code without fencing) only
- * lose the run at their total timeout: the deadline carried in the request
- * context (seen by every worker), or the abort reason on the registry entry
- * of the process that drives the run. Uses the local fence when this process drives the run;
+ * lose the run at their total timeout, recorded as the abort reason on their
+ * registry entry. Uses the local fence when this process drives the run;
  * otherwise (a remote evented worker) checks the claim where it lives.
  */
 export async function assertExecutionOwned(args: {
@@ -1058,10 +1056,7 @@ export async function assertExecutionOwned(args: {
 }): Promise<void> {
   const claim = getExecutionClaim(args.requestContext, args.runId);
   if (!claim) {
-    if (
-      isRunPastDeadline(args.requestContext, args.runId) ||
-      isMastraTimeoutError(getRunRegistryEntry(args.runId, args.mastra)?.abortSignal?.reason)
-    ) {
+    if (isMastraTimeoutError(getRunRegistryEntry(args.runId, args.mastra)?.abortSignal?.reason)) {
       throw new DurableExecutionFenceError(EXECUTION_TIMED_OUT_ERROR_ID, {
         agentId: args.agentId,
         runId: args.runId,
@@ -1086,8 +1081,7 @@ export async function assertExecutionOwned(args: {
  * {@link assertExecutionOwned} for writes that may land after the execution
  * settled, such as a background task's result. Once the claim is released,
  * the write is accepted until another execution claims the run, as storage
- * accepts the released claim's writes. A run without a claim stops writing
- * once the deadline carried in its request context passes.
+ * accepts the released claim's writes.
  */
 export async function assertExecutionNotSuperseded(args: {
   runId: string;
@@ -1096,16 +1090,7 @@ export async function assertExecutionNotSuperseded(args: {
   mastra: Mastra | undefined;
 }): Promise<void> {
   const claim = getExecutionClaim(args.requestContext, args.runId);
-  if (!claim) {
-    if (isRunPastDeadline(args.requestContext, args.runId)) {
-      throw new DurableExecutionFenceError(EXECUTION_TIMED_OUT_ERROR_ID, {
-        agentId: args.agentId,
-        runId: args.runId,
-        executionId: args.runId,
-      });
-    }
-    return;
-  }
+  if (!claim) return;
 
   const local = fencesByExecutionId.get(claim.executionId);
   if (local) return local.verify();
