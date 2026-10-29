@@ -192,7 +192,7 @@ describe('breakdownGroupBy', () => {
     it('groups every tab but Projects by project too', () => {
       expect(breakdownGroupBy('projects', true)).toEqual(['projectId']);
       expect(breakdownGroupBy('threads', true)).toEqual(['projectId', 'threadId']);
-      expect(breakdownGroupBy('models', true)).toEqual(['projectId', 'model']);
+      expect(breakdownGroupBy('models', true)).toEqual(['projectId', 'provider', 'model']);
       expect(breakdownGroupBy('environments', true)).toEqual(['projectId', 'environment']);
     });
   });
@@ -329,6 +329,19 @@ describe('withDropped', () => {
       expect(rows[1]).toMatchObject({ projectId: 'p2', name: 'gone', count: 0 });
       expect(rows[1]?.tokens).toBeUndefined();
       expect(rowChange(rows[1], previous.get('p2|gone'), 'count').change).toBe(-1);
+    });
+  });
+
+  describe('when a model was used before but not now', () => {
+    it('keeps its provider, so it shows the same mark and name as the other models', () => {
+      const modelsBy = ['provider', 'model'];
+      const before = previousFigures({
+        tab: 'models',
+        groupBy: modelsBy,
+        spanGroups: [{ dimensions: { provider: 'openai', model: 'gpt-5-mini' }, value: 12 }],
+      });
+      const rows = withDropped([], before, modelsBy, false);
+      expect(rows).toMatchObject([{ provider: 'openai', name: 'gpt-5-mini', count: 0 }]);
     });
   });
 });

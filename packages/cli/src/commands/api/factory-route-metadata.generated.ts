@@ -835,7 +835,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "id": {
                 "type": "string"
               },
+              "name": {
+                "type": "string"
+              },
               "title": {
+                "type": "string"
+              },
+              "description": {
                 "type": "string"
               },
               "initialPhase": {
@@ -849,7 +855,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "id": {
                       "type": "string"
                     },
+                    "name": {
+                      "type": "string"
+                    },
                     "title": {
+                      "type": "string"
+                    },
+                    "description": {
                       "type": "string"
                     },
                     "kind": {
@@ -860,8 +872,41 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "terminal"
                       ]
                     },
+                    "nextPhases": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "context": {
+                      "type": "string"
+                    },
                     "role": {
                       "type": "string"
+                    },
+                    "autoStart": {
+                      "type": "boolean"
+                    },
+                    "autoStartWhen": {
+                      "$ref": "#/$defs/__schema0"
+                    },
+                    "exitTool": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "autoApprove": {
+                          "type": "boolean"
+                        },
+                        "autoApproveWhen": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "autoApprove"
+                      ]
                     },
                     "transitions": {
                       "type": "array",
@@ -905,7 +950,172 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "boards"
-      ]
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema7"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema2": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema5"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "source.kind",
+            "source.integration"
+          ]
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema6"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema6"
+              }
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema2"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/decisions": {

@@ -53,11 +53,23 @@ export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in (coreStorage.TR
 /** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
 const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
 
-export const timeToFirstChunkFeatures = timeToFirstChunkSupported
-  ? timeToFirstChunkSortSupported
-    ? (['trace-query-time-to-first-chunk', 'trace-query-time-to-first-chunk-sort'] as const)
-    : (['trace-query-time-to-first-chunk'] as const)
-  : ([] as const);
+/** Same rule for time to first token: returned and sorted only when core knows the field. */
+export const timeToFirstTokenSupported = 'timeToFirstTokenMs' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+const timeToFirstTokenSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstTokenMs') === true;
+
+export const timingFeatures = [
+  ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
+  ...(timeToFirstChunkSupported && timeToFirstChunkSortSupported
+    ? (['trace-query-time-to-first-chunk-sort'] as const)
+    : []),
+  ...(timeToFirstTokenSupported ? (['trace-query-time-to-first-token'] as const) : []),
+  ...(timeToFirstTokenSupported && timeToFirstTokenSortSupported
+    ? (['trace-query-time-to-first-token-sort'] as const)
+    : []),
+];
+
+/** Order fields holding numbers that can be empty; the rest are timestamps. */
+const NUMERIC_ORDER_FIELDS = new Set<string>(['timeToFirstChunkMs', 'timeToFirstTokenMs']);
 
 export function durationMsSql(startedAt: string, endedAt: string): string {
   return `dateDiff('millisecond', ${startedAt}, ${endedAt})`;
@@ -80,6 +92,7 @@ const TRACE_FIELDS = {
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
   timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'Float64' },
+  timeToFirstTokenMs: { sql: 'r.timeToFirstTokenMs', parameterType: 'Float64' },
   entityId: { sql: 'r.entityId', parameterType: 'String' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
@@ -99,6 +112,7 @@ const SPAN_FIELDS = {
   endedAt: { sql: 's.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: 's.durationMs', parameterType: 'Float64' },
   timeToFirstChunkMs: { sql: 's.timeToFirstChunkMs', parameterType: 'Float64' },
+  timeToFirstTokenMs: { sql: 's.timeToFirstTokenMs', parameterType: 'Float64' },
   status: { sql: 's.status', parameterType: 'String' },
   error: { sql: 's.error', parameterType: 'String' },
   entityType: { sql: 's.entityType', parameterType: 'String' },
@@ -178,6 +192,7 @@ const TRACE_SELECT = `
   r.entityType AS entityType,
   r.environment AS environment,
   r.timeToFirstChunkMs AS timeToFirstChunkMs,
+  r.timeToFirstTokenMs AS timeToFirstTokenMs,
   ${TRACE_STATUS_SQL} AS status`;
 
 export class ParameterBuilder {
@@ -202,7 +217,8 @@ function fieldDefinition<TField extends string>(
 }
 
 function resolveOrderField(field: string): TraceOrder['field'] {
-  if (field === 'startedAt' || field === 'endedAt' || field === 'timeToFirstChunkMs') return field;
+  if (field === 'startedAt' || field === 'endedAt' || NUMERIC_ORDER_FIELDS.has(field))
+    return field as TraceOrder['field'];
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
@@ -530,6 +546,7 @@ function compileClickHouseTraceScope(
       endedAt,
       ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
       timeToFirstChunkMs,
+      timeToFirstTokenMs,
       if(isNotNull(error), 'error', 'success') AS status,
       error,
       entityType,
@@ -681,7 +698,7 @@ const TRACE_LIST_SELECT = TRACE_SELECT.split('\n')
   .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview),$/.test(line))
   .join('\n');
 
-type TraceOrder = { field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs'; direction: 'ASC' | 'DESC' };
+type TraceOrder = { field: coreStorage.TraceQueryOrderField; direction: 'ASC' | 'DESC' };
 
 function traceOrder(plan: TrustedTraceQueryTracesPlan): TraceOrder {
   return {
@@ -700,7 +717,7 @@ function keysetCursorCondition(
   // Empty values sort last in both directions: after an empty value only empty values remain.
   if (plan.cursor.sortValue === null)
     return `(isNull(sortValue) AND traceId > ${parameters.add(plan.cursor.traceId, 'String')})`;
-  const numeric = order.field === 'timeToFirstChunkMs';
+  const numeric = NUMERIC_ORDER_FIELDS.has(order.field);
   const comparison = order.direction === 'ASC' ? '>' : '<';
   const sortValue = parameters.add(plan.cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
   const traceId = parameters.add(plan.cursor.traceId, 'String');
@@ -718,7 +735,7 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
   const order = traceOrder(plan);
   const ctes = compileClickHouseTraceCandidates(
     plan,
-    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt, r.timeToFirstChunkMs AS timeToFirstChunkMs',
+    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt, r.timeToFirstChunkMs AS timeToFirstChunkMs, r.timeToFirstTokenMs AS timeToFirstTokenMs',
     parameters,
     QUERY_TRACES_SCOPE,
   );
@@ -1248,6 +1265,9 @@ export async function queryTraces(
     ...(timeToFirstChunkSupported && {
       timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
     }),
+    ...(timeToFirstTokenSupported && {
+      timeToFirstTokenMs: row.timeToFirstTokenMs == null ? null : Number(row.timeToFirstTokenMs),
+    }),
   });
 
   if (plan.paginationMode === 'delta') {
@@ -1276,7 +1296,7 @@ export async function queryTraces(
   // their payloads.
   const keys = await run(compileClickHouseTraceQueryKeys(plan));
   const sortValue = (value: unknown): TraceQuerySortValue =>
-    plan.orderBy.field !== 'timeToFirstChunkMs' ? asIsoTimestamp(value) : value == null ? null : Number(value);
+    !NUMERIC_ORDER_FIELDS.has(plan.orderBy.field) ? asIsoTimestamp(value) : value == null ? null : Number(value);
   let total = Number(keys[0]?.__total ?? 0);
   if (plan.paginationMode === 'page' && keys.length === 0 && plan.page > 0) {
     const [stats] = await run(compileClickHouseTraceQueryTotal(plan));

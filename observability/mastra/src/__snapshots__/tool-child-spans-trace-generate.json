@@ -33,7 +33,8 @@
           "model": "mock-model-id",
           "provider": "mock-provider",
           "availableTools": ["childSpanTool"],
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -82,6 +83,7 @@
                 }
               ],
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -153,6 +155,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -330,6 +333,7 @@
                         }
                       ],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 10,
@@ -503,6 +507,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -744,6 +749,7 @@
                         }
                       ],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,

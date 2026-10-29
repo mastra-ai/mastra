@@ -319,6 +319,44 @@ export function createProviderTests(factory: BrowserFactory) {
             }
           }
         }, 30_000);
+
+        // Issue #28664: a second launch on a reused profile must not read the
+        // first launch's (dead) DevTools port from the profile's launcher logs.
+        it.runIf(config.profile && Boolean(process.env.CHROME_PATH || getSystemChromePath()))(
+          'launch, close, launch again on the same profile',
+          async () => {
+            const profileDir = mkdtempSync(join(tmpdir(), 'browser-test-'));
+            const threadId = config.scope === 'thread' ? THREAD_ID : undefined;
+            let browser: MastraBrowser | undefined;
+
+            try {
+              for (let run = 0; run < 2; run++) {
+                browser = factory.create({ profile: profileDir, scope: config.scope, headless: config.headless });
+                if (threadId) browser.setCurrentThread(threadId);
+
+                await browser.ensureReady();
+                await factory.navigate(browser, TEST_URL, threadId);
+                const pid = await factory.getPid(browser, threadId);
+                expect(pid).toBeDefined();
+
+                if (threadId) {
+                  await browser.closeThreadSession(threadId);
+                }
+                await browser.close();
+                browser = undefined;
+                expect(await waitForProcessExit(pid!, 5000)).toBe(true);
+              }
+            } finally {
+              if (browser) {
+                try {
+                  await browser.close();
+                } catch {}
+              }
+              rmSync(profileDir, { recursive: true, force: true });
+            }
+          },
+          60_000,
+        );
       });
     }
   });

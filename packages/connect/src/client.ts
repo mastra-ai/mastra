@@ -574,13 +574,21 @@ export async function proxyRequestWithResponse(
     headers['base-url-override'] = options.baseUrlOverride;
   }
   const init: RequestInit = { method: options.method, headers };
+  const hasContentType = () => Object.keys(headers).some(name => name.toLowerCase() === 'content-type');
   if (typeof options.body === 'string') {
     // Pre-encoded payloads (multipart, form-encoded) go out unchanged with
     // the caller's content type; only JSON encoding is applied automatically.
-    if (!Object.keys(headers).some(name => name.toLowerCase() === 'content-type')) {
+    if (!hasContentType()) {
       headers['content-type'] = 'text/plain';
     }
     init.body = options.body;
+  } else if (options.body instanceof ArrayBuffer || options.body instanceof Uint8Array) {
+    // Buffer extends Uint8Array, so provider file uploads reach the proxy as
+    // raw bytes instead of being JSON-encoded into an object of numeric keys.
+    if (!hasContentType()) {
+      headers['content-type'] = 'application/octet-stream';
+    }
+    init.body = options.body as RequestInit['body'];
   } else if (options.body !== undefined) {
     headers['content-type'] = 'application/json';
     init.body = JSON.stringify(options.body);
