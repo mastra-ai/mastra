@@ -18,8 +18,25 @@ import {
 import {
   FilterBar,
   FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
   FILTER_BAR_TIME_RANGE_ITEM,
 } from '@mastra/playground-ui/components/FilterBar';
 
-<FilterBar.TimeRange preset={preset} onPresetChange={setPreset} />;
+<FilterBar
+  fields={[FILTER_BAR_TIME_RANGE_FIELD, ...fields]}
+  operators={operators}
+  value={[FILTER_BAR_TIME_RANGE_ITEM, ...items]}
+  onValueChange={setItems}
+>
+  <FilterBar.Chips
+    renderChip={item =>
+      item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
+        <FilterBar.TimeRange preset={preset} onPresetChange={setPreset} />
+      ) : (
+        <FilterBar.Chip item={item} />
+      )
+    }
+  />
+  <FilterBar.Input />
+</FilterBar>;
 ```
