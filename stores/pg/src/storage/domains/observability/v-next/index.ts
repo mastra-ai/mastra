@@ -426,6 +426,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'feedback',
         'trace-query-context-ids',
         ...traceQueryOps.timingFeatures,
+        ...traceQueryOps.outcomeFeatures,
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ] as const;
@@ -452,6 +453,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'feedback',
       'trace-query-context-ids',
       ...traceQueryOps.timingFeatures,
+      ...traceQueryOps.outcomeFeatures,
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
     ] as const;
