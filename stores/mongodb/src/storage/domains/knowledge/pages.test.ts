@@ -1,5 +1,6 @@
 import {
   KnowledgeConflictError,
+  KnowledgePageKeyConflictError,
   KnowledgeMoveTooLargeError,
   KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
@@ -190,12 +191,12 @@ describe('MongoKnowledgePages (schema 4)', () => {
     const y = (await store.materializeScope({ address: 'team:y', declaration: 'team:$t', name: 'Y', provenance })).scope;
     const a = await store.createPage({ parentId: x.id, name: 'a', key: 'dup', provenance });
     await store.createPage({ parentId: y.id, name: 'b', key: 'dup', provenance });
-    await expect(store.movePage({ id: a.id, expectedVersion: 1, parentId: y.id, provenance })).rejects.toBeInstanceOf(KnowledgeConflictError);
+    await expect(store.movePage({ id: a.id, expectedVersion: 1, parentId: y.id, provenance })).rejects.toBeInstanceOf(KnowledgePageKeyConflictError);
     const src = await store.createPage({ parentId: x.id, name: 'src2', provenance });
     await store.createPage({ parentId: src.id, name: 'kid', key: 'dup2', provenance });
     const tgt = await store.createPage({ parentId: y.id, name: 'tgt2', provenance });
     await store.createPage({ parentId: tgt.id, name: 'kid2', key: 'dup2', provenance });
-    await expect(store.mergePages({ sourceId: src.id, sourceVersion: 1, targetId: tgt.id, provenance })).rejects.toBeInstanceOf(KnowledgeConflictError);
+    await expect(store.mergePages({ sourceId: src.id, sourceVersion: 1, targetId: tgt.id, provenance })).rejects.toBeInstanceOf(KnowledgePageKeyConflictError);
     const holder = await store.createPage({ parentId: x.id, name: 'holder', provenance });
     await (await connector.getCollection('mastra_knowledge_pages')).insertMany(
       Array.from({ length: MAX_KNOWLEDGE_MOVE_PAGES + 5 }, (_, i) => ({
