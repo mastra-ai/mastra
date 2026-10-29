@@ -1513,15 +1513,17 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       };
     }
 
-    const page = events.slice(0, limit).map((row): KnowledgePageActivityEvent => ({
-      id: String(row.id),
-      action: String(row.action) as KnowledgePageActivityAction,
-      scopeId: String(row.scopeId),
-      pageId: String(row.pageId),
-      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-      provenance: row.provenance as KnowledgeProvenance,
-      createdAt: new Date(row.createdAt),
-    }));
+    const page = events.slice(0, limit).map(
+      (row): KnowledgePageActivityEvent => ({
+        id: String(row.id),
+        action: String(row.action) as KnowledgePageActivityAction,
+        scopeId: String(row.scopeId),
+        pageId: String(row.pageId),
+        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+        provenance: row.provenance as KnowledgeProvenance,
+        createdAt: new Date(row.createdAt),
+      }),
+    );
     const last = page[page.length - 1];
     return {
       events: page,
