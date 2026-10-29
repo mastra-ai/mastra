@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { buildInsert } from './sql';
+import { describe, expect, it, vi } from 'vitest';
+import type { DbClient } from '../../../client';
+import { buildInsert, insertRows } from './sql';
 
 const LONE_SURROGATE = /\\ud[89ab][0-9a-f]{2}/i;
 
@@ -60,5 +61,52 @@ describe('buildInsert jsonb encoding', () => {
 
   it('preserves a plain string as a valid JSON scalar', () => {
     expect(jsonbValue({ traceId: 't1', input: 'hello' })).toBe('"hello"');
+  });
+});
+
+describe('insertRows partition recovery', () => {
+  const missingPartition = Object.assign(new Error('no partition of relation "mastra_span_events" found for row'), {
+    code: '23514',
+    routine: 'ExecFindPartition',
+  });
+  const row = { traceId: 't1', spanId: 's1', endedAt: new Date() };
+
+  function clientThatLacksTodaysPartition() {
+    const query = vi.fn().mockRejectedValueOnce(missingPartition).mockResolvedValue({ rows: [] });
+    const none = vi.fn(async () => {});
+    const tx = vi.fn(async (fn: (t: { none: typeof none }) => Promise<void>) => fn({ none }));
+    const manyOrNone = vi.fn(async (): Promise<{ relname: string }[]> => []);
+    const oneOrNone = vi.fn(async () => ({ exists: false }));
+    return { client: { query, tx, manyOrNone, oneOrNone } as unknown as DbClient, query, tx, none, oneOrNone };
+  }
+
+  it('creates the day and retries once in native mode', async () => {
+    const { client, query, tx } = clientThatLacksTodaysPartition();
+    await expect(insertRows(client, 'obs', 'mastra_span_events', [row], { mode: 'native' })).resolves.toBeUndefined();
+    expect(tx).toHaveBeenCalledOnce();
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves pg_partman-managed tables alone and rethrows the original error', async () => {
+    const { client, query, tx } = clientThatLacksTodaysPartition();
+    await expect(insertRows(client, 'obs', 'mastra_span_events', [row], { mode: 'partman' })).rejects.toBe(
+      missingPartition,
+    );
+    expect(tx).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledOnce();
+  });
+
+  it('passes a DDL failure that is not a privilege error through unchanged', async () => {
+    const { client, none } = clientThatLacksTodaysPartition();
+    const lockTimeout = Object.assign(new Error('canceling statement due to lock timeout'), { code: '55P03' });
+    none.mockRejectedValue(lockTimeout);
+
+    await expect(insertRows(client, 'obs', 'mastra_span_events', [row], { mode: 'native' })).rejects.toBe(lockTimeout);
+  });
+
+  it('does not detect again when the store already resolved its mode', async () => {
+    const { client, oneOrNone } = clientThatLacksTodaysPartition();
+    await insertRows(client, 'obs', 'mastra_span_events', [row], { mode: 'native' });
+    expect(oneOrNone).not.toHaveBeenCalled();
   });
 });
