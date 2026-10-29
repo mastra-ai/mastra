@@ -1,3 +1,4 @@
+import nodePath from 'node:path';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -37,6 +38,12 @@ export const writeFileTool = createTool({
 
       const size = Buffer.byteLength(content, 'utf-8');
       let output = `Wrote ${size} bytes to ${path}`;
+      // An absolute path can be mapped somewhere else (e.g. `/tmp/x` into
+      // `<workspace>/tmp/x`). Name the real location so later commands find it.
+      const resolvedPath = nodePath.isAbsolute(path) ? filesystem.resolveAbsolutePath?.(path) : undefined;
+      if (resolvedPath && nodePath.normalize(resolvedPath) !== nodePath.normalize(path)) {
+        output += ` (resolved to ${resolvedPath})`;
+      }
       output += await getEditDiagnosticsText(workspace, path, content);
       span.end({ success: true }, { bytesTransferred: size });
       return output;
