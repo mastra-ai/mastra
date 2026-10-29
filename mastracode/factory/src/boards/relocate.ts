@@ -1,10 +1,10 @@
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { holdsLegacyPlanner } from './legacy-plan-role.js';
 import type { BoardRegistry } from './registry.js';
 
 /** Rows that predate persisted boards used source-type routing. */
-export function effectiveBoard(item: WorkItemRow): string {
+export function effectiveBoard(item: Card): string {
   return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
 }
 
@@ -25,7 +25,7 @@ export async function moveCardToBoard({
   workItems: Pick<WorkItemsStorage, 'update' | 'supersedeDecisionsForWorkItem'>;
   boardRegistry: BoardRegistry;
   userId: string;
-  item: WorkItemRow;
+  item: Card;
   targetBoard: string;
   /** Phase to file the card on; defaults to the target board's initial phase. */
   targetStage?: string;
@@ -82,7 +82,7 @@ export async function moveCardToBoard({
   }
 }
 
-export function cardLabels(item: WorkItemRow): string[] {
+export function cardLabels(item: Card): string[] {
   const labels = item.metadata?.labels;
   return Array.isArray(labels) ? labels.filter((label): label is string => typeof label === 'string') : [];
 }

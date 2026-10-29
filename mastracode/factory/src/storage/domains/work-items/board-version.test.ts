@@ -33,7 +33,7 @@ async function seedCard(workItems: WorkItemsStorage, { factoryProjectId = PROJEC
 /** Counts reads of the card table, which is what a cache hit must avoid. */
 function countCardReads(seed: Seed) {
   const findMany = vi.spyOn(seed.storage.ops, 'findMany');
-  return () => findMany.mock.calls.filter(([collection]) => collection === 'work_items').length;
+  return () => findMany.mock.calls.filter(([collection]) => collection === 'factory_board_items').length;
 }
 
 const poll = (workItems: WorkItemsStorage, factoryProjectId = PROJECT) =>
@@ -75,7 +75,7 @@ describe('board list cache', () => {
     await poll(seed.workItems);
     const cardReads = countCardReads(seed);
 
-    await seed.workItems['ops'].updateAtomic('work_items', { id: card.id }, () => null);
+    await seed.workItems['ops'].updateAtomic('factory_board_items', { id: card.id }, () => null);
     await poll(seed.workItems);
 
     expect(cardReads()).toBe(0);

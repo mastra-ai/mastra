@@ -17,10 +17,15 @@ import type { FactoryStorageOps } from '@mastra/core/storage';
 import { externalSourceKey } from '../work-items/base.js';
 import type { ExternalWorkItemSource } from '../work-items/base.js';
 import { bumpBoardVersions, FACTORY_BOARD_VERSIONS_SCHEMA, trackBoardWrites } from '../work-items/board-version.js';
+import { FACTORY_BOARD_ITEMS_SCHEMA } from '../work-items/work-item-schema.js';
 import { fanOutWorkItemActivity, listActivityForUser, PARTICIPANT_SCAN_LIMIT } from './activity.js';
 import type { WorkItemActivityRow } from './activity.js';
 import type { FactoryActorExternalIdentity, FactoryActorRef } from './actor.js';
 import { WORK_ITEM_ACTIVITY_SCHEMA, WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from './schema.js';
+
+function boardItemsTable(): string {
+  return process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run' ? 'work_items' : FACTORY_BOARD_ITEMS_SCHEMA.name;
+}
 
 export type { WorkItemActivityRow } from './activity.js';
 export { WORK_ITEM_ACTIVITY_SCHEMA, WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from './schema.js';
@@ -415,7 +420,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
    * rather than in the fan-out, which must stay free of its own queries.
    */
   async #fanOutActivity(comment: WorkItemCommentRow): Promise<void> {
-    const item = await this.ops.findOne<{ created_by: string } & Record<string, unknown>>('work_items', {
+    const item = await this.ops.findOne<{ created_by: string } & Record<string, unknown>>(boardItemsTable(), {
       id: comment.workItemId,
       org_id: comment.orgId,
       factory_project_id: comment.factoryProjectId,
@@ -479,7 +484,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     );
     const feedActivityAt = latest?.updated_at ?? now;
     await this.ops.updateAtomic<WorkItemFeedColumns>(
-      'work_items',
+      boardItemsTable(),
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
       row => {
         const next = { commentCount, feedActivityAt };

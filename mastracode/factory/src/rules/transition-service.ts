@@ -7,7 +7,7 @@ import { workPullRequestCardRejection } from '../boards/work.js';
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
@@ -110,7 +110,7 @@ export interface FactoryTransitionServiceOptions {
     orgId: string;
     factoryProjectId: string;
     workItemId: string;
-    item: WorkItemRow;
+    item: Card;
   }) => Promise<void> | void;
   /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
   selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -283,7 +283,7 @@ export class FactoryTransitionService {
     return result;
   }
 
-  #notifyCommitted(request: FactoryTransitionRequest, item: WorkItemRow, result: FactoryTransitionResult): void {
+  #notifyCommitted(request: FactoryTransitionRequest, item: Card, result: FactoryTransitionResult): void {
     const onTransitionCommitted = this.#onTransitionCommitted;
     if (!onTransitionCommitted || result.status !== 'accepted') return;
     // Board-neutral: `currentStage` only knows the built-in rule stages.
@@ -308,7 +308,7 @@ export class FactoryTransitionService {
   /** A rejection can outlive its work item: the row still names the id the caller asked for. */
   async #recordTransition(
     request: FactoryTransitionRequest,
-    item: WorkItemRow | undefined,
+    item: Card | undefined,
     result: FactoryTransitionResult,
   ): Promise<void> {
     if (!this.#audit) return;
@@ -352,7 +352,7 @@ export class FactoryTransitionService {
   async #evaluateAndCommit(
     request: FactoryTransitionRequest,
     transitionId: string,
-    item: WorkItemRow,
+    item: Card,
   ): Promise<FactoryTransitionResult> {
     const boards = await this.#boards.load(request);
     if (request.causalChain && request.causalChain.length > MAX_FACTORY_RULE_CAUSAL_DEPTH) {

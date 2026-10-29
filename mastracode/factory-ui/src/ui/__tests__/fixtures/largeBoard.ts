@@ -1,8 +1,30 @@
-import type { WorkItemRow } from '@mastra/factory';
+import type { Card } from '@mastra/factory';
 import type { GithubIssuePage } from '../../domains/factory/services/factory';
 
-export function largeBoard(count: number, factoryProjectId = 'fp-1'): WorkItemRow[] {
+export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
   return Array.from({ length: count }, (_, index) => ({
+    workItemId: `work-large-${index}`,
+    parentBoardItemId: null,
+    workItem: {
+      id: `work-large-${index}`,
+      orgId: 'org-1',
+      factoryProjectId,
+      provider: 'factory',
+      kind: 'issue',
+      externalId: `large-${index}`,
+      key: `large-${index}`.slice(0, 8),
+      url: null,
+      title: `Large task ${index}`,
+      state: 'open',
+      labels: [],
+      author: null,
+      parentWorkItemId: null,
+      metadata: null,
+      revision: 1,
+      syncedAt: null,
+      createdAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
+      updatedAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
+    },
     id: `large-${index}`,
     orgId: 'org-1',
     createdBy: 'user-1',
