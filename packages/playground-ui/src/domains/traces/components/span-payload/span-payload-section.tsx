@@ -131,7 +131,7 @@ export function SpanPayloadSection({
           </DataPanelSectionHeading>
         )}
         {/* Revealed on hover or keyboard focus; `pointer-fine` only, since a touch screen has no hover. */}
-        <div className="ml-auto flex items-center gap-1 group-focus-within/payload:opacity-100 group-hover/payload:opacity-100 motion-safe:transition-opacity pointer-fine:opacity-0">
+        <div className="ml-auto flex items-center gap-1 group-focus-within/payload:opacity-100 group-hover/payload:opacity-100 pointer-fine:opacity-0">
           {hasRich && <ViewToggle view={view} onChange={setView} />}
           <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
         </div>
@@ -183,7 +183,7 @@ export function SpanPayloadJsonSection({ title, icon, raw, layout = 'panel' }: S
           </DataPanelSectionHeading>
         </CollapsibleTrigger>
         {/* Revealed on hover or keyboard focus; `pointer-fine` only, since a touch screen has no hover. */}
-        <div className="ml-auto flex items-center gap-1 group-focus-within/payload:opacity-100 group-hover/payload:opacity-100 motion-safe:transition-opacity pointer-fine:opacity-0">
+        <div className="ml-auto flex items-center gap-1 group-focus-within/payload:opacity-100 group-hover/payload:opacity-100 pointer-fine:opacity-0">
           <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
         </div>
       </div>

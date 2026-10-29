@@ -102,7 +102,7 @@ export const ActivityTrigger = ({ className, children, ...props }: ComponentProp
   return (
     <div
       className={cn(
-        'group/row relative w-full min-w-0 rounded-md transition-colors motion-reduce:transition-none',
+        'group/row relative w-full min-w-0 rounded-md',
         foldable && appearance === 'row' && 'hover:bg-fill',
         className,
       )}

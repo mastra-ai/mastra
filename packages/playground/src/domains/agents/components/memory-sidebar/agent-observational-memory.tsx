@@ -11,7 +11,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks/memory';
@@ -245,10 +244,7 @@ const ObservationalMemoryDisabled = () => (
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
         rel="noopener noreferrer"
-        className={cn(
-          'inline-flex items-center gap-2 text-info-indicator hover:underline',
-          controlStateColorTransition,
-        )}
+        className={cn('inline-flex items-center gap-2 text-info-indicator hover:underline')}
       >
         <Txt as="span" variant="body" className="block">
           Learn about Observational Memory

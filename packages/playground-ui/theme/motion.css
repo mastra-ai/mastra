@@ -1,5 +1,4 @@
 @theme {
-  /* State colour on a control — the only thing a hover is allowed to animate. */
   --duration-fast: 150ms;
   --duration-normal: 200ms;
   --duration-slow: 300ms;

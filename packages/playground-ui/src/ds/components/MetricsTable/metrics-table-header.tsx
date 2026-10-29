@@ -15,7 +15,7 @@ export const FOCUS =
  * brightens while the header is hovered or focused, so it hints without pulling the eye at rest.
  */
 const EXPLAINED =
-  'cursor-help underline decoration-dotted decoration-placeholder/45 underline-offset-4 transition-[text-decoration-color] duration-150 group-hover/header:decoration-placeholder group-focus-visible/header:decoration-placeholder';
+  'cursor-help underline decoration-dotted decoration-placeholder/45 underline-offset-4 group-hover/header:decoration-placeholder group-focus-visible/header:decoration-placeholder';
 
 type HeaderTextProps = {
   header: string;

@@ -5,7 +5,6 @@ import { SlashIcon } from '../../icons/SlashIcon';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { PopupAnchorProvider } from '@/ds/primitives/popup-anchor';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -84,7 +83,6 @@ export const Crumb = ({
             // icon-sm control sitting next to it share height, radius, padding and colors.
             'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full px-[.9em]',
             controlSizeClasses.sm,
-            controlStateColorTransition,
             // Long labels truncate: the current crumb gets more room than nav crumbs.
             isCurrent
               ? 'max-w-xs cursor-default text-foreground'

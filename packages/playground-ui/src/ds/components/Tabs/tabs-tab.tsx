@@ -3,7 +3,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -75,7 +75,6 @@ export const Tab = ({
           quietTextHover,
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
-          controlStateColorTransition,
           focusRing,
           'data-[active]:text-foreground',
           'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground',

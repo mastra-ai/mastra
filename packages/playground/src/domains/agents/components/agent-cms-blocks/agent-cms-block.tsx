@@ -19,7 +19,6 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
@@ -196,11 +195,8 @@ const InlineBlockContent = ({
     <>
       <div className="group relative rounded-md hover:bg-fill-subtle">
         {!readOnly && (
-          <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
-            <div
-              {...dragHandleProps}
-              className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
-            >
+          <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+            <div {...dragHandleProps} className={cn('cursor-grab active:cursor-grabbing', quietTextHover)}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Icon>
@@ -214,7 +210,7 @@ const InlineBlockContent = ({
         )}
 
         {!readOnly && (
-          <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+          <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
             <DisplayConditionsDialog
               entityName={`Block ${index + 1}`}
               schema={schema}

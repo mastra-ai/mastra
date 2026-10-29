@@ -20,8 +20,7 @@ export function MetricsCardActions({
     <div
       className={cn(
         'flex shrink-0 items-center gap-1 self-center',
-        reveal === 'hover' &&
-          'opacity-0 transition-opacity duration-150 group-hover/metrics-card:opacity-100 focus-within:opacity-100',
+        reveal === 'hover' && 'opacity-0 group-hover/metrics-card:opacity-100 focus-within:opacity-100',
         className,
       )}
     >

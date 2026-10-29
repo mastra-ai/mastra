@@ -6,7 +6,6 @@ import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
 import type { ThemeLifeline, ThemeLifelinePoint } from './theme-lifelines-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { Txt } from '@/ds/components/Txt';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -64,7 +63,7 @@ export function LifelineRow({
       <Txt
         as="span"
         variant="caption"
-        className={cn(quietTextHoverInGroup, controlStateColorTransition, 'w-52 shrink-0 truncate text-right')}
+        className={cn(quietTextHoverInGroup, 'w-52 shrink-0 truncate text-right')}
         title={row.label}
       >
         {row.label}

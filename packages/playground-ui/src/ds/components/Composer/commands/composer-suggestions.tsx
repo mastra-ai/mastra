@@ -44,7 +44,7 @@ export function ComposerSuggestions({
             <div className="border-b border-border px-1.5 py-1">
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-caption text-muted-foreground transition-colors duration-normal ease-out-custom hover:bg-fill-subtle hover:text-foreground motion-reduce:transition-none"
+                className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-caption text-muted-foreground hover:bg-fill-subtle hover:text-foreground motion-reduce:transition-none"
                 aria-label="Back to slash commands"
                 onMouseDown={event => event.preventDefault()}
                 onClick={onBack}
@@ -68,7 +68,7 @@ export function ComposerSuggestions({
                     aria-selected={index === activeIndex}
                     aria-current={item.active ? 'true' : undefined}
                     className={cn(
-                      'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-caption transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
+                      'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-caption',
                       index === activeIndex
                         ? 'bg-fill-subtle text-foreground'
                         : 'text-muted-foreground hover:bg-fill-subtle hover:text-foreground',

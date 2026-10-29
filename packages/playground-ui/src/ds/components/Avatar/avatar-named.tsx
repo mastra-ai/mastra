@@ -3,7 +3,6 @@ import { useContext, useState } from 'react';
 import { Txt } from '../Txt/Txt';
 import { AvatarSizeContext, avatarSizeClasses } from './avatar-size';
 import type { AvatarSize } from './avatar-size';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type AvatarProps = {
@@ -31,7 +30,6 @@ export function AvatarNamed({ src, name, size, interactive = false, color, textC
         avatarSizeClasses[resolvedSize],
         'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border',
         !showFallbackTint && 'bg-fill',
-        controlStateColorTransition,
         interactive && 'cursor-pointer hover:border-border-hover',
       )}
       style={showFallbackTint ? { backgroundColor: color } : undefined}

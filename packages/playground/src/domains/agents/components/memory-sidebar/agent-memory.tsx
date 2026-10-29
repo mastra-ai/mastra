@@ -4,7 +4,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import {
@@ -207,10 +206,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 href="https://mastra.ai/en/docs/memory/semantic-recall"
                 target="_blank"
                 rel="noopener noreferrer"
-                className={cn(
-                  'inline-flex items-center gap-2 text-info-indicator hover:underline',
-                  controlStateColorTransition,
-                )}
+                className={cn('inline-flex items-center gap-2 text-info-indicator hover:underline')}
               >
                 <Txt as="span" variant="body" className="block">
                   Learn about semantic recall

@@ -1,6 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
@@ -214,7 +214,6 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                   className={cn(
                     'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-card',
                     quietTextHoverInGroup,
-                    controlStateColorTransition,
                   )}
                 >
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
@@ -223,7 +222,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                   <Txt variant="column" tone="ink">
                     {starterPrompt.title}
                   </Txt>
-                  <Txt variant="meta" className={cn('mt-1', quietTextHoverInGroup, controlStateColorTransition)}>
+                  <Txt variant="meta" className={cn('mt-1', quietTextHoverInGroup)}>
                     {starterPrompt.description}
                   </Txt>
                 </span>

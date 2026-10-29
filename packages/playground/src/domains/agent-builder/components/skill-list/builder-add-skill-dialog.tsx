@@ -17,7 +17,6 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, Download, ExternalLink, Loader2, Package } from 'lucide-react';
@@ -293,7 +292,7 @@ export function BuilderAddSkillDialog({
                           href={githubUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={cn(quietTextHover, controlStateColorTransition)}
+                          className={quietTextHover}
                           title="View on GitHub"
                         >
                           <ExternalLink className="h-4 w-4" />

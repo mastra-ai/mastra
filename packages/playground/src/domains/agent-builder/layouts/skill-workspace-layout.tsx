@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeftIcon } from 'lucide-react';
@@ -93,7 +92,6 @@ export const SkillWorkspaceLayout = ({
               className={cn(
                 'text-foreground',
                 'relative z-10 flex-1 rounded-full outline-none',
-                controlStateColorTransition,
                 activeTab === 'chat' ? '' : quietTextHover,
               )}
             >
@@ -110,7 +108,6 @@ export const SkillWorkspaceLayout = ({
               className={cn(
                 'text-foreground',
                 'relative z-10 flex-1 rounded-full outline-none',
-                controlStateColorTransition,
                 activeTab === 'configure' ? '' : quietTextHover,
               )}
             >

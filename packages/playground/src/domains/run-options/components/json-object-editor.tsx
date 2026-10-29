@@ -5,9 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Braces, CopyIcon, X, Check } from 'lucide-react';
@@ -108,7 +106,7 @@ export const JsonObjectEditor = ({
     setSelectedPreset(getMatchingPresetKey(presets, valueStr));
   };
 
-  const buttonClass = cn(quietTextHover, controlStateColorTransition);
+  const buttonClass = quietTextHover;
 
   const handleFormat = async () => {
     if (!isValidJson(draft)) {

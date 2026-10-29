@@ -117,7 +117,7 @@ function CommandPaletteScope({
         quietTextHover,
         'flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left text-body-sm hover:border-border hover:bg-fill-subtle data-[active=true]:border-border data-[active=true]:bg-fill-hover data-[active=true]:text-foreground',
         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
-        'transition-[color,transform] duration-fast ease-out-custom active:scale-[0.99] motion-reduce:transition-none',
+        'transition-[scale] duration-fast ease-out-custom active:scale-[0.99] motion-reduce:transition-none',
       )}
       data-active={active}
       aria-pressed={active}

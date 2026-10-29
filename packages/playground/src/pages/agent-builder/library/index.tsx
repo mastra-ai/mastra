@@ -7,7 +7,6 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -142,7 +141,6 @@ export default function AgentBuilderLibraryPage() {
                       className={cn(
                         'text-foreground',
                         'px-3 py-1.5',
-                        controlStateColorTransition,
                         tab === 'agents' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >
@@ -155,7 +153,6 @@ export default function AgentBuilderLibraryPage() {
                       className={cn(
                         'text-foreground',
                         'px-3 py-1.5',
-                        controlStateColorTransition,
                         tab === 'skills' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >

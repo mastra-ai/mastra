@@ -7,7 +7,6 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
@@ -746,13 +745,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 <Txt variant="caption" tone="muted">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
                   <Tooltip>
-                    <TooltipTrigger
-                      className={cn(
-                        'inline cursor-pointer underline decoration-dotted',
-                        quietTextHover,
-                        controlStateColorTransition,
-                      )}
-                    >
+                    <TooltipTrigger className={cn('inline cursor-pointer underline decoration-dotted', quietTextHover)}>
                       use variables
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="start" className="max-w-72">

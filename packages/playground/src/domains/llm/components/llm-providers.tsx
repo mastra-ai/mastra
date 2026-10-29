@@ -65,7 +65,7 @@ export const LLMProviders = ({
       end: provider.docUrl ? (
         <Info
           className={cn(
-            'size-3.5 cursor-pointer opacity-0 transition-opacity duration-100',
+            'size-3.5 cursor-pointer opacity-0',
             quietTextHover,
             'hover:opacity-100',
             'group-data-[highlighted]/item:opacity-100',

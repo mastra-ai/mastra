@@ -19,8 +19,6 @@ const MENU_ITEM_OVERRIDES = cn(
   // height becomes the floor so single-line rows keep the control rhythm and a
   // taller item grows instead of overflowing into its neighbour.
   'h-auto min-h-control-md py-1',
-  // Rows in a list switch instantly: no colour fade inherited from Button.
-  'transition-none',
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
   // The library's highlight (`data-highlighted`, which follows both the pointer and the

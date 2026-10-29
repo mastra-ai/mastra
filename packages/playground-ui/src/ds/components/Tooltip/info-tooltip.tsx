@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import type { TooltipContentProps } from './tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 type InfoTooltipProps = {
@@ -34,7 +34,6 @@ function InfoTooltip({ children, side = 'top', align, contentClassName, ...name 
             // A step quieter than the placeholder grey at rest, so it reads as a hint, not a control.
             className={cn(
               'flex shrink-0 cursor-help items-center rounded-full text-placeholder/80 hover:text-muted-foreground focus-visible:text-muted-foreground',
-              controlStateColorTransition,
               focusRing,
             )}
           />

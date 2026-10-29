@@ -7,7 +7,6 @@ import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 import { Spinner } from '@/ds/components/Spinner';
 import { getShortId } from '@/ds/components/Text';
 import { Txt } from '@/ds/components/Txt';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
 import { formatDate } from '@/utils/date-format';
@@ -97,7 +96,7 @@ function TraceScoreReason({ reason }: { reason: string }) {
           <button
             type="button"
             onClick={() => setExpanded(value => !value)}
-            className={cn(quietTextHover, controlStateColorTransition, 'relative z-10 underline underline-offset-2')}
+            className={cn(quietTextHover, 'relative z-10 underline underline-offset-2')}
           >
             <Txt as="span" variant="caption">
               {expanded ? 'Read less' : 'Read more'}

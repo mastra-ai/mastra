@@ -17,7 +17,6 @@ import { useTraceIntelligence } from './use-trace-intelligence';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -160,7 +159,6 @@ export function SortableSignalHeaders({
                               aria-label={`Reorder ${label}`}
                               className={cn(
                                 quietTextHover,
-                                controlStateColorTransition,
                                 'absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50',
                               )}
                               style={{ left: '100%' }}

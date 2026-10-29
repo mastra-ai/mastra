@@ -1,6 +1,5 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckIcon } from 'lucide-react';
@@ -53,7 +52,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
           type="button"
           onClick={onRetry}
           data-testid="agent-builder-autosave-retry"
-          className={cn('underline underline-offset-2', quietTextHover, controlStateColorTransition)}
+          className={cn('underline underline-offset-2', quietTextHover)}
         >
           <Txt as="span" variant="caption">
             Retry

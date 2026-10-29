@@ -19,7 +19,7 @@ export function AttachmentCard({ name, typeLabel, icon, preview, onClick, href, 
     messageSurfaceStyle,
     'relative isolate block w-64 max-w-full min-w-0 overflow-hidden text-left',
     (onClick || href) &&
-      'cursor-pointer hover:bg-fill-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus motion-safe:transition-colors',
+      'cursor-pointer hover:bg-fill-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
   );
   const content = (
     <>

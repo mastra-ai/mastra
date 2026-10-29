@@ -14,7 +14,7 @@ export const WorkspaceLink = ({ href, icon, children }: WorkspaceLinkProps) => {
   return (
     <Link
       href={href}
-      className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-fill hover:text-foreground"
+      className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
     >
       {icon}
       <Txt as="span" variant="meta" className="truncate">

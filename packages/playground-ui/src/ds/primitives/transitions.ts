@@ -1,17 +1,15 @@
-// Motion policy for interactive state (hover / press / open / focus)
+// Motion policy for interactive state (hover / press / focus)
 //
-// A control's BACKGROUND switches instantly; only its COLOUR fades, over
-// 150ms. Hover fires more than any other interaction — sweeping a cursor
-// across a nav crosses ten rows a second — and fading the fill leaves the
-// surface trailing the pointer, while the colour crossfade is what stops the
-// label from snapping. This is measured from Linear, whose rows carry exactly
-// `transition: color 0.15s` and no background transition.
+// State changes are instant: a control's background, text, border and icon
+// switch the moment the pointer arrives or leaves, with no transition. Hover
+// fires more than any other interaction (sweeping a cursor across a nav
+// crosses ten rows a second), and any fade leaves the surface trailing the
+// pointer. Nothing follows the pointer between items either: each row paints
+// its own hover.
 //
 // Animate what moves or arrives instead: overlays entering, panels collapsing,
-// a switch thumb travelling. Those happen once per intent, not ten times a
-// second. https://craft.gustavofior.com/hover-restraint
-export const controlStateColorTransition =
-  'transition-[color] duration-fast ease-out-custom motion-reduce:transition-none';
+// a switch thumb travelling, a chevron turning. Those happen once per intent,
+// not ten times a second. https://craft.gustavofior.com/hover-restraint
 
 export const heightTransition = 'transition-[height] duration-normal ease-out-custom motion-reduce:transition-none';
 

@@ -30,13 +30,13 @@ interface AddBlockButtonProps {
 const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonProps) => {
   return (
     <div className={cn('group/add flex items-center gap-2 py-0.5', className)}>
-      <div className="h-px flex-1 bg-border opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
+      <div className="h-px flex-1 bg-border opacity-0 group-hover/add:opacity-100" />
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
             className={cn(
-              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100',
+              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100',
               focusRing,
               quietTextHover,
             )}
@@ -61,7 +61,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
-      <div className="h-px flex-1 bg-border opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
+      <div className="h-px flex-1 bg-border opacity-0 group-hover/add:opacity-100" />
     </div>
   );
 };

@@ -19,7 +19,7 @@ export function ShowMore({
   if (total <= limit) return null;
   const left = total - shown;
   const button =
-    'flex items-center gap-1.5 rounded-md px-2 py-1 text-body-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-fill-subtle hover:text-foreground';
+    'flex items-center gap-1.5 rounded-md px-2 py-1 text-body-sm font-medium text-muted-foreground hover:bg-fill-subtle hover:text-foreground';
   const n = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
   return (
     <li className="-mx-2 flex items-center gap-1">

@@ -2,7 +2,6 @@ import { File, Folder } from 'lucide-react';
 import * as React from 'react';
 import { useTreeDepth } from './tree-context';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface TreeInputProps {
@@ -69,7 +68,6 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
         data-tree-item-kind="input"
         className={cn(
           'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
-          transitions.colors,
           'focus-within:bg-fill-subtle focus-within:text-foreground focus-within:outline-hidden',
           className,
         )}

@@ -23,7 +23,6 @@ import {
   menuItemButtonClass,
   menuItemTrailingIconClass,
 } from '@/ds/primitives/menu-item';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -191,12 +190,7 @@ export function PropertyFilterCreator({
         <div className={cn('grid', selectedField && 'gap-3')}>
           {selectedField && (
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                aria-label="Back to properties"
-                className={cn(quietTextHover, controlStateColorTransition)}
-                onClick={reset}
-              >
+              <button type="button" aria-label="Back to properties" className={quietTextHover} onClick={reset}>
                 <ArrowLeftIcon className="size-4" />
               </button>
               <FilterIcon className="size-4 shrink-0 text-muted-foreground" />

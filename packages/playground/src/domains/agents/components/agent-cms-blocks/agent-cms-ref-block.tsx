@@ -8,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
@@ -113,11 +112,8 @@ const RefBlockContent = ({
     <div className="group relative rounded-md hover:bg-fill-subtle">
       {/* Left gutter — drag handle (visible on hover/focus-within) */}
       {!readOnly && (
-        <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
-          <div
-            {...dragHandleProps}
-            className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
-          >
+        <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+          <div {...dragHandleProps} className={cn('cursor-grab active:cursor-grabbing', quietTextHover)}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Icon>
@@ -170,12 +166,7 @@ const RefBlockContent = ({
                     <button
                       type="button"
                       aria-label={`Open actions for ${promptBlock.name}`}
-                      className={cn(
-                        'rounded p-0.5 hover:bg-fill-subtle',
-                        !onRulesChange && 'ml-auto',
-                        quietTextHover,
-                        controlStateColorTransition,
-                      )}
+                      className={cn('rounded p-0.5 hover:bg-fill-subtle', !onRulesChange && 'ml-auto', quietTextHover)}
                     >
                       <Icon className="h-3! w-3!">
                         <ChevronDown />

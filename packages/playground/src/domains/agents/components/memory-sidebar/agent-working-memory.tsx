@@ -8,7 +8,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemoryConfig } from '@mastra/react/hooks/memory';
@@ -130,7 +130,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                               as="span"
                               variant="meta"
                               tone="muted"
-                              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-card px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-card px-1.5 py-0.5 opacity-0 group-hover:opacity-100"
                             >
                               Click to copy
                             </Txt>
@@ -224,10 +224,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             href="https://mastra.ai/en/docs/memory/working-memory"
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-              'inline-flex items-center gap-2 text-info-indicator hover:underline',
-              controlStateColorTransition,
-            )}
+            className={cn('inline-flex items-center gap-2 text-info-indicator hover:underline')}
           >
             <Txt as="span" variant="body" className="block">
               Learn about working memory

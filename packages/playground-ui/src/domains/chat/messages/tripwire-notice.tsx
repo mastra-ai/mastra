@@ -28,7 +28,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
+              className="flex w-fit items-center gap-1.5 opacity-70 hover:opacity-100"
             >
               {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
               <Txt as="span" variant="caption">

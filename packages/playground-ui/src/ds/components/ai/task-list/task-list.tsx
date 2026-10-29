@@ -9,7 +9,7 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { focusRing, transitions } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type TaskListItem = TaskItem;
@@ -273,7 +273,6 @@ export const TaskList = ({
           }}
           className={cn(
             'grid size-6 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground',
-            transitions.colors,
             focusRing,
             !open && 'group-hover/task-list:text-foreground',
           )}
