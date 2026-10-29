@@ -22,6 +22,8 @@ export const TRACE_AGGREGATE_DIMENSION_REGISTRY = {
   entityId: stringDimension(),
   environment: stringDimension(),
   status: stringDimension(),
+  outcome: stringDimension(),
+  stopReason: stringDimension(),
   serviceName: stringDimension(),
   executionSource: stringDimension(),
   threadId: stringDimension(),

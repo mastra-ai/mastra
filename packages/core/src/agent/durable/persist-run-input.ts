@@ -13,6 +13,8 @@ type SavedInput = { threadId: string; resourceId: string; memoryConfig?: MemoryC
 type TimeoutNoticeState = { input: Promise<SavedInput | undefined>; notice?: Promise<void> };
 
 const timeoutNoticeStates = new WeakMap<RunRegistryEntry, TimeoutNoticeState>();
+// An input saved twice (again at the deadline, after the first save lost its claim) still gets one notice.
+const noticedEntries = new WeakSet<RunRegistryEntry>();
 
 function isTotalTimeout(error: unknown): boolean {
   return isMastraTimeoutError(error) && error.timeoutType === 'total';
@@ -21,7 +23,8 @@ function isTotalTimeout(error: unknown): boolean {
 /** Save the notice once, after the input, on the same save queue. */
 function saveTimeoutNotice(entry: RunRegistryEntry, state: TimeoutNoticeState, error: unknown): Promise<void> {
   state.notice ??= state.input.then(async saved => {
-    if (!saved || !entry.saveQueueManager) return;
+    if (!saved || !entry.saveQueueManager || noticedEntries.has(entry)) return;
+    noticedEntries.add(entry);
     const notice = new MessageList({ threadId: saved.threadId, resourceId: saved.resourceId });
     notice.add(
       createTotalTimeoutNoticeMessage({ error, threadId: saved.threadId, resourceId: saved.resourceId }),
@@ -55,14 +58,20 @@ export async function persistDurableTimeoutNotice(
  * entry, before the run starts. No-op when the entry lacks memory or a message
  * list, the thread is unknown, memory is read-only, or an input processor
  * tripped the run.
+ *
+ * `entry` overrides the registry lookup, for a caller that captured it before
+ * the run could be cleaned up. With `assertOwnership: false` the save skips the
+ * execution ownership check and relies on the run fence in scope, for a caller
+ * already writing under a claim that replaced the execution's own.
  * @internal
  */
 export async function persistDurableRunInput(
   runId: string,
   workflowInput: Pick<DurableAgenticWorkflowInput, 'agentId' | 'state' | 'options'>,
   mastra: Mastra | undefined,
+  options: { entry?: RunRegistryEntry; assertOwnership?: boolean } = {},
 ): Promise<void> {
-  const entry = getRunRegistryEntry(runId, mastra);
+  const entry = options.entry ?? getRunRegistryEntry(runId, mastra);
   const state = workflowInput.state;
   if (
     !entry?.saveQueueManager ||
@@ -92,6 +101,7 @@ export async function persistDurableRunInput(
   const save = entry.saveQueueManager.flushMessages(entry.messageList.clone(), state.threadId, state.memoryConfig, {
     throwOnError: true,
     beforePersist: async () => {
+      if (options.assertOwnership === false) return;
       try {
         await assertExecutionOwned({
           runId,

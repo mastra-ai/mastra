@@ -68,6 +68,18 @@ export const timingFeatures = [
     : []),
 ];
 
+/**
+ * Outcome fields follow the same rule: core before them rejects their predicates and strict rows,
+ * so they are only returned and declared when core knows them.
+ */
+export const spanQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {});
+export const traceQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+
+export const outcomeFeatures = [
+  ...(spanQueryOutcomeFieldsSupported ? (['span-query-outcome-fields'] as const) : []),
+  ...(traceQueryOutcomeFieldsSupported ? (['trace-query-outcome-fields'] as const) : []),
+];
+
 /** Order fields holding numbers that can be empty; the rest are timestamps. */
 const NUMERIC_ORDER_FIELDS = new Set<string>(['timeToFirstChunkMs', 'timeToFirstTokenMs']);
 
@@ -100,6 +112,8 @@ const TRACE_FIELDS = {
   spanType: { sql: 'r.spanType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
+  outcome: { sql: 'r.outcome', parameterType: 'String' },
+  stopReason: { sql: 'r.stopReason', parameterType: 'String' },
   tags: { sql: 'r.tags', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQueryField>;
 
@@ -114,6 +128,8 @@ const SPAN_FIELDS = {
   timeToFirstChunkMs: { sql: 's.timeToFirstChunkMs', parameterType: 'Float64' },
   timeToFirstTokenMs: { sql: 's.timeToFirstTokenMs', parameterType: 'Float64' },
   status: { sql: 's.status', parameterType: 'String' },
+  outcome: { sql: 's.outcome', parameterType: 'String' },
+  stopReason: { sql: 's.stopReason', parameterType: 'String' },
   error: { sql: 's.error', parameterType: 'String' },
   entityType: { sql: 's.entityType', parameterType: 'String' },
   entityId: { sql: 's.entityId', parameterType: 'String' },
@@ -193,6 +209,9 @@ const TRACE_SELECT = `
   r.environment AS environment,
   r.timeToFirstChunkMs AS timeToFirstChunkMs,
   r.timeToFirstTokenMs AS timeToFirstTokenMs,
+  r.outcome AS outcome,
+  r.stopReason AS stopReason,
+  r.stopReasonContext AS stopReasonContext,
   ${TRACE_STATUS_SQL} AS status`;
 
 export class ParameterBuilder {
@@ -550,6 +569,8 @@ function compileClickHouseTraceScope(
       timeToFirstChunkMs,
       timeToFirstTokenMs,
       if(isNotNull(error), 'error', 'success') AS status,
+      outcome,
+      stopReason,
       error,
       entityType,
       entityId,
@@ -697,7 +718,7 @@ export function compileClickHouseTraceCandidates(
 const QUERY_TRACES_SCOPE = { oneRootPerTrace: true, spanExistence: true } as const;
 
 const TRACE_LIST_SELECT = TRACE_SELECT.split('\n')
-  .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview),$/.test(line))
+  .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview|stopReasonContext),$/.test(line))
   .join('\n');
 
 type TraceOrder = { field: coreStorage.TraceQueryOrderField; direction: 'ASC' | 'DESC' };
@@ -932,7 +953,7 @@ export function compileClickHouseTraceRootPayloads(
       `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.dedupeKey, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")}, ${tenant(key.organizationId)}, ${tenant(key.resourceId)})`,
   );
   return {
-    query: `SELECT traceId, spanId AS rootSpanId, dedupeKey, organizationId, resourceId, ${columns === 'payload' ? `metadataRaw AS metadata, ${PREVIEW_COLUMNS.join(', ')}` : 'input, output, error'}
+    query: `SELECT traceId, spanId AS rootSpanId, dedupeKey, organizationId, resourceId, ${columns === 'payload' ? `metadataRaw AS metadata, stopReasonContext, ${PREVIEW_COLUMNS.join(', ')}` : 'input, output, error'}
 FROM ${TABLE_TRACE_ROOTS}
 WHERE (startedAt, traceId, dedupeKey, endedAt, ifNull(organizationId, ''), isNull(organizationId), ifNull(resourceId, ''), isNull(resourceId)) IN (${tuples.join(', ')})${compileTenantScope(scope, parameters)}
 ORDER BY ${ROOT_VERSION_ORDER}
@@ -1269,6 +1290,11 @@ export async function queryTraces(
     }),
     ...(timeToFirstTokenSupported && {
       timeToFirstTokenMs: row.timeToFirstTokenMs == null ? null : Number(row.timeToFirstTokenMs),
+    }),
+    ...(traceQueryOutcomeFieldsSupported && {
+      outcome: row.outcome == null ? null : String(row.outcome),
+      stopReason: row.stopReason == null ? null : String(row.stopReason),
+      stopReasonContext: (parseJson(row.stopReasonContext) ?? null) as Record<string, unknown> | null,
     }),
   });
 

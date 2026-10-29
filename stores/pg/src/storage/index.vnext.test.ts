@@ -153,6 +153,8 @@ describe('PostgresStoreVNext', () => {
           'trace-query-time-to-first-chunk-sort',
           'trace-query-time-to-first-token',
           'trace-query-time-to-first-token-sort',
+          'span-query-outcome-fields',
+          'trace-query-outcome-fields',
           'trace-query-root-span-fields',
           'trace-query-root-entity-id',
         ]);
@@ -184,6 +186,8 @@ describe('PostgresStoreVNext', () => {
           'trace-query-time-to-first-chunk-sort',
           'trace-query-time-to-first-token',
           'trace-query-time-to-first-token-sort',
+          'span-query-outcome-fields',
+          'trace-query-outcome-fields',
           'trace-query-root-span-fields',
           'trace-query-root-entity-id',
         ]);
