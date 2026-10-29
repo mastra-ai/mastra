@@ -184,6 +184,43 @@ describe('createToolCallStep delegated run identity provenance', () => {
     expect(carouselOwners.map(m => m.id)).toEqual(['earlier-assistant']);
   });
 
+  it('suspends without announcing the suspension when the pre-suspension flush fails', async () => {
+    // A consumer that reacts to `tool-call-suspended` (a resume, or an abort that must
+    // settle the parked call) looks the call up in memory. If the flush failed the call
+    // was never stored, so the chunk must be withheld - but the run still has to suspend,
+    // otherwise it can never be resumed.
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add({ id: 'user-1', role: 'user', content: 'process this' }, 'input');
+    const enqueue = vi.fn();
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const tool = createTool({
+      id: 'suspend-tool',
+      description: 'Suspends until resumed',
+      inputSchema: z.object({ data: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async (_input, context) => await context?.agent?.suspend?.({ reason: 'waiting' }),
+    });
+    const flushMessages = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const toolCallStep = createToolCallStep({
+      tools: { suspendTool: tool } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue },
+      runId: 'flush-failure-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        inputData: { toolCallId: 'call-suspend-1', toolName: 'suspendTool', args: { data: 'x' } },
+      }),
+    );
+
+    expect(flushMessages).toHaveBeenCalled();
+    expect(suspend).toHaveBeenCalled();
+    expect(enqueue.mock.calls.map(([chunk]: [any]) => chunk.type)).not.toContain('tool-call-suspended');
+  });
+
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
     const runResume = async (suspendedToolCallId: string, suspendedToolRunId: string) => {
       const execute = vi.fn(async () => ({ ok: true }));

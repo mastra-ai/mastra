@@ -370,7 +370,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         safeEnqueue(controller, resumedChunk);
       };
 
-      // Helper function to flush messages before suspension
+      // Helper function to flush messages before suspension. Returns false when the flush
+      // failed: the caller then skips publishing the suspension chunk, because a consumer
+      // reacting to it would look for a parked call that memory never received. The run must
+      // still suspend, so the failure is logged rather than thrown.
       const flushMessagesBeforeSuspension = async () => {
         const saveQueueManager = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
         const memoryConfig = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
@@ -379,7 +382,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const memory = readScoped(scopeCtx, MEMORY_KEY, 'memory');
 
         if (!saveQueueManager || !threadId || memoryConfig?.readOnly) {
-          return;
+          return true;
         }
 
         try {
@@ -400,8 +403,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           // Flush all pending messages immediately
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+          return true;
         } catch (error) {
           logger?.error('Error flushing messages before suspension:', error);
+          return false;
         }
       };
 
@@ -604,15 +609,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
 
             // Flush messages before suspension to ensure they are persisted
-            await flushMessagesBeforeSuspension();
+            const flushed = await flushMessagesBeforeSuspension();
 
             // Publish only after the approval state is persisted: a consumer that reacts
             // to this chunk (approve/decline, or abort) must find the parked tool call
-            // in memory instead of racing the flush still in flight (#1932).
-            if (outputWriter) {
-              await outputWriter(approvalChunk);
-            } else {
-              safeEnqueue(controller, approvalChunk);
+            // in memory instead of racing the flush still in flight (#1932). When the
+            // flush failed, publishing would send that consumer after a call the store
+            // never received, so the run suspends without announcing it.
+            if (flushed) {
+              if (outputWriter) {
+                await outputWriter(approvalChunk);
+              } else {
+                safeEnqueue(controller, approvalChunk);
+              }
             }
 
             return suspend(
@@ -668,12 +677,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
 
           // Flush messages before suspension to ensure they are persisted
-          await flushMessagesBeforeSuspension();
+          const flushed = await flushMessagesBeforeSuspension();
 
           // Publish only after the parked tool call is persisted: a consumer that reacts
           // to this chunk (abort, resume) must find the suspended invocation in memory
-          // instead of racing the flush still in flight (#1932).
-          safeEnqueue(controller, suspensionChunk);
+          // instead of racing the flush still in flight (#1932). If the flush failed, the
+          // run still suspends but stays silent, so no consumer acts on a missing call.
+          if (flushed) {
+            safeEnqueue(controller, suspensionChunk);
+          }
 
           return await suspend(
             {
@@ -757,13 +769,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
 
             // Flush messages before suspension to ensure they are persisted
-            await flushMessagesBeforeSuspension();
+            const flushed = await flushMessagesBeforeSuspension();
 
-            // Publish only after the approval state is persisted (#1932).
-            if (outputWriter) {
-              await outputWriter(approvalChunk);
-            } else {
-              safeEnqueue(controller, approvalChunk);
+            // Publish only after the approval state is persisted (#1932). A failed flush
+            // means the parked call never reached the store, so the run suspends quietly
+            // rather than inviting an approval that cannot be resolved.
+            if (flushed) {
+              if (outputWriter) {
+                await outputWriter(approvalChunk);
+              } else {
+                safeEnqueue(controller, approvalChunk);
+              }
             }
 
             return suspend(
