@@ -203,9 +203,13 @@ describe('handleBrowserCommand', () => {
     browserInstance.retire.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
     const losing = handleBrowserCommand(ctx, ['on']);
     await vi.waitFor(() => expect(finishOldClose).toBeDefined());
-    await handleBrowserCommand(ctx, ['on']);
+    const winning = handleBrowserCommand(ctx, ['on']);
+    await vi.waitFor(() => expect(browserMocks.createBrowserFromSettings).toHaveBeenCalledTimes(3));
+    await new Promise(r => setTimeout(r, 0));
+    // The old browser still holds the profile, so the replacement is not handed out yet.
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(second);
     finishOldClose();
-    await losing;
+    await Promise.all([losing, winning]);
 
     expect(first.retire).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(first);
@@ -232,9 +236,13 @@ describe('handleBrowserCommand', () => {
     browserInstance.retire.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
     const losing = handleBrowserCommand(ctx, ['clear']);
     await vi.waitFor(() => expect(finishOldClose).toBeDefined());
-    await handleBrowserCommand(ctx, ['on']);
+    const winning = handleBrowserCommand(ctx, ['on']);
+    await vi.waitFor(() => expect(browserMocks.createBrowserFromSettings).toHaveBeenCalledTimes(3));
+    await new Promise(r => setTimeout(r, 0));
+    // The old browser still holds the profile, so the replacement is not handed out yet.
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(second);
     finishOldClose();
-    await losing;
+    await Promise.all([losing, winning]);
 
     expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(cleared);
     expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);

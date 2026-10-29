@@ -48,20 +48,30 @@ export function discardBrowser(browser: MastraBrowser): Promise<void> {
 }
 
 /**
+ * Every close still in flight, chained so a later replacement (or exit) waits
+ * for all of them, not just the browser it replaced. Each browser is retired once.
+ */
+let retiring: Promise<void> = Promise.resolve();
+let retiringBrowser: MastraBrowser | undefined;
+
+/**
  * Make `next` the active browser, closing the previous one first so it
- * releases its profile before `next` launches on it.
+ * releases its profile before `next` launches on it. Also waits for any
+ * browser an earlier replacement is still closing.
  *
- * Returns whether `next` is still the active browser once the previous one is
- * closed. False means a later call replaced (and closed) it meanwhile, so the
- * caller must not hand `next` to agents.
+ * Returns whether `next` is still the active browser once those closes finish.
+ * False means a later call replaced (and closed) it meanwhile, so the caller
+ * must not hand `next` to agents.
  */
 export async function replaceActiveBrowser(next: MastraBrowser | undefined): Promise<boolean> {
   const previous = activeBrowser;
   activeBrowser = next;
   const mine = ++generation;
-  if (previous && previous !== next) {
-    await closeBrowser(previous);
+  if (previous && previous !== next && previous !== retiringBrowser) {
+    retiringBrowser = previous;
+    retiring = Promise.all([retiring, closeBrowser(previous)]).then(() => {});
   }
+  await retiring;
   return generation === mine;
 }
 

@@ -1019,8 +1019,14 @@ export abstract class MastraBrowser extends MastraBase {
     this.status = 'closing';
 
     this._closePromise = (async () => {
+      let closed = false;
       try {
         await this.doClose();
+        closed = true;
+        // Kill orphaned child processes (GPU, renderer, crashpad, etc.) before
+        // any further await: once status is 'closed', ensureReady() can relaunch
+        // and register new PIDs that must not be killed.
+        this.killProcesses();
         this.status = 'closed';
         this.notifyBrowserClosed();
         // Clean up stale lock files only after confirmed shutdown.
@@ -1032,8 +1038,7 @@ export abstract class MastraBrowser extends MastraBase {
         throw err;
       } finally {
         this._closePromise = undefined;
-        // Kill orphaned child processes (GPU, renderer, crashpad, etc.)
-        this.killProcesses();
+        if (!closed) this.killProcesses();
       }
     })();
 

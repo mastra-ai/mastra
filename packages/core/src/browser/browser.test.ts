@@ -388,6 +388,48 @@ describe('MastraBrowser launch with a locked profile', () => {
     expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'does not kill a browser relaunched while close was still releasing the profile lock',
+    async () => {
+      class RelaunchingBrowser extends FakeBrowser {
+        // Relaunch skips profile prep so it lands inside close()'s lock release.
+        protected getLocalProfilePath() {
+          return undefined;
+        }
+        adoptPid(pid: number) {
+          this.sharedBrowserPid = pid;
+        }
+      }
+      const browser = new RelaunchingBrowser({ profile: profileDir });
+      await browser.launch();
+      // A live local PID holds the lock but is not listening, so close()'s lock
+      // release waits out the starting-holder grace after status is 'closed'.
+      await lockProfile(`${hostname()}-${process.pid}`, { listening: false });
+
+      const closing = browser.close();
+      await vi.waitFor(() => expect(browser.status).toBe('closed'));
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      let killedBy: NodeJS.Signals | null = null;
+      child.once('exit', (_code, signal) => (killedBy = signal));
+      try {
+        browser.doLaunch.mockImplementationOnce(async () => browser.adoptPid(child.pid!));
+        await browser.ensureReady();
+        await closing;
+        // Give a SIGKILL from close() time to be reported.
+        await new Promise(r => setTimeout(r, 200));
+
+        expect(browser.status).toBe('ready');
+        expect(killedBy).toBeNull();
+      } finally {
+        child.kill('SIGKILL');
+      }
+    },
+    10_000,
+  );
+
   it('launches normally when the profile is not locked', async () => {
     writeFileSync(join(profileDir, 'Preferences'), '{}');
     const browser = new FakeBrowser({ profile: profileDir });

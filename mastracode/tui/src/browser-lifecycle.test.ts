@@ -77,4 +77,43 @@ describe('browser lifecycle', () => {
     expect(first.retire).toHaveBeenCalledOnce();
     expect(second.retire).not.toHaveBeenCalled();
   });
+
+  /** Resolves once a promise has settled, or reports it still pending. */
+  async function settled(promise: Promise<unknown>) {
+    let done = false;
+    void promise.then(() => (done = true));
+    await new Promise(r => setTimeout(r, 0));
+    return done;
+  }
+
+  it('does not hand over a browser while an earlier replaced browser is still closing', async () => {
+    let finishClose!: () => void;
+    const a = fakeBrowser(() => new Promise<void>(r => (finishClose = r)));
+    await replaceActiveBrowser(a);
+
+    const b = fakeBrowser();
+    const c = fakeBrowser();
+    void replaceActiveBrowser(b);
+    const cApplied = replaceActiveBrowser(c);
+
+    // B never launched and closes at once, but A still holds the profile.
+    expect(await settled(cApplied)).toBe(false);
+    finishClose();
+    expect(await cApplied).toBe(true);
+    expect(a.retire).toHaveBeenCalledOnce();
+    expect(b.retire).toHaveBeenCalledOnce();
+  });
+
+  it('does not finish shutdown while an earlier replaced browser is still closing', async () => {
+    let finishClose!: () => void;
+    const a = fakeBrowser(() => new Promise<void>(r => (finishClose = r)));
+    await replaceActiveBrowser(a);
+    void replaceActiveBrowser(fakeBrowser());
+
+    const shutdown = closeActiveBrowser();
+
+    expect(await settled(shutdown)).toBe(false);
+    finishClose();
+    await shutdown;
+  });
 });
