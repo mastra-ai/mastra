@@ -34,50 +34,50 @@ interface OtelExporterConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'provider',
     type: 'ProviderConfig',
     description: 'Provider-specific configuration (see below)',
-    required: true,
+    isOptional: false,
   },
   {
     name: 'signals',
     type: '{ traces?: boolean; logs?: boolean }',
     description:
       'Per-signal toggle. Both default to true. Set a value to false to disable that signal. Log export also requires the matching `@opentelemetry/exporter-logs-otlp-*` package to be installed for the chosen protocol.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'timeout',
     type: 'number',
     description: 'Export timeout in milliseconds (default: 30000)',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'batchSize',
     type: 'number',
     description: 'Number of spans/logs per batch (default: 512)',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
     description: "Logger level (default: 'warn')",
-    required: false,
+    isOptional: true,
   },
   {
     name: 'metadataMapping',
     type: 'Record<string, string>',
     description:
       'Maps metadata keys to top-level span attribute names, for example `{ userId: "user.id" }`. Disabled by default. Namespaced metadata is retained. See Metadata mapping below for value conversion and precedence.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'resourceAttributes',
     type: 'DetectedResourceAttributes',
     description: 'Optional OpenTelemetry Resource Attributes (values here override any defaults)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -116,24 +116,24 @@ interface Dash0Config {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'Dash0 API key. Falls back to DASH0_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description: 'Dash0 ingress endpoint. Falls back to DASH0_ENDPOINT env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'dataset',
     type: 'string',
     description: 'Dataset name. Falls back to DASH0_DATASET env var.',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -149,24 +149,24 @@ interface SignozConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'SigNoz ingestion key. Falls back to SIGNOZ_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'region',
     type: "'us' | 'eu' | 'in'",
     description: "SigNoz cloud region. Falls back to SIGNOZ_REGION env var. (default: 'us')",
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description: 'Custom endpoint. Falls back to SIGNOZ_ENDPOINT env var.',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -181,19 +181,19 @@ interface NewRelicConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'New Relic license key. Falls back to NEW_RELIC_LICENSE_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description:
       'Custom endpoint. Falls back to NEW_RELIC_ENDPOINT env var. (default: https://otlp.nr-data.net:443/v1/traces)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -209,25 +209,25 @@ interface TraceloopConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'Traceloop API key. Falls back to TRACELOOP_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'destinationId',
     type: 'string',
     description: 'Destination identifier. Falls back to TRACELOOP_DESTINATION_ID env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description:
       'Custom endpoint. Falls back to TRACELOOP_ENDPOINT env var. (default: https://api.traceloop.com/v1/traces)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -242,18 +242,18 @@ interface LaminarConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description: 'Custom endpoint. Falls back to LAMINAR_ENDPOINT env var. (default: https://api.lmnr.ai/v1/traces)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -271,32 +271,32 @@ type CustomConfig = {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'endpoint',
     type: 'string',
     description:
       'Legacy collector endpoint. Cannot be combined with endpoints. Uses the existing signal-path derivation for OTLP.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoints',
     type: '{ traces?: string; logs?: string }',
     description:
       'Exact per-signal URLs. Supply at least one endpoint. Omitted signals are not exported. Cannot be combined with endpoint.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'protocol',
     type: "'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'",
     description: "Export protocol (default: 'http/json')",
-    required: false,
+    isOptional: true,
   },
   {
     name: 'headers',
     type: 'Record<string, string>',
     description: 'Custom headers for authentication',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
