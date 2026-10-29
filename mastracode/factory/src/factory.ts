@@ -33,6 +33,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
@@ -124,6 +125,7 @@ import { createSourceControlTools } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
+import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -304,6 +306,13 @@ export interface MastraFactoryConfig {
   configVersion?: string;
   /** Board definitions installed for this Factory instance. */
   boards?: readonly InstalledBoard[];
+  /**
+   * App skills written in code with `createSkill()` from `@mastra/core/skills`.
+   * Every Factory session can load them, and a board phase runs one through
+   * `runner.skill`. A skill here wins over a `factory-skills/` folder skill or
+   * a bundled skill of the same name. Names must be unique.
+   */
+  skills?: readonly InlineSkill[];
   /** Whether the built-in Work and Review boards are installed. Default: true. */
   includeDefaultBoards?: boolean;
 
@@ -451,6 +460,7 @@ export class MastraFactory {
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
   readonly #boards: BoardRegistry;
+  readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
@@ -481,6 +491,10 @@ export class MastraFactory {
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
           'rules on the owning board via defineBoard({ tools }).',
       );
+    }
+    this.#skills = assertFactorySkills(config.skills);
+    for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
+      console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
@@ -1060,9 +1074,8 @@ export class MastraFactory {
                   id: installationId,
                 });
                 if (!installation) return null;
-                const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
-                const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
-                if (!selected) return null;
+                const selected = await githubIntegration.getInstallationRepo(Number(installation.externalId), slug);
+                if (!selected || selected.id.toString() !== externalId || selected.fullName !== slug) return null;
                 return githubIntegration.sourceControlStorage.repositories.upsert({
                   orgId,
                   input: {
@@ -1282,6 +1295,7 @@ export class MastraFactory {
         subagents: [],
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
+          skills: this.#skills,
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           sourceControls: integrations.flatMap(integration =>
@@ -1715,6 +1729,7 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             deploymentModelProviders,
+            skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,

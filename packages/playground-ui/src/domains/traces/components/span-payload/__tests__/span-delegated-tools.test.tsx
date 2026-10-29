@@ -7,7 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
 import { SpanDetailsView } from '../../span-details-view';
-import { makeSpan } from './fixtures/span-payloads';
+import { makeSpan, traceWithoutToolCalls } from './fixtures/span-payloads';
 import { registeredTools } from './fixtures/tools';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -18,7 +18,10 @@ beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
 afterAll(() => vi.unstubAllGlobals());
 
 beforeEach(() => {
-  server.use(http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json(registeredTools)));
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json(registeredTools)),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceWithoutToolCalls)),
+  );
 });
 
 // Agents expose each workflow they own as a tool named `workflow-<key>` and each
@@ -29,8 +32,23 @@ const KINDS = [
 ] as const;
 
 const LAYOUTS = [
-  ['data panel', (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
-  ['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
+  {
+    layout: 'data panel',
+    renderSpan: (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />,
+    // What the span got sits in the Input tab, what it produced in the Output tab.
+    open: (tab: 'input' | 'output') => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${tab}`, 'i') })),
+    toolsSection: () => screen.getByRole('region', { name: 'Available tools' }),
+  },
+  {
+    layout: 'details',
+    renderSpan: (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />,
+    open: () => {},
+    toolsSection: () => {
+      const found = screen.getByText('Available tools (2)').closest('[data-slot="span-payload-section"]');
+      if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');
+      return found;
+    },
+  },
 ] as const;
 
 const linksTo = (prefix: string) =>
@@ -93,21 +111,24 @@ describe.each(KINDS)('$kind tools', ({ kind, label, key, page }) => {
     input: { toolName, toolCallId: 'call-1' },
   });
 
-  describe.each(LAYOUTS)('%s', (_layout, renderSpan) => {
-    const renderWithLinks = (span: SpanRecord) =>
-      renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
+  describe.each(LAYOUTS)('$layout', ({ renderSpan, open, toolsSection }) => {
+    const renderWithLinks = (span: SpanRecord) => {
+      const view = renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
+      return view;
+    };
 
     it(`links a ${kind} the span offered as a tool to its page`, () => {
       renderWithLinks(offeredSpan);
+      open('input');
 
-      const tools = screen.getByText('Tools (2)').closest('[data-slot="span-payload-section"]');
-      if (!(tools instanceof HTMLElement)) throw new Error('Missing Tools section');
+      const tools = toolsSection();
       expect(within(tools).getByRole('link', { name: toolName }).getAttribute('href')).toBe(page);
       expect(within(tools).queryByRole('link', { name: `${kind}-` })).toBeNull();
     });
 
     it(`links a ${kind} the model called from the opened tool call, and only that call`, () => {
       renderWithLinks(calledSpan);
+      open('input');
 
       expect(screen.queryAllByRole('link')).toHaveLength(0);
       for (const button of screen.getAllByRole('button', { name: new RegExp(`^(${label} ${key}|CookingTool)$`) })) {
@@ -120,16 +141,19 @@ describe.each(KINDS)('$kind tools', ({ kind, label, key, page }) => {
 
     it(`links the ${kind} a run suspended in`, () => {
       renderWithLinks(suspendedSpan);
+      open('output');
       expect(linksTo(pagePrefix)).toEqual([[toolName, page]]);
     });
 
     it(`links the ${kind} a run resumed into`, () => {
       renderWithLinks(resumedSpan);
+      open('input');
       expect(linksTo(pagePrefix)).toEqual([[toolName, page]]);
     });
 
     it(`links the ${kind} whose result a processor handled`, () => {
       renderWithLinks(resultProcessorSpan);
+      open('input');
       expect(linksTo(pagePrefix)).toEqual([[toolName, page]]);
     });
   });

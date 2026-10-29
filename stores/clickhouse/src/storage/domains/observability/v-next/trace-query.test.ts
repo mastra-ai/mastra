@@ -57,22 +57,25 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain(5000);
   });
 
-  it('compiles time to first chunk predicates on the root column and on spans', () => {
-    const compiled = compileClickHouseTraceQueryKeys(
-      plan({
-        where: {
-          op: 'and',
-          args: [
-            { op: 'gte', left: { path: 'timeToFirstChunkMs' }, right: { literal: 0 } },
-            { spans: { some: { op: 'exists', path: 'timeToFirstChunkMs' } } },
-          ],
-        },
-      }),
-    );
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'compiles %s predicates on the root column and on spans',
+    field => {
+      const compiled = compileClickHouseTraceQueryKeys(
+        plan({
+          where: {
+            op: 'and',
+            args: [
+              { op: 'gte', left: { path: field }, right: { literal: 0 } },
+              { spans: { some: { op: 'exists', path: field } } },
+            ],
+          },
+        }),
+      );
 
-    expect(compiled.query).toMatch(/r\.timeToFirstChunkMs >= \{trace_query_\d+:Float64\}/);
-    expect(compiled.query).toContain('isNotNull(s.timeToFirstChunkMs)');
-  });
+      expect(compiled.query).toMatch(new RegExp(`r\\.${field} >= \\{trace_query_\\d+:Float64\\}`));
+      expect(compiled.query).toContain(`isNotNull(s.${field})`);
+    },
+  );
 
   it('bootstraps delta polling and hands numbered pages a query-bound cursor', async () => {
     coreFeatures.add('observability-delta-polling');
@@ -370,7 +373,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
   });
 
-  it('projects canonical span values with guarded JSON strings and typed parameters', () => {
+  it('projects canonical span values from columns or guarded JSON strings with typed parameters', () => {
     const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
@@ -396,9 +399,11 @@ describe('ClickHouse advanced trace query', () => {
     );
 
     expect(compiled.query.match(/FROM current_spans s/g)).toHaveLength(1);
-    expect(compiled.query).toContain(`JSONType(attributes, 'model') = 'String'`);
-    expect(compiled.query).toContain(`JSONExtractString(attributes, 'model')`);
-    expect(compiled.query).toContain(`JSONType(attributes, 'provider') = 'String'`);
+    // Model and provider read the column, falling back to string attributes for older spans.
+    expect(compiled.query).toContain(`coalesce(model, if(JSONType(attributes, 'model') = 'String'`);
+    expect(compiled.query).toContain(`coalesce(provider, if(JSONType(attributes, 'provider') = 'String'`);
+    expect(compiled.query).toMatch(/s\.model = \{trace_query_\d+:String\}/);
+    expect(compiled.query).toMatch(/s\.provider = \{trace_query_\d+:String\}/);
     expect(compiled.query).toContain(`dateDiff('millisecond', startedAt, endedAt) AS durationMs`);
     expect(compiled.query).toMatch(/s\.startedAt >= \{trace_query_6:DateTime64\(3, 'UTC'\)\}/);
     expect(compiled.query).toMatch(/s\.durationMs > \{trace_query_7:Float64\}/);
@@ -971,10 +976,11 @@ describe('ClickHouse advanced trace query', () => {
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(20);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       timeToFirstChunkMs: 300,
+      timeToFirstTokenMs: 200,
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',
@@ -1027,6 +1033,7 @@ describe('ClickHouse advanced trace query', () => {
           outputPreview: '',
           errorPreview: '',
           timeToFirstChunkMs: null,
+          timeToFirstTokenMs: null,
         },
       ],
     });
@@ -1035,6 +1042,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       timeToFirstChunkMs: null,
+      timeToFirstTokenMs: null,
       entityId: null,
       parentSpanId: null,
       metadata: null,
@@ -1294,5 +1302,6 @@ function traceRow(traceId: string, startedAt: string) {
     environment: null,
     status: 'success',
     timeToFirstChunkMs: 300 as number | null,
+    timeToFirstTokenMs: 200 as number | null,
   };
 }
