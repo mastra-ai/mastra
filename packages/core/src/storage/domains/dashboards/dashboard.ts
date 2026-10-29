@@ -12,10 +12,10 @@ import {
   scoresFilterSchema,
 } from '@internal/core/storage';
 import { z } from 'zod/v4';
+import { spanAggregateQueryObjectSchema } from '../observability/span-aggregate';
+import { traceAggregateQueryObjectSchema } from '../observability/trace-aggregate';
+import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from '../observability/trace-query';
 import { dashboardFilterNodeSchema } from './dashboard-filters';
-import { spanAggregateQueryObjectSchema } from './span-aggregate';
-import { traceAggregateQueryObjectSchema } from './trace-aggregate';
-import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from './trace-query';
 
 /**
  * Stored definition of a custom dashboard: rows of widgets on a 12-column grid, each widget

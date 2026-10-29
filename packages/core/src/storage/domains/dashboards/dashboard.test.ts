@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TRACE_QUERY_MAX_DEPTH, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from '../observability/trace-query';
 import {
   DASHBOARD_MAX_BYTES,
   DASHBOARD_MAX_QUERIES_PER_VIEW,
@@ -11,7 +12,6 @@ import {
   migrateDashboardDefinition,
 } from './dashboard';
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from './dashboard';
-import { TRACE_QUERY_MAX_DEPTH, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from './trace-query';
 
 const schemas = [
   ['full schema', dashboardDefinitionSchema],

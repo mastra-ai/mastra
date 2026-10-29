@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
+import type { TraceAggregateMeasure } from '../observability/trace-aggregate';
 import type {
   DashboardDefinition,
   DashboardDefinitionEnvelope,
@@ -8,7 +9,6 @@ import type {
   NormalizedDashboardQuery,
 } from './dashboard';
 import type { DashboardFilterNode } from './dashboard-filters';
-import type { TraceAggregateMeasure } from './trace-aggregate';
 
 describe('DashboardQuery type', () => {
   it('narrows on source and request', () => {

@@ -14,6 +14,7 @@ export * from './blobs';
 export * from './scores';
 export * from './observability';
 export * from './studio';
+export * from './dashboards';
 export * from './operations';
 export * from './workflows';
 export * from './workflow-definitions';
