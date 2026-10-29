@@ -96,7 +96,7 @@ function SpendCard() {
       title={view === 'model' ? 'Spend by model' : 'Spend by provider'}
       titleMenu={{
         value: view,
-        onValueChange: v => setView(v as 'model' | 'provider'),
+        onValueChange: setView,
         options: [
           { value: 'model', label: 'Spend by model' },
           { value: 'provider', label: 'Spend by provider' },
