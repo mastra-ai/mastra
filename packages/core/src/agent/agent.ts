@@ -1907,7 +1907,12 @@ export class Agent<
     return [new WorkspaceInstructionsProcessor({ workspace })];
   }
 
-  #getKnowledgeProcessors(configuredProcessors: InputProcessorOrWorkflow[]): InputProcessorOrWorkflow[] {
+  #warnedPinsWithoutMemory = false;
+
+  #getKnowledgeProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    hasMemory: boolean,
+  ): InputProcessorOrWorkflow[] {
     const knowledge = this.getKnowledge();
     if (!knowledge) return [];
     const configuredIds = new Set(
@@ -1919,6 +1924,16 @@ export class Agent<
       processors.push(new KnowledgeInstructionsProcessor(instructions));
     }
     if (knowledge.pinnedContextEnabled && !configuredIds.has(PINNED_KNOWLEDGE_STATE_ID)) {
+      // Pins ride a Memory state signal; without Memory there is no thread to carry them.
+      if (!hasMemory) {
+        if (!this.#warnedPinsWithoutMemory) {
+          this.#warnedPinsWithoutMemory = true;
+          this.logger.warn(
+            `Agent "${this.name}": Knowledge pinnedContext needs Memory on the agent; pinned pages are not delivered without it.`,
+          );
+        }
+        return processors;
+      }
       processors.push(
         new PinnedStateProcessor({
           principalsKey: context => knowledge.__principalsKey(context),
@@ -2523,7 +2538,7 @@ export class Agent<
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
 
     // Knowledge usage instructions, and pins when there is a Memory thread to carry their state signal
-    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors);
+    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors, Boolean(memory));
 
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
