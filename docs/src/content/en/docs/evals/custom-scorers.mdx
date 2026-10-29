@@ -396,7 +396,7 @@ ${JSON.stringify(run.output)}`,
 
 `Rate this refund handling from 0 to 1` alone leaves the middle of the scale undefined, and judges fill that gap differently between calls. Name the endpoints, describe at least one middle value, and say that only the number should come back. If your scorer must not drift outside a range, clamp or reject the value in a function step instead of trusting the judge.
 
-This matters most for [gates](/docs/evals/gates-and-verdicts), whose thresholds must be between 0 and 1 even though the judge's number is stored exactly as returned. A prompt that asks for a 1 to 10 score makes a failing `2` clear every threshold you're allowed to set, so the gate never fires.
+This matters most for [gates](/docs/evals/gates-and-verdicts), whose thresholds must be between 0 and 1 even though the judge's number is stored exactly as returned. A prompt that asks for a 1 to 10 score makes a failing `2` pass every threshold you're allowed to set. The gate then never fires.
 
 ## Example: Create a custom scorer
 

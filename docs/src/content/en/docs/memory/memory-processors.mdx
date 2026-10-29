@@ -331,7 +331,7 @@ Both scenarios are safe - guardrails prevent inappropriate content from being pe
 
 Cancelling a run and blocking it with a processor `abort()` both stop generation, but they save different things:
 
-| What stops the run | Memory processors | What is persisted |
+| What stops the run | Memory processors | What's persisted |
 | - | - | - |
 | `abortSignal` from the caller | Still run | The user message and the assistant text the user already saw |
 | `abort()` inside a processor | Skipped | Nothing; the tripwire blocks the save |
