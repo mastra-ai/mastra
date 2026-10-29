@@ -7,3 +7,23 @@ Planning and Building on the Work board now run in one `work` session, so the bu
 This replaces the fallback that let a build borrow the plan or triage session. Triage no longer hands its session to later phases. Runs and API calls that name the `plan` role still start Planning, in a `plan` session the build then continues in; cards planned before this change keep using their `plan` session the same way. Self-review keeps its own `review` session.
 
 `invokeSkill` decisions accept `startsAfterOwnMove: true` to start a run even when the agent of the same session moved the card. Custom board phases with a `runner.skill` set it when a card enters from another phase, so moving a card between phases that share a context now starts the next phase's skill.
+
+```ts
+phases: {
+  building: {
+    kind: 'working',
+    name: 'Building',
+    runner: { context: 'builder' },
+    onEnter: {
+      issue: context => ({
+        type: 'invokeSkill',
+        role: 'builder',
+        idempotencyKey: `${context.ingress.id}:build`,
+        prompt: 'Build the approved plan.',
+        // The planner shares this session and moved the card itself; start the build anyway.
+        startsAfterOwnMove: true,
+      }),
+    },
+  },
+},
+```
