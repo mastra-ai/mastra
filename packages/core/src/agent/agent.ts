@@ -2571,8 +2571,11 @@ export class Agent<
   /**
    * Returns the output processors for this agent, resolving function-based processors if necessary.
    */
-  public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
-    return this.listResolvedOutputProcessors(requestContext);
+  public async listOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+  ): Promise<OutputProcessorOrWorkflow[]> {
+    return this.listResolvedOutputProcessors(requestContext, configuredProcessorOverrides);
   }
 
   /**

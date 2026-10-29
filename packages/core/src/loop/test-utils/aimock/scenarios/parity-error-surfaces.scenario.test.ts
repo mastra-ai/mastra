@@ -291,10 +291,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const errors = result.chunks!.filter(chunk => chunk.type === 'error');
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
-      // The durable engines persist the input through agent memory regardless of the configured
-      // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
-      const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
-      const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      const inputSaved = !readOnly && !customHistory && !historyOff;
       // Recall at the deadline and again once a late write from the settling run would have landed.
       for (const delayMs of [0, engine === 'inngest' ? 3_000 : 500]) {
         await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -497,6 +494,73 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       }
     },
     TEST_TIMEOUT_MS,
+  );
+});
+
+// The finish path saves the turn only where a MessageHistory output processor would, so every
+// engine must honor the same history and observational-memory settings when a run completes.
+describeForAllEngines('error-surfaces: history settings at finish', engine => {
+  const getMock = useLoopScenarioAimock();
+  const TEST_TIMEOUT_MS = engine === 'inngest' ? 15_000 : 5_000;
+
+  it.each([
+    { name: 'default', saved: 'memory' },
+    // History disabled in config and no MessageHistory configured: nothing saves the turn.
+    { name: 'historyOff', saved: 'none' },
+    // History disabled in config, but an explicit MessageHistory writes to its own store.
+    { name: 'historyStore', saved: 'historyStore' },
+    // A custom processor takes the message-history id and saves nothing.
+    { name: 'customHistory', saved: 'none' },
+    // Observational memory switched off: memory adds MessageHistory as usual.
+    { name: 'omDisabled', saved: 'memory' },
+    // An observational-memory processor owns the writes, so memory adds no MessageHistory.
+    { name: 'omProcessor', saved: 'none' },
+  ] as const)(
+    'a finished turn is saved only where MessageHistory saves it ($name)',
+    async ({ name, saved }) => {
+      const memory = new MockMemory();
+      const historyMemory = new MockMemory();
+      const threadId = `finish-history-${engine}-${name}`;
+      const llm = getMock();
+      await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'Where is my order?',
+        ...(name === 'historyOff' && { memoryOptions: { lastMessages: false } }),
+        ...(name === 'historyStore' && {
+          memoryOptions: { lastMessages: false },
+          outputProcessors: [new MessageHistory({ storage: (await historyMemory.storage.getStore('memory'))! })],
+        }),
+        ...(name === 'customHistory' && {
+          outputProcessors: [{ id: 'message-history', processOutputResult: ({ messages }: any) => messages }],
+        }),
+        ...(name === 'omDisabled' && { memoryOptions: { observationalMemory: { enabled: false } } }),
+        ...(name === 'omProcessor' && {
+          outputProcessors: [{ id: 'observational-memory', processOutputResult: ({ messages }: any) => messages }],
+        }),
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: 'Your order shipped today.' });
+        },
+      });
+
+      // Recall once the run finishes and again once a late write would have landed.
+      for (const delayMs of [0, engine === 'inngest' ? 3_000 : 500]) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        for (const [store, target] of [
+          ['memory', memory],
+          ['historyStore', historyMemory],
+        ] as const) {
+          const { messages } = await target.recall({ threadId, resourceId: RESOURCE });
+          const text = JSON.stringify(messages);
+          expect(text.includes('Where is my order?'), `input in ${store}`).toBe(saved === store);
+          expect(text.includes('Your order shipped today.'), `reply in ${store}`).toBe(saved === store);
+        }
+      }
+    },
+    TEST_TIMEOUT_MS + 5_000,
   );
 });
 

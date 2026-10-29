@@ -327,14 +327,12 @@ export async function runDurableFinishSideEffects({
           })
       : undefined;
 
-  if (
-    saveQueueManager &&
-    memory &&
-    durableState?.threadId &&
-    durableState?.resourceId &&
-    !durableState.observationalMemory &&
-    !durableState.memoryConfig?.readOnly
-  ) {
+  // Save the turn to agent memory only where memory itself adds a MessageHistory processor, as the
+  // non-durable finish path does. A configured MessageHistory already saved it above. Runs started
+  // before persistHistory existed keep the earlier rule.
+  const persistHistory =
+    durableState?.persistHistory ?? (!durableState?.observationalMemory && !durableState?.memoryConfig?.readOnly);
+  if (saveQueueManager && memory && durableState?.threadId && durableState?.resourceId && persistHistory) {
     await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
     if (!durableState.threadExists) await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
     try {
