@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { CompositeAuth, MastraAuthProvider, normalizeMastraUser } from './index';
 import type { MastraUser } from '..';
+import { CompositeAuth, MastraAuthProvider, normalizeMastraUser } from './index';
 
 class StubAuth<TUser = unknown> extends MastraAuthProvider<TUser> {
   constructor(private readonly user: TUser | null) {
