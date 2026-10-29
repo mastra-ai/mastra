@@ -307,24 +307,6 @@ function removeWorkingMemoryToolInvocations(
 }
 
 // Keep this union and the recall helpers in sync with core without requiring newer peer exports.
-// Threads written before Subconscious was removed may own a hidden remind thread. Deleting the
-// parent still deletes it, so no orphaned remind threads are left behind.
-const LEGACY_REMIND_PARENT_THREAD_METADATA_KEY = 'subconsciousRemindParentThreadId';
-
-function legacyRemindThreadId(parentThreadId: string): string {
-  return `subconscious:${parentThreadId}:remind`;
-}
-
-function isOwnedLegacyRemindThread(
-  thread: StorageThreadType | null | undefined,
-  parentThreadId: string,
-  resourceId: string,
-): thread is StorageThreadType {
-  return (
-    thread?.resourceId === resourceId && thread.metadata?.[LEGACY_REMIND_PARENT_THREAD_METADATA_KEY] === parentThreadId
-  );
-}
-
 type RecallSignalType = 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
 
 function isRecallSignalType(type: unknown): type is RecallSignalType {
@@ -1069,12 +1051,6 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     const thread = await memoryStore.getThreadById({ threadId });
-    const remindThreadId = legacyRemindThreadId(threadId);
-    const remindThread = thread?.resourceId ? await memoryStore.getThreadById({ threadId: remindThreadId }) : null;
-
-    if (thread?.resourceId && isOwnedLegacyRemindThread(remindThread, threadId, thread.resourceId)) {
-      await this.deleteStoredThread(memoryStore, remindThreadId, remindThread.resourceId);
-    }
     await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
   }
 

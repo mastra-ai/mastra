@@ -260,26 +260,6 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
   });
 
-  it('skips persisted subconscious-activity signals from removed Subconscious threads', () => {
-    const state = createState();
-    addUserMessage(
-      state,
-      createStateSignalMessage(
-        {
-          stateId: 'subconscious-activity',
-          mode: 'snapshot',
-          version: 1,
-          message: 'Hot: [[Atlas launch]] (1)',
-          value: { updates: [], hot: [] },
-        },
-        'subconscious-activity-1',
-      ),
-    );
-
-    expect(state.messageComponentsById.has('subconscious-activity-1')).toBe(false);
-    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
-  });
-
   it('labels the Knowledge state signal as pinned context', () => {
     const state = createState();
     addUserMessage(

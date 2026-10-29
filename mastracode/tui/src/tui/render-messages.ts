@@ -518,10 +518,6 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       return true;
     }
 
-    // Threads written before Subconscious was removed still hold persisted
-    // `subconscious-activity` snapshots; skip them rather than print raw signals.
-    if (stateSignal.stateId === 'subconscious-activity') return true;
-
     const component = new StateSignalComponent({
       stateId: stateSignal.stateId,
       mode: stateSignal.mode,

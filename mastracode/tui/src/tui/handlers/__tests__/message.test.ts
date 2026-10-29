@@ -235,23 +235,6 @@ describe('handleMessageStart signals', () => {
     expect(rendered).toContain('changed: browser opened');
   });
 
-  it('skips streamed subconscious-activity signals from removed Subconscious threads', () => {
-    handleMessageStart(
-      ctx,
-      signalMessage({
-        type: 'state',
-        tagName: 'subconscious-activity',
-        contents: 'Hot: [[Atlas launch]] (1)',
-        metadata: {
-          state: { id: 'subconscious-activity', mode: 'snapshot', cacheKey: 'subconscious-activity:v1' },
-          value: { updates: [], hot: [] },
-        },
-      } as Parameters<typeof createSignal>[0]),
-    );
-
-    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
-  });
-
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
     handleMessageStart(
       ctx,
