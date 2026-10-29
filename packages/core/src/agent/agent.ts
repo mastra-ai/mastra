@@ -1912,7 +1912,12 @@ export class Agent<
       processors.push(new KnowledgeInstructionsProcessor(instructions));
     }
     if (knowledge.pinnedContextEnabled && !configuredIds.has(PINNED_KNOWLEDGE_STATE_ID)) {
-      processors.push(new PinnedStateProcessor({ getKnowledgeStore: () => knowledge.getStorage() }));
+      processors.push(
+        new PinnedStateProcessor({
+          principalsKey: context => knowledge.__principalsKey(context),
+          readPins: context => knowledge.__deliveredPins(context),
+        }),
+      );
     }
     return processors;
   }

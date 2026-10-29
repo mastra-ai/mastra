@@ -19,7 +19,7 @@ import type {
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import { classifyProviderError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -872,7 +872,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
   const knowledge =
     knowledgeOption === true
-      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage, tools: true, pinnedContext: true })
+      ? new Knowledge({
+          id: 'mastracode',
+          name: 'MastraCode Knowledge',
+          storage,
+          scopes: knowledgeMemoryScopes(),
+          tools: true,
+          pinnedContext: true,
+        })
       : knowledgeOption instanceof Knowledge
         ? knowledgeOption
         : knowledgeEntry?.instance;
