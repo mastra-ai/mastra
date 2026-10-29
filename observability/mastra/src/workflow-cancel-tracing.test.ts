@@ -1,4 +1,5 @@
 import { EventEmitterPubSub } from '@mastra/core/events';
+import { MastraTimeoutError } from '@mastra/core/loop';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
@@ -195,6 +196,56 @@ describe('workflow run cancellation tracing', () => {
 
   createControlFlowOutcomeTests({ createStorage: () => new MockStore() });
   createConcurrentBranchOutcomeTests({ createStorage: () => new MockStore() });
+
+  it.each(
+    (['default', 'evented'] as const).flatMap(engine =>
+      (['timeout', 'authorization'] as const).map(reason => ({ engine, reason })),
+    ),
+  )('$engine retains error details when a failed workflow is classified as $reason', async ({ engine, reason }) => {
+    const error =
+      reason === 'timeout'
+        ? new MastraTimeoutError({ timeoutMs: 100, timeoutType: 'total' })
+        : Object.assign(new Error('Provider denied access'), { name: 'AI_APICallError', statusCode: 403 });
+    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
+      id: 'classified-failure',
+      inputSchema: empty,
+      outputSchema: empty,
+      retryConfig: { attempts: 0, delay: 0 },
+    })
+      .then(
+        createStep({
+          id: 'denied-step',
+          inputSchema: empty,
+          outputSchema: empty,
+          execute: async () => {
+            throw error;
+          },
+        }),
+      )
+      .commit();
+    const host = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { workflow },
+      observability: new Observability({
+        configs: { default: { serviceName: 'classified-failure', exporters: [exporter] } },
+      }),
+    });
+    try {
+      if (engine === 'evented') await host.startWorkers();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('failed');
+      const root = endedSpans().find(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(root).toMatchObject({
+        outcome: reason === 'timeout' ? 'limit' : 'blocked',
+        stopReason: reason,
+        errorInfo: { message: expect.stringContaining(error.message) },
+      });
+      expectSingleEndPerSpan();
+    } finally {
+      await host.shutdown();
+    }
+  });
 
   it.each([
     ['default', false],

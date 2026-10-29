@@ -565,7 +565,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (root?.type === SpanType.WORKFLOW_RUN && root.entityId === args.workflowId) {
       completeWorkflowSpan(
         root,
-        termination.outcome === 'error'
+        failure && termination.outcome !== 'interrupted'
           ? { error: { ...termination, error: getErrorFromUnknown(failure?.error), endTree: true } }
           : {
               end: {
