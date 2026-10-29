@@ -17,9 +17,13 @@
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m3": [
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "MiniMaxAI/MiniMax-M3.1-Flash": [
@@ -28,13 +32,9 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "minimax/minimax-m3": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

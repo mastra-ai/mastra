@@ -20,15 +20,15 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "DeepSeek-V3.2": [
+      {
+        "type": "toggle"
       }
     ],
     "MiniMax-M3": [
