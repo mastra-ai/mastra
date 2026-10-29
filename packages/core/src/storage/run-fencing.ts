@@ -192,6 +192,15 @@ export function coverNestedRun(parentRunId: string, nestedRunId: string): void {
 }
 
 /**
+ * The claim generation the current run fence scope holds for `runId`, if any.
+ *
+ * @internal
+ */
+export function currentRunGeneration(runId: string): number | undefined {
+  return getRunFenceContext()?.current()?.generationFor?.(runId);
+}
+
+/**
  * The fence a write to `store` must carry: the explicit `fence`, otherwise
  * the fence of the durable run execution the write happens in. Adapters call
  * this at the start of every fenced write, passing the domain store itself as
