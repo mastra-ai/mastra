@@ -943,7 +943,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       await deleteRunSnapshots(runId);
     });
     return {
-      clear: totalTimeout.cleanup,
+      clear: () => {
+        totalTimeout.cleanup();
+        // Let retention prune this session's fence; a later session raises its own.
+        void armed?.then(({ retire }) => retire());
+      },
       deadline: armed?.then(({ deadline }) => deadline) ?? Promise.resolve(undefined),
     };
   }

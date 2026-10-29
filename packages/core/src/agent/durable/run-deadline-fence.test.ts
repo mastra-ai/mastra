@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
@@ -73,6 +73,29 @@ describe('run deadline fence', () => {
     await expect(resumed.inScope(() => memoryStore.saveThread({ thread: thread() }))).resolves.toMatchObject({
       id: 't-1',
     });
+  });
+
+  it('retires the session fence so retention can prune it', async () => {
+    const { mastra, memoryStore } = await setup();
+    const retire = vi.spyOn(memoryStore, 'retireRunFence');
+    const { deadline, retire: settle } = await arm(mastra);
+    await settle();
+
+    expect(retire).toHaveBeenCalledWith({ runId, ...deadline.fence });
+    await expect(retire.mock.results[0]!.value).resolves.toBe(true);
+  });
+
+  it('retires the expired fence and still rejects late writes', async () => {
+    const { mastra, memoryStore } = await setup();
+    const retire = vi.spyOn(memoryStore, 'retireRunFence');
+    const { expire, inScope } = await arm(mastra);
+    await expire();
+
+    expect(retire).toHaveBeenCalledWith(expect.objectContaining({ runId, ownerId: 'deadline:expired' }));
+    await expect(retire.mock.results[0]!.value).resolves.toBe(true);
+    await expect(inScope(() => memoryStore.saveThread({ thread: thread() }))).rejects.toSatisfy(
+      isRunFenceConflictError,
+    );
   });
 
   it('arms without a fence when the agent has no fencing memory store', async () => {

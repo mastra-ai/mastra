@@ -23,11 +23,18 @@ async function resolveMemoryStore(
 
 const NO_FENCE = async () => {};
 
+async function retireFence(store: MemoryStorage, fence: RunFence): Promise<void> {
+  // Retention prunes only retired fences; a failed retire just keeps the row.
+  await store.retireRunFence(fence).catch(() => false);
+}
+
 /**
  * Start a run's deadline for one execution session. Raises a memory run fence
  * when the agent's memory store supports fencing; otherwise steps only check
  * the deadline before writing. `expire()` raises a newer fence so writes still
- * in flight at the deadline are rejected by the store.
+ * in flight at the deadline are rejected by the store. `retire()` marks the
+ * fence settled so `memory.runFences` retention can prune it; call it when the
+ * session ends. Retiring does not change which writes the fence accepts.
  */
 export async function armRunDeadline(args: {
   mastra: Mastra | undefined;
@@ -35,25 +42,29 @@ export async function armRunDeadline(args: {
   runId: string;
   requestContext: RequestContext | undefined;
   expiresAt: number;
-}): Promise<{ deadline: DurableRunDeadline; expire: () => Promise<void> }> {
+}): Promise<{ deadline: DurableRunDeadline; expire: () => Promise<void>; retire: () => Promise<void> }> {
   const { runId, expiresAt } = args;
   const store = await resolveMemoryStore(args.mastra, args.agentId, args.requestContext);
-  if (!store) return { deadline: { expiresAt }, expire: NO_FENCE };
+  if (!store) return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
 
   // Claimed runs use small claim counters; claim-less runs order sessions by time.
   const fence: RunFence = { runId, generation: Date.now(), ownerId: `deadline:${expiresAt}` };
   const raised = await store.raiseRunFence(fence).catch(() => false);
   // A newer session already owns the fence; steps fall back to deadline checks.
-  if (!raised) return { deadline: { expiresAt }, expire: NO_FENCE };
+  if (!raised) return { deadline: { expiresAt }, expire: NO_FENCE, retire: NO_FENCE };
 
   return {
     deadline: { expiresAt, fence: { generation: fence.generation, ownerId: fence.ownerId } },
     expire: async () => {
+      const expired: RunFence = {
+        runId,
+        generation: Math.max(Date.now(), fence.generation + 1),
+        ownerId: 'deadline:expired',
+      };
       // On failure, writes are still refused by the deadline check.
-      await store
-        .raiseRunFence({ runId, generation: Math.max(Date.now(), fence.generation + 1), ownerId: 'deadline:expired' })
-        .catch(() => false);
+      if (await store.raiseRunFence(expired).catch(() => false)) await retireFence(store, expired);
     },
+    retire: () => retireFence(store, fence),
   };
 }
 
