@@ -365,28 +365,32 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS + 5_000,
   );
 
-  // Durable engines save the input before the run starts, so the deadline can fire during that save,
-  // before anything has called the model. The other engines save the input when the run finishes.
-  it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest')(
-    'a deadline during a slow input save stops the run before it starts',
-    async () => {
+  // Durable engines save the input before the run starts, so the deadline can fire before or during
+  // that save, before anything has called the model. The other engines save the input when the run finishes.
+  it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest').each([
+    ['before', 1],
+    ['during', DEADLINE_MS],
+  ] as const)(
+    'a deadline %s a slow input save stops the run before it starts and keeps the input',
+    async (_when, totalMs) => {
       const memory = new MockMemory();
       const saveMessages = memory.saveMessages.bind(memory);
-      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
-        if (args.messages.some(message => message.role === 'user')) {
-          await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500));
-        }
-        return saveMessages(args);
+      const heldSaves: Promise<unknown>[] = [];
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
+        if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => saveMessages(args));
+        heldSaves.push(held.catch(() => {}));
+        return held;
       });
       try {
         const result = await runLoopScenario({
           engine,
           llm: getMock(),
           memory,
-          threadId: `slow-input-${engine}`,
+          threadId: `slow-input-${engine}-${totalMs}`,
           resourceId: RESOURCE,
           prompt: 'Save me slowly.',
-          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          modelSettings: { timeout: { totalMs } },
           collectChunks: true,
           fixtures: llm => {
             llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
@@ -409,6 +413,12 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           });
           expect(snapshot?.status).not.toBe('running');
         }
+        await Promise.all(heldSaves);
+        const { messages } = await memory.recall({ threadId: `slow-input-${engine}-${totalMs}`, resourceId: RESOURCE });
+        // Inngest takes no execution claim: the request was accepted before the deadline, so the deadline
+        // alone must not drop it (see #28659). Durable and evented cover memory with their claim, and the
+        // deadline releases it, so storage rejects an input save still in flight.
+        expect(messages.map(message => message.role)).toEqual(engine === 'inngest' ? ['user'] : []);
       } finally {
         saveSpy.mockRestore();
       }

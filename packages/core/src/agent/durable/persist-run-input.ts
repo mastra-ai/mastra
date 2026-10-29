@@ -1,6 +1,6 @@
 import { MastraFGAPermissions } from '../../auth/ee';
 import type { Mastra } from '../../mastra';
-import { assertExecutionOwned } from './execution-fence';
+import { assertExecutionOwned, DurableExecutionFenceError, EXECUTION_TIMED_OUT_ERROR_ID } from './execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from './memory-fga';
 import { getRunRegistryEntry } from './run-registry';
 import type { DurableAgenticWorkflowInput } from './types';
@@ -46,12 +46,20 @@ export async function persistDurableRunInput(
   // Save a copy so later consumers still see the accepted request; saves upsert by ID.
   await entry.saveQueueManager.flushMessages(entry.messageList.clone(), state.threadId, state.memoryConfig, {
     throwOnError: true,
-    beforePersist: () =>
-      assertExecutionOwned({
-        runId,
-        agentId: workflowInput.agentId,
-        mastra,
-        requestContext,
-      }),
+    beforePersist: async () => {
+      try {
+        await assertExecutionOwned({
+          runId,
+          agentId: workflowInput.agentId,
+          mastra,
+          requestContext,
+        });
+      } catch (error) {
+        // The request was accepted before the deadline, so the deadline alone
+        // must not drop it. Any other ownership loss still blocks the save.
+        if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_TIMED_OUT_ERROR_ID) return;
+        throw error;
+      }
+    },
   });
 }
