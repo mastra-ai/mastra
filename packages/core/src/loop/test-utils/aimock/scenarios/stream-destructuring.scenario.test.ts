@@ -308,8 +308,10 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     async hasBody => {
       const llm = getMock();
       const request = hasBody ? { body: 'private-cached-request' } : {};
-      const { agent } = await createSharedAgent(llm, {
+      const pubsub = new EventEmitterPubSub();
+      const { agent, mastra } = await createSharedAgent(llm, {
         engine,
+        pubsub,
         inputProcessors: [
           {
             id: 'cached-request',
@@ -340,6 +342,38 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
           },
         ],
       });
+      const serialized: string[] = [];
+      const boundaries = { publish: 0, persist: 0, results: 0, state: 0 };
+      if (isDurableEngineVariant(engine)) {
+        const publish = pubsub.publish.bind(pubsub);
+        vi.spyOn(pubsub, 'publish').mockImplementation((...args) => {
+          boundaries.publish++;
+          serialized.push(JSON.stringify(args));
+          return publish(...args);
+        });
+        const store = await mastra.getStorage()?.getStore('workflows');
+        expect(store).toBeDefined();
+        if (store) {
+          const persist = store.persistWorkflowSnapshot.bind(store);
+          vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation((...args) => {
+            boundaries.persist++;
+            serialized.push(JSON.stringify(args));
+            return persist(...args);
+          });
+          const updateResults = store.updateWorkflowResults.bind(store);
+          vi.spyOn(store, 'updateWorkflowResults').mockImplementation((...args) => {
+            boundaries.results++;
+            serialized.push(JSON.stringify(args));
+            return updateResults(...args);
+          });
+          const updateState = store.updateWorkflowState.bind(store);
+          vi.spyOn(store, 'updateWorkflowState').mockImplementation((...args) => {
+            boundaries.state++;
+            serialized.push(JSON.stringify(args));
+            return updateState(...args);
+          });
+        }
+      }
       const result: any = await agent.stream('Use the cached answer');
       const output = result.output ?? result;
       try {
@@ -347,6 +381,15 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         expect(await output.text).toBe('Cached answer.');
         expect(llm.getRequests()).toHaveLength(0);
         expect(await output.request).toEqual(request);
+        if (isDurableEngineVariant(engine)) {
+          expect(boundaries.publish).toBeGreaterThan(0);
+          expect(boundaries.persist).toBeGreaterThan(0);
+          if (engine === 'evented') {
+            expect(boundaries.results).toBeGreaterThan(0);
+            expect(boundaries.state).toBeGreaterThan(0);
+          }
+          expect(serialized.join('\n')).not.toContain('private-cached-request');
+        }
       } finally {
         result.cleanup?.();
       }
