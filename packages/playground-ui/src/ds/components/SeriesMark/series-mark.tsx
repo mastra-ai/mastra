@@ -17,6 +17,12 @@ export type SeriesMarkProps = {
   style?: CSSProperties;
 };
 
+/** The icon tile tinted with the series color, and the icon drawn in it; without one, the neutral classes apply. */
+function tileColors(color?: string): CSSProperties {
+  if (!color) return {};
+  return { background: `color-mix(in oklab, ${color} 18%, transparent)`, color };
+}
+
 /**
  * What a table row stands for, before its name: a small color square, or an icon on a tinted
  * square. With `color`, it ties the row to its series on a chart (a chart's table or legend);
@@ -24,7 +30,7 @@ export type SeriesMarkProps = {
  * doesn't make rows taller.
  */
 export function SeriesMark({ color, icon, className, style }: SeriesMarkProps) {
-  if (icon === undefined || icon === null) {
+  if (!icon) {
     return (
       <span
         aria-hidden
@@ -44,7 +50,7 @@ export function SeriesMark({ color, icon, className, style }: SeriesMarkProps) {
         !color && 'bg-fill-subtle text-muted-foreground',
         className,
       )}
-      style={color ? { background: `color-mix(in oklab, ${color} 18%, transparent)`, color, ...style } : style}
+      style={{ ...tileColors(color), ...style }}
     >
       {icon}
     </span>

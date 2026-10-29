@@ -1,6 +1,6 @@
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { useId } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { MetricsTableSortDirection } from './metrics-table-types';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,50 @@ export const FOCUS =
  */
 const EXPLAINED =
   'cursor-help underline decoration-dotted decoration-placeholder/45 underline-offset-4 transition-[text-decoration-color] duration-150 group-hover/header:decoration-placeholder group-focus-visible/header:decoration-placeholder';
+
+type HeaderTextProps = {
+  header: string;
+  /** Underlines the label: the header has a tooltip. */
+  explained: boolean;
+};
+
+/** The header's label, as a sort button with the sorted direction's arrow. Takes a tooltip's trigger props. */
+function SortButton({
+  header,
+  explained,
+  sorted,
+  className,
+  ...props
+}: HeaderTextProps & { sorted?: MetricsTableSortDirection } & ComponentProps<'button'>) {
+  const SortIcon = sorted && SORT_ICON[sorted];
+  return (
+    <button
+      type="button"
+      {...props}
+      className={cn(
+        'group/header flex items-center gap-1 rounded whitespace-nowrap hover:text-muted-foreground',
+        FOCUS,
+        className,
+      )}
+    >
+      <span className={cn(explained && EXPLAINED)}>{header}</span>
+      {SortIcon && <SortIcon aria-hidden className="size-3" />}
+    </button>
+  );
+}
+
+/** The header's label as text; focusable when it has a tooltip, so the keyboard reaches it. */
+function HeaderText({ header, explained, className, ...props }: HeaderTextProps & ComponentProps<'span'>) {
+  return (
+    <span
+      tabIndex={explained ? 0 : undefined}
+      {...props}
+      className={cn('group/header rounded whitespace-nowrap', FOCUS, className)}
+    >
+      <span className={cn(explained && EXPLAINED)}>{header}</span>
+    </span>
+  );
+}
 
 /**
  * A column's header: a sort button when the column sorts, plain text otherwise. With a
@@ -35,33 +79,12 @@ export function MetricsTableHeaderLabel({
   onSort?: () => void;
 }) {
   const descriptionId = useId();
-  const SortIcon = sorted && SORT_ICON[sorted];
   const explained = Boolean(description);
-  const label = <span className={cn(explained && EXPLAINED)}>{header}</span>;
-  const described = explained ? { 'aria-describedby': descriptionId } : {};
-
+  const describedBy = explained ? descriptionId : undefined;
   const trigger = onSort ? (
-    <button
-      type="button"
-      onClick={onSort}
-      {...described}
-      className={cn(
-        'group/header flex items-center gap-1 rounded whitespace-nowrap hover:text-muted-foreground',
-        FOCUS,
-      )}
-    >
-      {label}
-      {SortIcon && <SortIcon aria-hidden className="size-3" />}
-    </button>
+    <SortButton header={header} explained={explained} sorted={sorted} onClick={onSort} aria-describedby={describedBy} />
   ) : (
-    // Focusable only to reach its tooltip from the keyboard.
-    <span
-      tabIndex={explained ? 0 : undefined}
-      {...described}
-      className={cn('group/header rounded whitespace-nowrap', FOCUS)}
-    >
-      {label}
-    </span>
+    <HeaderText header={header} explained={explained} aria-describedby={describedBy} />
   );
 
   if (!explained) return trigger;
