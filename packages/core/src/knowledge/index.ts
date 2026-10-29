@@ -48,6 +48,7 @@ export class Knowledge extends MastraBase {
   #tools: { read: boolean; write: boolean };
   #pins: false | PinBudget;
   #instructions?: KnowledgeInstructionsOption;
+  #semantic?: KnowledgeSemanticIndex;
 
   /** Config pins are never dropped, so a scope with more of them than the budget holds is a setup mistake. */
   #warnOnPinOvercommit(budget: PinBudget) {
@@ -85,6 +86,12 @@ export class Knowledge extends MastraBase {
         : { read: Boolean(tools), write: Boolean(tools) };
     this.#pins = resolvePins(config.pinnedContext);
     this.#instructions = config.instructions;
+    if (Boolean(config.vector) !== Boolean(config.embedder)) {
+      throw new Error('Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.');
+    }
+    if (config.vector && config.embedder) {
+      this.#semantic = new KnowledgeSemanticIndex(config.vector, config.embedder, config.embedderOptions);
+    }
     this.#runtime = new KnowledgeScopeRuntime(
       config.scopes,
       () => this.getStorage(),
@@ -136,7 +143,12 @@ export class Knowledge extends MastraBase {
   /** Tools for explicit wiring; defaults to the groups configured on this Knowledge. */
   createTools(options?: KnowledgeToolSelection): Record<string, ToolAction<any, any, any>> {
     return buildKnowledgePageTools(
-      { runtime: this.#runtime, getStorage: () => this.getStorage() },
+      {
+        runtime: this.#runtime,
+        getStorage: () => this.getStorage(),
+        semantic: this.#semantic,
+        warn: message => this.logger.warn(message),
+      },
       this.#groups(options),
       // A pin write changes what the pins lane shows; drop the turn's memoized read.
       context =>
@@ -144,6 +156,15 @@ export class Knowledge extends MastraBase {
           context as KnowledgeRunContext & { requestContext?: { delete?(key: string): void } }
         )?.requestContext?.delete?.(PINNED_READ_MEMO_KEY),
     );
+  }
+
+  /**
+   * Re-embeds every live page and note into the vector store, for content written outside the tools
+   * or after a failed embed. Returns how many were indexed; throws without `vector` and `embedder`.
+   */
+  async reindex(): Promise<number> {
+    if (!this.#semantic) throw new Error('Knowledge has no `vector` and `embedder` to reindex into.');
+    return this.#semantic.reindex(await this.getStorage());
   }
 
   /** The usage block that goes with `createTools(options)`. */
@@ -245,5 +266,6 @@ export type {
   KnowledgeAccessRule,
   KnowledgeRole,
 } from './declarations';
+import { KnowledgeSemanticIndex } from './semantic';
 export type { KnowledgeAccessExplanation } from './scope-runtime';
 export type { KnowledgeAccessGrant } from './access';

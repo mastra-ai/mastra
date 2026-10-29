@@ -1,4 +1,5 @@
 import type { MastraCompositeStore } from '../storage';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { KnowledgeScopeDeclarations } from './declarations';
 import type { KnowledgeInstructionsOption } from './instructions';
 
@@ -16,6 +17,14 @@ export interface KnowledgeConfig {
    */
   scopes: KnowledgeScopeDeclarations;
   storage?: MastraCompositeStore;
+  /**
+   * Vector store and embedder for semantic search. With both, `knowledge_search` blends keyword and
+   * semantic results, and page and note writes made through the tools are embedded. Without them,
+   * search is keyword only. Content written straight to the store is embedded by `reindex()`.
+   */
+  vector?: MastraVector;
+  embedder?: MastraEmbeddingModel<string>;
+  embedderOptions?: MastraEmbeddingOptions;
   /**
    * Tools an attached agent gets: `true` for read and write (`knowledge_search`, `knowledge_read`,
    * `knowledge_page`, `knowledge_note`), `{ read: true }` for `knowledge_search` and `knowledge_read`,

@@ -1,5 +1,10 @@
 import type { JSONSchema7 } from 'json-schema';
-import type { KnowledgeNote, KnowledgePage, KnowledgeStorage } from '../storage/domains/knowledge';
+import type {
+  KnowledgeNote,
+  KnowledgePage,
+  KnowledgePageSearchHit,
+  KnowledgeStorage,
+} from '../storage/domains/knowledge';
 import { knowledgeScopeReadable } from '../storage/domains/knowledge';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
@@ -8,12 +13,29 @@ import { knowledgeRoleAtLeast } from './declarations';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
+import type { KnowledgeSemanticIndex } from './semantic';
 
 /** What the page tools need from their Knowledge. @internal */
 export interface KnowledgePageToolHost {
   runtime: KnowledgeScopeRuntime;
   getStorage(): Promise<KnowledgeStorage>;
+  /** Set when Knowledge has a vector store and embedder: search is hybrid and writes are embedded. */
+  semantic?: KnowledgeSemanticIndex;
+  warn?: (message: string) => void;
 }
+
+/** Embeds after a committed write. A failure only costs recall, so it warns instead of failing the write. */
+async function reindex(host: KnowledgePageToolHost, work: (index: KnowledgeSemanticIndex) => Promise<void>) {
+  if (!host.semantic) return;
+  try {
+    await work(host.semantic);
+  } catch (error) {
+    host.warn?.(`Knowledge semantic index update failed; run knowledge.reindex() to repair: ${String(error)}`);
+  }
+}
+
+/** Reciprocal-rank constant: results ranked well by either list rise; neither list's scores need comparing. */
+const RRF_K = 60;
 
 /** Which tools to build. `pins` adds `knowledge_pin`. @internal */
 export interface KnowledgePageToolGroups {
@@ -139,7 +161,42 @@ function searchTool(host: KnowledgePageToolHost) {
       const { query, scope, limit } = input as { query: string; scope?: string[]; limit?: number };
       const run = await start(host, context);
       const scopeIds = scope ? (await readableScopes(run, scope)).map(page => page.id) : undefined;
-      const hits = await run.storage.searchPages({ query, read: run.read, scopeIds, limit: limitOf(limit) });
+      const max = limitOf(limit);
+      const lexical = await run.storage.searchPages({ query, read: run.read, scopeIds, limit: max });
+      let hits = lexical;
+      if (host.semantic) {
+        const inScope = (page: KnowledgePage) => !scopeIds || scopeIds.includes(page.scopeId);
+        // Every vector hit is re-read under the run's read scope before it can take a slot.
+        const semantic = await host.semantic
+          .search<KnowledgePageSearchHit>(query, max, async candidate => {
+            if (candidate.kind === 'page') {
+              const page = await run.storage.getPage({ id: candidate.id, read: run.read });
+              return page && !page.deletedAt && !page.isScope && inScope(page) ? { type: 'page', page } : null;
+            }
+            const note = await run.storage.getNote({ id: candidate.id, read: run.read });
+            if (!note || note.deletedAt) return null;
+            const page = await run.storage.getPage({ id: note.pageId, read: run.read });
+            return page && !page.deletedAt && inScope(page) ? { type: 'note', page, note } : null;
+          })
+          // Keyword results still answer when the embedder or vector store is down.
+          .catch(error => {
+            host.warn?.(`Knowledge semantic search failed; returning keyword results only: ${String(error)}`);
+            return [];
+          });
+        const fused = new Map<string, { hit: KnowledgePageSearchHit; score: number }>();
+        for (const list of [lexical, semantic]) {
+          list.forEach((hit, rank) => {
+            const key = hit.type === 'page' ? `page:${hit.page.id}` : `note:${hit.note.id}`;
+            const entry = fused.get(key) ?? { hit, score: 0 };
+            entry.score += 1 / (RRF_K + rank + 1);
+            fused.set(key, entry);
+          });
+        }
+        hits = [...fused.values()]
+          .sort((a, b) => b.score - a.score)
+          .slice(0, max)
+          .map(entry => entry.hit);
+      }
       const addresses = await scopeAddresses(
         run,
         hits.map(hit => hit.page),
@@ -298,16 +355,16 @@ function pageTool(host: KnowledgePageToolHost) {
           }
           const page = await run.page(args.page);
           await run.require(await run.scopeOf(page), 'editor', 'Editing a page');
-          return done(
-            await storage.updatePage({
-              id: page.id,
-              expectedVersion: args.expectedVersion ?? page.version,
-              name: args.name,
-              description: args.description,
-              body: args.body,
-              provenance,
-            }),
-          );
+          const updated = await storage.updatePage({
+            id: page.id,
+            expectedVersion: args.expectedVersion ?? page.version,
+            name: args.name,
+            description: args.description,
+            body: args.body,
+            provenance,
+          });
+          await reindex(host, index => index.indexPage(updated));
+          return done(updated);
         }
         if (!args.scope || !args.name) throw new Error('Creating a page needs scope and name.');
         const scope = await run.targetScope(args.scope, 'contributor', 'Creating a page');
@@ -315,16 +372,16 @@ function pageTool(host: KnowledgePageToolHost) {
         if (parent.id !== scope.id && parent.scopeId !== scope.id) {
           throw new Error(`Parent "${args.parent}" is not in scope "${args.scope}".`);
         }
-        return done(
-          await storage.createPage({
-            parentId: parent.id,
-            key: args.key,
-            name: args.name,
-            description: args.description,
-            body: args.body,
-            provenance,
-          }),
-        );
+        const created = await storage.createPage({
+          parentId: parent.id,
+          key: args.key,
+          name: args.name,
+          description: args.description,
+          body: args.body,
+          provenance,
+        });
+        await reindex(host, index => index.indexPage(created));
+        return done(created);
       }
 
       if (!args.page) throw new Error(`op "${args.op}" needs page.`);
@@ -356,14 +413,14 @@ function pageTool(host: KnowledgePageToolHost) {
       const target = await run.page(args.into);
       await run.require(home, 'owner', 'Merging a page away');
       await run.require(await run.scopeOf(target), 'editor', 'Merging into a page');
-      return done(
-        await storage.mergePages({
-          sourceId: page.id,
-          sourceVersion: args.expectedVersion ?? page.version,
-          targetId: target.id,
-          provenance,
-        }),
-      );
+      const merged = await storage.mergePages({
+        sourceId: page.id,
+        sourceVersion: args.expectedVersion ?? page.version,
+        targetId: target.id,
+        provenance,
+      });
+      await reindex(host, index => index.remove([`page:${page.id}`]));
+      return done(merged);
     },
   });
 }
@@ -424,6 +481,7 @@ function noteTool(host: KnowledgePageToolHost) {
           mentions: await resolveMentions(run, args.text),
           provenance,
         });
+        await reindex(host, index => index.indexNote(note));
         return { note: noteSummary(note), page: page.id };
       }
 
@@ -444,6 +502,7 @@ function noteTool(host: KnowledgePageToolHost) {
         return { note: noteSummary(restamped), page: page.id };
       }
       await storage.removeNote({ id: note.id, deletedBy: provenance.author, provenance });
+      await reindex(host, index => index.remove([`note:${note.id}`]));
       return { removed: note.id };
     },
   });
