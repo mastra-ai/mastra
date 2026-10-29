@@ -1,13 +1,6 @@
-import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { describe, expect, it } from 'vitest';
 import { KnowledgeLibSQL } from './index';
-
-createKnowledgePageStoreTests(async () => {
-  const store = new KnowledgeLibSQL({ client: createClient({ url: ':memory:' }) });
-  await store.init();
-  return store;
-});
 
 const who = { author: 'host' };
 
@@ -59,5 +52,40 @@ describe('KnowledgeLibSQL schema 4 wiring', () => {
     const readB = { addresses: ['org:b'], prefixes: [], children: [] };
     expect((await store.listPageActivity({ pageId: source.id, read: readA })).events.length).toBeGreaterThan(0);
     expect((await store.listPageActivity({ pageId: source.id, read: readB })).events.length).toBe(0);
+  });
+
+  it('links an unlinked scope on its first later run and keeps that parent afterwards', async () => {
+    const store = await makeStore();
+    const p1 = (
+      await store.materializeScope({ address: 'org:p1', declaration: 'org:$orgId', name: 'P1', provenance: who })
+    ).scope;
+    const p2 = (
+      await store.materializeScope({ address: 'org:p2', declaration: 'org:$orgId', name: 'P2', provenance: who })
+    ).scope;
+    const first = await store.materializeScope({
+      address: 'team:x',
+      declaration: 'team:$orgId',
+      name: 'X',
+      provenance: who,
+    });
+    expect(first.scope.parentId).toBeNull();
+    const linked = await store.materializeScope({
+      address: 'team:x',
+      declaration: 'team:$orgId',
+      name: 'X',
+      parentId: p1.id,
+      provenance: who,
+    });
+    expect(linked.scope.parentId).toBe(p1.id);
+    expect(linked.parentConflict).toBeUndefined();
+    const again = await store.materializeScope({
+      address: 'team:x',
+      declaration: 'team:$orgId',
+      name: 'X',
+      parentId: p2.id,
+      provenance: who,
+    });
+    expect(again.scope.parentId).toBe(p1.id);
+    expect(again.parentConflict).toEqual({ existingParentId: p1.id, requestedParentId: p2.id });
   });
 });

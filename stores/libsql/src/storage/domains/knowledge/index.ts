@@ -11,7 +11,6 @@ import {
   inspectKnowledgePagesSchema,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
-  knowledgePagesResetMessage,
   TABLE_KNOWLEDGE_PAGES_STATE,
   pageKnowledgeScopeMembers,
   pageKnowledgeScopeNodes,
@@ -58,6 +57,7 @@ import {
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
+  KnowledgeSchemaResetRequiredError,
   KnowledgeStorage,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
@@ -492,22 +492,29 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   // Schema-4 page store: delegates to LibSQLKnowledgePages.
+  async #inspectPages(tx: Pick<Executor, 'execute'>) {
+    const tables = await tx.execute({
+      sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\'",
+    });
+    const tableNames = tables.rows.map(row => String(row.name));
+    let schemaVersion: number | undefined;
+    if (tableNames.includes(TABLE_KNOWLEDGE_PAGES_STATE)) {
+      const state = await tx.execute({
+        sql: `SELECT schemaVersion FROM "${TABLE_KNOWLEDGE_PAGES_STATE}" WHERE id = 'knowledge'`,
+      });
+      if (state.rows[0]) schemaVersion = Number(state.rows[0].schemaVersion);
+    }
+    return inspectKnowledgePagesSchema({ tableNames, schemaVersion });
+  }
+
+  override async inspectSchema() {
+    return this.#inspectPages(this.#client);
+  }
+
   override async init(): Promise<void> {
     await this.#transaction(async tx => {
-      const tables = await tx.execute({
-        sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\'",
-      });
-      const tableNames = tables.rows.map(row => String(row.name));
-      let schemaVersion: number | undefined;
-      if (tableNames.includes(TABLE_KNOWLEDGE_PAGES_STATE)) {
-        const state = await tx.execute({
-          sql: `SELECT schemaVersion FROM "${TABLE_KNOWLEDGE_PAGES_STATE}" WHERE id = 'knowledge'`,
-        });
-        if (state.rows[0]) schemaVersion = Number(state.rows[0].schemaVersion);
-      }
-      const inspection = inspectKnowledgePagesSchema({ tableNames, schemaVersion });
-      if (inspection.status === 'incompatible-reset-required')
-        throw new Error(knowledgePagesResetMessage(inspection.reason));
+      const inspection = await this.#inspectPages(tx);
+      if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
       for (const statement of KNOWLEDGE_PAGE_DDL) await tx.execute(statement);
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,

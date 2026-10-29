@@ -12,6 +12,7 @@ import {
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
+  KnowledgeSchemaResetRequiredError,
   KnowledgeStorage,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
@@ -26,7 +27,6 @@ import {
   inspectKnowledgePagesSchema,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
-  knowledgePagesResetMessage,
   TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
 import type {
@@ -298,9 +298,9 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   // Schema-4 page store: delegates to MySQLKnowledgePages.
-  override async init(): Promise<void> {
-    const exec = async (sql: string, args: (string | number)[] = []) => {
-      const [rows] = await this.#pool.query(sql, args);
+  async #inspectPages() {
+    const exec = async (sql: string) => {
+      const [rows] = await this.#pool.query(sql);
       return rows as RowDataPacket[];
     };
     const tables = await exec(
@@ -312,9 +312,16 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       const state = await exec(`SELECT schemaVersion FROM \`${TABLE_KNOWLEDGE_PAGES_STATE}\` WHERE id = 'knowledge'`);
       if (state[0]) schemaVersion = Number(state[0].schemaVersion);
     }
-    const inspection = inspectKnowledgePagesSchema({ tableNames, schemaVersion });
-    if (inspection.status === 'incompatible-reset-required')
-      throw new Error(knowledgePagesResetMessage(inspection.reason));
+    return inspectKnowledgePagesSchema({ tableNames, schemaVersion });
+  }
+
+  override async inspectSchema() {
+    return this.#inspectPages();
+  }
+
+  override async init(): Promise<void> {
+    const inspection = await this.#inspectPages();
+    if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
     for (const statement of KNOWLEDGE_PAGE_DDL) await this.#pool.query(statement);
     await this.#pool.query(
       `INSERT IGNORE INTO \`${TABLE_KNOWLEDGE_PAGES_STATE}\` (id, schemaVersion) VALUES ('knowledge', ?)`,

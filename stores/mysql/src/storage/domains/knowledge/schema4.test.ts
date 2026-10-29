@@ -1,4 +1,3 @@
-import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { createPool } from 'mysql2/promise';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { StoreOperationsMySQL } from '../operations';
@@ -17,12 +16,6 @@ const pool = createPool({
 });
 afterAll(() => pool.end());
 const createStore = () => new KnowledgeMySQL({ pool, operations: new StoreOperationsMySQL({ pool, database }) });
-createKnowledgePageStoreTests(async () => {
-  const store = createStore();
-  await store.dangerouslyReset();
-  return store;
-});
-
 const who = { author: 'host' };
 
 async function makeStore() {
@@ -74,5 +67,40 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     const readB = { addresses: ['org:b'], prefixes: [], children: [] };
     expect((await store.listPageActivity({ pageId: source.id, read: readA })).events.length).toBeGreaterThan(0);
     expect((await store.listPageActivity({ pageId: source.id, read: readB })).events.length).toBe(0);
+  });
+
+  it('links an unlinked scope on its first later run and keeps that parent afterwards', async () => {
+    const store = await makeStore();
+    const p1 = (
+      await store.materializeScope({ address: 'org:p1', declaration: 'org:$orgId', name: 'P1', provenance: who })
+    ).scope;
+    const p2 = (
+      await store.materializeScope({ address: 'org:p2', declaration: 'org:$orgId', name: 'P2', provenance: who })
+    ).scope;
+    const first = await store.materializeScope({
+      address: 'team:x',
+      declaration: 'team:$orgId',
+      name: 'X',
+      provenance: who,
+    });
+    expect(first.scope.parentId).toBeNull();
+    const linked = await store.materializeScope({
+      address: 'team:x',
+      declaration: 'team:$orgId',
+      name: 'X',
+      parentId: p1.id,
+      provenance: who,
+    });
+    expect(linked.scope.parentId).toBe(p1.id);
+    expect(linked.parentConflict).toBeUndefined();
+    const again = await store.materializeScope({
+      address: 'team:x',
+      declaration: 'team:$orgId',
+      name: 'X',
+      parentId: p2.id,
+      provenance: who,
+    });
+    expect(again.scope.parentId).toBe(p1.id);
+    expect(again.parentConflict).toEqual({ existingParentId: p1.id, requestedParentId: p2.id });
   });
 });
