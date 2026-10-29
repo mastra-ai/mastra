@@ -1086,7 +1086,8 @@ export async function assertExecutionOwned(args: {
  * {@link assertExecutionOwned} for writes that may land after the execution
  * settled, such as a background task's result. Once the claim is released,
  * the write is accepted until another execution claims the run, as storage
- * accepts the released claim's writes.
+ * accepts the released claim's writes. A run without a claim stops writing
+ * once the deadline carried in its request context passes.
  */
 export async function assertExecutionNotSuperseded(args: {
   runId: string;
@@ -1095,7 +1096,16 @@ export async function assertExecutionNotSuperseded(args: {
   mastra: Mastra | undefined;
 }): Promise<void> {
   const claim = getExecutionClaim(args.requestContext, args.runId);
-  if (!claim) return;
+  if (!claim) {
+    if (isRunPastDeadline(args.requestContext, args.runId)) {
+      throw new DurableExecutionFenceError(EXECUTION_TIMED_OUT_ERROR_ID, {
+        agentId: args.agentId,
+        runId: args.runId,
+        executionId: args.runId,
+      });
+    }
+    return;
+  }
 
   const local = fencesByExecutionId.get(claim.executionId);
   if (local) return local.verify();

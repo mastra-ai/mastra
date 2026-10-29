@@ -111,15 +111,19 @@ describe('run deadline fence', () => {
   it('does not fence out a resumed session when the earlier session timer fires late', async () => {
     const { mastra, memoryStore } = await setup();
     const now = vi.spyOn(Date, 'now');
-    now.mockReturnValue(1_000);
-    const first = await arm(mastra);
-    now.mockReturnValue(2_000);
-    const resumed = await arm(mastra);
-    now.mockReturnValue(3_000);
-    expect(first.deadline.fence).toBeDefined();
-    expect(resumed.deadline.fence!.generation).toBeGreaterThan(first.deadline.fence!.generation);
-    await first.expire();
-    now.mockRestore();
+    let resumed: Awaited<ReturnType<typeof arm>>;
+    try {
+      now.mockReturnValue(1_000);
+      const first = await arm(mastra);
+      now.mockReturnValue(2_000);
+      resumed = await arm(mastra);
+      now.mockReturnValue(3_000);
+      expect(first.deadline.fence).toBeDefined();
+      expect(resumed.deadline.fence!.generation).toBeGreaterThan(first.deadline.fence!.generation);
+      await first.expire();
+    } finally {
+      now.mockRestore();
+    }
 
     await expect(resumed.inScope(() => memoryStore.saveThread({ thread: thread() }))).resolves.toMatchObject({
       id: 't-1',
