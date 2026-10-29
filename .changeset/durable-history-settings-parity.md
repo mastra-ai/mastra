@@ -10,3 +10,4 @@ Behavior changes:
 - With a custom MessageHistory processor, messages go to that processor's store instead of the agent's memory. If the processor has no `persistMessages`, nothing is saved.
 - When observational memory is added as a processor, the run no longer saves a second copy to agent memory.
 - With `observationalMemory: { enabled: false }`, messages are saved by MessageHistory, the same as with a normal agent.
+- If a configured MessageHistory processor throws at the end of a run, the run now fails, as it does with a normal agent. Before, the error was logged and the run reported success even though nothing was saved.

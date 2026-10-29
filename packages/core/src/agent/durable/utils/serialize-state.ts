@@ -161,7 +161,7 @@ export function serializeDurableState(params: {
   threadExists?: boolean;
   savePerStep?: boolean;
   observationalMemory?: boolean;
-  persistHistory?: boolean;
+  historyWriter?: 'none' | 'memory' | 'processor';
   fixedMemory?: boolean;
 }): SerializableDurableState {
   return {
@@ -171,7 +171,7 @@ export function serializeDurableState(params: {
     threadExists: params.threadExists,
     savePerStep: params.savePerStep,
     observationalMemory: params.observationalMemory,
-    persistHistory: params.persistHistory,
+    historyWriter: params.historyWriter,
     fixedMemory: params.fixedMemory,
   };
 }

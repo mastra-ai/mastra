@@ -78,6 +78,39 @@ describe('runDurableFinishSideEffects', () => {
     expect(flushMessages).toHaveBeenCalledTimes(1);
   });
 
+  // A rebuilt worker only has the agent's own output processors, so a MessageHistory passed at
+  // call time is gone. The turn must still be saved, through the save queue.
+  it.each([
+    { name: 'missing on a rebuilt worker', outputProcessors: [], flushes: 1 },
+    {
+      name: 'present on this worker',
+      outputProcessors: [{ id: 'message-history', processOutputResult: ({ messages }: any) => messages }],
+      flushes: 0,
+    },
+  ])('a configured MessageHistory writer $name', async ({ outputProcessors, flushes }) => {
+    const flushMessages = vi.fn().mockResolvedValue(undefined);
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors,
+      saveQueueManager: { flushMessages },
+      memory: { createThread: vi.fn() },
+    } as unknown as RunRegistryEntry);
+
+    await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: makeInitData({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        threadExists: true,
+        historyWriter: 'processor',
+      }),
+      messageListState: makeMessageListState(),
+      mastra: { getLogger: () => undefined, getServer: () => undefined } as any,
+    });
+
+    expect(flushMessages).toHaveBeenCalledTimes(flushes);
+  });
+
   it('denies before durable finish persistence writes', async () => {
     const denial = new Error('memory write denied');
     authorizeDurableMemory.mockRejectedValueOnce(denial);

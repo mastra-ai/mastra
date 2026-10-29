@@ -983,7 +983,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       threadExists,
       savePerStep,
       observationalMemory,
-      persistHistory: historyWriter.kind === 'memory',
+      historyWriter: historyWriter.kind,
       fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,

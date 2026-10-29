@@ -691,6 +691,44 @@ describeForAllEngines('error-surfaces: history settings at finish', engine => {
     },
     TEST_TIMEOUT_MS + 5_000,
   );
+
+  // No save-queue flush backs up a configured MessageHistory, so its failure must fail the run
+  // rather than finish with the turn saved nowhere.
+  it(
+    'a configured MessageHistory that fails at finish fails the run',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `finish-history-${engine}-throws`;
+      const llm = getMock();
+      const { output } = await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'Where is my order?',
+        expectStreamError: true,
+        outputProcessors: [
+          {
+            id: 'message-history',
+            persistMessages: async () => {},
+            processOutputResult: () => {
+              throw new Error('history save failed');
+            },
+          } as any,
+        ],
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: 'Your order shipped today.' });
+        },
+      });
+
+      expect(output.status).toBe('failed');
+      expect(String((output as any).error?.message)).toContain('history save failed');
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages).toEqual([]);
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
 });
 
 describeParity('error-surfaces parity', target => {

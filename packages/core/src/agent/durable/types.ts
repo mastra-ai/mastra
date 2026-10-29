@@ -142,12 +142,11 @@ export interface SerializableDurableState {
   /** Whether observational memory is enabled (suppresses savePerStep) */
   observationalMemory?: boolean;
   /**
-   * Whether the finish path saves the turn to agent memory, i.e. memory itself adds a
-   * MessageHistory processor. False when history is off, read-only, observational memory owns
-   * the writes, or an explicitly configured MessageHistory saves instead. Absent on runs
-   * started before this field existed; those fall back to `observationalMemory`.
+   * Which writer saves the turn at finish (see HistoryWriter). Only `memory` means the finish
+   * path flushes to agent memory itself. Absent on runs started before this field existed;
+   * those fall back to `observationalMemory`.
    */
-  persistHistory?: boolean;
+  historyWriter?: HistoryWriter['kind'];
   /**
    * Whether the agent's memory is a fixed instance. Only then may the stored
    * transcript reference recalled messages instead of copying them: function or
