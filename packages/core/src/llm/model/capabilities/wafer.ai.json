@@ -12,7 +12,12 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "glm5.2-fast": [
+    "GLM-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMax-M3": [
       {
         "type": "toggle"
       },
@@ -21,17 +26,12 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "GLM-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
     "Kimi-K2.6": [
       {
         "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "glm5.2-fast": [
       {
         "type": "toggle"
       },

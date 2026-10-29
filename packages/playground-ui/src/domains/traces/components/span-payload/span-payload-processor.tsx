@@ -13,7 +13,7 @@ import {
   SpanPayloadMarkdown,
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
-import { getProcessorRunContext, hasItems } from './span-payload-registry';
+import { hasItems } from './span-payload-registry';
 import { SpanToolNameValue } from './span-payload-tool';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
@@ -158,11 +158,8 @@ export function SpanPayloadProcessor({ value, hidden = [] }: SpanPayloadProcesso
   );
 }
 
-/**
- * A processor span's input, without the step and retry count that Attributes
- * shows as run context, nor the tools and tool choice the Tools section shows.
- */
+/** A processor span's input, without the tools and tool choice the Tools section shows. */
 export function SpanPayloadProcessorInput({ value }: { value: ProcessorSpanPayload<ProcessorRunInputByPhase> }) {
   const toolKeys = 'tools' in value.data && hasItems(value.data.tools) ? ['tools', 'toolChoice'] : [];
-  return <SpanPayloadProcessor value={value} hidden={[...Object.keys(getProcessorRunContext(value)), ...toolKeys]} />;
+  return <SpanPayloadProcessor value={value} hidden={toolKeys} />;
 }

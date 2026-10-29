@@ -34,6 +34,7 @@ const meta = {
   },
   argTypes: {
     status: { control: 'inline-radio', options: ['idle', 'running', 'error'] },
+    appearance: { control: 'inline-radio', options: ['row', 'inline'] },
     collapsible: { control: 'boolean' },
     icon: { control: false },
     children: { control: false },
@@ -62,6 +63,19 @@ type Story = StoryObj<typeof meta>;
 export const Folded: Story = {};
 
 export const Expanded: Story = { args: { defaultOpen: true } };
+
+export const Inline: Story = {
+  args: { appearance: 'inline', defaultOpen: true },
+  decorators: [
+    Story => (
+      <div className="flex flex-col gap-2 text-body text-foreground">
+        <p>Here is what changed in the agent config.</p>
+        <Story />
+        <p>The support agent now reads its name from the config.</p>
+      </div>
+    ),
+  ],
+};
 
 export const WithoutBody: Story = {
   args: {

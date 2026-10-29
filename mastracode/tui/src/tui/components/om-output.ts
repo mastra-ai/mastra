@@ -184,18 +184,17 @@ export class OMOutputComponent extends WidthAwareContainer {
       const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
       return chalk.hex(color)(`Reflected: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`);
-    } else {
-      // Observation: "Observed: Xk → Yk tokens (Zx compression) in Ns"
-      const observed = formatTokens(this.data.tokensObserved ?? 0);
-      const compressed = formatTokens(this.data.observationTokens ?? 0);
-      const ratio =
-        (this.data.tokensObserved ?? 0) > 0 && (this.data.observationTokens ?? 0) > 0
-          ? `${Math.round((this.data.tokensObserved ?? 0) / (this.data.observationTokens ?? 1))}x`
-          : '';
-      const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
-      const ratioStr = ratio ? ` (${ratio} compression)` : '';
-      return chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`);
     }
+    // Observation: "Observed: Xk → Yk tokens (Zx compression) in Ns"
+    const observed = formatTokens(this.data.tokensObserved ?? 0);
+    const compressed = formatTokens(this.data.observationTokens ?? 0);
+    const ratio =
+      (this.data.tokensObserved ?? 0) > 0 && (this.data.observationTokens ?? 0) > 0
+        ? `${Math.round((this.data.tokensObserved ?? 0) / (this.data.observationTokens ?? 1))}x`
+        : '';
+    const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
+    const ratioStr = ratio ? ` (${ratio} compression)` : '';
+    return chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`);
   }
 
   getChatSpacingKind(): ChatSpacingKind {

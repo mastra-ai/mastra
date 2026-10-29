@@ -125,7 +125,7 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-The function can be asynchronous. For decisions that depend on the tool name and arguments, use a [classifier](/reference/classifier/classifier) to estimate whether the call needs human review:
+The function can be asynchronous. For decisions that depend on the tool name and arguments, use a [classifier](/docs/classifier) to estimate whether the call needs human review:
 
 ```typescript title="src/mastra/agents/run-with-approval.ts"
 import { Classifier } from '@mastra/core/classifier'

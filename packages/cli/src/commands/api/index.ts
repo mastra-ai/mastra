@@ -1111,6 +1111,7 @@ export async function executeDescriptor(
   }
 }
 
-function collect(value: string, previous: string[]): string[] {
+/** Commander option parser for repeatable flags. */
+export function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }

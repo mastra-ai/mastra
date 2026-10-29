@@ -1,10 +1,15 @@
 import { useTools } from '@mastra/react/hooks/tools';
+import { useTraceSpans } from '@mastra/react/hooks/traces';
+import type { ReactNode } from 'react';
 import type { SpanRecord } from '../../types';
+import { formatSpanToolCallMessages, getRequestedToolCalls } from '../format-trace-thread-messages';
+import { ReadOnlyToolCallProvider } from '../read-only-tool-call-provider';
 import { SpanPayloadList, SpanPayloadListName } from './span-payload-primitives';
 import { getDelegatedToolHref, getSpanTools } from './span-payload-registry';
 import type { SpanTool } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
 import type { SpanPayloadSectionProps } from './span-payload-section';
+import { MessageRow } from '@/domains/chat/messages/message-row';
 import { Txt } from '@/ds/components/Txt';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { useLinkComponent } from '@/lib/framework';
@@ -57,14 +62,66 @@ export interface SpanToolsSectionProps {
   layout?: SpanPayloadSectionProps['layout'];
 }
 
-/** The tools the span offered the model. */
+/**
+ * The tools the model called, each opening on its input and result like in the chat,
+ * then the tools the span offered the model.
+ */
 export function SpanToolsSection({ span, layout }: SpanToolsSectionProps) {
+  return (
+    <>
+      {getRequestedToolCalls(span).length > 0 && <SpanToolCallsSection span={span} layout={layout} />}
+      <SpanAvailableToolsSection span={span} layout={layout} />
+    </>
+  );
+}
+
+export interface SpanToolCallsSectionProps extends SpanToolsSectionProps {
+  /** Replaces the "Tool calls" heading, e.g. with the sentence of the notice the section sits in. */
+  heading?: ReactNode;
+}
+
+/** The tools the model called, each opening on its input and the result its tool span recorded. */
+export function SpanToolCallsSection({ span, layout, heading }: SpanToolCallsSectionProps) {
+  // The results live on the tool spans, which the trace panel has usually loaded already.
+  const { data } = useTraceSpans({ traceId: span.traceId, passive: true });
+  const toolCalls = formatSpanToolCallMessages(span, data?.spans ?? []);
+  // Only tools the chat never draws (task tools, working memory) were called; the Output JSON keeps them.
+  if (toolCalls.length === 0) return null;
+
+  return (
+    <SpanPayloadSection
+      title={`Tool calls (${toolCalls.length})`}
+      heading={heading}
+      icon={<ToolsIcon />}
+      raw={getRequestedToolCalls(span)}
+      hasPreview
+      // Each call folds on its own, so the list never needs clipping.
+      clip={false}
+      layout={layout}
+    >
+      {/* Tool rows carry their own vertical margins; strip them at the edges so the card padding is the only outer spacing. */}
+      <div
+        data-slot="span-tool-calls"
+        className="flex flex-col [&>[data-slot=message]:first-child]:mt-0 [&>[data-slot=message]:last-child]:mb-0"
+      >
+        <ReadOnlyToolCallProvider>
+          {toolCalls.map(message => (
+            <MessageRow key={message.id} message={message} readOnly />
+          ))}
+        </ReadOnlyToolCallProvider>
+      </div>
+    </SpanPayloadSection>
+  );
+}
+
+/** The tools the span offered the model, linking to their pages when registered. */
+export function SpanAvailableToolsSection({ span, layout }: SpanToolsSectionProps) {
   const spanTools = getSpanTools(span);
   if (!spanTools) return null;
 
   return (
     <SpanPayloadSection
-      title={`Tools (${spanTools.tools.length})`}
+      title={`Available tools (${spanTools.tools.length})`}
       icon={<ToolsIcon />}
       raw={spanTools.raw}
       layout={layout}
