@@ -266,7 +266,10 @@ type CustomConfig = {
   headers?: Record<string, string>
 } & (
   | { endpoint: string; endpoints?: never }
-  | { endpoint?: never; endpoints: { traces?: string; logs?: string } }
+  | {
+      endpoint?: never
+      endpoints: { traces: string; logs?: string } | { traces?: string; logs: string }
+    }
 )
 ```
 
@@ -281,7 +284,7 @@ type CustomConfig = {
   },
   {
     name: 'endpoints',
-    type: '{ traces?: string; logs?: string }',
+    type: '{ traces: string; logs?: string } | { traces?: string; logs: string }',
     description:
       'Exact per-signal URLs. Supply at least one endpoint. Omitted signals are not exported. Cannot be combined with endpoint.',
     isOptional: true,

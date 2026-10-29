@@ -53,11 +53,8 @@ export type CustomConfig = {
     }
   | {
       endpoint?: never;
-      /** Exact signal URLs. Omitted signals are not exported; no paths are added or rewritten. */
-      endpoints: {
-        traces?: string;
-        logs?: string;
-      };
+      /** Exact signal URLs. At least one is required. Omitted signals are not exported. */
+      endpoints: { traces: string; logs?: string } | { traces?: string; logs: string };
     }
 );
 

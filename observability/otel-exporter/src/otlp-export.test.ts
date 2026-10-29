@@ -97,7 +97,7 @@ describe('OTLP exports', () => {
         provider: {
           custom: {
             protocol,
-            endpoints: { [signal]: baseUrl + '/exact/' },
+            endpoints: signal === 'traces' ? { traces: baseUrl + '/exact/' } : { logs: baseUrl + '/exact/' },
           },
         },
       });

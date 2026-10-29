@@ -116,6 +116,7 @@ describe('Provider Configurations', () => {
     });
 
     it('rejects an empty endpoints configuration', () => {
+      // @ts-expect-error At least one signal is required; verify runtime validation for JavaScript callers.
       expect(resolveProviderConfig({ custom: { endpoints: {} } })).toBeNull();
     });
 
