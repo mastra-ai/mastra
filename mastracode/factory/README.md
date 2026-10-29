@@ -363,7 +363,7 @@ const releaseBoard = defineBoard({
 A phase's `runner.skill` runs a skill when a card enters the phase. Use a built-in skill such as `factory-plan`, or write your own. Factory finds a skill in this order; the first match wins:
 
 1. **Code skills** — passed to `new MastraFactory({ skills })`, created with `createSkill()` from `@mastra/core/skills`.
-2. **Folder skills** — `factory-skills/<name>/SKILL.md` in your app. Factory looks in `src/mastra/public/factory-skills`, `public/factory-skills`, `factory-skills` and `output/factory-skills` under the working directory, and uses the first that exists. Supporting files, such as `references/`, can sit next to `SKILL.md`.
+2. **Folder skills** — `src/mastra/factory-skills/<name>/SKILL.md` in your app. `mastra build` copies the folder into the build output. The older `src/mastra/public/factory-skills` still works; when both exist, `src/mastra/factory-skills` wins. Factory also looks in `public/factory-skills`, `factory-skills` and `output/factory-skills` under the working directory, and uses the first that exists. Supporting files, such as `references/`, can sit next to `SKILL.md`.
 3. **Built-in skills** shipped with `@mastra/factory`.
 
 A skill with the same name as a built-in skill replaces it, for the built-in boards too. A code skill replaces the whole folder skill of the same name, including its supporting files. Repository skills in a project's own repository never replace these.

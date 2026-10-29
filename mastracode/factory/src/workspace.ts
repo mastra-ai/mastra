@@ -80,14 +80,17 @@ export const BUNDLED_FACTORY_SKILLS_PATH =
 /**
  * Resolve the consumer repo's local Factory skills root, if any. Checked in
  * addition to the bundled skills so projects can add (or override) Factory
- * skills without patching the installed package. Candidates cover the cwd
- * variants the dev server runs with (`repo root`, `--dir src/mastra` which
- * runs with cwd `src/mastra/public`), then the platform build output when
- * the server runs from its parent directory.
+ * skills without patching the installed package. Skills live in
+ * `src/mastra/factory-skills`; `src/mastra/public/factory-skills` is the older
+ * location and still works. Candidates cover the cwd variants the dev server
+ * runs with (`repo root`, `mastra dev` which runs with cwd `src/mastra/public`),
+ * then the platform build output when the server runs from its parent directory.
  */
 export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
   const candidates = [
+    join(cwd, 'src', 'mastra', 'factory-skills'),
     join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
+    ...(path.basename(cwd) === 'public' ? [join(cwd, '..', 'factory-skills')] : []),
     join(cwd, 'public', 'factory-skills'),
     join(cwd, 'factory-skills'),
     join(cwd, 'output', 'factory-skills'),

@@ -53,3 +53,16 @@ export async function buildFactoryUI(
 
   logger.info('Factory UI copied successfully');
 }
+
+/**
+ * Copies the project's `<mastraDir>/factory-skills` into the build output, where
+ * the deployed Factory looks for app skills. The bundler only copies `public/`,
+ * which was the older place for these skills. No-op when the folder is missing.
+ */
+export async function copyFactorySkills(mastraDir: string, outputDir: string, logger: PinoLogger): Promise<void> {
+  const source = join(mastraDir, 'factory-skills');
+  if (!existsSync(source)) return;
+
+  logger.info('Copying Factory skills...');
+  await copy(source, join(outputDir, 'factory-skills'), { overwrite: true });
+}
