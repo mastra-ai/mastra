@@ -3422,3 +3422,40 @@ describe('createToolCallStep malformed JSON args (issue #9815)', () => {
     expect(result.error.message).toMatch(/invalid|malformed|json|args|arguments/i);
   });
 });
+
+describe('data chunks written by a tool', () => {
+  it('persist under the step response message, not the run-level message id', async () => {
+    const tool = createTool({
+      id: 'emit-metadata',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-workspace-metadata', data: { toolName: 'emit-metadata' } });
+        return { ok: true };
+      },
+    });
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'emit-metadata', agentId: 'agent' },
+    }).build();
+    const outputWriter = vi.fn(async () => {});
+    const step = createToolCallStep({
+      tools: { 'emit-metadata': built },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter,
+      _internal: { stepResponseMessageId: 'msg-rotated' },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'metadata-call', toolName: 'emit-metadata', args: {} },
+      }),
+    );
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-workspace-metadata' }), {
+      messageId: 'msg-rotated',
+    });
+  });
+});

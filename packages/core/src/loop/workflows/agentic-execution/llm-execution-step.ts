@@ -88,6 +88,7 @@ import {
   SUBSCRIBE_PENDING_SIGNALS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
+  STEP_RESPONSE_MESSAGE_ID_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
@@ -1942,6 +1943,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           'stepActiveTools',
           currentStep.activeTools as string[] | undefined,
         );
+
+        // Publish the response message this step writes into. A processor can rotate
+        // it (task-state signals) well after the run-level id was chosen, and a tool
+        // data chunk persisted under the stale id replaces the sealed earlier row.
+        writeScoped(scopeCtx, STEP_RESPONSE_MESSAGE_ID_KEY, 'stepResponseMessageId', currentStep.messageId);
 
         if (toolCallForeachOptions) {
           updateToolCallForeachConcurrency(toolCallForeachOptions, {
