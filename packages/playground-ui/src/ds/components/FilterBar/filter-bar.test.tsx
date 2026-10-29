@@ -886,6 +886,35 @@ describe('FilterBar', () => {
       { id: 'b', fieldId: 'traceId', operatorId: 'is', value: 'x' },
     ];
 
+    describe('when a field relabels an operator', () => {
+      const relabeled: FilterBarField[] = [
+        { ...FIELDS[0], operatorLabels: { 'is-empty': 'is not recorded' } },
+        { id: 'note', label: 'Note', operators: ['is', 'is-empty'] },
+      ];
+
+      it('uses the label on that field only, in the operator list and on the chip', async () => {
+        const onChange = vi.fn();
+        render(<Harness fields={relabeled} onChange={onChange} />);
+
+        getInput().focus();
+        type('status');
+        await screen.findByRole('option', { name: 'Status' });
+        key('Enter');
+        expect(await screen.findByRole('option', { name: 'is not recorded' })).toBeDefined();
+        expect(screen.queryByRole('option', { name: 'is empty' })).toBeNull();
+        type('is not recorded');
+        key('Enter');
+
+        expect(argAt(onChange, 0, 0)).toMatchObject([{ fieldId: 'status', operatorId: 'is-empty' }]);
+        expect(screen.getByRole('group', { name: 'Status is not recorded' })).toBeDefined();
+
+        type('note');
+        await screen.findByRole('option', { name: 'Note' });
+        key('Enter');
+        expect(await screen.findByRole('option', { name: 'is empty' })).toBeDefined();
+      });
+    });
+
     it('renders an accessible label per chip', () => {
       render(<Harness initial={INITIAL} />);
       expect(screen.getByRole('group', { name: 'Status is Running' })).toBeDefined();

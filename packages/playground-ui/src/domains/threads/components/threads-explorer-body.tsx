@@ -104,6 +104,7 @@ export function ThreadsExplorerBody({
         <TracesListView
           listId="all-threads"
           columnPreferences={THREAD_LIST_COLUMN_PREFERENCES}
+          outcomeColumn={false}
           traces={rows}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
