@@ -48,7 +48,7 @@ A name that matches more than one readable page is refused, and the error lists 
 
 ## Search and read
 
-`knowledge_search` matches the query against page names, descriptions, bodies and notes the run can read. Name matches come first. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
+`knowledge_search` matches the query against page names, descriptions, bodies and notes the run can read. Name matches come first. With [semantic search](/docs/knowledge/setup#add-semantic-search) set up, results also match by meaning. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
 
 ```json
 { "query": "on-call", "scope": ["org:acme"] }

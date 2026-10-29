@@ -34,7 +34,41 @@ export const knowledge = new Knowledge({
 
 Leave out `storage` to use the storage configured on `Mastra`. Knowledge storage is supported by `LibSQLStore`, `PostgresStore`, `MySQLStore`, `MongoDBStore` and `InMemoryStore` (for tests).
 
-Search matches keywords in page names, descriptions, bodies and notes.
+Without a vector store, search matches keywords in page names, descriptions, bodies and notes. See [add semantic search](#add-semantic-search) to also match by meaning.
+
+## Add semantic search
+
+Pass a `vector` store and an `embedder` to match pages and notes by meaning as well as by keyword. A search for "reimbursement" then finds a page about getting money back, with no shared word:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  vector: new LibSQLVector({ id: 'knowledge-vector', url: 'file:./knowledge.db' }),
+  embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  scopes: { ...knowledgeMemoryScopes() },
+  tools: true,
+})
+```
+
+Pass both or neither. Passing only one throws ``Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.`` `embedderOptions` is passed to the embedder on every call.
+
+`knowledge_search` then blends keyword and semantic results into one ranked list. Every semantic hit is read again with the run's access before it can take a place in the results. A run never sees content it can't read, and that content never takes a slot from content it can.
+
+Pages and notes written through the tools are embedded as they're written. Scope pages aren't embedded. Run `reindex()` to re-embed every page and note. It returns how many it indexed. Run it after:
+
+- Content written straight to the store, outside the tools.
+- A write that logged `Knowledge semantic index update failed; run knowledge.reindex() to repair`. The write itself succeeded. Only search by meaning misses it until you reindex.
+
+```typescript
+const indexed = await knowledge.reindex()
+```
+
+If the embedder or vector store fails during a search, the search returns keyword results and logs a warning.
 
 ## Choose the tools
 

@@ -43,8 +43,25 @@ import { Knowledge } from '@mastra/core/knowledge'
       'Pinned entries delivered every turn, plus the `knowledge_pin` tool. `maxPins` defaults to 20, `maxTokens` to 500 (at most 2000). Off by default.',
     isOptional: true,
   },
-  { name: 'vector', type: 'MastraVector', description: 'Vector store for semantic search.', isOptional: true },
-  { name: 'embedder', type: 'MastraEmbeddingModel', description: 'Embedder for semantic search.', isOptional: true },
+  {
+    name: 'vector',
+    type: 'MastraVector',
+    description:
+      'Vector store for semantic search. Pass with `embedder`; passing only one throws. Without both, search is keyword only.',
+    isOptional: true,
+  },
+  {
+    name: 'embedder',
+    type: 'MastraEmbeddingModel<string>',
+    description: 'Embedding model for semantic search. Pass with `vector`.',
+    isOptional: true,
+  },
+  {
+    name: 'embedderOptions',
+    type: 'MastraEmbeddingOptions',
+    description: 'Options passed to the embedder on every call.',
+    isOptional: true,
+  },
   {
     name: 'instructions',
     type: 'false | string | function',
@@ -58,3 +75,4 @@ import { Knowledge } from '@mastra/core/knowledge'
 
 - `createTools({ read, write, pinnedContext })`: returns the Knowledge tools for explicit wiring.
 - `getInstructions({ read, write, pinnedContext })`: returns the instruction block for those tools.
+- `reindex()`: re-embeds every page and note into the vector store and resolves to how many it indexed. Use it for content written straight to the store or after a failed embed. Throws without `vector` and `embedder`.
