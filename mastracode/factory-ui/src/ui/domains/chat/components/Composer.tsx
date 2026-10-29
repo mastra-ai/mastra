@@ -63,6 +63,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const {
     commands,
     composerDraft: draft,
+    composerPreview: preview,
     composerInputRef: inputRef,
     setComposerDraft,
     runComposerCommand,
@@ -91,7 +92,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
   const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
-  const hasSubmittableDraft = draft.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
+  const shownText = preview?.text ?? draft;
+  const hasSubmittableDraft = shownText.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -183,12 +185,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     if (sendDisabled || !hasSubmittableDraft) return;
-    submitInput(draft.trim());
+    submitInput(shownText.trim());
   };
 
   const commandMenu = useComposerCommands({
     commands,
-    value: draft,
+    value: shownText,
     onValueChange: updateDraft,
     inputRef,
     enabled: !planFeedback.pending,
@@ -259,6 +261,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onPaste={onPaste}
             placeholder={placeholder}
             disabled={textareaDisabled}
+            readOnly={preview !== undefined}
+            style={preview ? { height: preview.height } : undefined}
             variant={variant}
             aria-label="Message"
           />

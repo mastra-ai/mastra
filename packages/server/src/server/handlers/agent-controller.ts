@@ -10,6 +10,7 @@ import type {
   TokenUsage,
   WireDisplayState,
 } from '@mastra/core/agent-controller';
+import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -627,15 +628,16 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
 
 /**
  * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
- * serialization. Compact message updates and ends are already JSON-safe and
- * pass through unchanged; only `message_start` carries a message snapshot.
+ * serialization, into the same identity a saved error part keeps. Compact
+ * message updates and ends are already JSON-safe and pass through unchanged;
+ * only `message_start` carries a message snapshot.
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
     return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
   if (carriesError(event)) {
-    return { ...event, error: { name: event.error.name, message: event.error.message } };
+    return { ...event, error: toPersistedErrorIdentity(event.error) };
   }
   return event;
 }
@@ -643,7 +645,13 @@ function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:sessionId/stream',
-  queryParamSchema: sessionQuerySchema,
+  queryParamSchema: sessionQuerySchema.extend({
+    displayState: z.preprocess(value => {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return value;
+    }, z.boolean().optional()),
+  }),
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   sseFlushOnConnect: true,
@@ -653,7 +661,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, sessionId, abortSignal, requestContext }) => {
+  handler: async ({ mastra, controllerId, sessionId, displayState, abortSignal, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getExistingSession(controller, sessionId, requestContext);
@@ -704,17 +712,19 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
           // current display state (including the message in flight). This runs
           // before subscribe() so it precedes the buffered workspace events
           // subscribe() replays; both are synchronous, so no event slips between.
-          try {
-            controller.enqueue(
-              toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
-            );
-          } catch {
-            cleanup(controller);
-            return;
+          if (displayState !== false) {
+            try {
+              controller.enqueue(
+                toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
+              );
+            } catch {
+              cleanup(controller);
+              return;
+            }
           }
 
           unsubscribe = session.subscribe(event => {
-            if (cleanedUp) return;
+            if (cleanedUp || (displayState === false && event.type === 'display_state_changed')) return;
             try {
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed

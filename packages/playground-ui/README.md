@@ -29,6 +29,28 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+### Data sizes
+
+Import `formatBytes` from the number utility:
+
+```ts
+import { formatBytes } from '@mastra/playground-ui/utils/number';
+
+formatBytes(1536);
+formatBytes(0.5, { unit: 'GB' });
+formatBytes(2048, { unit: 'GB', autoScale: false });
+formatBytes(0.5, { unit: 'GB', autoScale: true });
+formatBytes(2048, { unit: 'GB', autoScale: true });
+```
+
+These calls return `1.5 KB`, `0.5 GB`, `2048 GB`, `512 MB`, and `2 TB`, respectively.
+
+With no options, `formatBytes(bytes)` keeps its existing automatic byte formatting and rounding. With a source `unit`, the formatter keeps the supplied value and unit unchanged unless `autoScale: true`. The supported units are `B`, `KB`, `MB`, `GB`, `TB`, and `PB`, also exported as the `ByteUnit` type.
+
+Conversions use the helper's existing binary convention: each unit is 1024 of the previous unit, despite the legacy `KB` through `PB` labels. These are not decimal SI conversions, where each step is 1000. Convert decimal measurements to this convention before passing them in.
+
+Automatic scaling stops at B and PB. It rounds bytes and values of 10 or more to whole numbers, and smaller values in larger units to one decimal place. When rounding reaches 1024, the opt-in mode promotes to the next unit, except at PB. Zero becomes `0 B` in automatic mode and keeps its source unit otherwise. Negative, non-finite, null, and undefined measurements return `undefined` in every mode.
+
 ### Subtle buttons
 
 Use `variant="subtle"` for a persistent neutral fill, such as a selected view. It keeps the same dimensions as `default`, so switching between the two does not move surrounding controls. Set `aria-pressed` on toggle buttons to expose selection to assistive technology.

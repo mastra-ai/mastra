@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as p from '@clack/prompts';
+import fastStringWidth from 'fast-string-width';
 import pc from 'picocolors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -657,6 +658,51 @@ describe('deploy artifact', () => {
 
     expect(diagram).toContain(`\u001B[38;5;214m${boxTop}\u001B[39m`);
     expect(diagram).not.toContain(colors.yellow(boxTop));
+  });
+
+  // The deploy note wraps any line wider than the terminal, which scrambled the boxes on narrow terminals.
+  // Wide characters take two terminal cells each.
+  it.each([
+    [200, 'teammate-turso', '  │  ┌'],
+    [110, 'teammate-turso', 'production (US West)\n'],
+    [74, 'teammate-turso', '│ Turso · Connect… │'],
+    [74, 'チームメイトのデータベース', '│ チームメイトの…  │'],
+    [56, 'teammate-turso', '└─ ■ Observability  Mastra Platform'],
+    [56, 'チームメイトのデータベース', '├─ ■ チームメイトのデータベース  Turso · Connected'],
+  ])('fits the deployment overview into a %i-column note with database %s', (width, databaseName, expectedLayout) => {
+    const diagram = renderDeploymentArchitecture(
+      {
+        projectName: 'teammate',
+        environment: { id: 'env_1', name: 'production', region: 'us-west' },
+        serverLabel: 'Server',
+        workersEnabled: false,
+        workersConfig: null,
+        databases: [
+          {
+            id: 'db_1',
+            platformProjectId: 'project_1',
+            organizationId: 'org_1',
+            environmentId: null,
+            kind: 'turso',
+            name: databaseName,
+            status: 'ready',
+            region: null,
+            providerResourceId: null,
+            error: null,
+            createdAt: '2026-08-26T16:30:00.000Z',
+            updatedAt: '2026-08-26T16:30:00.000Z',
+            deletedAt: null,
+          },
+        ],
+        observabilityEnabled: true,
+        renderedAt: new Date('2026-08-26T16:30:00.000Z'),
+        width,
+      },
+      pc.createColors(false),
+    );
+
+    expect(diagram).toContain(expectedLayout);
+    for (const line of diagram.split('\n')) expect(fastStringWidth(line)).toBeLessThanOrEqual(width);
   });
 
   it.each([

@@ -67,7 +67,7 @@ export function useSetDefaultThinkingLevel() {
 export interface ApplyDefaultModelResponse {
   modelId: string;
   applied: string[];
-  skipped: Array<{ sessionId: string; reason: 'not-running' | 'thread-missing' | 'apply-failed' }>;
+  skipped: Array<{ sessionId: string; reason: 'not-running' | 'thread-missing' | 'factory-scope' | 'apply-failed' }>;
 }
 
 export function useApplyDefaultModel() {

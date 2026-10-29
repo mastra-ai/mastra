@@ -1075,7 +1075,7 @@ const agent = new Agent({
 
 ### Example: LMStudio
 
-After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/$\{modelId\}\`) which will be displayed in the LMStudio interface.
+After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/\${modelId}\`) which will be displayed in the LMStudio interface.
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -1234,10 +1234,7 @@ ${allProviders
       logo="${getLogoUrl(p.id)}"
     />`,
   )
-  .join(
-    '\
-',
-  )}
+  .join('')}
 </CardGrid>`;
 }
 
@@ -1417,10 +1414,7 @@ async function generateDocs() {
   console.info('✅ Generated gateways/index.mdx');
 
   // Generate AI SDK provider documentation
-  console.info(
-    '\
-🔍 Filtering AI SDK providers...',
-  );
+  console.info('🔍 Filtering AI SDK providers...');
   const supportedProviderIds = new Set(Object.keys(providerRegistry));
   const aiSdkProviders = allModelsDevProviders
     .filter(p => {

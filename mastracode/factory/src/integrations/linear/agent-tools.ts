@@ -21,11 +21,14 @@ import { z } from 'zod';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 
-function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
+function createLinearGetIssueTool(linear: LinearIntegration, orgId: string, workspaceUrlKey: string | null) {
+  // The URL pattern lets the agent link a ticket it mentions without fetching it first.
+  const linkHint = workspaceUrlKey
+    ? ` Issues in this workspace link as https://linear.app/${workspaceUrlKey}/issue/<identifier> (e.g. https://linear.app/${workspaceUrlKey}/issue/ENG-123).`
+    : '';
   return createTool({
     id: 'linear_get_issue',
-    description:
-      "Fetch a Linear issue's full details — title, description, state, assignee, labels, priority, and discussion comments. Use this whenever you're working on a Linear issue (e.g. ENG-123) to get its complete context.",
+    description: `Fetch a Linear issue's full details — title, description, state, assignee, labels, priority, and discussion comments. Use this whenever you're working on a Linear issue (e.g. ENG-123) to get its complete context.${linkHint}`,
     inputSchema: z.object({
       issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
     }),
@@ -124,7 +127,7 @@ export async function buildLinearAgentTools({
   if (!check.connected) return {};
 
   return {
-    linear_get_issue: createLinearGetIssueTool(linear, orgId),
+    linear_get_issue: createLinearGetIssueTool(linear, orgId, check.workspaceUrlKey),
     // Only offered when the granted OAuth scope allows posting comments —
     // connections made before `comments:create` was requested are read-only
     // until the org reconnects Linear.

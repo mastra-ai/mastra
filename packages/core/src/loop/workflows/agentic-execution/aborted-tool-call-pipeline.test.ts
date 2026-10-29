@@ -6,6 +6,7 @@ import { createTool } from '../../../tools';
 import { ToolStream } from '../../../tools/stream';
 import { CoreToolBuilder } from '../../../tools/tool-builder/builder';
 import { createStep } from '../../../workflows/workflow';
+import { serializeToolError } from '../errors';
 import { toolCallOutputSchema } from '../schema';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createToolCallStep } from './tool-call-step';
@@ -19,7 +20,7 @@ import { createToolCallStep } from './tool-call-step';
 // and llm-mapping-step.test.ts each pin one half of this chain; this test pins the
 // composition so neither half can silently regress against the other's expectations.
 describe('aborted tool call pipeline (tool-call-step → schema boundary → llm-mapping-step)', () => {
-  it('leaves the call unrecorded end-to-end when the request abort interrupts the tool', async () => {
+  it.each([false, true])('records cancellation and stops the loop (sibling error: %s)', async siblingError => {
     // -- Real tool that throws mid-flight, as fetch/etc. do when the request aborts.
     const abortedTool = createTool({
       id: 'slow-server-tool',
@@ -128,6 +129,7 @@ describe('aborted tool call pipeline (tool-call-step → schema boundary → llm
         controller,
         messageList,
         runId: 'test-run',
+        options: { abortSignal: abortController.signal },
         _internal: { generateId: () => 'test-message-id' },
       } as any,
       llmExecutionStep,
@@ -141,21 +143,40 @@ describe('aborted tool call pipeline (tool-call-step → schema boundary → llm
         stepResult: { isContinued: true, reason: undefined },
         metadata: {},
       })),
-      inputData: [crossedBoundary],
+      inputData: [
+        crossedBoundary,
+        ...(siblingError
+          ? [
+              {
+                toolCallId: 'call-error',
+                toolName: 'failed-tool',
+                args: {},
+                error: serializeToolError(new Error('failed')),
+              },
+            ]
+          : []),
+      ],
     } as any);
 
-    // Nothing persisted: the message history is never updated for the aborted call —
-    // no fabricated success, no output-error whose text is the abort message.
-    expect(updateToolInvocation).not.toHaveBeenCalled();
-    // No result/error chunks reach the stream for the aborted call.
-    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
-    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-error' }));
-    // The loop ends, leaving the call incomplete rather than continuing on a fake result.
+    const notice =
+      'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.';
+    expect(updateToolInvocation).toHaveBeenCalledTimes(siblingError ? 2 : 1);
+    expect(updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({ toolInvocation: expect.objectContaining({ state: 'result', result: notice }) }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tool-result', payload: expect.objectContaining({ result: notice }) }),
+    );
+    if (!siblingError) {
+      expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-error' }));
+    }
+    // The cancellation notice does not make the aborted loop continue.
     expect(bail).toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(false);
+    expect(result.stepResult.reason).toBe('abort');
     // And the abort marker itself survived the schema boundary intact.
     expect(crossedBoundary.aborted).toBe(true);
-    expect(crossedBoundary).not.toHaveProperty('result');
+    expect(crossedBoundary.result).toBe(notice);
     expect(crossedBoundary.error).toBeUndefined();
   });
 });

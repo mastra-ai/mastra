@@ -1,4 +1,5 @@
 import type {
+  AggregateTracesResponse,
   GetObservabilityCapabilitiesResponse,
   GetScoresScorers_Response,
   GetTraceQueryFieldsResponse,
@@ -31,6 +32,8 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     deltaPolling: true,
     traceQuery: true,
     traceQueryRootDuration: true,
+    traceQueryTimeToFirstChunk: true,
+    traceQueryTimeToFirstChunkSort: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
@@ -50,6 +53,21 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
 };
 
+export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryTimeToFirstChunk: false,
+    traceQueryTimeToFirstChunkSort: false,
+  },
+};
+
+/** A store that records when each root streamed its first chunk but can't order trace queries by it. */
+export const noTimeToFirstChunkSortCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceQueryTimeToFirstChunkSort: false },
+};
+
 export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, spanQuery: false },
@@ -59,6 +77,30 @@ export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = 
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, deltaPolling: false },
 };
+
+/** A store that answers `aggregateTraces()` next to the trace query API. */
+export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceAggregate: true },
+};
+
+const HOUR = 60 * 60 * 1000;
+
+const hourBefore = (timeRange: { to: string }, hoursAgo: number) =>
+  new Date((Math.floor(Date.parse(timeRange.to) / HOUR) - hoursAgo) * HOUR).toISOString();
+
+/** Two hourly buckets near the end of the window: 5 traces (1 failed), then 3 traces (1 failed). */
+export function traceCountsAggregate(timeRange: { to: string }): AggregateTracesResponse {
+  return {
+    rows: [
+      { bucket: hourBefore(timeRange, 3), measures: { count: 5, errorCount: 1 } },
+      { bucket: hourBefore(timeRange, 2), measures: { count: 3, errorCount: 1 } },
+    ],
+    truncated: false,
+  };
+}
+
+export const traceAggregateError = { error: 'Trace aggregation failed' };
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
   canonicalFields: [],
@@ -96,6 +138,15 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
       createdAt: '2026-09-15T11:00:00.000Z',
       inputPreview: 'Book a table for two',
     },
+  ],
+  page: { next: null },
+};
+
+/** One root that streamed its first chunk after 412ms, one that never streamed. */
+export const streamedTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [
+    { ...weatherTrace, timeToFirstChunkMs: 412 },
+    { ...twoTracesPage.traces[1], timeToFirstChunkMs: null },
   ],
   page: { next: null },
 };

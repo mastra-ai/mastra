@@ -30,8 +30,11 @@
         "entityId": "multi-step-agent",
         "attributes": {
           "instructions": "You are a helpful calculator assistant that announces what you will do before doing it.",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "availableTools": ["calculator"],
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -86,6 +89,7 @@
                 }
               ],
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -155,8 +159,11 @@
                 "entityId": "multi-step-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 10,
                     "outputTokens": 15,
@@ -352,6 +359,7 @@
                         }
                       },
                       "finishReason": "tool-calls",
+                      "timeToFirstTokenMs": "<ms>",
                       "completionStartTime": "<date>",
                       "responseModel": "mock-model-id"
                     },
@@ -515,8 +523,11 @@
                 "entityId": "multi-step-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 20,
                     "outputTokens": 10,
@@ -790,6 +801,7 @@
                         }
                       },
                       "finishReason": "stop",
+                      "timeToFirstTokenMs": "<ms>",
                       "completionStartTime": "<date>",
                       "responseModel": "mock-model-id"
                     },

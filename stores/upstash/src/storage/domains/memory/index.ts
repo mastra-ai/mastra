@@ -1423,9 +1423,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       if (direction === 'ASC') {
         return aValue - bValue;
-      } else {
-        return bValue - aValue;
       }
+      return bValue - aValue;
     });
   }
 

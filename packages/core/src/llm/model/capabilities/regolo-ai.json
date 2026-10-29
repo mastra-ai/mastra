@@ -30,13 +30,18 @@
   ],
   "structuredOutput": ["gemma4-31b", "glm5.2", "qwen3.8-27b"],
   "reasoning": {
-    "gpt-oss-120b": [
+    "gemma4-31b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-oss-20b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -49,11 +54,6 @@
       }
     ],
     "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "gemma4-31b": [
       {
         "type": "toggle"
       }

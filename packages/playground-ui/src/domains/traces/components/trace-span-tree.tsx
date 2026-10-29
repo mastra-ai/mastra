@@ -3,7 +3,6 @@ import type { UISpan } from '../types';
 import type { SpanRowContext } from './span-rows';
 import { SpanRows } from './span-rows';
 import { SpanTreeRow } from './span-tree-row';
-import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
@@ -19,7 +18,7 @@ export type TraceSpanTreeProps = {
   featuredSpanIds?: string[];
   /** Row scrolled into view once it is mounted (ancestors auto-expand when the span is featured). */
   revealSpanId?: string;
-  /** Rendered full-width above the span type legend row. */
+  /** Rendered full-width above the span rows. */
   leadingSlot?: ReactNode;
   /** Optional end-of-row cell. By default rows have no trailing cell; the duration is shown under the span name. */
   renderTrailing?: (ctx: SpanRowContext) => ReactNode;
@@ -50,7 +49,6 @@ export function TraceSpanTree({
   return (
     <>
       {leadingSlot}
-      <SpanTypeLegend spans={hierarchicalSpans} />
       <div
         className={cn('grid content-start items-start gap-y-px overflow-hidden pb-1', {
           'grid-cols-[minmax(0,1fr)]': !renderTrailing,

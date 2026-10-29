@@ -296,6 +296,46 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).toContain('Mastra');
     });
 
+    it('should resolve extensionless alias imports of files with dots in their names', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              'src/*': ['src/*'],
+            },
+          },
+        }),
+      );
+
+      const srcDir = join(tempDir, 'src');
+      fs.mkdirSync(join(srcDir, 'repositories'), { recursive: true });
+      fs.writeFileSync(
+        join(srcDir, 'repositories', 'keyword-repository.interface.ts'),
+        `export const kind = 'interface';`,
+      );
+      fs.writeFileSync(join(srcDir, 'repositories', 'keyword.fixtures.ts'), `export const fixture = 'fixture';`);
+
+      const indexFile = join(srcDir, 'index.ts');
+      fs.writeFileSync(
+        indexFile,
+        `import { kind } from 'src/repositories/keyword-repository.interface';\nimport { fixture } from 'src/repositories/keyword.fixtures';\nconsole.log(kind, fixture);`,
+      );
+
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [tsConfigPaths({ tsConfigPath })],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].imports).toEqual([]);
+      expect(result.output[0].code).toContain('interface');
+      expect(result.output[0].code).toContain('fixture');
+    });
+
     it('resolves relative importers from the configured cwd', async () => {
       const appDir = join(tempDir, 'apps', 'custom');
       const srcDir = join(appDir, 'src');

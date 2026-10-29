@@ -275,16 +275,10 @@ describe('Agent schedules — scheduler integration', () => {
       );
       await waitForScheduler(mastra);
       expect(ack).toHaveBeenCalledOnce();
+      // A running scheduler sleeps until its next fire; later wakes re-arm it.
+      expect(unsubscribe).not.toHaveBeenCalledWith(SCHEDULER_WAKE_TOPIC, wakeCb);
 
       const wakeCalls = (spy: typeof subscribe) => spy.mock.calls.filter(([topic]) => topic === SCHEDULER_WAKE_TOPIC);
-      // The running scheduler still listens, so wakes can end its idle sleep (#26944).
-      expect(wakeCalls(unsubscribe)).toHaveLength(0);
-      const wake = vi.spyOn(mastra.scheduler!, 'wake');
-      await wakeCb(
-        { id: 'wake-2', type: SCHEDULER_WAKE_EVENT, runId: 'remote-schedule', data: {}, createdAt: new Date() },
-        ack,
-      );
-      expect(wake).toHaveBeenCalledOnce();
 
       // A second startWorkers() with the scheduler already running must not
       // re-subscribe, and stopWorkers() must not unsubscribe twice.
@@ -292,17 +286,15 @@ describe('Agent schedules — scheduler integration', () => {
       expect(wakeCalls(subscribe)).toHaveLength(1);
       await mastra.stopWorkers();
       expect(wakeCalls(unsubscribe)).toHaveLength(1);
-      expect(unsubscribe).toHaveBeenCalledWith(SCHEDULER_WAKE_TOPIC, wakeCb);
 
       // stop → start: the scheduler worker object survives and is restarted by
-      // the regular start loop. Boot re-subscribes and stays subscribed.
+      // the regular start loop. Boot re-subscribes once (scheduler not running
+      // yet) and keeps that subscription while it runs.
       await mastra.startWorkers();
       await waitForScheduler(mastra);
       expect(mastra.workers.filter(w => w.name === 'scheduler')).toHaveLength(1);
       expect(wakeCalls(subscribe)).toHaveLength(2);
       expect(wakeCalls(unsubscribe)).toHaveLength(1);
-      await mastra.stopWorkers();
-      expect(wakeCalls(unsubscribe)).toHaveLength(2);
     }, 10_000);
 
     it('still boots the other workers and the boot probe when the wake subscribe fails', async () => {

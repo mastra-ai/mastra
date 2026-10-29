@@ -233,7 +233,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-input-end': {
-      return;
+      return undefined;
     }
 
     case 'raw': {

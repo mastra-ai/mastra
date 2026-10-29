@@ -1,21 +1,25 @@
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { Mastra } from '../mastra';
+import { resolveCurrentSpan } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../request-context/input-source';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
 import { consumeBuilderValidatedInput } from './builder-validation-context';
+import { createToolObserve } from './observe';
 import type {
   McpMetadata,
   MCPToolProperties,
   NeedsApprovalFn,
   ToolAction,
+  ToolExecuteCallContext,
   ToolExecuteFunction,
   ToolExecutionContext,
   ToolPayloadTransform,
 } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
+import type { ValidationError } from './validation';
 
 /**
  * Marker to identify Mastra tools even when `instanceof` fails.
@@ -232,12 +236,14 @@ export class Tool<
   /**
    * Tool execution function
    * @param inputData - The raw, validated input data
-   * @param context - Optional execution context with metadata
+   * @param context - Optional execution context with metadata. `observe` may be omitted;
+   * the runtime provides one (a no-op when no tracing span is active).
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: NonNullable<
-    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute']
-  >;
+  execute?: (
+    inputData: TSchemaIn,
+    context: ToolExecuteCallContext<TContext>,
+  ) => Promise<TSchemaOut | ValidationError | void>;
 
   /** Whether this tool only displays its call and receives a server acknowledgement. */
   renderOnly?: boolean;
@@ -581,6 +587,20 @@ export class Tool<
               requestContext: executionRequestContext ?? new RequestContext(),
             };
           }
+        }
+
+        // Agent tool calls inject `observe` in the tool builder. Direct `tool.execute()` calls and
+        // `createStep(tool)` workflow steps do not, so default it here from the caller's span,
+        // falling back to the ambient span (e.g. a direct call from inside a traced workflow step).
+        if (!organizedContext.observe) {
+          organizedContext = {
+            ...organizedContext,
+            observe: createToolObserve(
+              organizedContext.tracingContext?.currentSpan ??
+                organizedContext.tracing?.currentSpan ??
+                resolveCurrentSpan(),
+            ),
+          };
         }
 
         const resumeData =

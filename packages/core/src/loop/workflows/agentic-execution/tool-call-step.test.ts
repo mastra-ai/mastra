@@ -1515,10 +1515,9 @@ describe('createToolCallStep tool execution error handling', () => {
     });
   });
 
-  it('should return aborted (not error/result) when the request was aborted while the tool threw', async () => {
-    // A throw caused by request cancellation must NOT become a tool result, or the call is
-    // persisted as completed (result = abort message) and reads as success on resume. The
-    // step flags it `aborted` instead. CoreToolBuilder wraps the throw in a MastraError, so
+  it('should return aborted with a cancellation notice when the request was aborted while the tool threw', async () => {
+    // Preserve the abort classification while recording that the tool ran and its
+    // effects are unknown. CoreToolBuilder wraps the throw in a MastraError, so
     // the abort signal — not the error type — is the evidence.
     const abortedTool = createTool({
       id: 'failing-tool',
@@ -1558,7 +1557,10 @@ describe('createToolCallStep tool execution error handling', () => {
 
     expect(result).toHaveProperty('aborted', true);
     expect(result).not.toHaveProperty('error');
-    expect(result).not.toHaveProperty('result');
+    expect(result).toHaveProperty(
+      'result',
+      'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.',
+    );
   });
 
   it('should still return error (not aborted) when a tool throws and the request was NOT aborted', async () => {

@@ -61,6 +61,9 @@ interface SlackAdapterChannelConfigBase {
    * @default true
    */
   typingStatus?: ChannelAdapterConfig['typingStatus'];
+
+  /** Who can approve or deny tool calls in a channel. Defaults to the requester; use `'anyone'` for shared channels. */
+  toolApprovers?: ChannelAdapterConfig['toolApprovers'];
 }
 
 /**

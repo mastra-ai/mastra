@@ -98,12 +98,12 @@ describe('workspace root as the Mastra app', () => {
               start: 'mastra start',
             },
             dependencies: {
-              '@mastra/core': 'monorepo-test',
-              '@mastra/deployer': 'monorepo-test',
+              '@mastra/core': inject('tag'),
+              '@mastra/deployer': inject('tag'),
               '@inner/subpath-only': 'workspace:*',
             },
             devDependencies: {
-              mastra: 'monorepo-test',
+              mastra: inject('tag'),
               typescript: '7.0.2',
             },
           },

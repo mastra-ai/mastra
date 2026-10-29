@@ -137,7 +137,7 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
           modelVersion={v2Agent.modelVersion}
           threadId={threadId}
           initialMessages={initialMessages}
-          supportsMemory={true}
+          supportsMemory
           settings={{ modelSettings: { chatWithLegacyStream: false, ...modelSettings } }}
         >
           <Thread

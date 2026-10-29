@@ -184,6 +184,8 @@ export interface LinearConnectionCheck {
   connected: boolean;
   /** Whether the granted OAuth scope allows posting issue comments. */
   canComment: boolean;
+  /** Linear workspace slug, for `https://linear.app/<urlKey>/issue/<ID>` links. */
+  workspaceUrlKey: string | null;
   checkedAt: number;
 }
 
@@ -469,6 +471,7 @@ export class LinearIntegration implements FactoryIntegration {
     const check: LinearConnectionCheck = {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
+      workspaceUrlKey: connection?.workspaceUrlKey ?? null,
       checkedAt: Date.now(),
     };
     this.#connectionChecks.set(orgId, check);

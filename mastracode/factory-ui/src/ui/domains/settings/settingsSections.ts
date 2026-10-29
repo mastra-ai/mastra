@@ -8,7 +8,6 @@ export type SettingsSection =
   | 'factory'
   | 'connections'
   | 'repositories'
-  | 'environment'
   | 'intake'
   | 'models'
   | 'memory'
@@ -21,7 +20,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   factory: 'Manage Factory',
   connections: 'Connections',
   repositories: 'Repositories',
-  environment: 'Environment',
   intake: 'Work Intake',
   models: 'Models',
   memory: 'Memory',
@@ -46,6 +44,7 @@ type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor }
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
   ['personal-models', { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.personal }],
   ['factory-memory', { section: 'memory' }],
+  ['environment', { section: 'repositories' }],
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {

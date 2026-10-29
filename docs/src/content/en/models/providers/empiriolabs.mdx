@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "empiriolabs/deepseek-v4-1-flash"
+  model: "empiriolabs/deepseek-v4-1-flash-1017"
 });
 
 // Generate a response
@@ -200,6 +200,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "empiriolabs/glm-4-7-flashx",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 131072,
+    "inputCost": 0.07,
+    "outputCost": 0.4
   },
   {
     "model": "empiriolabs/glm-5-1",
@@ -758,7 +770,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.empiriolabs.ai/v1",
-    id: "empiriolabs/deepseek-v4-1-flash",
+    id: "empiriolabs/deepseek-v4-1-flash-1017",
     apiKey: process.env.EMPIRIOLABS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -779,7 +791,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "empiriolabs/step-5-preview"
-      : "empiriolabs/deepseek-v4-1-flash";
+      : "empiriolabs/deepseek-v4-1-flash-1017";
   }
 });
 ```

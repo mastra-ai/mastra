@@ -33,6 +33,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
+import { executionFailureTermination } from '../observability/execution-outcome';
 import { executeWithContext } from '../observability/utils';
 import type {
   OutputResult,
@@ -1178,6 +1179,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Pass-through data that should flow to the next processor in a chain
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
+        agent,
         lateSignalSink,
         phase,
         runId: agentRunId,
@@ -2063,6 +2065,14 @@ export class Workflow<
 
   __markInternal() {
     this.isInternal = true;
+    // Nested workflows of an internal workflow are its own plumbing (e.g. the
+    // background-task attempt body, the agentic loop iteration), not resources
+    // end users are granted access to.
+    for (const step of Object.values(this.steps)) {
+      if (step instanceof Workflow && !step.isInternal) {
+        step.__markInternal();
+      }
+    }
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -2110,7 +2120,7 @@ export class Workflow<
           return;
         case 'mapping':
           this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
-          return;
+          break;
       }
     };
     switch (live.type) {
@@ -2141,9 +2151,9 @@ export class Workflow<
           outputSchema: z.object({}),
           execute: async () => ({}),
         });
-        return;
+        break;
       default:
-        return;
+        break;
     }
   }
 
@@ -3191,9 +3201,9 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
-    // FGA authorization check
+    // FGA authorization check (internal workflows are exempt, matching Run.start)
     const fgaProvider = mastra?.getServer()?.fga;
-    if (fgaProvider) {
+    if (fgaProvider && !this.isInternal) {
       const user = requestContext?.get('user' as any);
       await requireFGA({
         fgaProvider,
@@ -4016,7 +4026,15 @@ export class Run<
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+    const span = this.workflowRunSpan;
+    // Older observability implementations may only support end({ endTree: true }).
+    const endTree = span?.endTree ?? span?.end;
+    endTree?.call(span, {
+      endTree: true,
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      attributes: { status: 'canceled' },
+    });
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
@@ -4184,6 +4202,7 @@ export class Run<
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -4224,7 +4243,7 @@ export class Run<
 
       return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
     })().catch(error => {
-      workflowSpan?.error({ error: error as Error });
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
       throw error;
     });
 
@@ -4261,7 +4280,7 @@ export class Run<
               : initialRunSnapshot,
           });
         } catch (error) {
-          workflowSpan?.error({ error: error as Error });
+          workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
           throw error;
         }
       }
@@ -5318,6 +5337,7 @@ export class Run<
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}' (resumed)`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5653,6 +5673,7 @@ export class Run<
     }
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5801,6 +5822,7 @@ export class Run<
 
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
       entityType: EntityType.WORKFLOW_RUN,
@@ -5828,7 +5850,7 @@ export class Run<
     try {
       await this.#claimRun({ workflowsStore, snapshot, operation: 'timeTravel' });
     } catch (error) {
-      workflowSpan?.error({ error: error as Error, endSpan: true });
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error, endSpan: true });
       throw error;
     }
 

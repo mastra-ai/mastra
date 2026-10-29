@@ -75,14 +75,14 @@ export type SchedulerConfig = {
    */
   tickIntervalMs?: number;
   /**
-   * Opt in to idle sleep: the longest time in ms the scheduler goes without
-   * querying storage while no schedule is due. After a tick finds nothing due,
-   * the scheduler skips storage until the earliest active schedule's next
-   * fire time, capped at this value, so scale-to-zero databases (e.g. Neon)
-   * can suspend. Changes made through `mastra.schedules` wake it early (across
-   * processes when they share a pubsub); rows written to storage directly, or
-   * from a process without a shared pubsub, are picked up within this cap.
-   * Unset by default: storage is queried every `tickIntervalMs`.
+   * Longest time in ms the scheduler sleeps between storage checks while no
+   * schedule is due. By default an idle scheduler sleeps until the earliest
+   * active schedule's next fire (or indefinitely with none) and relies on
+   * `mastra.schedules` changes to wake it; set this to also find rows written
+   * to storage directly, or by a process that shares no pubsub with this one.
+   * With `enabled: true` it opts that fixed-interval poller into the same
+   * capped sleep, so scale-to-zero databases (e.g. Neon) can suspend.
+   * Ignored unless greater than `tickIntervalMs`.
    */
   maxIdleIntervalMs?: number;
   /**
