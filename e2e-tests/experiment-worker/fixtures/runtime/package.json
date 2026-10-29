@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mastra/core": "experiment-worker-e2e-test",
+    "@mastra/core": "e2e-test",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "mastra": "experiment-worker-e2e-test"
+    "mastra": "e2e-test"
   }
 }

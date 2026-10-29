@@ -1,5 +1,9 @@
+import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
+import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
+import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
   FACTORY_GITHUB_EVENTS,
+  FACTORY_RULE_SOURCES,
   FACTORY_GITLAB_EVENTS,
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
@@ -21,7 +25,15 @@ import type {
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from '../rules/types.js';
-import { IDENTIFIER_RE, isBoardIdentifier, MAX_ROLE_LENGTH, MAX_TOOL_NAME_LENGTH } from '../rules/validation.js';
+import {
+  IDENTIFIER_RE,
+  isBoardIdentifier,
+  MAX_ROLE_LENGTH,
+  MAX_SKILL_NAME_LENGTH,
+  MAX_TOOL_NAME_LENGTH,
+  SKILL_NAME_RE,
+} from '../rules/validation.js';
+import { addInstructions, startSkill } from './phase-runner.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
@@ -82,23 +94,115 @@ type ReadonlyFactoryBoardRules = Readonly<
 /**
  * What a phase means to the runtime.
  * - `resting`: nobody is seated; a card waits for a person or an event.
- * - `working`: an agent in `role` carries the card; a person's move in arms autonomy.
+ * - `working`: an agent in the phase's context carries the card; a person's move in arms autonomy.
  * - `terminal`: the card is finished; sessions stop and held resources are released.
  */
 export type BoardPhaseKind = 'resting' | 'working' | 'terminal';
 
+/** The agent Factory runs every phase with. */
+export const FACTORY_AGENT_ID = CODE_AGENT_ID;
+
+/** The session context a working phase runs in when it names none. */
+export const DEFAULT_PHASE_CONTEXT = 'work';
+
+/** Who runs a working phase, and with what. */
+export interface BoardPhaseRunner {
+  /** Must be `code-agent`, the agent Factory runs; omitted means that agent. */
+  readonly agentId?: string;
+  /** Skill started when a card enters the phase from a source with no `onEnter` handler. */
+  readonly skill?: string;
+  /**
+   * The session the phase runs in. Phases naming the same context share one session per card;
+   * a different context gets its own. Defaults to `work`.
+   */
+  readonly context?: string;
+  /** Appended to every run the phase starts. */
+  readonly instructions?: string;
+}
+
+/**
+ * The tool whose successful call ends a working phase. The agent then moves the card itself with
+ * `factory_transition_work_item`, to one of the phase's `nextPhases`.
+ */
+export interface BoardPhaseExitTool {
+  readonly id: string;
+  /**
+   * Answer the approval the tool waits for without a person. Factory sessions run other tools
+   * without asking, so today this applies to `submit_plan`. Defaults to false.
+   */
+  readonly autoApprove?: boolean;
+  /** With `autoApprove`, only cards this matches are approved without a person. */
+  readonly autoApproveWhen?: RuleGroup;
+}
+
 type BoardPhaseBase<PhaseId extends string> = {
-  readonly title: string;
+  readonly name?: string;
+  /** @deprecated Use `name`. */
+  readonly title?: string;
+  readonly description?: string;
+  /** Phases a card may move to from here. */
+  readonly nextPhases?: readonly PhaseId[];
+  /** @deprecated List the phase in `nextPhases`. */
   readonly next?: PhaseId;
+  /** Named moves rules can choose by outcome; each target is also an allowed next phase. */
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
 
+type WorkingPhaseFields = {
+  readonly runner?: BoardPhaseRunner;
+  /** @deprecated Use `runner.context`. */
+  readonly role?: string;
+  /** Runs start without anyone approving them, even with the project's auto-run off. */
+  readonly autoStart?: boolean;
+  /** With `autoStart`, only cards this matches start on their own. */
+  readonly autoStartWhen?: RuleGroup;
+  /** A bare tool name is shorthand for `{ id }`, with nothing approved on a person's behalf. */
+  readonly exitTool?: string | BoardPhaseExitTool;
+};
+
+type NonWorkingPhaseFields = {
+  readonly runner?: never;
+  readonly role?: never;
+  readonly autoStart?: never;
+  readonly autoStartWhen?: never;
+  readonly exitTool?: never;
+};
+
+/** A phase as a board declares it. */
 export type BoardPhaseDefinition<PhaseId extends string> =
-  | (BoardPhaseBase<PhaseId> & { readonly kind: 'resting'; readonly role?: never })
-  | (BoardPhaseBase<PhaseId> & { readonly kind: 'working'; readonly role: string })
-  | (BoardPhaseBase<PhaseId> & { readonly kind: 'terminal'; readonly role?: never });
+  | (BoardPhaseBase<PhaseId> & NonWorkingPhaseFields & { readonly kind: 'resting' })
+  | (BoardPhaseBase<PhaseId> & WorkingPhaseFields & { readonly kind: 'working' })
+  | (BoardPhaseBase<PhaseId> & NonWorkingPhaseFields & { readonly kind: 'terminal' });
+
+type ResolvedPhaseBase<PhaseId extends string> = {
+  readonly name: string;
+  readonly description?: string;
+  /** Every phase a card may move to from here, including outcome targets. */
+  readonly nextPhases: readonly PhaseId[];
+  readonly outcomes?: Readonly<Record<string, PhaseId>>;
+  readonly onEnter?: ReadonlyBoardPhaseHandlers;
+  readonly onExit?: ReadonlyBoardPhaseHandlers;
+};
+
+/**
+ * A phase as the board resolved it: deprecated fields are replaced by their new names, so
+ * only the new structure leaves `defineBoard()`, and a resolved phase can be declared again.
+ */
+export type BoardPhase<PhaseId extends string> =
+  | (ResolvedPhaseBase<PhaseId> & { readonly kind: 'resting' })
+  | (ResolvedPhaseBase<PhaseId> & {
+      readonly kind: 'working';
+      readonly runner: Readonly<BoardPhaseRunner & { agentId: string; context: string }>;
+      readonly autoStart?: boolean;
+      readonly autoStartWhen?: RuleGroup;
+      readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup }>;
+    })
+  | (ResolvedPhaseBase<PhaseId> & { readonly kind: 'terminal' });
+
+type ResolvedRunner = Extract<BoardPhase<string>, { kind: 'working' }>['runner'];
+type ResolvedExitTool = Extract<BoardPhase<string>, { kind: 'working' }>['exitTool'];
 
 export interface BoardTransition<PhaseId extends string> {
   readonly outcome: string | null;
@@ -113,9 +217,10 @@ export type BoardSourceClosed<PhaseId extends string> = Readonly<{ completed: Ph
 
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
   readonly id: BoardId;
-  readonly title: string;
+  readonly name: string;
+  readonly description?: string;
   readonly initialPhase: PhaseId;
-  readonly phases: Readonly<Record<PhaseId, BoardPhaseDefinition<PhaseId>>>;
+  readonly phases: Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
   readonly transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
   readonly rules: ReadonlyFactoryBoardRules;
   /** Tool-result rules keyed by tool name; empty when the board declares none. */
@@ -130,15 +235,23 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   phaseKind(phase: string): BoardPhaseKind | undefined;
   isWorking(phase: string): boolean;
   isTerminal(phase: string): boolean;
-  /** Role seated in a working phase; undefined for resting/terminal/unknown phases. */
+  /** Session context of a working phase; undefined for resting/terminal/unknown phases. */
   roleForPhase(phase: string): string | undefined;
-  /** First working phase, in declaration order, carried by `role`. */
+  /** First working phase, in declaration order, running in `role`'s context. */
   phaseForRole(role: string): PhaseId | undefined;
+  /**
+   * Whether the phase's runs start without anyone approving them, for a card with these facts
+   * (`cardRuleFacts`). A phase with a start condition never starts on its own without facts.
+   */
+  startsAutomatically(phase: string, facts?: RuleFacts): boolean;
 }
 
 type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>> = {
   id: BoardId;
-  title: string;
+  name?: string;
+  /** @deprecated Use `name`. */
+  title?: string;
+  description?: string;
   initialPhase: keyof Phases & string;
   phases: Phases;
   tools?: Record<string, BoardToolRule>;
@@ -159,17 +272,123 @@ function validateBoardIdentifier(value: unknown, label: string): void {
   }
 }
 
+const MAX_NAME_LENGTH = 128;
+const MAX_DESCRIPTION_LENGTH = 2_000;
+const MAX_INSTRUCTIONS_LENGTH = 1_000;
+const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions']);
+const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen']);
+const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool'] as const;
+const MOVE_TOOL = 'factory_transition_work_item';
+
+/** `name`, falling back to the deprecated `title`; both may be set only to the same text. */
+function resolveName(name: unknown, title: unknown, label: string): string {
+  if (name !== undefined && title !== undefined && name !== title) {
+    throw new BoardDefinitionError(`${label} sets both name and title; drop the deprecated title.`);
+  }
+  const value = name ?? title;
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > MAX_NAME_LENGTH) {
+    throw new BoardDefinitionError(`${label} must declare a name.`);
+  }
+  return value;
+}
+
+function optionalText(value: unknown, label: string, max: number): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > max) {
+    throw new BoardDefinitionError(`${label} must be non-empty text of at most ${max} characters.`);
+  }
+  return value;
+}
+
+function ruleGroup(value: unknown, label: string): RuleGroup | undefined {
+  if (value === undefined) return undefined;
+  const parsed = cardRuleGroupSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new BoardDefinitionError(`${label} is not a valid condition: ${parsed.error.issues[0]?.message}`);
+  }
+  return parsed.data;
+}
+
+function isContext(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_ROLE_LENGTH && IDENTIFIER_RE.test(value);
+}
+
+function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): ResolvedRunner {
+  const runner: unknown = phase.runner ?? {};
+  if (!isPlainObject(runner) || Object.keys(runner).some(key => !RUNNER_KEYS.has(key))) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner may only set agentId, skill, context and instructions.`);
+  }
+  const role: unknown = phase.role;
+  if (role !== undefined && runner.context !== undefined && role !== runner.context) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" sets both role and runner.context; drop the deprecated role.`);
+  }
+  const context = runner.context ?? role ?? DEFAULT_PHASE_CONTEXT;
+  if (!isContext(context)) throw new BoardDefinitionError(`Working phase "${phaseId}" must declare a valid context.`);
+  const agentId = runner.agentId ?? FACTORY_AGENT_ID;
+  if (agentId !== FACTORY_AGENT_ID) {
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" names unknown agent "${String(agentId)}"; Factory runs "${FACTORY_AGENT_ID}".`,
+    );
+  }
+  const skill = runner.skill;
+  if (
+    skill !== undefined &&
+    (typeof skill !== 'string' || skill.length > MAX_SKILL_NAME_LENGTH || !SKILL_NAME_RE.test(skill))
+  ) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.skill must be a skill name.`);
+  }
+  const instructions = optionalText(
+    runner.instructions,
+    `Phase "${phaseId}" runner.instructions`,
+    MAX_INSTRUCTIONS_LENGTH,
+  );
+  return Object.freeze({
+    agentId,
+    context,
+    ...(skill !== undefined ? { skill } : {}),
+    ...(instructions !== undefined ? { instructions } : {}),
+  });
+}
+
+function resolveExitTool(phaseId: string, value: unknown): ResolvedExitTool {
+  if (value === undefined) return undefined;
+  const declared = typeof value === 'string' ? { id: value } : value;
+  if (!isPlainObject(declared) || Object.keys(declared).some(key => !EXIT_TOOL_KEYS.has(key))) {
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" exitTool must be a tool name or { id, autoApprove, autoApproveWhen }.`,
+    );
+  }
+  const { id, autoApprove = false } = declared;
+  if (typeof id !== 'string' || id.length === 0 || id.length > MAX_TOOL_NAME_LENGTH || !IDENTIFIER_RE.test(id)) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" exitTool has an invalid tool name.`);
+  }
+  if (id === MOVE_TOOL) {
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" cannot end with ${MOVE_TOOL}: that tool already moves the card.`,
+    );
+  }
+  if (typeof autoApprove !== 'boolean') {
+    throw new BoardDefinitionError(`Phase "${phaseId}" exitTool.autoApprove must be a boolean.`);
+  }
+  const autoApproveWhen = ruleGroup(declared.autoApproveWhen, `Phase "${phaseId}" exitTool.autoApproveWhen`);
+  if (autoApproveWhen && !autoApprove) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" exitTool.autoApproveWhen needs autoApprove.`);
+  }
+  return Object.freeze({ id, autoApprove, ...(autoApproveWhen ? { autoApproveWhen } : {}) });
+}
+
 function validatePhaseSemantics(phaseId: string, phase: BoardPhaseDefinition<string>): void {
   if (!PHASE_KINDS.has(phase.kind as string)) {
     throw new BoardDefinitionError(`Phase "${phaseId}" must declare kind 'resting', 'working', or 'terminal'.`);
   }
-  if (phase.kind === 'working') {
-    const role: unknown = phase.role;
-    if (typeof role !== 'string' || role.length === 0 || role.length > MAX_ROLE_LENGTH || !IDENTIFIER_RE.test(role)) {
-      throw new BoardDefinitionError(`Working phase "${phaseId}" must declare a valid role.`);
-    }
-  } else if ((phase as { role?: unknown }).role !== undefined) {
+  if (phase.kind === 'working') return;
+  if ((phase as { role?: unknown }).role !== undefined) {
     throw new BoardDefinitionError(`Phase "${phaseId}" is ${phase.kind} and cannot declare a role.`);
+  }
+  for (const field of WORKING_ONLY_FIELDS) {
+    if ((phase as Record<string, unknown>)[field] !== undefined) {
+      throw new BoardDefinitionError(`Phase "${phaseId}" is ${phase.kind} and cannot declare ${field}.`);
+    }
   }
 }
 
@@ -246,12 +465,63 @@ function validateEventRules(events: unknown): BoardEventRules {
   return Object.freeze(frozen) as BoardEventRules;
 }
 
+/** The phase's `onEnter` handlers, with its runner's skill for other sources and its instructions on every run. */
+function phaseEnterHandlers(
+  declared: ReadonlyBoardPhaseHandlers | undefined,
+  runner: ResolvedRunner,
+): ReadonlyBoardPhaseHandlers | undefined {
+  const handlers: BoardPhaseHandlers = { ...declared };
+  if (runner.skill) {
+    for (const source of FACTORY_RULE_SOURCES) handlers[source] ??= startSkill(runner.skill, runner.context);
+  }
+  if (runner.instructions) {
+    for (const source of Object.keys(handlers) as FactoryRuleSource[]) {
+      handlers[source] = addInstructions(handlers[source]!, runner.instructions);
+    }
+  }
+  return Object.keys(handlers).length > 0 ? handlers : undefined;
+}
+
+const warnedBoards = new Set<string>();
+
+type DeclaredBoard = {
+  readonly id: string;
+  readonly name?: string;
+  readonly title?: string;
+  readonly phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
+};
+
+/** Deprecated fields a board declaration still uses; `defineBoard()` maps each to its replacement. */
+function deprecatedFields(config: DeclaredBoard): string[] {
+  const found: string[] = [];
+  if (config.title !== undefined) found.push('title → name');
+  for (const [phaseId, phase] of Object.entries(config.phases)) {
+    if (phase.title !== undefined) found.push(`phases.${phaseId}.title → name`);
+    if (phase.next !== undefined) found.push(`phases.${phaseId}.next → nextPhases`);
+    if (phase.role !== undefined) found.push(`phases.${phaseId}.role → runner.context`);
+  }
+  return found;
+}
+
+function warnDeprecatedFields(config: DeclaredBoard): void {
+  if (warnedBoards.has(config.id)) return;
+  const found = deprecatedFields(config);
+  if (found.length === 0) return;
+  warnedBoards.add(config.id);
+  console.warn(
+    `[Mastra Factory] Board "${config.id}" uses deprecated fields: ${found.join(', ')}. ` +
+      'They still work but will be removed in a future release.',
+  );
+}
+
 export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
   validateBoardIdentifier(config.id, 'Board id');
+  const boardName = resolveName(config.name, config.title, `Board "${config.id}"`);
+  const boardDescription = optionalText(config.description, `Board "${config.id}" description`, MAX_DESCRIPTION_LENGTH);
   if (config.transitionPolicy !== undefined && typeof config.transitionPolicy !== 'function') {
     throw new BoardDefinitionError('Board transitionPolicy must be a function.');
   }
@@ -269,6 +539,7 @@ export function defineBoard<
   if (config.phases[config.initialPhase]!.kind !== 'resting') {
     throw new BoardDefinitionError(`Initial phase "${config.initialPhase}" must be a resting phase.`);
   }
+  warnDeprecatedFields(config);
   const sourceClosed = validateSourceClosed(config.sourceClosed, config.phases) as
     | BoardSourceClosed<PhaseId>
     | undefined;
@@ -278,10 +549,16 @@ export function defineBoard<
       if (phase.next !== undefined && phase.outcomes) {
         throw new BoardDefinitionError(`Phase "${phaseId}" cannot define both next and outcomes.`);
       }
+      if (phase.nextPhases !== undefined && !Array.isArray(phase.nextPhases)) {
+        throw new BoardDefinitionError(`Phase "${phaseId}" nextPhases must be a list of phases.`);
+      }
       const targets: BoardTransition<string>[] =
         phase.next !== undefined
           ? [Object.freeze({ outcome: null, to: phase.next })]
           : Object.entries(phase.outcomes ?? {}).map(([outcome, to]) => Object.freeze({ outcome, to }));
+      for (const to of phase.nextPhases ?? []) {
+        if (!targets.some(target => target.to === to)) targets.push(Object.freeze({ outcome: null, to }));
+      }
       for (const { to } of targets) {
         if (!phaseIds.has(to)) {
           throw new BoardDefinitionError(`Phase "${phaseId}" targets undefined phase "${to}".`);
@@ -293,23 +570,49 @@ export function defineBoard<
 
   const phases = Object.freeze(
     Object.fromEntries(
-      Object.entries(config.phases).map(([phaseId, phase]) => [
-        phaseId,
-        Object.freeze({
-          title: phase.title,
-          kind: phase.kind,
-          ...(phase.kind === 'working' ? { role: phase.role } : {}),
-          ...(phase.next !== undefined ? { next: phase.next } : {}),
-          ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
-          ...(phase.onEnter ? { onEnter: Object.freeze({ ...phase.onEnter }) } : {}),
-          ...(phase.onExit ? { onExit: Object.freeze({ ...phase.onExit }) } : {}),
-        }),
-      ]),
+      Object.entries(config.phases).map(([phaseId, phase]) => {
+        const label = `Phase "${phaseId}"`;
+        const nextPhases = Object.freeze([
+          ...new Set([...(phase.nextPhases ?? []), ...transitions[phaseId as PhaseId]!.map(({ to }) => to)]),
+        ]);
+        const runner = phase.kind === 'working' ? resolveRunner(phaseId, phase) : undefined;
+        const working = phase.kind === 'working' ? phase : undefined;
+        if (working?.autoStart !== undefined && typeof working.autoStart !== 'boolean') {
+          throw new BoardDefinitionError(`${label} autoStart must be a boolean.`);
+        }
+        const autoStartWhen = ruleGroup(working?.autoStartWhen, `${label} autoStartWhen`);
+        if (autoStartWhen && working?.autoStart !== true) {
+          throw new BoardDefinitionError(`${label} autoStartWhen needs autoStart.`);
+        }
+        const exitTool = resolveExitTool(phaseId, working?.exitTool);
+        if (exitTool && nextPhases.length === 0) {
+          throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
+        }
+        const onEnter = runner ? phaseEnterHandlers(phase.onEnter, runner) : phase.onEnter;
+        const name = resolveName(phase.name, phase.title, label);
+        const description = optionalText(phase.description, `${label} description`, MAX_DESCRIPTION_LENGTH);
+        return [
+          phaseId,
+          Object.freeze({
+            name,
+            ...(description !== undefined ? { description } : {}),
+            kind: phase.kind,
+            nextPhases,
+            ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
+            ...(runner ? { runner } : {}),
+            ...(working?.autoStart ? { autoStart: true } : {}),
+            ...(autoStartWhen ? { autoStartWhen } : {}),
+            ...(exitTool ? { exitTool } : {}),
+            ...(onEnter ? { onEnter: Object.freeze({ ...onEnter }) } : {}),
+            ...(phase.onExit ? { onExit: Object.freeze({ ...phase.onExit }) } : {}),
+          }),
+        ];
+      }),
     ),
-  ) as Readonly<Record<PhaseId, BoardPhaseDefinition<PhaseId>>>;
+  ) as Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
   const rules = Object.freeze(
     Object.fromEntries(
-      Object.entries(config.phases).flatMap(([phaseId, phase]) => {
+      (Object.entries(phases) as [PhaseId, BoardPhase<PhaseId>][]).flatMap(([phaseId, phase]) => {
         const sources = new Set([...Object.keys(phase.onEnter ?? {}), ...Object.keys(phase.onExit ?? {})]);
         if (sources.size === 0) return [];
         return [
@@ -339,16 +642,17 @@ export function defineBoard<
   const kinds = new Map<string, BoardPhaseKind>();
   const roles = new Map<string, string>();
   const phaseByRole = new Map<string, PhaseId>();
-  for (const [phaseId, phase] of Object.entries(phases) as [PhaseId, BoardPhaseDefinition<PhaseId>][]) {
+  for (const [phaseId, phase] of Object.entries(phases) as [PhaseId, BoardPhase<PhaseId>][]) {
     kinds.set(phaseId, phase.kind);
     if (phase.kind !== 'working') continue;
-    roles.set(phaseId, phase.role);
-    if (!phaseByRole.has(phase.role)) phaseByRole.set(phase.role, phaseId);
+    roles.set(phaseId, phase.runner.context);
+    if (!phaseByRole.has(phase.runner.context)) phaseByRole.set(phase.runner.context, phaseId);
   }
 
   return Object.freeze({
     id: config.id,
-    title: config.title,
+    name: boardName,
+    ...(boardDescription !== undefined ? { description: boardDescription } : {}),
     initialPhase: config.initialPhase,
     phases,
     transitions: Object.freeze(transitions),
@@ -365,5 +669,11 @@ export function defineBoard<
     isTerminal: (phase: string) => kinds.get(phase) === 'terminal',
     roleForPhase: (phase: string) => roles.get(phase),
     phaseForRole: (role: string) => phaseByRole.get(role),
+    startsAutomatically: (phase: string, facts?: RuleFacts) => {
+      const definition = phases[phase as PhaseId] as BoardPhase<PhaseId> | undefined;
+      if (definition?.kind !== 'working' || definition.autoStart !== true) return false;
+      if (!definition.autoStartWhen) return true;
+      return facts !== undefined && evaluateRuleGroup(definition.autoStartWhen, facts);
+    },
   });
 }

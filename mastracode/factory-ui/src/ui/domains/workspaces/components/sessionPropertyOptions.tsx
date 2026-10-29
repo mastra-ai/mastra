@@ -33,7 +33,7 @@ import { SESSION_SORT_OPTIONS } from '../services/sessionSort';
 
 function withIcons<V extends string>(options: readonly DropdownMenuRadioOption<V>[], icons: Record<V, LucideIcon>) {
   return options.map(option => {
-    const Icon = icons[option.value];
+    const Icon: LucideIcon = icons[option.value];
     return { ...option, icon: <Icon aria-hidden /> };
   });
 }

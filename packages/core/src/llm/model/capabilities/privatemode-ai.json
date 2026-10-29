@@ -30,7 +30,18 @@
     "kimi-latest"
   ],
   "reasoning": {
+    "glm-flash-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-latest": [
       {
         "type": "toggle"
       }
@@ -48,17 +59,6 @@
       }
     ],
     "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-latest": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

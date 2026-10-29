@@ -9,16 +9,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "MiniMax-M2.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "Qwen3.8-Max": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "MiniMax-M2.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "GLM-5.2": [

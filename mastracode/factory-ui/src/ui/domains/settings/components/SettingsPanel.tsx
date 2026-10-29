@@ -30,7 +30,7 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 export function SettingsPanel() {
   const section = useSettingsSection();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
+  const { sessionId: chatSessionId, sessionThreadId, resourceId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -61,7 +61,14 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'intake' && <IntakeSection />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
-      {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} sessionId={sessionId} />}
+      {section === 'memory' && factoryId && (
+        <MemorySettings
+          factoryId={factoryId}
+          sessionId={sessionId}
+          threadId={sessionId ? (sessionThreadId ?? sessionId) : undefined}
+          resourceId={resourceId}
+        />
+      )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
       {section === 'behavior' && (
         <BehaviorSettings

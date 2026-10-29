@@ -489,31 +489,6 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(onResult).toHaveBeenCalledTimes(1);
   });
 
-  it('moves an approved plan to Building before emitting the next phase signal', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepare(storage, 'plan');
-    const boards = createBoardRegistry();
-    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
-
-    await processor.processInputStep(
-      inputArgs(requestContext(), [
-        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
-      ]),
-    );
-
-    await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
-      revision: 2,
-      stages: ['execute'],
-    });
-    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
-    expect(signal).toMatchObject({
-      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
-    });
-    expect(signal?.contents).toContain('Factory work phase: Building (execute)');
-    expect(signal?.contents).toContain('Config: rules-v1');
-  });
-
   describe('board-owned tool-result rules', () => {
     const approved = () => toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } });
     const stageOf = async (storage: WorkItemsStorage, id: string) =>
@@ -618,6 +593,31 @@ describe('FactoryPhaseStateProcessor', () => {
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
       expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
     });
+  });
+
+  it('moves an approved plan to Building before emitting the next phase signal', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage, 'plan');
+    const boards = createBoardRegistry();
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+
+    await processor.processInputStep(
+      inputArgs(requestContext(), [
+        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
+      ]),
+    );
+
+    await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
+      revision: 2,
+      stages: ['execute'],
+    });
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(signal).toMatchObject({
+      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
+    });
+    expect(signal?.contents).toContain('Factory work phase: Building (execute)');
+    expect(signal?.contents).toContain('Config: rules-v1');
   });
 
   it('emits the persisted custom board and phase in the state signal', async () => {

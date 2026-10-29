@@ -13,7 +13,7 @@ import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { connectLinear } from '../../factory/services/linear';
 import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
@@ -94,7 +94,7 @@ function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {
   const status = query.data;
   const label = <IntegrationLabel provider="github" name="GitHub" />;
 
-  if (query.isPending) return <SkeletonRows label="Loading GitHub connection" rows={1} rowClassName="h-16 w-full" />;
+  if (query.isPending) return <SettingsRowsSkeleton label="Loading GitHub connection" rows={1} />;
   if (query.isError || status?.reason === 'unavailable') {
     return <RetryRow label={label} errorMsg="Couldn't load GitHub connections." onRetry={() => void query.refetch()} />;
   }
@@ -135,7 +135,7 @@ function LinearConnectionRow({ showAvailable }: { showAvailable: boolean }) {
   const status = query.data;
   const label = <IntegrationLabel provider="linear" name="Linear" />;
 
-  if (query.isPending) return <SkeletonRows label="Loading Linear connection" rows={1} rowClassName="h-16 w-full" />;
+  if (query.isPending) return <SettingsRowsSkeleton label="Loading Linear connection" rows={1} />;
   if (status?.reason === 'unavailable') {
     return <RetryRow label={label} errorMsg="Couldn't load Linear connections." onRetry={() => void query.refetch()} />;
   }
@@ -158,7 +158,7 @@ function GitLabConnectionRows({ showAvailable }: { showAvailable: boolean }) {
   const status = query.data;
   const label = <PlatformLabel provider="gitlab" />;
 
-  if (query.isPending) return <SkeletonRows label="Loading GitLab connections" rows={1} rowClassName="h-16 w-full" />;
+  if (query.isPending) return <SettingsRowsSkeleton label="Loading GitLab connections" rows={1} />;
   if (query.isError || status?.reason === 'unavailable') {
     return <RetryRow label={label} errorMsg="Couldn't load GitLab connections." onRetry={() => void query.refetch()} />;
   }
@@ -176,7 +176,7 @@ function JiraConnectionRows({ showAvailable }: { showAvailable: boolean }) {
   const status = query.data;
   const label = <PlatformLabel provider="jira" />;
 
-  if (query.isPending) return <SkeletonRows label="Loading Jira connections" rows={1} rowClassName="h-16 w-full" />;
+  if (query.isPending) return <SettingsRowsSkeleton label="Loading Jira connections" rows={1} />;
   if (status?.reason === 'unavailable') {
     return <RetryRow label={label} errorMsg="Couldn't load Jira connections." onRetry={() => void query.refetch()} />;
   }
@@ -197,7 +197,7 @@ function IncidentioConnectionRows({ showAvailable }: { showAvailable: boolean })
   const label = <PlatformLabel provider="incident-io" />;
 
   if (statusQuery.isPending || connectionsQuery.isPending) {
-    return <SkeletonRows label="Loading incident.io connections" rows={1} rowClassName="h-16 w-full" />;
+    return <SettingsRowsSkeleton label="Loading incident.io connections" rows={1} />;
   }
   if (statusQuery.isError) {
     return (

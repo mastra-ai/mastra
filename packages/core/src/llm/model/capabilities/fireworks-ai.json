@@ -77,24 +77,6 @@
     "accounts/fireworks/routers/qwen-max-latest"
   ],
   "reasoning": {
-    "accounts/fireworks/models/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "accounts/fireworks/models/qwen3p8-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "accounts/fireworks/models/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "accounts/fireworks/models/deepseek-v4p1-flash": [
       {
         "type": "toggle"
@@ -117,6 +99,41 @@
         "min": 1024
       }
     ],
+    "accounts/fireworks/models/glm-5p3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/glm-5p3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "accounts/fireworks/models/qwen3p8-2p4t-a95b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "accounts/fireworks/models/qwen3p8-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
     "accounts/fireworks/models/minimax-m3": [
       {
         "type": "effort",
@@ -136,28 +153,6 @@
         "min": 1024
       }
     ],
-    "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "accounts/fireworks/models/qwen3p8-2p4t-a95b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "accounts/fireworks/models/glm-5p3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/nemotron-3-ultra-nvfp4": [
-      {
-        "type": "toggle"
-      }
-    ],
     "accounts/fireworks/models/deepseek-v4p1-flash-1017": [
       {
         "type": "toggle"
@@ -173,64 +168,24 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "accounts/fireworks/models/glm-5p3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/glm-5p3-fast": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/glm-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/deepseek-v4p1-flash-spot": [
+    "accounts/fireworks/models/nemotron-3-ultra-nvfp4": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "accounts/fireworks/models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/minimax-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "accounts/fireworks/routers/deepseek-flash-latest": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/glm-5p3-spot": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/kimi-latest": [
+    "accounts/fireworks/routers/kimi-fast-latest": [
       {
         "type": "toggle"
       },
@@ -243,7 +198,16 @@
         "min": 1024
       }
     ],
-    "accounts/fireworks/routers/kimi-k3-fast": [
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/kimi-latest": [
       {
         "type": "toggle"
       },
@@ -269,13 +233,7 @@
         "min": 1024
       }
     ],
-    "accounts/fireworks/routers/qwen-max-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "accounts/fireworks/routers/kimi-fast-latest": [
+    "accounts/fireworks/routers/kimi-k3-fast": [
       {
         "type": "toggle"
       },
@@ -294,10 +252,52 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-flash-latest": [
+    "accounts/fireworks/routers/minimax-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "accounts/fireworks/routers/deepseek-v4p1-flash-spot": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-5p3-fast": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-5p3-spot": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/deepseek-flash-latest": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/qwen-max-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

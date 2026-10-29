@@ -3,6 +3,11 @@
   "temperature": ["mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-flash", "mimo-v2.6-pro"],
   "structuredOutput": ["mimo-v2.6-flash", "mimo-v2.6-pro"],
   "reasoning": {
+    "mimo-v2.6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
     "mimo-v2.5-pro": [
       {
         "type": "toggle"
@@ -14,11 +19,6 @@
       }
     ],
     "mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-pro": [
       {
         "type": "toggle"
       }

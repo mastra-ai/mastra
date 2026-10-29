@@ -241,17 +241,17 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           title: chunk.payload.title,
           providerMetadata: chunk.payload.providerMetadata,
         };
-      } else {
-        return {
-          type: 'source',
-          sourceType: 'document',
-          id: chunk.payload.id,
-          mediaType: chunk.payload.mimeType!,
-          title: chunk.payload.title,
-          filename: chunk.payload.filename,
-          providerMetadata: chunk.payload.providerMetadata,
-        };
       }
+      return {
+        type: 'source',
+        sourceType: 'document',
+        id: chunk.payload.id,
+        mediaType: chunk.payload.mimeType!,
+        title: chunk.payload.title,
+        filename: chunk.payload.filename,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
     case 'file':
       if (mode === 'generate') {
         return {

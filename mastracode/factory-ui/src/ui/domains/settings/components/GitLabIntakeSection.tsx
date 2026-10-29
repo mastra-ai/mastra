@@ -7,9 +7,8 @@ import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/service
 import type { GitLabStatus } from '../../factory/services/gitlab';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
-import { SourcePicker } from './IntakeSourcePicker';
+import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupGitLabProjectsByAccount } from './intakeSourceGroups';
-import { IntakeSourceRouting } from './LinearRouting';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 
@@ -69,34 +68,26 @@ export function GitLabIntakeSection({
       }
     >
       {configured && config.gitlab.enabled && !authError && (
-        <>
-          <SourcePicker
-            label="GitLab projects"
-            addLabel="Add project"
-            itemIcon={<SettingsIntegrationIcon provider="gitlab" />}
-            groups={groupGitLabProjectsByAccount(projects)}
-            selectedIds={projectsQuery.isPending ? [] : config.gitlab.sourceIds}
-            pending={busy}
-            loading={projectsQuery.isPending}
-            error={projectsQuery.isError ? "Couldn't load GitLab projects." : undefined}
-            onRetry={() => void projectsQuery.refetch()}
-            onToggleItem={id =>
-              update({
-                ...config,
-                gitlab: { ...config.gitlab, sourceIds: toggleSourceId(config.gitlab.sourceIds, id) },
-              })
-            }
-          />
-          {!projectsQuery.isError && (
-            <IntakeSourceRouting
-              integrationId="gitlab"
-              label="GitLab"
-              sourceIds={config.gitlab.sourceIds ?? []}
-              sources={projects}
-              factories={factories}
-            />
-          )}
-        </>
+        <RoutedSourcePicker
+          integrationId="gitlab"
+          routingLabel="GitLab"
+          factories={factories}
+          label="GitLab projects"
+          addLabel="Add project"
+          itemIcon={<SettingsIntegrationIcon provider="gitlab" />}
+          groups={groupGitLabProjectsByAccount(projects)}
+          selectedIds={projectsQuery.isPending ? [] : config.gitlab.sourceIds}
+          pending={busy}
+          loading={projectsQuery.isPending}
+          error={projectsQuery.isError ? "Couldn't load GitLab projects." : undefined}
+          onRetry={() => void projectsQuery.refetch()}
+          onToggleItem={id =>
+            update({
+              ...config,
+              gitlab: { ...config.gitlab, sourceIds: toggleSourceId(config.gitlab.sourceIds, id) },
+            })
+          }
+        />
       )}
     </IntakeProviderCard>
   );

@@ -47,7 +47,7 @@ export async function openLocalObservabilityStore(
   // Loaded on demand: DuckDB's native binding adds ~25 MB to every session that never turns this on.
   const { DuckDBStore } = await import('@mastra/duckdb');
   const store = new DuckDBStore({ id: 'mastra-code-observability', path, retention: LOCAL_OBSERVABILITY_RETENTION });
-  await store.db.getConnection();
+  await store.db.query('SELECT 1');
   // No init() here: the session composite initializes the domain.
   const pruned = pruneExistingTables(store).catch(() => []);
   return { store, pruned };

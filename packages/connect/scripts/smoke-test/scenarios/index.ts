@@ -19,6 +19,7 @@ import { microsoftTeamsScenario } from './microsoft-teams.js';
 import { notionScenario } from './notion.js';
 import { oneDriveScenario } from './one-drive.js';
 import { openaiScenario } from './openai.js';
+import { outlookScenario } from './outlook.js';
 import { posthogScenario } from './posthog.js';
 import { resendScenario } from './resend.js';
 import { slackScenario } from './slack.js';
@@ -54,6 +55,7 @@ export const scenarios: Scenario[] = [
   notionScenario,
   oneDriveScenario,
   openaiScenario,
+  outlookScenario,
   posthogScenario,
   resendScenario,
   slackScenario,

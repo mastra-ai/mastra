@@ -3,7 +3,7 @@
   "temperature": ["glm-4.6v", "glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"],
   "structuredOutput": ["glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"],
   "reasoning": {
-    "glm-5.3-flash": [
+    "glm-5.3-highspeed": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -14,7 +14,7 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3-highspeed": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
