@@ -78,13 +78,24 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
     .generateScore(({ results }) => {
       const evaluations = results.analyzeStepResult?.evaluations || [];
       const missingTools = results.analyzeStepResult?.missingTools || [];
-      const totalToolCalls = results.preprocessStepResult?.actualTools.length || 0;
+      const actualTools = results.preprocessStepResult?.actualTools || [];
+      const totalToolCalls = actualTools.length;
 
       if (totalToolCalls === 0) {
         return missingTools.length > 0 ? 0.0 : 1.0;
       }
 
-      const appropriateToolCalls = evaluations.filter(e => e.wasAppropriate).length;
+      const remainingCalls = new Map<string, number>();
+      for (const toolName of actualTools) {
+        remainingCalls.set(toolName, (remainingCalls.get(toolName) ?? 0) + 1);
+      }
+
+      const appropriateToolCalls = evaluations.filter(evaluation => {
+        const remaining = remainingCalls.get(evaluation.toolCalled) ?? 0;
+        if (remaining === 0) return false;
+        remainingCalls.set(evaluation.toolCalled, remaining - 1);
+        return evaluation.wasAppropriate;
+      }).length;
       return roundToTwoDecimals(Math.min(1, appropriateToolCalls / (totalToolCalls + missingTools.length)));
     })
     .generateReason({

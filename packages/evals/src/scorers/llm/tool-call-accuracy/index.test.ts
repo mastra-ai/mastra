@@ -759,6 +759,32 @@ describe('createToolCallAccuracyScorerLLM', () => {
       expect((await scorer.run(run(['weather-tool']))).score).toBe(1);
     });
 
+    it('ignores appropriate evaluations for tools the agent never called', async () => {
+      const scorer = createToolCallAccuracyScorerLLM({
+        model: judge(
+          [{ toolCalled: 'weather-tool', wasAppropriate: false, reasoning: 'Not needed' }, appropriate('search-tool')],
+          [],
+        ),
+        availableTools,
+      });
+      expect((await scorer.run(run(['weather-tool']))).score).toBe(0);
+    });
+
+    it('does not count excess appropriate evaluations for one tool as another call', async () => {
+      const scorer = createToolCallAccuracyScorerLLM({
+        model: judge(
+          [
+            appropriate('weather-tool'),
+            appropriate('weather-tool'),
+            { toolCalled: 'search-tool', wasAppropriate: false, reasoning: 'Not needed' },
+          ],
+          [],
+        ),
+        availableTools,
+      });
+      expect((await scorer.run(run(['weather-tool', 'search-tool']))).score).toBe(0.5);
+    });
+
     it('returns zero when calls receive no evaluations', async () => {
       const scorer = createToolCallAccuracyScorerLLM({ model: judge([], []), availableTools });
       expect((await scorer.run(run(['weather-tool']))).score).toBe(0);
