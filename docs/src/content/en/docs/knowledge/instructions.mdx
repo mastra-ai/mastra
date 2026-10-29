@@ -15,11 +15,11 @@ Knowledge is experimental and can change without notice.
 
 When Knowledge attaches tools to an agent, it also adds a short instruction block that explains how to use them. Each part is included only when its tools are on:
 
-- **Read:** search before answering, read a node before relying on it, cite the record used, say so when nothing is found, and show both records with dates when they disagree.
-- **Write:** store one durable fact per record, add to an existing node before creating one, record a change as a new dated record, and remove only records that are wrong.
-- **Pins:** how to keep the pin set small and current.
+- **Read:** search with `knowledge_search` before answering, read a page with `knowledge_read` before relying on it, cite the page or note used, say so when nothing is found, and show both notes with their dates when they disagree.
+- **Write:** add one durable fact per note with `knowledge_note` on the page it's about, add to an existing page before creating one, put long-form text such as runbooks in a page body with `knowledge_page`, record a change as a new dated note, and remove only notes that are wrong.
+- **Pins:** pin only standing instructions, durable preferences and firm constraints that apply without being asked for, keep pinned pages short, and unpin a page once it stops being true.
 
-The text depends only on which tools are on and on your override, never on scopes, pins, or search results, so it doesn't break prompt caching.
+The text depends only on which tools are on and on your override, never on the run's scopes, its pinned pages or search results, so it doesn't break prompt caching.
 
 ## Override the instructions
 
@@ -33,6 +33,6 @@ const knowledge = new Knowledge({
 })
 ```
 
-The function receives the default text for each part, and an empty string for parts that are off. Return the same string for the same inputs, or the prompt cache stops working.
+The function receives the default text for each part as `read`, `write` and `pins`, with an empty string for parts that are off. Return the same string for the same inputs, or the prompt cache stops working.
 
 To add the block when you wire tools yourself, call `knowledge.getInstructions({ read: true, write: true, pinnedContext: false })`.
