@@ -31,6 +31,7 @@ import type {
   ListExperimentResultsOutput,
   CreateIndexOptions,
   TABLE_NAMES,
+  StorageColumn,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -45,6 +46,25 @@ import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 const DEFAULT_PRUNE_BATCH_SIZE = 1000;
+
+/**
+ * Column list for reading experiment rows. Each `timestamp` column comes back
+ * twice: as itself, and as its `*Z` mirror derived in the query with
+ * `AT TIME ZONE 'UTC'`. A plain `timestamp` otherwise round-trips through the
+ * session timezone, and reading the stored `*Z` column instead would return the
+ * insert time for rows written before the mirrors were filled in. Deriving it
+ * here makes legacy rows read correctly with no backfill to run at startup.
+ */
+function selectWithMirrors(schema: Record<string, StorageColumn>): string {
+  return Object.entries(schema)
+    .flatMap(([name, definition]) =>
+      definition.type === 'timestamp' ? [`"${name}"`, `"${name}" AT TIME ZONE 'UTC' AS "${name}Z"`] : [`"${name}"`],
+    )
+    .join(', ');
+}
+
+const EXPERIMENT_COLUMNS = selectWithMirrors(EXPERIMENTS_SCHEMA);
+const EXPERIMENT_RESULT_COLUMNS = selectWithMirrors(EXPERIMENT_RESULTS_SCHEMA);
 
 export class ExperimentsPG extends ExperimentsStorage {
   #db: PgDB;
@@ -523,7 +543,10 @@ export class ExperimentsPG extends ExperimentsStorage {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT ${EXPERIMENT_COLUMNS} FROM ${tableName} WHERE ${whereSql}`, [
+        id,
+        ...params,
+      ]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -617,7 +640,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.readClient.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        `SELECT ${EXPERIMENT_COLUMNS} FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 
@@ -721,7 +744,7 @@ export class ExperimentsPG extends ExperimentsStorage {
             "startedAtZ", "completedAtZ", "createdAtZ"
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
             $21, $22, $23)
-          RETURNING *`,
+          RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
           [
             id,
             input.experimentId,
@@ -800,7 +823,7 @@ export class ExperimentsPG extends ExperimentsStorage {
               "startedAtZ", "completedAtZ", "createdAtZ"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
               $21, $22, $23)
-            RETURNING *`,
+            RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
             [
               id,
               input.experimentId,
@@ -837,7 +860,7 @@ export class ExperimentsPG extends ExperimentsStorage {
             "startedAt" = $10, "completedAt" = $11, "retryCount" = $12, "attempt" = $13,
             "traceId" = $14, "status" = $15, "tags" = $16, "toolMockReport" = $17,
             "startedAtZ" = $18, "completedAtZ" = $19
-          WHERE "id" = $1 RETURNING *`,
+          WHERE "id" = $1 RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
           [
             existing.id,
             input.itemDatasetVersion ?? null,
@@ -898,7 +921,7 @@ export class ExperimentsPG extends ExperimentsStorage {
                "tags" = CASE WHEN $4 THEN NULL WHEN $5 THEN $6::jsonb ELSE "tags" END,
                "comment" = CASE WHEN $4 THEN NULL WHEN $7 THEN $8 ELSE "comment" END
            WHERE "id" = $1${input.experimentId !== undefined ? ' AND "experimentId" = $9' : ''}
-           RETURNING *`,
+           RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
           [
             input.id,
             input.status !== undefined,
@@ -955,7 +978,10 @@ export class ExperimentsPG extends ExperimentsStorage {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT ${EXPERIMENT_RESULT_COLUMNS} FROM ${tableName} WHERE ${whereSql}`, [
+        id,
+        ...params,
+      ]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -1024,7 +1050,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.readClient.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        `SELECT ${EXPERIMENT_RESULT_COLUMNS} FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 
