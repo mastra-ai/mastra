@@ -133,6 +133,8 @@ export function resolveExportedSpanId(
   return typeof span.getExportedSpanId === 'function' ? span.getExportedSpanId() : span.id;
 }
 
+const NO_OP_TRACE_ID = 'no-op-trace';
+
 /**
  * The context a suspending run saves so that its resume continues it (see `resumeFrom`).
  * Takes the run's live span, or its exported span when another process persisted it.
@@ -140,8 +142,13 @@ export function resolveExportedSpanId(
 export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefined): ResumeTracingContext | undefined {
   if (!span) return undefined;
   const live = 'exportSpan' in span;
-  // The values exporters see. An unsampled span exports nothing, so it anchors nothing.
-  const exported = live ? (span.isValid ? span.exportSpan() : undefined) : span;
+  // The values exporters see, with the instance's own internal-span setting.
+  // An unsampled span exports nothing, so it anchors nothing.
+  const exported = live
+    ? span.isValid
+      ? span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans)
+      : undefined
+    : span;
   return {
     traceId: span.traceId,
     spanId: live ? resolveExportedSpanId(span) : span.id,
@@ -159,7 +166,9 @@ export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefi
  * so on its own it keeps the resume in the saved trace.
  */
 function continuedRun(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {
-  if (!saved?.traceId || (targetTraceId ?? saved.traceId) !== saved.traceId) return undefined;
+  // An unsampled run saves the no-op span's placeholder trace, which no exported span belongs to.
+  if (!saved?.traceId || saved.traceId === NO_OP_TRACE_ID) return undefined;
+  if ((targetTraceId ?? saved.traceId) !== saved.traceId) return undefined;
   return {
     traceId: saved.traceId,
     parentSpanId: saved.spanId,

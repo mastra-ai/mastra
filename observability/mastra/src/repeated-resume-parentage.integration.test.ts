@@ -7,9 +7,10 @@ import {
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
+import { InternalSpans, SamplingStrategyType, SpanType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Observability } from './default';
@@ -382,7 +383,8 @@ it.each(['normal', 'durable'] as const)(
   30_000,
 );
 
-it('a recovered durable run and a later resume keep the initial invocation as their origin', async () => {
+/** Crash a durable run mid-tool, recover it in a fresh process, then resume its approval. */
+async function recoverThenResume({ sampleCrashedRun }: { sampleCrashedRun: boolean }) {
   const exporter = new TestExporter();
   const storage = new InMemoryStore();
   const runId = 'recovered-resume';
@@ -427,7 +429,13 @@ it('a recovered durable run and a later resume keep the initial invocation as th
       logger: false,
       recovery: { durableAgents: 'auto' },
       observability: new Observability({
-        configs: { test: { serviceName: 'recovered-resume', exporters: [exporter] } },
+        configs: {
+          test: {
+            serviceName: 'recovered-resume',
+            exporters: [exporter],
+            sampling: { type: SamplingStrategyType.CUSTOM, sampler: () => sampleCrashedRun || !crashes },
+          },
+        },
       }),
     });
     return { agent, host };
@@ -450,32 +458,48 @@ it('a recovered durable run and a later resume keep the initial invocation as th
     recovering = openProcess(false);
     const recovered = await recovering.agent.recover(runId, { force: true });
     cleanups.push(recovered.cleanup);
-    await vi.waitFor(() => expect(exporter.getSpansByType(SpanType.AGENT_RUN)).toHaveLength(2), { timeout: 10_000 });
+    const expectedRuns = sampleCrashedRun ? 3 : 2;
+    await vi.waitFor(() => expect(exporter.getSpansByType(SpanType.AGENT_RUN)).toHaveLength(expectedRuns - 1), {
+      timeout: 10_000,
+    });
     const resumed = await recovering.agent.resumeGenerate(runId, { approved: true }, { toolCallId: 'call-2' });
     expect(resumed.text).toBe('Both approvals received.');
 
-    await expect.poll(() => exporter.getSpansByType(SpanType.AGENT_RUN).length).toBe(3);
+    await expect.poll(() => exporter.getSpansByType(SpanType.AGENT_RUN).length).toBe(expectedRuns);
     const runs = exporter.getSpansByType(SpanType.AGENT_RUN);
-    const initial = runs.find(span => !span.parentSpanId)!;
-    const recoveredRun = runs.find(span => span.name.endsWith('(recovered)'))!;
-    const laterResume = runs.find(span => span.name.endsWith('(resumed)'))!;
-    expect(initial.externalParentSpanId).toBe(EXTERNAL_AT_START);
-    expect(recoveredRun).toMatchObject({
-      parentSpanId: initial.id,
-      resumedFromSpanId: initial.id,
-      externalParentSpanId: EXTERNAL_AT_START,
-    });
-    expect(laterResume).toMatchObject({
-      parentSpanId: recoveredRun.id,
-      resumedFromSpanId: initial.id,
-      externalParentSpanId: EXTERNAL_AT_START,
-    });
+    return {
+      initial: runs.find(span => span.name.endsWith("'recovered-resume'")),
+      recoveredRun: runs.find(span => span.name.endsWith('(recovered)'))!,
+      laterResume: runs.find(span => span.name.endsWith('(resumed)'))!,
+    };
   } finally {
     for (const cleanup of cleanups) cleanup();
     releaseCrashed();
     await crashed.host.shutdown();
     await recovering?.host.shutdown();
   }
+}
+
+it('a recovered durable run and a later resume keep the initial invocation as their origin', async () => {
+  const { initial, recoveredRun, laterResume } = await recoverThenResume({ sampleCrashedRun: true });
+  expect(initial!.externalParentSpanId).toBe(EXTERNAL_AT_START);
+  expect(recoveredRun).toMatchObject({
+    parentSpanId: initial!.id,
+    resumedFromSpanId: initial!.id,
+    externalParentSpanId: EXTERNAL_AT_START,
+  });
+  expect(laterResume).toMatchObject({
+    parentSpanId: recoveredRun.id,
+    resumedFromSpanId: initial!.id,
+    externalParentSpanId: EXTERNAL_AT_START,
+  });
+}, 30_000);
+
+it('recovering a run whose start was not sampled starts a new lineage at the recovered run', async () => {
+  const { initial, recoveredRun, laterResume } = await recoverThenResume({ sampleCrashedRun: false });
+  expect(initial).toBeUndefined();
+  expect(recoveredRun.resumedFromSpanId).toBeUndefined();
+  expect(laterResume).toMatchObject({ parentSpanId: recoveredRun.id, resumedFromSpanId: recoveredRun.id });
 }, 30_000);
 
 it('stores the resume lineage of a resumed run in the trace store', async () => {
@@ -570,3 +594,71 @@ it('names only the agent run, not its internal loop workflow, as a resume of the
     await host.shutdown();
   }
 });
+
+it.each([
+  [true, [null, null]],
+  [false, [EXTERNAL_AT_START, EXTERNAL_AT_START]],
+] as const)(
+  'a resume keeps the external parent its agent run exported (includeInternalSpans: %s)',
+  async (includeInternalSpans, expected) => {
+    const exporter = new TestExporter();
+    const runId = 'under-internal-workflow';
+    const agent = new Agent({
+      id: 'under-internal-workflow',
+      name: 'Under internal workflow',
+      instructions: 'Request two approvals, then answer.',
+      model: twoApprovalsModel(),
+      tools: {
+        confirm: createTool({
+          id: 'confirm',
+          description: 'Request approval',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ approved: true }),
+        }),
+      },
+    });
+    const step = createStep({
+      id: 'run-agent',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async ({ tracingContext }) => {
+        expect((await agent.generate('Start.', { runId, maxSteps: 10, tracingContext })).finishReason).toBe(
+          'suspended',
+        );
+        return {};
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'internal-outer',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: { tracingPolicy: { internal: InternalSpans.WORKFLOW } },
+    })
+      .then(step)
+      .commit();
+    const host = new Mastra({
+      agents: { agent },
+      workflows: { workflow },
+      storage: new InMemoryStore(),
+      logger: false,
+      observability: new Observability({
+        configs: { test: { serviceName: 'under-internal', exporters: [exporter], includeInternalSpans } },
+      }),
+    });
+    try {
+      const run = await workflow.createRun();
+      const outer = await run.start({ inputData: {}, tracingOptions: { parentSpanId: EXTERNAL_AT_START } });
+      expect(outer.status).toBe('success');
+      const resumed = await agent.resumeGenerate({ approved: true }, { runId, toolCallId: 'call-1', maxSteps: 10 });
+      expect(resumed.finishReason).toBe('suspended');
+
+      const runs = exporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(runs[1]!.resumedFromSpanId).toBe(runs[0]!.id);
+      // With the internal workflow hidden, the agent run is exported under its external parent; shown, it is not.
+      expect(runs.map(span => span.externalParentSpanId ?? null)).toEqual(expected);
+    } finally {
+      await host.shutdown();
+    }
+  },
+);
