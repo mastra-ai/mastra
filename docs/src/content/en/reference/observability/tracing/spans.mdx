@@ -303,7 +303,7 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span owned by an external tracing system, such as an ambient OpenTelemetry span. A resumed run keeps the external parent of the run it continues, unless the resume passes its own `tracingOptions.parentSpanId` */
   externalParentSpanId?: string
 
-  /** Span id of the first run that a resumed run continues. Not set on the first run */
+  /** Span id of the first run that a resumed run continues. Not set on the first run. `metadata.resumedFromSpanId` can differ: it holds the span the resume attaches under, which is the previous run when a workflow suspends more than once */
   resumedFromSpanId?: string
 
   /** Requested model and its provider, from this span's own model and provider attributes. Set only when both are present */

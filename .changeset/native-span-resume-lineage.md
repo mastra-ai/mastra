@@ -1,5 +1,5 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
 Fixed resumed runs losing the link to the run they continue. When you resume an agent, durable agent or workflow run, its span now sets `resumedFromSpanId` to the span id of the first run. This stays true after several resumes and after a durable agent recovers. A resumed run also keeps the external parent span of the run it continues.
