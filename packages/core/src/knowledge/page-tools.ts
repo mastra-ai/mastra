@@ -331,7 +331,7 @@ function pageTool(host: KnowledgePageToolHost) {
         },
         name: { type: 'string', minLength: 1 },
         description: { type: 'string', description: 'A short synopsis (about 100 tokens). Empty clears it.' },
-        body: { type: 'string', description: 'The curated long-form summary.' },
+        body: { type: 'string', description: 'The curated long-form summary, in markdown.' },
         expectedVersion: {
           type: 'integer',
           minimum: 1,
@@ -461,7 +461,11 @@ function noteTool(host: KnowledgePageToolHost) {
         page: { type: 'string', minLength: 1, description: `Add: the page. ${pageRefDescription}` },
         note: { type: 'string', minLength: 1, description: 'Restamp or remove: the note id.' },
         scope: { ...scopeListSchema, description: 'Add or restamp: the stamp scopes (addresses).' },
-        text: { type: 'string', minLength: 1, description: 'Add: the note, about 250 tokens at most.' },
+        text: {
+          type: 'string',
+          minLength: 1,
+          description: 'Add: the note, about 250 tokens at most; inline markdown is fine.',
+        },
         when: {
           type: 'string',
           description:

@@ -9,6 +9,7 @@ import { KnowledgeDeclarationError, knowledgeMemoryScopes, knowledgeRoleAtLeast 
 import type { KnowledgeScopeDeclarations } from '../declarations';
 import { buildKnowledgePageTools } from '../page-tools';
 import { KnowledgeScopeRuntime } from '../scope-runtime';
+import { KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
 
 /** The §10 reference setup of the access spec. */
 const scopes: KnowledgeScopeDeclarations = {
@@ -186,6 +187,18 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     await expect(
       bea.note({ op: 'add', page: 'Billing Service', scope: ['agent:acme:alex'], text: 'Spoof.' }),
     ).rejects.toThrow(/not found/);
+  });
+
+  it('tells the model page bodies and notes are markdown', () => {
+    const describe = (tool: string) =>
+      (
+        standardSchemaToJSONSchema(tools[tool]!.inputSchema as never, { io: 'input' }) as {
+          properties: Record<string, { description?: string }>;
+        }
+      ).properties;
+    expect(describe('knowledge_page').body!.description).toMatch(/markdown/);
+    expect(describe('knowledge_note').text!.description).toMatch(/markdown/);
+    expect(KNOWLEDGE_WRITE_INSTRUCTIONS).toMatch(/page bodies in markdown/);
   });
 
   it('a note accepts a plain date or a date-time for when', async () => {
