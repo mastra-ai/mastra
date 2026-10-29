@@ -6,7 +6,7 @@ import { DatasetsSpanner } from './domains/datasets';
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
-describe.skipIf(process.env.ENABLE_TESTS !== 'true')('Spanner dataset field fidelity', () => {
+describe('Spanner dataset field fidelity', () => {
   process.env.SPANNER_EMULATOR_HOST ||= 'localhost:9010';
   const client = new Spanner({ projectId: process.env.SPANNER_PROJECT_ID || 'test-project' });
   // Own the emulator instance so parallel test files cannot race during bootstrap.

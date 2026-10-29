@@ -23,7 +23,7 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do nc -z localhost 9010 && exit 0; sleep 1; done; echo 'Spanner emulator did not become ready on localhost:9010 within 30s' >&2; exit 1)",
-    "test": "ENABLE_TESTS=${ENABLE_TESTS:-true} vitest run",
+    "test": "vitest run",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
