@@ -314,7 +314,7 @@ Visit [Request Context](/docs/server/request-context) for more information.
   - On an existing thread, the first turn loads every stored message until the first observation completes. A large thread pays a one-time context cost.
   - `lastMessages` does nothing under Observational Memory. It replaces raw history itself, so the MessageHistory processor is skipped.
   - Leave `observation.observeOnContextOverflow` at its default `true`. When the main model's context overflows, it compresses pending messages and retries the request. With it off, that request fails.
-  - Invalid option combinations throw on first use, not when you construct `Memory`. For example, `shareTokenBudget: true` with async buffering enabled fails on the first memory operation. Read the error instead of retrying.
+  - Some invalid options are validated on first use, not when you construct `Memory`. For example, `shareTokenBudget: true` with async buffering enabled fails on the first memory operation. Read the error instead of retrying.
   - With async buffering, work continues in the background. Call `await memory.settled()` before closing storage or shutting down, or that work is lost.
   - The observation mutex only works inside one process. Process each thread in a single process, or external locking is needed to avoid duplicate work.
   - Debug with `OM_DEBUG=1`, which writes `om-debug.log`, plus `getStatus()` and the `onDebugEvent` callback.
