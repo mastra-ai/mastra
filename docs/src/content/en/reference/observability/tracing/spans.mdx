@@ -300,7 +300,7 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string
 
-  /** Parent span owned by an external tracing system, such as an ambient OpenTelemetry span. A resumed run keeps the external parent of the run it continues */
+  /** Parent span owned by an external tracing system, such as an ambient OpenTelemetry span. A resumed run keeps the external parent of the run it continues, unless the resume passes its own `tracingOptions.parentSpanId` */
   externalParentSpanId?: string
 
   /** Span id of the first run that a resumed run continues. Not set on the first run */
