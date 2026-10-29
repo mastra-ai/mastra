@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -13,9 +13,10 @@ const script = fileURLToPath(new URL('./publish-packages.mjs', import.meta.url))
 // packument; the script GETs `/<name>/<version>` to see what's already there.
 // PUT responses are delayed so concurrent publishes overlap, and every PUT is
 // checked against the dependencies that had finished publishing when it arrived.
-async function startRegistry(t, { published = [], failPut = {}, dependencies = {} } = {}) {
+async function startRegistry(t, { published = [], failPut = {}, hangPut = {}, dependencies = {} } = {}) {
   const versions = new Set(published);
   const failures = new Map(Object.entries(failPut));
+  const hangs = new Map(Object.entries(hangPut));
   const state = { puts: [], inFlight: 0, maxInFlight: 0, publishedBeforeDependency: [], versions, failures };
   const server = createServer((req, res) => {
     let body = '';
@@ -32,6 +33,11 @@ async function startRegistry(t, { published = [], failPut = {}, dependencies = {
       const packument = JSON.parse(body);
       const version = Object.keys(packument.versions)[0];
       state.puts.push({ name, version, distTags: packument['dist-tags'] });
+      if (hangs.get(name)) {
+        // Never answer, like an upload that stalls.
+        hangs.set(name, hangs.get(name) - 1);
+        return;
+      }
       for (const dep of dependencies[name] ?? []) {
         if (![...versions].some(id => id.startsWith(`${dep}@`)))
           state.publishedBeforeDependency.push(`${name} before ${dep}`);
@@ -54,7 +60,10 @@ async function startRegistry(t, { published = [], failPut = {}, dependencies = {
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => server.close());
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
   return { url: `http://127.0.0.1:${server.address().port}`, state };
 }
 
@@ -62,18 +71,23 @@ function makeWorkspace(t, registryUrl, packages) {
   const cwd = mkdtempSync(path.join(tmpdir(), 'publish-packages-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ name: 'fixture', private: true }));
-  writeFileSync(path.join(cwd, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
+  // The script does its own retries; pnpm's built-in backoff would make the
+  // failure tests take minutes.
+  writeFileSync(path.join(cwd, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\nfetchRetries: 0\n');
   writeFileSync(path.join(cwd, '.npmrc'), `${registryUrl.replace(/^http:/, '')}/:_authToken=test-token\n`);
   for (const pkg of packages) {
     const dir = path.join(cwd, 'packages', pkg.name.replaceAll('/', '-'));
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ version: '1.0.0', ...pkg }));
   }
+  // A release publishes from an installed workspace; pnpm 11 can't resolve
+  // `workspace:` versions without it. Only workspace links, so no network.
+  execFileSync('pnpm', ['install', '--offline', '--ignore-scripts'], { cwd, stdio: 'pipe' });
   return cwd;
 }
 
-function run(cwd, registry, extraArgs = []) {
-  const env = { ...process.env, PUBLISH_RETRY_DELAY_MS: '10' };
+function run(cwd, registry, extraArgs = [], extraEnv = {}) {
+  const env = { ...process.env, PUBLISH_RETRY_DELAY_MS: '10', ...extraEnv };
   delete env.NPM_CONFIG_PROVENANCE;
   delete env.NPM_CONFIG_USERCONFIG;
   return new Promise((resolve, reject) => {
@@ -149,6 +163,18 @@ test('a temporary npm error during a publish is retried instead of failing the r
   const { status, output } = await run(cwd, registry.url);
 
   assert.equal(status, 0, output);
+  assert.equal(registry.state.puts.filter(put => put.name === '@fx/voice').length, 2);
+  assert.ok(registry.state.versions.has('@fx/voice@1.0.0'));
+});
+
+test('a publish that hangs is killed and retried instead of stalling the release', { timeout: 30_000 }, async t => {
+  const registry = await startRegistry(t, { hangPut: { '@fx/voice': 1 }, dependencies: releaseDependencies });
+  const cwd = makeWorkspace(t, registry.url, releasePackages);
+
+  const { status, output } = await run(cwd, registry.url, [], { PUBLISH_TIMEOUT_MS: '3000' });
+
+  assert.equal(status, 0, output);
+  assert.match(output, /Timed out after 3s; killed/);
   assert.equal(registry.state.puts.filter(put => put.name === '@fx/voice').length, 2);
   assert.ok(registry.state.versions.has('@fx/voice@1.0.0'));
 });
