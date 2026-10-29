@@ -227,6 +227,22 @@ describe('factory_list_work_items', () => {
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
   });
 
+  it('links each card on its board when a public URL is configured', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+    try {
+      const { run } = setup({ items: rows });
+      const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
+      expect(result.items.find(row => row.id === 'a')?.url).toBe(
+        'https://factory.example.com/factories/project-1/work?item=a',
+      );
+      expect(result.items.find(row => row.id === 'c')?.url).toBe(
+        'https://factory.example.com/factories/project-1/review?item=c',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('defaults to 25 rows, caps at 50 and flags truncation', async () => {
     const many = Array.from({ length: 60 }, (_, index) => item({ id: `m${index}` }));
     const { run } = setup({ items: many });

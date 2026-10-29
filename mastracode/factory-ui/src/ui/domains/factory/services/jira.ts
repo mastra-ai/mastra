@@ -7,7 +7,13 @@
  * by filtering for the `jira` provider configuration key.
  */
 
-export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
+export type JiraStatusReason =
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready'
+  | 'unavailable';
 
 export interface JiraStatus {
   enabled: boolean;
@@ -88,10 +94,11 @@ export async function fetchJiraStatus(baseUrl: string): Promise<JiraStatus> {
     if (res.status === 401) {
       return { enabled: false, configured: false, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, configured: false };
+    if (res.status === 404) return { enabled: false, configured: false };
+    if (!res.ok) return { enabled: false, configured: false, reason: 'unavailable' };
     return (await res.json()) as JiraStatus;
   } catch {
-    return { enabled: false, configured: false };
+    return { enabled: false, configured: false, reason: 'unavailable' };
   }
 }
 

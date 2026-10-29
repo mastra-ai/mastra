@@ -15,12 +15,6 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bee-buzz": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "bee-hive": [
       {
         "type": "effort",
@@ -28,6 +22,12 @@
       }
     ],
     "bee-comb": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "bee-buzz": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

@@ -4,7 +4,7 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
-import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MIN_OBSERVATION_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
 import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
@@ -257,6 +257,7 @@ export function getDynamicMemory(
     // search still reaches the whole resource. Neither session state, the env
     // var, nor a repository's database.json can switch it.
     const omScope = isFactory ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
+    const isResourceScope = omScope === 'resource';
 
     // The Factory row is authoritative and read per invocation, so a stored
     // threshold/attachment change reaches the running Memory without a session.
@@ -264,10 +265,14 @@ export function getDynamicMemory(
     const factorySettingsUnavailable =
       isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory);
     const factorySettings = factorySettingsUnavailable ? null : factorySettingsContext;
-    const obsThreshold =
+    // Rows saved before validation can still hold a thread-scope threshold that
+    // @mastra/memory refuses because it does not exceed the activation buffer.
+    // Resource scope has no activation buffer and keeps its saved value.
+    const storedObsThreshold =
       factorySettings !== undefined
         ? (factorySettings?.observationThreshold ?? DEFAULT_OBS_THRESHOLD)
         : (state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD);
+    const obsThreshold = isResourceScope ? storedObsThreshold : Math.max(storedObsThreshold, MIN_OBSERVATION_THRESHOLD);
     const refThreshold =
       factorySettings !== undefined
         ? (factorySettings?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD)
@@ -286,9 +291,6 @@ export function getDynamicMemory(
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
-
-    // Async buffering is not supported with resource scope — disable it
-    const isResourceScope = omScope === 'resource';
 
     const observerInstruction = caveman
       ? `${DYNAMIC_AGENTS_MD_INSTRUCTION}\n\n${CAVEMAN_OM_INSTRUCTION}`

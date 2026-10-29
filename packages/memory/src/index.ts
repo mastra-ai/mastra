@@ -3273,9 +3273,8 @@ Notes:
         return item;
       } else if (item && typeof item === 'object' && 'id' in item) {
         return item.id;
-      } else {
-        throw new Error('Invalid input: array items must be strings or objects with an id property');
       }
+      throw new Error('Invalid input: array items must be strings or objects with an id property');
     });
 
     const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');

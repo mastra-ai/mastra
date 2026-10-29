@@ -1,4 +1,5 @@
 export { createRouteAdapterTestSuite } from './route-adapter-test-suite';
+export { createStructuredWakeTestSuite, type StructuredWakeTestConfig } from './structured-wake-test-suite';
 export { createDurableDisconnectTestSuite, type DurableDisconnectTestConfig } from './durable-disconnect-test-suite';
 export type {
   AdapterTestSuiteConfig,

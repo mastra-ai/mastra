@@ -1,3 +1,5 @@
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { KnowledgeLoadingSkeleton } from '../domains/factory/components/knowledge/KnowledgeLoadingSkeleton';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
@@ -408,7 +410,18 @@ function ActivityPanel({
       </Txt>
     );
   }
-  if (activity.isPending) return <SkeletonRows label="Loading knowledge activity" rows={6} />;
+  if (activity.isPending)
+    return (
+      <SkeletonRows label="Loading knowledge activity" rows={6} className="divide-border gap-0 divide-y pr-2">
+        <div aria-hidden className="flex items-start justify-between gap-4 py-3">
+          <div className="min-w-0 flex-1">
+            <SkeletonText line="text-body-sm" className="w-3/4 motion-reduce:before:animate-none" />
+            <SkeletonText line="text-meta" className="w-1/2 motion-reduce:before:animate-none" />
+          </div>
+          <SkeletonText line="text-meta" className="w-20 motion-reduce:before:animate-none" />
+        </div>
+      </SkeletonRows>
+    );
   if (activity.isError) {
     const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
     return <Notice variant="destructive">{message}</Notice>;
@@ -724,7 +737,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     const message = scopesQuery.error instanceof Error ? scopesQuery.error.message : 'Unable to load knowledge scopes.';
     body = <Notice variant="destructive">{message}</Notice>;
   } else if (scopesQuery.isPending) {
-    body = <SkeletonRows label="Loading knowledge scopes" rows={3} />;
+    body = <KnowledgeLoadingSkeleton label="Loading knowledge scopes" layout={layout} />;
   } else if (!selection) {
     body = (
       <Txt tone="muted" as="p" variant="body">
@@ -736,7 +749,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       graphQuery.error instanceof Error ? graphQuery.error.message : 'Unable to load the knowledge graph.';
     body = <Notice variant="destructive">{message}</Notice>;
   } else if (graphQuery.isPending) {
-    body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
+    body = <KnowledgeLoadingSkeleton label="Loading knowledge graph" layout={layout} />;
   } else if (graphQuery.data.nodes.length === 0) {
     // Identity rungs use exact-scope visibility (v2 has no downward
     // inheritance), so an empty org/project view usually means knowledge only

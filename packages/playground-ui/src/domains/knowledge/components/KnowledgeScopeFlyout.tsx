@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { useKnowledgeDataSource } from '../data-source-context';
 import { knowledgeActivityLabel, KNOWLEDGE_ACTIVITY_TRUNCATED } from '../lib/activityLabel';
 import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../types';
+import { KnowledgeActivitySkeleton } from './KnowledgeSkeletons';
 
 import { Txt } from '@/ds/components/Txt';
 
@@ -74,7 +75,7 @@ export function KnowledgeScopeFlyout({
             Recent activity
           </Txt>
           {activity.isPending ? (
-            <p className="mt-2 text-caption text-muted-foreground">Loading…</p>
+            <KnowledgeActivitySkeleton />
           ) : activity.isError ? (
             <p className="mt-2 text-caption text-muted-foreground">Unable to load recent activity.</p>
           ) : recentActivity.length === 0 ? (

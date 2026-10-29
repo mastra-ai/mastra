@@ -580,9 +580,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         statusText: sseResponse.statusText,
         headers,
       });
-    } else {
-      return new Response(null, { status: 500 });
     }
+    return new Response(null, { status: 500 });
   }
 
   async registerRoute(

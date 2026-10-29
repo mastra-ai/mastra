@@ -272,10 +272,10 @@ describe('Intake candidate paging', () => {
     scrollSentinel(true);
     const skeleton = await within(triage).findByRole('status', { name: 'Loading more candidates' });
     expect(skeleton.children).toHaveLength(1);
-    expect(skeleton.firstElementChild).toHaveClass('before:animate-[shimmer_2s_infinite]', 'before:bg-linear-to-r');
     releaseSecondPage();
 
     await waitFor(() => expect(within(triage).getByText('Triage signup')).toBeInTheDocument());
+    expect(within(triage).queryByRole('status', { name: 'Loading more candidates' })).not.toBeInTheDocument();
     expect(requestedTriagePages).toEqual(['1', '2']);
   });
 

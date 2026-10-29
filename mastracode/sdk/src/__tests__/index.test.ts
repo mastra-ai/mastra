@@ -789,11 +789,19 @@ describe('createMastraCode', () => {
     );
   });
 
-  it.each([{}, { subagents: undefined }])(
-    'registers native defaults when subagents is omitted or undefined (%j)',
-    async config => {
-      const { createMastraCode } = await import('../index.js');
-      await createMastraCode(config);
+  it.each([{}, { subagents: undefined }])('registers no subagents when subagents is omitted (%j)', async config => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode(config);
+    expect(controllerConstructorMock.mock.calls[0]![0].subagents).toEqual([]);
+  });
+
+  it.each([['builtinSubagents'], ['resolveSubagentsSetting(true)']])(
+    'registers the built-in subagents with mode default models when opted in via %s',
+    async via => {
+      const { createMastraCode, builtinSubagents, resolveSubagentsSetting } = await import('../index.js');
+      await createMastraCode({
+        subagents: via === 'builtinSubagents' ? [...builtinSubagents] : resolveSubagentsSetting(true),
+      });
       const { subagents, modes } = controllerConstructorMock.mock.calls[0]![0];
       expect(subagents.map((agent: { id: string }) => agent.id)).toEqual(['explore', 'plan', 'execute']);
       for (const [index, modeId] of ['fast', 'plan', 'build'].entries()) {
@@ -813,7 +821,11 @@ describe('createMastraCode', () => {
 
   it('uses the default custom mode model when native modes are absent', async () => {
     const { createMastraCode } = await import('../index.js');
-    await createMastraCode({ modes: [{ id: 'review', name: 'Review', defaultModelId: 'openai/review-model' }] });
+    const { builtinSubagents } = await import('../index.js');
+    await createMastraCode({
+      modes: [{ id: 'review', name: 'Review', defaultModelId: 'openai/review-model' }],
+      subagents: [...builtinSubagents],
+    });
     expect(
       controllerConstructorMock.mock.calls[0]![0].subagents.map(
         (agent: { defaultModelId: string }) => agent.defaultModelId,
@@ -873,7 +885,8 @@ describe('createMastraCode', () => {
   it('filters disabled workspace tools from native subagent allowlists', async () => {
     const { createMastraCode } = await import('../index.js');
     const { executeSubagent } = await import('../agents/subagents/execute.js');
-    await createMastraCode({ disabledTools: ['execute_command'] });
+    const { builtinSubagents } = await import('../index.js');
+    await createMastraCode({ disabledTools: ['execute_command'], subagents: [...builtinSubagents] });
     const registered = controllerConstructorMock.mock.calls[0]![0].subagents as {
       id: string;
       allowedWorkspaceTools?: string[];
@@ -951,7 +964,14 @@ describe('createMastraCode', () => {
     });
     const context = new RequestContext([['controller', { state: {} }]]);
     expect(codeAgentConfig().knowledge).toBe(instance);
-    expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual([
+    expect(await codeAgentConfig().scopes({ scopes: [], requestContext: context })).toEqual([
+      { scope: 'org:self', access: 'read' },
+      'team:self:x',
+    ]);
+    // The run's incoming scopes (identity, per-message scopes) are kept ahead of the host's.
+    expect(await codeAgentConfig().scopes({ scopes: ['resource:u1', 'request:r1'], requestContext: context })).toEqual([
+      'resource:u1',
+      'request:r1',
       { scope: 'org:self', access: 'read' },
       'team:self:x',
     ]);
@@ -963,9 +983,9 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ knowledge: new Knowledge({ id: 'plain' }) });
     const plainScopes = codeAgentConfig().scopes;
-    expect(await plainScopes({ requestContext: context })).toEqual([]);
+    expect(await plainScopes({ scopes: [], requestContext: context })).toEqual([]);
     const factory = new RequestContext([['controller', { state: { factoryOrgId: 'o', factoryProjectId: 'p' } }]]);
-    expect(await plainScopes({ requestContext: factory })).toEqual([
+    expect(await plainScopes({ scopes: [], requestContext: factory })).toEqual([
       { scope: 'org:o', access: 'write' },
       { scope: 'project:p', access: 'write' },
     ]);
@@ -988,7 +1008,7 @@ describe('createMastraCode', () => {
         scopes: host,
       });
       const context = new RequestContext([['controller', { state }]]);
-      expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual(
+      expect(await codeAgentConfig().scopes({ scopes: [], requestContext: context })).toEqual(
         host.filter(tag => tag.startsWith('resource:')),
       );
       // The inspector uses the same resolver with the same host tags, and refuses an unresolved session.
@@ -1018,7 +1038,7 @@ describe('createMastraCode', () => {
     expect(on.knowledge!.pinnedContextEnabled).toBe(true);
     expect(codeAgentConfig().knowledge).toBe(on.knowledge);
     const context = new RequestContext([['controller', { state: {} }]]);
-    expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual([
+    expect(await codeAgentConfig().scopes({ scopes: [], requestContext: context })).toEqual([
       { scope: 'org:local', access: 'write' },
     ]);
 
