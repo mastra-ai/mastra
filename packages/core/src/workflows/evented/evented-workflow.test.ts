@@ -1706,9 +1706,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       15000,
     );
 
-    // Known race (PR #28669, discussion_r4403275813): a denied redelivery can
-    // fail a running parent because authorization and the step claim are not atomic.
-    it.fails('does not fail an authorized child that is still running after lease expiry', async () => {
+    it('does not fail an authorized child that is still running after lease expiry', async () => {
       const effect = Promise.withResolvers<void>();
       const entered = Promise.withResolvers<void>();
       const fixture = await setup({
@@ -1745,9 +1743,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     }, 15000);
 
-    // Known race (PR #28669, discussion_r4403275813): a delayed authorization
-    // can dispatch after another delivery has already failed the parent.
-    it.fails('does not dispatch a child after a concurrent delivery has denied the run', async () => {
+    it('does not dispatch a child after a concurrent delivery has denied the run', async () => {
       const authorization = Promise.withResolvers<void>();
       const fixture = await setup();
       fixture.fga.require.mockImplementationOnce(async () => {

@@ -1987,6 +1987,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     fgaProvider,
     nestedWorkflowStep,
     nestedRunId,
+    isFreshStart,
     continueRedelivery,
   }: {
     args: ProcessorArgs;
@@ -1994,6 +1995,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     fgaProvider: RequireFGAOptions['fgaProvider'];
     nestedWorkflowStep: Workflow;
     nestedRunId: string;
+    isFreshStart: boolean;
     continueRedelivery: () => Promise<boolean>;
   }): Promise<boolean> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -2010,10 +2012,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         context: { resourceId: parentRun?.resourceId },
         metadata: { workflowId: nestedWorkflowStep.id, runId: nestedRunId, resourceId: parentRun?.resourceId },
       });
+      // Another delivery may have denied the parent while authorization was pending.
+      if (await continueRedelivery()) return false;
       return true;
     } catch (error) {
       // A concurrent delivery may have finished while authorization was pending.
       if (await continueRedelivery()) return false;
+      if (isFreshStart && workflowsStore) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: args.runId });
+        // This delivery has not claimed the step: a running leaf belongs to an
+        // authorized delivery. If it crashed, leave the running step for recovery.
+        if (snapshot?.context[nestedWorkflowStep.id]?.status === 'running') return false;
+      }
       await this.errorWorkflow(args, getErrorFromUnknown(error));
       return false;
     }
@@ -2157,6 +2167,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           fgaProvider,
           nestedWorkflowStep,
           nestedRunId,
+          isFreshStart: nestedDispatch === 'start',
           continueRedelivery,
         });
         if (!authorized) return;
