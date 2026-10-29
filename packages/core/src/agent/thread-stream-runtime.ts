@@ -30,7 +30,7 @@ import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSett
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
-import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
+import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
@@ -570,7 +570,7 @@ type AgentThreadRuntimeState = {
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
-  pendingSignalListenersByRunId: Map<string, Set<() => void>>;
+  pendingSignalListenersByRunId: Map<string, Set<PendingSignalListener>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
@@ -1564,7 +1564,7 @@ export class AgentThreadStreamRuntime {
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, data.runId, signal, 'pending');
-        this.#notifyPendingSignals(state, key);
+        this.#notifyPendingSignals(state, key, signal);
       } else if (data?.type === 'signals-cancelled') {
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
@@ -2530,7 +2530,7 @@ export class AgentThreadStreamRuntime {
           const queued: ClaimedQueuedMessage = { identity: messageIdentity };
           state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
-          this.#notifyPendingSignals(state, key);
+          this.#notifyPendingSignals(state, key, joinSignal ?? signal);
           const admission = await pendingAdmission.outcome.catch(() => undefined);
           if (queued.cancelled) {
             // Cancelled while waiting. It was admitted like queued input on an idle owner, so
@@ -3865,7 +3865,7 @@ export class AgentThreadStreamRuntime {
     state.pendingSignalsByThread.set(key, queue);
     this.#recordLocallyQueuedSignal(state, key, signal.id);
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
-    this.#notifyPendingSignals(state, key);
+    this.#notifyPendingSignals(state, key, signal);
     this.#publish(pubsub, key, {
       type: 'signal-enqueued',
       runId: record.runId,
@@ -5236,7 +5236,7 @@ export class AgentThreadStreamRuntime {
   }
 
   /** @internal Listen only to input actually admitted to this process's owning run. */
-  subscribePendingSignals(runId: string, listener: () => void, pubsub?: PubSub): () => void {
+  subscribePendingSignals(runId: string, listener: PendingSignalListener, pubsub?: PubSub): () => void {
     const state = this.#getState(pubsub);
     if (!state.threadKeysByRunId.has(runId)) return () => {};
     const listeners = state.pendingSignalListenersByRunId.get(runId) ?? new Set();
@@ -5250,7 +5250,7 @@ export class AgentThreadStreamRuntime {
     };
   }
 
-  #notifyPendingSignals(state: AgentThreadRuntimeState, key: string): void {
+  #notifyPendingSignals(state: AgentThreadRuntimeState, key: string, signal: CreatedAgentSignal): void {
     const runId = state.activeThreadRunIds.get(key);
     if (
       !runId ||
@@ -5260,7 +5260,10 @@ export class AgentThreadStreamRuntime {
     ) {
       return;
     }
-    for (const listener of [...(state.pendingSignalListenersByRunId.get(runId) ?? [])]) listener();
+    const listeners = [...(state.pendingSignalListenersByRunId.get(runId) ?? [])];
+    if (listeners.length === 0) return;
+    const signals = [signal.toDataPart().data];
+    for (const listener of listeners) listener(signals);
   }
 
   /**
@@ -7177,7 +7180,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
-          this.#notifyPendingSignals(state, key);
+          this.#notifyPendingSignals(state, key, signal);
           const accepted = pendingAdmission.outcome.then(async admission => {
             if (admission.action === 'local') {
               // The reserved run owns the lease and takes this signal from the pre-run queue.
@@ -7226,7 +7229,7 @@ export class AgentThreadStreamRuntime {
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
-          this.#notifyPendingSignals(state, key);
+          this.#notifyPendingSignals(state, key, signal);
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',

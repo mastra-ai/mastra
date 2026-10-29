@@ -97,60 +97,57 @@
         "type": "toggle"
       }
     ],
+    "Pro/zai-org/GLM-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-V3.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-R1": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
     "zai-org/GLM-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-35B-A3B": [
+    "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-9B": [
+    "deepseek-ai/DeepSeek-V4-Flash": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.1-Terminus": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-27B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-32B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-32B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
+    "deepseek-ai/DeepSeek-R1": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -177,7 +174,44 @@
         "max": 32768
       }
     ],
+    "Qwen/Qwen3.5-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-35B-A3B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-32B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
     "Qwen/Qwen3.5-4B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-32B": [
       {
         "type": "toggle"
       },
@@ -197,51 +231,17 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.1-Terminus": [
+    "Qwen/Qwen3.5-9B": [
       {
         "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-R1": [
+      },
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "Pro/zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-R1": [
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,

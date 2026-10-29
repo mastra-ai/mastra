@@ -5,12 +5,11 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRight, Blend, Building2, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { OnboardingModelScope } from '../../services/onboardingFlow';
-import { SETUP_LABELS } from '../../services/onboardingSteps';
+import { SETUP_DETAILS, SETUP_LABELS } from '../../services/onboardingSteps';
 
 interface SetupOption {
   scope: OnboardingModelScope;
   icon: ReactNode;
-  detail: string;
   needsCompanyAccount: boolean;
 }
 
@@ -18,19 +17,16 @@ const SETUP_OPTIONS: SetupOption[] = [
   {
     scope: 'factory',
     icon: <Building2 />,
-    detail: 'A shared account and model for Factory work and sessions.',
     needsCompanyAccount: true,
   },
   {
     scope: 'hybrid',
     icon: <Blend />,
-    detail: 'Factory work uses the company account. Each person uses their own account for sessions.',
     needsCompanyAccount: true,
   },
   {
     scope: 'user',
     icon: <Users />,
-    detail: 'Each person uses their own account and default model, for Factory work and sessions.',
     needsCompanyAccount: false,
   },
 ];
@@ -66,7 +62,7 @@ export function OnboardingSetupStep({
               icon={option.icon}
               selected={scope === option.scope}
               disabled={disabled}
-              detail={disabled ? 'An admin needs to connect the company account first.' : option.detail}
+              detail={disabled ? 'An admin needs to connect the company account first.' : SETUP_DETAILS[option.scope]}
             />
           );
         })}

@@ -202,8 +202,10 @@ function startsRun(decision: FactoryCommitDecision): decision is RunStartDecisio
 }
 
 // Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
+// A run that starts after its own agent's move is queued onto that agent's run instead.
 function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
   if (request.cause === 'run_start') return true;
+  if (decision.type === 'invokeSkill' && decision.startsAfterOwnMove === true) return false;
   return request.actor.type === 'agent' && request.actor.role === decision.role;
 }
 
