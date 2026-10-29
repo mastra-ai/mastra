@@ -28,6 +28,7 @@ import { loadExporter, loadSignalExporter } from './loadExporter.js';
 import { convertLog } from './log-converter.js';
 import { resolveProviderConfig } from './provider-configs.js';
 import type { ResolvedProviderConfig } from './provider-configs.js';
+import { resolveHttpSignalEndpoint } from './signal-endpoint.js';
 import { SpanConverter } from './span-converter.js';
 import type { ExportProtocol, OtelExporterConfig } from './types.js';
 
@@ -189,10 +190,15 @@ export class OtelExporter extends BaseExporter {
 
   /**
    * Derive the endpoint for a specific signal from the resolved provider config.
-   * Strips trailing slashes and any existing signal-path suffix so we never
-   * produce a doubled "//v1/logs" or leave a stale "/v1/traces" on a logs URL.
+   * HTTP endpoints with a path are complete trace URLs. Derive sibling log URLs
+   * from a trailing signal segment, preserving query parameters. Keep the existing
+   * non-HTTP endpoint handling unchanged.
    */
   private getSignalEndpoint(resolved: ResolvedProviderConfig, signal: 'traces' | 'logs'): string {
+    if (resolved.protocol === 'http/json' || resolved.protocol === 'http/protobuf') {
+      return resolveHttpSignalEndpoint(resolved.endpoint, signal);
+    }
+
     const signalPaths: Record<string, string> = {
       traces: '/v1/traces',
       logs: '/v1/logs',

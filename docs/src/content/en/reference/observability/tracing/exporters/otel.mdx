@@ -29,6 +29,7 @@ interface OtelExporterConfig {
   timeout?: number
   batchSize?: number
   logLevel?: 'debug' | 'info' | 'warn' | 'error'
+  metadataMapping?: Record<string, string>
 }
 ```
 
@@ -66,6 +67,13 @@ interface OtelExporterConfig {
     required: false,
   },
   {
+    name: 'metadataMapping',
+    type: 'Record<string, string>',
+    description:
+      'Maps metadata keys to top-level span attribute names, for example `{ userId: "user.id" }`. Disabled by default. Namespaced metadata is retained. See Metadata mapping below for value conversion and precedence.',
+    required: false,
+  },
+  {
     name: 'resourceAttributes',
     type: 'DetectedResourceAttributes',
     description: 'Optional OpenTelemetry Resource Attributes (values here override any defaults)',
@@ -73,6 +81,27 @@ interface OtelExporterConfig {
   },
 ]}
 />
+
+## Metadata mapping
+
+Use `metadataMapping` when your backend expects metadata such as `userId` under a specific span attribute name:
+
+```typescript
+import { OtelExporter } from '@mastra/otel-exporter'
+
+const exporter = new OtelExporter({
+  provider: {
+    custom: { endpoint: 'https://collector.example.com/v1/traces' },
+  },
+  metadataMapping: { userId: 'user.id', tenantId: 'tenant.id' },
+})
+```
+
+A span with metadata `{ userId: 'user-123', tenantId: 'acme' }` exports both `user.id` and `tenant.id`, alongside the existing `mastra.metadata.userId` and `mastra.metadata.tenantId` attributes. Mappings apply to every span that contains the selected metadata keys, including child spans.
+
+Mapped values are strings. Objects and arrays are JSON-encoded. Missing keys, `null`, `undefined`, and empty strings are omitted; `0` and `false` become `"0"` and `"false"`. Keys are matched literally, so a key containing a dot doesn't select a nested property. Empty destination names are ignored.
+
+Explicit mappings overwrite existing attributes with the same destination name. If multiple metadata keys map to the same name, the last mapping with a non-empty value wins. Mapping doesn't affect log records or resource attributes.
 
 ## Provider configurations
 
@@ -261,6 +290,14 @@ interface CustomConfig {
   },
 ]}
 />
+
+### HTTP endpoint paths
+
+For `http/json` and `http/protobuf`, an endpoint without a path uses `/v1/traces` and `/v1/logs`. An endpoint with a custom path is used as the trace URL, with trailing slashes removed. A final `/traces` or `/logs` segment is replaced with the requested signal name. Query parameters are preserved.
+
+For example, `https://collector.example.com/api/otel/traces?tenant=acme` sends traces to that URL and logs to `https://collector.example.com/api/otel/logs?tenant=acme`.
+
+If a custom path doesn't end in `/traces` or `/logs`, log export appends `/v1/logs` to that path. Set `signals: { logs: false }` when your endpoint only accepts traces.
 
 ## Methods
 
