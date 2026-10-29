@@ -56,9 +56,9 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   /**
    * Experiments prune as whole units: an aged experiment and its result rows go
-   * together, mirroring `deleteExperiment`. Anchored on `completedAt` (not the
-   * `completedAtZ` mirror, which carries a `DEFAULT NOW()` this domain never
-   * overrides — it holds insert time even for running rows). `completedAt` is
+   * together, mirroring `deleteExperiment`. Anchored on `completedAt` rather
+   * than its `completedAtZ` mirror: both are written together, but
+   * `completedAt` is the column the retention index covers. `completedAt` is
    * written as a UTC ISO string and stays NULL while running, so
    * `completedAt < cutoff` is false for in-flight experiments.
    */
@@ -376,6 +376,10 @@ export class ExperimentsPG extends ExperimentsStorage {
           completedAt: null,
           createdAt: nowIso,
           updatedAt: nowIso,
+          startedAtZ: null,
+          completedAtZ: null,
+          createdAtZ: nowIso,
+          updatedAtZ: nowIso,
         },
       });
 
@@ -471,12 +475,14 @@ export class ExperimentsPG extends ExperimentsStorage {
         values.push(input.skippedCount);
       }
       if (input.startedAt !== undefined) {
-        setClauses.push(`"startedAt" = $${paramIndex++}`);
-        values.push(input.startedAt?.toISOString() ?? null);
+        const iso = input.startedAt?.toISOString() ?? null;
+        setClauses.push(`"startedAt" = $${paramIndex++}`, `"startedAtZ" = $${paramIndex++}`);
+        values.push(iso, iso);
       }
       if (input.completedAt !== undefined) {
-        setClauses.push(`"completedAt" = $${paramIndex++}`);
-        values.push(input.completedAt?.toISOString() ?? null);
+        const iso = input.completedAt?.toISOString() ?? null;
+        setClauses.push(`"completedAt" = $${paramIndex++}`, `"completedAtZ" = $${paramIndex++}`);
+        values.push(iso, iso);
       }
 
       values.push(input.id);
@@ -711,8 +717,10 @@ export class ExperimentsPG extends ExperimentsStorage {
           `INSERT INTO ${resultsTable} (
             "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
             "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
-            "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt",
+            "startedAtZ", "completedAtZ", "createdAtZ"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+            $21, $22, $23)
           RETURNING *`,
           [
             id,
@@ -734,6 +742,9 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.status ?? null,
             purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
             purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
+            nowIso,
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
             nowIso,
           ],
         );
@@ -784,8 +795,10 @@ export class ExperimentsPG extends ExperimentsStorage {
             `INSERT INTO ${tableName} (
               "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
               "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
-              "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+              "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt",
+              "startedAtZ", "completedAtZ", "createdAtZ"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+              $21, $22, $23)
             RETURNING *`,
             [
               id,
@@ -808,6 +821,9 @@ export class ExperimentsPG extends ExperimentsStorage {
               purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
               purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
               new Date().toISOString(),
+              input.startedAt.toISOString(),
+              input.completedAt.toISOString(),
+              new Date().toISOString(),
             ],
           );
         }
@@ -818,7 +834,8 @@ export class ExperimentsPG extends ExperimentsStorage {
             "itemDatasetVersion" = $2, "organizationId" = $3, "projectId" = $4,
             "input" = $5, "output" = $6, "groundTruth" = $7, "metadata" = $8, "error" = $9,
             "startedAt" = $10, "completedAt" = $11, "retryCount" = $12, "attempt" = $13,
-            "traceId" = $14, "status" = $15, "tags" = $16, "toolMockReport" = $17
+            "traceId" = $14, "status" = $15, "tags" = $16, "toolMockReport" = $17,
+            "startedAtZ" = $18, "completedAtZ" = $19
           WHERE "id" = $1 RETURNING *`,
           [
             existing.id,
@@ -838,6 +855,8 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.status ?? null,
             purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
             purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
           ],
         );
       });
