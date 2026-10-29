@@ -498,6 +498,19 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       if (current && isTerminalRow(current)) this.#abortFirstAttempt(rowId, new Error('Task cancelled'));
     }
 
+    // Finished rows past their TTL and retention. The manager only deletes rows when
+    // `backgroundTasks.cleanup` is set; `ttlMs: null` rows carry the `NEVER` deadline and stay.
+    if (storage.supportsTaskExpiry) {
+      await storage
+        .deleteTasks({
+          agentId: this.#owner,
+          status: [...TERMINAL_ROW_STATUSES],
+          dateFilterBy: 'expiresAt',
+          toDate: new Date(now - EXPIRED_RETENTION_MS),
+        })
+        .catch(error => this.#getLogger?.().debug('Could not delete expired MCP tasks', { error }));
+    }
+
     const { tasks: expired } = await this.#manager.listTasks({
       agentId: this.#owner,
       status: OPEN_ROW_STATUSES,

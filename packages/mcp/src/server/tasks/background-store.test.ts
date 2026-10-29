@@ -1,6 +1,10 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { BackgroundTask } from '@mastra/core/background-tasks';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
+import { LibSQLStore } from '@mastra/libsql';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { taskKeyOf } from '../../shared/tasks';
 import { BackgroundTaskMCPTaskStore, projectTask, TASK_EXPIRED_MESSAGE, TASK_LOST_MESSAGE } from './background-store';
@@ -453,6 +457,139 @@ describe('BackgroundTaskMCPTaskStore', () => {
     await store.sweep();
     expect(restart).toHaveBeenCalledTimes(3);
     release.forEach(resolve => resolve());
+    store.close();
+  });
+});
+
+// Without `backgroundTasks.cleanup`, the manager never deletes finished rows; the sweep deletes this
+// server's own once their TTL and retention have passed.
+describe.each([
+  { storage: 'in-memory', make: () => new InMemoryStore() },
+  {
+    storage: 'libsql',
+    make: (dir: string) => new LibSQLStore({ id: 'purge', url: `file:${join(dir, 'tasks.db')}` }),
+  },
+])('BackgroundTaskMCPTaskStore deleting finished rows ($storage)', ({ make }) => {
+  const RETENTION_MS = 60_000;
+  let mastra: Mastra | undefined;
+  let dir: string | undefined;
+  afterEach(async () => {
+    await mastra?.shutdown();
+    mastra = undefined;
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  const done: MCPTaskWork = async () => ({ status: 'completed', result: { content: [] } });
+
+  async function setup() {
+    dir = mkdtempSync(join(tmpdir(), 'mcp-purge-'));
+    mastra = new Mastra({ logger: false, storage: make(dir), backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const store = new BackgroundTaskMCPTaskStore({
+      manager,
+      serverId: 's',
+      workFor: () => done,
+      recoverFor: () => false,
+    });
+    store.registerTool('tool');
+    return { manager, store, storage: await manager.getStorage() };
+  }
+
+  async function finished(store: BackgroundTaskMCPTaskStore, storage: Awaited<ReturnType<typeof setup>>['storage']) {
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+    store.run(task.taskId, done);
+    const key = taskKeyOf(task.taskId);
+    for (let i = 0; i < 150; i++) {
+      const { tasks } = await storage.listTasks({ agentId: store.owner, toolCallId: key });
+      if (tasks[0]?.status === 'completed') return tasks[0];
+      await sleep(20);
+    }
+    throw new Error('task never completed');
+  }
+
+  /** Moves a row's deadline into the past, as if that much time had gone by. */
+  async function expiredAgo(storage: Awaited<ReturnType<typeof setup>>['storage'], id: string, ms: number) {
+    expect(await storage.updateTask(id, { expiresAt: new Date(Date.now() - ms) })).toBe(true);
+  }
+
+  it('deletes a finished task once its TTL and retention have passed', async () => {
+    const { store, storage } = await setup();
+    const row = await finished(store, storage);
+    await expiredAgo(storage, row.id, RETENTION_MS + 1_000);
+
+    await store.sweep();
+    expect(await storage.getTask(row.id)).toBeNull();
+    store.close();
+  });
+
+  it('keeps a finished task inside its TTL, and through the retention after it', async () => {
+    const { store, storage } = await setup();
+    const fresh = await finished(store, storage);
+    const retained = await finished(store, storage);
+    await expiredAgo(storage, retained.id, RETENTION_MS - 10_000);
+
+    await store.sweep();
+    expect(await storage.getTask(fresh.id)).toMatchObject({ status: 'completed' });
+    expect(await storage.getTask(retained.id)).toMatchObject({ status: 'completed' });
+    store.close();
+  });
+
+  it("leaves another server's rows and an agent's rows alone", async () => {
+    const { store, storage } = await setup();
+    const long = new Date(Date.now() - RETENTION_MS - 60_000);
+    const theirs = (id: string, agentId: string): BackgroundTask =>
+      row({ id, agentId, toolCallId: id, runId: id, status: 'completed', completedAt: long, expiresAt: long });
+    await storage.createTask(theirs('other-server', 'mcp-server:other'));
+    await storage.createTask(theirs('agent', 'agent-1'));
+    // The same row of this server's is deleted, so the sweep did run its delete.
+    await storage.createTask(theirs('mine', store.owner));
+
+    await store.sweep();
+    expect(await storage.getTask('mine')).toBeNull();
+    expect(await storage.getTask('other-server')).toMatchObject({ status: 'completed' });
+    expect(await storage.getTask('agent')).toMatchObject({ status: 'completed' });
+    store.close();
+  });
+
+  it('keeps sweeping when the delete fails', async () => {
+    const { store, storage } = await setup();
+    vi.spyOn(storage, 'deleteTasks').mockRejectedValue(new Error('storage down'));
+    const first = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+    const row = (await storage.listTasks({ agentId: store.owner, toolCallId: taskKeyOf(first.taskId) })).tasks[0]!;
+    await expiredAgo(storage, row.id, 1_000);
+
+    await expect(store.sweep()).resolves.toBeUndefined();
+    // The later step of the same sweep still ran: the open task past its TTL is failed.
+    expect(await storage.getTask(row.id)).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
+    store.close();
+  });
+
+  it('fails an open task past its TTL instead of deleting it', async () => {
+    const { store, storage } = await setup();
+    const ask: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { k: { method: 'elicitation/create', params: {} } },
+    });
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+    store.run(task.taskId, ask);
+    const key = taskKeyOf(task.taskId);
+    let open: BackgroundTask | undefined;
+    for (let i = 0; i < 150 && open?.status !== 'suspended'; i++) {
+      await sleep(20);
+      open = (await storage.listTasks({ agentId: store.owner, toolCallId: key })).tasks[0];
+    }
+    expect(open?.status).toBe('suspended');
+    await expiredAgo(storage, open!.id, RETENTION_MS + 1_000);
+
+    await store.sweep();
+    expect(await storage.getTask(open!.id)).toMatchObject({
+      status: 'failed',
+      error: { message: TASK_EXPIRED_MESSAGE },
+    });
+    // Its new deadline keeps the failure readable through the retention, sweep after sweep.
+    await store.sweep();
+    expect(await storage.getTask(open!.id)).toMatchObject({ status: 'failed' });
     store.close();
   });
 });
