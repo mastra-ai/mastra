@@ -40,11 +40,17 @@ After building, Mastra creates the following structure:
     ├── package.json       # Production dependencies
     ├── node_modules/      # Installed dependencies
     ├── .npmrc             # Copied from your project (if present)
-    ├── public/            # Static assets (if src/mastra/public exists)
+    ├── <static assets>     # Contents of src/mastra/public, merged into the output root
     └── playground/        # Studio UI (if --studio flag used)
 ```
 
 The `output` directory is self-contained. You can copy it to any server and run it directly.
+
+:::warning[Don't keep a database file in `src/mastra/public`]
+
+Build copies the contents of `src/mastra/public` into `.mastra/output` and overwrites files with the same name. A SQLite database stored in `public` therefore ends up inside the build, and a URL such as `file:./mastra.db` resolves against the directory the server runs from. If that is the output directory, the server opens the copied database instead of the one you edit, and changes to it are lost on the next build. Keep database files outside `public`.
+
+:::
 
 ## Running the server
 
