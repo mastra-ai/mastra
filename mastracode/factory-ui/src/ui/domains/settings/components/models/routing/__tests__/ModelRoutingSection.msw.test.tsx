@@ -157,6 +157,51 @@ describe('ModelRoutingSection', () => {
     expect(patchedBodies).toEqual([]);
   });
 
+  it('keeps a save in flight guarded after the page leaves the Factory and comes back', async () => {
+    const patchedBodies: unknown[] = [];
+    let releasePatch!: () => void;
+    const patchHeld = new Promise<void>(resolve => (releasePatch = resolve));
+    stubFactory('user');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2`, () =>
+        HttpResponse.json({ project: { id: 'fp-2', name: 'Other', modelScope: 'user' } }),
+      ),
+      http.patch<never, { modelScope?: FactoryModelScope }>(FACTORY_URL, async ({ request }) => {
+        patchedBodies.push(await request.json());
+        await patchHeld;
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory' } });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client, rerender } = renderRoutingSection();
+
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
+    await user.click(routing('Factory'));
+    await confirmSwitch(user);
+    await waitFor(() => expect(patchedBodies).toHaveLength(1));
+
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-2/settings/models']}>
+        <ModelRoutingSection factoryId="fp-2" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
+        <ModelRoutingSection factoryId="fp-1" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'Factory' })).toBeChecked();
+    await user.click(routing('Hybrid'));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    releasePatch();
+    await waitForMutationsIdle(client);
+    expect(patchedBodies).toEqual([{ modelScope: 'factory' }]);
+    expect(routing('Factory')).toBeChecked();
+  });
+
   it('lets an admin change the Factory default from the unused Factory card in Personal routing', async () => {
     const patchedBodies = stubFactory('user');
     const user = userEvent.setup();

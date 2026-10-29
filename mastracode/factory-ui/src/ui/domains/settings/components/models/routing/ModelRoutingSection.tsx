@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import {
   useFactoryProjectQuery,
+  usePendingFactoryModelScope,
   useSetFactoryModelScopeMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
 import { ModelRoutingSkeleton } from './ModelRoutingSkeleton';
@@ -22,13 +23,14 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setModelScope = useSetFactoryModelScopeMutation(factoryId);
   const [requestedScope, setRequestedScope] = useState<FactoryModelScope>();
-  const pendingScope = setModelScope.isPending ? setModelScope.variables : undefined;
+  const pendingScope = usePendingFactoryModelScope(factoryId);
+  const saving = pendingScope !== undefined;
   const savedScope = projectQuery.data && savedModelScope(projectQuery.data);
   const modelScope = pendingScope ?? savedScope;
   const error = setModelScope.error ?? projectQuery.error;
 
   const pickScope = (scope: FactoryModelScope) => {
-    if (scope === modelScope || setModelScope.isPending) return;
+    if (scope === modelScope || saving) return;
     setRequestedScope(scope);
   };
 
@@ -42,11 +44,7 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
       scope="factory"
       title="Model routing"
       description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
-      action={
-        modelScope && (
-          <ModelRoutingSwitch value={modelScope} pending={setModelScope.isPending} onValueChange={pickScope} />
-        )
-      }
+      action={modelScope && <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />}
     >
       <div className="flex flex-col gap-6">
         {error && (
