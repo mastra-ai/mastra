@@ -1,5 +1,5 @@
 import { MastraFGAPermissions } from '../../auth/ee';
-import { createTotalTimeoutNoticeMessage } from '../../loop/shared/record-terminal-error-message';
+import { createTotalTimeoutNoticeMessages } from '../../loop/shared/record-terminal-error-message';
 import { isMastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import type { MemoryConfigInternal } from '../../memory/types';
@@ -27,7 +27,7 @@ function saveTimeoutNotice(entry: RunRegistryEntry, state: TimeoutNoticeState, e
     noticedEntries.add(entry);
     const notice = new MessageList({ threadId: saved.threadId, resourceId: saved.resourceId });
     notice.add(
-      createTotalTimeoutNoticeMessage({ error, threadId: saved.threadId, resourceId: saved.resourceId }),
+      createTotalTimeoutNoticeMessages({ error, threadId: saved.threadId, resourceId: saved.resourceId }),
       'response',
     );
     await entry.saveQueueManager.flushMessages(notice, saved.threadId, saved.memoryConfig, { throwOnError: true });

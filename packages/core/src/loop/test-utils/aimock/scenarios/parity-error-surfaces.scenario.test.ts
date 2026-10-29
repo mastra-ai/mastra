@@ -60,6 +60,12 @@ const STREAM_CUT: ModelScript = {
   ],
 };
 
+/** The text of a provider-request message, whether its content is a string or parts. */
+function promptText(message: { content: unknown }): string {
+  if (typeof message.content === 'string') return message.content;
+  return (message.content as Array<{ text?: string }>).map(part => part.text ?? '').join('');
+}
+
 /** One turn of `input` on plain and `target`. */
 function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParityScenario, 'engines'> {
   return {
@@ -379,8 +385,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS + 5_000,
   );
 
-  // A retry after the deadline must not show the model the same prompt twice in a row: the timed-out
-  // turn keeps its user message followed by a timeout notice, as a failed provider call does.
+  // A retry after the deadline must not show the model the same prompt twice in a row. The timed-out turn
+  // stores its user message and an error-part notice (history shows it answered), plus a persisted
+  // system-reminder signal, which is what the next prompt carries between the two requests.
   it(
     'the next turn sees the timed-out request followed by a timeout notice',
     async () => {
@@ -448,18 +455,25 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const prompt = (requests[1]!.body?.messages ?? []).filter(
         (message: { role: string }) => message.role !== 'system',
       ) as Array<{ role: string; content: unknown }>;
-      expect(prompt.map(message => message.role)).toEqual(['user', 'assistant', 'user']);
+      expect(prompt.map(message => message.role)).toEqual(['user', 'user', 'user']);
       expect(JSON.stringify(prompt[0]!.content)).toContain('RETRY_FIRST');
-      expect(JSON.stringify(prompt[1]!.content)).toContain('timed out');
+      expect(promptText(prompt[1]!)).toContain(
+        `<system-reminder type="timeout-notice">The previous reply was interrupted: Agent execution timed out after ${DEADLINE_MS}ms (modelSettings.timeout.totalMs)</system-reminder>`,
+      );
       expect(JSON.stringify(prompt[2]!.content)).toContain('RETRY_SECOND');
+      // The stored error part is history only; it never reaches the provider as assistant text.
+      expect(JSON.stringify(prompt)).not.toContain('MastraTimeoutError');
+
+      const stored = (await memory.recall({ threadId, resourceId: RESOURCE, hideSignals: [] })).messages;
+      expect(stored.filter(message => (message.role as string) === 'signal')).toHaveLength(1);
     },
     TEST_TIMEOUT_MS * 3,
   );
 
-  // Step and first-chunk timeouts already store a MastraTimeoutError part on the failed turn. The next
-  // prompt renders it as an interrupted reply instead of dropping it, so the request is not left unanswered.
+  // Step and first-chunk timeouts store a MastraTimeoutError part on the failed turn. Like every stored
+  // error part it is history for the UI and the DB, and never reaches a provider.
   it(
-    'the next turn after a step timeout sees the stored timeout as an interrupted reply',
+    'the next turn after a step timeout does not send the stored timeout error to the model',
     async () => {
       const memory = new MockMemory();
       const threadId = `step-timeout-retry-${engine}`;
@@ -509,10 +523,10 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(await second.output.text).toBe('Second reply.');
 
       const prompt = (llm.getRequests().at(-1)!.body?.messages ?? []) as Array<{ role: string; content: unknown }>;
-      expect(prompt.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'user']);
+      expect(prompt.map(message => message.role)).toEqual(['system', 'user', 'user']);
       expect(JSON.stringify(prompt[1]!.content)).toContain('STEP_FIRST');
-      expect(JSON.stringify(prompt[2]!.content)).toContain(`[Reply interrupted: ${stepError}]`);
-      expect(JSON.stringify(prompt[3]!.content)).toContain('STEP_SECOND');
+      expect(JSON.stringify(prompt[2]!.content)).toContain('STEP_SECOND');
+      expect(JSON.stringify(prompt)).not.toContain(stepError);
     },
     TEST_TIMEOUT_MS * 3,
   );
@@ -628,6 +642,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         // Past the last save, so a second notice has had the chance to land.
         await new Promise(resolve => setTimeout(resolve, 200));
         expect(lateSaves.length).toBeGreaterThan(1);
+        const { messages: withSignals } = await memory.recall({ threadId, resourceId: RESOURCE, hideSignals: [] });
+        expect(withSignals.filter(message => (message.role as string) === 'signal')).toHaveLength(1);
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
         expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
       } finally {

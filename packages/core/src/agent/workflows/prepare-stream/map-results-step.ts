@@ -6,7 +6,7 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
-import { createTotalTimeoutNoticeMessage } from '../../../loop/shared/record-terminal-error-message';
+import { createTotalTimeoutNoticeMessages } from '../../../loop/shared/record-terminal-error-message';
 import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
 import { normalizeMessageHistoryConfig } from '../../../memory/message-history-config';
@@ -146,7 +146,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       // The notice keeps the next turn from seeing this request as unanswered (#28735).
       const messages = [
         ...messageList.transformMessagesForTranscript(input),
-        createTotalTimeoutNoticeMessage({ error, threadId: memoryData.thread.id, resourceId }),
+        ...createTotalTimeoutNoticeMessages({ error, threadId: memoryData.thread.id, resourceId }),
       ];
       // A configured MessageHistory may use its own storage and creates its own thread there; save
       // where the finish path would.

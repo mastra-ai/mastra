@@ -26,6 +26,7 @@
  */
 
 import type { MastraDBMessage, MastraErrorPart, MessageList } from '../../agent/message-list';
+import { createSignal } from '../../agent/signals';
 import { providerErrorFacts } from '../../error/provider-error';
 import { readProviderErrorDetails } from './provider-error-details';
 
@@ -135,11 +136,15 @@ export function recordTerminalErrorMessage({
 }
 
 /**
- * The assistant record saved next to a request that hit `timeout.totalMs`.
- * Its `error` part is what the prompt shows the model on the next turn, so a
- * retried request does not reach it as a second unanswered user message.
+ * The records saved next to a request that hit `timeout.totalMs` (#28735):
+ * - an assistant `error` part, so history, recall and Studio show the turn as answered;
+ * - a persisted `system-reminder` signal, which is what the next prompt shows the
+ *   model, so a retried request does not reach it as a second unanswered user message.
+ *   Error parts never reach a provider, and signals are hidden from recall by default.
+ * The signal row is the one `ifActive`/`ifIdle: { behavior: 'persist' }` writes; it
+ * is saved directly so it is never delivered into the timed-out run or wakes the thread.
  */
-export function createTotalTimeoutNoticeMessage({
+export function createTotalTimeoutNoticeMessages({
   error,
   threadId,
   resourceId,
@@ -147,18 +152,26 @@ export function createTotalTimeoutNoticeMessage({
   error: unknown;
   threadId: string;
   resourceId?: string;
-}): MastraDBMessage {
+}): MastraDBMessage[] {
   const createdAt = new Date();
-  return {
-    id: globalThis.crypto.randomUUID(),
-    role: 'assistant',
-    createdAt,
-    threadId,
-    resourceId,
-    // Stamp the part as MessageList would, so every engine saves the same shape.
-    content: {
-      format: 2,
-      parts: [{ type: 'error', error: toPersistedErrorIdentity(error), createdAt: createdAt.getTime() }],
+  const identity = toPersistedErrorIdentity(error);
+  const reminder = createSignal({
+    type: 'reactive',
+    tagName: 'system-reminder',
+    contents: `The previous reply was interrupted: ${identity.message}`,
+    attributes: { type: 'timeout-notice' },
+    createdAt: new Date(createdAt.getTime() + 1),
+  });
+  return [
+    {
+      id: globalThis.crypto.randomUUID(),
+      role: 'assistant',
+      createdAt,
+      threadId,
+      resourceId,
+      // Stamp the part as MessageList would, so every engine saves the same shape.
+      content: { format: 2, parts: [{ type: 'error', error: identity, createdAt: createdAt.getTime() }] },
     },
-  };
+    reminder.toDBMessage({ threadId, resourceId }),
+  ];
 }
