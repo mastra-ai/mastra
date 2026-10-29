@@ -6,7 +6,6 @@ import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarItem } from './types';
 import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker';
 import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron/disclosure-chevron';
 import { cn } from '@/lib/utils';
 
 export const FILTER_BAR_TIME_RANGE_FIELD_ID = 'timeRange';
@@ -57,7 +56,7 @@ export function FilterBarTimeRange(props: FilterBarTimeRangeProps) {
       >
         <DateTimeRangePicker
           {...props}
-          renderTrigger={({ label, disabled }) => (
+          renderTrigger={({ label, icon, iconEnd, disabled }) => (
             <button
               type="button"
               ref={el => ctx.registerSegment(FILTER_BAR_TIME_RANGE_ITEM.id, 'value', el)}
@@ -65,11 +64,14 @@ export function FilterBarTimeRange(props: FilterBarTimeRangeProps) {
               disabled={disabled}
               aria-label={`Time range: ${label}`}
               title={label}
-              className={cn(editableSegmentClass, 'max-w-64 gap-1.5 text-foreground')}
+              className={cn(
+                editableSegmentClass,
+                'max-w-64 gap-1.5 text-foreground [&>svg]:size-[1.1em] [&>svg]:shrink-0 [&>svg]:text-muted-foreground',
+              )}
             >
-              <CalendarIcon className="size-[1.1em] shrink-0 text-muted-foreground" aria-hidden />
+              {icon}
               <span className="truncate">{label}</span>
-              <DisclosureChevron className="size-[1.1em] text-muted-foreground" />
+              {iconEnd}
             </button>
           )}
         />

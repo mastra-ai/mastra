@@ -1,6 +1,6 @@
 import { CalendarIcon } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { CustomRangeEditor } from './custom-range-editor';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
@@ -42,10 +42,19 @@ export interface DateTimeRangePickerProps {
   /** Size passed through to the trigger Button. Defaults to 'md'. */
   size?: ButtonProps['size'];
   /**
-   * Replace the default Button trigger. Receives the current label (preset name or
-   * custom range) and must return an element the menu/popover can attach to.
+   * Replace the default Button trigger with another element, e.g. a filter bar segment. It
+   * receives the trigger's content (calendar `icon`, `label`, chevron `iconEnd`) so every
+   * host shows the same control, and must return an element the menu/popover can attach to.
    */
-  renderTrigger?: (props: { label: string; disabled?: boolean }) => ReactElement;
+  renderTrigger?: (props: DateTimeRangePickerTriggerProps) => ReactElement;
+}
+
+export interface DateTimeRangePickerTriggerProps {
+  /** Preset name or custom range. */
+  label: string;
+  icon: ReactNode;
+  iconEnd: ReactNode;
+  disabled?: boolean;
 }
 
 export function DateTimeRangePicker({
@@ -119,19 +128,24 @@ export function DateTimeRangePicker({
   };
 
   const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
+  const triggerProps: DateTimeRangePickerTriggerProps = {
+    label: shownPreset === 'custom' ? customLabel : datePresetLabel,
+    icon: <CalendarIcon />,
+    iconEnd: <DisclosureChevron />,
+    disabled,
+  };
+  const trigger = renderTrigger ? (
+    renderTrigger(triggerProps)
+  ) : (
+    <Button size={size} disabled={disabled} icon={triggerProps.icon} iconEnd={triggerProps.iconEnd}>
+      {triggerProps.label}
+    </Button>
+  );
 
   if (shownPreset === 'custom' && !presetMenuOpen) {
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
-        {renderTrigger ? (
-          <PopoverTrigger render={renderTrigger({ label: customLabel, disabled })} />
-        ) : (
-          <PopoverTrigger asChild>
-            <Button size={size} disabled={disabled} icon={<CalendarIcon />} iconEnd={<DisclosureChevron />}>
-              {customLabel}
-            </Button>
-          </PopoverTrigger>
-        )}
+        <PopoverTrigger render={trigger} />
         <PopoverContent align="start" className={cn('w-auto p-0')}>
           <CustomRangeEditor
             dateFrom={dateFrom}
@@ -147,19 +161,9 @@ export function DateTimeRangePicker({
     );
   }
 
-  const triggerLabel = shownPreset === 'custom' ? customLabel : datePresetLabel;
-
   return (
     <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
-      {renderTrigger ? (
-        <DropdownMenu.Trigger render={renderTrigger({ label: triggerLabel, disabled })} />
-      ) : (
-        <DropdownMenu.Trigger asChild>
-          <Button size={size} disabled={disabled} icon={<CalendarIcon />} iconEnd={<DisclosureChevron />}>
-            {triggerLabel}
-          </Button>
-        </DropdownMenu.Trigger>
-      )}
+      <DropdownMenu.Trigger render={trigger} />
       <DropdownMenu.Content align="start">
         {/* Items select on click (not onValueChange) so re-picking the checked
             "Custom range..." still reopens the range editor. */}
