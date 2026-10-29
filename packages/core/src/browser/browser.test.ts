@@ -169,6 +169,8 @@ describe('MastraBrowser.setCookies', () => {
       // Like a real browser, answering takes a moment.
       await new Promise(resolve => setTimeout(resolve, 1));
       if (!this.open) return false;
+      const rejected = cookies.find(cookie => cookie.value === 'rejected');
+      if (rejected) throw new Error(`browser rejected ${rejected.name}`);
       for (const cookie of cookies) {
         this.added.push(cookie.name);
         this.values[cookie.name] = cookie.value;
@@ -180,6 +182,27 @@ describe('MastraBrowser.setCookies', () => {
       await this.addPendingCookies(threadId);
     }
   }
+
+  it('forgets a cookie the browser rejected, so later cookies still get added', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+    await browser.setCookies([{ name: 'bad', value: 'rejected', url: 'https://example.com' }], 'thread-1');
+
+    await expect(browser.openThread('thread-1')).rejects.toThrow('browser rejected bad');
+    await browser.setCookies([{ name: 'good', value: 'v', url: 'https://example.com' }], 'thread-1');
+
+    expect(browser.added).toEqual(['good']);
+  });
+
+  it("doesn't keep a record for every thread that closes", async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+    for (const id of ['a', 'b', 'c']) {
+      await browser.setCookies([{ name: 'n', value: 'v', url: 'https://example.com' }], id);
+      await browser.closeThreadSession(id);
+    }
+
+    expect(browser['cookieQueueGenerations'].size).toBe(0);
+    expect(browser['pendingCookies'].size).toBe(0);
+  });
 
   it('keeps the newest value when a cookie set before the browser opens is set again after', async () => {
     const browser = new QueueingBrowser({ headless: true, scope: 'shared' });

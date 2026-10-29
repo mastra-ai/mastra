@@ -170,5 +170,13 @@ describe.skipIf(!canLaunchBrowser)('BrowserViewer.setCookies', () => {
     expect(ready).toBe(0);
     expect(viewer.hasThreadSession('thread-1')).toBe(false);
     expect(viewer['threadManager'].getContextForThread('thread-1')).toBeFalsy();
+
+    // The rejected cookie is gone, so the thread can still open signed in.
+    await viewer.setCookies([cookie('retry')], 'thread-1');
+    await viewer.launch('thread-1');
+    expect(await titleAt('thread-1')).toBe('preview=retry');
+
+    await viewer.closeThreadSession('thread-1');
+    expect(viewer['cookieAdds'].size).toBe(0);
   }, 30_000);
 });

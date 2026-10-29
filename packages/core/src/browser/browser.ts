@@ -1559,7 +1559,22 @@ export abstract class MastraBrowser extends MastraBase {
 
   private dropQueuedCookies(key: string): void {
     this.pendingCookies.delete(key);
-    this.cookieQueueGenerations.set(key, (this.cookieQueueGenerations.get(key) ?? 0) + 1);
+    // Only an update under way can hold the old generation; with none, forget the key.
+    if (this.cookieQueueUpdates.has(key)) {
+      this.cookieQueueGenerations.set(key, (this.cookieQueueGenerations.get(key) ?? 0) + 1);
+    } else {
+      this.cookieQueueGenerations.delete(key);
+    }
+  }
+
+  /** Add cookies to the open browser. If it rejects them, they leave the queue, so they can't fail every later call. */
+  private async addOrForget(cookies: BrowserCookie[], key: string, threadId: string): Promise<boolean> {
+    try {
+      return await this.addCookiesToOpenBrowser(cookies, threadId);
+    } catch (error) {
+      this.pendingCookies.delete(key);
+      throw error;
+    }
   }
 
   /** Run cookie updates for one queue key in call order, so overlapping calls don't lose cookies. */
@@ -1603,7 +1618,7 @@ export abstract class MastraBrowser extends MastraBase {
       if (dropped()) return;
       // Cookies still waiting go first, so an older value never overwrites a newer one.
       const all = [...(this.pendingCookies.get(key) ?? []), ...cookies];
-      if (await this.addCookiesToOpenBrowser(all, effectiveThreadId)) {
+      if (await this.addOrForget(all, key, effectiveThreadId)) {
         this.pendingCookies.delete(key);
         return;
       }
@@ -1628,7 +1643,7 @@ export abstract class MastraBrowser extends MastraBase {
     await this.updateCookieQueue(key, async () => {
       const pending = this.pendingCookies.get(key);
       if (!pending) return;
-      if (await this.addCookiesToOpenBrowser(pending, threadId)) this.pendingCookies.delete(key);
+      if (await this.addOrForget(pending, key, threadId)) this.pendingCookies.delete(key);
     });
   }
 
