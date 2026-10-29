@@ -1296,6 +1296,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
           if (session && sessionFs) {
             return c.json(await listSessionRenderedPath(session, renderedRoot));
           }
+          const unauthorized = await requireSignedIn(loose(c), sessionFs);
+          if (unauthorized) return unauthorized;
           return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1378,6 +1380,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (session && sessionFs) return c.json(await readSessionWorkspaceFile(session, path));
+          const unauthorized = await requireSignedIn(loose(c), sessionFs);
+          if (unauthorized) return unauthorized;
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);

@@ -362,6 +362,38 @@ describe('local filesystem routes auth', () => {
     }
   });
 
+  it('rejects anonymous callers on the workspace fallback routes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-fallback-'));
+    await mkdir(join(root, 'ws'));
+    await writeFile(join(root, 'ws', 'README.md'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      // An unresolved session must not fall through to the host workspace.
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const request = async (path: string, query: string) => {
+      const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+      if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+      const app = new Hono<any>();
+      app.get('/', context => route.handler(context as never, async () => {}));
+      return app.request(`http://localhost/?${query}`);
+    };
+
+    const file = await request('/web/workspace/file', 'workspacePath=ws&path=README.md');
+    expect(file.status).toBe(401);
+    expect(await file.json()).toEqual({ error: 'unauthorized' });
+
+    const rendered = await request('/web/workspace/rendered/list', 'workspacePath=ws&root=output');
+    expect(rendered.status).toBe(401);
+    expect(await rendered.json()).toEqual({ error: 'unauthorized' });
+  });
+
   it('serves local roots when no auth provider is configured', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-off-'));
     await mkdir(join(root, 'browsable'));
