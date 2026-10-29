@@ -50,11 +50,7 @@ describe('resolveAgentScopes', () => {
         },
         { scopes: incoming(), requestContext },
       );
-      expect(seen).toEqual([
-        { scope: 'org:acme', access: 'read' },
-        { scope: 'team:core', access: 'read' },
-        { scope: 'project:p1', access: 'read' },
-      ]);
+      expect(seen).toEqual(['org:acme', 'team:core', 'project:p1']);
       const result = resolveAgentScopes({ requestContext, agentScopes, callScopes: ['org:acme', 'project:p1'] });
       expect(result.scopes).toEqual(['audience:acme:public']);
     });
@@ -74,7 +70,6 @@ describe('resolveAgentScopes', () => {
       const result = resolveAgentScopes({ callScopes: ['resource:u1', 'thread:t1', 'x-custom_1:v:with:colons'] });
       expect(result).toEqual({
         scopes: ['resource:u1', 'thread:t1', 'x-custom_1:v:with:colons'],
-        readOnly: ['x-custom_1:v:with:colons'],
         resourceId: 'u1',
         threadId: 't1',
       });
@@ -160,7 +155,7 @@ describe('resolveAgentScopes', () => {
         threadId: 't1',
         snapshot: { resourceId: 'u1', threadId: 't1' },
       });
-      expect(result).toEqual({ scopes: ['resource:u1', 'thread:t1'], readOnly: [], resourceId: 'u1', threadId: 't1' });
+      expect(result).toEqual({ scopes: ['resource:u1', 'thread:t1'], resourceId: 'u1', threadId: 't1' });
     });
   });
 
@@ -193,22 +188,19 @@ describe('resolveAgentScopes', () => {
         threadId: 'opt-t',
         snapshot: { resourceId: 'snap-r', threadId: 'snap-t' },
       };
-      expect(resolveAgentScopes(all)).toEqual({ scopes: [], readOnly: [], resourceId: 'ctx-r', threadId: 'ctx-t' });
+      expect(resolveAgentScopes(all)).toEqual({ scopes: [], resourceId: 'ctx-r', threadId: 'ctx-t' });
       expect(resolveAgentScopes({ ...all, requestContext: undefined })).toEqual({
         scopes: [],
-        readOnly: [],
         resourceId: 'opt-r',
         threadId: 'mem-t',
       });
       expect(resolveAgentScopes({ memory: { resource: 'mem-r' }, threadId: 'opt-t', snapshot: all.snapshot })).toEqual({
         scopes: [],
-        readOnly: [],
         resourceId: 'mem-r',
         threadId: 'opt-t',
       });
       expect(resolveAgentScopes({ snapshot: all.snapshot })).toEqual({
         scopes: [],
-        readOnly: [],
         resourceId: 'snap-r',
         threadId: 'snap-t',
       });
@@ -222,7 +214,6 @@ describe('resolveAgentScopes', () => {
       });
       expect(result).toEqual({
         scopes: ['org:acme'],
-        readOnly: ['org:acme'],
         resourceId: 'ctx-r',
         threadId: undefined,
       });
@@ -235,7 +226,6 @@ describe('resolveAgentScopes', () => {
     it('uses the snapshot set when nothing is re-supplied', () => {
       expect(resolveAgentScopes({ snapshot })).toEqual({
         scopes: snapshot.scopes,
-        readOnly: [],
         resourceId: 'u1',
         threadId: 't1',
       });
@@ -264,7 +254,6 @@ describe('resolveAgentScopes', () => {
     it('keeps the snapshot set when the Agent configuration now returns other scopes', () => {
       expect(resolveAgentScopes({ snapshot, agentScopes: ['org:b', 'thread:t2'] })).toEqual({
         scopes: snapshot.scopes,
-        readOnly: [],
         resourceId: 'u1',
         threadId: 't1',
       });
@@ -315,7 +304,7 @@ describe('deriveAgentRunRequestContext', () => {
     const derived = deriveAgentRunRequestContext(new RequestContext(), parent.scopes);
     derived.set(MASTRA_THREAD_ID_KEY, 't1-observer');
     const nested = resolveAgentScopes({ requestContext: derived, memory: { thread: 'other', resource: 'u2' } });
-    expect(nested).toEqual({ scopes: ['org:acme'], readOnly: [], resourceId: 'u2', threadId: 't1-observer' });
+    expect(nested).toEqual({ scopes: ['org:acme'], resourceId: 'u2', threadId: 't1-observer' });
   });
 });
 

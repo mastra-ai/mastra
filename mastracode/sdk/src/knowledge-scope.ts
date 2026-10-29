@@ -1,4 +1,3 @@
-import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { MastraCodeState } from './schema.js';
 
 /**
@@ -8,15 +7,7 @@ import type { MastraCodeState } from './schema.js';
  */
 export const LOCAL_KNOWLEDGE_ORG_ID = 'local';
 
-export type KnowledgeSessionScopes =
-  | { resolved: true; scopes: AgentScopeEntry[] }
-  | { resolved: false; reason: string };
-
-function tagOf(entry: AgentScopeEntry): string {
-  return typeof entry === 'string' ? entry : entry.scope;
-}
-
-const writable = (scope: string): AgentScopeEntry => ({ scope, access: 'write' });
+export type KnowledgeSessionScopes = { resolved: true; scopes: string[] } | { resolved: false; reason: string };
 
 function isIdentityTag(tag: string): boolean {
   return tag.startsWith('resource:') || tag.startsWith('thread:');
@@ -27,8 +18,6 @@ function isIdentityTag(tag: string): boolean {
  * Every Knowledge reader and writer in a session (the code agent, the /knowledge inspector) uses
  * this, so what the agent writes is what the inspector reads.
  *
- * The tags this adds are writable; the host's keep the access the host gave them.
- *
  * - Factory sessions require `org:<factoryOrgId>` and `project:<factoryProjectId>`, so projects stay
  *   isolated. A host tag of the same type with another value is refused. A Factory session with
  *   no org resolves to nothing (fail closed): a session owner is a user id, never an org.
@@ -36,7 +25,7 @@ function isIdentityTag(tag: string): boolean {
  */
 export function resolveKnowledgeSessionScopes(
   state: MastraCodeState | undefined,
-  hostScopes: readonly AgentScopeEntry[] = [],
+  hostScopes: readonly string[] = [],
 ): KnowledgeSessionScopes {
   const projectId = typeof state?.factoryProjectId === 'string' ? state.factoryProjectId.trim() : '';
   const orgId = typeof state?.factoryOrgId === 'string' ? state.factoryOrgId.trim() : '';
@@ -45,16 +34,15 @@ export function resolveKnowledgeSessionScopes(
   if (factoryOwned) {
     if (!orgId) return { resolved: false, reason: 'This Factory session has no resolved organization.' };
     const required = [`org:${orgId}`, ...(projectId ? [`project:${projectId}`] : [])];
-    for (const entry of hostScopes) {
-      const tag = tagOf(entry);
+    for (const tag of hostScopes) {
       const type = tag.slice(0, tag.indexOf(':') + 1);
       const conflict = required.find(requiredTag => requiredTag.startsWith(type) && requiredTag !== tag);
       if (type && conflict && (type === 'org:' || type === 'project:')) {
         return { resolved: false, reason: `Scope ${tag} conflicts with this Factory session's ${conflict}.` };
       }
     }
-    const held = new Set(hostScopes.map(tagOf));
-    return { resolved: true, scopes: [...hostScopes, ...required.filter(tag => !held.has(tag)).map(writable)] };
+    const held = new Set(hostScopes);
+    return { resolved: true, scopes: [...hostScopes, ...required.filter(tag => !held.has(tag))] };
   }
 
   return { resolved: true, scopes: [...hostScopes] };
@@ -64,11 +52,11 @@ export function resolveKnowledgeSessionScopes(
  * The scopes a run acts with when its session is unresolved: only the host's `resource:`/`thread:`
  * tags, so its writes stay private to the run and no host tag stands in for the missing org.
  */
-export function knowledgeUnresolvedScopes(hostScopes: readonly AgentScopeEntry[]): AgentScopeEntry[] {
-  return hostScopes.filter(entry => isIdentityTag(tagOf(entry)));
+export function knowledgeUnresolvedScopes(hostScopes: readonly string[]): string[] {
+  return hostScopes.filter(isIdentityTag);
 }
 
 /** The non-identity tags of a session's scopes, as plain strings. */
-export function knowledgeSessionTags(scopes: readonly AgentScopeEntry[]): string[] {
-  return scopes.map(tagOf).filter(tag => !isIdentityTag(tag));
+export function knowledgeSessionTags(scopes: readonly string[]): string[] {
+  return scopes.filter(tag => !isIdentityTag(tag));
 }

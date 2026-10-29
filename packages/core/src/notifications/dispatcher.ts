@@ -1,4 +1,3 @@
-import type { AgentScopeEntry } from '../agent/scopes';
 import type { CreatedAgentSignal } from '../agent/signals';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { AgentSignalIfIdleOptions, SendAgentSignalOptions, SendAgentSignalResult } from '../agent/types';
@@ -59,7 +58,7 @@ function delayedDeliveryTarget({
   threadId: string;
   streamOptions?: AgentSignalIfIdleOptions['streamOptions'];
   requireClaimedOwner: boolean;
-  scopes?: AgentScopeEntry[];
+  scopes?: string[];
 }): SendAgentSignalOptions {
   const scoped = scopes?.length ? { scopes } : {};
   if (!streamOptions && !requireClaimedOwner) return { resourceId, threadId, ...scoped };
@@ -93,7 +92,7 @@ async function sendNotificationSignalToAgent(
 }
 
 /** The scopes every record of a summary names, or none when they differ. */
-function sharedScopes(records: NotificationRecord[]): AgentScopeEntry[] | undefined {
+function sharedScopes(records: NotificationRecord[]): string[] | undefined {
   const scopes = records.map(record => readNotificationRoutingRequirement(record.metadata)?.scopes);
   const key = JSON.stringify(scopes[0] ?? null);
   return scopes.every(entry => JSON.stringify(entry ?? null) === key) ? scopes[0] : undefined;

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
 import path from 'node:path';
 
-import type { Agent, AgentScopeEntry } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 import { AgentController, migratePersistedModelSelection } from '@mastra/core/agent-controller';
 import type {
   IntervalHandler,
@@ -360,11 +360,11 @@ export interface MastraCodeConfig {
    */
   knowledge?: false | true | Knowledge | { key: string; instance: Knowledge };
   /**
-   * The scopes every Knowledge run acts with, like an Agent's `scopes`: a plain scope such as
-   * `'org:acme'` is read-only, `{ scope: 'team:core', access: 'write' }` is writable. Factory
-   * sessions always add writable `org:` and `project:` scopes.
+   * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `'org:acme'`. What a
+   * run may do on each comes from the Knowledge instance's scope declarations. Factory sessions
+   * always add `org:` and `project:` scopes.
    */
-  scopes?: AgentScopeEntry[];
+  scopes?: string[];
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -882,11 +882,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ? knowledgeOption
         : knowledgeEntry?.instance;
   const knowledgeKey = entryKey ?? knowledge?.id ?? 'default';
-  const knowledgeHostScopes: AgentScopeEntry[] = [
+  const knowledgeHostScopes: string[] = [
     ...(config?.scopes ?? []),
-    ...(knowledgeOption === true && !(config?.scopes ?? []).length
-      ? [{ scope: `org:${LOCAL_KNOWLEDGE_ORG_ID}`, access: 'write' as const }]
-      : []),
+    ...(knowledgeOption === true && !(config?.scopes ?? []).length ? [`org:${LOCAL_KNOWLEDGE_ORG_ID}`] : []),
   ];
   const dynamicMemory =
     config?.memory === undefined

@@ -1,4 +1,3 @@
-import type { AgentScopeEntry } from '../agent/scopes';
 import type { NotificationRecord } from './types';
 
 /**
@@ -15,7 +14,7 @@ export type NotificationRoutingRequirement = {
   /** Reject the delivery unless an advertised thread owner acknowledges it. */
   requireClaimedOwner?: boolean;
   /** Scopes for the run this notification starts. */
-  scopes?: AgentScopeEntry[];
+  scopes?: string[];
 };
 
 export function readNotificationRoutingRequirement(

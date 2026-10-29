@@ -59,9 +59,7 @@ async function createHarness(id: string, durable: boolean) {
     name: `${id} agent`,
     // Resolved per run with the run's request context, so it sees the run's scope tags.
     instructions: ({ requestContext }) => {
-      runTags = getRunAgentScopes(requestContext)
-        .map(scope => scope.scope)
-        .filter(tag => tag.startsWith('request:'));
+      runTags = getRunAgentScopes(requestContext).filter(tag => tag.startsWith('request:'));
       return 'You help.';
     },
     memory,

@@ -261,15 +261,10 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     );
   });
 
-  it('refuses undeclared run scopes and read-only scope entries, and ambiguous names list candidates', async () => {
+  it('refuses undeclared run scopes, and ambiguous names list candidates', async () => {
     await expect(as('typo', ['org:acme', 'role:acme:suport']).search('x')).rejects.toThrow(
       /"role:acme:suport" does not match a declared scope type.*knowledgeMemoryScopes/,
     );
-    const requestContext = new RequestContext();
-    setRunAgentScopes(requestContext, ['org:acme'], ['org:acme']);
-    await expect(
-      tools.knowledge_search!.execute!({ query: 'x' } as never, { requestContext, agent: {} } as never),
-    ).rejects.toThrow(/Read-only scope entries were removed/);
 
     await admin().page({ op: 'write', scope: 'org:acme', name: 'Roadmap' });
     await admin().page({ op: 'write', scope: 'team:acme:support', name: 'Roadmap' });

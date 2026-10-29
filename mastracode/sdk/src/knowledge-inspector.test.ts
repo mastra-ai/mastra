@@ -1,4 +1,3 @@
-import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
@@ -13,7 +12,7 @@ import type { MastraCodeState } from './schema.js';
 
 // The built-in Knowledge (`knowledge: true`) writes under the fixed local org, which the host
 // passes as its scope; the inspector must read the same scopes.
-const LOCAL_HOST: AgentScopeEntry[] = [{ scope: `org:${LOCAL_KNOWLEDGE_ORG_ID}`, access: 'write' }];
+const LOCAL_HOST = [`org:${LOCAL_KNOWLEDGE_ORG_ID}`];
 const host = { author: 'host' };
 
 const declarations = {
@@ -101,7 +100,7 @@ function seeder(store: KnowledgeStorage) {
   };
 }
 
-async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes: AgentScopeEntry[] = LOCAL_HOST) {
+async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes: string[] = LOCAL_HOST) {
   const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'inspector' }), scopes: declarations });
   const store = await knowledge.getStorage();
   const session = createSessionHarness(state);
@@ -296,7 +295,7 @@ describe('KnowledgeInspector', () => {
   });
 
   it('is unavailable when the session holds a scope Knowledge does not declare', async () => {
-    harness = await createHarness({}, [{ scope: 'team:x', access: 'write' }]);
+    harness = await createHarness({}, ['team:x']);
     await expect(harness.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({
       code: 'unavailable',
       message: expect.stringContaining('team:x'),

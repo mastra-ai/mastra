@@ -960,23 +960,23 @@ describe('createMastraCode', () => {
     const instance = new Knowledge({ id: 'mastra', scopes: {} });
     await createMastraCode({
       knowledge: instance,
-      scopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'],
+      scopes: ['org:self', 'team:self:x'],
     });
     const context = new RequestContext([['controller', { state: {} }]]);
     expect(codeAgentConfig().knowledge).toBe(instance);
     expect(await codeAgentConfig().scopes({ scopes: [], requestContext: context })).toEqual([
-      { scope: 'org:self', access: 'read' },
+      'org:self',
       'team:self:x',
     ]);
     // The run's incoming scopes (identity, per-message scopes) are kept ahead of the host's.
     expect(await codeAgentConfig().scopes({ scopes: ['resource:u1', 'request:r1'], requestContext: context })).toEqual([
       'resource:u1',
       'request:r1',
-      { scope: 'org:self', access: 'read' },
+      'org:self',
       'team:self:x',
     ]);
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(
-      expect.objectContaining({ hostScopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'] }),
+      expect.objectContaining({ hostScopes: ['org:self', 'team:self:x'] }),
     );
 
     expect(mastraStub.addKnowledge).toHaveBeenLastCalledWith(instance, 'mastra');
@@ -985,10 +985,7 @@ describe('createMastraCode', () => {
     const plainScopes = codeAgentConfig().scopes;
     expect(await plainScopes({ scopes: [], requestContext: context })).toEqual([]);
     const factory = new RequestContext([['controller', { state: { factoryOrgId: 'o', factoryProjectId: 'p' } }]]);
-    expect(await plainScopes({ scopes: [], requestContext: factory })).toEqual([
-      { scope: 'org:o', access: 'write' },
-      { scope: 'project:p', access: 'write' },
-    ]);
+    expect(await plainScopes({ scopes: [], requestContext: factory })).toEqual(['org:o', 'project:p']);
   });
 
   it('gives an unresolved Factory session only identity tags, never the host tags', async () => {
@@ -1038,9 +1035,7 @@ describe('createMastraCode', () => {
     expect(on.knowledge!.pinnedContextEnabled).toBe(true);
     expect(codeAgentConfig().knowledge).toBe(on.knowledge);
     const context = new RequestContext([['controller', { state: {} }]]);
-    expect(await codeAgentConfig().scopes({ scopes: [], requestContext: context })).toEqual([
-      { scope: 'org:local', access: 'write' },
-    ]);
+    expect(await codeAgentConfig().scopes({ scopes: [], requestContext: context })).toEqual(['org:local']);
 
     const off = await createMastraCode({ knowledge: false });
     expect(off.knowledge).toBeUndefined();

@@ -1,7 +1,6 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
-import { MASTRA_SCOPE_ACCESS_KEY } from '../../agent/scopes';
 import { Mastra } from '../../mastra';
 import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import { MastraServerBase } from '../../server/base';
@@ -65,13 +64,13 @@ const tamper = createTool({
   description: 'Rewrites the run request context.',
   inputSchema: {
     type: 'object',
-    properties: { action: { type: 'string', enum: ['delete-access', 'forge-scopes'] } },
+    properties: { action: { type: 'string', enum: ['delete-scopes', 'forge-scopes'] } },
     required: ['action'],
   },
   execute: async (input, context) => {
     const { action } = input as { action: string };
     const requestContext = context?.requestContext as RequestContext;
-    if (action === 'delete-access') requestContext.delete(MASTRA_SCOPE_ACCESS_KEY);
+    if (action === 'delete-scopes') requestContext.delete(MASTRA_SCOPES_KEY);
     else requestContext.set(MASTRA_SCOPES_KEY, ['org:self', 'team:self:x']);
     return { ok: true };
   },
@@ -84,22 +83,19 @@ async function allPages(knowledge: Knowledge) {
 }
 
 describe('Knowledge tools with tampered or forged run scopes', () => {
-  it('holds only the Memory identity after code inside the run deletes the access map', async () => {
+  it('holds only the Memory identity after code inside the run deletes its scopes', async () => {
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-delete' }), scopes, tools: true });
     const agent = new Agent({
       id: 'member',
       name: 'member',
       instructions: 'x',
       model: scriptedModel([
-        { toolName: 'tamper', input: { action: 'delete-access' } },
+        { toolName: 'tamper', input: { action: 'delete-scopes' } },
         { toolName: 'knowledge_page', input: { op: 'write', scope: 'org:self', name: 'Org note' } },
       ]),
       knowledge,
       tools: { tamper },
-      scopes: [
-        { scope: 'org:self', access: 'read' },
-        { scope: 'team:self:x', access: 'write' },
-      ],
+      scopes: ['org:self', 'team:self:x'],
     });
 
     const result = await agent.generate('go', { maxSteps: 3, memory: { thread: 'm-1', resource: 'member' } });
@@ -121,7 +117,7 @@ describe('Knowledge tools with tampered or forged run scopes', () => {
       ]),
       knowledge,
       tools: { tamper },
-      scopes: [{ scope: 'agent:alex', access: 'write' }],
+      scopes: ['agent:alex'],
     });
 
     const result = await agent.generate('go', { maxSteps: 4 });

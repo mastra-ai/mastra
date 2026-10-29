@@ -1,6 +1,5 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
-import type { AgentScopeEntry } from '../agent/scopes';
 import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
 import type {
   AgentSignalAttributes,
@@ -126,7 +125,7 @@ export type SessionSendNotificationSignalOptions = {
    * Scopes for the run the notification starts. A run's scopes are fixed when it starts:
    * a notification naming other scopes than the active run's starts its own run after it.
    */
-  scopes?: AgentScopeEntry[];
+  scopes?: string[];
 };
 
 /** Usage fields that are summed across steps when present on a step's usage. */
@@ -5037,7 +5036,7 @@ export class Session<TState = unknown> {
            * Scopes for this message. A run's scopes are fixed when it starts, so a message
            * whose scopes differ from the active run's does not join it (`scope-mismatch`).
            */
-          scopes?: AgentScopeEntry[];
+          scopes?: string[];
           /**
            * Provider options attached to the resulting prompt turn. Surfaces as
            * `providerOptions` on the `UserModelMessage` sent to the model and as
@@ -5426,7 +5425,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
-    scopes?: AgentScopeEntry[];
+    scopes?: string[];
   }): Promise<void> {
     let admitted = () => {};
     if (scopes) {
@@ -5464,7 +5463,7 @@ export class Session<TState = unknown> {
       requestContext?: RequestContext;
       untilIdle?: boolean | { maxIdleMs?: number };
       author?: MessageAuthor;
-      scopes?: AgentScopeEntry[];
+      scopes?: string[];
     },
     onAdmitted: () => void,
   ): Promise<void> {
@@ -5585,7 +5584,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     author?: MessageAuthor;
     /** Scopes for the run the queued message starts. */
-    scopes?: AgentScopeEntry[];
+    scopes?: string[];
   }): Promise<void> {
     await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
@@ -5635,7 +5634,7 @@ export class Session<TState = unknown> {
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
       /** Scopes for the run the queued signal starts. */
-      scopes?: AgentScopeEntry[];
+      scopes?: string[];
     } = {},
   ): Promise<void> {
     await this.machinery.authorizeExecute?.(requestContextInput);
@@ -5669,7 +5668,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     author?: MessageAuthor;
     /** Scopes for the run the steering message starts; see `sendMessage`. */
-    scopes?: AgentScopeEntry[];
+    scopes?: string[];
   }): Promise<void> {
     this.abort();
     await this.sendMessage({ content, files, requestContext, author, ...(scopes?.length ? { scopes } : {}) });

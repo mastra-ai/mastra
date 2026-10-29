@@ -1,4 +1,3 @@
-import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { Session } from '@mastra/core/agent-controller';
 import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import type { Knowledge } from '@mastra/core/knowledge';
@@ -257,13 +256,13 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   #fingerprint?: string;
   #identityKey = opaqueToken();
 
-  readonly #hostScopes: readonly AgentScopeEntry[];
+  readonly #hostScopes: readonly string[];
 
   constructor(input: {
     knowledge: Knowledge;
     store: KnowledgeStorage;
     session: Session<MastraCodeState>;
-    hostScopes?: readonly AgentScopeEntry[];
+    hostScopes?: readonly string[];
   }) {
     this.#knowledge = input.knowledge;
     this.#store = input.store;
@@ -727,7 +726,7 @@ export async function createKnowledgeInspector(input: {
   mastra?: Pick<Mastra, 'getKnowledge'>;
   session: Session<MastraCodeState>;
   /** The host's `knowledge.scopes`, so the inspector reads what the code agent writes. */
-  hostScopes?: readonly AgentScopeEntry[];
+  hostScopes?: readonly string[];
 }): Promise<KnowledgeInspector | undefined> {
   let selected: Knowledge | undefined;
   if (typeof input.knowledge === 'string') {

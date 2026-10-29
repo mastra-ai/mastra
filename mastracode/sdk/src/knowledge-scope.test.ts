@@ -9,21 +9,18 @@ describe('resolveKnowledgeSessionScopes', () => {
       resolved: true,
       scopes: ['resource:u1'],
     });
-    const member = [{ scope: 'org:self', access: 'read' as const }, 'team:self:x'];
+    const member = ['org:self', 'team:self:x'];
     expect(resolveKnowledgeSessionScopes(undefined, member)).toEqual({ resolved: true, scopes: member });
   });
 
   it('requires the Factory org and project tags, trimmed the way the seeder stores them', () => {
     expect(resolveKnowledgeSessionScopes({ factoryOrgId: ' org-1 ', factoryProjectId: 'proj-1' } as never)).toEqual({
       resolved: true,
-      scopes: [
-        { scope: 'org:org-1', access: 'write' },
-        { scope: 'project:proj-1', access: 'write' },
-      ],
+      scopes: ['org:org-1', 'project:proj-1'],
     });
     expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'org-1' } as never, ['agent:a'])).toEqual({
       resolved: true,
-      scopes: ['agent:a', { scope: 'org:org-1', access: 'write' }],
+      scopes: ['agent:a', 'org:org-1'],
     });
   });
 

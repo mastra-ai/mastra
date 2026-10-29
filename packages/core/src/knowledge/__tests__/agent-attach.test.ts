@@ -68,7 +68,6 @@ const scopes = {
 };
 
 // Agent scopes still carry an access flag; Knowledge refuses read-only entries, so these are written out.
-const held = (...names: string[]) => names.map(scope => ({ scope, access: 'write' as const }));
 
 describe('Knowledge attached to an Agent without Memory', () => {
   const runOptions = () => ({ memory: { thread: 'thread-1', resource: 'user-1' } });
@@ -93,7 +92,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
         prompts,
       ),
       knowledge,
-      scopes: held('org:acme'),
+      scopes: ['org:acme'],
     });
 
     expect(agent.hasOwnMemory()).toBe(false);
@@ -177,7 +176,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
         instructions: 'x',
         model: scriptedModel(calls, []),
         knowledge,
-        scopes: held('org:acme', `team:acme:${team}`),
+        scopes: ['org:acme', `team:acme:${team}`],
       });
 
     const wrote = await agentFor('support', [
@@ -204,7 +203,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(toolErrors(refused).join('\n')).toMatch(/not found/);
   });
 
-  it('fails closed on a read-only scope entry instead of ignoring it', async () => {
+  it('refuses the removed { scope, access } scope entry before any tool runs', async () => {
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'ro' }), scopes, tools: true });
     const agent = new Agent({
       id: 'ro',
@@ -212,10 +211,11 @@ describe('Knowledge attached to an Agent without Memory', () => {
       instructions: 'x',
       model: scriptedModel([{ toolName: 'knowledge_search', input: { query: 'x' } }], []),
       knowledge,
-      scopes: [{ scope: 'org:acme', access: 'read' }],
+      scopes: [{ scope: 'org:acme', access: 'read' }] as any,
     });
-    const result = await agent.generate('q', { maxSteps: 2, ...runOptions() });
-    expect(toolErrors(result).join('\n')).toMatch(/Read-only scope entries were removed/);
+    await expect(agent.generate('q', { maxSteps: 2, ...runOptions() })).rejects.toThrow(
+      'must be an array of "<type>:<value>" strings',
+    );
   });
 
   it('delivers pinned pages to an agent with Memory, on the next call after pinning', async () => {
@@ -234,7 +234,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
         model: scriptedModel(calls, prompts),
         knowledge,
         memory: new MockMemory(),
-        scopes: held('org:acme'),
+        scopes: ['org:acme'],
       });
     const pinned = await agent([
       {
@@ -275,7 +275,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
         prompts,
       ),
       knowledge,
-      scopes: held('org:acme'),
+      scopes: ['org:acme'],
     });
     const warn = vi.spyOn((writer as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
     const result = await writer.generate('pin', { maxSteps: 4, ...runOptions() });

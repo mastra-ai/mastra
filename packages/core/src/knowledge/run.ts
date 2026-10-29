@@ -150,22 +150,14 @@ export class KnowledgeRun {
 
 /**
  * The run's principals in canonical form: its resolved run scopes plus its Memory identity. Every one
- * must match a declared scope type. Read-only scope entries were removed from Knowledge's model, so a
- * run carrying one fails closed instead of getting whatever the rules give.
+ * must match a declared scope type.
  * @internal
  */
 export function knowledgeRunPrincipals(
   runtime: KnowledgeScopeRuntime,
   context: KnowledgeRunContext | undefined,
 ): string[] {
-  const entries = getRunAgentScopes(context?.requestContext);
-  const readOnly = entries.filter(entry => entry.access === 'read').map(entry => entry.scope);
-  if (readOnly.length > 0) {
-    throw new Error(
-      `Read-only scope entries were removed; declare roles in Knowledge scopes instead (${readOnly.join(', ')}).`,
-    );
-  }
-  const raw = entries.map(entry => entry.scope);
+  const raw = getRunAgentScopes(context?.requestContext);
   if (context?.agent?.resourceId) raw.push(`resource:${context.agent.resourceId}`);
   if (context?.agent?.threadId) raw.push(`thread:${context.agent.threadId}`);
   if (raw.length === 0) {

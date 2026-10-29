@@ -53,7 +53,6 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentId: string;
   agentVersionId?: string;
   resolvedScopes?: string[];
-  resolvedReadOnly?: string[];
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
   authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
@@ -73,7 +72,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentId,
   agentVersionId,
   resolvedScopes,
-  resolvedReadOnly,
   methodType,
   saveQueueManager,
   authorizeMemory,
@@ -159,7 +157,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
       agentId,
       agentVersionId,
       resolvedScopes,
-      resolvedReadOnly,
       tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -376,7 +373,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
       agentId,
       agentVersionId,
       resolvedScopes,
-      resolvedReadOnly,
       requestContext: result.requestContext!,
       actor: options.actor,
       mcp: options.mcp,

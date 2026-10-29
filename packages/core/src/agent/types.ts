@@ -84,7 +84,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
-import type { AgentScopeEntry, AgentScopesConfig } from './scopes';
+import type { AgentScopesConfig } from './scopes';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
@@ -225,7 +225,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
        * Validated, but does not change the scopes of the run receiving the signal:
        * a run's scopes are fixed when it starts.
        */
-      scopes?: AgentScopeEntry[];
+      scopes?: string[];
     }
   | {
       runId?: string;
@@ -237,7 +237,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
        * Scopes for a run this signal starts, unioned with `ifIdle.streamOptions.scopes`.
        * `resource:`/`thread:` scopes must equal `resourceId`/`threadId`.
        */
-      scopes?: AgentScopeEntry[];
+      scopes?: string[];
     };
 
 /**
@@ -862,8 +862,8 @@ interface AgentConfigBase<
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
    * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
-   * A plain address is read-only; `{ scope: 'team:core', access: 'write' }` lets the run write
-   * there too. `resource:` and `thread:` scopes are always writable.
+   * Scopes say who the run is; what it may do with them is decided by whatever reads them, such as
+   * Knowledge's scope declarations.
    * A run's incoming scopes are the call's `scopes`, `defaultOptions.scopes` and the reserved
    * `mastra__scopes` request-context key. A static list is added to them. A function receives
    * them as `scopes` (with the request context) and returns the run's final set, so it can narrow

@@ -28,8 +28,7 @@ import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
 import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSettle } from './run-lease-fence';
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
-import { agentScopeEntryTag, agentScopeEntryWrites, deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
-import type { AgentScopeEntry } from './scopes';
+import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
@@ -296,35 +295,21 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
     .catch(() => {});
 }
 
-/** Unions scope entries by tag; a tag any list holds read-only stays read-only. */
-function unionScopes(...lists: Array<readonly AgentScopeEntry[] | undefined>): AgentScopeEntry[] {
-  const byTag = new Map<string, AgentScopeEntry>();
-  for (const entry of lists.flatMap(list => list ?? [])) {
-    const tag = agentScopeEntryTag(entry);
-    const existing = byTag.get(tag);
-    if (existing === undefined || (agentScopeEntryWrites(existing) && !agentScopeEntryWrites(entry))) {
-      byTag.set(tag, entry);
-    }
-  }
-  return [...byTag.values()];
+/** Unions scope lists, dropping duplicates. */
+function unionScopes(...lists: Array<readonly string[] | undefined>): string[] {
+  return [...new Set(lists.flatMap(list => list ?? []))];
 }
 
-/** Two scope lists hold the same tags with the same access, ignoring order and duplicates. */
-function sameScopeEntries(a: readonly AgentScopeEntry[], b: readonly AgentScopeEntry[]): boolean {
-  const keys = (list: readonly AgentScopeEntry[]) =>
-    [
-      ...new Set(
-        unionScopes(list).map(entry => `${agentScopeEntryTag(entry)}\u0000${agentScopeEntryWrites(entry) ? 'w' : 'r'}`),
-      ),
-    ].sort();
-  const left = keys(a);
-  const right = keys(b);
-  return left.length === right.length && left.every((key, index) => key === right[index]);
+/** Two scope lists hold the same scopes, ignoring order and duplicates. */
+function sameScopes(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every(scope => right.has(scope));
 }
 
 type ThreadTargetScopes = {
-  scopes?: AgentScopeEntry[];
-  ifIdle?: { streamOptions?: { scopes?: AgentScopeEntry[]; requestContext?: RequestContext } };
+  scopes?: string[];
+  ifIdle?: { streamOptions?: { scopes?: string[]; requestContext?: RequestContext } };
 };
 
 /**
@@ -341,7 +326,7 @@ function resolveThreadTargetScopes(
   target: ThreadTargetScopes,
   ids: { resourceId?: string; threadId?: string },
   mastra?: { getMastraServer?(): unknown },
-): AgentScopeEntry[] | undefined {
+): string[] | undefined {
   const idleScopes = target.ifIdle?.streamOptions?.scopes;
   if (target.scopes === undefined && idleScopes === undefined) return undefined;
   const scopes = unionScopes(target.scopes, idleScopes);
@@ -622,7 +607,7 @@ type AgentThreadRuntimeState = {
   /** Idle-start reservations whose execution lease has not resolved yet. */
   pendingThreadAdmissions: Map<string, PendingThreadAdmission>;
   /** Call scopes of runs this process reserved through an idle start, until their record registers. */
-  reservedRunScopes: Map<string, AgentScopeEntry[] | undefined>;
+  reservedRunScopes: Map<string, string[] | undefined>;
   /**
    * Idle signals this process has already acted on, keyed by request id, with the
    * reply it sent. Backends deliver at least once, so a redelivery of a signal
@@ -1002,11 +987,11 @@ export class AgentThreadStreamRuntime {
    * whose scopes this process can't see (owned by another process, or reserved without going
    * through an idle start) never matches, so a signal naming scopes waits for it instead.
    */
-  #runHoldsScopes(state: AgentThreadRuntimeState, runId: string, scopes: readonly AgentScopeEntry[]): boolean {
+  #runHoldsScopes(state: AgentThreadRuntimeState, runId: string, scopes: readonly string[]): boolean {
     const record = state.threadRunsById.get(runId);
-    if (record) return sameScopeEntries(record.streamOptions?.scopes ?? [], scopes);
+    if (record) return sameScopes(record.streamOptions?.scopes ?? [], scopes);
     if (!state.reservedRunScopes.has(runId)) return false;
-    return sameScopeEntries(state.reservedRunScopes.get(runId) ?? [], scopes);
+    return sameScopes(state.reservedRunScopes.get(runId) ?? [], scopes);
   }
 
   #isSweptLeaseOwner(state: AgentThreadRuntimeState, runId: string): boolean {
@@ -2440,6 +2425,7 @@ export class AgentThreadStreamRuntime {
     incomingStreamOptions?: AgentExecutionOptions<any>,
     waitForIdle = false,
     joinSignal?: CreatedAgentSignal,
+    messageScopes?: string[],
   ): Promise<{ runId: string; error?: string; blocked?: boolean; output?: MastraModelOutput<OUTPUT> } | undefined> {
     const messageIdentity = this.#idleMessageIdentity(owner.agent.id, key, signal);
     let admissionSettled = false;

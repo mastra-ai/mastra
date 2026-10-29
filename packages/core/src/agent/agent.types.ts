@@ -22,7 +22,6 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPaylo
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
-import type { AgentScopeEntry } from './scopes';
 import type { AgentSignalType } from './signals';
 import type { SubAgentGenerateResult } from './subagent';
 import type {
@@ -473,11 +472,8 @@ export type NetworkOptions<OUTPUT = undefined> = {
    * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
    * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
    * also set, or the call throws. Never accepted from an HTTP request body.
-   * A plain address is read-only; `{ scope, access: 'write' }` lets the run write there too.
-   * `resource:` and `thread:` scopes are always writable. A tag any source names read-only stays
-   * read-only.
    */
-  scopes?: AgentScopeEntry[];
+  scopes?: string[];
 
   /** Whether to automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
@@ -629,11 +625,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
    * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
    * also set, or the call throws. Never accepted from an HTTP request body.
-   * A plain address is read-only; `{ scope, access: 'write' }` lets the run write there too.
-   * `resource:` and `thread:` scopes are always writable. A tag any source names read-only stays
-   * read-only.
    */
-  scopes?: AgentScopeEntry[];
+  scopes?: string[];
 
   /**
    * Serverless runtime helpers. Use these when the platform freezes the
@@ -944,7 +937,6 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   toolCallId?: string;
   /** Internal: The run's resolved scopes, persisted in suspend snapshots for resume */
   resolvedScopes?: string[];
-  resolvedReadOnly?: string[];
 } & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}
