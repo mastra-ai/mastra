@@ -1,5 +1,14 @@
 # @mastra/clickhouse
 
+## 1.28.0-alpha.1
+
+### Patch Changes
+
+- Fixed span timestamps being stored as 9999-12-31 on ClickHouse 26.8 and later. Span start, end and update times are now written as ISO strings, which every ClickHouse version reads the same way. ([#28011](https://github.com/mastra-ai/mastra/pull/28011))
+
+- Updated dependencies [[`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990)]:
+  - @mastra/core@1.81.0-alpha.1
+
 ## 1.28.0-alpha.0
 
 ### Minor Changes

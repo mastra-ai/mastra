@@ -58,6 +58,7 @@ import {
   getRunRegistryEntry,
   deleteRunRegistryEntry,
   publishAbortRequest,
+  requestAcknowledgedAbort,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -670,6 +671,12 @@ export interface InngestAgent<TOutput = undefined> {
   /** Abort a run by id, including on the Inngest worker executing it. */
   abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
+   * Abort a run by id and resolve whether the abort was confirmed, locally or
+   * by the Inngest worker executing it. Used by the server's run abort route.
+   * @internal
+   */
+  __abortRunAcknowledged(runId: string): Promise<boolean>;
+  /**
    * Resume a suspended durable run and return its streaming output. Routes
    * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
    */
@@ -1214,11 +1221,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * worker. Mirrors the `abort()` handed out with a stream result.
    */
   function abortDurableRun(runId: string): void {
+    abortLocalController(runId);
+    void requestRemoteAbort(runId);
+  }
+
+  function abortLocalController(runId: string): void {
     const controller = getRunRegistryEntry(runId, mastra)?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
-    void requestRemoteAbort(runId);
   }
 
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
@@ -1249,6 +1260,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
     | 'abortRunStream'
+    | '__abortRunAcknowledged'
     | '__fork'
     | 'getDurableWorkflows'
     | 'durableLoopWorkflowName'
@@ -2482,6 +2494,25 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // on an Inngest worker this process cannot see.
       abortDurableRun(runId);
       return aborted || getRunRegistryEntry(runId, mastra) !== undefined;
+    },
+
+    // Mirrors DurableAgent.__abortRunAcknowledged: a registry entry is not
+    // confirmation, the run normally executes on an Inngest worker.
+    async __abortRunAcknowledged(runId) {
+      const wrapperClose = getRunStreamSlot(activeStreamUntilIdle, runId);
+      if (wrapperClose) {
+        wrapperClose();
+        return true;
+      }
+      if (agent.abortRunStream(runId)) {
+        abortDurableRun(runId);
+        return true;
+      }
+      try {
+        return await requestAcknowledgedAbort(getPubsub(), runId);
+      } finally {
+        abortLocalController(runId);
+      }
     },
 
     __fork() {

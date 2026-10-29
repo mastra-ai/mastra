@@ -153,7 +153,12 @@ export {
   DurableAgentDefaults,
   DurableStepIds,
 } from './constants';
-export { publishAbortRequest, subscribeToAbortRequests, ensureRemoteAbortListener } from './abort-transport';
+export {
+  publishAbortRequest,
+  requestAcknowledgedAbort,
+  subscribeToAbortRequests,
+  ensureRemoteAbortListener,
+} from './abort-transport';
 
 // Types
 export type {

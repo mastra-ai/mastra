@@ -55,6 +55,11 @@ export const TOOL_APPROVAL_VERDICTS_KEY = createRunScopeKey<Map<string, boolean>
  */
 export const STEP_USAGE_KEY = createRunScopeKey<LanguageModelUsage | undefined>('loop:stepUsage');
 export const STEP_MODEL_MESSAGES_KEY = createRunScopeKey<ModelMessage[]>('loop:stepModelMessages');
+/**
+ * Response message the current step is writing into. A signal or a retry rotates the id
+ * mid-iteration, so tool-emitted data chunks must use this instead of the run-level id.
+ */
+export const STEP_RESPONSE_MESSAGE_ID_KEY = createRunScopeKey<string>('loop:stepResponseMessageId');
 /** Latest provider request for local durable callers only; never serialized with a step. */
 export const LOCAL_MODEL_REQUEST_KEY = createRunScopeKey<LanguageModelRequestMetadata>('loop:localModelRequest');
 export const EAGER_TOOL_EXECUTION_KEY = createRunScopeKey<EagerToolExecutionCoordinator>('loop:eagerToolExecution');

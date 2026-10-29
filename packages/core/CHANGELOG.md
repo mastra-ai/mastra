@@ -1,5 +1,31 @@
 # @mastra/core
 
+## 1.81.0-alpha.1
+
+### Minor Changes
+
+- Added factory-scoped sandbox environment. A deployment that hosts several factories can now give a credential to one factory's sessions only: every Factory sandbox provider accepts `env` as a function of the session's sandbox context, which carries the new `factoryId` and `factoryName` fields. Scope secrets by `factoryId`, because names can be edited and aren't unique. ([#28767](https://github.com/mastra-ai/mastra/pull/28767))
+
+  ```ts
+  new PlatformFactorySandbox({
+    env: ctx => (ctx.factoryId === PLATFORM_FACTORY_ID ? { PLATFORM_TOKEN } : {}),
+  });
+  ```
+
+  Platform and Docker sandboxes keep the environment they started with when they resume. When you remove a credential from a factory, recreate its running sandboxes.
+
+### Patch Changes
+
+- Fixed `resumeStream()` on evented workflows rejecting its `result` with "promise 'result' was not resolved or rejected when stream finished". The stream now stays open until the resumed run's result is set. ([#28871](https://github.com/mastra-ai/mastra/pull/28871))
+
+- Fixed nested evented workflows running without the caller's `workflows:execute` permission on the child workflow. When a fine-grained authorization (FGA) provider is configured, non-internal nested workflows now require an authenticated user with that permission, or a trusted actor with tenant scope subject to the provider's actor policy. Internal child workflows remain exempt from this check. ([#28669](https://github.com/mastra-ai/mastra/pull/28669))
+
+  Schedule-triggered runs carry no user identity or trusted actor by default. Scheduled workflows containing non-internal nested children therefore now fail closed when FGA is configured, matching the default engine's behavior.
+
+- Fixed tracing for runs that continue in another process. A durable agent run resumed after a restart or on another server now stays on its original trace instead of opening a second trace that never ends. Evented workflow runs restarted after a crash, or time-travelled, now trace their steps, so scores of a recovered agent run link to the run's trace. ([#28832](https://github.com/mastra-ai/mastra/pull/28832))
+
+- Retry policies that match bad-request errors no longer retry a 400 that rejects the model or a parameter, such as `model_not_found`. These requests fail the same way on every retry. ([#28786](https://github.com/mastra-ai/mastra/pull/28786))
+
 ## 1.81.0-alpha.0
 
 ### Minor Changes

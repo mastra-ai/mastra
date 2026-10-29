@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { coreFeatures } from '@mastra/core/features';
 import { ZipArchive } from 'archiver';
+import fastStringWidth from 'fast-string-width';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
@@ -261,12 +262,13 @@ interface ArchitectureNode {
 }
 
 const BOX_INNER_WIDTH = 30;
-const BOX_WIDTH = BOX_INNER_WIDTH + 2;
-const BOX_TEXT_WIDTH = BOX_INNER_WIDTH - 2;
+// Below this the boxes truncate most titles, so narrow terminals get a list instead.
+const MIN_BOX_INNER_WIDTH = 18;
 const BOX_HEIGHT = 4;
 const SLOT_HEIGHT = BOX_HEIGHT + 1;
 const CONNECTOR_GAP_WIDTH = 7;
 const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
+const PANEL_SEPARATOR_WIDTH = 5;
 
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
@@ -276,14 +278,23 @@ const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; to
   redis: { label: 'Redis', tone: 'red' },
 };
 
+// Terminal cells, not characters: wide characters (CJK, emoji) take two, as in p.note's wrapping.
 function architectureTextWidth(value: string): number {
-  return Array.from(value).length;
+  return fastStringWidth(value);
 }
 
-function truncateArchitectureText(value: string, width = BOX_TEXT_WIDTH): string {
-  const characters = Array.from(value);
-  if (characters.length <= width) return value;
-  return `${characters.slice(0, width - 1).join('')}…`;
+function truncateArchitectureText(value: string, width: number): string {
+  if (architectureTextWidth(value) <= width) return value;
+  let truncated = '';
+  for (const character of value) {
+    if (architectureTextWidth(`${truncated}${character}`) > width - 1) break;
+    truncated += character;
+  }
+  return `${truncated}…`;
+}
+
+function architectureDiagramWidth(boxInnerWidth: number): number {
+  return 3 * (boxInnerWidth + 2) + 2 * CONNECTOR_GAP_WIDTH;
 }
 
 const DEPLOY_REGION_PRESENTATION: Array<{
@@ -499,17 +510,22 @@ function visibleArchitectureWidth(value: string): number {
   return architectureTextWidth(value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, ''));
 }
 
-function renderArchitectureBox(node: ArchitectureNode | undefined, colors: ArchitectureColors): string[] {
-  if (!node) return Array.from({ length: BOX_HEIGHT }, () => ' '.repeat(BOX_WIDTH));
+function renderArchitectureBox(
+  node: ArchitectureNode | undefined,
+  innerWidth: number,
+  colors: ArchitectureColors,
+): string[] {
+  if (!node) return Array.from({ length: BOX_HEIGHT }, () => ' '.repeat(innerWidth + 2));
 
-  const title = truncateArchitectureText(node.title);
-  const subtitle = truncateArchitectureText(node.subtitle);
+  const textWidth = innerWidth - 2;
+  const title = truncateArchitectureText(node.title, textWidth);
+  const subtitle = truncateArchitectureText(node.subtitle, textWidth);
   const border = (value: string) => paintArchitectureTone(colors, node.tone, value);
   return [
-    border(`┌${'─'.repeat(BOX_INNER_WIDTH)}┐`),
-    `${border('│')} ${colors.bold(title)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(title))} ${border('│')}`,
-    `${border('│')} ${colors.dim(subtitle)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(subtitle))} ${border('│')}`,
-    border(`└${'─'.repeat(BOX_INNER_WIDTH)}┘`),
+    border(`┌${'─'.repeat(innerWidth)}┐`),
+    `${border('│')} ${colors.bold(title)}${' '.repeat(textWidth - architectureTextWidth(title))} ${border('│')}`,
+    `${border('│')} ${colors.dim(subtitle)}${' '.repeat(textWidth - architectureTextWidth(subtitle))} ${border('│')}`,
+    border(`└${'─'.repeat(innerWidth)}┘`),
   ];
 }
 
@@ -566,6 +582,8 @@ export function renderDeploymentArchitecture(
     databases: readonly ProjectDatabase[];
     observabilityEnabled: boolean;
     renderedAt?: Date;
+    /** Columns available for the overview; wider content is wrapped by the terminal note. */
+    width?: number;
   },
   colors: ArchitectureColors = pc,
 ): string {
@@ -601,39 +619,11 @@ export function renderDeploymentArchitecture(
       : []),
   ];
 
-  const slotCount = Math.max(leftNodes.length, rightNodes.length);
-  const centerSlot = Math.floor((slotCount - 1) / 2);
   const centerNode: ArchitectureNode = {
     title: input.environment.name,
     subtitle: formatDeploymentLocation(input.environment.region),
     tone: 'gray',
   };
-  const connectorLineOffset = 2;
-  const centerConnectorY = centerSlot * SLOT_HEIGHT + connectorLineOffset;
-  const leftConnectorYs = new Set(leftNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
-  const rightConnectorYs = new Set(rightNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
-  const lines: string[] = [];
-
-  for (let slot = 0; slot < slotCount; slot++) {
-    const leftBox = renderArchitectureBox(leftNodes[slot], colors);
-    const centerBox = renderArchitectureBox(slot === centerSlot ? centerNode : undefined, colors);
-    const rightBox = renderArchitectureBox(rightNodes[slot], colors);
-
-    for (let line = 0; line < BOX_HEIGHT; line++) {
-      const y = slot * SLOT_HEIGHT + line;
-      lines.push(
-        `${leftBox[line]}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${centerBox[line]}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}${rightBox[line]}`.trimEnd(),
-      );
-    }
-
-    if (slot < slotCount - 1) {
-      const y = slot * SLOT_HEIGHT + BOX_HEIGHT;
-      lines.push(
-        `${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}`.trimEnd(),
-      );
-    }
-  }
-
   const panelLines = renderDeploymentPanel(
     {
       projectName: input.projectName,
@@ -645,14 +635,90 @@ export function renderDeploymentArchitecture(
     },
     colors,
   );
-  const rowCount = Math.max(lines.length, panelLines.length);
   const panelWidth = Math.max(...panelLines.map(visibleArchitectureWidth));
+  const width = input.width ?? Infinity;
+
+  // Narrower terminals wrap every line wider than the note, so pick the widest layout that fits:
+  // panel beside the diagram, panel above a diagram shrunk to fit, or panel above a list.
+  if (panelWidth + PANEL_SEPARATOR_WIDTH + architectureDiagramWidth(BOX_INNER_WIDTH) > width) {
+    const boxInnerWidth = Math.min(BOX_INNER_WIDTH, Math.floor((width - 2 * CONNECTOR_GAP_WIDTH) / 3) - 2);
+    const lines =
+      boxInnerWidth >= MIN_BOX_INNER_WIDTH
+        ? renderArchitectureDiagram(leftNodes, centerNode, rightNodes, boxInnerWidth, colors)
+        : renderArchitectureList(centerNode, [...leftNodes, ...rightNodes], width, colors);
+    return [...panelLines, '', ...lines].join('\n');
+  }
+
+  const lines = renderArchitectureDiagram(leftNodes, centerNode, rightNodes, BOX_INNER_WIDTH, colors);
+  const rowCount = Math.max(lines.length, panelLines.length);
 
   return Array.from({ length: rowCount }, (_, index) => {
     const panelLine = panelLines[index] ?? '';
     const paddedPanelLine = `${panelLine}${' '.repeat(Math.max(0, panelWidth - visibleArchitectureWidth(panelLine)))}`;
     return `${paddedPanelLine}  ${colors.dim('│')}  ${lines[index] ?? ''}`.trimEnd();
   }).join('\n');
+}
+
+function renderArchitectureDiagram(
+  leftNodes: readonly ArchitectureNode[],
+  centerNode: ArchitectureNode,
+  rightNodes: readonly ArchitectureNode[],
+  boxInnerWidth: number,
+  colors: ArchitectureColors,
+): string[] {
+  const slotCount = Math.max(leftNodes.length, rightNodes.length);
+  const centerSlot = Math.floor((slotCount - 1) / 2);
+  const connectorLineOffset = 2;
+  const centerConnectorY = centerSlot * SLOT_HEIGHT + connectorLineOffset;
+  const leftConnectorYs = new Set(leftNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const rightConnectorYs = new Set(rightNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const emptyBox = ' '.repeat(boxInnerWidth + 2);
+  const lines: string[] = [];
+
+  for (let slot = 0; slot < slotCount; slot++) {
+    const leftBox = renderArchitectureBox(leftNodes[slot], boxInnerWidth, colors);
+    const centerBox = renderArchitectureBox(slot === centerSlot ? centerNode : undefined, boxInnerWidth, colors);
+    const rightBox = renderArchitectureBox(rightNodes[slot], boxInnerWidth, colors);
+
+    for (let line = 0; line < BOX_HEIGHT; line++) {
+      const y = slot * SLOT_HEIGHT + line;
+      lines.push(
+        `${leftBox[line]}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${centerBox[line]}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}${rightBox[line]}`.trimEnd(),
+      );
+    }
+
+    if (slot < slotCount - 1) {
+      const y = slot * SLOT_HEIGHT + BOX_HEIGHT;
+      lines.push(
+        `${emptyBox}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${emptyBox}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}`.trimEnd(),
+      );
+    }
+  }
+
+  return lines;
+}
+
+function renderArchitectureList(
+  centerNode: ArchitectureNode,
+  nodes: readonly ArchitectureNode[],
+  width: number,
+  colors: ArchitectureColors,
+): string[] {
+  const renderItem = (node: ArchitectureNode, prefixWidth: number): string => {
+    const available = Math.max(1, width - prefixWidth);
+    const titleWidth = architectureTextWidth(node.title);
+    // Keep at least a few subtitle characters, or drop the subtitle instead of showing a lone ellipsis.
+    if (available - titleWidth - 2 < 4) return colors.bold(truncateArchitectureText(node.title, available));
+    return `${colors.bold(node.title)}  ${colors.dim(truncateArchitectureText(node.subtitle, available - titleWidth - 2))}`;
+  };
+
+  return [
+    `${paintArchitectureTone(colors, centerNode.tone, '■')} ${renderItem(centerNode, 2)}`,
+    ...nodes.map(
+      (node, index) =>
+        `${colors.dim(index === nodes.length - 1 ? '└─' : '├─')} ${paintArchitectureTone(colors, node.tone, '■')} ${renderItem(node, 5)}`,
+    ),
+  ];
 }
 
 function getPackageName(projectDir: string): string | null {
@@ -1891,6 +1957,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       showWorkersConfig,
       databases,
       observabilityEnabled: projectConfig?.disablePlatformObservability !== true,
+      // p.note wraps its content at the terminal width minus its 6-column frame.
+      width: (process.stdout.columns ?? 80) - 6,
     }),
     'Deployment Overview',
   );
