@@ -2276,6 +2276,31 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         if (!authorized) return;
         authorizedEventId = args.eventId;
+        if (step.type === 'foreach' && workflowsStore && authorizedEventId) {
+          // Foreach skips the generic running/resume writes below. Record authorization
+          // before publishing the child, not after its asynchronous start handler runs.
+          const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+          const storedResult = snapshot?.context[leafId] ?? stepResults[leafId];
+          await workflowsStore.updateWorkflowResults({
+            workflowName: workflowId,
+            runId,
+            stepId: leafId,
+            requestContext: withoutAuthToken(requestContext),
+            result: {
+              ...(storedResult ?? {
+                status: 'running',
+                startedAt: Date.now(),
+                payload: prevResult.status === 'success' ? prevResult.output : undefined,
+              }),
+              metadata: {
+                ...storedResult?.metadata,
+                authorizedEventIds: [
+                  ...new Set([...(storedResult?.metadata?.authorizedEventIds ?? []), authorizedEventId]),
+                ],
+              },
+            },
+          });
+        }
       }
     }
 

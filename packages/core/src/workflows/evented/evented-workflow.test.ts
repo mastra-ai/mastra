@@ -1691,6 +1691,57 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     });
 
+    it.each([false, true])(
+      'preserves an authorized foreach child before start metadata (replaceResults=%s)',
+      async replaceResults => {
+        const entered = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        const fixture = await setup({ foreach: true, replaceResults });
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const update = store.updateWorkflowResults.bind(store);
+        vi.spyOn(store, 'updateWorkflowResults').mockImplementation(async args => {
+          if (args.result.metadata?.foreachNestedRunIds) {
+            entered.resolve();
+            await release.promise;
+          }
+          return update(args);
+        });
+        try {
+          const starting = fixture.run.start({
+            inputData: [{ value: 'ok' }],
+            requestContext: fixture.requestContext,
+          });
+          await entered.promise;
+          const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+          await fixture.waitForDelivery(delivery, 1);
+          fixture.policy.allowed = false;
+          const lease = fixture.leases.mock.calls.find(
+            ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+          )!;
+          await fixture.pubsub.releaseLease(lease[0], lease[1]);
+          fixture.emitter.emit('workflows', delivery);
+          await fixture.waitForDelivery(delivery, 2);
+          const snapshot = await store.loadWorkflowSnapshot({
+            workflowName: fixture.parent.id,
+            runId: fixture.run.runId,
+          });
+          expect(snapshot?.status).toBe('running');
+          expect(
+            fixture.publish.mock.calls.filter(
+              ([, event]) => event.type === 'workflow.fail' && event.runId === fixture.run.runId,
+            ),
+          ).toHaveLength(0);
+          release.resolve();
+          await expect(starting).resolves.toMatchObject({ status: 'success' });
+          expect(fixture.effects()).toBe(1);
+        } finally {
+          release.resolve();
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
     it('does not fail an authorized foreach child after lease expiry', async () => {
       const effect = Promise.withResolvers<void>();
       const entered = Promise.withResolvers<void>();
@@ -1731,6 +1782,35 @@ describe('Workflow (Evented Engine Specific)', () => {
         await fixture.mastra.stopWorkers();
       }
     }, 15000);
+
+    it('retries foreach authorization persistence without failing the parent', async () => {
+      const fixture = await setup({ foreach: true });
+      const store = (await fixture.storage.getStore('workflows'))!;
+      const update = store.updateWorkflowResults.bind(store);
+      let failWrite = true;
+      vi.spyOn(store, 'updateWorkflowResults').mockImplementation(async args => {
+        if (failWrite && args.result.metadata?.authorizedEventIds) {
+          failWrite = false;
+          throw new Error('Transient authorization-record write failure');
+        }
+        return update(args);
+      });
+      try {
+        const starting = fixture.run.start({
+          inputData: [{ value: 'ok' }],
+          requestContext: fixture.requestContext,
+        });
+        await vi.waitFor(() => expect(failWrite).toBe(false));
+        const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+        await fixture.waitForDelivery(delivery, 1, { ok: false, retry: true });
+        expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        await expect(starting).resolves.toMatchObject({ status: 'success' });
+        await fixture.waitForDelivery(delivery, 2);
+        expect(fixture.effects()).toBe(1);
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    });
 
     it('retries an authorized child after a transient snapshot-read failure', async () => {
       const fixture = await setup();
