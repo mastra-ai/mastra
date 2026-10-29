@@ -146,51 +146,44 @@ describe('workflow resume span linkage', () => {
     },
   );
 
-  it.each(['default', 'evented', 'evented-async'] as const)(
-    '%s ends suspension before a distinct resumed execution',
-    async engine => {
-      const workflow = makeWorkflow(engine === 'default' ? 'default' : 'evented');
-      const host = new Mastra({
-        logger: false,
-        storage: new MockStore(),
-        workflows: { [workflow.id]: workflow },
-        observability: new Observability({
-          configs: { default: { serviceName: 'workflow-outcomes', exporters: [exporter] } },
-        }),
-      });
-      try {
-        if (engine !== 'default') await host.startWorkers();
-        const run = await workflow.createRun();
-        if (engine === 'evented-async' && 'startAsync' in run) {
-          await run.startAsync({ inputData: {} });
-          await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
-        } else {
-          expect((await run.start({ inputData: {} })).status).toBe('suspended');
-        }
-        const suspended = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
-        expect(suspended).toHaveLength(1);
-        expect(suspended[0]).toMatchObject({ outcome: 'suspend' });
-        const originalId = suspended[0]!.id;
+  // startAsync() only dispatches; it creates no WORKFLOW_RUN span because the worker may run in another process.
+  it.each(['default', 'evented'] as const)('%s ends suspension before a distinct resumed execution', async engine => {
+    const workflow = makeWorkflow(engine);
+    const host = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { [workflow.id]: workflow },
+      observability: new Observability({
+        configs: { default: { serviceName: 'workflow-outcomes', exporters: [exporter] } },
+      }),
+    });
+    try {
+      if (engine !== 'default') await host.startWorkers();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const suspended = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(suspended).toHaveLength(1);
+      expect(suspended[0]).toMatchObject({ outcome: 'suspend' });
+      const originalId = suspended[0]!.id;
 
-        const resumedRun = await workflow.createRun({ runId: run.runId });
-        expect(await resumedRun.resume({ resumeData: { approved: true } })).toMatchObject({
-          status: 'success',
-          result: { approved: true },
-        });
-        const executions = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
-        expectWorkflowSegments(endedSpans(), originalId);
-        expect(executions[1]).toMatchObject({ outcome: 'success', parentSpanId: originalId });
-        const started = exporter
-          .getByEventType(TracingEventType.SPAN_STARTED)
-          .map(event => event.exportedSpan)
-          .filter(span => span.type === SpanType.WORKFLOW_RUN);
-        expect(started.map(span => span.outcome)).toEqual([null, null]);
-        expectNoOrphans();
-      } finally {
-        await host.shutdown();
-      }
-    },
-  );
+      const resumedRun = await workflow.createRun({ runId: run.runId });
+      expect(await resumedRun.resume({ resumeData: { approved: true } })).toMatchObject({
+        status: 'success',
+        result: { approved: true },
+      });
+      const executions = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expectWorkflowSegments(endedSpans(), originalId);
+      expect(executions[1]).toMatchObject({ outcome: 'success', parentSpanId: originalId });
+      const started = exporter
+        .getByEventType(TracingEventType.SPAN_STARTED)
+        .map(event => event.exportedSpan)
+        .filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(started.map(span => span.outcome)).toEqual([null, null]);
+      expectNoOrphans();
+    } finally {
+      await host.shutdown();
+    }
+  });
 
   // Evented control-flow spans were split out of this change, so only the default engine emits them.
   it.each(
