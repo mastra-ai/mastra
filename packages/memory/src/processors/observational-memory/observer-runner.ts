@@ -11,7 +11,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
-import { formatOmError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
+import { formatOmError, isOmModelExecutionFailure, OmModelExecutionError, toOmModelExecutionError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -420,7 +420,9 @@ export class ObserverRunner {
           idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
-      );
+      ).catch(error => {
+        throw toOmModelExecutionError('observer-model', error, abortSignal);
+      });
     };
 
     let result = await doGenerate();
@@ -438,7 +440,10 @@ export class ObserverRunner {
         omDebug(
           `[OM:callObserver] degenerate repetition on retry, failing. ${describeDegenerateOutput(result.text, 2000)}`,
         );
-        throw new Error(`Observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`);
+        throw new OmModelExecutionError(
+          'observer-model',
+          new Error(`Observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`),
+        );
       }
     }
 
@@ -762,7 +767,9 @@ export class ObserverRunner {
           idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
-      );
+      ).catch(error => {
+        throw toOmModelExecutionError('observer-model', error, abortSignal);
+      });
     };
 
     let result = await doGenerate();
@@ -780,8 +787,11 @@ export class ObserverRunner {
         omDebug(
           `[OM:callMultiThreadObserver] degenerate repetition on retry, failing. ${describeDegenerateOutput(result.text, 2000)}`,
         );
-        throw new Error(
-          `Multi-thread observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`,
+        throw new OmModelExecutionError(
+          'observer-model',
+          new Error(
+            `Multi-thread observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`,
+          ),
         );
       }
     }

@@ -15,7 +15,12 @@ import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { runOMCommit } from './commit-queue';
 import { omDebug, omError } from './debug';
-import { isOmModelExecutionError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
+import {
+  isOmModelExecutionFailure,
+  OmModelExecutionError,
+  shouldContinueAfterOmFailure,
+  toOmModelExecutionError,
+} from './error';
 import {
   applyExtractorHooks,
   buildThreadMetadataFromExtractedValues,
@@ -564,7 +569,9 @@ export class ReflectorRunner {
           idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.reflectionConfig.maxRetries,
         },
-      );
+      ).catch(error => {
+        throw toOmModelExecutionError('reflector-model', error, abortSignal);
+      });
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
@@ -660,8 +667,11 @@ export class ReflectorRunner {
     // when every ladder attempt was degenerate (parseReflectorOutput discards
     // degenerate text) or the model returned nothing — both are failures.
     if (observations.trim().length > 0 && parsed.observations.trim().length === 0) {
-      throw new Error(
-        `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`,
+      throw new OmModelExecutionError(
+        'reflector-model',
+        new Error(
+          `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`,
+        ),
       );
     }
 
@@ -1629,10 +1639,7 @@ export class ReflectorRunner {
       if (error instanceof ReflectionNotAppliedError) return;
       if (
         lifecycleError !== undefined ||
-        abortSignal?.aborted ||
-        this.reflectionConfig.failurePolicy !== 'continue' ||
-        !isOmModelExecutionError(error) ||
-        error.failureKind !== 'reflector-model'
+        !shouldContinueAfterOmFailure(this.reflectionConfig.failurePolicy, abortSignal)
       ) {
         throw error;
       }

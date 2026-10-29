@@ -50,6 +50,25 @@ export function isOmModelExecutionError(error: unknown): error is OmModelExecuti
   }
 }
 
+/**
+ * Tags a failed OM model call — provider error, timeout, an abort the run didn't
+ * request, or unusable output — so `failurePolicy` diagnostics can name it.
+ * Cancellation of the run itself passes through untouched.
+ */
+export function toOmModelExecutionError(failureKind: OmFailureKind, error: unknown, abortSignal?: AbortSignal) {
+  if (abortSignal?.aborted || isOmModelExecutionError(error)) return error;
+  return new OmModelExecutionError(failureKind, error);
+}
+
+/**
+ * `failurePolicy: 'continue'` keeps the turn running after any OM failure except
+ * cancellation of the run itself. The run's own abort signal is the only authority
+ * on cancellation; an abort error it didn't cause is a failure like any other.
+ */
+export function shouldContinueAfterOmFailure(failurePolicy: OmFailurePolicy, abortSignal?: AbortSignal): boolean {
+  return failurePolicy === 'continue' && !abortSignal?.aborted;
+}
+
 export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
   return {
     failurePolicy,

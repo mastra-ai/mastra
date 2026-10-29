@@ -6,7 +6,7 @@ import xxhash from 'xxhash-wasm';
 import type { Memory } from '../../..';
 import { getOMLockKey, runOMCommit } from '../commit-queue';
 import { omDebug, omError } from '../debug';
-import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
+import { formatOmError, getOmFailureMetadata, shouldContinueAfterOmFailure } from '../error';
 import {
   findLastCompletedObservationBoundary,
   getObservableMessages,
@@ -263,12 +263,8 @@ export abstract class ObservationStrategy {
       }
 
       omError('[OM] Observation failed', error);
-      if (
-        this.observationConfig.failurePolicy === 'continue' &&
-        isOmModelExecutionError(error) &&
-        error.failureKind === 'observer-model'
-      ) {
-        return { observed: false, error };
+      if (shouldContinueAfterOmFailure(this.observationConfig.failurePolicy, abortSignal)) {
+        return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
       }
       throw error;
     } finally {

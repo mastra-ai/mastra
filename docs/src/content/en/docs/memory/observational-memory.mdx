@@ -256,7 +256,7 @@ With `failurePolicy: 'continue'`, Mastra retries as configured, reports the fail
 
 A provider outage usually takes out both stages, so set the policy on both if you want the turn to survive one.
 
-This policy applies only to Observer and Reflector model and provider failures when observation or reflection runs synchronously: at `blockAfter`, when async buffering is disabled, and in resource-scoped observation. In those paths, persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It doesn't prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
+This policy applies when observation or reflection runs synchronously: at `blockAfter`, when async buffering is disabled, and in resource-scoped observation. Under `'continue'`, any failure in those paths lets the turn continue: provider and network errors, Observer output that stays degenerate after its retry, timeouts and aborts raised inside the Observer or Reflector call, and storage errors while saving observations. If Observational Memory can't load its record at the start of a turn, the turn runs without memory context and its messages are still saved. Only cancelling the turn itself, through its `abortSignal`, stops it. The policy doesn't prevent the underlying error, change `blockAfter`, or change attachment handling.
 
 Background (async buffered) observation and reflection failures never stop the turn, whatever the policy. They're reported as `om_buffering_failed`, and the failed input stays pending. If it keeps growing, it reaches `blockAfter`, where synchronous observation applies `failurePolicy`.
 

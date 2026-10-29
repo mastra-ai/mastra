@@ -17,6 +17,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
+import { shouldContinueAfterOmFailure } from './error';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
@@ -88,6 +89,9 @@ const GATEWAY_STATE_KEY = '__isGatewayModel';
 
 /** Step number OM last recovered from a context-overflow error, so each step retries at most once. */
 const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
+
+/** Set when loading memory failed under failurePolicy 'continue'; OM skips the rest of the turn. */
+const INPUT_FAILED_STATE_KEY = '__omInputFailed';
 
 /** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
 function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
@@ -282,6 +286,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         return messageList;
       }
 
+      // Loading memory failed earlier in this turn under failurePolicy 'continue': run the rest of it
+      // without OM. processOutputResult persists the turn's messages when no turn is live.
+      if (state[INPUT_FAILED_STATE_KEY]) return messageList;
+
       // ── Create turn on first step (or when state is reset) ──
       // The turn is stashed in customState so that the output processor instance
       // (which is a separate ObservationalMemoryProcessor) can retrieve it in
@@ -333,7 +341,18 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.sendStateSignal = args.sendStateSignal;
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
-        await this.turn.start(this.memory, runState);
+        try {
+          await this.turn.start(this.memory, runState);
+        } catch (error) {
+          if (!shouldContinueAfterOmFailure(this.engine.getObservationConfig().failurePolicy, abortSignal)) throw error;
+          console.warn(
+            `[Observational Memory] Could not load memory for thread ${threadId}; continuing this turn without it (failurePolicy: 'continue'): ${error instanceof Error ? error.message : String(error)}`,
+          );
+          this.turn = undefined;
+          state.__omTurn = undefined;
+          state[INPUT_FAILED_STATE_KEY] = true;
+          return messageList;
+        }
         if (stepNumber > 0) {
           // A background result may have landed in storage after the durable snapshot was saved.
           // Reconcile those response messages before the unread-part scan; the snapshot's part
@@ -353,8 +372,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
                 );
                 if (!previous || previous.toolInvocation.state !== 'result') return true;
                 const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
-                  | { status?: string }
-                  | undefined;
+                  { status?: string } | undefined;
                 const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
                 return (
                   previousTask?.status === 'running' &&
@@ -540,6 +558,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         }
         this.turn = undefined;
         state.__omTurn = undefined;
+        state[INPUT_FAILED_STATE_KEY] = undefined;
 
         if (!liveTurn) {
           // No live turn exists — this happens during a resumed stream where input processors
@@ -563,6 +582,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     if (!this.engine.getObservationConfig().observeOnContextOverflow) return;
     if (state[GATEWAY_STATE_KEY]) return;
+    if (state[INPUT_FAILED_STATE_KEY]) return;
     // One recovery per step: if the retry overflows again, observing more won't help.
     if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
     if (classifyProviderError(error) !== 'context_overflow') return;
