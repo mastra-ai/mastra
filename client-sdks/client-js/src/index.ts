@@ -40,6 +40,20 @@ export type {
   AgentControllerCommandAck,
   AgentControllerCommandRejection,
 } from './resources/agent-controller';
+export type {
+  KnowledgeImporterConnection,
+  KnowledgeImporterConnectionStatus,
+  KnowledgeImporterOptionField,
+  KnowledgeImporterOptionValue,
+  KnowledgeImporterRunSummary,
+  KnowledgeImporterSettings,
+  KnowledgeImporterSummary,
+  ListKnowledgeImporterConnectionsResponse,
+  ListKnowledgeImporterRunsResponse,
+  ListKnowledgeImportersResponse,
+  SaveKnowledgeImporterSettingsParams,
+  StartKnowledgeImporterRunResponse,
+} from './resources/knowledge-importers';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most
 // users interact via `observe` on the tool execution context.
