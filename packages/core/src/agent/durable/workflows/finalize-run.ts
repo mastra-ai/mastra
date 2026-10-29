@@ -244,6 +244,23 @@ export async function runDurableFinishSideEffects({
   const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
   await assertOwned();
 
+  // Save the turn to agent memory only where memory itself adds a MessageHistory processor, as the
+  // non-durable finish path does; a configured MessageHistory saves it in the output processors
+  // below. A worker that rebuilt the pipeline lacks call-time processors and resolves its own
+  // writer from what it rebuilt, so when the configured MessageHistory is gone, flush to agent
+  // memory rather than drop the turn. Runs started before historyWriter existed keep the earlier rule.
+  const configuredHistoryMissing =
+    durableState?.historyWriter === 'processor' && registryEntry?.historyWriter?.kind !== 'processor';
+  if (configuredHistoryMissing) {
+    effectiveLogger.warn(
+      '[DurableAgent] Configured MessageHistory is not available on this worker; saving the turn to agent memory',
+      { runId },
+    );
+  }
+  const persistHistory = durableState?.historyWriter
+    ? durableState.historyWriter === 'memory' || configuredHistoryMissing
+    : !durableState?.observationalMemory && !durableState?.memoryConfig?.readOnly;
+
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
@@ -300,9 +317,9 @@ export async function runDurableFinishSideEffects({
         };
       }
       effectiveLogger.warn('[DurableAgent] Error running output processors', { runId, error });
-      // Ordinary history can retry through the strict queue flush below. OM owns
-      // its final write and skips that flush, so its failure must propagate here.
-      if (durableState?.observationalMemory) throw error;
+      // The strict queue flush below retries memory-owned history. When it will not run (a
+      // configured MessageHistory or OM owns the write), the failure must propagate here.
+      if (!persistHistory) throw error;
     }
   }
 
@@ -327,14 +344,7 @@ export async function runDurableFinishSideEffects({
           })
       : undefined;
 
-  if (
-    saveQueueManager &&
-    memory &&
-    durableState?.threadId &&
-    durableState?.resourceId &&
-    !durableState.observationalMemory &&
-    !durableState.memoryConfig?.readOnly
-  ) {
+  if (saveQueueManager && memory && durableState?.threadId && durableState?.resourceId && persistHistory) {
     await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
     if (!durableState.threadExists) await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
     try {

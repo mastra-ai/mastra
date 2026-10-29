@@ -43,6 +43,7 @@ import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
+import type { HistoryWriter } from '../resolve-history-writer';
 import type { SaveQueueManager } from '../save-queue';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
@@ -140,6 +141,12 @@ export interface SerializableDurableState {
   savePerStep?: boolean;
   /** Whether observational memory is enabled (suppresses savePerStep) */
   observationalMemory?: boolean;
+  /**
+   * Which writer saves the turn at finish (see HistoryWriter). Only `memory` means the finish
+   * path flushes to agent memory itself. Absent on runs started before this field existed;
+   * those fall back to `observationalMemory`.
+   */
+  historyWriter?: HistoryWriter['kind'];
   /**
    * Whether the agent's memory is a fixed instance. Only then may the stored
    * transcript reference recalled messages instead of copying them: function or
@@ -803,6 +810,8 @@ export interface RunRegistryEntry {
    * replaced tools are kept (#25960).
    */
   requestTools?: Record<string, CoreTool>;
+  /** Where the run saves its turn as history, resolved once when the run starts. */
+  historyWriter?: HistoryWriter;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */

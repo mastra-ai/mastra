@@ -42,6 +42,8 @@ import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
+import { resolveHistoryWriter } from '../resolve-history-writer';
+import type { HistoryWriter } from '../resolve-history-writer';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
@@ -191,7 +193,11 @@ interface DurablePreparationAgent {
     model?: MastraLanguageModel;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
-  listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
+  listOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+  ): Promise<OutputProcessorOrWorkflow[]>;
+  listConfiguredOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   __resolveRunErrorProcessors(
     requestContext: RequestContext,
     overrides?: ErrorProcessorOrWorkflow[],
@@ -565,9 +571,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   inputProcessors = await typedAgent.listInputProcessors(requestContext);
   // Call-time outputProcessors replace constructor-level ones (parity with
   // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+  // Where the turn is saved as history depends on the configured processors, so resolve them
+  // once and reuse them below; a function-form resolver then runs only once.
+  const configuredOutputProcessors =
+    memory && threadId && resourceId
+      ? (execOptions?.outputProcessors ?? (await typedAgent.listConfiguredOutputProcessors(requestContext)))
+      : undefined;
   outputProcessors = execOptions?.outputProcessors
     ? execOptions.outputProcessors
-    : await typedAgent.listOutputProcessors(requestContext);
+    : await typedAgent.listOutputProcessors(requestContext, configuredOutputProcessors);
+  const historyWriter: HistoryWriter =
+    memory && configuredOutputProcessors
+      ? resolveHistoryWriter(memory, memoryConfig, configuredOutputProcessors)
+      : { kind: 'none' };
   // Error processors resolve after output processors. They resolve once:
   // call-time errorProcessors replace the resolved list, including the defaults,
   // and the request lane below reuses the result. `hasConfiguredErrorProcessors`
@@ -967,6 +983,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       threadExists,
       savePerStep,
       observationalMemory,
+      historyWriter: historyWriter.kind,
       fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,
@@ -1000,6 +1017,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     inputProcessors,
     llmRequestInputProcessors,
     outputProcessors,
+    historyWriter,
     errorProcessors,
     processorStates,
     agent: agent as unknown as Agent<any, any, any, any>,

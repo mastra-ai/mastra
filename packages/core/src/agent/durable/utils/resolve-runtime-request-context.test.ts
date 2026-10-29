@@ -142,6 +142,91 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
+  // The finish path compares the writer the run started with against the one this worker
+  // rebuilt, so the rebuild must resolve it from its own configured processors.
+  it.each([
+    { name: 'without the call-time MessageHistory', configured: [], kind: 'memory' },
+    {
+      name: 'with an agent-level MessageHistory',
+      configured: [{ id: 'message-history', persistMessages: vi.fn() }],
+      kind: 'processor',
+    },
+  ])('resolves the history writer on a worker $name', async ({ configured, kind }) => {
+    const runId = `history-writer-${kind}`;
+    const memory = { getMergedThreadConfig: () => ({ lastMessages: 10 }) };
+    const agent = {
+      ...makeAgent(),
+      getMemory: vi.fn().mockResolvedValue(memory),
+      listConfiguredOutputProcessors: vi.fn().mockResolvedValue(configured),
+      listOutputProcessors: vi.fn().mockResolvedValue([{ id: 'combined-workflow' }]),
+    };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+        rehydrateProcessors: true,
+      });
+
+      expect(globalRunRegistry.get(runId)?.historyWriter?.kind).toBe(kind);
+      expect(agent.listConfiguredOutputProcessors).toHaveBeenCalledTimes(1);
+      expect(agent.listOutputProcessors).toHaveBeenCalledWith(expect.anything(), configured);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
+  it("resolves a worker's output processors with the run's memory context", async () => {
+    const runId = 'rebuild-memory-context';
+    const memoryConfig = { lastMessages: false as const };
+    let seen: unknown;
+    const agent = {
+      ...makeAgent(),
+      getMemory: vi.fn().mockResolvedValue({ getMergedThreadConfig: () => memoryConfig }),
+      listConfiguredOutputProcessors: vi.fn().mockResolvedValue([]),
+      listOutputProcessors: vi.fn(async (requestContext: RequestContext) => {
+        seen = requestContext.get('MastraMemory');
+        return [];
+      }),
+    };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: { threadId: 'thread-1', resourceId: 'user-1', memoryConfig } as any,
+        rehydrateProcessors: true,
+      });
+
+      expect(seen).toEqual({ thread: { id: 'thread-1' }, resourceId: 'user-1', memoryConfig });
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
+  it('a durable agent passes the resolved configured processors through instead of resolving them again', async () => {
+    const { Agent } = await import('../../agent');
+    const { createDurableAgent } = await import('../create-durable-agent');
+    const resolver = vi.fn(() => []);
+    const agent = new Agent({
+      id: 'resolver-agent',
+      name: 'resolver-agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini',
+      outputProcessors: resolver,
+    });
+    const durable = createDurableAgent({ agent });
+    const requestContext = new RequestContext();
+
+    const configured = await durable.listConfiguredOutputProcessors(requestContext);
+    await durable.listOutputProcessors(requestContext, configured);
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['persistence-only', 'live-pipeline'] as const)(
     'keeps runtime resolution failures non-fatal for a %s rebuild',
     async registryState => {

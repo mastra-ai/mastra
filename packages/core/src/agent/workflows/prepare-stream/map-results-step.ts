@@ -8,22 +8,19 @@ import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../../lo
 import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
 import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
-import { normalizeMessageHistoryConfig } from '../../../memory/message-history-config';
-import { isObservationalMemoryEnabled } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { compactStopReasonContext } from '../../../observability/outcome-schema';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { OutputProcessorOrWorkflow } from '../../../processors';
-import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
-import type { MessageHistory } from '../../../processors/memory/message-history';
 import type { RequestContext } from '../../../request-context';
 import type { StepTripwireData, MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
 import type { MastraDBMessage, MessageList } from '../../message-list';
+import { resolveHistoryWriter } from '../../resolve-history-writer';
 import type { SaveQueueManager } from '../../save-queue';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
@@ -119,24 +116,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     const saveInputAfterTotalTimeout = async () => {
       if (!memory || !memoryData.thread?.id) return;
-      // Mirror the finish path: only a MessageHistory output processor saves the turn. An explicitly
-      // configured one always runs; memory adds one only when history is enabled and observational
-      // memory does not own the writes (see Memory.getOutputProcessors).
-      const effectiveConfig = memory.getMergedThreadConfig(memoryConfig);
-      if (effectiveConfig.readOnly) return;
-      const hasConfiguredProcessor = (id: string) =>
-        configuredOutputProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
-      const configuredHistory = configuredOutputProcessors.find(
-        p => !isProcessorWorkflow(p) && p.id === 'message-history',
-      ) as Partial<Pick<MessageHistory, 'persistMessages'>> | undefined;
-      const memoryAddsMessageHistory =
-        normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled &&
-        !hasConfiguredProcessor('observational-memory') &&
-        !isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
-      if (!configuredHistory && !memoryAddsMessageHistory) return;
-      // A custom processor using the message-history id replaces the built-in one, and the finish path
-      // only saves through it. Without persistMessages there is nothing equivalent to call here.
-      if (configuredHistory && typeof configuredHistory.persistMessages !== 'function') return;
+      // Mirror the finish path: save only where its MessageHistory output processor would.
+      const writer = resolveHistoryWriter(memory, memoryConfig, configuredOutputProcessors);
+      if (writer.kind === 'none') return;
       const input = filterMessagesForPersistence(messageList.get.input.db());
       if (input.length === 0) return;
 
@@ -144,8 +126,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
       const messages = messageList.transformMessagesForTranscript(input);
       // A configured MessageHistory may use its own storage and creates its own thread there; save
       // where the finish path would.
-      if (configuredHistory?.persistMessages) {
-        await configuredHistory.persistMessages({ messages, threadId: memoryData.thread.id, resourceId });
+      if (writer.kind === 'processor') {
+        await writer.processor.persistMessages({ messages, threadId: memoryData.thread.id, resourceId });
         return;
       }
       await ensureThreadExists();
