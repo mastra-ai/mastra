@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../trace-filters';
 import type { TraceDatePreset } from '../../types';
+import { DEFAULT_TRACES_FILTERS } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
 import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 import { FILTER_BAR_TIME_RANGE_FIELD_ID, FilterBar } from '@/ds/components/FilterBar';
@@ -103,6 +104,7 @@ export function TracesExplorerTimeRangeChip({
       onDateRangeChange={setDateRange}
       disabled={isLoading}
       presets={presets}
+      defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
       minDate={minDate}
       maxRangeMs={maxRangeMs}
     />

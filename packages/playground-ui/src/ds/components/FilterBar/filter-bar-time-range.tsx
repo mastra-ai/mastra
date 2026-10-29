@@ -1,11 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, XIcon } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
-import { FilterBarChip, editableSegmentClass } from './filter-bar-chip';
+import { FilterBarChip, editableSegmentClass, removeSegmentClass } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarItem } from './types';
 import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
-import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
+import type {
+  DateRangePreset,
+  DateTimeRangePickerProps,
+} from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
 import { cn } from '@/lib/utils';
 
 export const FILTER_BAR_TIME_RANGE_FIELD_ID = 'timeRange';
@@ -32,7 +35,10 @@ export const FILTER_BAR_TIME_RANGE_ITEM: FilterBarItem = {
   value: '',
 };
 
-export type FilterBarTimeRangeProps = Omit<DateTimeRangePickerProps, 'size' | 'renderTrigger'>;
+export type FilterBarTimeRangeProps = Omit<DateTimeRangePickerProps, 'size' | 'renderTrigger'> & {
+  /** Shows a × that switches back to this preset whenever another range is selected. */
+  defaultPreset?: DateRangePreset;
+};
 
 const isSegment = (target: EventTarget | null) =>
   target instanceof HTMLElement && target.hasAttribute('data-filter-bar-segment');
@@ -40,10 +46,11 @@ const isSegment = (target: EventTarget | null) =>
 /**
  * A filter bar's time range: calendar, range, chevron, the same control as a standalone
  * `DateTimeRangePicker`. Always present and non-removable, so it reads as the bar's scope
- * rather than as a `field · value` filter.
+ * rather than as a `field · value` filter. With `defaultPreset`, a trailing × resets the range to it.
  */
-export function FilterBarTimeRange(props: FilterBarTimeRangeProps) {
+export function FilterBarTimeRange({ defaultPreset, ...props }: FilterBarTimeRangeProps) {
   const ctx = useFilterBarContext();
+  const canReset = defaultPreset !== undefined && props.preset !== defaultPreset;
   return (
     <FilterBarChip item={FILTER_BAR_TIME_RANGE_ITEM} removable={false}>
       {/* The picker popup is portaled but bubbles React events through here — keep its
@@ -76,6 +83,21 @@ export function FilterBarTimeRange(props: FilterBarTimeRangeProps) {
           )}
         />
       </div>
+      {canReset && (
+        <button
+          type="button"
+          data-filter-bar-segment=""
+          tabIndex={-1}
+          ref={el => ctx.registerSegment(FILTER_BAR_TIME_RANGE_ITEM.id, 'remove', el)}
+          disabled={props.disabled}
+          aria-label="Reset time range"
+          title="Reset time range"
+          className={removeSegmentClass}
+          onClick={() => props.onPresetChange?.(defaultPreset)}
+        >
+          <XIcon className="size-[1.1em]" />
+        </button>
+      )}
     </FilterBarChip>
   );
 }

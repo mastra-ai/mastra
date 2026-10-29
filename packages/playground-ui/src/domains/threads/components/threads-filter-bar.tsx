@@ -1,3 +1,4 @@
+import { DEFAULT_TRACES_FILTERS } from '../../traces/components/traces-explorer/traces-explorer-actions';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
@@ -68,6 +69,7 @@ export function ThreadsFilterBar({
               onDateRangeChange={onDateRangeChange}
               disabled={disabled}
               presets={THREAD_TIME_RANGE_PRESETS}
+              defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
             />
           ) : (
             <FilterBar.Chip item={item} />

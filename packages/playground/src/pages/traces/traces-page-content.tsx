@@ -14,13 +14,12 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
   const toolbar = (
     <ActionRow>
       <ActionRow.Start>
+        <TracesExplorer.ColumnsMenu />
         <TracesExplorer.FilterBar />
       </ActionRow.Start>
-      <ActionRow.End>
-        <TracesExplorer.ColumnsMenu />
-      </ActionRow.End>
     </ActionRow>
   );
+  const chart = <TracesExplorer.Histogram />;
   const content = (
     <>
       <TracesExplorer.List />
@@ -36,7 +35,16 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
 
   // Scoped instances render inside another page (e.g. the agent Traces tab) whose header has no
   // breadcrumbs or view switch; /traces gets both from the shared observability layout.
-  if (isScoped) return <TracesExplorer.Layout toolbar={toolbar}>{content}</TracesExplorer.Layout>;
+  if (isScoped)
+    return (
+      <TracesExplorer.Layout toolbar={toolbar} chart={chart}>
+        {content}
+      </TracesExplorer.Layout>
+    );
 
-  return <TracesExplorer.Body toolbar={toolbar}>{content}</TracesExplorer.Body>;
+  return (
+    <TracesExplorer.Body toolbar={toolbar} chart={chart}>
+      {content}
+    </TracesExplorer.Body>
+  );
 });
