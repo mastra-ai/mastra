@@ -2920,6 +2920,7 @@ describe('PlatformSandbox', () => {
         environmentId: 'env_123',
         idleTimeoutMinutes: 30,
         networkIsolation: 'PRIVATE',
+        publicPorts: true,
         env: { BASE: '1' },
         fetch: fetchMock,
       });
@@ -2937,8 +2938,30 @@ describe('PlatformSandbox', () => {
         environmentId: 'env_123',
         idleTimeoutMinutes: 15,
         networkIsolation: 'PRIVATE',
+        publicPorts: true,
         env: { GITHUB_TOKEN: 'ghs_abc' },
       });
+    });
+
+    it.each([
+      [undefined, undefined],
+      [true, true],
+      [false, false],
+    ])('sends publicPorts=%s when creating a sandbox', async (publicPorts, expected) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxProvider: 'e2b',
+        ...(publicPorts !== undefined && { publicPorts }),
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      expect(body.publicPorts).toBe(expected);
     });
 
     it('inherits session/thread correlation ids so clone requests carry the headers', async () => {
