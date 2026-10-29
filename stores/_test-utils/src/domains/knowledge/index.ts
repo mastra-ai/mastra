@@ -972,3 +972,5 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     });
   });
 }
+
+export { createKnowledgePageStoreTests } from './pages';

@@ -2,6 +2,7 @@ import { MockStore } from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { createTestSuite } from './factory';
 import { createMastraStorageCompositionTests } from './composite-tests';
+import { createKnowledgePageStoreTests } from './domains/knowledge';
 import { createObservabilityVNextTests } from './domains/observability-vnext';
 
 // Test InMemoryStore (MockStore)
@@ -23,3 +24,6 @@ createObservabilityVNextTests({
     return (await store.getStore('observability')) as ObservabilityStorage;
   },
 });
+
+// The shared Knowledge schema-4 page-store contract against the in-memory reference store.
+createKnowledgePageStoreTests(async () => (await new MockStore().getStore('knowledge'))!);

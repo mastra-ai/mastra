@@ -243,7 +243,7 @@ export class KnowledgeMoveTooLargeError extends Error {
 /** @experimental */
 export class KnowledgePageDepthError extends Error {
   constructor(pageId: string) {
-    super(`Page ${pageId} would sit more than ${MAX_KNOWLEDGE_PAGE_DEPTH} levels below its root scope.`);
+    super(`Page ${pageId} would sit more than ${MAX_KNOWLEDGE_PAGE_DEPTH} levels below its home scope.`);
     this.name = 'KnowledgePageDepthError';
   }
 }
