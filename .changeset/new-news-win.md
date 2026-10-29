@@ -6,7 +6,7 @@ Toolbar and filter bar controls now share one look: the same paddings, icon gaps
 
 **Time range.** A filter bar's time range is now the `DateTimeRangePicker` itself, so it looks and behaves the same on every page: a calendar icon, the range and a chevron, with no separate "Time" label. Pass `defaultPreset` to show a × that resets a custom range; it replaces the chevron while a custom range is applied.
 
-Added `FilterBar.TimeRange` with `FILTER_BAR_TIME_RANGE_FIELD`, `FILTER_BAR_TIME_RANGE_ITEM` and `FILTER_BAR_TIME_RANGE_FIELD_ID`. The `TRACE_TIME_RANGE_*` names and `TraceTimeRangeChip` are deprecated aliases and keep working.
+Added `FilterBar.TimeRange` with `FILTER_BAR_TIME_RANGE_FIELD`, `FILTER_BAR_TIME_RANGE_ITEM` and `FILTER_BAR_TIME_RANGE_FIELD_ID`. They replace `TraceTimeRangeChip` and the `TRACE_TIME_RANGE_*` names from `domains/traces/components/trace-time-range-chip`, which are removed.
 
 ```tsx
 import {

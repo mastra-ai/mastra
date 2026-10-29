@@ -13,12 +13,6 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import {
-  TRACE_TIME_RANGE_FIELD,
-  TRACE_TIME_RANGE_FIELD_ID,
-  TRACE_TIME_RANGE_ITEM,
-  TraceTimeRangeChip,
-} from '@/domains/traces/components/trace-time-range-chip';
 import { traceFilterFieldColor } from '@/domains/traces/trace-filters';
 import { ActionRow } from '@/ds/components/ActionRow';
 import { Button, TriggerChevron } from '@/ds/components/Button/Button';
@@ -28,7 +22,12 @@ import { ComboboxContent, ComboboxItem, ComboboxList, ComboboxRoot, ComboboxTrig
 import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker';
 import type { DateRangePreset } from '@/ds/components/DateTimeRangePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
-import { FilterBar } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+  FilterBar,
+} from '@/ds/components/FilterBar';
 import { DEFAULT_FILTER_OPERATORS } from '@/ds/components/FilterBar/default-operators';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
 import { ListSearch } from '@/ds/components/ListSearch';
@@ -39,7 +38,7 @@ import { Txt } from '@/ds/components/Txt';
 /*
  * Every page toolbar in Studio and Platform, rebuilt from the same components and props as
  * the page (file:line under each). A review page, not documentation: run it on two branches to
- * compare. It only uses APIs that exist on both sides, so the same file renders on `main`.
+ * compare.
  */
 
 const meta: Meta = {
@@ -49,7 +48,7 @@ const meta: Meta = {
 export default meta;
 
 const FIELDS: FilterBarField[] = [
-  TRACE_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD,
   {
     id: 'environment',
     label: 'Environment',
@@ -84,28 +83,28 @@ const PROJECT: FilterBarItem = { id: 'project', fieldId: 'project', operatorId: 
 const CUSTOM_FROM = new Date('2026-10-27T00:00:00');
 const CUSTOM_TO = new Date('2026-10-29T00:00:00');
 
-function TimeChip({ initial, withReset }: { initial: DateRangePreset; withReset?: boolean }) {
+function TimeRange({ initial, withReset }: { initial: DateRangePreset; withReset?: boolean }) {
   const [preset, setPreset] = useState<DateRangePreset>(initial);
   return (
-    <TraceTimeRangeChip
+    <FilterBar.TimeRange
       preset={preset}
       onPresetChange={setPreset}
       dateFrom={preset === 'custom' ? CUSTOM_FROM : undefined}
       dateTo={preset === 'custom' ? CUSTOM_TO : undefined}
-      {...(withReset ? { defaultPreset: 'last-7d' as const } : {})}
+      defaultPreset={withReset ? 'last-7d' : undefined}
     />
   );
 }
 
-/** A FilterBar whose time item renders the chip; everything else is a regular chip. */
+/** A FilterBar whose time item renders the time range; everything else is a regular chip. */
 function Bar({
   items: initialItems,
-  timeChip,
+  timeRange,
   placeholder,
   leading,
 }: {
   items: FilterBarItem[];
-  timeChip?: ReactNode;
+  timeRange?: ReactNode;
   placeholder: string;
   leading?: ReactNode;
 }) {
@@ -119,13 +118,13 @@ function Bar({
       className="min-w-64 flex-1"
     >
       {leading}
-      <FilterBar.Chips renderChip={item => (isTime(item) ? timeChip : <FilterBar.Chip item={item} />)} />
+      <FilterBar.Chips renderChip={item => (isTime(item) ? timeRange : <FilterBar.Chip item={item} />)} />
       <FilterBar.Input placeholder={placeholder} />
     </FilterBar>
   );
 }
 
-const isTime = (item: FilterBarItem) => item.fieldId === TRACE_TIME_RANGE_FIELD_ID;
+const isTime = (item: FilterBarItem) => item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID;
 
 function ColumnsMenu() {
   return (
@@ -231,8 +230,8 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <Bar
-                items={[TRACE_TIME_RANGE_ITEM, ENVIRONMENT, PRIMITIVE]}
-                timeChip={<TimeChip initial="custom" withReset />}
+                items={[FILTER_BAR_TIME_RANGE_ITEM, ENVIRONMENT, PRIMITIVE]}
+                timeRange={<TimeRange initial="custom" withReset />}
                 placeholder="Filter traces…"
               />
             </ActionRow.Start>
@@ -245,8 +244,8 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <Bar
-                items={[TRACE_TIME_RANGE_ITEM]}
-                timeChip={<TimeChip initial="last-7d" withReset />}
+                items={[FILTER_BAR_TIME_RANGE_ITEM]}
+                timeRange={<TimeRange initial="last-7d" withReset />}
                 placeholder="Filter traces…"
               />
             </ActionRow.Start>
@@ -259,8 +258,8 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <Bar
-                items={[TRACE_TIME_RANGE_ITEM]}
-                timeChip={<TimeChip initial="last-24h" />}
+                items={[FILTER_BAR_TIME_RANGE_ITEM]}
+                timeRange={<TimeRange initial="last-24h" />}
                 placeholder="Filter metrics…"
               />
             </ActionRow.Start>
@@ -334,8 +333,8 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start className="min-w-0 flex-1">
               <Bar
-                items={[TRACE_TIME_RANGE_ITEM]}
-                timeChip={<TimeChip initial="last-7d" />}
+                items={[FILTER_BAR_TIME_RANGE_ITEM]}
+                timeRange={<TimeRange initial="last-7d" />}
                 placeholder="Filter…"
                 leading={
                   <div className="flex items-center gap-1.5">
@@ -357,8 +356,8 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <Bar
-                items={[TRACE_TIME_RANGE_ITEM, PROJECT]}
-                timeChip={<TimeChip initial="last-24h" />}
+                items={[FILTER_BAR_TIME_RANGE_ITEM, PROJECT]}
+                timeRange={<TimeRange initial="last-24h" />}
                 placeholder="Filter logs…"
               />
             </ActionRow.Start>
@@ -373,8 +372,8 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <Bar
-                items={[TRACE_TIME_RANGE_ITEM, PROJECT]}
-                timeChip={<TimeChip initial="last-24h" withReset />}
+                items={[FILTER_BAR_TIME_RANGE_ITEM, PROJECT]}
+                timeRange={<TimeRange initial="last-24h" withReset />}
                 placeholder="Filter traces…"
               />
             </ActionRow.Start>
@@ -387,8 +386,8 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <Bar
-                items={[TRACE_TIME_RANGE_ITEM]}
-                timeChip={<TimeChip initial="last-24h" />}
+                items={[FILTER_BAR_TIME_RANGE_ITEM]}
+                timeRange={<TimeRange initial="last-24h" />}
                 placeholder="Filter requests"
               />
             </ActionRow.Start>
