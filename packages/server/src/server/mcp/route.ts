@@ -16,13 +16,45 @@ import {
 // Signs `input_required` continuation state; per process, like MCPServer's own default, without its per-instance warning.
 const requestStateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
 
+const MISSING_MCP_MESSAGE = 'Built-in MCP server needs @mastra/mcp: npm install @mastra/mcp';
+const reportedMissingMCP = new WeakSet<Mastra>();
+
+/** Whether `error` (or an error it wraps) says `@mastra/mcp` itself can't be resolved, not a module inside it. */
+function isMissingMCPPackage(error: unknown): boolean {
+  for (let current = error; current instanceof Error; current = current.cause) {
+    const code = (current as { code?: unknown }).code;
+    if (
+      (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+      /Cannot find (package|module) '@mastra\/mcp'/.test(current.message)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
- * The only place `@mastra/mcp` is loaded, so apps that never serve the built-in MCP endpoint never load the MCP SDK.
+ * The only place `@mastra/mcp` (an optional peer dependency) is loaded, so apps that never serve the built-in MCP
+ * endpoint never load the MCP SDK. When it isn't installed the endpoint answers 501.
  * The catalogue is loaded here as well: it imports the server adapter, which imports this route.
  */
-async function loadBuiltinMCP() {
-  const [{ MCPServer }, { buildBuiltinMCPTools }] = await Promise.all([import('@mastra/mcp'), import('./catalogue')]);
-  return { MCPServer, buildBuiltinMCPTools };
+async function loadBuiltinMCP(mastra: Mastra) {
+  let mcp: typeof import('@mastra/mcp');
+  try {
+    mcp = await import('@mastra/mcp');
+  } catch (error) {
+    if (!isMissingMCPPackage(error)) throw error;
+    if (!reportedMissingMCP.has(mastra)) {
+      reportedMissingMCP.add(mastra);
+      mastra.getLogger()?.error(MISSING_MCP_MESSAGE);
+    }
+    throw new HTTPException(501, {
+      message: MISSING_MCP_MESSAGE,
+      res: Response.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: MISSING_MCP_MESSAGE } }),
+    });
+  }
+  const { buildBuiltinMCPTools } = await import('./catalogue');
+  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools };
 }
 
 /** Dispatched routes see only the bearer credential, never cookies or the Studio client-type header. */
@@ -61,7 +93,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       throw new HTTPException(404, { message: 'Not Found' });
     }
     const config = resolveBuiltinMCPConfig(mastra, request);
-    const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP();
+    const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP(mastra);
     const tools = await buildBuiltinMCPTools(
       {
         mastra,

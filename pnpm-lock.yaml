@@ -6480,9 +6480,6 @@ importers:
 
   packages/server:
     dependencies:
-      '@mastra/mcp':
-        specifier: workspace:^
-        version: link:../mcp
       hono:
         specifier: ^4.13.13
         version: 4.13.16
@@ -6517,6 +6514,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
