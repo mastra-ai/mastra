@@ -59,6 +59,7 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
   ThreadHistoryChunk,
+  ThreadRunStatusChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -76,7 +77,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
-import type { AgentScopeEntry } from './scopes';
+import type { AgentScopeEntry, AgentScopesConfig } from './scopes';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
@@ -433,13 +434,23 @@ export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOption
    * chunks are always emitted.
    */
   withInitialHistory?: boolean | { perPage?: number };
+  /** Emit ordered thread-run-status chunks, including retained outcomes. Defaults to false. */
+  withRunStatus?: boolean;
   /** Request context used to resolve the agent's memory when loading initial history. */
   requestContext?: RequestContext;
 }
 
-export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+export interface AgentThreadSubscription<
+  OUTPUT = unknown,
+  WITH_HISTORY extends boolean = false,
+  WITH_RUN_STATUS extends boolean = false,
+> {
   /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
-  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
+  stream: AsyncIterable<
+    | AgentChunkType<OUTPUT>
+    | (WITH_RUN_STATUS extends true ? ThreadRunStatusChunk : never)
+    | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)
+  >;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
@@ -846,10 +857,13 @@ interface AgentConfigBase<
    * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
    * A plain address is read-only; `{ scope: 'team:core', access: 'write' }` lets the run write
    * there too. `resource:` and `thread:` scopes are always writable.
-   * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
-   * A resolver function runs once per call with the request context.
+   * A run's incoming scopes are the call's `scopes`, `defaultOptions.scopes` and the reserved
+   * `mastra__scopes` request-context key. A static list is added to them. A function receives
+   * them as `scopes` (with the request context) and returns the run's final set, so it can narrow
+   * or replace them; it must keep any `resource:`/`thread:` scope it was given. It runs once per
+   * call and is not called on resume.
    */
-  scopes?: DynamicArgument<AgentScopeEntry[], TRequestContext>;
+  scopes?: AgentScopesConfig<TRequestContext>;
   /**
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *

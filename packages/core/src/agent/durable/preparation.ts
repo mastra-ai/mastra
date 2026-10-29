@@ -42,7 +42,7 @@ import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopeEntry } from '../scopes';
-import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
+import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
@@ -161,7 +161,7 @@ interface DurablePreparationAgent {
   maxRetries?: number;
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
-  getScopes?(opts: { requestContext: RequestContext }): Promise<AgentScopeEntry[] | undefined>;
+  getScopes?(opts: { requestContext: RequestContext; scopes?: AgentScopeEntry[] }): Promise<AgentScopeEntry[]>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   __getModelAndModelList(opts: { requestContext: RequestContext; model?: unknown }): Promise<{
     model: MastraLanguageModel;
@@ -376,13 +376,16 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2b. Resolve agent scopes for callers that did not (DurableAgent resolves its own).
   // Durable runs read identity from `memory` only, so nothing changes without scopes.
   if (!scopesResolved) {
-    const configuredScopes = (await typedAgent.getScopes?.({ requestContext })) ?? [];
     const defaultScopes = (await loadDefaultOptions()).scopes ?? [];
-    const agentScopes = [...configuredScopes, ...defaultScopes];
+    const incoming = incomingAgentScopes({ requestContext, callScopes, defaultScopes, mastra });
+    const agentScopes = typedAgent.getScopes
+      ? await typedAgent.getScopes({ requestContext, scopes: incoming })
+      : incoming;
     if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
       const resolved = resolveAgentScopes({
         requestContext,
         agentScopes,
+        incomingScopes: incoming,
         callScopes,
         memory: execOptions.memory,
         mastra,

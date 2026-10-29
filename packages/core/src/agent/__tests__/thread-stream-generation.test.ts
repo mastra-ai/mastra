@@ -36,7 +36,9 @@ const text = (t: string) => ({ type: 'text-delta', payload: { id: 't', text: t }
 const start = { type: 'start', payload: {} };
 const finish = { type: 'finish', payload: {} };
 const summarize = (parts: any[]) =>
-  parts.map(part => (part.type === 'text-delta' ? `text:${part.payload.text}` : part.type));
+  parts
+    .filter(part => part.type !== 'thread-run-status')
+    .map(part => (part.type === 'text-delta' ? `text:${part.payload.text}` : part.type));
 
 /** Processes on one bus: two that drive the run in turn, and observers whose subscribers read the thread. */
 async function setup({ read: startReading = true } = {}) {

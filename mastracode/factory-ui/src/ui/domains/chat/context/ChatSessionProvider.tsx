@@ -142,7 +142,7 @@ export function ChatSessionConfigProvider({
           if (sessionQuery.isError) void sessionQuery.refetch();
         }
       : undefined,
-    sessionThreadId: storedSession?.sessionId,
+    sessionThreadId: storedSession?.sessionId ?? undefined,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
     draftSessionId: isUserDraft ? draftSessionId : undefined,
     factorySessionState:
