@@ -17,7 +17,7 @@ import {
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
-import { quoteIdent } from '../../db/utils';
+import { getColumnDef, getSpannerParamType, quoteIdent } from '../../db/utils';
 import { transformFromSpannerRow } from '../utils';
 
 function buildStatusCondition(
@@ -244,19 +244,31 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
     if ('ownerId' in update) data.ownerId = update.ownerId ?? null;
     if ('leaseExpiresAt' in update) data.leaseExpiresAt = update.leaseExpiresAt ?? null;
     if (Object.keys(data).length === 0) return false;
-    const setClauses = Object.keys(data).map(field => `${quoteIdent(field, 'column name')} = @${field}`);
-    const params: Record<string, any> = { ...data, id: taskId };
+    const params: Record<string, any> = { id: taskId };
+    const types: Record<string, any> = {};
+    const bind = (name: string, column: string, value: unknown) => {
+      const prepared = this.db.prepareValue(value, column, TABLE_BACKGROUND_TASKS);
+      params[name] = prepared;
+      const colType = getColumnDef(TABLE_BACKGROUND_TASKS, column)?.type;
+      if (prepared === null || colType === 'jsonb' || colType === 'timestamp') {
+        types[name] = getSpannerParamType(colType);
+      }
+    };
+    const setClauses = Object.entries(data).map(([field, value]) => {
+      bind(field, field, value);
+      return `${quoteIdent(field, 'column name')} = @${field}`;
+    });
     const predicates: string[] = [];
     if (options?.expectedStatus) {
       predicates.push('status = @expectedStatus');
-      params.expectedStatus = options.expectedStatus;
+      bind('expectedStatus', 'status', options.expectedStatus);
     }
     if (options?.expectedOwnerId !== undefined) {
       if (options.expectedOwnerId === null) {
         predicates.push('ownerId IS NULL');
       } else {
         predicates.push('ownerId = @expectedOwnerId');
-        params.expectedOwnerId = options.expectedOwnerId;
+        bind('expectedOwnerId', 'ownerId', options.expectedOwnerId);
       }
     }
     if (options?.expectedLeaseExpiresAt !== undefined) {
@@ -264,13 +276,15 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
         predicates.push('leaseExpiresAt IS NULL');
       } else {
         predicates.push('leaseExpiresAt = @expectedLeaseExpiresAt');
-        params.expectedLeaseExpiresAt = options.expectedLeaseExpiresAt;
+        bind('expectedLeaseExpiresAt', 'leaseExpiresAt', options.expectedLeaseExpiresAt);
       }
     }
     const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
-    const [rowCount] = await this.database.runUpdate({
+    // Spanner DML must run inside a read-write transaction; Database has no runUpdate.
+    const rowCount = await this.db.runDml({
       sql: `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE id = @id${predicateSql}`,
       params,
+      types,
     });
     return rowCount > 0;
   }

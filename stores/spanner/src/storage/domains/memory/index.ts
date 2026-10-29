@@ -58,7 +58,7 @@ function buildSpannerMessageMetadataFilter(metadataFilter: StorageMetadataFilter
     const typeExpr = `JSON_TYPE(${queryExpr})`;
 
     if (value === null) {
-      clauses.push(`${queryExpr} = 'null'`);
+      clauses.push(`${typeExpr} = 'null'`);
       return;
     }
 

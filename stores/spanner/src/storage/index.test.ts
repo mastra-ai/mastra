@@ -2572,7 +2572,7 @@ if (ENABLE_TESTS) {
         it('is a no-op when no fields are provided', async () => {
           const task = createSampleTask();
           await backgroundTasks.createTask(task);
-          await expect(backgroundTasks.updateTask(task.id, {})).resolves.toBeUndefined();
+          await expect(backgroundTasks.updateTask(task.id, {})).resolves.toBe(false);
         });
       });
 

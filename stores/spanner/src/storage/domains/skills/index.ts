@@ -25,6 +25,7 @@ import type {
   ListSkillVersionsOutput,
   SkillVersion,
 } from '@mastra/core/storage/domains/skills';
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
 import { quoteIdent } from '../../db/utils';
@@ -34,6 +35,21 @@ import { transformFromSpannerRow } from '../utils';
  * Spanner-backed storage for skills and their immutable versions.
  * Mirrors the thin-record + versions pattern used by agents/prompt-blocks/scorer-definitions.
  */
+const SNAPSHOT_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'license',
+  'compatibility',
+  'source',
+  'references',
+  'scripts',
+  'assets',
+  'files',
+  'metadata',
+  'tree',
+] as const;
+
 export class SkillsSpanner extends SkillsStorage {
   private database: Database;
   private db: SpannerDB;
@@ -56,6 +72,11 @@ export class SkillsSpanner extends SkillsStorage {
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_SKILLS, schema: SKILLS_SCHEMA });
     await this.db.createTable({ tableName: TABLE_SKILL_VERSIONS, schema: SKILL_VERSIONS_SCHEMA });
+    await this.db.alterTable({
+      tableName: TABLE_SKILL_VERSIONS,
+      schema: SKILL_VERSIONS_SCHEMA,
+      ifNotExists: ['files'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
     // Sweep any orphaned drafts left behind by previous partial create() calls.
@@ -166,6 +187,7 @@ export class SkillsSpanner extends SkillsStorage {
       references: transformed.references ?? undefined,
       scripts: transformed.scripts ?? undefined,
       assets: transformed.assets ?? undefined,
+      files: transformed.files ?? undefined,
       metadata: transformed.metadata ?? undefined,
       tree: transformed.tree ?? undefined,
       changedFields: transformed.changedFields ?? undefined,
@@ -244,6 +266,7 @@ export class SkillsSpanner extends SkillsStorage {
                 references: (snapshot as any).references ?? null,
                 scripts: (snapshot as any).scripts ?? null,
                 assets: (snapshot as any).assets ?? null,
+                files: (snapshot as any).files ?? null,
                 metadata: (snapshot as any).metadata ?? null,
                 tree: (snapshot as any).tree ?? null,
                 changedFields: Object.keys(snapshot),
@@ -306,8 +329,51 @@ export class SkillsSpanner extends SkillsStorage {
         });
       }
 
-      // Only thin-record fields land on the entity row; content updates create
-      // a new version through the server's auto-versioning layer.
+      // Snapshot fields never land on the entity row; a real change to any of
+      // them is written as a new immutable version.
+      const configFields: Record<string, unknown> = {};
+      for (const field of SNAPSHOT_FIELDS) {
+        const value = (updates as Record<string, unknown>)[field];
+        if (value !== undefined) configFields[field] = value;
+      }
+      if (Object.keys(configFields).length > 0) {
+        const latestVersion = await this.getLatestVersion(id);
+        if (!latestVersion) {
+          throw new MastraError({
+            id: createStorageErrorId('SPANNER', 'UPDATE_SKILL', 'NO_VERSIONS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: `No versions found for skill ${id}`,
+            details: { skillId: id },
+          });
+        }
+        const {
+          id: _versionId,
+          skillId: _skillId,
+          versionNumber: _versionNumber,
+          changedFields: _changedFields,
+          changeMessage: _changeMessage,
+          createdAt: _createdAt,
+          ...latestConfig
+        } = latestVersion;
+        const changedFields = SNAPSHOT_FIELDS.filter(
+          field =>
+            field in configFields &&
+            !skillSnapshotFieldValuesEqual(configFields[field], latestConfig[field as keyof typeof latestConfig]),
+        );
+        if (changedFields.length > 0) {
+          await this.createVersion({
+            id: crypto.randomUUID(),
+            skillId: id,
+            versionNumber: latestVersion.versionNumber + 1,
+            ...latestConfig,
+            ...configFields,
+            changedFields: [...changedFields],
+            changeMessage: `Updated ${changedFields.join(', ')}`,
+          } as CreateSkillVersionInput);
+        }
+      }
+
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (updates.authorId !== undefined) updateData.authorId = updates.authorId;
       if ((updates as any).visibility !== undefined) updateData.visibility = (updates as any).visibility;
@@ -519,6 +585,7 @@ export class SkillsSpanner extends SkillsStorage {
           references: input.references ?? null,
           scripts: input.scripts ?? null,
           assets: input.assets ?? null,
+          files: input.files ?? null,
           metadata: input.metadata ?? null,
           tree: input.tree ?? null,
           changedFields: input.changedFields ?? null,
