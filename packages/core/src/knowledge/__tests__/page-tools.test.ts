@@ -7,9 +7,9 @@ import { InMemoryStore } from '../../storage/mock';
 import { validateToolInput } from '../../tools/validation';
 import { KnowledgeDeclarationError, knowledgeMemoryScopes, knowledgeRoleAtLeast } from '../declarations';
 import type { KnowledgeScopeDeclarations } from '../declarations';
+import { KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
 import { buildKnowledgePageTools } from '../page-tools';
 import { KnowledgeScopeRuntime } from '../scope-runtime';
-import { KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
 
 /** The §10 reference setup of the access spec. */
 const scopes: KnowledgeScopeDeclarations = {
