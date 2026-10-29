@@ -653,6 +653,34 @@ describe.each([
       expect((await call('run_hang', {}, { user: 'bob' })).result).toMatchObject({ resultType: 'task' });
     });
 
+    it.skipIf(backgroundTasks)(
+      'counts finished workflow and agent tasks against the retained cap, without starting a run past it',
+      async () => {
+        const { workflows } = await start({
+          workflows: { doubler: 'always' },
+          agents: { researcher: 'always' },
+          maxRetainedTasksPerClient: 2,
+        });
+        const tasks = await requester();
+        const run = (await call('run_doubler', { n: 2 })).result;
+        const ask = (await call('ask_researcher', { message: 'tides?' })).result;
+        await waitFor(tasks, run.taskId, 'completed');
+        await waitFor(tasks, ask.taskId, 'completed');
+
+        const retainedError = 'Too many recent tasks for this client (limit 2). Try again once older tasks expire.';
+        for (const [name, args] of [
+          ['run_doubler', { n: 3 }],
+          ['ask_researcher', { message: 'tides?' }],
+        ] as const) {
+          expect((await call(name, args)).result).toMatchObject({
+            isError: true,
+            content: [{ type: 'text', text: retainedError }],
+          });
+        }
+        expect((await workflows.doubler.listWorkflowRuns()).total).toBe(1);
+      },
+    );
+
     it("answers an 'auto' run synchronously when it outlives its window at the cap, letting it finish", async () => {
       const { workflows } = await start({
         workflows: { hang: 'always', report: { mode: 'auto', syncWindowMs: 50 } },

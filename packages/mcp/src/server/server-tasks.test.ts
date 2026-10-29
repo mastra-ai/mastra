@@ -566,6 +566,67 @@ describe.each([
     });
   });
 
+  // Only the in-memory store holds finished results in process memory; Mastra storage keeps them
+  // in the database and ignores the retained caps.
+  describe.skipIf(onMastra)('retained task caps', () => {
+    const retainedError = 'Too many recent tasks for this client (limit 2). Try again once older tasks expire.';
+
+    async function finish(name: string, user = 'alice') {
+      const { result } = await call(name, {}, { user });
+      expect(result).toMatchObject({ resultType: 'task' });
+      await waitFor(await requester(user), result.taskId, 'completed');
+      return result.taskId as string;
+    }
+
+    it('refuses a task once a client holds its retained cap of finished tasks, leaving other clients alone', async () => {
+      const { probe } = await start({ tools: { quick: 'always' }, maxRetainedTasksPerClient: 2 });
+      const first = await finish('quick');
+      await finish('quick');
+      const runs = probe.runs.length;
+
+      const refused = (await call('quick')).result;
+      expect(refused).toMatchObject({ isError: true, content: [{ type: 'text', text: retainedError }] });
+      expect(refused.resultType).not.toBe('task');
+      expect(probe.runs).toHaveLength(runs);
+      // Admitted results stay readable.
+      expect(await (await requester()).get(first)).toMatchObject({ status: 'completed' });
+
+      await finish('quick', 'bob');
+    });
+
+    it('refuses a task past the server-wide retained cap for every client', async () => {
+      await start({ tools: { quick: 'always' }, maxRetainedTasks: 2 });
+      await finish('quick', 'alice');
+      await finish('quick', 'bob');
+      expect((await call('quick', {}, { user: 'carol' })).result).toMatchObject({
+        isError: true,
+        content: [{ type: 'text', text: 'Too many recent tasks on this server (limit 2). Try again later.' }],
+      });
+    });
+
+    it("answers an 'auto' tool synchronously when it outlives its window at the retained cap", async () => {
+      await start({
+        tools: { quick: 'always', slow: { mode: 'auto', syncWindowMs: 50 } },
+        maxRetainedTasksPerClient: 2,
+      });
+      await finish('quick');
+      await finish('quick');
+      const answered = (await call('slow')).result;
+      expect(answered).toMatchObject({ content: [{ type: 'text', text: 'slow done' }] });
+      expect(answered.isError).toBeFalsy();
+      expect(answered.resultType).not.toBe('task');
+    });
+  });
+
+  it.runIf(onMastra)('keeps creating tasks past the retained caps in Mastra storage', async () => {
+    await start({ tools: { quick: 'always' }, maxRetainedTasksPerClient: 1, maxRetainedTasks: 1 });
+    for (let i = 0; i < 3; i++) {
+      const { result } = await call('quick');
+      expect(result).toMatchObject({ resultType: 'task' });
+      await waitFor(await requester(), result.taskId, 'completed');
+    }
+  });
+
   it('rejects task configs it cannot serve at construction', () => {
     const tools = makeTools({ runs: [], aborted: [], authInfos: [], contexts: [], started: [] });
     const make = (tasks: unknown) => () =>
@@ -584,7 +645,18 @@ describe.each([
     for (const bad of [0, -1, 1.5, Number.NaN]) {
       expect(make({ tools: { echo: 'always' }, maxOpenTasksPerClient: bad })).toThrow(/maxOpenTasksPerClient/);
       expect(make({ tools: { echo: 'always' }, maxOpenTasks: bad })).toThrow(/maxOpenTasks /);
+      expect(make({ tools: { echo: 'always' }, maxRetainedTasksPerClient: bad })).toThrow(/maxRetainedTasksPerClient/);
+      expect(make({ tools: { echo: 'always' }, maxRetainedTasks: bad })).toThrow(/maxRetainedTasks /);
     }
+    // Every open task is also retained: setting both with retained below open is refused, and an
+    // unset cap follows the one that was set (the retained tests above rely on the lowered open cap).
+    expect(make({ tools: { echo: 'always' }, maxOpenTasksPerClient: 5, maxRetainedTasksPerClient: 4 })).toThrow(
+      /tasks.maxRetainedTasksPerClient \(4\) must be at least tasks.maxOpenTasksPerClient \(5\)/,
+    );
+    expect(make({ tools: { echo: 'always' }, maxOpenTasks: 3, maxRetainedTasks: 2 })).toThrow(
+      /tasks.maxRetainedTasks \(2\) must be at least tasks.maxOpenTasks \(3\)/,
+    );
+    expect(make({ tools: { echo: 'always' }, maxOpenTasks: 20_000, maxOpenTasksPerClient: 5_000 })).not.toThrow();
   });
 
   it('resolves recover per tool, falling back to tasks.recover and then false', () => {

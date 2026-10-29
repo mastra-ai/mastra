@@ -2023,7 +2023,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: '86400000',
     description:
-      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks in memory until the server closes. With the in-memory store, finished results stay in memory until their TTL ends, so lower `ttlMs` to limit memory use and avoid `null`. In Mastra storage, `null` keeps the row until you delete it, and a task still running after about 24.8 days (the longest timer Node.js supports) ends `failed`.',
+      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. With the in-memory store, `null` keeps tasks until the server closes, and finished results stay in memory until their TTL ends; `maxRetainedTasksPerClient` and `maxRetainedTasks` bound how many it holds. A task with a `null` TTL counts against them until the server closes. In Mastra storage, `null` keeps the row until you delete it, and a task still running after about 24.8 days (the longest timer Node.js supports) ends `failed`.',
   },
   {
     name: 'recover',
@@ -2054,6 +2054,22 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: '1000',
     description: 'Most open tasks across all callers. See [open task caps](#open-task-caps).',
+  },
+  {
+    name: 'maxRetainedTasksPerClient',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      'Most tasks one caller can have in the store, open or finished, until each is forgotten. Only the in-memory store enforces it. See [retained task caps](#retained-task-caps).',
+  },
+  {
+    name: 'maxRetainedTasks',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10000',
+    description:
+      'Most tasks in the store across all callers, open or finished. See [retained task caps](#retained-task-caps).',
   },
   {
     name: 'authorize',
@@ -2089,9 +2105,19 @@ A task counts as open while it's `working` or `input_required`. It stops countin
 
 - An `'always'` tool doesn't run. The call answers with `isError: true` and a message such as `Too many open tasks for this client (limit 100). Wait for one to finish or cancel one.`
 - An `'auto'` tool that's still running when its sync window ends keeps running under the request and answers synchronously, the same way it would without tasks. Cancelling the request still aborts it.
-- `run_<workflow>` and `ask_<agent>` tasks count against the same caps. An `'always'` workflow starts no run, and an `'always'` agent doesn't run. An `'auto'` workflow run that suspends can only be answered through a task, so at the cap the server cancels it and answers with `isError: true`.
+- `run_<workflow>` and `ask_<agent>` tasks count against the same caps, and against the [retained task caps](#retained-task-caps). An `'always'` workflow starts no run, and an `'always'` agent doesn't run. An `'auto'` workflow run that suspends can only be answered through a task, so at the cap the server cancels it and answers with `isError: true`.
 
 Both values must be positive integers. The server passes them to `store.create()` as `limits`, and the store enforces them by throwing `MCPTaskLimitError`. A custom store that ignores `limits` doesn't cap open tasks.
+
+### Retained task caps
+
+The in-memory store keeps a finished task's result in memory so the client can still read it, until the task's `ttlMs` ends plus one more minute. Finishing a task frees its open slot but not its memory, so a client that runs many short tasks in a row could otherwise grow memory without bound. `maxRetainedTasksPerClient` and `maxRetainedTasks` cap every task the store still holds, open or finished.
+
+- A call that would go over a retained cap is refused as at an open cap. An `'always'` tool answers with `isError: true` and a message such as `Too many recent tasks for this client (limit 1000). Try again once older tasks expire.`, and an `'auto'` tool answers synchronously.
+- Tasks already created keep their full `ttlMs`. The store never drops a result early to make room. A slot frees when the store forgets a task.
+- Every open task is also retained. When you set only one of a pair, the other follows it: lowering `maxRetainedTasksPerClient` below 100 lowers the default `maxOpenTasksPerClient` to match, and raising `maxOpenTasks` above 10000 raises the default `maxRetainedTasks`. Setting both with the retained cap below the open cap throws when the server is created.
+
+Only the in-memory store enforces retained caps. Tasks kept in Mastra storage (see [Tasks across instances](#tasks-across-instances)) keep finished results in the database, so retained caps don't apply to them. Open task caps still do. A custom store that keeps finished results elsewhere can ignore them too.
 
 ### Asking for input inside a task
 

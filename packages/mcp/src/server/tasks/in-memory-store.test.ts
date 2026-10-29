@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailedTaskSchema, taskKeyOf, TASKS_ERROR_CODES } from '../../shared/tasks';
 import { InMemoryMCPTaskStore } from './in-memory-store';
+import type { MCPTaskHandle } from './in-memory-store';
 import { MCPTaskLimitError } from './store';
 import type { MCPTaskAttempt, MCPTaskAttemptOutcome } from './store';
 
@@ -137,6 +138,78 @@ describe('InMemoryMCPTaskStore', () => {
     expect(await store.cancel(task.taskId, alice)).toBe(true);
     expect(await store.get(task.taskId, alice)).toMatchObject({ status: 'cancelled' });
     await vi.waitFor(() => expect(contexts).toEqual([{ id: 1 }]));
+  });
+
+  it('keeps prototype-named input keys open until each is answered, first answer winning', async () => {
+    store = new InMemoryMCPTaskStore();
+    const { taskId } = await store.create({ ttlMs: null, principal: 'alice' });
+    const keys = ['constructor', 'toString', '__proto__'];
+    const requests = Object.fromEntries(keys.map(key => [key, elicit(key)]));
+    const answers = store.handle(taskId).requireInput(requests);
+
+    // An empty update must not count inherited properties as answers.
+    await store.update(taskId, {}, alice);
+    expect(await store.get(taskId, alice)).toEqual(
+      expect.objectContaining({ status: 'input_required', inputRequests: requests }),
+    );
+
+    await store.update(taskId, Object.fromEntries([['constructor', { action: 'accept', content: { v: 1 } }]]), alice);
+    await store.update(taskId, Object.fromEntries([['toString', { action: 'decline' }]]), alice);
+    const open = await store.get(taskId, alice);
+    expect(open?.status).toBe('input_required');
+    expect(Object.keys((open as { inputRequests: object }).inputRequests)).toEqual(['__proto__']);
+
+    await store.update(
+      taskId,
+      Object.fromEntries([
+        ['constructor', { action: 'decline' }],
+        ['__proto__', { action: 'cancel' }],
+      ]),
+      alice,
+    );
+    const resolved = await answers;
+    expect(Object.keys(resolved).sort()).toEqual([...keys].sort());
+    expect(resolved.constructor).toEqual({ action: 'accept', content: { v: 1 } });
+    expect(resolved.toString).toEqual({ action: 'decline' });
+    expect(Object.getOwnPropertyDescriptor(resolved, '__proto__')?.value).toEqual({ action: 'cancel' });
+    expect((await store.get(taskId, alice))?.status).toBe('working');
+  });
+
+  it.each([
+    ['complete', (handle: MCPTaskHandle) => handle.complete({ content: [] }), 'completed'],
+    [
+      'fail',
+      (handle: MCPTaskHandle) => handle.fail({ code: TASKS_ERROR_CODES.InternalError, message: 'boom' }),
+      'failed',
+    ],
+  ] as const)('%s rejects a pending input wait without aborting the work', async (_, finish, status) => {
+    store = new InMemoryMCPTaskStore();
+    const { taskId } = await store.create({ ttlMs: null, principal: 'alice' });
+    const handle = store.handle(taskId);
+    const waiting = handle.requireInput({ a: elicit('?') });
+
+    finish(handle);
+    await expect(waiting).rejects.toThrow(new RegExp(status));
+    expect(handle.signal.aborted).toBe(false);
+    expect((await store.get(taskId, alice))?.status).toBe(status);
+  });
+
+  it('close rejects a pending input wait and ignores writes through retained handles', async () => {
+    store = new InMemoryMCPTaskStore();
+    const waitingTask = await store.create({ ttlMs: null, principal: 'alice' });
+    const idleTask = await store.create({ ttlMs: null, principal: 'alice' });
+    const waitingHandle = store.handle(waitingTask.taskId);
+    const idleHandle = store.handle(idleTask.taskId);
+    const waiting = waitingHandle.requireInput({ a: elicit('?') });
+
+    store.close();
+
+    await expect(waiting).rejects.toThrow(/closed/);
+    expect(idleHandle.signal.aborted).toBe(true);
+    await expect(idleHandle.requireInput({ b: elicit('?') })).rejects.toThrow(/no longer running/);
+    await expect(waitingHandle.requireInput({ c: elicit('?') })).rejects.toThrow(/no longer running/);
+    idleHandle.complete({ content: [] });
+    expect(await store.get(idleTask.taskId, alice)).toBeUndefined();
   });
 
   it('keeps a tool error as a completed task and an infrastructure error as failed', async () => {
@@ -467,6 +540,73 @@ describe('InMemoryMCPTaskStore', () => {
       await create('alice');
       store.close();
       await expect(create('alice')).resolves.toMatchObject({ status: 'working' });
+    });
+  });
+
+  describe('retained task limits', () => {
+    // Open limits high enough that only the retained ones can refuse.
+    const limits = { perPrincipal: 100, total: 100, retainedPerPrincipal: 2, retainedTotal: 3 };
+    const finished = async (principal: string, ttlMs: number | null = null) => {
+      const task = await store.create({ ttlMs, principal, limits });
+      store.handle(task.taskId).complete(text(`done for ${principal}`));
+      return task;
+    };
+    const refusal = (principal: string) =>
+      store.create({ ttlMs: null, principal, limits }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    it('refuses a task past the per-principal retained limit even once earlier tasks finished', async () => {
+      store = new InMemoryMCPTaskStore();
+      await finished('alice');
+      await finished('alice');
+
+      const refused = await refusal('alice');
+      expect(refused).toBeInstanceOf(MCPTaskLimitError);
+      expect(refused).toMatchObject({ scope: 'principal', limit: 2, kind: 'retained' });
+      expect((refused as Error).message).toMatch(/retained/);
+      // A principal at its cap does not block one below it.
+      await expect(finished('bob')).resolves.toMatchObject({ status: 'working' });
+    });
+
+    it('refuses a task past the store-wide retained limit across principals', async () => {
+      store = new InMemoryMCPTaskStore();
+      await finished('alice');
+      await finished('alice');
+      await finished('bob');
+      expect(await refusal('carol')).toMatchObject({ scope: 'total', limit: 3, kind: 'retained' });
+    });
+
+    it('keeps admitted results readable for their whole TTL and frees the slot once they are purged', async () => {
+      vi.useFakeTimers({ now: 0 });
+      store = new InMemoryMCPTaskStore({ expiredRetentionMs: 500 });
+      const first = await finished('alice', 1_000);
+      await finished('alice', 1_000);
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(await refusal('alice')).toMatchObject({ kind: 'retained' });
+      expect(await store.get(first.taskId, alice)).toMatchObject({
+        status: 'completed',
+        result: text('done for alice'),
+      });
+
+      // Past the TTL the result is still served for the retention window, and still counts.
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await store.get(first.taskId, alice)).toMatchObject({ status: 'completed' });
+      expect(await refusal('alice')).toMatchObject({ kind: 'retained' });
+
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(finished('alice')).resolves.toMatchObject({ status: 'working' });
+      expect(await store.get(first.taskId, alice)).toBeUndefined();
+    });
+
+    it('starts counting from zero after close', async () => {
+      store = new InMemoryMCPTaskStore();
+      await finished('alice');
+      await finished('alice');
+      store.close();
+      await expect(finished('alice')).resolves.toMatchObject({ status: 'working' });
     });
   });
 });

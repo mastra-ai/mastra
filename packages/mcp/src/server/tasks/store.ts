@@ -19,8 +19,8 @@ export interface MCPTaskCreateParams {
   trace?: MCPTaskTrace;
   /**
    * Most open (`working` or `input_required`) tasks allowed for this principal and for the whole
-   * store, counting the one being created. Over either, `create` rejects with
-   * {@link MCPTaskLimitError} and records nothing. Omitted: no limit.
+   * store, counting the one being created, plus the optional retained-task bounds. Over any of them,
+   * `create` rejects with {@link MCPTaskLimitError} and records nothing. Omitted: no limit.
    */
   limits?: MCPTaskLimits;
 }
@@ -29,6 +29,13 @@ export interface MCPTaskCreateParams {
 export interface MCPTaskLimits {
   perPrincipal: number;
   total: number;
+  /**
+   * Most tasks the store may hold for this principal and in total, open or finished but not yet
+   * forgotten, counting the one being created. A store that keeps finished results outside process
+   * memory may ignore these.
+   */
+  retainedPerPrincipal?: number;
+  retainedTotal?: number;
 }
 
 /**
@@ -40,8 +47,12 @@ export class MCPTaskLimitError extends Error {
   constructor(
     readonly scope: 'principal' | 'total',
     readonly limit: number,
+    /** `'open'` for the open-task limits, `'retained'` for the retained ones. */
+    readonly kind: 'open' | 'retained' = 'open',
   ) {
-    super(`Too many open MCP tasks ${scope === 'principal' ? 'for this principal' : 'in this store'} (limit ${limit})`);
+    super(
+      `Too many ${kind} MCP tasks ${scope === 'principal' ? 'for this principal' : 'in this store'} (limit ${limit})`,
+    );
     this.name = 'MCPTaskLimitError';
   }
 }
