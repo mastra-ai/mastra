@@ -14,6 +14,8 @@
  * @experimental Knowledge APIs are experimental and may change without notice.
  */
 
+import { estimateTokenCount } from 'tokenx';
+
 /**
  * Who changed something, recorded on every page and note change.
  *
@@ -162,7 +164,9 @@ export interface KnowledgePin {
 }
 
 /**
- * Most levels a page may sit below its root scope. Creates and moves past it are refused.
+ * Most levels an ordinary page may sit below its home scope page: a page directly under its scope
+ * is depth 1. Scope pages (including scopes nested under scopes by `belongsTo` or as template
+ * children) don't count and reset the count. Creates and moves past it are refused.
  *
  * @experimental
  */
@@ -194,6 +198,34 @@ export const MAX_KNOWLEDGE_PAGE_DESCRIPTION_TOKENS = 100;
  * @experimental
  */
 export const MAX_KNOWLEDGE_NOTE_TOKENS = 250;
+
+/**
+ * Rejects a page description over {@link MAX_KNOWLEDGE_PAGE_DESCRIPTION_TOKENS} before any write.
+ * Every adapter calls this so all stores share one estimator and one error.
+ *
+ * @experimental
+ */
+export function assertKnowledgePageDescriptionWithinBound(description: string | undefined): void {
+  if (description === undefined) return;
+  if (estimateTokenCount(description) > MAX_KNOWLEDGE_PAGE_DESCRIPTION_TOKENS) {
+    throw new Error(
+      `Knowledge page description exceeds the ${MAX_KNOWLEDGE_PAGE_DESCRIPTION_TOKENS} token limit; put long-form text in the page body`,
+    );
+  }
+}
+
+/**
+ * Rejects note text over {@link MAX_KNOWLEDGE_NOTE_TOKENS} before any write.
+ *
+ * @experimental
+ */
+export function assertKnowledgeNoteTextWithinBound(text: string): void {
+  if (estimateTokenCount(text) > MAX_KNOWLEDGE_NOTE_TOKENS) {
+    throw new Error(
+      `Knowledge note text exceeds the ${MAX_KNOWLEDGE_NOTE_TOKENS} token limit; split it into separate notes or put long-form text in the page body`,
+    );
+  }
+}
 
 /** @experimental */
 export class KnowledgeMoveTooLargeError extends Error {
