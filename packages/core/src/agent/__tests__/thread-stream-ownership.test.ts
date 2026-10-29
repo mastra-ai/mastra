@@ -441,6 +441,66 @@ describe('thread ownership (#24878)', () => {
     run.complete();
   });
 
+  it('re-acknowledges an admitted signal when the first acceptance reply is lost', async () => {
+    class DroppedReplyPubSub extends LeasePubSub {
+      replies = 0;
+      override async publish(topic: string, event: any) {
+        if (event.data?.type === 'signal-accepted' && ++this.replies === 1) return;
+        return super.publish(topic, event);
+      }
+    }
+    const pubsub = new DroppedReplyPubSub();
+    const owner = new AgentThreadStreamRuntime();
+    const sender = new AgentThreadStreamRuntime();
+    const agent = { id: 'retry-owner-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const run = registerRun(owner, agent, pubsub, 'retry-run', 'thread', 'user');
+    await run.registered;
+
+    const result = sender.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'retry delivery' },
+      { resourceId: 'user', threadId: 'thread' },
+      pubsub,
+    );
+    expect(await result.accepted).toEqual({ action: 'deliver', runId: 'retry-run' });
+    expect(pubsub.replies).toBe(2);
+    run.complete();
+  });
+
+  it('does not acknowledge a finished run while its terminal broadcast is pending', async () => {
+    const pubsub = new LeasePubSub();
+    pubsub.streamPartDelayMs = 500;
+    const owner = new AgentThreadStreamRuntime();
+    const agent = { id: 'finished-owner-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const run = registerRun(owner, agent, pubsub, 'finished-run', 'thread', 'user');
+    await run.registered;
+    run.complete();
+    await nextTicks();
+
+    const key = 'user\u0000thread';
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const replyTopic = `${topic}.signal-acceptance.test`;
+    let acknowledged = false;
+    await pubsub.subscribe(replyTopic, async (_event, ack) => {
+      acknowledged = true;
+      await ack();
+    });
+    await pubsub.publish(topic, {
+      type: 'agent.thread-stream',
+      runId: 'finished-run',
+      data: {
+        type: 'signal-enqueued',
+        runId: 'finished-run',
+        sourceId: 'other-instance',
+        signal: { id: 'late-signal', type: 'user-message', contents: 'late', createdAt: new Date() },
+        replyTopic,
+        requestId: 'late-request',
+      },
+    });
+    expect(pubsub.owners.get(key)).toBe('finished-run');
+    expect(acknowledged).toBe(false);
+  });
+
   it('does not deliver a signal to a remote run whose owner agent is unknown', async () => {
     const senderRuntime = new AgentThreadStreamRuntime();
     const pubsub = new LeasePubSub();

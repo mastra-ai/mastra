@@ -1550,29 +1550,32 @@ export class AgentThreadStreamRuntime {
       if (!active) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (data?.type === 'signal-enqueued') {
+        if (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) return;
+        const activeRunId = state.activeThreadRunIds.get(key);
+        // A predecessor can still receive signals during handoff, but a finished run
+        // must not acknowledge work after its queues have already been drained.
         if (
-          (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) ||
-          subscription.admittedSignalIds.has(data.signal.id)
+          !activeRunId ||
+          state.threadKeysByRunId.get(activeRunId) !== key ||
+          (activeRunId !== data.runId &&
+            !state.threadRunsById.has(activeRunId) &&
+            !state.preparedRunsById.has(activeRunId)) ||
+          (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId))
         )
           return;
-        // Keep predecessor routing through a handoff, but never promote observer copies into execution.
-        if (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId)) {
-          return;
+        const queued = [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(queue =>
+          queue?.some(signal => signal.id === data.signal.id),
+        );
+        if (!subscription.admittedSignalIds.has(data.signal.id) && !queued) {
+          const queues = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+          const queue = queues.get(key) ?? [];
+          const signal = createSignal(data.signal);
+          queue.push(signal);
+          queues.set(key, queue);
+          subscription.admittedSignalIds.add(data.signal.id);
+          this.#publishPendingUserMessage(pubsub, key, data.runId, signal, 'pending');
+          this.#notifyPendingSignals(state, key, signal);
         }
-        const queues = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
-        if (
-          [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(queue =>
-            queue?.some(signal => signal.id === data.signal.id),
-          )
-        )
-          return;
-        const queue = queues.get(key) ?? [];
-        const signal = createSignal(data.signal);
-        queue.push(signal);
-        queues.set(key, queue);
-        subscription.admittedSignalIds.add(data.signal.id);
-        this.#publishPendingUserMessage(pubsub, key, data.runId, signal, 'pending');
-        this.#notifyPendingSignals(state, key, signal);
         if (data.replyTopic && data.requestId) {
           await resolvedPubSub.publish(data.replyTopic, {
             type: 'signal-accepted',
