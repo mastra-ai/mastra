@@ -214,13 +214,108 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "workItemList",
     "method": "GET",
     "path": "/web/factory/projects/:id/work-items",
-    "description": "List Factory work items and running sessions",
+    "description": "List Factory work items and running sessions. Without filters or a limit every card comes back; with `limit` the response pages by `nextCursor`.",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "assignee",
+      "author",
+      "board",
+      "cursor",
+      "label",
+      "limit",
+      "linearProject",
+      "q",
+      "reviewer",
+      "sort",
+      "source",
+      "stage",
+      "teammate",
+      "worked"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/:workItemId": {
+    "contractKey": "workItemGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/:workItemId",
+    "description": "Read one Factory work item",
+    "pathParams": [
+      "id",
+      "workItemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/counts": {
+    "contractKey": "workItemCounts",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/counts",
+    "description": "Count Factory work items per board and stage, under the same filters as the list",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "assignee",
+      "author",
+      "board",
+      "label",
+      "linearProject",
+      "q",
+      "reviewer",
+      "source",
+      "stage",
+      "teammate",
+      "worked"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/sources": {
+    "contractKey": "workItemSources",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/sources",
+    "description": "List the external source of every Factory work item, for intake de-duplication",
     "pathParams": [
       "id"
     ],
     "queryParams": [],
     "bodyParams": [],
     "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "sources"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/sync": {
+    "contractKey": "workItemSync",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/sync",
+    "description": "Keep a board current. Without a cursor (or with one older than deletes are kept), returns every open card with `reset`; with one, only cards written or deleted since. Feed events named `board` say when to ask again.",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "cursor"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -1685,6 +1780,68 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "id"
       ]
     },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "board": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "stage": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "q": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "source": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "linearProject": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "label": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "teammate": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "author": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "assignee": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "reviewer": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "worked": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "sort": {
+          "default": "recent",
+          "type": "string",
+          "enum": [
+            "recent",
+            "recent-mine",
+            "created-newest",
+            "created-oldest"
+          ]
+        },
+        "limit": {
+          "type": "string",
+          "pattern": "^\\d+$"
+        },
+        "cursor": {
+          "type": "string"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "string"
+        }
+      }
+    },
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -1710,10 +1867,318 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "type": "string"
           }
+        },
+        "nextCursor": {
+          "type": "string"
         }
       },
       "required": [
         "workItems",
+        "runningSessionIds",
+        "parkedSessionIds"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/:workItemId": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "workItemId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "workItemId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workItem": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "workItem"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/counts": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "board": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "stage": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "q": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "source": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "linearProject": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "label": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "teammate": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "author": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "assignee": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "reviewer": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "worked": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "boards": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          }
+        }
+      },
+      "required": [
+        "total",
+        "boards"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/sources": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "board": {
+                "type": "string"
+              },
+              "externalSource": {
+                "type": "object",
+                "properties": {
+                  "integrationId": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "externalId": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "integrationId",
+                  "type",
+                  "externalId"
+                ]
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "board",
+              "externalSource",
+              "metadata"
+            ]
+          }
+        }
+      },
+      "required": [
+        "sources"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/sync": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "reset": {
+          "type": "boolean"
+        },
+        "workItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "deletedIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "boards": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              }
+            }
+          },
+          "required": [
+            "total",
+            "boards"
+          ]
+        },
+        "runningSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parkedSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "cursor",
+        "reset",
+        "workItems",
+        "deletedIds",
+        "counts",
         "runningSessionIds",
         "parkedSessionIds"
       ]
@@ -3477,6 +3942,10 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "workItemList": "GET /web/factory/projects/:id/work-items",
+  "workItemGet": "GET /web/factory/projects/:id/work-items/:workItemId",
+  "workItemCounts": "GET /web/factory/projects/:id/work-items/counts",
+  "workItemSources": "GET /web/factory/projects/:id/work-items/sources",
+  "workItemSync": "GET /web/factory/projects/:id/work-items/sync",
   "projectUpdate": "PATCH /web/factory/projects/:id",
   "projectEnvironmentUpdate": "PATCH /web/factory/projects/:id/environment",
   "workItemUpdate": "PATCH /web/factory/work-items/:id",

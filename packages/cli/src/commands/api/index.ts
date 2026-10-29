@@ -591,7 +591,26 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
   addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {
-    description: 'List Factory work items and running sessions',
+    description: 'List Factory work items and running sessions, optionally filtered, sorted and paged',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'get', FACTORY_API_ROUTE_CATALOG.workItemGet, {
+    description: 'Get one Factory work item',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'counts', FACTORY_API_ROUTE_CATALOG.workItemCounts, {
+    description: 'Count Factory work items per board and stage, optionally filtered',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'sources', FACTORY_API_ROUTE_CATALOG.workItemSources, {
+    description: 'List the external sources Factory work items were created from',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'sync', FACTORY_API_ROUTE_CATALOG.workItemSync, {
+    description: 'Sync a board: open cards first, then only cards changed since the cursor',
+    input: 'optional',
     routePlacement: 'origin',
   });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
