@@ -44,6 +44,8 @@ import {
   applyReservedMemoryContextKeys,
   prepareForDurableExecution,
   persistDurableRunInput,
+  armRunDeadline,
+  withRunDeadline,
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
@@ -63,6 +65,7 @@ import {
 import type {
   AgentStepFinishEventData,
   AgentSuspendedEventData,
+  DurableRunDeadline,
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -910,14 +913,20 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * deadline the run is reported failed: the stream gets one
    * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
-   * Returns the timer teardown; a no-op when no budget is configured.
+   * Returns the timer teardown and the deadline that steps on any worker
+   * receive through the event request context; a no-op without a budget.
    */
   function armTotalTimeout(
     entry: { abortSignal?: AbortSignal },
     abortController: AbortController,
     runId: string,
     timeoutMs: number | undefined,
-  ): () => void {
+    requestContext: RequestContext | undefined,
+  ): { clear: () => void; deadline: Promise<DurableRunDeadline | undefined> } {
+    const armed =
+      timeoutMs && timeoutMs > 0
+        ? armRunDeadline({ mastra, agentId, runId, requestContext, expiresAt: Date.now() + timeoutMs })
+        : undefined;
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
       timeoutMs,
@@ -928,10 +937,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     entry.abortSignal = totalTimeout.signal;
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      // Reject memory writes still in flight before reporting the timeout.
+      await (await armed)?.expire();
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });
-    return totalTimeout.cleanup;
+    return {
+      clear: totalTimeout.cleanup,
+      deadline: armed?.then(({ deadline }) => deadline) ?? Promise.resolve(undefined),
+    };
   }
 
   async function deleteRunSnapshots(runId: string): Promise<void> {
@@ -1096,6 +1110,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   async function triggerWorkflow(
     runId: string,
     workflowInput: any,
+    deadline: DurableRunDeadline | undefined,
     tracingOptions?: { traceId: string; parentSpanId: string },
     actor?: ActorSignal,
   ): Promise<void> {
@@ -1107,7 +1122,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: workflowInput.requestContextEntries ?? {},
+        // The deadline rides only the event, never the persisted workflow input.
+        requestContext: withRunDeadline(workflowInput.requestContextEntries, runId, deadline),
         tracingOptions,
         actor,
       }),
@@ -1310,11 +1326,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ? forwardExternalAbort(streamOptions.abortSignal, abortController, runId)
         : undefined;
       registryEntry.abortController = abortController;
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: runDeadline } = armTotalTimeout(
         registryEntry,
         abortController,
         runId,
         callbackOptions.modelSettings?.timeout?.totalMs,
+        registryEntry.requestContext,
       );
 
       // 1b. Register non-serializable state on the global run registry so
@@ -1434,7 +1451,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
           try {
-            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+            await triggerWorkflow(runId, workflowInput, await runDeadline, tracingOptions, streamOptions?.actor);
           } catch (error) {
             if (persistedRunning) await deleteRunSnapshots(runId);
             throw error;
@@ -1675,7 +1692,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: runDeadline } = armTotalTimeout(
         existingEntry,
         abortController,
         runId,
@@ -1683,6 +1700,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           existingRegistryEntry?.timeoutTotalMs ??
           (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input?.options?.modelSettings?.timeout
             ?.totalMs,
+        callbackOptions.requestContext,
       );
 
       // A warm resume reuses the tools built for the first request, which close
@@ -1849,7 +1867,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       const dispatch = ready.then(async () => {
         const snapshot = suspendedSnapshot;
-        const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        // Replace the snapshot's deadline from the previous session with this one's, or drop it.
+        const requestContext = withRunDeadline(
+          mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext),
+          runId,
+          await runDeadline,
+        );
         try {
           keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
         } catch (error) {

@@ -27,6 +27,7 @@ import {
   setExecutionClaim,
   withExecutionFence,
 } from './execution-fence';
+import { withRunDeadline } from './run-deadline';
 import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './run-registry';
 
@@ -318,6 +319,23 @@ describe('assertExecutionOwned', () => {
 
     it('keeps ownership without a registry entry', async () => {
       await expect(assertOwned()).resolves.toBeUndefined();
+    });
+
+    const withDeadline = (expiresAt: number) =>
+      new RequestContext(Object.entries(withRunDeadline({}, runId, { expiresAt })));
+
+    it('loses ownership on a worker without the registry entry once its deadline passes', async () => {
+      const requestContext = withDeadline(Date.now() - 1);
+      await expect(assertExecutionOwned({ runId, agentId, requestContext, mastra: undefined })).rejects.toMatchObject({
+        id: EXECUTION_TIMED_OUT_ERROR_ID,
+      });
+    });
+
+    it('keeps ownership before its deadline', async () => {
+      const requestContext = withDeadline(Date.now() + 60_000);
+      await expect(
+        assertExecutionOwned({ runId, agentId, requestContext, mastra: undefined }),
+      ).resolves.toBeUndefined();
     });
   });
 

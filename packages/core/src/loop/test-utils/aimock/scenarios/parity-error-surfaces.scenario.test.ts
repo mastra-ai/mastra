@@ -22,6 +22,8 @@
 import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
+import { globalRunRegistry } from '../../../../agent/durable/run-registry';
+import type { RunRegistryEntry } from '../../../../agent/durable/types';
 import { MockMemory } from '../../../../memory/mock';
 import { MessageHistory } from '../../../../processors/memory';
 import type { RequestContext } from '../../../../request-context';
@@ -361,6 +363,134 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const saved = JSON.stringify(messages);
       expect(saved.includes('Check the slow courier.')).toBe(true);
       expect(saved.includes('late courier result')).toBe(false);
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  // Inngest can run a step on a worker that never saw the run start, so that worker has no registry
+  // entry and no local timer. The tool hides the entry from the steps to model that worker; the
+  // starting process keeps its timer. The late tool result must still not reach memory.
+  it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest').each([false, true])(
+    'a tool on a worker without the run registry entry finishes after the deadline and does not reach memory (savePerStep: %s)',
+    async savePerStep => {
+      const memory = new MockMemory();
+      const threadId = `remote-late-tool-${engine}-${savePerStep}`;
+      const toolFinished = Promise.withResolvers<void>();
+      const hidden: string[] = [];
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Check the remote courier.',
+          maxSteps: 3,
+          savePerStep,
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          tools: {
+            remote: createTool({
+              id: 'remote',
+              description: 'Check the remote courier.',
+              inputSchema: z.object({}),
+              execute: async () => {
+                for (const [runId, entry] of globalRunRegistry.entries()) {
+                  if (entry.memory !== memory && entry.threadId !== threadId) continue;
+                  // `noDisposeOnSet` keeps the replaced entry alive for the starting process.
+                  globalRunRegistry.set(runId, { mastra: {} } as RunRegistryEntry);
+                  hidden.push(runId);
+                }
+                await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 1_000));
+                toolFinished.resolve();
+                return { status: 'remote courier result' };
+              },
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              { toolCalls: [{ id: 'call_remote', name: 'remote', arguments: {} }] },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+          },
+        });
+
+        expect(hidden).toHaveLength(1);
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        await toolFinished.promise;
+        await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
+        expect(JSON.stringify(messages).includes('remote courier result')).toBe(false);
+      } finally {
+        for (const runId of hidden) globalRunRegistry.delete(runId);
+      }
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  // A write can pass the deadline check just before the deadline and reach storage after it. The
+  // check alone cannot stop that write; storage must refuse it.
+  it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest')(
+    'a step save that starts before the deadline and lands after it does not reach memory',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `held-step-save-${engine}`;
+      const saveMessages = memory.saveMessages.bind(memory);
+      const heldSaves: Promise<unknown>[] = [];
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
+        if (args.messages.every(message => message.role === 'user')) return saveMessages(args);
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => saveMessages(args));
+        heldSaves.push(held.catch(() => {}));
+        return held;
+      });
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Check the quick courier.',
+          maxSteps: 3,
+          savePerStep: true,
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          tools: {
+            quick: createTool({
+              id: 'quick',
+              description: 'Check the quick courier.',
+              inputSchema: z.object({}),
+              execute: async () => ({ status: 'quick courier result' }),
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              { toolCalls: [{ id: 'call_quick', name: 'quick', arguments: {} }] },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+          },
+        });
+
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        await vi.waitFor(() => expect(heldSaves.length).toBeGreaterThan(0), { timeout: DEADLINE_MS });
+        await Promise.all(heldSaves);
+        await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+        await Promise.all(heldSaves);
+
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
+        expect(JSON.stringify(messages).includes('quick courier result')).toBe(false);
+      } finally {
+        saveSpy.mockRestore();
+      }
     },
     TEST_TIMEOUT_MS + 5_000,
   );
