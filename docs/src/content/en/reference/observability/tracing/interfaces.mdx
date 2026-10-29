@@ -702,6 +702,9 @@ interface AgentRunAttributes {
 
   /** When the run's model streamed its first chunk, copied from the agent's own first generation */
   completionStartTime?: Date
+
+  /** Time to first token of the model inference that streamed the run's first chunk, copied the same way */
+  timeToFirstTokenMs?: number
 }
 ```
 
@@ -752,6 +755,12 @@ interface ModelGenerationAttributes {
 
   /** Whether this was a streaming response */
   streaming?: boolean
+
+  /** When the generation's first inference streamed its first chunk */
+  completionStartTime?: Date
+
+  /** Time to first token of the model inference that streamed the generation's first chunk */
+  timeToFirstTokenMs?: number
 
   /** Reason the generation finished */
   finishReason?: string
@@ -812,6 +821,9 @@ interface ModelStepAttributes {
 
   /** When the step's first inference streamed its first chunk */
   completionStartTime?: Date
+
+  /** Time to first token of the model inference that streamed the step's first chunk */
+  timeToFirstTokenMs?: number
 }
 ```
 
@@ -841,6 +853,9 @@ interface ModelInferenceAttributes {
 
   /** When the first token/chunk of the completion was received */
   completionStartTime?: Date
+
+  /** Milliseconds from the start of the model inference that streamed the first chunk to that chunk */
+  timeToFirstTokenMs?: number
 
   /** Result warnings */
   warnings?: Record<string, any>

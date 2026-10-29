@@ -63,7 +63,7 @@ export function PersonalDefaultModelPicker({
       </ButtonsGroup>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
-          Apply to running sessions
+          Apply to my running chats
         </Button>
         <Button size="sm" variant="ghost" disabled={busy || !savedModelId} onClick={clearDefault}>
           Clear

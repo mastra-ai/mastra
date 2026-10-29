@@ -17,6 +17,7 @@ import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
+import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
@@ -208,6 +209,7 @@ export class StepExecutor extends MastraBase {
     // and traces match the default engine.
     const workflowStepSpan = params.tracingContext?.currentSpan?.createChildSpan({
       type: SpanType.WORKFLOW_STEP,
+      outcome: null,
       name: `workflow step: '${stepId}'`,
       entityType: EntityType.WORKFLOW_STEP,
       entityId: stepId,
@@ -382,11 +384,13 @@ export class StepExecutor extends MastraBase {
         finalResult.__stateDelta = stateDelta;
       }
 
-      if (finalResult.status === 'success') {
-        workflowStepSpan?.end({ output: stepOutput, attributes: { status: 'success' } });
-      } else {
-        workflowStepSpan?.end({ attributes: { status: finalResult.status } });
-      }
+      completeWorkflowSpan(workflowStepSpan, {
+        end: {
+          ...workflowTermination(finalResult),
+          ...(finalResult.status === 'success' ? { output: stepOutput } : {}),
+          attributes: { status: finalResult.status },
+        },
+      });
 
       return finalResult;
     } catch (error: any) {
@@ -397,7 +401,16 @@ export class StepExecutor extends MastraBase {
         fallbackMessage: 'Unknown step execution error',
       });
 
-      workflowStepSpan?.error({ error: errorInstance });
+      completeWorkflowSpan(workflowStepSpan, {
+        error: {
+          ...workflowTermination(
+            error instanceof TripWire
+              ? { status: 'tripwire', tripwire: { reason: error.message, processorId: error.processorId } }
+              : { status: 'failed', error: errorInstance },
+          ),
+          error: errorInstance,
+        },
+      });
 
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(

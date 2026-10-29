@@ -13,6 +13,7 @@ import {
   compileSpanQueryPredicate,
   keysetSortBounds,
   timeToFirstChunkSupported,
+  timeToFirstTokenSupported,
   runWithPostgresTraceQueryTimeout,
 } from './trace-query';
 
@@ -44,6 +45,7 @@ const fields = [
   'environment',
   'executionSource',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -110,13 +112,8 @@ export function compilePostgresSpanSelection(
   const predicate = plan.where ? compileSpanQueryPredicate(plan.where, values.length + 1) : { sql: 'TRUE', values: [] };
   values.push(...predicate.values);
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-  // Older core still accepts model/provider predicates. Keep their source fields available
-  // for that contract; newer core rejects them and only extracts values for the selected page.
-  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
-    ? ''
-    : `CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
-       CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,`;
   // Completed records win; the greatest end time follows existing getSpan semantics.
+  // `model` and `provider` filters read only their dedicated columns, never span attributes.
   // Payload columns are read only after page selection, inside the same snapshot.
   // A completed span ends at or after it starts, so the end-time bound only prunes partitions.
   const ctes = [
@@ -128,7 +125,7 @@ export function compilePostgresSpanSelection(
     `current_spans AS MATERIALIZED (
     SELECT DISTINCT ON (${identities})
       ${fields.map(field => `"${field}"`).join(', ')}, "startedAt", "endedAt", "cursorId"::text AS version,
-      ${legacyModelFields}
+      "model", "provider",
       (EXTRACT(EPOCH FROM ("endedAt" - "startedAt")) * 1000)::float8 AS "durationMs",
       CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
       error IS NOT NULL AS "hasError"
@@ -203,12 +200,15 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
     async tx => {
       const query = compilePostgresSpanQuery(schema, plan);
       const rows = await tx.any<Selected>(query.text, query.values);
-      const selected = rows.map(({ version: _version, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
-        ...row,
-        ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
-        startedAt: startedAt.toISOString(),
-        endedAt: endedAt.toISOString(),
-      }));
+      const selected = rows.map(
+        ({ version: _version, startedAt, endedAt, timeToFirstChunkMs, timeToFirstTokenMs, ...row }) => ({
+          ...row,
+          ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
+          ...(timeToFirstTokenSupported && { timeToFirstTokenMs }),
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString(),
+        }),
+      );
       const page = rows.slice(0, plan.limit);
       if (!page.length) return buildSpanQueryResponse(plan, [], []);
       const remaining = async () => {
@@ -226,13 +226,15 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
         })
         .join(' OR ');
       // Stored previews, plus the payload only where its preview is NULL (a row written before the
-      // preview columns existed), so new rows never read their payloads here.
+      // preview columns existed), so new rows never read their payloads here. Model and provider
+      // fall back to span attributes for rows written before their columns existed; that fallback
+      // is returned, never filtered on.
       const payloadRows = await tx.any<
         SpanQueryIdentity & Record<string, unknown> & { model: string | null; provider: string | null }
       >(
         `SELECT ${identities},
-      CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
-      CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,
+      COALESCE("model", CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END) AS model,
+      COALESCE("provider", CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END) AS provider,
       ${PREVIEW_PAYLOADS.map(([preview, payload]) => `"${preview}", CASE WHEN ${missingPreviewSql(`"${preview}"`)} THEN "${payload}" END AS "${payload}"`).join(',\n      ')}
       FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} WHERE ${payloadWhere}`,
         payloadValues,

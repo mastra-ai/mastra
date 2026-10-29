@@ -54,11 +54,7 @@ describe('planSpanAggregate', () => {
     expect(planSpanAggregate({ ...base, where }).where).toEqual(planSpanQuery({ timeRange, where }).where);
   });
 
-  it.each([
-    ['model', 'not a span query field'],
-    ['provider', 'not a span query field'],
-    ['metadata.tenant', 'trace-only'],
-  ])('rejects %s in where (%s)', field => {
+  it.each([['metadata.tenant', 'trace-only']])('rejects %s in where (%s)', field => {
     expectIssue({ ...base, where: eq(field, 'x') }, 'field_not_allowed', ['where', 'left', 'path']);
   });
 
@@ -138,7 +134,12 @@ describe('planSpanAggregate', () => {
 
   it('reports every issue at once', () => {
     expect(
-      issues({ ...base, where: eq('model', 'x'), groupBy: ['traceId'], orderBy: { field: 'nope', direction: 'asc' } }),
+      issues({
+        ...base,
+        where: eq('metadata.tenant', 'x'),
+        groupBy: ['traceId'],
+        orderBy: { field: 'nope', direction: 'asc' },
+      }),
     ).toEqual([
       { code: 'field_not_allowed', path: ['where', 'left', 'path'] },
       { code: 'field_not_allowed', path: ['groupBy', 0] },

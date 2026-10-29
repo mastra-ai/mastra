@@ -238,6 +238,15 @@ const waitForPlaygroundUiWatchPlugin = (): Plugin => ({
   },
 });
 
+// Green mark while developing Studio itself. `mastra dev` serves the built bundle, so users keep the default icon.
+const devFaviconPlugin = (): Plugin => ({
+  name: 'dev-favicon',
+  apply: 'serve',
+  transformIndexHtml(html: string) {
+    return html.replace('href="./mastra-dark-tile.svg"', 'href="./mastra-dark-tile-dev.svg"');
+  },
+});
+
 export default defineConfig(({ mode }) => {
   const commonConfig: UserConfig = {
     plugins: [stubNodeBuiltinsPlugin, tailwindcss(), react(), routesManifestPlugin()],
@@ -270,7 +279,11 @@ export default defineConfig(({ mode }) => {
     const targetHost = process.env.HOST || 'localhost';
 
     if (commonConfig.plugins) {
-      commonConfig.plugins.push(studioStandalonePlugin(targetPort, targetHost), waitForPlaygroundUiWatchPlugin());
+      commonConfig.plugins.push(
+        studioStandalonePlugin(targetPort, targetHost),
+        waitForPlaygroundUiWatchPlugin(),
+        devFaviconPlugin(),
+      );
     }
 
     return {

@@ -66,6 +66,8 @@ export type TracesFiltersContextValue = TracesFiltersActions & {
   dateTo?: Date;
   filtersApplied: boolean;
   contentFiltersApplied: boolean;
+  /** The host's filters ask for `running` traces, which `filters` (and so the query) can't express. */
+  runningSelected: boolean;
 };
 
 export type TracesSelectionActions = {

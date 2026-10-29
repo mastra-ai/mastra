@@ -64,8 +64,10 @@ export const ALL_SIGNAL_TABLES = [
 
 export const ALL_TABLE_NAMES = [...ALL_SIGNAL_TABLES, TABLE_DISCOVERY] as const;
 
+export type SignalTable = (typeof ALL_SIGNAL_TABLES)[number];
+
 /** Maps each signal table to the column used as its partition / TTL key. */
-export const SIGNAL_TIME_COLUMN: Record<(typeof ALL_SIGNAL_TABLES)[number], string> = {
+export const SIGNAL_TIME_COLUMN: Record<SignalTable, string> = {
   [TABLE_SPAN_EVENTS]: 'endedAt',
   [TABLE_METRIC_EVENTS]: 'timestamp',
   [TABLE_LOG_EVENTS]: 'timestamp',

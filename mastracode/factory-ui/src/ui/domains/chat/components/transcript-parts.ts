@@ -1,5 +1,4 @@
-import { groupConsecutive, isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ConsecutiveGroups } from '@mastra/playground-ui/components/ai/tool-call';
+import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolInvocationPart } from '@mastra/react/ui';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
 
@@ -96,22 +95,6 @@ function awaitsPrompt(
 ): boolean {
   const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
   return tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
-}
-
-// Drawn as their own messages, so never folded into a group of tool cards.
-const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill', 'reply_in_thread']);
-
-export function collectToolGroups(
-  parts: readonly MessagePart[],
-  suspensions: ReadonlyMap<string, SuspensionPrompt>,
-): ConsecutiveGroups<ToolPart> {
-  return groupConsecutive(parts, {
-    key: part => part.toolInvocation.toolCallId,
-    joins: (part): part is ToolPart =>
-      part.type === 'tool-invocation' &&
-      !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
-      !suspensions.has(part.toolInvocation.toolCallId),
-  });
 }
 
 export function toolFromInvocationPart(
