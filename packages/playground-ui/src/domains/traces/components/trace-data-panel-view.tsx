@@ -18,12 +18,14 @@ import type { Layout } from 'react-resizable-panels';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
+import { createTraceTimeCursorStore } from '../hooks/use-trace-time-cursor';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
 import { TraceEntityMeta, TraceStatusMeta, TraceSummaryDescription } from './trace-summary-description';
+import { TraceTimeCursorProvider } from './trace-time-cursor-provider';
 import { Button } from '@/ds/components/Button';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
@@ -251,6 +253,14 @@ export function TraceDataPanelView({
     setUncontrolledSpanView(view);
     onSpanViewChange?.(view);
   };
+
+  // Owned here (not by the provider) so it can be reset without remounting the columns. The
+  // cursor only exists in the timeline view: leaving it, or opening another trace, clears it so
+  // the messages never stay filtered with no visible cursor.
+  const [timeCursorStore] = useState(createTraceTimeCursorStore);
+  useEffect(() => {
+    timeCursorStore.set(null);
+  }, [timeCursorStore, traceId, spanView]);
 
   const { download: downloadTraceJson, isPending: isDownloadingTrace } = useDownloadTraceJson();
 
@@ -482,126 +492,128 @@ export function TraceDataPanelView({
             </>
           )}
 
-          <TracePanelColumns
-            layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : entityType === null ? 'unknown' : entityType}
-            sideColumnSlot={sideColumn}
-            spanPanelSlot={spanPanelSlot}
-            highlightQuery={query}
-            spanPanelKey={selectedSpanId}
-          >
-            {!isLoading && !spans?.length ? (
-              <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
-            ) : (
-              (() => {
-                // Shared by the Spans and Timeline tabs: both views render the same
-                // filtered `hierarchicalSpans`, so one query drives both.
-                const isTimeline = spanView === 'timeline';
-                const searchHeader = (
-                  // The bar itself is the search field: no pill inside the square panel, the
-                  // bottom rule is its only edge, and keyboard focus lights that rule like a
-                  // field's rim. The view switch stays as flat square icons.
-                  <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
-                    <SearchIcon aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
-                    <input
-                      type="search"
-                      aria-label="Search spans"
-                      placeholder="Search spans..."
-                      value={query}
-                      onChange={event => setQuery(event.target.value)}
-                      className="h-full min-w-0 flex-1 bg-transparent px-1.5 text-label text-foreground outline-hidden placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
-                    />
-                    {query && (
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="Clear search"
-                        className="rounded-md"
-                        onClick={() => setQuery('')}
-                      >
-                        <XIcon />
-                      </Button>
-                    )}
-                    <div role="group" aria-label="Span view" className="flex shrink-0 items-center gap-0.5">
-                      {(
-                        [
-                          ['tree', 'Span tree', <ListTreeIcon key="tree" />],
-                          ['timeline', 'Timeline', <ChartGanttIcon key="timeline" />],
-                        ] as const
-                      ).map(([view, label, icon]) => (
+          <TraceTimeCursorProvider store={timeCursorStore}>
+            <TracePanelColumns
+              layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : entityType === null ? 'unknown' : entityType}
+              sideColumnSlot={sideColumn}
+              spanPanelSlot={spanPanelSlot}
+              highlightQuery={query}
+              spanPanelKey={selectedSpanId}
+            >
+              {!isLoading && !spans?.length ? (
+                <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
+              ) : (
+                (() => {
+                  // Shared by the Spans and Timeline tabs: both views render the same
+                  // filtered `hierarchicalSpans`, so one query drives both.
+                  const isTimeline = spanView === 'timeline';
+                  const searchHeader = (
+                    // The bar itself is the search field: no pill inside the square panel, the
+                    // bottom rule is its only edge, and keyboard focus lights that rule like a
+                    // field's rim. The view switch stays as flat square icons.
+                    <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
+                      <SearchIcon aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                      <input
+                        type="search"
+                        aria-label="Search spans"
+                        placeholder="Search spans..."
+                        value={query}
+                        onChange={event => setQuery(event.target.value)}
+                        className="h-full min-w-0 flex-1 bg-transparent px-1.5 text-label text-foreground outline-hidden placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
+                      />
+                      {query && (
                         <Button
-                          key={view}
                           size="icon-sm"
-                          variant={spanView === view ? 'subtle' : 'ghost'}
-                          aria-label={label}
-                          aria-pressed={spanView === view}
-                          tooltip={label}
+                          variant="ghost"
+                          aria-label="Clear search"
                           className="rounded-md"
-                          onClick={() => setSpanView(view)}
+                          onClick={() => setQuery('')}
                         >
-                          {icon}
+                          <XIcon />
                         </Button>
-                      ))}
-                    </div>
-                  </DataPanel.Header>
-                );
-                const noSearchResults = !isLoading && hierarchicalSpans.length === 0 && (
-                  <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
-                );
-                const viewProps = {
-                  hierarchicalSpans,
-                  onSpanClick: handleSpanClick,
-                  selectedSpanId,
-                  expandedSpanIds,
-                  setExpandedSpanIds,
-                  featuredSpanIds,
-                  revealSpanId: featuredSpanIds?.at(-1),
-                  isLoading,
-                };
-
-                return (
-                  <>
-                    {searchHeader}
-                    <DataPanel.Content>
-                      {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
-                        <Notice variant="info" className="mb-6">
-                          <Notice.Message>
-                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                            deployed).
-                          </Notice.Message>
-                        </Notice>
                       )}
+                      <div role="group" aria-label="Span view" className="flex shrink-0 items-center gap-0.5">
+                        {(
+                          [
+                            ['tree', 'Span tree', <ListTreeIcon key="tree" />],
+                            ['timeline', 'Timeline', <ChartGanttIcon key="timeline" />],
+                          ] as const
+                        ).map(([view, label, icon]) => (
+                          <Button
+                            key={view}
+                            size="icon-sm"
+                            variant={spanView === view ? 'subtle' : 'ghost'}
+                            aria-label={label}
+                            aria-pressed={spanView === view}
+                            tooltip={label}
+                            className="rounded-md"
+                            onClick={() => setSpanView(view)}
+                          >
+                            {icon}
+                          </Button>
+                        ))}
+                      </div>
+                    </DataPanel.Header>
+                  );
+                  const noSearchResults = !isLoading && hierarchicalSpans.length === 0 && (
+                    <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
+                  );
+                  const viewProps = {
+                    hierarchicalSpans,
+                    onSpanClick: handleSpanClick,
+                    selectedSpanId,
+                    expandedSpanIds,
+                    setExpandedSpanIds,
+                    featuredSpanIds,
+                    revealSpanId: featuredSpanIds?.at(-1),
+                    isLoading,
+                  };
 
-                      {rootSpan && rootError && (
-                        <Notice
-                          variant="destructive"
-                          title={rootError.name ?? 'Error'}
-                          action={
-                            <Notice.Button
-                              onClick={() => {
-                                setSelectedSpanId(rootSpan.spanId);
-                                onSpanSelect?.(rootSpan.spanId);
-                              }}
-                            >
-                              View details
-                            </Notice.Button>
-                          }
-                          className="mb-4"
-                        >
-                          <Notice.Message className="line-clamp-3">{rootError.message}</Notice.Message>
-                        </Notice>
-                      )}
+                  return (
+                    <>
+                      {searchHeader}
+                      <DataPanel.Content>
+                        {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
+                          <Notice variant="info" className="mb-6">
+                            <Notice.Message>
+                              Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                              deployed).
+                            </Notice.Message>
+                          </Notice>
+                        )}
 
-                      {/* Both views share selection + expansion state, and stay mounted with no
+                        {rootSpan && rootError && (
+                          <Notice
+                            variant="destructive"
+                            title={rootError.name ?? 'Error'}
+                            action={
+                              <Notice.Button
+                                onClick={() => {
+                                  setSelectedSpanId(rootSpan.spanId);
+                                  onSpanSelect?.(rootSpan.spanId);
+                                }}
+                              >
+                                View details
+                              </Notice.Button>
+                            }
+                            className="mb-4"
+                          >
+                            <Notice.Message className="line-clamp-3">{rootError.message}</Notice.Message>
+                          </Notice>
+                        )}
+
+                        {/* Both views share selection + expansion state, and stay mounted with no
                     results because they host the search field: unmounting would strand the
                     user with a query they can no longer clear. */}
-                      {isTimeline ? <TraceSpanTimeline {...viewProps} /> : <TraceSpanTree {...viewProps} />}
-                      {noSearchResults}
-                    </DataPanel.Content>
-                  </>
-                );
-              })()
-            )}
-          </TracePanelColumns>
+                        {isTimeline ? <TraceSpanTimeline {...viewProps} /> : <TraceSpanTree {...viewProps} />}
+                        {noSearchResults}
+                      </DataPanel.Content>
+                    </>
+                  );
+                })()
+              )}
+            </TracePanelColumns>
+          </TraceTimeCursorProvider>
         </>
       )}
     </DataPanel>

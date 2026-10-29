@@ -13,3 +13,6 @@ export const TIMELINE_TICKS = [0, 0.25, 0.5, 0.75, 1];
  * that ends with the trace still fits; the axis header uses the same padding to stay aligned.
  */
 export const TIMELINE_TRACK_PADDING = 'pl-2 pr-16';
+
+/** Name column, then the time track. Shared by the timeline grid and the cursor overlay drawn over it. */
+export const TIMELINE_COLUMNS = 'grid-cols-[minmax(12rem,2fr)_minmax(12rem,3fr)]';

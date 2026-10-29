@@ -71,6 +71,33 @@ describe('formatTraceThreadMessages', () => {
     });
   });
 
+  describe('when the agent run is still in progress', () => {
+    const runningRoot = (span: (typeof agentTraceWithTools.spans)[number]) =>
+      span.spanId === 'agent-root' ? { ...span, endedAt: null, output: undefined } : span;
+
+    it('shows the text blocks that already ended as the assistant reply', () => {
+      const messages = formatTraceThreadMessages(agentTraceWithTools.spans.map(runningRoot));
+
+      expect(messages.at(-1)).toMatchObject({
+        role: 'assistant',
+        content: { parts: [{ type: 'text', text: 'Your Paris itinerary is ready.' }] },
+        traceSpanIds: ['agent-root', 'text-chunk'],
+      });
+    });
+
+    it('shows no assistant reply while the text block is still being written', () => {
+      const spans = agentTraceWithTools.spans
+        .map(runningRoot)
+        .map(span => (span.spanId === 'text-chunk' ? { ...span, endedAt: null, output: undefined } : span));
+
+      const messages = formatTraceThreadMessages(spans);
+
+      expect(messages.some(message => message.content.parts[0]?.type === 'text' && message.role === 'assistant')).toBe(
+        false,
+      );
+    });
+  });
+
   describe('when the agent run is a resume, so its input carries no user message', () => {
     it('renders no user message but keeps the tool calls and the response', () => {
       const spans = agentTraceWithTools.spans.map(span =>

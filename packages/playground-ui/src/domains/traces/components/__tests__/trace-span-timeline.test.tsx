@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createTraceTimeCursorStore } from '../../hooks/use-trace-time-cursor';
 import { getSpanTimingLayout } from '../../utils/span-timing';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
+import { TraceTimeCursorProvider } from '../trace-time-cursor-provider';
 import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
 import { formatDuration } from '@/utils/duration';
 
@@ -147,5 +149,152 @@ describe('TraceSpanTimeline', () => {
     render(<Harness />);
     const axis = screen.getByLabelText('Trace time axis');
     expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.00 s');
+  });
+
+  describe('with a time cursor', () => {
+    const traceStart = Date.parse('2026-06-01T10:00:00.000Z');
+
+    const renderWithCursor = (props: Parameters<typeof Harness>[0] = {}) => {
+      const store = createTraceTimeCursorStore();
+      render(
+        <TraceTimeCursorProvider store={store}>
+          <Harness initialExpanded={['root']} {...props} />
+        </TraceTimeCursorProvider>,
+      );
+      return store;
+    };
+
+    it('scrolls to the lowest span the cursor crosses, only when that span changes', () => {
+      const store = renderWithCursor();
+      const scrolledTo = () => scrollIntoView.mock.instances.map(el => (el as Element).getAttribute('aria-label'));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      act(() => store.set(traceStart + 100));
+      expect(scrolledTo()).toEqual(['View details for span agent run']);
+
+      act(() => store.set(traceStart + 500));
+      act(() => store.set(traceStart + 600));
+      expect(scrolledTo()).toEqual(['View details for span agent run', 'View details for span weather tool']);
+
+      act(() => store.set(traceStart + 900));
+      expect(scrolledTo()).toEqual([
+        'View details for span agent run',
+        'View details for span weather tool',
+        'View details for span agent run',
+      ]);
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest', behavior: 'smooth' });
+    });
+
+    it('shows the whole trace until the cursor is set', () => {
+      renderWithCursor();
+
+      expect(rows()).toHaveLength(2);
+      expect(screen.getByTestId('timeline-time-cursor').style.left).toBe('100%');
+      expect(screen.getByRole('slider', { name: 'Trace time cursor' }).getAttribute('aria-valuetext')).toBe(
+        'Full trace',
+      );
+    });
+
+    it('hides spans that have not started yet at the cursor', () => {
+      const store = renderWithCursor();
+
+      act(() => store.set(traceStart + 100));
+
+      expect(rows().map(r => r.getAttribute('aria-label'))).toEqual(['View details for span agent run']);
+      expect(screen.getByTestId('timeline-time-cursor').style.left).toBe('10%');
+    });
+
+    it('draws running spans up to the cursor with their elapsed time', () => {
+      const store = renderWithCursor();
+
+      act(() => store.set(traceStart + 500));
+
+      const [rootBar, childBar] = screen.getAllByTestId('span-timeline-bar');
+      expect([rootBar?.style.left, rootBar?.style.width]).toEqual(['0%', '50%']);
+      expect([childBar?.style.left, childBar?.style.width]).toEqual(['25%', '25%']);
+      const childRow = screen.getByLabelText('View details for span weather tool');
+      expect(within(childRow).getByLabelText('Running')).not.toBeNull();
+      expect(within(childRow).getByText(formatDuration(250))).not.toBeNull();
+    });
+
+    it('draws spans that ended before the cursor in full', () => {
+      const store = renderWithCursor();
+
+      act(() => store.set(traceStart + 900));
+
+      const childRow = screen.getByLabelText('View details for span weather tool');
+      expect(within(childRow).queryByLabelText('Running')).toBeNull();
+      expect(screen.getAllByTestId('span-timeline-bar')[1]?.style.width).toBe('50%');
+    });
+
+    it('steps between span starts and ends with the keyboard, and Escape shows the full trace again', () => {
+      const store = renderWithCursor();
+      const slider = screen.getByRole('slider', { name: 'Trace time cursor' });
+
+      fireEvent.keyDown(slider, { key: 'Home' });
+      expect(store.get()).toBe(traceStart);
+      expect(rows()).toHaveLength(1);
+
+      const steps: (string | null)[] = [];
+      for (let i = 0; i < 3; i++) {
+        fireEvent.keyDown(slider, { key: 'ArrowRight' });
+        steps.push(slider.getAttribute('aria-valuenow'));
+      }
+      expect(steps).toEqual(['250', '750', '1000']);
+      expect(rows()).toHaveLength(2);
+
+      fireEvent.keyDown(slider, { key: 'ArrowLeft' });
+      expect(slider.getAttribute('aria-valuenow')).toBe('750');
+
+      fireEvent.keyDown(slider, { key: 'Escape' });
+      expect(store.get()).toBeNull();
+      expect(screen.getByTestId('timeline-time-cursor').style.left).toBe('100%');
+    });
+
+    // jsdom has no layout: give the track 1000px and the 16px-wide playhead its center on `centerX`.
+    const layOut = (centerX: number) => {
+      const track = screen.getByLabelText('Trace time axis').firstElementChild as HTMLElement;
+      vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1000, 24));
+      const playhead = screen.getByTestId('timeline-time-cursor');
+      vi.spyOn(playhead, 'getBoundingClientRect').mockReturnValue(new DOMRect(centerX - 8, 0, 16, 400));
+      playhead.hasPointerCapture = vi.fn(() => true);
+      return playhead;
+    };
+
+    it('drags the playhead from anywhere along it, without jumping on press', async () => {
+      const store = renderWithCursor();
+      act(() => store.set(traceStart + 500));
+      const playhead = layOut(500);
+
+      // Pressed 3px left of the line: the cursor stays where it is.
+      fireEvent.pointerDown(playhead, { button: 0, pointerId: 1, clientX: 497 });
+      expect(store.get()).toBe(traceStart + 500);
+
+      fireEvent.pointerMove(playhead, { pointerId: 1, clientX: 197 });
+      await waitFor(() => expect(store.get()).toBe(traceStart + 200));
+      expect(rows()).toHaveLength(1);
+    });
+
+    it('can be grabbed while showing the full trace', async () => {
+      const store = renderWithCursor();
+      const playhead = layOut(1000);
+
+      fireEvent.pointerDown(playhead, { button: 0, pointerId: 1, clientX: 1000 });
+      expect(store.get()).toBe(traceStart + 1000);
+
+      fireEvent.pointerMove(playhead, { pointerId: 1, clientX: 100 });
+      await waitFor(() => expect(store.get()).toBe(traceStart + 100));
+      expect(rows()).toHaveLength(1);
+    });
+
+    it('still selects a span when its row is clicked while the cursor is set', () => {
+      const onSpanClick = vi.fn();
+      const store = renderWithCursor({ onSpanClick });
+      act(() => store.set(traceStart + 500));
+
+      fireEvent.click(screen.getByLabelText('View details for span weather tool'));
+
+      expect(onSpanClick).toHaveBeenCalledWith('child');
+    });
   });
 });

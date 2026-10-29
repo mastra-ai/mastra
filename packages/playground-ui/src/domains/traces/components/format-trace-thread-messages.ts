@@ -270,7 +270,18 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
   // A run started by a non-user signal (a skill, a reminder…) opens with that signal instead of a user turn.
   const signalParts = signal && !isUserSignalType(signal.type) ? toTextParts(signal.contents) : [];
   const { tools, textSpanIds, resumedOutput } = collectAssistantSpans(hierarchicalRoot, spans);
-  const responseText = getResponseText(root.output) || getResponseText(resumedOutput);
+  const responseText =
+    getResponseText(root.output) ||
+    getResponseText(resumedOutput) ||
+    // A run still in progress (e.g. a timeline snapshot) has no output yet: show the text blocks that already ended.
+    (root.endedAt
+      ? ''
+      : textSpanIds
+          .flatMap(id => {
+            const text = readString(spans.find(span => span.spanId === id)?.output, 'text');
+            return text ? [text] : [];
+          })
+          .join(''));
   const assistantCreatedAt = new Date(root.endedAt ?? root.startedAt);
   const threadId = root.threadId ?? undefined;
 

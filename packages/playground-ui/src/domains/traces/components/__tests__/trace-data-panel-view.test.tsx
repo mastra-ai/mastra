@@ -9,6 +9,7 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useTraceTimeCursor } from '../../hooks/use-trace-time-cursor';
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
 import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
@@ -958,6 +959,63 @@ describe('TraceDataPanelView — timeline view', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
     expect(screen.getByLabelText('View details for span weather tool').getAttribute('aria-selected')).toBe('true');
+  });
+});
+
+describe('TraceDataPanelView — time cursor', () => {
+  // Stands in for the Messages panel: it reads the same cursor the real panel follows.
+  function CursorProbe() {
+    const isScrubbing = useTraceTimeCursor(t => t != null);
+    return <p data-testid="cursor-probe">{isScrubbing ? 'scrubbing' : 'full trace'}</p>;
+  }
+
+  const setCursorToStart = () =>
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'Trace time cursor' }), { key: 'Home' });
+
+  it('shares the timeline cursor with the messages column', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} messagesPanelSlot={<CursorProbe />} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
+    expect(screen.getByTestId('cursor-probe').textContent).toBe('full trace');
+
+    setCursorToStart();
+
+    expect(screen.getByTestId('cursor-probe').textContent).toBe('scrubbing');
+  });
+
+  it('shows the full trace again after switching to the tree view', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} messagesPanelSlot={<CursorProbe />} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
+    setCursorToStart();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
+
+    expect(screen.getByTestId('cursor-probe').textContent).toBe('full trace');
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
+    expect(screen.getByRole('slider', { name: 'Trace time cursor' }).getAttribute('aria-valuetext')).toBe('Full trace');
+  });
+
+  it('shows the full trace when another trace opens', () => {
+    const { rerender } = render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        spanView="timeline"
+        messagesPanelSlot={<CursorProbe />}
+      />,
+    );
+    setCursorToStart();
+
+    rerender(
+      <TraceDataPanelView
+        {...baseProps}
+        traceId="trace-2"
+        spans={nestedSpanFixture}
+        spanView="timeline"
+        messagesPanelSlot={<CursorProbe />}
+      />,
+    );
+
+    expect(screen.getByTestId('cursor-probe').textContent).toBe('full trace');
   });
 });
 

@@ -1,5 +1,7 @@
-import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
+import { ChevronDownIcon, ChevronRightIcon, Loader2Icon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { useIsCurrentTimelineSpan } from '../hooks/use-timeline-current-span';
+import { useTraceTimeCursor } from '../hooks/use-trace-time-cursor';
 import { splitSpanName, TIMELINE_TICKS, TIMELINE_TRACK_PADDING } from '../utils/span-timeline';
 import { getSpanTimingLayout } from '../utils/span-timing';
 import type { SpanRowContext } from './span-rows';
@@ -53,6 +55,20 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
   } = ctx;
   const rowRef = useRef<HTMLDivElement>(null);
   const shouldScrollIntoView = isSelected || isRevealed;
+  const startMs = Date.parse(span.startTime);
+  // Spans with no end yet are live: they keep running whatever the cursor time.
+  const endMs = span.endTime ? startMs + span.latency : Infinity;
+  const isStarted = useTraceTimeCursor(t => t == null || t >= startMs);
+  // Elapsed ms at the cursor (`null` without one). Constant once the span has ended, so only the rows
+  // running at the cursor re-render while it moves.
+  const elapsedMs = useTraceTimeCursor(t => (t == null ? null : Math.max(0, Math.min(t, endMs) - startMs)));
+  const isCurrent = useIsCurrentTimelineSpan(span.id);
+
+  // Follow the cursor: keep the lowest span it crosses on screen while scrubbing.
+  useEffect(() => {
+    if (!isCurrent) return;
+    rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [isCurrent]);
 
   // Nested rows mount late, once expansion opens, so scroll on mount as well as on change.
   useEffect(() => {
@@ -61,7 +77,16 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
     rowRef.current?.scrollIntoView({ block: isRevealed ? 'center' : 'nearest', behavior: 'smooth' });
   }, [shouldScrollIntoView, isRevealed]);
 
-  const { startShiftMs, leftPercent, widthPercent } = getSpanTimingLayout(span, overallLatency, overallStartTime);
+  // Spans start after their parent, so hiding a row also hides its not-yet-started descendants.
+  if (!isStarted) return null;
+
+  const {
+    startShiftMs,
+    leftPercent,
+    widthPercent: fullWidthPercent,
+  } = getSpanTimingLayout(span, overallLatency, overallStartTime);
+  const isRunning = elapsedMs != null && elapsedMs < endMs - startMs;
+  const widthPercent = isRunning ? (overallLatency ? (elapsedMs / overallLatency) * 100 : 0) : fullWidthPercent;
   const toggleLabel = isExpanded
     ? `Collapse children (${expansion.numOfChildren})`
     : `Expand children (${expansion.numOfChildren})`;
@@ -155,22 +180,29 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
             <TimelineGridlines />
             <div
               data-testid="span-timeline-bar"
+              data-running={isRunning || undefined}
               className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm"
               style={{
                 left: `${leftPercent}%`,
                 width: widthPercent ? `${widthPercent}%` : '2px',
-                backgroundColor: `color-mix(in oklab, ${color} 40%, transparent)`,
-                boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${color} 70%, transparent)`,
+                // A running bar fades out toward the cursor: it has no end yet.
+                background: isRunning
+                  ? `linear-gradient(to right, color-mix(in oklab, ${color} 40%, transparent), color-mix(in oklab, ${color} 5%, transparent))`
+                  : `color-mix(in oklab, ${color} 40%, transparent)`,
+                boxShadow: isRunning
+                  ? `inset 1px 0 0 0 color-mix(in oklab, ${color} 70%, transparent)`
+                  : `inset 0 0 0 1px color-mix(in oklab, ${color} 70%, transparent)`,
               }}
             />
             <Txt
               as="span"
               variant="body-sm"
               tone="muted"
-              className="absolute top-1/2 ml-1.5 -translate-y-1/2 whitespace-nowrap tabular-nums"
+              className="absolute top-1/2 ml-1.5 flex -translate-y-1/2 items-center gap-1 whitespace-nowrap tabular-nums"
               style={{ left: `${leftPercent + widthPercent}%` }}
             >
-              {formatDuration(span.latency)}
+              {isRunning && <Loader2Icon aria-label="Running" className="size-3 motion-safe:animate-spin" />}
+              {formatDuration(isRunning ? elapsedMs : span.latency)}
             </Txt>
           </div>
         </HoverCardTrigger>

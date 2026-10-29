@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import '@/test/inert-resize-observer';
 import { SpanType } from '@mastra/core/observability';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createTraceTimeCursorStore } from '../../hooks/use-trace-time-cursor';
 import { TraceThreadItemView } from '../trace-thread-item-view';
+import { TraceTimeCursorProvider } from '../trace-time-cursor-provider';
 import {
   agentTraceWithTools,
   agentTraceWithSkill,
@@ -239,6 +241,109 @@ describe('TraceThreadItemView', () => {
       expect(await screen.findByTestId('tool-badge')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.getByTestId('skill-activation-status').textContent).toBe('false');
+    });
+  });
+
+  describe('when the timeline time cursor is set', () => {
+    const [root] = basicAgentTrace.spans;
+    if (!root) throw new Error('fixture missing root span');
+    const traceStart = new Date(root.startedAt).getTime();
+    const at = (ms: number) => new Date(traceStart + ms);
+    // Root runs 0–1000ms, a tool call 200–400ms, then the reply text block 500–700ms.
+    const timedTrace = {
+      ...basicAgentTrace,
+      spans: [
+        root,
+        {
+          ...root,
+          spanId: 'hotel-tool',
+          parentSpanId: root.spanId,
+          name: "tool: 'searchHotels'",
+          spanType: SpanType.TOOL_CALL,
+          entityType: 'tool',
+          entityId: 'searchHotels',
+          entityName: 'searchHotels',
+          attributes: { toolCallId: 'call-hotels' },
+          input: { city: 'Paris' },
+          output: { hotels: ['Left Bank'] },
+          startedAt: at(200),
+          endedAt: at(400),
+        },
+        {
+          ...root,
+          spanId: 'reply-chunk',
+          parentSpanId: root.spanId,
+          name: "chunk: 'text'",
+          spanType: SpanType.MODEL_CHUNK,
+          attributes: { chunkType: 'text' },
+          input: null,
+          output: { text: 'Your Paris itinerary is ready.' },
+          startedAt: at(500),
+          endedAt: at(700),
+        },
+      ],
+    };
+
+    const renderAtCursor = async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(timedTrace)),
+        http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+      );
+      const store = createTraceTimeCursorStore();
+      const { queryClient } = renderWithProviders(
+        <TraceTimeCursorProvider store={store}>
+          <TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />
+        </TraceTimeCursorProvider>,
+      );
+      expect(await screen.findByText('Your Paris itinerary is ready.')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      return store;
+    };
+
+    it('shows only the user message before the first tool call starts', async () => {
+      const store = await renderAtCursor();
+
+      act(() => store.set(traceStart + 100));
+
+      expect(screen.getByText('Plan a weekend in Paris')).not.toBeNull();
+      expect(screen.queryByTestId('tool-badge')).toBeNull();
+      expect(screen.queryByText('Your Paris itinerary is ready.')).toBeNull();
+    });
+
+    it('shows the tool call once it has started, before the reply exists', async () => {
+      const store = await renderAtCursor();
+
+      act(() => store.set(traceStart + 300));
+
+      expect(screen.getByTestId('tool-badge')).not.toBeNull();
+      expect(screen.queryByText('Your Paris itinerary is ready.')).toBeNull();
+    });
+
+    it('shows the reply text that was already written while the run is still going', async () => {
+      const store = await renderAtCursor();
+
+      act(() => store.set(traceStart + 800));
+
+      expect(screen.getByTestId('tool-badge')).not.toBeNull();
+      expect(screen.getByText('Your Paris itinerary is ready.')).not.toBeNull();
+    });
+
+    it('says nothing has happened yet before the trace starts', async () => {
+      const store = await renderAtCursor();
+
+      act(() => store.set(traceStart - 1));
+
+      expect(screen.getByText('Nothing has happened yet at this point.')).not.toBeNull();
+    });
+
+    it('shows the whole turn again once the cursor is cleared', async () => {
+      const store = await renderAtCursor();
+      act(() => store.set(traceStart + 100));
+
+      act(() => store.set(null));
+
+      expect(screen.getByTestId('tool-badge')).not.toBeNull();
+      expect(screen.getByText('Your Paris itinerary is ready.')).not.toBeNull();
     });
   });
 });

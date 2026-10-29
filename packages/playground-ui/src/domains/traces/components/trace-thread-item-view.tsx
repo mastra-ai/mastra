@@ -1,5 +1,8 @@
 import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { ListTreeIcon } from 'lucide-react';
+import { useMemo } from 'react';
+import { useTraceTimeCursor, useTraceTimeCursorStore } from '../hooks/use-trace-time-cursor';
+import { createSpanSnapshotIndex, snapshotKeyAt, snapshotSpansAt } from '../utils/span-snapshot';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { ReadOnlyToolCallProvider } from './read-only-tool-call-provider';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
@@ -16,12 +19,24 @@ export interface TraceThreadItemViewProps {
   className?: string;
 }
 
+const NO_SPANS: never[] = [];
+
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
   const { data, isLoading, error } = useTraceSpans({
     traceId: traceId,
     passive: true,
     queryOptions: { enabled: !!traceId },
   });
+  const spans = data?.spans ?? NO_SPANS;
+  const snapshotIndex = useMemo(() => createSpanSnapshotIndex(spans), [spans]);
+  const timeCursor = useTraceTimeCursorStore();
+  // Re-renders only when the cursor crosses a span start or end, not on every cursor move.
+  const snapshotKey = useTraceTimeCursor(t => (t == null ? null : snapshotKeyAt(snapshotIndex, t)));
+  const messages = useMemo(() => {
+    // The key fully determines which spans are started and ended, so reading the live cursor here is safe.
+    const t = snapshotKey == null ? null : (timeCursor?.get() ?? null);
+    return formatTraceThreadMessages(t == null ? spans : snapshotSpansAt(spans, t));
+  }, [spans, snapshotKey, timeCursor]);
 
   if (isLoading) return <TraceMessagesSkeleton className={className} />;
 
@@ -33,13 +48,11 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
     );
   }
 
-  const messages = data ? formatTraceThreadMessages(data.spans) : [];
-
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
         <Txt variant="body" tone="muted">
-          No agent turn found for this trace.
+          {snapshotKey == null ? 'No agent turn found for this trace.' : 'Nothing has happened yet at this point.'}
         </Txt>
       </div>
     );
