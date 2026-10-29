@@ -91,7 +91,7 @@ import { OtelExporter } from '@mastra/otel-exporter'
 
 const exporter = new OtelExporter({
   provider: {
-    custom: { endpoint: 'https://collector.example.com/v1/traces' },
+    custom: { endpoints: { traces: 'https://collector.example.com/v1/traces' } },
   },
   metadataMapping: { userId: 'user.id', tenantId: 'tenant.id' },
 })
@@ -261,11 +261,13 @@ interface LaminarConfig {
 ### `CustomConfig`
 
 ```typescript
-interface CustomConfig {
-  endpoint: string
+type CustomConfig = {
   protocol?: 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'
   headers?: Record<string, string>
-}
+} & (
+  | { endpoint: string; endpoints?: never }
+  | { endpoint?: never; endpoints: { traces?: string; logs?: string } }
+)
 ```
 
 <PropertiesTable
@@ -273,8 +275,16 @@ interface CustomConfig {
   {
     name: 'endpoint',
     type: 'string',
-    description: 'OTEL collector endpoint URL',
-    required: true,
+    description:
+      'Legacy collector endpoint. Cannot be combined with endpoints. Uses the existing signal-path derivation for OTLP.',
+    required: false,
+  },
+  {
+    name: 'endpoints',
+    type: '{ traces?: string; logs?: string }',
+    description:
+      'Exact per-signal URLs. Supply at least one endpoint. Omitted signals are not exported. Cannot be combined with endpoint.',
+    required: false,
   },
   {
     name: 'protocol',
@@ -291,13 +301,31 @@ interface CustomConfig {
 ]}
 />
 
-### HTTP endpoint paths
+### Custom signal endpoints
 
-For `http/json` and `http/protobuf`, an endpoint without a path uses `/v1/traces` and `/v1/logs`. An endpoint with a custom path is used as the trace URL, with trailing slashes removed. A final `/traces` or `/logs` segment is replaced with the requested signal name. Query parameters are preserved.
+Supply either `endpoint` or `endpoints`, never both. TypeScript rejects configurations with both options. Runtime validation also rejects them and disables the exporter with an error message.
 
-For example, `https://collector.example.com/api/otel/traces?tenant=acme` sends traces to that URL and logs to `https://collector.example.com/api/otel/logs?tenant=acme`.
+Use `endpoints` to supply the exact URL for each signal. URLs are passed to the selected exporter without adding, removing, or replacing path segments. Trace and log endpoints can use different hosts and unrelated paths:
 
-If a custom path doesn't end in `/traces` or `/logs`, log export appends `/v1/logs` to that path. Set `signals: { logs: false }` when your endpoint only accepts traces.
+```typescript
+import { OtelExporter } from '@mastra/otel-exporter'
+
+const exporter = new OtelExporter({
+  provider: {
+    custom: {
+      protocol: 'http/protobuf',
+      endpoints: {
+        traces: 'https://traces.example.com/api/ingest/?tenant=acme',
+        logs: 'https://logs.example.com/events',
+      },
+    },
+  },
+})
+```
+
+Supply at least one signal endpoint. Omit `logs` for trace-only export or `traces` for log-only export. The `signals` toggles can still disable a configured signal. Protocol and headers apply to both endpoints; the selected protocol must support the signal. A custom `exporter` instance overrides trace transport as before.
+
+The singular `endpoint` option retains its existing behavior for compatibility: OTLP signal paths are derived from the collector URL, and Zipkin uses the configured URL directly. For custom paths, use `endpoints` instead.
 
 ## Methods
 

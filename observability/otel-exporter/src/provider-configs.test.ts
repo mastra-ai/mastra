@@ -106,6 +106,19 @@ describe('Provider Configurations', () => {
   });
 
   describe('Custom', () => {
+    it.each(['https://collector.example.com', ''])('rejects both endpoint and endpoints (%s)', endpoint => {
+      expect(
+        resolveProviderConfig({
+          // @ts-expect-error These options are mutually exclusive, including for JavaScript callers.
+          custom: { endpoint, endpoints: { traces: 'https://collector.example.com/traces' } },
+        }),
+      ).toBeNull();
+    });
+
+    it('rejects an empty endpoints configuration', () => {
+      expect(resolveProviderConfig({ custom: { endpoints: {} } })).toBeNull();
+    });
+
     it('should configure custom provider', () => {
       const config = resolveProviderConfig({
         custom: {
@@ -120,8 +133,9 @@ describe('Provider Configurations', () => {
       expect(config?.protocol).toBe('http/protobuf');
     });
 
-    it('should require endpoint for custom provider', () => {
+    it('should require an endpoint for custom provider', () => {
       const config = resolveProviderConfig({
+        // @ts-expect-error Verify runtime validation for JavaScript callers.
         custom: {
           headers: { 'x-value': 'test' },
         },

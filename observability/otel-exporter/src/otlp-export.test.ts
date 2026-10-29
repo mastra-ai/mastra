@@ -70,17 +70,52 @@ describe('OTLP exports', () => {
       ['/v1/traces', '/v1/traces', '/v1/logs'],
       ['/v1/traces/', '/v1/traces', '/v1/logs'],
       ['/v1/logs', '/v1/traces', '/v1/logs'],
-      ['/v1/ai/otel/traces', '/v1/ai/otel/traces', '/v1/ai/otel/logs'],
-      ['/api/otel/traces/', '/api/otel/traces', '/api/otel/logs'],
-      ['/api/ingest', '/api/ingest', '/api/ingest/v1/logs'],
-      ['/api/otel/traces?tenant=acme', '/api/otel/traces?tenant=acme', '/api/otel/logs?tenant=acme'],
-      ['?tenant=acme', '/v1/traces?tenant=acme', '/v1/logs?tenant=acme'],
     ])('routes traces and logs for %s', async (path, traces, logs) => {
       exporter = new OtelExporter({ provider: { custom: { endpoint: baseUrl + path, protocol } } });
       await sendSpan();
       await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
       await exporter.flush();
       expect(requests.map(request => request.path).sort()).toEqual([traces, logs].sort());
+    });
+
+    it.each([
+      ['/api/traces/', '/events/log-ingest?tenant=acme'],
+      ['/ingest?signal=traces', '/logs/?signal=logs'],
+      ['/', '/'],
+    ])('uses explicit trace %s and log %s endpoints unchanged', async (traces, logs) => {
+      exporter = new OtelExporter({
+        provider: { custom: { protocol, endpoints: { traces: baseUrl + traces, logs: baseUrl + logs } } },
+      });
+      await sendSpan();
+      await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
+      await exporter.flush();
+      expect(requests.map(request => request.path).sort()).toEqual([traces, logs].sort());
+    });
+
+    it.each(['traces', 'logs'] as const)('exports only the explicitly configured %s signal', async signal => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            protocol,
+            endpoints: { [signal]: baseUrl + '/exact/' },
+          },
+        },
+      });
+      await sendSpan();
+      await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
+      await exporter.flush();
+      expect(requests.map(request => request.path)).toEqual(['/exact/']);
+    });
+
+    it('honors signal toggles with explicit endpoints', async () => {
+      exporter = new OtelExporter({
+        provider: { custom: { protocol, endpoints: { traces: baseUrl + '/trace', logs: baseUrl + '/log' } } },
+        signals: { traces: false, logs: false },
+      });
+      await sendSpan();
+      await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
+      await exporter.flush();
+      expect(requests).toEqual([]);
     });
   });
 

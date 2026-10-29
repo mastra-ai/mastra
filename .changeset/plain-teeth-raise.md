@@ -2,13 +2,20 @@
 '@mastra/otel-exporter': minor
 ---
 
-Fixed HTTP trace exports to custom endpoint paths such as `/api/otel/traces`. Query parameters are preserved, and log exports use the corresponding `/logs` path when the endpoint ends in `/traces` or `/logs`.
+Added explicit `custom.endpoints.traces` and `custom.endpoints.logs` URLs, passed through without rewriting paths or query parameters. Omitted signals are not exported. Configure either `endpoint` or `endpoints`, never both; this is enforced in TypeScript and at runtime. The singular `endpoint` option retains its legacy behavior.
 
 Added opt-in `metadataMapping` to copy selected metadata into top-level span attributes. Existing exports remain unchanged without a mapping:
 
 ```ts
 new OtelExporter({
-  provider: { custom: { endpoint: 'https://collector.example.com/api/otel/traces' } },
+  provider: {
+    custom: {
+      endpoints: {
+        traces: 'https://collector.example.com/api/otel/traces',
+        logs: 'https://collector.example.com/events',
+      },
+    },
+  },
   metadataMapping: { userId: 'user.id', tenantId: 'tenant.id' },
 });
 ```

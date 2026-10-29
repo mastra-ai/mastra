@@ -41,11 +41,25 @@ export interface LaminarConfig {
   endpoint?: string;
 }
 
-export interface CustomConfig {
-  endpoint?: string; // Required at runtime
+/** Configure either a legacy collector endpoint or exact per-signal endpoints. */
+export type CustomConfig = {
   headers?: Record<string, string>;
   protocol?: ExportProtocol;
-}
+} & (
+  | {
+      /** Legacy collector endpoint. Cannot be combined with endpoints. */
+      endpoint: string;
+      endpoints?: never;
+    }
+  | {
+      endpoint?: never;
+      /** Exact signal URLs. Omitted signals are not exported; no paths are added or rewritten. */
+      endpoints: {
+        traces?: string;
+        logs?: string;
+      };
+    }
+);
 
 // Provider configuration that infers the provider type from the key
 export type ProviderConfig =
