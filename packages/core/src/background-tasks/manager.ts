@@ -80,6 +80,7 @@ export class BackgroundTaskManager {
   private localReservations = new Map<string, string>();
   private localPendingTaskIds = new Set<string>();
   private drainingPending = false;
+  private pendingDrainRequested = false;
 
   // Task IDs this manager currently holds an execution lease for. Populated on
   // a successful claim and drained by the lease heartbeat, which renews each
@@ -1310,11 +1311,15 @@ export class BackgroundTaskManager {
           },
     );
     if (!started) {
-      this.releaseLocalSlot(taskId);
       const current = await storage.getTask(taskId);
-      if (current?.status === 'pending' && current.ownerId === this.workerId && this.taskContexts.has(taskId)) {
-        this.localPendingTaskIds.add(taskId);
-        setTimeout(() => void this.drainPending(), 0).unref?.();
+      // Another delivery on this worker may already be running with this
+      // reservation. Only release it if the task is no longer ours to run.
+      if (current?.status !== 'running' || current.ownerId !== this.workerId) {
+        this.releaseLocalSlot(taskId);
+        if (current?.status === 'pending' && current.ownerId === this.workerId && this.taskContexts.has(taskId)) {
+          this.localPendingTaskIds.add(taskId);
+          setTimeout(() => void this.drainPending(), 0).unref?.();
+        }
       }
       return true;
     }
@@ -1882,6 +1887,23 @@ export class BackgroundTaskManager {
       // Storage unavailable mid-shutdown — leases expire on their own.
       return;
     }
+    for (const taskId of [...this.ownedLeases]) {
+      try {
+        // Fenced on the owner so a worker whose lease already lapsed (and whose
+        // task was reclaimed) cannot revive it.
+        const renewed = await storage.updateTask(
+          taskId,
+          { leaseExpiresAt: new Date(Date.now() + this.config.leaseDurationMs) },
+          { expectedStatus: 'running', expectedOwnerId: this.workerId },
+        );
+        if (!renewed) {
+          this.ownedLeases.delete(taskId);
+          await this.#abortSupersededRun(taskId);
+        }
+      } catch {
+        // Transient storage error — keep the lease tracked and retry next tick.
+      }
+    }
     for (const taskId of [...this.localPendingTaskIds]) {
       try {
         const task = await storage.getTask(taskId);
@@ -1902,23 +1924,6 @@ export class BackgroundTaskManager {
         );
       } catch {
         // Transient storage error — the lease expires unless the next tick succeeds.
-      }
-    }
-    for (const taskId of [...this.ownedLeases]) {
-      try {
-        // Fenced on the owner so a worker whose lease already lapsed (and whose
-        // task was reclaimed) cannot revive it.
-        const renewed = await storage.updateTask(
-          taskId,
-          { leaseExpiresAt: new Date(Date.now() + this.config.leaseDurationMs) },
-          { expectedStatus: 'running', expectedOwnerId: this.workerId },
-        );
-        if (!renewed) {
-          this.ownedLeases.delete(taskId);
-          await this.#abortSupersededRun(taskId);
-        }
-      } catch {
-        // Transient storage error — keep the lease tracked and retry next tick.
       }
     }
   }
@@ -2000,34 +2005,45 @@ export class BackgroundTaskManager {
   }
 
   private async drainPending(): Promise<void> {
-    if (this.drainingPending || this.shuttingDown) return;
+    if (this.shuttingDown) return;
+    if (this.drainingPending) {
+      this.pendingDrainRequested = true;
+      return;
+    }
     this.drainingPending = true;
 
     try {
-      const storage = await this.getStorage();
-      for (const taskId of [...this.localPendingTaskIds]) {
-        const task = await storage.getTask(taskId);
-        if (!task || task.status !== 'pending' || (task.ownerId && task.ownerId !== this.workerId)) {
-          this.localPendingTaskIds.delete(taskId);
-          continue;
-        }
-
-        const isProcessAffine = this.taskContexts.has(taskId);
-        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
-        if (!canRun) continue;
-
-        this.localPendingTaskIds.delete(taskId);
+      do {
+        this.pendingDrainRequested = false;
         try {
-          await this.dispatch(task);
+          const storage = await this.getStorage();
+          for (const taskId of [...this.localPendingTaskIds]) {
+            const task = await storage.getTask(taskId);
+            if (!task || task.status !== 'pending' || (task.ownerId && task.ownerId !== this.workerId)) {
+              this.localPendingTaskIds.delete(taskId);
+              continue;
+            }
+
+            const isProcessAffine = this.taskContexts.has(taskId);
+            const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
+            if (!canRun) continue;
+
+            this.localPendingTaskIds.delete(taskId);
+            try {
+              await this.dispatch(task);
+            } catch (error) {
+              if (isProcessAffine) this.releaseLocalSlot(taskId);
+              this.localPendingTaskIds.add(taskId);
+              this.#mastra
+                ?.getLogger?.()
+                ?.warn(`background-task dispatch failed while draining ${taskId}:`, error as any);
+              return;
+            }
+          }
         } catch (error) {
-          if (isProcessAffine) this.releaseLocalSlot(taskId);
-          this.localPendingTaskIds.add(taskId);
-          this.#mastra?.getLogger?.()?.warn(`background-task dispatch failed while draining ${taskId}:`, error as any);
-          return;
+          this.#mastra?.getLogger?.()?.warn('background-task queue drain failed:', error as any);
         }
-      }
-    } catch (error) {
-      this.#mastra?.getLogger?.()?.warn('background-task queue drain failed:', error as any);
+      } while (this.pendingDrainRequested && !this.shuttingDown);
     } finally {
       this.drainingPending = false;
     }

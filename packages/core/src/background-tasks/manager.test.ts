@@ -1598,6 +1598,82 @@ describe('BackgroundTaskManager', () => {
       }
     });
 
+    it('retries a drain requested while a recovered portable task is being checked for capacity', async () => {
+      const storage = new MockStore();
+      const bgStore = await storage.getStore('backgroundTasks');
+      const local = new Mastra({ logger: false, storage });
+      await local.startWorkers();
+      const pubsub = new EventEmitterPubSub();
+      const mgr = new BackgroundTaskManager({ globalConcurrency: 1, recoverStaleTasksOnStart: false });
+      mgr.__registerMastra(local);
+      let releaseFirst!: () => void;
+      const firstGate = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      let releaseCapacity!: () => void;
+      const capacityGate = new Promise<void>(resolve => {
+        releaseCapacity = resolve;
+      });
+      let checkingCapacity!: () => void;
+      const capacityStarted = new Promise<void>(resolve => {
+        checkingCapacity = resolve;
+      });
+      const execute = vi.fn(async (args: { id: string }) => {
+        if (args.id === 'first') await firstGate;
+        return args.id;
+      });
+      mgr.registerStaticExecutor('portable-tool', { execute });
+      try {
+        await mgr.init(pubsub);
+        const { task: first } = await mgr.enqueue({
+          toolName: 'portable-tool',
+          toolCallId: 'first',
+          args: { id: 'first' },
+          agentId: 'first',
+          runId: 'first',
+        });
+        await vi.waitFor(async () => expect((await bgStore!.getTask(first.id))?.status).toBe('running'));
+        await bgStore!.createTask({
+          id: 'second',
+          status: 'pending',
+          toolName: 'portable-tool',
+          toolCallId: 'second',
+          args: { id: 'second' },
+          agentId: 'second',
+          runId: 'second',
+          retryCount: 0,
+          maxRetries: 0,
+          timeoutMs: 5000,
+          createdAt: new Date(),
+        });
+        const countRunning = bgStore!.getRunningCount.bind(bgStore);
+        let blocked = false;
+        vi.spyOn(bgStore!, 'getRunningCount').mockImplementation(async () => {
+          if (!blocked) {
+            blocked = true;
+            checkingCapacity();
+            await capacityGate;
+            return 1; // stale count from before the first task finished
+          }
+          return countRunning();
+        });
+        const recovering = mgr['recoverStaleTasks']();
+        await capacityStarted;
+        releaseFirst();
+        await vi.waitFor(async () => expect((await bgStore!.getTask(first.id))?.status).toBe('completed'));
+        releaseCapacity();
+        await recovering;
+        await vi.waitFor(async () => expect((await bgStore!.getTask('second'))?.status).toBe('completed'));
+        expect(execute).toHaveBeenCalledTimes(2);
+      } finally {
+        releaseFirst();
+        releaseCapacity();
+        await mgr.shutdown();
+        await pubsub.close();
+        await local.stopWorkers();
+      }
+    });
+
     it('drains fast portable pending tasks during startup recovery', async () => {
       const storage = new MockStore();
       const bgStore = await storage.getStore('backgroundTasks');
@@ -1748,6 +1824,113 @@ describe('BackgroundTaskManager', () => {
         await second?.stopWorkers();
         await first.backgroundTaskManager?.shutdown();
         await first.stopWorkers();
+      }
+    });
+
+    it('renews running leases before scanning a slow pending queue', async () => {
+      const storage = new MockStore();
+      const bgStore = await storage.getStore('backgroundTasks');
+      const local = new Mastra({
+        logger: false,
+        storage,
+        backgroundTasks: { enabled: true, globalConcurrency: 1, leaseDurationMs: 3_000 },
+      });
+      let releaseFirst!: () => void;
+      const firstGate = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      let releasePending!: () => void;
+      const pendingGate = new Promise<void>(resolve => {
+        releasePending = resolve;
+      });
+      let scanningPending!: () => void;
+      const pendingScan = new Promise<void>(resolve => {
+        scanningPending = resolve;
+      });
+      try {
+        await local.startWorkers();
+        const mgr = local.backgroundTaskManager!;
+        const { task: first } = await mgr.enqueue(
+          { toolName: 't', toolCallId: 'first', args: {}, agentId: 'a', runId: 'first' },
+          ctx(async () => {
+            await firstGate;
+            return 'first result';
+          }),
+        );
+        await vi.waitFor(async () => expect((await bgStore.getTask(first.id))?.status).toBe('running'));
+        const initialExpiry = (await bgStore.getTask(first.id))!.leaseExpiresAt!.getTime();
+        const { task: pending } = await mgr.enqueue(
+          { toolName: 't', toolCallId: 'pending', args: {}, agentId: 'a', runId: 'pending' },
+          ctx(async () => 'pending result'),
+        );
+        const getTask = bgStore.getTask.bind(bgStore);
+        let blocked = false;
+        vi.spyOn(bgStore, 'getTask').mockImplementation(async id => {
+          if (id === pending.id && !blocked) {
+            blocked = true;
+            scanningPending();
+            await pendingGate;
+          }
+          return getTask(id);
+        });
+        await pendingScan;
+        expect((await getTask(first.id))!.leaseExpiresAt!.getTime()).toBeGreaterThan(initialExpiry);
+      } finally {
+        releasePending();
+        releaseFirst();
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('keeps a running task slot reserved when a duplicate dispatch loses the claim', async () => {
+      const storage = new MockStore();
+      const bgStore = await storage.getStore('backgroundTasks');
+      const local = new Mastra({ logger: false, storage, backgroundTasks: { enabled: true, globalConcurrency: 1 } });
+      let releaseFirst!: () => void;
+      const gate = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      const second = vi.fn(async () => 'second result');
+      try {
+        await local.startWorkers();
+        const mgr = local.backgroundTaskManager!;
+        const updateTask = bgStore.updateTask.bind(bgStore);
+        let duplicate: Promise<boolean> | undefined;
+        let firstId: string | undefined;
+        vi.spyOn(bgStore, 'updateTask').mockImplementation(async (id, updates, expected) => {
+          if (!duplicate && updates.status === 'running') {
+            firstId = id;
+            duplicate = mgr['handleDispatch']({ data: { taskId: id } } as Parameters<
+              (typeof mgr)['handleDispatch']
+            >[0]);
+            await duplicate;
+          }
+          return updateTask(id, updates, expected);
+        });
+        await mgr.enqueue(
+          { toolName: 't', toolCallId: 'first', args: {}, agentId: 'a', runId: 'first' },
+          ctx(async () => {
+            await gate;
+            return 'first result';
+          }),
+        );
+        await vi.waitFor(async () => expect((await bgStore.getTask(firstId!))?.status).toBe('running'));
+        expect(duplicate).toBeDefined();
+        const { task } = await mgr.enqueue(
+          { toolName: 't', toolCallId: 'second', args: {}, agentId: 'a', runId: 'second' },
+          ctx(second),
+        );
+        await tick(100);
+        expect((await bgStore.getTask(task.id))?.status).toBe('pending');
+        expect(second).not.toHaveBeenCalled();
+        releaseFirst();
+        await vi.waitFor(async () => expect((await bgStore.getTask(task.id))?.status).toBe('completed'));
+        expect(second).toHaveBeenCalledOnce();
+      } finally {
+        releaseFirst();
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
       }
     });
 
