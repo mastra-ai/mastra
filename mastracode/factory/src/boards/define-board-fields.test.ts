@@ -69,7 +69,8 @@ describe('defineBoard phase fields', () => {
   });
 
   it('keeps the built-in Work board contexts as the old role names', () => {
-    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', runner: { context: 'plan' } });
+    // Planning and Building share the `work` session, so the builder keeps the plan's context.
+    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', runner: { context: 'work' } });
     expect(workBoard.phases.intake.nextPhases).toEqual(workBoard.transitions.intake.map(({ to }) => to));
   });
 
@@ -261,6 +262,8 @@ describe('defineBoard phase fields', () => {
       role: 'release',
       skillName: 'release-notes',
       arguments: 'Work item (https://github.test/acme/repo/issues/7)\n\nKeep it short.',
+      // Entering from another phase, the skill starts even when that phase's agent made the move.
+      startsAfterOwnMove: true,
     });
     expect(await board.rules.build!.manual!.onEnter!(stageContext('build'))).toMatchObject({
       prompt: 'Ship it.\n\nKeep it short.',
