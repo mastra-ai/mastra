@@ -81,38 +81,39 @@ const membershipSetSchema = z
   .refine(set => set.length <= TRACE_QUERY_MAX_SET_VALUES, 'Membership set is too large')
   .meta({ maxItems: TRACE_QUERY_MAX_SET_VALUES });
 
-export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicate> = z.lazy(() =>
-  z.union([
-    z
-      .object({
-        op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
-        left: pathOrLiteralSchema,
-        right: pathOrLiteralSchema,
-      })
-      .strict(),
-    z
-      .object({
-        op: z.enum(['in', 'notIn']),
-        value: pathOrLiteralSchema,
-        set: membershipSetSchema,
-      })
-      .strict(),
-    z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
-    z
-      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
-      .strict(),
-    z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
-    z
-      .object({
-        op: z.enum(['and', 'or']),
-        args: z.array(traceQueryScalarPredicateSchema).min(1),
-      })
-      .strict(),
-    z.object({ op: z.literal('not'), arg: traceQueryScalarPredicateSchema }).strict(),
-  ]),
+export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicate, TraceQueryScalarPredicate> = z.lazy(
+  () =>
+    z.union([
+      z
+        .object({
+          op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
+          left: pathOrLiteralSchema,
+          right: pathOrLiteralSchema,
+        })
+        .strict(),
+      z
+        .object({
+          op: z.enum(['in', 'notIn']),
+          value: pathOrLiteralSchema,
+          set: membershipSetSchema,
+        })
+        .strict(),
+      z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
+      z
+        .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
+        .strict(),
+      z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
+      z
+        .object({
+          op: z.enum(['and', 'or']),
+          args: z.array(traceQueryScalarPredicateSchema).min(1),
+        })
+        .strict(),
+      z.object({ op: z.literal('not'), arg: traceQueryScalarPredicateSchema }).strict(),
+    ]),
 );
 
-export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(() =>
+export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate, TraceQueryPredicate> = z.lazy(() =>
   z.union([
     z
       .object({

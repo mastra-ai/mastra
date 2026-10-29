@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type { TraceAggregateMeasure } from '../observability/trace-aggregate';
+import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '../observability/trace-query';
 import type { FilterNode } from '../saved-views/filter-node';
 import type {
   DashboardDefinition,
@@ -52,6 +53,17 @@ describe('DashboardQuery type', () => {
     type Keys = DashboardQuery extends infer Q ? (Q extends unknown ? keyof Q : never) : never;
     expectTypeOf<'timeRange' extends Keys ? true : false>().toEqualTypeOf<false>();
     expectTypeOf<'comparePeriod' extends Keys ? true : false>().toEqualTypeOf<false>();
+  });
+});
+
+describe('DashboardQuery predicates', () => {
+  it('types where and having as predicates, not unknown', () => {
+    type Trace = Extract<DashboardQuery, { source: 'traceAggregate' }>;
+    type Span = Extract<DashboardQuery, { source: 'spanAggregate' }>;
+    expectTypeOf<Trace['where']>().toEqualTypeOf<TraceQueryPredicate | undefined>();
+    expectTypeOf<Trace['having']>().toEqualTypeOf<TraceQueryScalarPredicate | undefined>();
+    expectTypeOf<Span['where']>().toEqualTypeOf<TraceQueryScalarPredicate | undefined>();
+    expectTypeOf<Span['having']>().toEqualTypeOf<TraceQueryScalarPredicate | undefined>();
   });
 });
 
