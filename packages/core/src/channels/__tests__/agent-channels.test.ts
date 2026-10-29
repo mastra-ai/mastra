@@ -3751,6 +3751,30 @@ describe('thread history', () => {
     ]);
   });
 
+  it('does not download text attachments larger than the download ceiling', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const fetchData = vi.fn().mockResolvedValue(Buffer.from('never read'));
+    const huge = {
+      type: 'file',
+      mimeType: 'text/plain',
+      name: 'huge.log',
+      url: 'https://files.slack.com/files-pri/T1-F1/huge.log',
+      size: 500 * 1024 * 1024,
+      fetchData,
+    };
+    await t.run(makeChatThread([historyMessage(0, { attachments: [huge] })]));
+    const [withLog] = t.signals();
+
+    expect(fetchData).not.toHaveBeenCalled();
+    expect(withLog.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      {
+        type: 'text',
+        text: '[Attached file: huge.log (text/plain) — https://files.slack.com/files-pri/T1-F1/huge.log]',
+      },
+    ]);
+  });
+
   it('skips the history walk for subscribed threads, DMs and maxMessages: 0', async () => {
     const subscribed = await setup();
     await subscribed.run(makeChatThread([historyMessage(0)], { isSubscribed: vi.fn().mockResolvedValue(true) }));

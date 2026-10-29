@@ -90,6 +90,9 @@ const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat',
 /** Size cap for text attachments decoded into the agent's prompt. */
 const MAX_TEXT_ATTACHMENT_BYTES = 128 * 1024;
 
+/** Text attachments whose reported size exceeds this are not downloaded. */
+const MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
@@ -1738,7 +1741,11 @@ export class AgentChannels {
             text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
           });
         }
-      } else if (att.fetchData && isTextMimeType(mimeType)) {
+      } else if (
+        att.fetchData &&
+        isTextMimeType(mimeType) &&
+        !(att.size !== undefined && att.size > MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES)
+      ) {
         // Text-like files behind an authenticated fetch (e.g. Slack's
         // url_private) are decoded and handed to the agent as text, since the
         // URL alone is unreadable without the adapter's credentials.
