@@ -223,6 +223,24 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(await store.getPageByPath({ scopeId: acme.id, path: ['policies'], read: 'all' })).toBeNull();
       });
 
+      it('materializes concurrently without throwing or duplicating a template page', async () => {
+        const nested = [{ key: 'policies', name: 'Policies', pages: [{ key: 'refund', name: 'Refund policy' }] }];
+        const materialize = (pages: typeof nested) =>
+          store.materializeScope({ address: 'org:acme', declaration: ORG, name: 'Acme', pages, provenance: host });
+        const [a, b] = await Promise.all([materialize(nested), materialize(nested)]);
+        expect(a.scope.id).toBe(b.scope.id);
+        expect([a.created, b.created].filter(Boolean)).toHaveLength(1);
+
+        // An existing scope missing a template child: both runs add it, one page results.
+        const grown = [{ ...nested[0]!, pages: [...nested[0]!.pages, { key: 'returns', name: 'Returns' }] }];
+        await Promise.all([materialize(grown), materialize(grown)]);
+
+        const { pages } = await store.listPages({ read: 'all' });
+        const live = pages.filter(entry => !entry.isScope);
+        expect(live.map(entry => entry.key).sort()).toEqual(['policies', 'refund', 'returns']);
+        expect((await store.getScopesByAddress(['org:acme'])).length).toBe(1);
+      });
+
       it('materializes nested page templates once, adding nested templates declared later', async () => {
         const template = { key: 'policies', name: 'Policies', pages: [{ key: 'refund', name: 'Refund policy' }] };
         const { scope: acme } = await store.materializeScope({
