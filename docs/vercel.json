@@ -1113,6 +1113,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/frameworks/agents/:path*",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/tools",
       "permanent": true
@@ -3099,6 +3104,11 @@
     },
     {
       "source": "/docs/frameworks/agents/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/:path*/llms.txt",
       "destination": "/docs/agents/overview/llms.txt",
       "permanent": true
     },
