@@ -33,7 +33,11 @@ const USERS: Record<string, User> = {
 };
 
 const ROLES: RoleDefinition[] = [
-  { id: 'builder', name: 'Builder', permissions: ['*:read', '*:execute', 'stored-agents:write'] },
+  {
+    id: 'builder',
+    name: 'Builder',
+    permissions: ['*:read', '*:execute', 'stored-agents:write', 'stored-agents:delete'],
+  },
   { id: 'member', name: 'Member', permissions: ['*:read', '*:execute'] },
   { id: 'admin', name: 'Admin', permissions: ['*'] },
   { id: 'grantee', name: 'Grantee', permissions: ['*:read', '*:execute', `stored-agents:read:${PRIVATE}`] },
@@ -353,6 +357,15 @@ describe('stored agent visibility on /api/agents', () => {
     expect(afterEdit.text).not.toContain(PRIVATE_WS);
     expect(afterEdit.text).not.toContain('alice-secret-workspace');
     expect((await http('alice', 'GET', '/workspaces')).text).toContain(PRIVATE_WS);
+
+    // Deleting the agent leaves no stored record to check its registered workspace against.
+    expect((await http('alice', 'DELETE', `/stored/agents/${PRIVATE_WS}`)).status).toBe(200);
+    for (const user of ['bob', 'alice'] as const) {
+      const afterDelete = await http(user, 'GET', '/workspaces');
+      expect(afterDelete.status).toBe(200);
+      expect(afterDelete.text).not.toContain(PRIVATE_WS);
+      expect(afterDelete.text).not.toContain('alice-secret-workspace');
+    }
   });
 
   it('without auth configured, every stored agent stays listable and callable', async () => {

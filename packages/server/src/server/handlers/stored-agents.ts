@@ -1109,6 +1109,16 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);
 
+      // The agent registered its workspace on first use. With the record gone, GET /workspaces can't check who may
+      // see it, so unregister it.
+      if (typeof mastra.listWorkspaces === 'function') {
+        for (const [workspaceId, entry] of Object.entries(mastra.listWorkspaces())) {
+          if (entry.source === 'agent' && entry.agentId === storedAgentId) {
+            await mastra.removeWorkspace(workspaceId);
+          }
+        }
+      }
+
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {
       return handleError(error, 'Error deleting stored agent');
