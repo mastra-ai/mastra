@@ -1,19 +1,6 @@
 import { createKnowledgePagesCoreLoader } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
-import {
-  canonicalKnowledgeName,
-  createKnowledgeUlid,
-  KnowledgeConflictError,
-  KnowledgeMoveTooLargeError,
-  KnowledgeNotFoundError,
-  KnowledgePageDepthError,
-  KnowledgePageHasChildrenError,
-  KnowledgePageKeyConflictError,
-  knowledgePositionBetween,
-  MAX_KNOWLEDGE_MOVE_PAGES,
-  MAX_KNOWLEDGE_PAGE_DEPTH,
-  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
-} from '@mastra/core/storage';
+import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
   AddKnowledgeNoteInput,
   CreateKnowledgePageInput,
@@ -209,8 +196,8 @@ function toPin(row: Row): KnowledgePin {
   };
 }
 
-function limitOf(limit: number | undefined): number {
-  return Math.max(1, Math.min(limit ?? MAX_KNOWLEDGE_PAGE_LIST_LIMIT, MAX_KNOWLEDGE_PAGE_LIST_LIMIT));
+function limitOf(limit: number | undefined, max: number): number {
+  return Math.max(1, Math.min(limit ?? max, max));
 }
 
 function encodeCursor(value: unknown[]): string {
@@ -360,6 +347,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   // Scopes
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult> {
+    const core = await loadPagesCore();
     await assertKnowledgePageDescriptionWithinBound(input.description);
     return this.#transaction(async tx => {
       const now = new Date().toISOString();
@@ -374,7 +362,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         if (existing) return { row: existing, created: false };
         if (parentId !== null) await this.#livePage(tx, parentId);
         const id = createKnowledgeUlid();
-        const position = knowledgePositionBetween(await this.#lastPosition(tx, parentId, true));
+        const position = core.knowledgePositionBetween(await this.#lastPosition(tx, parentId, true));
         const who = JSON.stringify(input.provenance);
         await tx.execute({
           sql: `INSERT INTO "${T.pages}" (id, scopeId, isScope, address, declaration, parentId, position, path, depth, name, canonicalName, description, version, createdBy, updatedBy, createdAt, updatedAt) VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, 1, ?, ?, ?, ?)`,
@@ -387,7 +375,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
             position,
             `/${id}/`,
             spec.name,
-            canonicalKnowledgeName(spec.name),
+            core.canonicalKnowledgeName(spec.name),
             spec.description ?? null,
             who,
             who,
@@ -417,7 +405,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           sql: `UPDATE "${T.pages}" SET parentId = ?, position = ?, version = version + 1, updatedAt = ? WHERE id = ? AND parentId IS NULL`,
           args: [
             input.parentId,
-            knowledgePositionBetween(await this.#lastPosition(tx, input.parentId, true)),
+            core.knowledgePositionBetween(await this.#lastPosition(tx, input.parentId, true)),
             now,
             scopeId,
           ],
@@ -468,7 +456,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = limitOf(input.limit);
+    const core = await loadPagesCore();
+    const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const args: InValue[] = [input.parentId];
     let after = '';
@@ -520,14 +509,15 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     scopeId?: string;
     limit?: number;
   }): Promise<KnowledgePage[]> {
+    const core = await loadPagesCore();
     const readable = pageReadable('p', input.read);
-    const args: InValue[] = [canonicalKnowledgeName(input.name), ...readable.args];
+    const args: InValue[] = [core.canonicalKnowledgeName(input.name), ...readable.args];
     let scope = '';
     if (input.scopeId !== undefined) {
       scope = ` AND p.scopeId = ?`;
       args.push(input.scopeId);
     }
-    args.push(limitOf(input.limit));
+    args.push(limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT));
     const rows = await this.#query(
       this.#read,
       `SELECT p.* FROM "${T.pages}" p WHERE p.canonicalName = ? AND p.deletedAt IS NULL AND ${readable.sql}${scope} ORDER BY p.createdAt DESC, p.id DESC LIMIT ?`,
@@ -542,7 +532,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = limitOf(input.limit);
+    const core = await loadPagesCore();
+    const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const readable = pageReadable('p', input.read);
     const args: InValue[] = [input.parentId, ...readable.args];
@@ -567,7 +558,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = limitOf(input.limit);
+    const core = await loadPagesCore();
+    const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const readable = pageReadable('p', input.read);
     const args: InValue[] = [...readable.args];
@@ -577,7 +569,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       args.push(input.scopeId);
     }
     if (input.namePrefix) {
-      const prefix = canonicalKnowledgeName(input.namePrefix);
+      const prefix = core.canonicalKnowledgeName(input.namePrefix);
       filters += ` AND substr(p.canonicalName, 1, length(?)) = ?`;
       args.push(prefix, prefix);
     }
@@ -595,12 +587,13 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   }
 
   async #insertPage(tx: PageExecutor, input: CreateKnowledgePageInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     await assertKnowledgePageDescriptionWithinBound(input.description);
     const parent = await this.#livePage(tx, input.parentId);
     const isScopeParent = Number(parent.isScope) === 1;
     const scopeId = isScopeParent ? String(parent.id) : String(parent.scopeId);
     const depth = isScopeParent ? 1 : Number(parent.depth) + 1;
-    if (depth > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(input.parentId);
+    if (depth > core.MAX_KNOWLEDGE_PAGE_DEPTH) throw new core.KnowledgePageDepthError(input.parentId);
     const id = input.id ?? createKnowledgeUlid();
     if (await this.#pageRow(tx, id)) throw new KnowledgeConflictError(id);
     if (input.key !== undefined) {
@@ -609,9 +602,10 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         `SELECT id FROM "${T.pages}" WHERE scopeId = ? AND key = ? AND deletedAt IS NULL`,
         [scopeId, input.key],
       );
-      if (clash.length > 0) throw new KnowledgePageKeyConflictError(input.key, scopeId);
+      if (clash.length > 0) throw new core.KnowledgePageKeyConflictError(input.key, scopeId);
     }
-    const position = input.position ?? knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
+    const position =
+      input.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
     const now = new Date().toISOString();
     const who = JSON.stringify(input.provenance);
     await tx.execute({
@@ -625,7 +619,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         `${String(parent.path)}${id}/`,
         depth,
         input.name,
-        canonicalKnowledgeName(input.name),
+        core.canonicalKnowledgeName(input.name),
         input.description || null,
         input.body ?? null,
         who,
@@ -644,6 +638,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   }
 
   async updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     await assertKnowledgePageDescriptionWithinBound(input.description);
     return this.#transaction(async tx => {
       const row = await this.#livePage(tx, input.id);
@@ -656,7 +651,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         sql: `UPDATE "${T.pages}" SET name = ?, canonicalName = ?, description = ?, body = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
         args: [
           name,
-          canonicalKnowledgeName(name),
+          core.canonicalKnowledgeName(name),
           description as InValue,
           body as InValue,
           JSON.stringify(input.provenance),
@@ -684,6 +679,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     parent: Row,
     options: { position?: string; countLimitId: string; skipRootCount?: boolean },
   ): Promise<{ moved: number; scopeId: string }> {
+    const core = await loadPagesCore();
     const isScopeParent = Number(parent.isScope) === 1;
     const newScopeId = isScopeParent ? String(parent.id) : String(parent.scopeId);
     const newDepth = isScopeParent ? 1 : Number(parent.depth) + 1;
@@ -694,10 +690,11 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       [oldPath, oldPath],
     );
     const live = subtree.filter(row => !row.deletedAt);
-    if (live.length > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(options.countLimitId, live.length);
+    if (live.length > core.MAX_KNOWLEDGE_MOVE_PAGES)
+      throw new core.KnowledgeMoveTooLargeError(options.countLimitId, live.length);
     const shift = newDepth - Number(root.depth);
     const deepest = Math.max(...live.map(row => Number(row.depth)));
-    if (deepest + shift > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(String(root.id));
+    if (deepest + shift > core.MAX_KNOWLEDGE_PAGE_DEPTH) throw new core.KnowledgePageDepthError(String(root.id));
     if (newScopeId !== String(root.scopeId)) {
       const keys = live.filter(row => row.key !== null).map(row => String(row.key));
       if (keys.length > 0) {
@@ -706,12 +703,12 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           `SELECT key FROM "${T.pages}" WHERE scopeId = ? AND deletedAt IS NULL AND key IN (SELECT value FROM json_each(?)) AND substr(path, 1, length(?)) <> ?`,
           [newScopeId, jsonList(keys), oldPath, oldPath],
         );
-        if (clash.length > 0) throw new KnowledgePageKeyConflictError(String(clash[0]!.key), newScopeId);
+        if (clash.length > 0) throw new core.KnowledgePageKeyConflictError(String(clash[0]!.key), newScopeId);
       }
     }
     const newPath = `${String(parent.path)}${String(root.id)}/`;
     const position =
-      options.position ?? knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
+      options.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
     await tx.execute({
       sql: `UPDATE "${T.pages}" SET path = ? || substr(path, length(?) + 1), depth = depth + ?, scopeId = ? WHERE substr(path, 1, length(?)) = ?`,
       args: [newPath, oldPath, shift, newScopeId, oldPath, oldPath],
@@ -747,7 +744,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     });
   }
 
-  mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
+  async mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#transaction(async tx => {
       const source = await this.#livePage(tx, input.sourceId);
       const target = await this.#livePage(tx, input.targetId);
@@ -766,8 +764,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         `SELECT COUNT(*) AS n FROM "${T.pages}" WHERE substr(path, 1, length(?)) = ? AND id <> ? AND deletedAt IS NULL`,
         [sourcePath, sourcePath, input.sourceId],
       );
-      if (Number(carried[0]!.n) > MAX_KNOWLEDGE_MOVE_PAGES) {
-        throw new KnowledgeMoveTooLargeError(input.sourceId, Number(carried[0]!.n));
+      if (Number(carried[0]!.n) > core.MAX_KNOWLEDGE_MOVE_PAGES) {
+        throw new core.KnowledgeMoveTooLargeError(input.sourceId, Number(carried[0]!.n));
       }
       const now = new Date().toISOString();
       const children = await this.#query(tx, `SELECT * FROM "${T.pages}" WHERE parentId = ? AND isScope = 0`, [
@@ -832,7 +830,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     });
   }
 
-  deletePage(input: { id: string; expectedVersion: number; deletedBy: string }): Promise<KnowledgePage> {
+  async deletePage(input: { id: string; expectedVersion: number; deletedBy: string }): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#transaction(async tx => {
       const row = await this.#livePage(tx, input.id);
       if (Number(row.isScope) === 1) throw new Error(`Cannot delete ${input.id}: it is a scope page`);
@@ -842,7 +841,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         `SELECT 1 FROM "${T.pages}" WHERE parentId = ? AND deletedAt IS NULL LIMIT 1`,
         [input.id],
       );
-      if (children.length > 0) throw new KnowledgePageHasChildrenError(input.id);
+      if (children.length > 0) throw new core.KnowledgePageHasChildrenError(input.id);
       const now = new Date().toISOString();
       await tx.execute({
         sql: `UPDATE "${T.pages}" SET deletedAt = ?, deletedBy = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
@@ -909,7 +908,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     limit?: number;
     includeDeleted?: boolean;
   }): Promise<KnowledgeNoteListOutput> {
-    const limit = limitOf(input.limit);
+    const core = await loadPagesCore();
+    const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const readable = noteReadable('n', input.read);
     const args: InValue[] = [input.pageId, ...readable.args];
@@ -933,7 +933,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgeNoteListOutput> {
-    const limit = limitOf(input.limit);
+    const core = await loadPagesCore();
+    const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const readable = noteReadable('n', input.read);
     const args: InValue[] = [input.pageId, input.pageId, ...readable.args];
@@ -1129,7 +1130,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
-    const limit = limitOf(input.limit);
+    const core = await loadPagesCore();
+    const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 1);
     const readable = pageReadable('p', input.read);
     const noteVisible = noteReadable('n', input.read);
@@ -1244,7 +1246,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
-    const limit = limitOf(input.limit);
+    const core = await loadPagesCore();
+    const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const readable = pageReadable('p', input.read);
     const args: InValue[] = [...readable.args];

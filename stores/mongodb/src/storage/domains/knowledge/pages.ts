@@ -1,3 +1,5 @@
+import { createKnowledgePagesCoreLoader } from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
 import {
   inspectKnowledgePagesSchema,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
@@ -5,20 +7,7 @@ import {
   knowledgePagesResetMessage,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgePagesSchemaInspection } from '@internal/core/knowledge-compat';
-import {
-  canonicalKnowledgeName,
-  createKnowledgeUlid,
-  KnowledgeConflictError,
-  KnowledgePageKeyConflictError,
-  KnowledgeMoveTooLargeError,
-  KnowledgeNotFoundError,
-  KnowledgePageDepthError,
-  KnowledgePageHasChildrenError,
-  knowledgePositionBetween,
-  MAX_KNOWLEDGE_MOVE_PAGES,
-  MAX_KNOWLEDGE_PAGE_DEPTH,
-  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
-} from '@mastra/core/storage';
+import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
   AddKnowledgeNoteInput,
   CreateKnowledgePageInput,
@@ -43,6 +32,8 @@ import type {
 import type { ClientSession, Collection, Document, Filter } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+
+const loadPagesCore = createKnowledgePagesCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
 const DEFAULT_LIST_LIMIT = 50;
 const MONGO_DUPLICATE_KEY = 11000;
@@ -98,10 +89,10 @@ function decodeCursor(cursor: string): [string, string] {
   throw new Error('Invalid Knowledge cursor');
 }
 
-function clampLimit(limit: number | undefined): number {
+function clampLimit(limit: number | undefined, max: number): number {
   const value = limit ?? DEFAULT_LIST_LIMIT;
   if (!Number.isInteger(value) || value < 1) throw new Error('Knowledge list limit must be a positive integer');
-  return Math.min(value, MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
+  return Math.min(value, max);
 }
 
 const live = { deletedAt: { $exists: false } } as const;
@@ -379,6 +370,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     found: boolean;
     truncated: boolean;
   }> {
+    const core = await loadPagesCore();
     const pages = await this.#c('pages');
     const ids: string[] = [];
     let liveCount = 0;
@@ -405,7 +397,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           if (row.key != null) liveKeys.push(String(row.key));
         }
       }
-      if (liveCount > MAX_KNOWLEDGE_MOVE_PAGES)
+      if (liveCount > core.MAX_KNOWLEDGE_MOVE_PAGES)
         return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: true };
     }
     return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: false };
@@ -413,11 +405,12 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   /** Refuses before any write when a live carried page's key is already live in the destination scope. */
   async #assertNoKeyConflicts(keys: string[], scopeId: string, session?: Session): Promise<void> {
+    const core = await loadPagesCore();
     if (!keys.length) return;
     const clash = await (
       await this.#c('pages')
     ).findOne({ ...live, scopeId, key: { $in: keys } }, { projection: { _id: 0, key: 1 }, session });
-    if (clash) throw new KnowledgePageKeyConflictError(String(clash.key), scopeId);
+    if (clash) throw new core.KnowledgePageKeyConflictError(String(clash.key), scopeId);
   }
 
   /** Recomputes the denormalized scope of every page a note mentions, for notes touching `pageIds`. */
@@ -536,6 +529,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       at: Date;
     },
   ): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     const id = createKnowledgeUlid();
     const doc = {
       id,
@@ -544,9 +538,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       isScope: true,
       address: input.address,
       declaration: input.declaration,
-      position: knowledgePositionBetween(await this.#lastPosition(input.parentId, session)),
+      position: core.knowledgePositionBetween(await this.#lastPosition(input.parentId, session)),
       name: input.name,
-      canonicalName: canonicalKnowledgeName(input.name),
+      canonicalName: core.canonicalKnowledgeName(input.name),
       ...(input.description === undefined ? {} : { description: input.description }),
       depth: 0,
       version: 1,
@@ -587,7 +581,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const filter: Filter<Document> = { isScope: true, parentId: input.parentId, ...live };
     if (input.cursor) {
       const [position, id] = decodeCursor(input.cursor);
@@ -633,9 +628,10 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     scopeId?: string;
     limit?: number;
   }): Promise<KnowledgePage[]> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
-    const filter: Filter<Document> = { canonicalName: canonicalKnowledgeName(input.name), ...live };
+    const filter: Filter<Document> = { canonicalName: core.canonicalKnowledgeName(input.name), ...live };
     this.#scopeFilter(filter, input.scopeId, ids);
     const rows = await (
       await this.#c('pages')
@@ -663,7 +659,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
     const filter: Filter<Document> = {
       parentId: input.parentId,
@@ -692,12 +689,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
     const filter: Filter<Document> = { ...notScope, ...live };
     this.#scopeFilter(filter, input.scopeId, ids);
     if (input.namePrefix) {
-      filter.canonicalName = { $regex: `^${escapeRegex(canonicalKnowledgeName(input.namePrefix))}` };
+      filter.canonicalName = { $regex: `^${escapeRegex(core.canonicalKnowledgeName(input.namePrefix))}` };
     }
     if (input.cursor) {
       const [name, id] = decodeCursor(input.cursor);
@@ -746,19 +744,20 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       at: Date;
     },
   ): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     const id = input.id ?? createKnowledgeUlid();
     const scopeId = input.parent.isScope ? input.parent.id : input.parent.scopeId;
     const depth = input.parent.isScope ? 1 : (await this.#depthOf(input.parent.id, session)) + 1;
-    if (depth > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(id);
+    if (depth > core.MAX_KNOWLEDGE_PAGE_DEPTH) throw new core.KnowledgePageDepthError(id);
     const doc = {
       id,
       scopeId,
       parentId: input.parent.id,
       isScope: false,
       ...(input.key === undefined ? {} : { key: input.key, activeKey: activeKeyOf(scopeId, input.key) }),
-      position: input.position ?? knowledgePositionBetween(await this.#lastPosition(input.parent.id, session)),
+      position: input.position ?? core.knowledgePositionBetween(await this.#lastPosition(input.parent.id, session)),
       name: input.name,
-      canonicalName: canonicalKnowledgeName(input.name),
+      canonicalName: core.canonicalKnowledgeName(input.name),
       ...(input.description === undefined ? {} : { description: input.description }),
       ...(input.body === undefined ? {} : { body: input.body }),
       depth,
@@ -772,7 +771,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       await (await this.#c('pages')).insertOne({ ...doc }, { session });
     } catch (error) {
       if (isDuplicateKey(error)) {
-        if (input.key) throw new KnowledgePageKeyConflictError(input.key, scopeId);
+        if (input.key) throw new core.KnowledgePageKeyConflictError(input.key, scopeId);
         throw new KnowledgeConflictError(id);
       }
       throw error;
@@ -793,6 +792,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     const bounds = await this.#bounds();
     bounds.assertKnowledgePageDescriptionWithinBound(input.description);
     return this.#tx(async session => {
@@ -803,7 +803,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const unset: Document = {};
       if (input.name !== undefined) {
         set.name = input.name;
-        set.canonicalName = canonicalKnowledgeName(input.name);
+        set.canonicalName = core.canonicalKnowledgeName(input.name);
       }
       if (input.description !== undefined) {
         if (input.description === '') unset.description = '';
@@ -849,6 +849,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#tx(async session => {
       const page = await this.#requireLivePage(input.id, session);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
@@ -858,17 +859,18 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const tree = await this.#subtree(input.id, session, input.parentId);
       if (tree.found) throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       const parent = await this.#requireLivePage(input.parentId, session);
-      if (tree.live + 1 > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(input.id, tree.live + 1);
+      if (tree.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES)
+        throw new core.KnowledgeMoveTooLargeError(input.id, tree.live + 1);
       const newScopeId = parent.isScope ? parent.id : parent.scopeId;
       const newDepth = parent.isScope ? 1 : (await this.#depthOf(parent.id, session)) + 1;
       const delta = newDepth - (await this.#depthOf(page.id, session));
       if (page.scopeId !== newScopeId) {
         await this.#assertNoKeyConflicts(page.key ? [page.key, ...tree.liveKeys] : tree.liveKeys, newScopeId, session);
       }
-      if (tree.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > MAX_KNOWLEDGE_PAGE_DEPTH) {
-        throw new KnowledgePageDepthError(input.id);
+      if (tree.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
+        throw new core.KnowledgePageDepthError(input.id);
       }
-      const position = input.position ?? knowledgePositionBetween(await this.#lastPosition(parent.id, session));
+      const position = input.position ?? core.knowledgePositionBetween(await this.#lastPosition(parent.id, session));
       const now = new Date();
       let updated: Row | null;
       try {
@@ -909,6 +911,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#tx(async session => {
       if (input.sourceId === input.targetId)
         throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
@@ -920,12 +923,12 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       if (tree.found) {
         throw new Error(`Knowledge page ${source.id} can't merge into itself or its own subtree`);
       }
-      if (tree.live > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(source.id, tree.live);
+      if (tree.live > core.MAX_KNOWLEDGE_MOVE_PAGES) throw new core.KnowledgeMoveTooLargeError(source.id, tree.live);
       // Source's children become target's children, one level below the target.
       const delta = (await this.#depthOf(target.id, session)) - (await this.#depthOf(source.id, session));
       if (source.scopeId !== target.scopeId) await this.#assertNoKeyConflicts(tree.liveKeys, target.scopeId, session);
-      if (tree.maxDepth > 0 && tree.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH) {
-        throw new KnowledgePageDepthError(source.id);
+      if (tree.maxDepth > 0 && tree.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
+        throw new core.KnowledgePageDepthError(source.id);
       }
       const now = new Date();
       const pages = await this.#c('pages');
@@ -1020,13 +1023,14 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async deletePage(input: { id: string; expectedVersion: number; deletedBy: string }): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#tx(async session => {
       const page = await this.#requireLivePage(input.id, session);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
       if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be deleted`);
       const pages = await this.#c('pages');
       if (await pages.findOne({ parentId: input.id, ...live }, { projection: { id: 1 }, session })) {
-        throw new KnowledgePageHasChildrenError(input.id);
+        throw new core.KnowledgePageHasChildrenError(input.id);
       }
       const now = new Date();
       const updated = await pages.findOneAndUpdate(
@@ -1072,7 +1076,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     limit?: number;
     includeDeleted?: boolean;
   }): Promise<KnowledgeNoteListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
     const filter: Filter<Document> = { pageId: input.pageId, ...this.#visibleNotes(ids) };
     if (!input.includeDeleted) Object.assign(filter, live);
@@ -1097,7 +1102,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgeNoteListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
     const match: Filter<Document> = {
       mentions: input.pageId,
@@ -1298,7 +1304,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   // Search and activity ----------------------------------------------------------------------------
 
   async searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const terms = [...new Set(input.query.toLowerCase().split(/\s+/).filter(Boolean))];
     if (terms.length === 0) return [];
     const ids = await this.#readable(input.read);
@@ -1378,7 +1385,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
     const activity = await this.#c('activity');
     const notes = await this.#c('notes');
@@ -1556,7 +1564,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
     const match: Filter<Document> = {};
     if (input.audience !== 'all') match.audience = { $in: input.audience };

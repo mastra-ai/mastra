@@ -1,17 +1,6 @@
-import {
-  canonicalKnowledgeName,
-  createKnowledgeUlid,
-  KnowledgeConflictError,
-  KnowledgePageKeyConflictError,
-  KnowledgeMoveTooLargeError,
-  KnowledgeNotFoundError,
-  KnowledgePageDepthError,
-  KnowledgePageHasChildrenError,
-  knowledgePositionBetween,
-  MAX_KNOWLEDGE_MOVE_PAGES,
-  MAX_KNOWLEDGE_PAGE_DEPTH,
-  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
-} from '@mastra/core/storage';
+import { createKnowledgePagesCoreLoader } from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
+import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
   AddKnowledgeNoteInput,
   CreateKnowledgePageInput,
@@ -35,6 +24,8 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DbClient, TxClient } from '../../client';
+
+const loadPagesCore = createKnowledgePagesCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
 /** Core's bound checks, loaded lazily by the adapter so an old core fails with a clear message. */
 export interface PgKnowledgePagesBounds {
@@ -233,10 +224,10 @@ function decodeCursor(cursor: string, arity: number): string[] {
   throw new Error('Invalid Knowledge cursor');
 }
 
-function clampLimit(limit: number | undefined): number {
+function clampLimit(limit: number | undefined, max: number): number {
   const value = limit ?? DEFAULT_LIST_LIMIT;
   if (!Number.isInteger(value) || value < 1) throw new Error('Knowledge list limit must be a positive integer');
-  return Math.min(value, MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
+  return Math.min(value, max);
 }
 
 function iso(value: Date): string {
@@ -445,10 +436,11 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   /** Live descendants, capped, and the deepest live level. */
   async #subtreeStats(db: Queryable, rootId: string): Promise<{ live: number; maxDepth: number }> {
+    const core = await loadPagesCore();
     const rows = await this.#rows(
       db,
       `${this.#subtree('$1')}
-       SELECT (SELECT count(*) FROM (SELECT 1 FROM sub JOIN ${this.#pages} p ON p."id" = sub."id" WHERE p."deletedAt" IS NULL LIMIT ${MAX_KNOWLEDGE_MOVE_PAGES + 1}) l) AS live,
+       SELECT (SELECT count(*) FROM (SELECT 1 FROM sub JOIN ${this.#pages} p ON p."id" = sub."id" WHERE p."deletedAt" IS NULL LIMIT ${core.MAX_KNOWLEDGE_MOVE_PAGES + 1}) l) AS live,
               (SELECT COALESCE(max(p."depth"), 0) FROM sub JOIN ${this.#pages} p ON p."id" = sub."id" WHERE p."deletedAt" IS NULL) AS "maxDepth"`,
       [rootId],
     );
@@ -457,6 +449,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   /** Refuses before any write when a live carried page's key is already live in the destination scope. */
   async #assertNoKeyConflicts(db: Queryable, rootId: string, scopeId: string, includeRoot: boolean): Promise<void> {
+    const core = await loadPagesCore();
     const rows = await this.#rows(
       db,
       `${this.#subtree('$1')}
@@ -467,7 +460,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
        LIMIT 1`,
       [rootId, scopeId],
     );
-    if (rows[0]) throw new KnowledgePageKeyConflictError(String(rows[0].key), scopeId);
+    if (rows[0]) throw new core.KnowledgePageKeyConflictError(String(rows[0].key), scopeId);
   }
 
   async #isInSubtree(db: Queryable, rootId: string, candidateId: string): Promise<boolean> {
@@ -575,8 +568,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
       at: Date;
     },
   ): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     const id = createKnowledgeUlid();
-    const position = knowledgePositionBetween(await this.#lastPosition(db, input.parentId));
+    const position = core.knowledgePositionBetween(await this.#lastPosition(db, input.parentId));
     const rows = await this.#rows(
       db,
       `INSERT INTO ${this.#pages} ("id","scopeId","parentId","isScope","address","declaration","position","name","canonicalName","description","depth","version","createdBy","updatedBy","createdAt","updatedAt")
@@ -588,7 +582,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         input.declaration,
         position,
         input.name,
-        canonicalKnowledgeName(input.name),
+        core.canonicalKnowledgeName(input.name),
         input.description ?? null,
         JSON.stringify(input.provenance),
         iso(input.at),
@@ -620,7 +614,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const where = [`"isScope"`, `"deletedAt" IS NULL`];
     where.push(input.parentId === null ? `"parentId" IS NULL` : `"parentId" = ${params.add(input.parentId)}`);
@@ -676,9 +671,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
     scopeId?: string;
     limit?: number;
   }): Promise<KnowledgePage[]> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
-    const where = [`p."canonicalName" = ${params.add(canonicalKnowledgeName(input.name))}`, `p."deletedAt" IS NULL`];
+    const where = [
+      `p."canonicalName" = ${params.add(core.canonicalKnowledgeName(input.name))}`,
+      `p."deletedAt" IS NULL`,
+    ];
     if (input.scopeId) where.push(`p."scopeId" = ${params.add(input.scopeId)}`);
     const filter = new ReadFilter(input.read, params);
     where.push(filter.readable('s'));
@@ -697,7 +696,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const where = [`p."parentId" = ${params.add(input.parentId)}`, `NOT p."isScope"`, `p."deletedAt" IS NULL`];
     const filter = new ReadFilter(input.read, params);
@@ -722,12 +722,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const where = [`NOT p."isScope"`, `p."deletedAt" IS NULL`];
     if (input.scopeId) where.push(`p."scopeId" = ${params.add(input.scopeId)}`);
     if (input.namePrefix)
-      where.push(`starts_with(p."canonicalName", ${params.add(canonicalKnowledgeName(input.namePrefix))})`);
+      where.push(`starts_with(p."canonicalName", ${params.add(core.canonicalKnowledgeName(input.namePrefix))})`);
     const filter = new ReadFilter(input.read, params);
     where.push(filter.readable('s'));
     if (input.cursor) {
@@ -776,11 +777,12 @@ export class PgKnowledgePages implements KnowledgePageStore {
       at: Date;
     },
   ): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     const id = input.id ?? createKnowledgeUlid();
     const scopeId = input.parent.isScope ? input.parent.id : input.parent.scopeId;
     const depth = input.parent.isScope ? 1 : (await this.#depthOf(db, input.parent.id)) + 1;
-    if (depth > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(id);
-    const position = input.position ?? knowledgePositionBetween(await this.#lastPosition(db, input.parent.id));
+    if (depth > core.MAX_KNOWLEDGE_PAGE_DEPTH) throw new core.KnowledgePageDepthError(id);
+    const position = input.position ?? core.knowledgePositionBetween(await this.#lastPosition(db, input.parent.id));
     try {
       const rows = await this.#rows(
         db,
@@ -793,7 +795,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
           input.key ?? null,
           position,
           input.name,
-          canonicalKnowledgeName(input.name),
+          core.canonicalKnowledgeName(input.name),
           input.description ?? null,
           input.body ?? null,
           depth,
@@ -811,7 +813,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       return toPage(rows[0]!);
     } catch (error) {
       if (isUniqueViolation(error)) {
-        if (input.key) throw new KnowledgePageKeyConflictError(input.key, scopeId);
+        if (input.key) throw new core.KnowledgePageKeyConflictError(input.key, scopeId);
         throw new KnowledgeConflictError(id);
       }
       throw error;
@@ -824,6 +826,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
 
   async updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     const bounds = await this.#bounds();
     bounds.assertKnowledgePageDescriptionWithinBound(input.description);
     return this.#tx(async tx => {
@@ -838,7 +841,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       if (input.name !== undefined) {
         sets.push(
           `"name" = ${params.add(input.name)}`,
-          `"canonicalName" = ${params.add(canonicalKnowledgeName(input.name))}`,
+          `"canonicalName" = ${params.add(core.canonicalKnowledgeName(input.name))}`,
         );
       }
       if (input.description !== undefined)
@@ -861,6 +864,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
 
   async movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#tx(async tx => {
       const page = await this.#requireLivePage(tx, input.id);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
@@ -870,17 +874,17 @@ export class PgKnowledgePages implements KnowledgePageStore {
       }
       const parent = await this.#requireLivePage(tx, input.parentId);
       const stats = await this.#subtreeStats(tx, input.id);
-      if (stats.live + 1 > MAX_KNOWLEDGE_MOVE_PAGES) {
-        throw new KnowledgeMoveTooLargeError(input.id, stats.live + 1);
+      if (stats.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES) {
+        throw new core.KnowledgeMoveTooLargeError(input.id, stats.live + 1);
       }
       const newScopeId = parent.isScope ? parent.id : parent.scopeId;
       const newDepth = parent.isScope ? 1 : (await this.#depthOf(tx, parent.id)) + 1;
       const delta = newDepth - (await this.#depthOf(tx, page.id));
       await this.#assertNoKeyConflicts(tx, input.id, newScopeId, true);
-      if (stats.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > MAX_KNOWLEDGE_PAGE_DEPTH) {
-        throw new KnowledgePageDepthError(input.id);
+      if (stats.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
+        throw new core.KnowledgePageDepthError(input.id);
       }
-      const position = input.position ?? knowledgePositionBetween(await this.#lastPosition(tx, parent.id));
+      const position = input.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, parent.id));
       const now = new Date();
       try {
         await tx.query(
@@ -909,6 +913,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
 
   async mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#tx(async tx => {
       if (input.sourceId === input.targetId)
         throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
@@ -924,12 +929,12 @@ export class PgKnowledgePages implements KnowledgePageStore {
         throw new Error(`Knowledge page ${source.id} can't merge into itself or its own subtree`);
       }
       const stats = await this.#subtreeStats(tx, source.id);
-      if (stats.live > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(source.id, stats.live);
+      if (stats.live > core.MAX_KNOWLEDGE_MOVE_PAGES) throw new core.KnowledgeMoveTooLargeError(source.id, stats.live);
       // Source's children become target's children, one level below the target.
       const delta = (await this.#depthOf(tx, target.id)) - (await this.#depthOf(tx, source.id));
       await this.#assertNoKeyConflicts(tx, source.id, target.scopeId, false);
-      if (stats.maxDepth > 0 && stats.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH) {
-        throw new KnowledgePageDepthError(source.id);
+      if (stats.maxDepth > 0 && stats.maxDepth + delta > core.MAX_KNOWLEDGE_PAGE_DEPTH) {
+        throw new core.KnowledgePageDepthError(source.id);
       }
       const now = new Date();
       try {
@@ -983,6 +988,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
 
   async deletePage(input: { id: string; expectedVersion: number; deletedBy: string }): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
     return this.#tx(async tx => {
       const page = await this.#requireLivePage(tx, input.id);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
@@ -992,7 +998,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         `SELECT 1 FROM ${this.#pages} WHERE "parentId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
         [input.id],
       );
-      if (children.length) throw new KnowledgePageHasChildrenError(input.id);
+      if (children.length) throw new core.KnowledgePageHasChildrenError(input.id);
       const now = new Date();
       const rows = await this.#rows(
         tx,
@@ -1036,7 +1042,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
     limit?: number;
     includeDeleted?: boolean;
   }): Promise<KnowledgeNoteListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const filter = new ReadFilter(input.read, params);
     const extra = [`n."pageId" = ${params.add(input.pageId)}`];
@@ -1059,7 +1066,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgeNoteListOutput> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const filter = new ReadFilter(input.read, params);
     const pageParam = params.add(input.pageId);
@@ -1236,7 +1244,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
   // Search and activity ----------------------------------------------------------------------------
 
   async searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const terms = [...new Set(input.query.toLowerCase().split(/\s+/).filter(Boolean))];
     if (terms.length === 0) return [];
     const hits: Array<{ score: number; updatedAt: number; hit: KnowledgePageSearchHit }> = [];
@@ -1297,7 +1306,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const filter = new ReadFilter(input.read, params);
     const where = [filter.readable('s'), `(a."noteId" IS NULL OR ${this.#noteVisible(filter, 'a."noteId"')})`];
@@ -1428,7 +1438,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
-    const limit = clampLimit(input.limit);
+    const core = await loadPagesCore();
+    const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const filter = new ReadFilter(input.read, params);
     const where = [`p."deletedAt" IS NULL`, filter.readable('s')];

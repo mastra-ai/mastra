@@ -54,15 +54,35 @@ describe('schema 4 core loader', () => {
     await expect(load()).rejects.toThrow(/knowledge-pages/);
   });
 
-  it("uses core's bound helpers", async () => {
-    const calls: string[] = [];
-    const load = createKnowledgePagesCoreLoader(new Set(['knowledge-pages']), async () => ({
-      assertKnowledgePageDescriptionWithinBound: (d: string) => calls.push(`d:${d}`),
-      assertKnowledgeNoteTextWithinBound: (t: string) => calls.push(`n:${t}`),
-    }));
+  it("hands back core's page-store runtime", async () => {
+    class DepthError extends Error {}
+    const storageModule = {
+      assertKnowledgePageDescriptionWithinBound: () => {},
+      assertKnowledgeNoteTextWithinBound: () => {},
+      canonicalKnowledgeName: (name: string) => name.toLowerCase(),
+      knowledgePositionBetween: () => 'm',
+      MAX_KNOWLEDGE_MOVE_PAGES: 500,
+      MAX_KNOWLEDGE_PAGE_DEPTH: 10,
+      MAX_KNOWLEDGE_PAGE_LIST_LIMIT: 100,
+      KnowledgeMoveTooLargeError: Error,
+      KnowledgePageDepthError: DepthError,
+      KnowledgePageHasChildrenError: Error,
+      KnowledgePageKeyConflictError: Error,
+    };
+    const load = createKnowledgePagesCoreLoader(new Set(['knowledge-pages']), async () => storageModule);
     const core = await load();
-    core.assertKnowledgePageDescriptionWithinBound('x');
-    core.assertKnowledgeNoteTextWithinBound('y');
-    expect(calls).toEqual(['d:x', 'n:y']);
+    expect(core.canonicalKnowledgeName('Atlas')).toBe('atlas');
+    expect(core.MAX_KNOWLEDGE_PAGE_DEPTH).toBe(10);
+    // Errors keep core's class identity, so `instanceof` checks against core's exports still hold.
+    expect(new core.KnowledgePageDepthError('p')).toBeInstanceOf(DepthError);
+    expect(await load()).toBe(core);
+  });
+
+  it('names what a core advertising knowledge-pages is missing', async () => {
+    const load = createKnowledgePagesCoreLoader(new Set(['knowledge-pages']), async () => ({
+      assertKnowledgePageDescriptionWithinBound: () => {},
+      assertKnowledgeNoteTextWithinBound: () => {},
+    }));
+    await expect(load()).rejects.toThrow(/missing canonicalKnowledgeName,.*MAX_KNOWLEDGE_PAGE_LIST_LIMIT/);
   });
 });

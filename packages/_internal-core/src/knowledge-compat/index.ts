@@ -216,30 +216,59 @@ export function knowledgePagesResetMessage(reason: string): string {
   return `Knowledge storage needs a reset before this version can use it: ${reason}. Knowledge data has no migration; run \`await storage.stores?.knowledge?.dangerouslyReset()\` to drop the Knowledge tables (Memory tables are untouched).`;
 }
 
-interface KnowledgePagesCore {
+/**
+ * The page-store runtime pieces adapters take from `@mastra/core/storage`. They are loaded through
+ * `createKnowledgePagesCoreLoader` instead of static imports so adapters keep loading on cores
+ * older than the `knowledge-pages` feature without raising their `@mastra/core` peer floor.
+ */
+export interface KnowledgePagesCore {
   assertKnowledgePageDescriptionWithinBound(description: string | undefined): void;
   assertKnowledgeNoteTextWithinBound(text: string): void;
+  canonicalKnowledgeName(name: string): string;
+  knowledgePositionBetween(before?: string, after?: string): string;
+  MAX_KNOWLEDGE_MOVE_PAGES: number;
+  MAX_KNOWLEDGE_PAGE_DEPTH: number;
+  MAX_KNOWLEDGE_PAGE_LIST_LIMIT: number;
+  KnowledgeMoveTooLargeError: new (pageId: string, pages: number) => Error;
+  KnowledgePageDepthError: new (pageId: string) => Error;
+  KnowledgePageHasChildrenError: new (pageId: string) => Error;
+  KnowledgePageKeyConflictError: new (key: string, scopeId: string) => Error;
 }
+
+const KNOWLEDGE_PAGES_CORE_FUNCTIONS = [
+  'assertKnowledgePageDescriptionWithinBound',
+  'assertKnowledgeNoteTextWithinBound',
+  'canonicalKnowledgeName',
+  'knowledgePositionBetween',
+  'KnowledgeMoveTooLargeError',
+  'KnowledgePageDepthError',
+  'KnowledgePageHasChildrenError',
+  'KnowledgePageKeyConflictError',
+] as const;
+const KNOWLEDGE_PAGES_CORE_NUMBERS = [
+  'MAX_KNOWLEDGE_MOVE_PAGES',
+  'MAX_KNOWLEDGE_PAGE_DEPTH',
+  'MAX_KNOWLEDGE_PAGE_LIST_LIMIT',
+] as const;
 
 function resolveKnowledgePagesCore(storageModule: unknown): KnowledgePagesCore {
   const module = (typeof storageModule === 'object' && storageModule !== null ? storageModule : {}) as Record<
     string,
     unknown
   >;
-  const {
-    assertKnowledgePageDescriptionWithinBound: assertDescription,
-    assertKnowledgeNoteTextWithinBound: assertNote,
-  } = module;
-  if (typeof assertDescription !== 'function' || typeof assertNote !== 'function') {
-    throw new Error('@mastra/core advertises Knowledge pages without the required storage API');
+  const missing = [
+    ...KNOWLEDGE_PAGES_CORE_FUNCTIONS.filter(name => typeof module[name] !== 'function'),
+    ...KNOWLEDGE_PAGES_CORE_NUMBERS.filter(name => typeof module[name] !== 'number'),
+  ];
+  if (missing.length > 0) {
+    throw new Error(
+      `@mastra/core advertises Knowledge pages without the required storage API (missing ${missing.join(', ')})`,
+    );
   }
-  return {
-    assertKnowledgePageDescriptionWithinBound: description => assertDescription(description),
-    assertKnowledgeNoteTextWithinBound: text => assertNote(text),
-  };
+  return module as unknown as KnowledgePagesCore;
 }
 
-/** Loads core's shared bound helpers once, after checking core advertises `knowledge-pages`. */
+/** Loads core's page-store runtime once, after checking core advertises `knowledge-pages`. */
 export function createKnowledgePagesCoreLoader(
   features: ReadonlySet<string>,
   loadStorageModule: () => Promise<unknown>,
