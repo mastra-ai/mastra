@@ -15,6 +15,16 @@ Each MCP tool is a thin wrapper around an existing HTTP route. A call runs throu
 
 Use the built-in server to let coding assistants and other MCP clients drive the Mastra app you already run. To publish a hand-picked set of primitives with your own prompts and resources, create an [`MCPServer`](/docs/connections/mcp#expose-a-mastra-mcp-server) instead.
 
+## Installation
+
+The endpoint uses `@mastra/mcp`, which `@mastra/server` declares as an optional peer dependency. Install it in your project to enable the built-in server:
+
+```bash npm2yarn
+npm install @mastra/mcp@latest
+```
+
+Without it, the rest of the server keeps working, and `/api/mcp` answers with HTTP 501 and a JSON-RPC error that says to install the package. `mastra build` only adds `@mastra/mcp` to the build output when your project installs it.
+
 ## When it's served
 
 | Environment | Served at `/api/mcp` |

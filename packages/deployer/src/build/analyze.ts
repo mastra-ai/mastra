@@ -15,7 +15,7 @@ import { DEPS_TO_IGNORE } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports, mayContainPinoTransport } from './babel/detect-pino-transports';
-import { getPackageMetadata } from './package-info';
+import { getPackageMetadata, isOptionalPeerOfImporter } from './package-info';
 import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
 import {
   getPackageName,
@@ -71,6 +71,15 @@ async function resolveDependencyInfo(
   }
 
   return existing ?? {};
+}
+
+/** An external without install metadata that its importer declares as an optional peer: leave it out. */
+async function isUninstalledOptionalPeer(
+  pkgName: string,
+  info: ExternalDependencyInfo,
+  importerId: string | undefined,
+): Promise<boolean> {
+  return !info.version && !info.packageSpec && (await isOptionalPeerOfImporter(pkgName, importerId));
 }
 
 function importerParentPaths(importerId: string | undefined, base: string[]): string[] {
@@ -330,6 +339,9 @@ async function validateOutput(
           versionInfo,
           importerParentPaths(importerId, externalMetadataParentPaths),
         );
+        if (await isUninstalledOptionalPeer(pkgName, dependencyInfo, importerId)) {
+          continue;
+        }
         result.externalDependencies.set(
           pkgName,
           preferDependencyInfo(result.externalDependencies.get(pkgName), dependencyInfo),
@@ -596,6 +608,9 @@ export async function analyzeBundle(
             ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
           ]),
         );
+        if (await isUninstalledOptionalPeer(pkgName, dependencyInfo, importerId)) {
+          continue;
+        }
         allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));
       }
     }

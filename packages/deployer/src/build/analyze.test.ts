@@ -181,6 +181,81 @@ describe('external dependency versions', () => {
     }
   }, 15000);
 
+  it('leaves out an uninstalled optional peer that a bundled workspace package dynamically imports', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-optional-peer-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
+    const installedPeerDir = join(workspacePackageDir, 'node_modules', 'installed-peer');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(installedPeerDir, { recursive: true });
+    await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(workspacePackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/workspace-package',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        peerDependencies: { 'missing-peer': '^1.0.0', 'installed-peer': '^2.0.0' },
+        peerDependenciesMeta: { 'missing-peer': { optional: true }, 'installed-peer': { optional: true } },
+      }),
+    );
+    await writeFile(
+      join(installedPeerDir, 'package.json'),
+      JSON.stringify({ name: 'installed-peer', version: '2.3.4', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(installedPeerDir, 'index.js'), `export const value = 1;`);
+    await writeFile(
+      join(workspacePackageDir, 'src', 'index.js'),
+      `export const loadMissing = () => import('missing-peer');
+export const loadInstalled = () => import('installed-peer');
+export const loadUndeclared = () => import('missing-undeclared');
+`,
+    );
+    await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
+    await writeFile(
+      entryFile,
+      `import { loadMissing, loadInstalled, loadUndeclared } from '@internal/workspace-package';\nexport const value = [loadMissing, loadInstalled, loadUndeclared];`,
+    );
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: appDir,
+          platform: 'node',
+          isDev: true,
+          bundlerOptions: {
+            externals: ['missing-peer', 'installed-peer', 'missing-undeclared'],
+            enableSourcemap: false,
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result.externalDependencies.has('missing-peer')).toBe(false);
+      expect(result.externalDependencies.get('installed-peer')).toEqual({ version: '2.3.4', packageSpec: undefined });
+      // Not declared as an optional peer: unchanged behavior, kept without version info.
+      expect(result.externalDependencies.has('missing-undeclared')).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15000);
+
   it('does not externalize transitive workspace dependencies in production builds', async () => {
     await mkdir(tempRoot, { recursive: true });
     const tempDir = await mkdtemp(join(tempRoot, 'mastra-transitive-workspace-'));

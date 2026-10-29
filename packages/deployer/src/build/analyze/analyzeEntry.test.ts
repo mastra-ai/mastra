@@ -351,6 +351,61 @@ describe('analyzeEntry', () => {
     expect(lodashDep?.exports).toEqual(['*']);
   });
 
+  it('should leave out dynamic imports of uninstalled optional peers of the importing package', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-optional-peer-'));
+    // Outside node_modules, like a linked package whose code the analysis follows into.
+    const hostDir = join(root, 'linked', 'host-pkg');
+    const installedPeerDir = join(root, 'node_modules', 'installed-peer');
+    const entryFilePath = join(root, 'entry.ts');
+
+    try {
+      await mkdir(join(hostDir, 'dist'), { recursive: true });
+      await mkdir(installedPeerDir, { recursive: true });
+      await Promise.all([
+        writeFile(
+          join(hostDir, 'package.json'),
+          JSON.stringify({
+            name: 'host-pkg',
+            version: '1.0.0',
+            type: 'module',
+            exports: { '.': './dist/index.js' },
+            peerDependencies: { 'missing-peer': '^1.0.0', 'installed-peer': '^2.0.0' },
+            peerDependenciesMeta: { 'missing-peer': { optional: true }, 'installed-peer': { optional: true } },
+          }),
+        ),
+        // A nested manifest without a name must not hide the package's own manifest.
+        writeFile(join(hostDir, 'dist', 'package.json'), JSON.stringify({ type: 'module' })),
+        writeFile(
+          join(hostDir, 'dist', 'index.js'),
+          `export const loadMissing = () => import('missing-peer');
+export const loadInstalled = () => import('installed-peer');
+export const loadUndeclared = () => import('missing-undeclared');
+`,
+        ),
+        writeFile(
+          join(installedPeerDir, 'package.json'),
+          JSON.stringify({ name: 'installed-peer', version: '2.3.4', type: 'module', main: 'index.js' }),
+        ),
+        writeFile(join(installedPeerDir, 'index.js'), 'export const value = 1;'),
+        writeFile(entryFilePath, `export * from './linked/host-pkg/dist/index.js';\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+      });
+
+      expect(result.dependencies.has('missing-peer')).toBe(false);
+      expect(result.dependencies.get('installed-peer')?.version).toBe('2.3.4');
+      // Not declared as an optional peer: unchanged behavior, kept without version info.
+      expect(result.dependencies.has('missing-undeclared')).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('should ignore protocol imports like cloudflare:workers and node builtins', async () => {
     const entryWithProtocolImport = `
       import { env } from 'cloudflare:workers';

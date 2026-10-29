@@ -4,6 +4,14 @@
 
 Added a built-in MCP server. MCP clients such as Claude Code, Cursor, and the MCP Inspector can now call your agents, workflows, and tools at `/api/mcp` without defining an `MCPServer`. Every call goes through the matching HTTP route, so validation, auth, RBAC, FGA, and thread or run ownership apply exactly as they do over the HTTP API.
 
+The built-in server needs `@mastra/mcp`, which is an optional peer dependency of `@mastra/server`. Install it to enable the endpoint:
+
+```bash
+npm install @mastra/mcp
+```
+
+Without it, everything else keeps working and `/api/mcp` answers with HTTP 501 and a message that says to install the package.
+
 The endpoint is served under `mastra dev`, and in production only when `server.auth` is configured. **Apps that already configure `server.auth` get `/api/mcp` by default after upgrading.** To opt out, set `server.mcp.enabled` to `false`:
 
 ```ts
