@@ -17,7 +17,7 @@ import type {
   StreamEvent,
   WorkflowRegistry,
 } from '@internal/workflow-test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import type { FGACheckParams } from '../../auth/ee';
@@ -30,6 +30,7 @@ import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
+import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';
 
 // ============================================================================
@@ -1456,6 +1457,8 @@ describe('Workflow (Evented Engine Specific)', () => {
   });
 
   describe('nested user workflows', () => {
+    afterEach(() => vi.restoreAllMocks());
+
     async function setup({
       allowed = true,
       suspend = false,
@@ -1503,6 +1506,21 @@ describe('Workflow (Evented Engine Specific)', () => {
         if (event.type === 'workflow.step.run') deliveries.push({ ...event, data: { ...event.data } });
       });
       const pubsub = new EventEmitterPubSub(emitter);
+      const handling = vi.spyOn(WorkflowEventProcessor.prototype, 'handle');
+      // Observe the real handler's completion; emitter delivery and flush() do not await it.
+      const waitForDelivery = async (event: Event, occurrence: number) => {
+        let index = -1;
+        await vi.waitFor(() => {
+          index =
+            handling.mock.calls
+              .map(([candidate], i) => (candidate.id === event.id && candidate.runId === event.runId ? i : -1))
+              .filter(i => i !== -1)[occurrence - 1] ?? -1;
+          expect(index).toBeGreaterThanOrEqual(0);
+        });
+        const result = handling.mock.results[index]!;
+        expect(result.type).toBe('return');
+        await expect(result.value).resolves.toMatchObject({ ok: true });
+      };
       const leases = vi.spyOn(pubsub, 'acquireLease');
       const publish = vi.spyOn(pubsub, 'publish');
       const mastra = new Mastra({
@@ -1532,6 +1550,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         deliveries,
         leases,
         pubsub,
+        waitForDelivery,
         effects: () => effects,
       };
     }
@@ -1629,8 +1648,7 @@ describe('Workflow (Evented Engine Specific)', () => {
           )!;
           await fixture.pubsub.releaseLease(lease[0], lease[1]);
           fixture.emitter.emit('workflows', delivery);
-          await fixture.pubsub.flush();
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await fixture.waitForDelivery(delivery!, 2);
           expect(fixture.fga.require).not.toHaveBeenCalled();
           expect(fixture.effects()).toBe(suspend ? 0 : 1);
           const after = await store.loadWorkflowSnapshot({ workflowName: fixture.parent.id, runId: fixture.run.runId });
@@ -1670,8 +1688,7 @@ describe('Workflow (Evented Engine Specific)', () => {
           expect(result.status).toBe(suspend ? 'suspended' : 'success');
           fixture.publish.mockClear();
           authorization.resolve();
-          await fixture.pubsub.flush();
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await fixture.waitForDelivery(delivery, 2);
           const store = (await fixture.storage.getStore('workflows'))!;
           const snapshot = await store.loadWorkflowSnapshot({
             workflowName: fixture.parent.id,
@@ -1711,8 +1728,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         await fixture.pubsub.releaseLease(lease[0], lease[1]);
         fixture.emitter.emit('workflows', delivery);
         await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(2));
-        await fixture.pubsub.flush();
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await fixture.waitForDelivery(delivery, 2);
         const store = (await fixture.storage.getStore('workflows'))!;
         const snapshot = await store.loadWorkflowSnapshot({
           workflowName: fixture.parent.id,
@@ -1749,8 +1765,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         fixture.emitter.emit('workflows', delivery);
         await expect(starting).resolves.toMatchObject({ status: 'failed' });
         authorization.resolve();
-        await fixture.pubsub.flush();
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await fixture.waitForDelivery(delivery, 1);
         expect(fixture.effects()).toBe(0);
         expect(
           fixture.publish.mock.calls.filter(
