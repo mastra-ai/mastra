@@ -32,6 +32,7 @@ import {
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.js';
+import type { SessionFsDeps } from './fs.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -320,6 +321,69 @@ async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof ma
   app.get('/', context => route.handler(context as never, async () => {}));
   return (query: string) => app.request(`http://localhost/${query}`);
 }
+
+describe('local filesystem routes auth', () => {
+  const localRoutes = ['/web/fs/list', '/web/artifacts/list', '/web/codebase/resolve'];
+
+  async function requestLocalRoute({
+    path,
+    root,
+    sessionFs,
+  }: {
+    path: string;
+    root: string;
+    sessionFs?: SessionFsDeps;
+  }) {
+    const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+    if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+
+    const app = new Hono<any>();
+    app.get('/', context => route.handler(context as never, async () => {}));
+    return app.request(`http://localhost/?path=${encodeURIComponent(root)}`);
+  }
+
+  it('rejects anonymous callers when an auth provider is active', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-'));
+    await writeFile(join(root, 'secret.txt'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    for (const path of localRoutes) {
+      const response = await requestLocalRoute({ path, root, sessionFs });
+      expect(response.status, path).toBe(401);
+      expect(await response.json(), path).toEqual({ error: 'unauthorized' });
+    }
+  });
+
+  it('serves local roots when no auth provider is configured', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-off-'));
+    await mkdir(join(root, 'browsable'));
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => false,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const response = await requestLocalRoute({ path: '/web/fs/list', root, sessionFs });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        entries: [expect.objectContaining({ name: 'browsable' })],
+      }),
+    );
+  });
+});
 
 /**
  * Answers the tree's checks for a mocked sandbox with no symlinks and nothing
