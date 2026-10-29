@@ -606,6 +606,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
               context: z.string().optional(),
               /** @deprecated Use `context`. */
               role: z.string().optional(),
+              /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
+              skill: z.string().optional(),
               autoStart: z.boolean().optional(),
               /** Cards the phase starts on its own for; absent means every card. */
               autoStartWhen: cardRuleGroupSchema.optional(),

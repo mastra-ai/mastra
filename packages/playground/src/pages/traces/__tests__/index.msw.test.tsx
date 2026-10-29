@@ -446,7 +446,7 @@ describe('Traces page list source', () => {
       );
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
-      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
       await waitFor(() => {
         expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
@@ -477,7 +477,7 @@ describe('Traces page list source', () => {
       );
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
-      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
       await waitFor(() => {
         expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
@@ -778,7 +778,7 @@ describe('Traces side panel scores tab', () => {
       );
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
-      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
       await waitFor(() => {
         expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
@@ -788,7 +788,7 @@ describe('Traces side panel scores tab', () => {
       const scoresTab = traceSideColumn();
 
       expect(await within(scoresTab).findByText(/no scores/i)).not.toBeNull();
-      expect(screen.getByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(screen.getByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
     });
   });
 

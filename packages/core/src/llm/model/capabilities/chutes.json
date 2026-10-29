@@ -49,17 +49,17 @@
         "type": "toggle"
       }
     ],
+    "google/gemma-4-31B-turbo-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-ai/DeepSeek-V3.2-TEE": [
       {
         "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31B-turbo-TEE": [
       {
         "type": "toggle"
       }

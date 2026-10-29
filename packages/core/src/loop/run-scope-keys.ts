@@ -16,7 +16,7 @@
 
 import type { IdGenerator, LanguageModelRequestMetadata, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 import type { SaveQueueManager } from '../agent/save-queue';
-import type { CreatedAgentSignal } from '../agent/signals';
+import type { PendingSignalListener, CreatedAgentSignal } from '../agent/signals';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
@@ -78,9 +78,16 @@ export const SKIP_BG_TASK_WAIT_KEY = createRunScopeKey<boolean>('loop:skipBgTask
 export const DRAIN_PENDING_SIGNALS_KEY =
   createRunScopeKey<(runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]>('loop:drainPendingSignals');
 export const SUBSCRIBE_PENDING_SIGNALS_KEY =
-  createRunScopeKey<(runId: string, listener: () => void) => () => void>('loop:subscribePendingSignals');
+  createRunScopeKey<(runId: string, listener: PendingSignalListener) => () => void>('loop:subscribePendingSignals');
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('loop:initialSignalEchoes');
 
 // --- Tool payload transform ------------------------------------------------
 
 export const TOOL_PAYLOAD_TRANSFORM_KEY = createRunScopeKey<ToolPayloadTransformPolicy>('loop:toolPayloadTransform');
+
+export const CONTINUATION_STOP_CAUSE_KEY = createRunScopeKey<
+  import('./shared/continuation-core').ContinuationStopCause | undefined
+>('loop:continuationStopCause');
+
+export const DELEGATION_FAILURE_KEY =
+  createRunScopeKey<import('../observability/types').SpanTermination>('loop:delegationFailure');

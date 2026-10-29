@@ -8,7 +8,6 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { controlIconState } from '@/ds/primitives/control-icon';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -205,8 +204,6 @@ type CommandListProps = React.ComponentPropsWithoutRef<typeof CommandPrimitive.L
   scrollAreaClassName?: string;
   scrollAreaViewportClassName?: string;
   scrollAreaMask?: ScrollAreaMask;
-  /** Extra classes for the travelling hover surface (e.g. a different radius). */
-  highlightClassName?: string;
 };
 
 const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.List>, CommandListProps>(
@@ -218,12 +215,10 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
       scrollAreaClassName,
       scrollAreaViewportClassName,
       scrollAreaMask,
-      highlightClassName,
       ...props
     },
     ref,
   ) => {
-    const menu = useFluidMenu({ activeAttr: 'data-selected' });
     const animateHeight = React.useContext(CommandDialogVariantContext) === 'inset';
     const list = (
       <CommandPrimitive.List
@@ -231,15 +226,12 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
           'outline-none focus:outline-none focus-visible:outline-none',
           scrollArea ? 'overflow-visible' : 'max-h-dropdown overflow-x-hidden overflow-y-auto',
           animateHeight && cn('h-(--cmdk-list-height)', heightTransition),
-          menu.containerClassName,
           className,
         )}
         {...props}
-        {...menu.getContainerProps(props, ref)}
+        ref={ref}
       >
-        <FluidMenuItems menu={menu} className={highlightClassName}>
-          {children}
-        </FluidMenuItems>
+        {children}
       </CommandPrimitive.List>
     );
 
@@ -294,12 +286,12 @@ const CommandItem = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
 >(({ className, ...props }, ref) => (
   <CommandPrimitive.Item
-    ref={useFluidMenuItemRef(ref)}
+    ref={ref}
     className={cn(
       'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-body-sm text-muted-foreground select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
-      transitions.colors,
-      'data-[selected=true]:text-foreground',
+      // cmdk's selection follows both the pointer and the arrow keys; the row paints it instantly.
+      'data-[selected=true]:bg-fill data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
       '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0',
       controlIconState,

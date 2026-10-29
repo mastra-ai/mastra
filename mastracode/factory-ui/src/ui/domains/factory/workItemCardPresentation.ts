@@ -5,11 +5,18 @@ import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
 
 // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
-// Then the first lane whose seat is still free, so a card never leads with a run it has already had.
-export function primaryCardMove(moves: CardMove[], columnStage: string, sessions: WorkItem['sessions']) {
+// Then the first lane the card has not had a run in, so a card never leads with a run it has already had.
+// Phases can share a session (Planning and Building both run in `work`), so a lane the card has never
+// entered still counts as unused even when its session exists.
+export function primaryCardMove(
+  moves: CardMove[],
+  columnStage: string,
+  item: Pick<WorkItem, 'sessions'> & { stageHistory?: readonly { stage: string }[] },
+) {
   const columnMove = moves.find(move => move.stage === columnStage);
   if (columnMove) return columnMove;
-  const unusedMove = moves.find(move => !(move.role in sessions));
+  const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
+  const unusedMove = moves.find(move => !(move.role in item.sessions) || !visited.has(move.stage));
   return unusedMove ?? moves[0];
 }
 
