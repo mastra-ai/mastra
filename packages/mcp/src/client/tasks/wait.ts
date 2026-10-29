@@ -88,33 +88,56 @@ export async function waitForTask(
   const maxOutageMs = options.maxOutageMs ?? DEFAULT_MAX_OUTAGE_MS;
   const deadline = options.maxWaitMs === undefined ? undefined : now() + options.maxWaitMs;
   const answered = new Set<string>();
+  let task: MCPDetailedTask | MCPTask = created;
   let cancelSent = false;
   const cancel = () => {
     if (cancelSent) return;
     cancelSent = true;
     void port.cancel(created.taskId).catch(() => {});
   };
-  const onAbort = () => cancel();
-  options.signal?.addEventListener('abort', onAbort, { once: true });
+  const timedOut = () =>
+    new TaskWaitError('timeout', `Gave up on MCP task ${task.taskId} after ${options.maxWaitMs}ms`, task);
+
+  // Fires on caller abort or at maxWaitMs. Every operation gets this signal and is raced against it,
+  // so a request or input handler that ignores its signal can't keep the call open past either.
+  const stop = new AbortController();
+  const stopped = new Promise<never>((_, reject) => {
+    stop.signal.addEventListener('abort', () => reject(stop.signal.reason), { once: true });
+  });
+  stopped.catch(() => {});
+  const bounded = <T>(operation: Promise<T>): Promise<T> => Promise.race([operation, stopped]);
+  const onAbort = () => {
+    cancel();
+    stop.abort(options.signal!.reason);
+  };
+  if (options.signal?.aborted) onAbort();
+  else options.signal?.addEventListener('abort', onAbort, { once: true });
+  const deadlineTimer =
+    options.maxWaitMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          cancel();
+          stop.abort(timedOut());
+        }, options.maxWaitMs);
+  deadlineTimer?.unref?.();
 
   try {
-    let task: MCPDetailedTask | MCPTask = created;
     let reported: MCPTask['status'] | undefined;
     for (;;) {
       if (task.status !== reported) {
         reported = task.status;
         options.onStatus?.(task);
       }
-      options.signal?.throwIfAborted();
+      stop.signal.throwIfAborted();
       if (isTerminalTaskStatus(task.status)) return task as MCPTerminalTask;
 
       if (task.status === 'input_required' && 'inputRequests' in task) {
         const { inputRequests } = task as Extract<MCPDetailedTask, { status: 'input_required' }>;
         const pending = Object.entries(inputRequests).filter(([key]) => !answered.has(key));
         if (pending.length > 0) {
-          const responses = await answerInputRequests(pending, task, options);
+          const responses = await bounded(answerInputRequests(pending, task, options.inputRequests, stop.signal));
           for (const key of Object.keys(responses)) answered.add(key);
-          await port.update(task.taskId, responses, { signal: options.signal });
+          await bounded(port.update(task.taskId, responses, { signal: stop.signal }));
           // Updates are eventually consistent, so the next poll follows without waiting.
           task = await poll();
           continue;
@@ -130,11 +153,11 @@ export async function waitForTask(
         const remaining = deadline - now();
         if (remaining <= 0) {
           cancel();
-          throw new TaskWaitError('timeout', `Gave up on MCP task ${task.taskId} after ${options.maxWaitMs}ms`, task);
+          throw timedOut();
         }
         interval = Math.min(interval, remaining);
       }
-      await sleep(interval, options.signal);
+      await bounded(sleep(interval, stop.signal));
       task = await poll();
     }
 
@@ -152,15 +175,15 @@ export async function waitForTask(
       let backoff: number | undefined;
       for (;;) {
         try {
-          return await port.get(created.taskId, { signal: options.signal });
+          return await bounded(port.get(created.taskId, { signal: stop.signal }));
         } catch (error) {
-          options.signal?.throwIfAborted();
+          stop.signal.throwIfAborted();
           if (!port.isRecoverable(error)) throw error;
           const at = now();
           outageStartedAt ??= at;
           if (deadline !== undefined && at >= deadline) {
             cancel();
-            throw new TaskWaitError('timeout', `Gave up on MCP task ${task.taskId} after ${options.maxWaitMs}ms`, task);
+            throw timedOut();
           }
           const ttlEnd = task.ttlMs === null ? Infinity : Date.parse(task.createdAt) + task.ttlMs;
           const giveUpAt = Math.min(outageStartedAt + maxOutageMs, ttlEnd);
@@ -174,17 +197,19 @@ export async function waitForTask(
             );
           }
           try {
-            await port.recover(error);
+            await bounded(port.recover(error));
           } catch (recoverError) {
+            stop.signal.throwIfAborted();
             // Reconnecting fails the same way while the server is down; anything else ends the wait.
             if (!port.isRecoverable(recoverError)) throw recoverError;
           }
           backoff = Math.min(MAX_OUTAGE_BACKOFF_MS, backoff === undefined ? pollIntervalOf(task) : backoff * 2);
-          await sleep(Math.max(0, Math.min(backoff, giveUpAt - at, (deadline ?? Infinity) - at)), options.signal);
+          await bounded(sleep(Math.max(0, Math.min(backoff, giveUpAt - at, (deadline ?? Infinity) - at)), stop.signal));
         }
       }
     }
   } finally {
+    clearTimeout(deadlineTimer);
     options.signal?.removeEventListener('abort', onAbort);
   }
 }
@@ -192,9 +217,9 @@ export async function waitForTask(
 async function answerInputRequests(
   pending: [string, MCPTaskInputRequest][],
   task: MCPTask,
-  options: TaskWaitOptions,
+  handler: MCPInputRequestHandler | undefined,
+  signal: AbortSignal,
 ): Promise<MCPTaskInputResponses> {
-  const handler = options.inputRequests;
   if (!handler) {
     throw new TaskWaitError(
       'input_unhandled',
@@ -202,7 +227,6 @@ async function answerInputRequests(
       task,
     );
   }
-  const signal = options.signal ?? new AbortController().signal;
   const responses: MCPTaskInputResponses = {};
   for (const [key, request] of pending) {
     if (request.method !== 'elicitation/create') {

@@ -171,3 +171,72 @@ describe('waitForTask with a server-chosen poll interval', () => {
     ]);
   });
 });
+
+describe('waitForTask with an operation that never settles', () => {
+  const needsInput = {
+    ...created,
+    status: 'input_required',
+    inputRequests: {
+      confirm: {
+        method: 'elicitation/create',
+        params: { mode: 'form', message: 'OK?', requestedSchema: { type: 'object', properties: {} } },
+      },
+    },
+  } as MCPDetailedTask;
+  const port = (get: TaskWaitPort['get']): TaskWaitPort => ({
+    get,
+    update: vi.fn(async () => {}),
+    cancel: vi.fn(async () => {}),
+    isRecoverable: () => false,
+    recover: async () => {},
+  });
+
+  it('times out at maxWaitMs while a poll is still in flight, and ignores its late result', async () => {
+    let release!: () => void;
+    const slow = port(vi.fn(() => new Promise<MCPDetailedTask>(resolve => (release = () => resolve(completed)))));
+
+    // Polls after 100 ms, then that poll hangs past the 300 ms deadline.
+    const fresh = { ...created, createdAt: new Date().toISOString(), pollIntervalMs: 0 };
+    await expect(waitForTask(slow, fresh, { maxWaitMs: 300 })).rejects.toMatchObject({ reason: 'timeout' });
+    expect(slow.get).toHaveBeenCalledTimes(1);
+    expect(slow.cancel).toHaveBeenCalledTimes(1);
+    release();
+  });
+
+  it('times out at maxWaitMs while the input handler is still running, aborts its signal, and sends no update', async () => {
+    let handlerSignal: AbortSignal | undefined;
+    let release!: () => void;
+    const blocked = port(async () => needsInput);
+    const inputRequests = vi.fn(({ signal }: { signal: AbortSignal }) => {
+      handlerSignal = signal;
+      return new Promise<{ action: 'accept' }>(resolve => (release = () => resolve({ action: 'accept' })));
+    });
+
+    await expect(waitForTask(blocked, needsInput, { maxWaitMs: 50, inputRequests })).rejects.toMatchObject({
+      reason: 'timeout',
+    });
+    expect(handlerSignal?.aborted).toBe(true);
+    expect(blocked.cancel).toHaveBeenCalledTimes(1);
+    release();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(blocked.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects as soon as the caller aborts, even when the input handler ignores its signal', async () => {
+    let release!: () => void;
+    const blocked = port(async () => needsInput);
+    const controller = new AbortController();
+    const inputRequests = vi.fn(() => {
+      setTimeout(() => controller.abort(new Error('stopped by caller')), 20);
+      return new Promise<{ action: 'accept' }>(resolve => (release = () => resolve({ action: 'accept' })));
+    });
+
+    await expect(waitForTask(blocked, needsInput, { signal: controller.signal, inputRequests })).rejects.toThrow(
+      'stopped by caller',
+    );
+    expect(blocked.cancel).toHaveBeenCalledTimes(1);
+    release();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(blocked.update).not.toHaveBeenCalled();
+  });
+});

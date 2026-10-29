@@ -33,6 +33,8 @@ export interface TasksFixtureServer {
   restart: (downMs: number) => Promise<void>;
   /** Answers every request with this HTTP status, like a proxy in front of a restarting server; `undefined` restores. */
   setGatewayStatus: (status: number | undefined) => void;
+  /** Holds every `tasks/get` response for `ms` before answering; `0` restores. */
+  delayTaskGets: (ms: number) => void;
   close: () => Promise<void>;
 }
 
@@ -56,6 +58,7 @@ export async function startTasksFixtureServer(options: { pollIntervalMs?: number
   const requests: SentRequest[] = [];
   let releaseGated: (() => void) | undefined;
   let gatewayStatus: number | undefined;
+  let taskGetDelayMs = 0;
 
   const declaredTasks = (ctx: ServerContext) =>
     hasTasksCapability(
@@ -168,6 +171,9 @@ export async function startTasksFixtureServer(options: { pollIntervalMs?: number
         mcpName: req.headers['mcp-name'] ? String(req.headers['mcp-name']) : null,
         declaredTasks: hasTasksCapability(meta?.[CLIENT_CAPABILITIES_META_KEY]),
       });
+      if (body.method === 'tasks/get' && taskGetDelayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, taskGetDelayMs));
+      }
     }
     void handler(req, res, body);
   });
@@ -188,6 +194,9 @@ export async function startTasksFixtureServer(options: { pollIntervalMs?: number
     },
     setGatewayStatus: status => {
       gatewayStatus = status;
+    },
+    delayTaskGets: ms => {
+      taskGetDelayMs = ms;
     },
     close: async () => {
       store.close();

@@ -149,6 +149,55 @@ describe('MCPClient with MCP Tasks', () => {
     await waitFor(() => methods().includes('tasks/cancel'));
   });
 
+  it('times out at maxWaitMs while a poll is still waiting for its answer, without returning the late result', async () => {
+    const { call } = await connect({ tasks: { maxWaitMs: 300 } });
+    server!.delayTaskGets(1_000);
+
+    const startedAt = Date.now();
+    expect(await caught(call('report'))).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_TIMEOUT' });
+    expect(Date.now() - startedAt).toBeLessThan(900);
+    await waitFor(() => methods().includes('tasks/cancel'));
+  });
+
+  it('times out at maxWaitMs while the input handler is still running, without sending its late answer', async () => {
+    let handlerSignal: AbortSignal | undefined;
+    let release!: () => void;
+    const { call } = await connect({
+      tasks: { maxWaitMs: 300 },
+      inputRequests: ({ signal }) => {
+        handlerSignal = signal;
+        return new Promise(resolve => (release = () => resolve({ action: 'accept', content: { ok: true } })));
+      },
+    });
+
+    expect(await caught(call('confirm'))).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_TIMEOUT' });
+    expect(handlerSignal?.aborted).toBe(true);
+    await waitFor(() => methods().includes('tasks/cancel'));
+    release();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(methods()).not.toContain('tasks/update');
+  });
+
+  it('rejects an aborted call at once even when the input handler ignores its signal', async () => {
+    const controller = new AbortController();
+    let release!: () => void;
+    const { call } = await connect({
+      tasks: true,
+      inputRequests: () => {
+        setTimeout(() => controller.abort(new Error('user stopped')), 20);
+        return new Promise(resolve => (release = () => resolve({ action: 'accept', content: { ok: true } })));
+      },
+    });
+
+    expect(await caught(call('confirm', {}, { abortSignal: controller.signal }))).toMatchObject({
+      message: 'user stopped',
+    });
+    await waitFor(() => methods().includes('tasks/cancel'));
+    release();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(methods()).not.toContain('tasks/update');
+  });
+
   it('keeps waiting for a task while the server restarts', async () => {
     const { call } = await connect();
 
