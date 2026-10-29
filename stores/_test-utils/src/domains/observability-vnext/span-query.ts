@@ -331,6 +331,32 @@ export function createSpanQueryTests(
       }
     });
 
+    it('filters model and provider on their columns and returns attribute values for older rows', async () => {
+      expect(getStorage().getFeatures()).toContain('span-query-model-fields');
+      const attributes = { model: 'test-model', provider: 'test-provider' };
+      await getStorage().batchCreateSpans({
+        records: [
+          span('native', { model: 'test-model', provider: 'test-provider', attributes: { other: true } }),
+          // Written before the dedicated columns existed: the values live only in attributes.
+          span('legacy', { attributes }),
+          span('other', { model: 'other-model', provider: 'other-provider' }),
+        ],
+      });
+      for (const field of ['model', 'provider'] as const) {
+        const result = await query({
+          where: { op: 'eq', left: { path: field }, right: { literal: attributes[field] } },
+        });
+        expect(result.spans.map(row => row.spanId)).toEqual(['native']);
+      }
+      // The legacy row's attribute value never satisfies a filter: `exists` reads the column too.
+      const present = await query({ where: { op: 'exists', path: 'model' } });
+      expect(present.spans.map(row => row.spanId).sort()).toEqual(['native', 'other']);
+      const rows = Object.fromEntries((await query()).spans.map(row => [row.spanId, row]));
+      expect(rows.native).toMatchObject(attributes);
+      expect(rows.legacy).toMatchObject(attributes);
+      expect(rows.other).toMatchObject({ model: 'other-model', provider: 'other-provider' });
+    });
+
     it('persists parent and root entity carried on an exported span through buildCreateSpanRecord', async () => {
       const exported: AnyExportedSpan = {
         id: 'exported-tool',

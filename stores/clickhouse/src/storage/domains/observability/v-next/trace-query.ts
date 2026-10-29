@@ -535,13 +535,15 @@ function compileClickHouseTraceScope(
       ];
 
   if (relationCollections.has('spans')) {
+    // Model and provider fall back to span attributes: exporters before the dedicated columns
+    // existed wrote them only there. Span queries filter on the columns alone (memory budget).
     ctes.push(`current_spans AS (
     SELECT
       traceId,
       name,
       spanType,
-      if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
-      if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider,
+      coalesce(model, if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL)) AS model,
+      coalesce(provider, if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL)) AS provider,
       startedAt,
       endedAt,
       ${durationMsSql('startedAt', 'endedAt')} AS durationMs,

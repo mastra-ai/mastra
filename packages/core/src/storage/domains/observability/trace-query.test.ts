@@ -3,9 +3,6 @@ import { ObservabilityStorage } from './base';
 import {
   compareTraceQueryStrings,
   createTraceQueryObservedFieldDescriptor,
-  encodeTraceQueryCursor,
-  encodeTraceQueryDeltaCursor,
-  getTraceQueryDeltaWatermark,
   getTraceQueryCanonicalFieldDescriptors,
   getTraceQueryFieldsArgsSchema,
   getTraceQueryFieldsResponseSchema,
@@ -17,8 +14,6 @@ import {
   parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
-  planThreadQuery,
-  planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQuerySelectionPredicate,
   planTraceQueryValues,
@@ -50,6 +45,13 @@ import {
   TraceQueryValidationError,
 } from './trace-query';
 import type { TraceQueryPredicate } from './trace-query';
+import {
+  encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
+  planThreadQuery,
+  planTraceQuery,
+} from './trace-query-plan';
 
 const baseRequest = {
   timeRange: {

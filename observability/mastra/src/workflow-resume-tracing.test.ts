@@ -44,7 +44,7 @@ const makeWorkflow = (engine: 'default' | 'evented' = 'default', options?: Workf
     suspendSchema: empty,
     resumeSchema: z.object({ approved: z.boolean() }),
     execute: async ({ resumeData, suspend }) => {
-      if (!resumeData) {
+      if (!resumeData?.approved) {
         await suspend({});
         return { approved: false };
       }
@@ -184,6 +184,37 @@ describe('workflow resume span linkage', () => {
       await host.shutdown();
     }
   });
+
+  it.each(['default', 'evented'] as const)(
+    '%s resumes of a run suspended twice both continue its first execution',
+    async engine => {
+      const workflow = makeWorkflow(engine);
+      const host = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        workflows: { [workflow.id]: workflow },
+        observability: new Observability({
+          configs: { default: { serviceName: 'workflow-resume-lineage', exporters: [exporter] } },
+        }),
+      });
+      try {
+        if (engine === 'evented') await host.startWorkers();
+        const run = await workflow.createRun();
+        expect((await run.start({ inputData: {} })).status).toBe('suspended');
+        const rejected = await workflow.createRun({ runId: run.runId });
+        expect((await rejected.resume({ resumeData: { approved: false } })).status).toBe('suspended');
+        const approved = await workflow.createRun({ runId: run.runId });
+        expect((await approved.resume({ resumeData: { approved: true } })).status).toBe('success');
+
+        const executions = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+        const ids = executions.map(span => span.id);
+        expect(executions.map(span => span.parentSpanId ?? null)).toEqual([null, ids[0], ids[1]]);
+        expect(executions.map(span => span.resumedFromSpanId ?? null)).toEqual([null, ids[0], ids[0]]);
+      } finally {
+        await host.shutdown();
+      }
+    },
+  );
 
   // Evented control-flow spans were split out of this change, so only the default engine emits them.
   it.each(

@@ -7,7 +7,7 @@ import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
-import { createObservabilityContext, resolveExportedSpanId } from '../observability';
+import { createObservabilityContext, getResumeTracingContext } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
@@ -1172,15 +1172,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // nothing: its no-op span has no real trace for a resume to join.
         let persistTracingContext: WorkflowStateTracingContext = {};
         if (result.status === 'suspended') {
-          if (this.options.resumeTracingContext) {
-            persistTracingContext = this.options.resumeTracingContext;
-          } else if (workflowSpan?.isValid) {
-            persistTracingContext = {
-              traceId: workflowSpan.traceId,
-              spanId: resolveExportedSpanId(workflowSpan),
-              parentSpanId: workflowSpan.getParentSpanId(),
-            };
-          }
+          persistTracingContext = this.options.resumeTracingContext ?? getResumeTracingContext(workflowSpan) ?? {};
         }
 
         await this.persistStepUpdate({
