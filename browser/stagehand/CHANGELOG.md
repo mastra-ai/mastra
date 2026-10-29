@@ -1,5 +1,56 @@
 # @mastra/stagehand
 
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Added `setCookies()` support to `StagehandBrowser`. Cookies set before a thread's browser opens are added before it loads any page, so pages open signed in. ([#28631](https://github.com/mastra-ai/mastra/pull/28631))
+
+  ```ts
+  await browser.setCookies([{ name: 'my_app_session', value: token, domain: 'app.example.com', path: '/' }], threadId);
+  ```
+
+### Patch Changes
+
+- Fixed the browser failing with `ECONNREFUSED` when launched again on a profile it had used before. ([#28675](https://github.com/mastra-ai/mastra/pull/28675))
+
+  Before launching Chrome on a local profile, Mastra now clears the launcher logs left by earlier launches (`chrome-err.log`, `chrome-out.log`), which made the next launch connect to the old, dead DevTools port. It also removes a Chrome profile lock left by a browser that is no longer running. Stagehand does this for every thread-scoped browser too, not only on the first launch. Remote browsers (`cdpUrl`, Browserbase) are not affected.
+
+  If a browser that is still running holds the profile, launch now fails with a `BrowserProfileInUseError` that names the profile and the holding process:
+
+  ```ts
+  import { BrowserProfileInUseError } from '@mastra/core/browser';
+
+  try {
+    await browser.launch();
+  } catch (error) {
+    if (error instanceof BrowserProfileInUseError) {
+      // Another Chrome is using the profile: close it, or use a different profile.
+      console.error(error.message);
+    }
+    throw error;
+  }
+  ```
+
+  Added `browser.retire()` and `browser.killProcesses()` for code that replaces one browser with another. `close()` lets the browser relaunch the next time something uses it; `retire()` closes it for good, so a tool call still holding the old browser gets an error instead of starting an untracked Chrome. `killProcesses()` force-kills the browser's processes when `close()` fails or hangs. It works on macOS and Linux; it cannot force-kill Chrome on Windows.
+
+  ```ts
+  // Replace oldBrowser with newBrowser without leaving its Chrome running.
+  const retired = oldBrowser.retire();
+  const timedOut = await Promise.race([
+    retired.then(() => false),
+    new Promise<boolean>(resolve => setTimeout(() => resolve(true), 5000)),
+  ]).catch(() => true);
+  if (timedOut) oldBrowser.killProcesses();
+  ```
+
+  A browser that finishes closing after another browser took its profile no longer deletes the new browser's lock.
+
+  A lock whose holder is a live local process that has not started listening yet (Chrome creates the lock first) is no longer removed as stale; Mastra waits up to 3 seconds for it.
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d)]:
+  - @mastra/core@1.81.0-alpha.0
+
 ## 0.3.7
 
 ### Patch Changes

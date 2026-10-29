@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MastraError } from '@mastra/core/error';
+import { MastraError } from '@internal/core/error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';

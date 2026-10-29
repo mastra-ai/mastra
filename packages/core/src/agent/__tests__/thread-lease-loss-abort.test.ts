@@ -2406,65 +2406,86 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   }, 20_000);
 
   it('frees the thread when a retake it gave up on is granted after the run stopped', async () => {
-    const thread = 'late-retake-grant-thread';
-    const key = [RESOURCE, thread].join('\u0000');
-    for (let i = 0; i < 100; i++) {
-      llm.on(
-        { userMessage: 'late retake grant', sequenceIndex: i },
-        { toolCalls: [{ id: `call_late_grant_${i}`, name: 'tick', arguments: {} }] },
-      );
-    }
-    const shared = new SharedLeases();
-    /** Once cut, renewals never answer and a retake is granted only after the run gave up on it. */
-    class LateGrantPubSub extends ReplicaPubSub {
-      cut = false;
-      grantedLate = false;
-      /** Thread-lease acquires sent after the cut. */
-      sent = 0;
-      override async renewLease(key: string, owner: string, ttlMs: number) {
-        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
-        return super.renewLease(key, owner, ttlMs);
+    // Every lease deadline here is 300ms. On real timers an event-loop stall that long (a loaded CI runner) lapses
+    // the run's own execution claim before the backend is cut, so the run stops by itself and never sends the retake
+    // this test is about. On a fake clock time only moves when the test moves it, so a stall can't lapse anything.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    /** Moves the clock in small steps, letting I/O (the aimock model server) run between them. */
+    const advanceUntil = async (done: () => boolean) => {
+      // Bounded by real time: a slow model response can take many fake-clock steps to arrive.
+      const deadline = performance.now() + 10_000;
+      while (!done()) {
+        if (performance.now() > deadline) throw new Error('timed out waiting for the run');
+        await vi.advanceTimersByTimeAsync(10);
+        await new Promise(resolve => setImmediate(resolve));
       }
-      override async acquireLease(key: string, owner: string, ttlMs: number) {
-        if (!this.cut || !key.startsWith(`${RESOURCE}\u0000`)) return super.acquireLease(key, owner, ttlMs);
-        this.sent++;
-        await new Promise(resolve => setTimeout(resolve, 250));
-        const lease = await super.acquireLease(key, owner, ttlMs);
-        this.grantedLate = lease.acquired;
-        return lease;
+    };
+    try {
+      const thread = 'late-retake-grant-thread';
+      const key = [RESOURCE, thread].join('\u0000');
+      for (let i = 0; i < 100; i++) {
+        llm.on(
+          { userMessage: 'late retake grant', sequenceIndex: i },
+          { toolCalls: [{ id: `call_late_grant_${i}`, name: 'tick', arguments: {} }] },
+        );
       }
-    }
-    const pubsub = new LateGrantPubSub(shared);
-    let ticks = 0;
-    const tick = createTool({
-      id: 'tick',
-      description: 'Tick once',
-      inputSchema: z.object({}),
-      execute: async () => {
-        ticks++;
-        await new Promise(resolve => setTimeout(resolve, 20));
-        return 'ticked';
-      },
-    });
-    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
-    const { output, drain } = await startStream(agent, 'late retake grant', {
-      maxSteps: 100,
-      memory: { thread, resource: RESOURCE },
-    });
-    const done = drain().catch(() => undefined);
-    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
-    pubsub.cut = true;
-    // The run is stopped while its retake is on its way, so it gives up on that retake.
-    await vi.waitFor(() => expect(pubsub.sent).toBeGreaterThan(0), { timeout: 5_000 });
-    expect(agent.abortThreadStream({ resourceId: RESOURCE, threadId: thread })).toBe(true);
-    await done;
-    expect(await output.finishReason).toBe('aborted');
+      const shared = new SharedLeases();
+      /** Once cut, renewals never answer and a retake is granted only after the run gave up on it. */
+      class LateGrantPubSub extends ReplicaPubSub {
+        cut = false;
+        grantedLate = false;
+        /** Thread-lease acquires sent after the cut. */
+        sent = 0;
+        override async renewLease(key: string, owner: string, ttlMs: number) {
+          if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+          return super.renewLease(key, owner, ttlMs);
+        }
+        override async acquireLease(key: string, owner: string, ttlMs: number) {
+          if (!this.cut || !key.startsWith(`${RESOURCE}\u0000`)) return super.acquireLease(key, owner, ttlMs);
+          this.sent++;
+          await new Promise(resolve => setTimeout(resolve, 250));
+          const lease = await super.acquireLease(key, owner, ttlMs);
+          this.grantedLate = lease.acquired;
+          return lease;
+        }
+      }
+      const pubsub = new LateGrantPubSub(shared);
+      let ticks = 0;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Tick once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticks++;
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return 'ticked';
+        },
+      });
+      const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+      const { output, drain } = await startStream(agent, 'late retake grant', {
+        maxSteps: 100,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await advanceUntil(() => ticks >= 2);
+      pubsub.cut = true;
+      // The run is stopped while its retake is on its way, so it gives up on that retake.
+      await advanceUntil(() => pubsub.sent > 0);
+      expect(agent.abortThreadStream({ resourceId: RESOURCE, threadId: thread })).toBe(true);
+      let settled = false;
+      void done.finally(() => (settled = true));
+      await advanceUntil(() => settled);
+      expect(await output.finishReason).toBe('aborted');
 
-    // The backend granted the abandoned retake to a run that no longer exists. Nothing renews that lease,
-    // so the thread must be freed at once rather than stay held for a TTL.
-    await vi.waitFor(() => expect(pubsub.grantedLate).toBe(true), { timeout: 5_000 });
-    await new Promise(resolve => setTimeout(resolve, 30));
-    expect(shared.owner(key)).toBeUndefined();
+      // The backend granted the abandoned retake to a run that no longer exists. Nothing renews that lease,
+      // so the thread must be freed at once rather than stay held for a TTL.
+      await advanceUntil(() => pubsub.grantedLate);
+      await vi.advanceTimersByTimeAsync(30);
+      expect(shared.leases.has(key)).toBe(false);
+      expect(shared.owner(key)).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   }, 20_000);
 
   it("never frees a successor's lease when a retake it gave up on settles after the successor took the run", async () => {

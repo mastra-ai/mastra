@@ -1,10 +1,14 @@
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
+import { getErrorFromUnknown } from '../../error/utils.js';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { Mastra } from '../../mastra';
+import type { Span, SpanType } from '../../observability';
+import { executionFailureTermination } from '../../observability/execution-outcome';
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
+import { workflowTermination } from '../execution-outcome';
 import type {
   SerializedStepFlowEntry,
   StepResult,
@@ -53,6 +57,47 @@ export class EventedExecutionEngine extends ExecutionEngine {
   }
 
   /**
+   * `Run.restart()` and `Run.timeTravel()` hand the engine a WORKFLOW_RUN span to own. Evented
+   * steps only find a span registered on Mastra for their run, so hold it there while the run
+   * executes, then end it with the run's result as the default engine does.
+   */
+  private async executeInRunSpan<TOutput>(
+    runId: string,
+    workflowSpan: Span<SpanType.WORKFLOW_RUN>,
+    execute: () => Promise<TOutput>,
+  ): Promise<TOutput> {
+    this.mastra?.__registerRunTracingContext(runId, { currentSpan: workflowSpan });
+    try {
+      const result = await execute();
+      const settled = result as {
+        status: WorkflowRunStatus;
+        result?: unknown;
+        error?: unknown;
+        tripwire?: StepTripwireInfo;
+      };
+      const termination = workflowTermination(settled);
+      if (settled.error) {
+        workflowSpan.error({
+          ...termination,
+          error: getErrorFromUnknown(settled.error),
+          attributes: { status: settled.status },
+        });
+      } else {
+        workflowSpan.end({ ...termination, output: settled.result, attributes: { status: settled.status } });
+      }
+      return result;
+    } catch (error) {
+      workflowSpan.error({ ...executionFailureTermination(error), error: getErrorFromUnknown(error) });
+      throw error;
+    } finally {
+      // Another execution of this run may have registered its own span since.
+      if (this.mastra?.__getRunTracingContext(runId)?.currentSpan === workflowSpan) {
+        this.mastra.__unregisterRunTracingContext(runId);
+      }
+    }
+  }
+
+  /**
    * Executes a workflow run with the provided execution graph and input
    * @param graph The execution graph to execute
    * @param input The input data for the workflow
@@ -89,7 +134,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
   }): Promise<TOutput> {
+    const { workflowSpan, ...executeParams } = params;
+    if (workflowSpan) {
+      return this.executeInRunSpan(params.runId, workflowSpan, () =>
+        this.execute<TState, TInput, TOutput>(executeParams),
+      );
+    }
+
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
       throw new Error('No Pubsub adapter configured on the Mastra instance');

@@ -16,6 +16,7 @@ import {
   compileSpanQueryPredicate,
   runWithClickHouseTraceQueryTimeout,
   timeToFirstChunkSupported,
+  timeToFirstTokenSupported,
 } from './trace-query';
 import type { ClickHouseParameterType, ParameterBuilder } from './trace-query';
 
@@ -55,6 +56,7 @@ const displayFields = [
   'provider',
   'durationMs',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'status',
 ];
 
@@ -89,7 +91,7 @@ function afterCursor(plan: TrustedSpanQueryPlan, parameters: Parameters): string
   // only empty values remain.
   if (cursor.sortValue === null) equal.push(`isNull(${field})`);
   else {
-    const numeric = plan.orderBy.field === 'timeToFirstChunkMs';
+    const numeric = plan.orderBy.field === 'timeToFirstChunkMs' || plan.orderBy.field === 'timeToFirstTokenMs';
     const value = parameters.add(cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
     terms.push(`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${value}`);
     if (numeric) terms.push(`isNull(${field})`);
@@ -182,6 +184,7 @@ export const TRACE_BRANCHES_SPAN_FIELD_COLUMNS: Readonly<Record<string, readonly
       'startedAt',
       'endedAt',
       'timeToFirstChunkMs',
+      'timeToFirstTokenMs',
       'threadId',
       'runId',
       'sessionId',
@@ -342,7 +345,12 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
     )) as T[];
   };
   const rows = await run<
-    SpanQueryIdentity & { startedAt: string; endedAt: string; timeToFirstChunkMs?: number | null }
+    SpanQueryIdentity & {
+      startedAt: string;
+      endedAt: string;
+      timeToFirstChunkMs?: number | null;
+      timeToFirstTokenMs?: number | null;
+    }
   >(compileClickHouseSpanQuery(plan));
   const selected = rows.map(row => ({
     ...row,
@@ -385,7 +393,14 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
   const hydrated = page.flatMap(identity => {
     const row = byIdentity.get(coreStorage.spanQueryIdentityKey(identity));
     if (!row) return []; // The selected record can be deleted between reads.
-    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, timeToFirstChunkMs, ...metadata } = row;
+    const {
+      inputPreview: _input,
+      outputPreview: _output,
+      errorPreview: _error,
+      timeToFirstChunkMs,
+      timeToFirstTokenMs,
+      ...metadata
+    } = row;
     return [
       {
         ...metadata,
@@ -393,6 +408,9 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
         durationMs: Number(row.durationMs),
         ...(timeToFirstChunkSupported && {
           timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+        }),
+        ...(timeToFirstTokenSupported && {
+          timeToFirstTokenMs: timeToFirstTokenMs == null ? null : Number(timeToFirstTokenMs),
         }),
       },
     ];

@@ -30,6 +30,7 @@ export const coreFeatures = new Set<string>([
   'channels',
   'deploy-diagnosis',
   'model-inference-span',
+  'execution-outcomes',
   'internal-usage-rollup',
   'json-prompt-injection:inline',
   'observability-signal-deletion',
