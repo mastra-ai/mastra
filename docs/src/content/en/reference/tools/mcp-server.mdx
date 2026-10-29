@@ -2114,7 +2114,7 @@ The in-memory store keeps a finished task's result in memory so the client can s
 - Tasks already created keep their full `ttlMs`. The store never drops a result early to make room. A slot frees when the store forgets a task.
 - Every open task is also retained. When you set only one of a pair, the other follows it: lowering `maxRetainedTasksPerClient` below 100 lowers the default `maxOpenTasksPerClient` to match, and raising `maxOpenTasks` above 10000 raises the default `maxRetainedTasks`. Setting both with the retained cap below the open cap throws when the server is created.
 
-Only the in-memory store enforces retained caps. Tasks kept in Mastra storage (see [Tasks across instances](#tasks-across-instances)) keep finished results in the database, so retained caps don't apply to them; open task caps still do. A custom store that keeps finished results elsewhere can ignore them too.
+Only the in-memory store enforces retained caps. Tasks kept in Mastra storage (see [Tasks across instances](#tasks-across-instances)) keep finished results in the database, so retained caps don't apply to them. Open task caps still do. A custom store that keeps finished results elsewhere can ignore them too.
 
 ### Asking for input inside a task
 
