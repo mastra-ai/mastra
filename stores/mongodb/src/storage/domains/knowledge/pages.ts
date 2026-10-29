@@ -564,9 +564,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   async getPageByKey(input: { scopeId: string; key: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
     const ids = await this.#readable(input.read);
-    const row = await (
-      await this.#c('pages')
-    ).findOne({ scopeId: input.scopeId, key: input.key, ...live, ...this.#inScopes('scopeId', ids) }, noProjection);
+    const filter: Filter<Document> = { key: input.key, ...live };
+    this.#scopeFilter(filter, input.scopeId, ids);
+    const row = await (await this.#c('pages')).findOne(filter, noProjection);
     return row ? toPage(row) : null;
   }
 
@@ -691,7 +691,10 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     try {
       await (await this.#c('pages')).insertOne({ ...doc }, { session });
     } catch (error) {
-      if (isDuplicateKey(error)) throw new KnowledgeConflictError(input.key ? `${scopeId}#${input.key}` : id);
+      if (isDuplicateKey(error)) {
+        if (input.key) throw new Error(`Knowledge page key "${input.key}" already exists in scope ${scopeId}`);
+        throw new KnowledgeConflictError(id);
+      }
       throw error;
     }
     await this.#log(session, { action: 'page-created', scopeId, pageId: id, provenance: input.provenance, at: input.at });
@@ -759,10 +762,10 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return this.#tx(async session => {
       const page = await this.#requireLivePage(input.id, session);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
-      if (page.isScope) throw new Error(`Page ${input.id} is a scope page; scope pages cannot be moved.`);
-      if (input.parentId === input.id) throw new Error(`Page ${input.id} cannot move into itself or its own subtree.`);
+      if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be moved`);
+      if (input.parentId === input.id) throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       const tree = await this.#subtree(input.id, session, input.parentId);
-      if (tree.found) throw new Error(`Page ${input.id} cannot move into itself or its own subtree.`);
+      if (tree.found) throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       const parent = await this.#requireLivePage(input.parentId, session);
       if (tree.live + 1 > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(input.id, tree.live + 1);
       const newScopeId = parent.isScope ? parent.id : parent.scopeId;
@@ -813,14 +816,14 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   async mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
     return this.#tx(async session => {
-      if (input.sourceId === input.targetId) throw new Error('Cannot merge a page into itself.');
+      if (input.sourceId === input.targetId) throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
       const source = await this.#requireLivePage(input.sourceId, session);
       const target = await this.#requireLivePage(input.targetId, session);
       if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
-      if (source.isScope || target.isScope) throw new Error('Scope pages cannot be merged.');
+      if (source.isScope || target.isScope) throw new Error("Knowledge scope pages can't be merged");
       const tree = await this.#subtree(source.id, session, target.id);
       if (tree.found) {
-        throw new Error(`Page ${target.id} is inside ${source.id}; a page cannot merge into its own subtree.`);
+        throw new Error(`Knowledge page ${source.id} can't merge into itself or its own subtree`);
       }
       if (tree.live > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(source.id, tree.live);
       // Source's children become target's children, one level below the target.
@@ -907,7 +910,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return this.#tx(async session => {
       const page = await this.#requireLivePage(input.id, session);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
-      if (page.isScope) throw new Error(`Page ${input.id} is a scope page; scope pages cannot be deleted.`);
+      if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be deleted`);
       const pages = await this.#c('pages');
       if (await pages.findOne({ parentId: input.id, ...live }, { projection: { id: 1 }, session })) {
         throw new KnowledgePageHasChildrenError(input.id);
@@ -1012,13 +1015,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       .toArray();
     const found = new Set(rows.map(row => String(row.id)));
     const missing = ids.find(id => !found.has(id));
-    if (missing) throw new KnowledgeNotFoundError('scope', missing);
+    if (missing) throw new Error(`Knowledge note stamp ${missing} is not a scope page`);
   }
 
   async addNote(input: AddKnowledgeNoteInput): Promise<KnowledgeNote> {
     const bounds = await this.#bounds();
     bounds.assertKnowledgeNoteTextWithinBound(input.text);
-    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope.');
+    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope');
     return this.#tx(async session => {
       const page = await this.#requireLivePage(input.pageId, session);
       const stampIds = [...new Set(input.stampScopeIds)];
@@ -1080,7 +1083,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     stampScopeIds: string[];
     provenance: KnowledgeProvenance;
   }): Promise<KnowledgeNote> {
-    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope.');
+    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope');
     return this.#tx(async session => {
       const note = await this.#requireNote(input.id, session);
       if (note.deletedAt) throw new KnowledgeNotFoundError('note', input.id);
@@ -1298,6 +1301,15 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   // Pins -----------------------------------------------------------------------------------------
+
+  /** Deletes every document but keeps the collections, indexes and schema-version marker. */
+  async clearAll(): Promise<void> {
+    await this.#tx(async session => {
+      for (const name of ['activity', 'pins', 'notes', 'pages'] as const) {
+        await (await this.#c(name)).deleteMany({}, { session });
+      }
+    });
+  }
 
   async addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
     return this.#tx(async session => {
