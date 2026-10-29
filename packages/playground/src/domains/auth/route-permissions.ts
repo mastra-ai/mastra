@@ -61,6 +61,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/scorers', permission: 'scores:read', name: 'Scorers' },
   { route: '/datasets', permission: ['datasets:read'], name: 'Datasets' },
   { route: '/knowledge', permission: 'knowledge:read', name: 'Knowledge' },
+  { route: '/knowledge/importers', permission: 'knowledge:read', name: 'Knowledge importers' },
   { route: '/experiments', permission: ['datasets:read'], name: 'Experiments' },
   { route: '/experiments/review-queue', permission: ['datasets:read'], name: 'Review Queue' },
 

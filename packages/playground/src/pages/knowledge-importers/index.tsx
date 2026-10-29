@@ -1,0 +1,96 @@
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { ImporterDetail } from '@/domains/knowledge-importers/components/importer-detail';
+import { ImportersTable } from '@/domains/knowledge-importers/components/importers-table';
+import { useImporterSummaries } from '@/domains/knowledge-importers/use-knowledge-importers';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/knowledge'), navCrumb('/knowledge/importers')];
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Knowledge importers</h1>
+      {children}
+    </PageLayout>
+  );
+}
+
+export default function KnowledgeImportersPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const summaries = useImporterSummaries();
+
+  if (summaries.error) {
+    const error = summaries.error;
+    return (
+      <Shell>
+        {is401UnauthorizedError(error) ? (
+          <SessionExpired variant="fill" />
+        ) : is403ForbiddenError(error) ? (
+          <PermissionDenied variant="fill" resource="knowledge" />
+        ) : is404NotFoundError(error) ? (
+          <EmptyState
+            variant="fill"
+            titleSlot="No importers on this server"
+            descriptionSlot="This Mastra server doesn't expose the knowledge importers routes."
+          />
+        ) : (
+          <EmptyState
+            tone="error"
+            variant="fill"
+            titleSlot="Failed to load importers"
+            descriptionSlot={error.message}
+          />
+        )}
+      </Shell>
+    );
+  }
+
+  if (summaries.isPending) {
+    return (
+      <Shell>
+        <div className="flex flex-col gap-2 p-4" role="status" aria-label="Loading importers">
+          <SkeletonText />
+          <SkeletonText />
+          <SkeletonText />
+        </div>
+      </Shell>
+    );
+  }
+
+  if (summaries.data.length === 0) {
+    return (
+      <Shell>
+        <EmptyState
+          variant="fill"
+          titleSlot="No importers configured"
+          descriptionSlot="Importers registered on this server's Knowledge will show up here."
+        />
+      </Shell>
+    );
+  }
+
+  const requested = searchParams.get('importer');
+  const selected = summaries.data.find(summary => summary.importerId === requested) ?? summaries.data[0];
+
+  const select = (importerId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('importer', importerId);
+    setSearchParams(next);
+  };
+
+  return (
+    <Shell>
+      <div className="flex flex-col gap-8 pb-8">
+        <ImportersTable summaries={summaries.data} selectedId={selected.importerId} onSelect={select} />
+        <ImporterDetail key={selected.importerId} summary={selected} />
+      </div>
+    </Shell>
+  );
+}

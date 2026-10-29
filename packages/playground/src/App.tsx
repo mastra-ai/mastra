@@ -69,6 +69,7 @@ import ExperimentPage from './pages/experiments/experiment';
 import ReviewQueuePage from './pages/experiments/review-queue';
 import IntegrationsPage from './pages/integrations';
 import KnowledgePage from './pages/knowledge';
+import KnowledgeImportersPage from './pages/knowledge-importers';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -463,6 +464,7 @@ export const routes: RouteObject[] = [
       },
 
       { path: '/knowledge', element: <KnowledgePage /> },
+      { path: '/knowledge/importers', element: <KnowledgeImportersPage /> },
 
       ...(isExperimentalFeatures
         ? [
