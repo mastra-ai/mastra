@@ -20,7 +20,7 @@ import type { Processor } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createEventedWorkflow, createStep } from '@mastra/core/workflows';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Observability } from './default';
 import { TestExporter } from './exporters';
@@ -210,6 +210,7 @@ describe('a durable agent run resumed by another process', () => {
     });
     const toolCallId = await drain(started);
     sampleResume = true;
+    const consoleError = vi.spyOn(console, 'error');
     await drain(
       await startAgentProcess(storage, exporter, { sampling, inputProcessors: [passThrough] }).approveToolCall({
         runId: started.runId,
@@ -221,6 +222,8 @@ describe('a durable agent run resumed by another process', () => {
     const inputProcessorSpans = exporter.getAllSpans().filter(span => span.name === 'input processor: pass-through');
     expect(inputProcessorSpans).toEqual([]);
     expect(exporter.getIncompleteSpans().map(({ span }) => `${span?.type} ${span?.name}`)).toEqual([]);
+    expect(consoleError.mock.calls.filter(([message]) => String(message).includes('Invalid traceId'))).toEqual([]);
+    consoleError.mockRestore();
   });
 });
 
