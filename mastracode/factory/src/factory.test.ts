@@ -514,6 +514,16 @@ describe('MastraFactory.prepare', () => {
     expect(config.subagents).toEqual([]);
   });
 
+  it('disables rich score storage by default and allows opting in', async () => {
+    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
+    expect(disabled.disableScoreStorage).toBe(true);
+
+    vi.clearAllMocks();
+
+    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
+    expect(enabled.disableScoreStorage).toBe(false);
+  });
+
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });
