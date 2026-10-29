@@ -43,27 +43,34 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
+export interface GatewayApiKey {
+  apiKey: string;
+  /** Set for organization keys, which can be revoked. */
+  keyId?: string;
+}
+
 /**
  * Create a Gateway API key in the organization. Uses the organization key service and falls back
- * to provisioning a Gateway project with a key where that service isn't available.
+ * to provisioning a Gateway project with a key only where that service doesn't exist (404). A 503
+ * means the service failed, so it surfaces instead of leaving a stray project behind.
  */
 export async function createGatewayApiKey(
   token: string,
   orgId: string,
   label: string,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<GatewayApiKey> {
   try {
-    const result = await request<{ apiKey: string }>(
+    const result = await request<{ apiKey: string; keyId?: string }>(
       token,
       orgId,
       '/v1/gateway/organization/v2/keys',
       { method: 'POST', body: JSON.stringify({ label }) },
       signal,
     );
-    return result.apiKey;
+    return { apiKey: result.apiKey, keyId: result.keyId };
   } catch (error) {
-    if (!(error instanceof GatewayApiError) || ![404, 503].includes(error.status)) throw error;
+    if (!(error instanceof GatewayApiError) || error.status !== 404) throw error;
   }
 
   const result = await request<{ apiKey: string }>(
@@ -73,11 +80,21 @@ export async function createGatewayApiKey(
     { method: 'POST', body: JSON.stringify({ name: label, keyLabel: label }) },
     signal,
   );
-  return result.apiKey;
+  return { apiKey: result.apiKey };
+}
+
+/** Revoke an organization key, e.g. one created for a project that was never written. */
+export async function revokeGatewayApiKey(token: string, orgId: string, keyId: string): Promise<void> {
+  await request(token, orgId, `/v1/gateway/organization/v2/keys/${encodeURIComponent(keyId)}`, {
+    method: 'DELETE',
+  });
 }
 
 interface CustomerBalance {
+  featureId?: string;
   remaining?: number | null;
+  granted?: number | null;
+  usage?: number | null;
   unlimited?: boolean;
 }
 
@@ -101,11 +118,21 @@ export async function getGatewayCredits(token: string, orgId: string, signal?: A
     signal,
   );
   const featureId = customer?.creditPool?.featureId ?? STARTER_CREDIT_POOL;
-  const balance = customer?.balances?.[featureId];
-  return {
-    remaining: Math.max(0, balance?.remaining ?? 0),
-    unlimited: balance?.unlimited === true,
-  };
+  const balance = findBalance(customer?.balances, featureId);
+  return { remaining: remainingCredits(balance), unlimited: balance?.unlimited === true };
+}
+
+// Both follow the dashboard (`useCreditBalance`): balances aren't guaranteed to be keyed by feature
+// id, and `remaining` is optional.
+function findBalance(balances: BillingCustomer['balances'], featureId: string): CustomerBalance | undefined {
+  if (!balances) return undefined;
+  return Object.values(balances).find(entry => entry?.featureId === featureId) ?? balances[featureId];
+}
+
+function remainingCredits(balance: CustomerBalance | undefined): number {
+  if (balance?.remaining != null) return Math.max(0, balance.remaining);
+  if (balance?.granted != null) return Math.max(0, balance.granted - (balance.usage ?? 0));
+  return 0;
 }
 
 /** The dashboard's Add credits page for the organization, where credits and auto top-up are bought. */

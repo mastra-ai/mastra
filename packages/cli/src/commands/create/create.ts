@@ -10,7 +10,13 @@ import type { Template } from '../../utils/template-utils';
 import { getToken, LoginCancelledError } from '../auth/credentials.js';
 import type { LoginSource } from '../auth/credentials.js';
 import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
-import { createGatewayApiKey, creditsPageUrl, GATEWAY_API_KEY_ENV, getGatewayCredits } from '../gateway/api.js';
+import {
+  createGatewayApiKey,
+  creditsPageUrl,
+  GATEWAY_API_KEY_ENV,
+  getGatewayCredits,
+  revokeGatewayApiKey,
+} from '../gateway/api.js';
 import { formatCredits, offerGatewayCredits } from '../gateway/credits.js';
 import { provisionObservabilityProject } from '../init/observability-provision';
 import { installMastraSkills } from '../init/skills-install';
@@ -102,6 +108,8 @@ type GatewaySetupResult =
   | {
       status: 'ready';
       apiKey: string;
+      /** Set for organization keys, so a key the project never got can be revoked. */
+      keyId?: string;
       orgName: string;
       creditsUrl: string;
       remaining?: number;
@@ -464,6 +472,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   }
   process.removeListener('SIGINT', handleSigint);
   process.removeListener('SIGTERM', handleSigterm);
+  if (interruptionSignal || materializationError) await discardUnusedGatewayKey(platformSetup);
 
   if (interruptionSignal === 'SIGINT') {
     if (observabilityEnabled) {
@@ -569,8 +578,9 @@ async function setUpGateway({
   const spinner = p.spinner();
   spinner.start('Setting up your Gateway key...');
   let spinning = true;
+  let key: Awaited<ReturnType<typeof createGatewayApiKey>> | undefined;
   try {
-    const apiKey = await createGatewayApiKey(token, org.orgId, projectName, signal);
+    key = await createGatewayApiKey(token, org.orgId, projectName, signal);
     // Credits are optional: a failed balance read still keeps the new key.
     let credits: Awaited<ReturnType<typeof getGatewayCredits>> | undefined;
     try {
@@ -591,7 +601,8 @@ async function setUpGateway({
     }
     return {
       status: 'ready',
-      apiKey,
+      apiKey: key.apiKey,
+      keyId: key.keyId,
       orgName: org.orgName,
       creditsUrl: creditsPageUrl(org.orgId),
       remaining: credits?.remaining,
@@ -600,9 +611,33 @@ async function setUpGateway({
     };
   } catch (error) {
     if (spinning) spinner.stop('Could not set up a Gateway key.');
-    if (signal.aborted) throw error;
+    if (signal.aborted) {
+      // Create failed or was cancelled after the key was made: nothing will use it.
+      await discardGatewayKey({ token, orgId: org.orgId, keyId: key?.keyId });
+      throw error;
+    }
     return { status: 'failed', error };
   }
+}
+
+/** Revoke a key no project ended up with. Best effort: a failure here shouldn't hide the real one. */
+async function discardGatewayKey({ token, orgId, keyId }: { token: string; orgId: string; keyId?: string }) {
+  if (!keyId) return;
+  try {
+    await revokeGatewayApiKey(token, orgId, keyId);
+  } catch {
+    // The key stays listed in the dashboard, where it can be revoked by hand.
+  }
+}
+
+/** The Gateway key that was created but won't be written to a project. */
+async function discardUnusedGatewayKey(platformSetup: PlatformSetupResult | undefined) {
+  if (platformSetup?.status !== 'ready' || platformSetup.gateway?.status !== 'ready') return;
+  await discardGatewayKey({
+    token: platformSetup.token,
+    orgId: platformSetup.org.orgId,
+    keyId: platformSetup.gateway.keyId,
+  });
 }
 
 async function finishGatewaySetup({
@@ -632,6 +667,7 @@ async function finishGatewaySetup({
   }
 
   if (!(await writeManagedApiKey({ projectPath, apiKeyEnv: GATEWAY_API_KEY_ENV, apiKey: gateway.apiKey }))) {
+    await discardUnusedGatewayKey(platformSetup);
     analytics?.trackEvent('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
     return `${color.yellow('Could not write the Gateway key to .env.')}\n\n${manualSteps}`;
   }

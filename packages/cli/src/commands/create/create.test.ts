@@ -88,6 +88,7 @@ vi.mock('../gateway/api.js', () => ({
   createGatewayApiKey: vi.fn(),
   creditsPageUrl: (orgId: string) => `https://projects.test/add-credits/${orgId}`,
   getGatewayCredits: vi.fn(),
+  revokeGatewayApiKey: vi.fn(),
 }));
 
 vi.mock('../gateway/credits.js', () => ({
@@ -192,7 +193,7 @@ beforeEach(async () => {
   vi.mocked(createUtils.writeEmptyScaffold).mockResolvedValue();
 
   const gatewayApi = await import('../gateway/api.js');
-  vi.mocked(gatewayApi.createGatewayApiKey).mockResolvedValue('gateway-key');
+  vi.mocked(gatewayApi.createGatewayApiKey).mockResolvedValue({ apiKey: 'gateway-key', keyId: 'key-1' });
   vi.mocked(gatewayApi.getGatewayCredits).mockResolvedValue({
     remaining: 0,
     unlimited: false,
@@ -631,6 +632,52 @@ describe('managed Gateway', () => {
         'Model calls fail until you add Gateway credits: https://projects.test/add-credits/org-id',
       ),
     );
+  });
+
+  it('revokes the new key when the project is never written', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayApi = await import('../gateway/api.js');
+    const { publishStagedProject } = await import('./utils');
+    const adapter = await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(publishStagedProject).mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(
+      create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+    ).rejects.toThrow('disk full');
+
+    expect(adapter.writeManagedApiKey).not.toHaveBeenCalled();
+    expect(gatewayApi.revokeGatewayApiKey).toHaveBeenCalledWith('auth-token', 'org-id', 'key-1');
+  });
+
+  it("revokes the new key when it can't be written to .env", async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayApi = await import('../gateway/api.js');
+    const adapter = await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(adapter.writeManagedApiKey).mockResolvedValueOnce(false);
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(gatewayApi.revokeGatewayApiKey).toHaveBeenCalledWith('auth-token', 'org-id', 'key-1');
+    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('Could not write the Gateway key to .env.'));
+  });
+
+  it('keeps the key it wrote to the project', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayApi = await import('../gateway/api.js');
+    await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(gatewayApi.revokeGatewayApiKey).not.toHaveBeenCalled();
   });
 
   it("doesn't claim a balance it couldn't read", async () => {
