@@ -7,7 +7,9 @@
  * so a page or note the run can't read behaves exactly like a missing id.
  *
  * Every adapter must implement these semantics; the physical layout (tables, columns, denormalized
- * filter columns, how a large read scope is passed to the database) is the adapter's choice.
+ * filter columns, how a large read scope is passed to the database) is the adapter's choice. Any
+ * denormalized scope column (a note's page scope, its stamp scopes' addresses, its mentions' home
+ * scopes) must be updated in the same transaction as the move or merge that changes it.
  *
  * @experimental Knowledge APIs are experimental and may change without notice.
  */
@@ -36,15 +38,36 @@ export interface KnowledgeProvenance {
 export interface KnowledgeScopePrefix {
   /** The declaration key the scope page was materialized from, e.g. `team:$orgId:$teamId`. */
   declaration: string;
-  /** Address prefix, e.g. `team:acme:`. Empty matches every scope of the declaration. */
+  /**
+   * Address prefix, e.g. `team:acme:`. Empty matches every scope of the declaration. Core only emits
+   * prefixes that end at a segment boundary (empty, or ending in `:`), so `team:acme:` never matches
+   * `team:acmecorp:x`.
+   */
   prefix: string;
+}
+
+/**
+ * One tree-parent entry of a read scope, for a rule bound through the target type's `belongsTo`
+ * (e.g. `role:$orgId:admin` is viewer on every `resource:$resourceId` that belongs to `org:$orgId`).
+ * A scope page matches when it was created from `declaration` and its tree parent is `parentId`.
+ *
+ * @experimental
+ */
+export interface KnowledgeScopeChildren {
+  declaration: string;
+  /** Page id of the scope the rule's params bound (`org:acme`'s page). */
+  parentId: string;
 }
 
 /**
  * The scopes a read may see, at viewer or above. `'all'` reads without an access filter and is only
  * for host surfaces behind their own auth (Studio); agent runs always pass a computed read scope.
  *
- * A scope page is readable when its address is in `addresses`, or it matches a `prefixes` entry.
+ * A scope page is readable when its address is in `addresses`, or it matches a `prefixes` or
+ * `children` entry.
+ * Matching is exact and case-sensitive by UTF-16 code unit, as in {@link knowledgeScopeReadable}. SQL
+ * adapters must not use `LIKE` for prefixes: `_` and `%` are legal in addresses, and SQLite/MySQL
+ * `LIKE` folds ASCII case. Compare a substring (or a binary range) instead.
  *
  * @experimental
  */
@@ -53,6 +76,7 @@ export type KnowledgeReadScope =
   | {
       addresses: string[];
       prefixes: KnowledgeScopePrefix[];
+      children: KnowledgeScopeChildren[];
     };
 
 /**
@@ -107,7 +131,11 @@ export interface KnowledgeNote {
   when?: Date;
   /** Scope page ids that narrow who can see the note (OR). Never empty. */
   stampScopeIds: string[];
-  /** Page ids resolved from `[[mentions]]` in `text` at write time. */
+  /**
+   * Page ids resolved from `[[mentions]]` in `text` at write time. A resolved mention hides its note
+   * unless the run can read the mentioned page's scope; the mentioned page's deleted or live state
+   * doesn't affect visibility. Unresolved mentions have no entry and never hide a note.
+   */
   mentions: string[];
   provenance: KnowledgeProvenance;
   version: number;
@@ -213,15 +241,15 @@ export function canonicalKnowledgeName(name: string): string {
  * @experimental
  */
 export function knowledgeScopeReadable(
-  scope: Pick<KnowledgePage, 'address' | 'declaration'>,
+  scope: Pick<KnowledgePage, 'address' | 'declaration' | 'parentId'>,
   read: KnowledgeReadScope,
 ): boolean {
   if (read === 'all') return true;
-  if (!scope.address) return false;
-  if (read.addresses.includes(scope.address)) return true;
-  return read.prefixes.some(
-    entry => entry.declaration === scope.declaration && scope.address!.startsWith(entry.prefix),
-  );
+  const { address, declaration, parentId } = scope;
+  if (!address) return false;
+  if (read.addresses.includes(address)) return true;
+  if (read.prefixes.some(entry => entry.declaration === declaration && address.startsWith(entry.prefix))) return true;
+  return read.children.some(entry => entry.declaration === declaration && entry.parentId === parentId);
 }
 
 const POSITION_DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
@@ -447,10 +475,12 @@ export interface KnowledgePageStore {
   movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage>;
   /**
    * Moves the source's notes, child pages and pin audience to the target, retargets mentions of the
-   * source, and soft-deletes the source with `mergedInto`. Notes keep their stamps and text.
+   * source, and soft-deletes the source with `mergedInto`. Notes keep their stamps and text. Refuses
+   * scope pages on either side, a target inside the source's subtree (or the source itself), and
+   * merges past the depth limit or {@link MAX_KNOWLEDGE_MOVE_PAGES} carried pages, like `movePage`.
    */
   mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage>;
-  /** Soft-deletes a page with no live children and drops its pin. */
+  /** Soft-deletes an ordinary page with no live children and drops its pin; refuses scope pages. */
   deletePage(input: { id: string; expectedVersion: number; deletedBy: string }): Promise<KnowledgePage>;
 
   // Notes
@@ -483,7 +513,12 @@ export interface KnowledgePageStore {
   // Search and activity
   /** Lexical search over page names, descriptions, bodies and note text; access filtered first. */
   searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]>;
-  /** Events on readable scopes, newest first. */
+  /**
+   * Events on readable scopes, newest first. An event's scope is the page's home scope after the
+   * change (the target scope for a move or merge). Note events are returned only while the note
+   * itself is visible under `read` (page visible, a stamp readable, every mention visible), so the
+   * log never reveals a hidden note's id, author or source thread.
+   */
   listPageActivity(input: {
     read: KnowledgeReadScope;
     scopeId?: string;
@@ -499,11 +534,14 @@ export interface KnowledgePageStore {
   removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null>;
   /**
    * Pins on readable live pages, newest first: those whose audience intersects `audience`, or every
-   * pin for `'all'` (host surfaces). `pageIds` narrows to those pages.
+   * pin for `'all'`. `'all'` is for host surfaces behind their own auth (Studio); runs always pass
+   * their own scopes. `pageIds` narrows to those pages.
    */
   listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
     pageIds?: string[];
-  }): Promise<KnowledgePin[]>;
+    cursor?: string;
+    limit?: number;
+  }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }>;
 }
