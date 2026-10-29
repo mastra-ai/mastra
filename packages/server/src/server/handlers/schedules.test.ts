@@ -440,6 +440,16 @@ describe('Schedules handlers', () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it('rejects a trusted actor on the create body (actor is code-only)', () => {
+      const result = CREATE_SCHEDULE_ROUTE.bodySchema!.safeParse({
+        workflowId: 'test',
+        cron: '0 * * * *',
+        requestContext: { organizationId: 'org-1' },
+        actor: { actorKind: 'system', sourceWorkflow: 'scheduler' },
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('UPDATE_SCHEDULE_ROUTE', () => {

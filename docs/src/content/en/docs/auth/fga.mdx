@@ -320,6 +320,10 @@ workflow.then(createStep(reportAgent))
 workflow.then(createStep(summaryAgent, { actor: undefined }))
 ```
 
+### Scheduled workflows
+
+Scheduled workflow runs have no user. To let a scheduled workflow run nested workflows under FGA, set `actor` on the schedule. See [Scheduled workflows](/docs/workflows/scheduled-workflows#fine-grained-authorization).
+
 ### Trust requirements
 
 The actor signal is trusted input, so construct it server-side:

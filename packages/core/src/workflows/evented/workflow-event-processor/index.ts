@@ -822,7 +822,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     trigger: ScheduledWorkflowTrigger,
     currentState: WorkflowRunState | null | undefined,
   ): Promise<void> {
-    const { runId, resourceId, prevResult, initialState, requestContext } = workflowData;
+    const { runId, resourceId, prevResult, initialState, requestContext, actor } = workflowData;
     const logger = this.mastra.getLogger();
 
     // The claim id is the run id and `createRun` persists a snapshot, so an
@@ -846,6 +846,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
         initialState,
         requestContext: new RequestContext(Object.entries(requestContext ?? {})),
+        ...(actor !== undefined ? { actor } : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

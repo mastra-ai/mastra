@@ -2320,6 +2320,7 @@ export class Mastra<
           inputData: cfg.inputData,
           initialState: cfg.initialState,
           requestContext: cfg.requestContext,
+          ...(cfg.actor !== undefined ? { actor: cfg.actor } : {}),
         };
         // Stamp the current build's step-graph hash so the scheduler can
         // refuse to claim this row from an instance whose local workflow
