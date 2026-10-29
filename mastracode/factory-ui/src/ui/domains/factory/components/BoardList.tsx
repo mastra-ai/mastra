@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 import type { DragPayload } from '../boardDrag';
 import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
-import { BoardStageIcon, stageTintClass } from './BoardIcons';
+import { BoardStageIcon, stageHeaderTintClass } from './BoardIcons';
 
 export const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 
@@ -70,7 +70,7 @@ export function BoardListGroup({
       <div
         className={cn(
           'col-span-full mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3 transition-colors motion-reduce:transition-none',
-          dropZone.isDragOver ? 'bg-fill-hover' : stageTintClass(stage, phaseKind),
+          dropZone.isDragOver ? 'bg-fill-hover' : stageHeaderTintClass(stage, phaseKind),
         )}
       >
         <h2 className="m-0 min-w-0 flex-1">
