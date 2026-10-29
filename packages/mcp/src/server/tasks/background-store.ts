@@ -99,6 +99,17 @@ export const TASK_EXPIRED_MESSAGE = 'Task expired before it finished';
 const TERMINAL_ROW_STATUSES = new Set<BackgroundTask['status']>(['completed', 'failed', 'cancelled', 'timed_out']);
 const OPEN_ROW_STATUSES: BackgroundTask['status'][] = ['pending', 'running', 'suspended'];
 const UPDATE_ATTEMPTS = 3;
+/**
+ * The row statuses {@link projectTask} can turn into each task status: a suspended row whose
+ * requests are all answered is working, and an open row past its TTL is failed.
+ */
+const ROW_STATUSES_FOR: Record<MCPTask['status'], BackgroundTask['status'][]> = {
+  working: ['pending', 'running', 'suspended'],
+  input_required: ['suspended'],
+  completed: ['completed'],
+  cancelled: ['cancelled'],
+  failed: ['failed', 'timed_out', ...OPEN_ROW_STATUSES],
+};
 /** The most rows one sweep reads, in each of its two listings. */
 const SWEEP_BATCH = 100;
 
@@ -412,15 +423,18 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     const cursor = decodeTaskListCursor(options.cursor);
     const now = Date.now();
     const matching: MCPTaskListing[] = [];
-    // Surface, client and key are row columns, so storage filters them. Status is filtered here:
-    // a row's status isn't the task's (an expired running row is a failed task). Skipped rows can
-    // leave a page short, so keep reading until one task more than `limit` is found or rows run out.
+    // Surface, client and key are row columns, so storage filters them. A row's status isn't the
+    // task's (an expired running row is a failed task), so storage only narrows to the row statuses
+    // that can become it, and the status is checked here. A status filter then reads its own rows,
+    // plus open rows for `failed`, which `maxOpenTasks` bounds. Skipped rows can leave a page short,
+    // so keep reading until one task more than `limit` is found or rows run out.
     for (let page = 0; matching.length <= limit; page++) {
       const { tasks } = await this.#manager.listTasks({
         agentId: this.#owner,
         ...(options.surface && { toolName: this.#rowToolName(options.surface) }),
         ...(options.principalKey && { resourceId: `${this.#owner}:${options.principalKey}` }),
         ...(options.taskKey && { toolCallId: options.taskKey }),
+        ...(options.status && { status: ROW_STATUSES_FOR[options.status] }),
         // `toDate` is exclusive; tasks created in the cursor's millisecond are sorted out below.
         ...(cursor && { toDate: new Date(Date.parse(cursor.before) + 1) }),
         orderBy: 'createdAt',
