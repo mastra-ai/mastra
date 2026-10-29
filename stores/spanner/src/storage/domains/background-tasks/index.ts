@@ -17,7 +17,7 @@ import {
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
-import { quoteIdent } from '../../db/utils';
+import { getColumnDef, getSpannerParamType, quoteIdent } from '../../db/utils';
 import { transformFromSpannerRow } from '../utils';
 
 function buildStatusCondition(
@@ -94,10 +94,17 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
         ? transformed.leaseExpiresAt
         : new Date(transformed.leaseExpiresAt)
       : undefined,
+    expiresAt: transformed.expiresAt
+      ? transformed.expiresAt instanceof Date
+        ? transformed.expiresAt
+        : new Date(transformed.expiresAt)
+      : undefined,
+    metadata: parseJson(transformed.metadata) ?? undefined,
   };
 }
 
 export class BackgroundTasksSpanner extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private database: Database;
   private db: SpannerDB;
   private skipDefaultIndexes?: boolean;
@@ -125,7 +132,7 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
     await this.db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -223,6 +230,8 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
         completedAt: task.completedAt ?? null,
         ownerId: task.ownerId ?? null,
         leaseExpiresAt: task.leaseExpiresAt ?? null,
+        expiresAt: task.expiresAt ?? null,
+        metadata: task.metadata ?? null,
       },
     });
   }
@@ -243,9 +252,21 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
     if ('completedAt' in update) data.completedAt = update.completedAt ?? null;
     if ('ownerId' in update) data.ownerId = update.ownerId ?? null;
     if ('leaseExpiresAt' in update) data.leaseExpiresAt = update.leaseExpiresAt ?? null;
+    if ('expiresAt' in update) data.expiresAt = update.expiresAt ?? null;
+    if ('metadata' in update) data.metadata = update.metadata ?? null;
     if (Object.keys(data).length === 0) return false;
     const setClauses = Object.keys(data).map(field => `${quoteIdent(field, 'column name')} = @${field}`);
-    const params: Record<string, any> = { ...data, id: taskId };
+    // Spanner needs explicit param types for NULL, JSON and TIMESTAMP values.
+    const params: Record<string, any> = { id: taskId };
+    const types: Record<string, any> = {};
+    for (const [field, value] of Object.entries(data)) {
+      const prepared = this.db.prepareValue(value, field, TABLE_BACKGROUND_TASKS);
+      params[field] = prepared;
+      const colType = getColumnDef(TABLE_BACKGROUND_TASKS, field)?.type;
+      if (prepared === null || colType === 'jsonb' || colType === 'timestamp') {
+        types[field] = getSpannerParamType(colType);
+      }
+    }
     const predicates: string[] = [];
     if (options?.expectedStatus) {
       predicates.push('status = @expectedStatus');
@@ -264,13 +285,19 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
         predicates.push('leaseExpiresAt IS NULL');
       } else {
         predicates.push('leaseExpiresAt = @expectedLeaseExpiresAt');
-        params.expectedLeaseExpiresAt = options.expectedLeaseExpiresAt;
+        params.expectedLeaseExpiresAt = this.db.prepareValue(
+          options.expectedLeaseExpiresAt,
+          'leaseExpiresAt',
+          TABLE_BACKGROUND_TASKS,
+        );
+        types.expectedLeaseExpiresAt = getSpannerParamType('timestamp');
       }
     }
     const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
-    const [rowCount] = await this.database.runUpdate({
+    const rowCount = await this.db.runDml({
       sql: `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE id = @id${predicateSql}`,
       params,
+      types,
     });
     return rowCount > 0;
   }
@@ -360,7 +387,12 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
           ? quoteIdent('suspendedAt', 'column name')
           : filter.dateFilterBy === 'completedAt'
             ? quoteIdent('completedAt', 'column name')
-            : quoteIdent('createdAt', 'column name');
+            : filter.dateFilterBy === 'expiresAt'
+              ? quoteIdent('expiresAt', 'column name')
+              : quoteIdent('createdAt', 'column name');
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(`${quoteIdent('expiresAt', 'column name')} IS ${filter.hasExpiresAt ? 'NOT NULL' : 'NULL'}`);
+    }
     if (filter.fromDate) {
       const name = `p${idx++}`;
       params[name] = filter.fromDate.toISOString();
@@ -439,9 +471,16 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? quoteIdent('startedAt', 'column name')
-        : filter.dateFilterBy === 'completedAt'
-          ? quoteIdent('completedAt', 'column name')
-          : quoteIdent('createdAt', 'column name');
+        : filter.dateFilterBy === 'suspendedAt'
+          ? quoteIdent('suspendedAt', 'column name')
+          : filter.dateFilterBy === 'completedAt'
+            ? quoteIdent('completedAt', 'column name')
+            : filter.dateFilterBy === 'expiresAt'
+              ? quoteIdent('expiresAt', 'column name')
+              : quoteIdent('createdAt', 'column name');
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(`${quoteIdent('expiresAt', 'column name')} IS ${filter.hasExpiresAt ? 'NOT NULL' : 'NULL'}`);
+    }
     if (filter.fromDate) {
       const name = `p${idx++}`;
       params[name] = filter.fromDate.toISOString();

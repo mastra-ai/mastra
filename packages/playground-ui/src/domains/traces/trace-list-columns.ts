@@ -160,7 +160,10 @@ export function serializeTraceColumnPreferences(preferences: TraceColumnPreferen
 }
 
 /** Stable key per column of `buildTraceListColumns`, in the same order. Used to persist the column order. */
-export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): string[] {
+export function buildTraceListColumnKeys(
+  preferences: TraceColumnPreferences,
+  { outcomeColumn = true }: { outcomeColumn?: boolean } = {},
+): string[] {
   const visible = new Set(preferences.visibleColumns);
   const keys = ['startTime'];
   if (visible.has('type')) keys.push('type');
@@ -168,6 +171,7 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   if (visible.has('input')) keys.push('input');
   if (visible.has('output')) keys.push('output');
   keys.push('status');
+  if (outcomeColumn) keys.push('stopReason');
   for (const column of [
     'duration',
     'traceCount',
@@ -185,7 +189,10 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   return keys;
 }
 
-export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
+export function buildTraceListColumns(
+  preferences: TraceColumnPreferences,
+  { outcomeColumn = true }: { outcomeColumn?: boolean } = {},
+): string {
   const visible = new Set(preferences.visibleColumns);
   // Name is bounded when Input or Output is visible so they (1fr each) absorb the free space;
   // without either, Name is the flexible track that fills the grid.
@@ -197,7 +204,8 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
   if (visible.has('output')) columns.push('minmax(8rem,1fr)');
 
-  columns.push('6rem');
+  // With outcomes, Status becomes Outcome (room for `Interrupted`) followed by Stop reason.
+  columns.push(...(outcomeColumn ? ['7rem', '9rem'] : ['6rem']));
 
   if (visible.has('duration')) columns.push('7rem');
   if (visible.has('traceCount')) columns.push('6rem');

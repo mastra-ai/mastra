@@ -34,6 +34,15 @@ const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.incl
 export const timeToFirstTokenSupported = 'timeToFirstTokenMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
 const timeToFirstTokenSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstTokenMs') === true;
 
+/** Core before the outcome fields rejects their predicates and strict rows, so they are only returned and declared when core knows them. */
+export const spanQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {});
+export const traceQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+
+export const outcomeFeatures: readonly ('span-query-outcome-fields' | 'trace-query-outcome-fields')[] = [
+  ...(spanQueryOutcomeFieldsSupported ? (['span-query-outcome-fields'] as const) : []),
+  ...(traceQueryOutcomeFieldsSupported ? (['trace-query-outcome-fields'] as const) : []),
+];
+
 export const timingFeatures = [
   ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
   ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),

@@ -11,6 +11,7 @@ import {
   CloudIcon,
   CpuIcon,
   FingerprintIcon,
+  FlagIcon,
   FlaskConicalIcon,
   GaugeIcon,
   GitBranchIcon,
@@ -19,6 +20,7 @@ import {
   LayersIcon,
   MessageCircleIcon,
   MessageSquareIcon,
+  OctagonIcon,
   PercentIcon,
   PlayIcon,
   RadioIcon,
@@ -163,6 +165,8 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   serviceName: 'filterServiceName',
   environment: 'filterEnvironment',
   experimentId: 'filterExperimentId',
+  outcome: 'filterOutcome',
+  stopReason: 'filterStopReason',
   'spans.name': 'filterSpanName',
   'spans.spanType': 'filterSpanType',
   'spans.model': 'filterSpanModel',
@@ -339,6 +343,8 @@ export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   entityName: 'Primitive name',
   entityId: 'Primitive ID',
   status: 'Status',
+  outcome: 'Outcome',
+  stopReason: 'Stop reason',
   tags: 'Tags',
   serviceName: 'Service Name',
   environment: 'Environment',
@@ -371,6 +377,8 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   entityName: TagIcon,
   entityId: FingerprintIcon,
   status: ActivityIcon,
+  outcome: FlagIcon,
+  stopReason: OctagonIcon,
   tags: TagsIcon,
   serviceName: ServerIcon,
   environment: GlobeIcon,
@@ -444,6 +452,22 @@ const TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS = new Set<string>(['feedback.
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
 
+/** Outcome and stop reason: free text (custom spans set arbitrary values) with discovered suggestions. */
+export function createOutcomeFilterBarFields(
+  base: (id: string) => Pick<FilterBarField, 'id' | 'label' | 'icon' | 'color'>,
+  valueSuggestions?: (path: string) => FilterBarSuggestionsResolver | undefined,
+): FilterBarField[] {
+  return (['outcome', 'stopReason'] as const).map(id => {
+    const suggestions = valueSuggestions?.(id);
+    return {
+      ...base(id),
+      operators: TRACE_STRING_OPERATORS,
+      ...(id === 'outcome' ? { operatorLabels: { notExists: 'is not recorded' } } : {}),
+      ...(suggestions ? { suggestions } : {}),
+    };
+  });
+}
+
 /** The Tags field, or `undefined` until the backend describes `tags`: its operators
  *  can't be inferred safely from the static catalog. Only UI operators whose query
  *  operator the backend accepts are offered, and suggestions are wired only when the
@@ -478,9 +502,12 @@ export function createTraceFilterBarFields({
   valueSuggestions,
   withQueryTrace = true,
   withRootDuration = false,
+  withOutcomeFields = false,
 }: {
   /** Offer the root `durationMs` field. Only when the server declares `traceQueryRootDuration`. */
   withRootDuration?: boolean;
+  /** Offer the root `outcome` and `stopReason` fields. Only when the server declares `traceQueryOutcomeFields`. */
+  withOutcomeFields?: boolean;
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
@@ -584,6 +611,9 @@ export function createTraceFilterBarFields({
     ...[
       ...textFields,
       ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
+      ...(withOutcomeFields
+        ? createOutcomeFilterBarFields(traceFieldBase, path => valueSuggestions?.('trace', path))
+        : []),
     ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),

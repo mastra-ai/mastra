@@ -355,6 +355,113 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
       });
     });
 
+    describe('expiry and metadata', () => {
+      const HOUR = 60 * 60 * 1000;
+      const asTime = (value: Date | undefined) => {
+        const reader = value as unknown;
+        return (reader instanceof Date ? reader : new Date(reader as string)).getTime();
+      };
+      const ids = async (filter: Parameters<BackgroundTasksStorage['listTasks']>[0]) =>
+        (await bgStorage.listTasks(filter)).tasks.map(t => t.id).sort();
+
+      it('round-trips expiresAt and nested metadata', async () => {
+        if (!bgStorage) return;
+        const expiresAt = new Date(Date.now() + 24 * HOUR);
+        const metadata = { ttlMs: 86_400_000, resumeSchema: { type: 'object', required: ['a'] }, tags: ['x', 1] };
+        const task = createSampleTask({ expiresAt, metadata });
+        await bgStorage.createTask(task);
+
+        const result = await bgStorage.getTask(task.id);
+        expect(Math.abs(asTime(result!.expiresAt) - expiresAt.getTime())).toBeLessThan(5_000);
+        expect(result!.metadata).toEqual(metadata);
+      });
+
+      it('stores neither field when absent', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask();
+        await bgStorage.createTask(task);
+
+        const result = await bgStorage.getTask(task.id);
+        expect(result!.expiresAt ?? null).toBeNull();
+        expect(result!.metadata ?? null).toBeNull();
+      });
+
+      it('sets and clears both fields with updateTask', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask();
+        await bgStorage.createTask(task);
+
+        const expiresAt = new Date(Date.now() + HOUR);
+        await bgStorage.updateTask(task.id, { expiresAt, metadata: { step: 2 } });
+        let result = await bgStorage.getTask(task.id);
+        expect(Math.abs(asTime(result!.expiresAt) - expiresAt.getTime())).toBeLessThan(5_000);
+        expect(result!.metadata).toEqual({ step: 2 });
+
+        await bgStorage.updateTask(task.id, { expiresAt: undefined, metadata: undefined });
+        result = await bgStorage.getTask(task.id);
+        expect(result!.expiresAt ?? null).toBeNull();
+        expect(result!.metadata ?? null).toBeNull();
+      });
+
+      it('filters listTasks by hasExpiresAt and an expiresAt range', async () => {
+        if (!bgStorage) return;
+        const now = Date.now();
+        const soon = createSampleTask({ expiresAt: new Date(now + HOUR) });
+        const later = createSampleTask({ expiresAt: new Date(now + 48 * HOUR) });
+        const none = createSampleTask();
+        for (const t of [soon, later, none]) await bgStorage.createTask(t);
+
+        expect(await ids({ hasExpiresAt: true })).toEqual([soon.id, later.id].sort());
+        expect(await ids({ hasExpiresAt: false })).toEqual([none.id]);
+        expect(await ids({ dateFilterBy: 'expiresAt', toDate: new Date(now + 24 * HOUR) })).toEqual([soon.id]);
+        expect(await ids({ dateFilterBy: 'expiresAt', fromDate: new Date(now + 24 * HOUR) })).toEqual([later.id]);
+      });
+
+      it('deleteTasks removes only terminal rows whose expiresAt has passed', async () => {
+        if (!bgStorage) return;
+        const now = Date.now();
+        const expired = createSampleTask({
+          status: 'completed',
+          completedAt: new Date(now - HOUR),
+          expiresAt: new Date(now - HOUR),
+        });
+        const live = createSampleTask({
+          status: 'completed',
+          completedAt: new Date(now - HOUR),
+          expiresAt: new Date(now + HOUR),
+        });
+        const suspended = createSampleTask({ status: 'suspended', expiresAt: new Date(now - HOUR) });
+        const noExpiry = createSampleTask({ status: 'completed', completedAt: new Date(now - HOUR) });
+        for (const t of [expired, live, suspended, noExpiry]) await bgStorage.createTask(t);
+
+        await bgStorage.deleteTasks({
+          status: ['completed', 'failed', 'cancelled', 'timed_out'],
+          dateFilterBy: 'expiresAt',
+          toDate: new Date(now),
+        });
+
+        expect(await ids({})).toEqual([live.id, suspended.id, noExpiry.id].sort());
+      });
+
+      it('deleteTasks with hasExpiresAt: false spares rows that set their own expiry', async () => {
+        if (!bgStorage) return;
+        const now = Date.now();
+        const old = new Date(now - 2 * HOUR);
+        const ttlOnly = createSampleTask({ status: 'completed', completedAt: old });
+        const ownExpiry = createSampleTask({ status: 'completed', completedAt: old, expiresAt: new Date(now + HOUR) });
+        for (const t of [ttlOnly, ownExpiry]) await bgStorage.createTask(t);
+
+        await bgStorage.deleteTasks({
+          status: 'completed',
+          hasExpiresAt: false,
+          dateFilterBy: 'completedAt',
+          toDate: new Date(now - HOUR),
+        });
+
+        expect(await ids({})).toEqual([ownExpiry.id]);
+      });
+    });
+
     describe('execution ownership', () => {
       // Adapters store timestamps with differing precision (seconds for some
       // SQL dialects, ISO strings for schemaless stores), so compare with a

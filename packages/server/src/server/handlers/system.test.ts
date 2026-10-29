@@ -28,12 +28,14 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryTimeToFirstTokenSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceQueryOutcomeFields: false,
   traceAggregate: false,
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
+  spanQueryOutcomeFields: false,
   spanAggregate: false,
   spanAggregateModelDimensions: false,
   feedback: false,
@@ -712,6 +714,33 @@ describe('System Handlers', () => {
           });
         },
       );
+
+      it.each([
+        {
+          features: ['span-query', 'span-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: true, traceQueryOutcomeFields: false },
+        },
+        {
+          features: ['trace-query', 'trace-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: true },
+        },
+        {
+          features: ['span-query-outcome-fields', 'trace-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: false },
+        },
+        {
+          features: ['span-query', 'trace-query'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: false },
+        },
+      ] as const)('reports outcome fields for $features as $expected', async ({ features, expected }) => {
+        class OutcomeStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+
+        expect(await capabilitiesFor(new OutcomeStore())).toMatchObject(expected);
+      });
 
       it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {
         class SpanQueryStore extends BaseObservabilityStore {
