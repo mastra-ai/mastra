@@ -74,9 +74,18 @@ describe('ChartCard', () => {
     });
   });
 
+  it('adds no legend row to a card that passes no toolbar', () => {
+    const { container } = render(
+      <ChartCard title="Requests">
+        <div />
+      </ChartCard>,
+    );
+    expect(container.querySelectorAll('[aria-hidden="true"].min-h-6')).toHaveLength(0);
+  });
+
   it('keeps the legend row while a chart has no legend yet, so its plot lines up with its neighbours', () => {
     const { container } = render(
-      <ChartCard title="Resources and threads">
+      <ChartCard title="Resources and threads" toolbar={false}>
         <div data-testid="body" />
       </ChartCard>,
     );

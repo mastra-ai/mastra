@@ -43,7 +43,10 @@ export type ChartCardProps<V extends string = string> = {
   isLoading?: boolean;
   /** Top-bar buttons, e.g. "View in traces": revealed on hover, except on `hero` cards. */
   actions?: ReactNode;
-  /** Legend and controls above the body; they stay in every state. */
+  /**
+   * Legend and controls above the body; they stay in every state. Pass `false` or `null` while
+   * there's nothing to show yet, and the row keeps its height.
+   */
   toolbar?: ReactNode;
   /** Previous data stays on screen, dimmed, while a new range or filter loads. */
   isUpdating?: boolean;
@@ -103,9 +106,10 @@ export function ChartCard<V extends string = string>({
         {!hero && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
-        {/* A chart keeps its legend row while it has no legend yet (loading, empty, error), so its
-            plot starts where its neighbours' do. */}
-        {toolbar || (chart && <div aria-hidden className="min-h-6" />)}
+        {/* A card with a toolbar keeps its row while the toolbar is empty (`false` or `null` while
+            loading, empty or on error), so its plot starts where its neighbours' do. A card that
+            passes no toolbar (a legend drawn by the chart itself) gets no row. */}
+        {toolbar || (chart && toolbar !== undefined && <div aria-hidden className="min-h-6" />)}
         <div
           className={cn(
             'relative flex min-h-0 min-w-0 flex-col',

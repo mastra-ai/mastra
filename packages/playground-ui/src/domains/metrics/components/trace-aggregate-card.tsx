@@ -27,7 +27,8 @@ export function TraceAggregateCard({ requiresRootSpanFields, children, ...layout
   if (gate.status === 'unavailable') return null;
   if (gate.status === 'ready') return children(gate.scope);
   return (
-    <ChartCard {...layout}>
+    // Keeps the legend row its loaded chart will have, so the card doesn't shift when it loads.
+    <ChartCard {...layout} toolbar={null}>
       {gate.status === 'loading' ? (
         <MetricsCard.Loading />
       ) : (
