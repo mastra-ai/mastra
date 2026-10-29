@@ -330,6 +330,43 @@ describe('MastraBrowser launch with a locked profile', () => {
     },
   );
 
+  it.skipIf(process.platform === 'win32')(
+    'keeps the lock of a browser that took the profile while an older browser was still closing',
+    async () => {
+      let finishClose = () => {};
+      class SlowCloseBrowser extends FakeBrowser {
+        protected doClose() {
+          return new Promise<void>(resolve => {
+            finishClose = resolve;
+          });
+        }
+      }
+      const old = new SlowCloseBrowser({ profile: profileDir });
+      await old.launch();
+      const closing = old.close();
+      await vi.waitFor(() => expect(old.status).toBe('closing'));
+
+      // The replacement now holds the profile; the old close finishes late.
+      await lockProfile(`${hostname()}-4242`, { listening: true });
+      finishClose();
+      await closing;
+
+      expect(readlinkSync(join(profileDir, 'SingletonLock'))).toBe(`${hostname()}-4242`);
+      expect(lstatSync(join(profileDir, 'SingletonSocket')).isSymbolicLink()).toBe(true);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')('removes its own lock files after closing', async () => {
+    const browser = new FakeBrowser({ profile: profileDir });
+    await browser.launch();
+    // Chrome died without unlinking its socket; nothing listens anymore.
+    await lockProfile(`${hostname()}-4242`, { listening: false });
+
+    await browser.close();
+
+    expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+  });
+
   it('launches normally when the profile is not locked', async () => {
     writeFileSync(join(profileDir, 'Preferences'), '{}');
     const browser = new FakeBrowser({ profile: profileDir });

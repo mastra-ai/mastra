@@ -845,6 +845,21 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Remove this browser's profile lock after it closed, unless another browser
+   * now holds the profile. A close that finishes late (after a replacement
+   * already launched on the same profile) must not delete the live lock.
+   */
+  private async releaseProfileLockAfterClose(): Promise<void> {
+    if (!this.config.profile) return;
+    try {
+      await releaseStaleProfileLock(this.config.profile, this.logger);
+    } catch (err) {
+      if (!(err instanceof BrowserProfileInUseError)) throw err;
+      this.logger.debug?.(`Leaving profile lock in ${this.config.profile}: another browser holds it`);
+    }
+  }
+
+  /**
    * Get the CDP WebSocket URL for connecting to this browser.
    * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
    * SDK providers typically return null as they manage their own CDP connections.
@@ -962,9 +977,7 @@ export abstract class MastraBrowser extends MastraBase {
         this.notifyBrowserClosed();
         // Clean up stale lock files only after confirmed shutdown.
         // Removing them from a live profile (if doClose threw) could cause corruption.
-        if (this.config.profile) {
-          cleanupProfileLockFiles(this.config.profile, this.logger);
-        }
+        await this.releaseProfileLockAfterClose();
       } catch (err) {
         this.status = 'error';
         this.error = err instanceof Error ? err.message : String(err);
@@ -1224,9 +1237,9 @@ export abstract class MastraBrowser extends MastraBase {
 
     // Clean up stale lock files in the profile directory
     // This is especially important for external/manual close which may leave locks behind
-    if (this.config.profile) {
-      cleanupProfileLockFiles(this.config.profile, this.logger);
-    }
+    void this.releaseProfileLockAfterClose().catch(err => {
+      this.logger.debug?.(`Failed to release profile lock: ${err}`);
+    });
   }
 
   /**
@@ -1604,9 +1617,9 @@ export abstract class MastraBrowser extends MastraBase {
     // Notify callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
     // Clean up any stale lock files in the profile directory
-    if (this.config.profile) {
-      cleanupProfileLockFiles(this.config.profile, this.logger);
-    }
+    void this.releaseProfileLockAfterClose().catch(err => {
+      this.logger.debug?.(`Failed to release profile lock: ${err}`);
+    });
   }
 
   /**
@@ -1630,9 +1643,9 @@ export abstract class MastraBrowser extends MastraBase {
     // Notify only the callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
     // Clean up any stale lock files in the profile directory
-    if (this.config.profile) {
-      cleanupProfileLockFiles(this.config.profile, this.logger);
-    }
+    void this.releaseProfileLockAfterClose().catch(err => {
+      this.logger.debug?.(`Failed to release profile lock: ${err}`);
+    });
   }
 
   /**

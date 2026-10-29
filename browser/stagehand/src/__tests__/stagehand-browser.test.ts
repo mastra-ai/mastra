@@ -883,6 +883,19 @@ describe('StagehandBrowser thread scope on a profile', () => {
     expect(mockStagehandConstructor).toHaveBeenCalledTimes(2);
     expect(logAtChromeStart).toBe(false);
   });
+
+  // The peer range allows @mastra/core 1.80.0, which has no prepareLocalProfile().
+  it('still starts another thread browser on a core without prepareLocalProfile()', async () => {
+    const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+    browser.setCurrentThread('thread-1');
+    await browser.ensureReady();
+    Object.defineProperty(browser, 'prepareLocalProfile', { value: undefined });
+
+    browser.setCurrentThread('thread-2');
+    await browser.ensureReady();
+
+    expect(mockStagehandConstructor).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('createStagehandTools', () => {
