@@ -1,7 +1,7 @@
 export const KNOWLEDGE_V2_CORE_FEATURE = 'knowledge-v2';
 
-export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
-export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 4 as const;
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 4 as const;
 
 /** Hard cap on scope nodes returned by one `listScopeNodes` read. */
 export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
