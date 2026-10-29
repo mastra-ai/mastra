@@ -487,27 +487,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return true;
   }
 
-  async dangerouslyClearAll(): Promise<void> {
-    await this.#transaction(async tx => {
-      for (const table of [
-        TABLE_KNOWLEDGE_RECORD_SCOPES,
-        TABLE_KNOWLEDGE_NODE_SCOPES,
-        TABLE_KNOWLEDGE_SCOPE_GRANTS,
-        TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
-        TABLE_KNOWLEDGE_NODE_ADDRESSES,
-        TABLE_KNOWLEDGE_MENTIONS,
-        TABLE_KNOWLEDGE_PROPOSALS,
-        TABLE_KNOWLEDGE_ACTIVITY,
-        TABLE_KNOWLEDGE_IMPORT_STATE,
-        TABLE_KNOWLEDGE_IMPORT_RUNS,
-        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-        TABLE_KNOWLEDGE_RECORDS,
-        TABLE_KNOWLEDGE_NODES,
-      ]) {
-        await tx.execute(`DELETE FROM "${table}"`);
-      }
-      await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch = 0 WHERE id = 'global'`);
-    });
+  override async dangerouslyClearAll(): Promise<void> {
+    await this.#pages.clearAll();
   }
 
   // Schema-4 page store: delegates to LibSQLKnowledgePages.

@@ -467,18 +467,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return this.#pages.listPins(input);
   }
 
-  async dangerouslyClearAll(): Promise<void> {
-    await this.#transaction(async tx => {
-      for (const table of [
-        TABLE_KNOWLEDGE_MENTIONS,
-        TABLE_KNOWLEDGE_RECORDS,
-        TABLE_KNOWLEDGE_NODES,
-        TABLE_KNOWLEDGE_ACTIVITY,
-        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-      ]) {
-        await tx.execute(`DELETE FROM "${table}"`);
-      }
-    });
+  override async dangerouslyClearAll(): Promise<void> {
+    await this.#pages.clearAll();
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
