@@ -1,12 +1,12 @@
-import { createKnowledgePagesCoreLoader } from '@internal/core/knowledge-compat';
-import { coreFeatures } from '@mastra/core/features';
 import {
+  createKnowledgePagesCoreLoader,
   inspectKnowledgePagesSchema,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   knowledgePagesResetMessage,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgePagesSchemaInspection } from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
   AddKnowledgeNoteInput,
