@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { knowledgeRoleOn } from '../access';
 import {
   bindKnowledgePattern,
   compileKnowledgeScopes,
@@ -8,7 +9,6 @@ import {
   knowledgeRunScopes,
   knowledgeScopeAddress,
 } from '../declarations';
-import { knowledgeRoleOn } from '../access';
 
 const scopes = {
   ...knowledgeMemoryScopes(),
