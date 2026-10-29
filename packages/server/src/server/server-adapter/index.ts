@@ -948,13 +948,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     if (result?.status === 401) {
       // RFC 6750 §3: no error code when the request carried no credentials.
       const error = authorization?.trim() ? { error: 'invalid_token' } : undefined;
-      const challenge = await mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error);
+      const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error);
       return { ...result, headers: { ...result.headers, 'WWW-Authenticate': challenge } };
     }
 
     const user = context.requestContext.get(MASTRA_USER_KEY);
     if (user !== undefined && !(await checkMCPAudience(this.mastra, user))) {
-      const challenge = await mcpWWWAuthenticate(this.mastra, prefix, requestUrl, {
+      const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, {
         error: 'invalid_token',
         error_description: 'The token audience does not include this MCP server',
       });

@@ -177,12 +177,12 @@ export class AuthService {
     if (result.action === 'error' && result.status === 401) {
       // RFC 6750 §3: no error code when the request carried no credentials.
       const error = request.headers.authorization?.trim() ? { error: 'invalid_token' } : undefined;
-      response?.setHeader('WWW-Authenticate', await mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error));
+      response?.setHeader('WWW-Authenticate', mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error));
       return;
     }
     const user = requestContext.get(MASTRA_USER_KEY);
     if (user !== undefined && !(await checkMCPAudience(this.mastra, user))) {
-      const challenge = await mcpWWWAuthenticate(this.mastra, prefix, requestUrl, {
+      const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, {
         error: 'invalid_token',
         error_description: 'The token audience does not include this MCP server',
       });

@@ -75,36 +75,33 @@ export function mcpResourceMetadataUrl(mastra: Mastra, prefix: string, requestUr
 }
 
 /** RFC 9728 metadata for the built-in MCP endpoint. Unset optional fields are omitted. */
-export async function resolveMCPResourceMetadata(mastra: Mastra, prefix: string, requestUrl: string) {
-  const { generateProtectedResourceMetadata } = await import('@mastra/mcp');
+export function resolveMCPResourceMetadata(mastra: Mastra, prefix: string, requestUrl: string) {
   const config = getOAuthConfig(mastra);
   const hints = getAuthProvider(mastra)?.getOAuthMetadata?.();
   const authorizationServers = config.authorizationServers ?? hints?.authorizationServers;
   const scopesSupported = config.scopesSupported ?? hints?.scopesSupported;
-
-  const metadata: Record<string, unknown> = generateProtectedResourceMetadata({
+  // Built here rather than with @mastra/mcp's helpers: @mastra/mcp is an optional peer, and discovery must work
+  // (and 401s must not fail) without it.
+  return {
     resource: resolveMCPResource(mastra, prefix, requestUrl),
-    authorizationServers: authorizationServers ?? [],
-    scopesSupported,
-  });
-  // The helper defaults scopes to MCP-SDK placeholders; only advertise what the app configured.
-  if (!authorizationServers?.length) delete metadata.authorization_servers;
-  if (!scopesSupported?.length) delete metadata.scopes_supported;
-  return metadata;
+    ...(authorizationServers?.length ? { authorization_servers: authorizationServers } : {}),
+    ...(scopesSupported?.length ? { scopes_supported: scopesSupported } : {}),
+    bearer_methods_supported: ['header'],
+  };
 }
 
-/** `WWW-Authenticate` value for a 401 from the built-in MCP endpoint. */
-export async function mcpWWWAuthenticate(
+/** `WWW-Authenticate` value for a 401 from the built-in MCP endpoint (RFC 6750 §3 auth-params, quoted and escaped). */
+export function mcpWWWAuthenticate(
   mastra: Mastra,
   prefix: string,
   requestUrl: string,
   error?: { error: string; error_description?: string },
-): Promise<string> {
-  const { generateWWWAuthenticateHeader } = await import('@mastra/mcp');
-  return generateWWWAuthenticateHeader({
-    resourceMetadataUrl: mcpResourceMetadataUrl(mastra, prefix, requestUrl),
-    additionalParams: error,
-  });
+): string {
+  const params = { resource_metadata: mcpResourceMetadataUrl(mastra, prefix, requestUrl), ...error };
+  const quoted = Object.entries(params)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}="${value!.replace(/[\\"]/g, '\\$&')}"`);
+  return `Bearer ${quoted.join(', ')}`;
 }
 
 /**
@@ -164,7 +161,7 @@ export function createMCPOAuthMetadataRoutes(mastra: Mastra, prefix: string): Se
       tags: ['MCP'],
       requiresAuth: false,
       handler: async ({ mastra, request }) =>
-        Response.json(await resolveMCPResourceMetadata(mastra, prefix, request?.url ?? `http://localhost${path}`), {
+        Response.json(resolveMCPResourceMetadata(mastra, prefix, request?.url ?? `http://localhost${path}`), {
           headers: { 'Cache-Control': 'no-store' },
         }),
     }),
