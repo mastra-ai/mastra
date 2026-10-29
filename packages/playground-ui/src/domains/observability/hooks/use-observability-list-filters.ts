@@ -1,4 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { rangeBeforeZoom, rememberZoom } from '../lib/zoom-memory';
+import type { ZoomMemory } from '../lib/zoom-memory';
 import {
   OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
   readObservabilityListDates,
@@ -106,6 +108,21 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     });
   const onDateRangeChange = (from: Date | undefined, to: Date | undefined) =>
     updateDates(current => (current.datePreset === 'custom' ? { ...current, dateFrom: from, dateTo: to } : current));
+  // Not URL state: a shared or reloaded link has no zoom to undo.
+  const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
+  /** Narrows the range to a histogram selection, remembering the range to return to on reset. */
+  const onZoom = (from: Date, to: Date) =>
+    updateDates(current => {
+      zoomMemory.current = rememberZoom(zoomMemory.current, current, from, to);
+      return { datePreset: 'custom', dateFrom: from, dateTo: to };
+    });
+  /** Undoes the last histogram zoom, or switches to `defaultPreset` when there is none to undo. */
+  const onDateReset = (defaultPreset: TraceDatePreset) =>
+    updateDates(current => {
+      const before = rangeBeforeZoom(zoomMemory.current, current);
+      zoomMemory.current = undefined;
+      return before ?? { datePreset: defaultPreset };
+    });
   const onFiltersChange = (nextTokens: TraceFilterToken[], nextGroups: TraceFilterGroup[]) =>
     update(next => writeObservabilityListFilters(next, { tokens: nextTokens, groups: nextGroups }));
   const setSort = (direction: DataListSort) => update(next => writeObservabilityListSort(next, direction));
@@ -127,6 +144,8 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     onDatePresetChange,
     onDateChange,
     onDateRangeChange,
+    onZoom,
+    onDateReset,
     onFiltersChange,
     contentFiltersApplied,
     filtersApplied,

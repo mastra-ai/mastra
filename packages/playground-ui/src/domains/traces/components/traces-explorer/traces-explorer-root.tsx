@@ -44,6 +44,8 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
+import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
 export type TracesExplorerRootProps = {
   selection: TracesSelection;
@@ -134,6 +136,8 @@ export function TracesExplorerRoot({
   const current: Latest = { selection, filters: rawFilters, onChange, onSortChange: onHostSortChange, scopedFieldIds };
   const latest = useRef(current);
   latest.current = current;
+  // Not part of the host's filters: a shared or reloaded link has no zoom to undo.
+  const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
 
   const actions = useMemo(() => {
     const emit = (next: TracesExplorerState) => {
@@ -175,6 +179,17 @@ export function TracesExplorerRoot({
       setDatePreset: preset => updateFilters(applyDatePreset(latest.current.filters, preset)),
       setDate: (value, end) => updateFilters(applyDate(latest.current.filters, value, end)),
       setDateRange: (from, to) => updateFilters(applyDateRange(latest.current.filters, from, to)),
+      zoomDateRange: (from, to) => {
+        const base = latest.current.filters;
+        zoomMemory.current = rememberZoom(zoomMemory.current, base, from, to);
+        updateFilters({ ...base, datePreset: 'custom', dateFrom: from, dateTo: to });
+      },
+      resetDateRange: defaultPreset => {
+        const base = latest.current.filters;
+        const before = rangeBeforeZoom(zoomMemory.current, base);
+        zoomMemory.current = undefined;
+        updateFilters({ tokens: base.tokens, groups: base.groups, ...(before ?? { datePreset: defaultPreset }) });
+      },
     };
     const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
     return { selectionActions, filtersActions, onSortChange };

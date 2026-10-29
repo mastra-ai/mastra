@@ -25,7 +25,7 @@ const SELECTION_CLOCK = new Date(0);
  */
 export function TracesExplorerHistogram() {
   const { withQueryTrace, withRootDuration } = useTracesConfig();
-  const { filters, dateFrom, dateTo, runningSelected, setDatePreset, setDateRange } = useTracesFilters();
+  const { filters, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
   const aggregateAvailable = useTraceAggregateAvailable();
 
   const selectionKey = JSON.stringify(
@@ -69,8 +69,7 @@ export function TracesExplorerHistogram() {
       isUpdating={isPlaceholderData}
       onZoom={range => {
         const { from, to } = zoomWindow(buckets, range, request.timeRange);
-        setDatePreset('custom');
-        setDateRange(from, to);
+        zoomDateRange(from, to);
       }}
     />
   );

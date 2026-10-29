@@ -96,6 +96,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
                 onDatePresetChange={filters.onDatePresetChange}
                 onDateChange={filters.onDateChange}
                 onDateRangeChange={filters.onDateRangeChange}
+                onDateReset={filters.onDateReset}
                 onFiltersChange={filters.onFiltersChange}
                 disabled={isLoading}
               />
@@ -106,10 +107,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
           <SpansExplorerHistogram
             timeRange={timeRange}
             where={where}
-            onZoom={({ from, to }) => {
-              filters.onDatePresetChange('custom');
-              filters.onDateRangeChange(from, to);
-            }}
+            onZoom={({ from, to }) => filters.onZoom(from, to)}
           />
         }
         error={
