@@ -184,7 +184,8 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
   return { key, type, segments, params, slashInLast: false };
 }
 
-function matchPattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
+/** Binds a pattern's params from a concrete address; null when the address doesn't fit. */
+export function matchKnowledgePattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
   const prefix = `${pattern.type}:`;
   if (!address.startsWith(prefix)) return null;
   const parts = address.slice(prefix.length).split(':');
@@ -290,7 +291,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
   for (const [address, declaration] of concreteEntries) {
     const pattern = parsePattern(address, 'Knowledge scope key');
     const owner = byType.get(pattern.type);
-    if (owner && !matchPattern(owner.pattern, address)) {
+    if (owner && !matchKnowledgePattern(owner.pattern, address)) {
       throw new KnowledgeDeclarationError(
         `Knowledge scope "${address}" doesn't fit its type's pattern "${owner.key}".`,
       );
@@ -363,7 +364,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
       const extra = concrete.get(address);
       const typed = byType.get(address.slice(0, colon));
       if (typed) {
-        const params = matchPattern(typed.pattern, address);
+        const params = matchKnowledgePattern(typed.pattern, address);
         if (!params) return null;
         return {
           declaration: typed.key,
