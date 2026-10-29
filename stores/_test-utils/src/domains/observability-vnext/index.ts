@@ -1,3 +1,4 @@
+export * from './outcome-fields';
 export * from './span-aggregate';
 export * from './trace-aggregate';
 export * from './trace-query';
@@ -46,6 +47,7 @@ import {
 } from './trace-query';
 import type { TraceAggregateFixtureData } from './trace-aggregate';
 import type { TraceQueryFixtureData } from './trace-query';
+import { createOutcomeFieldTests } from './outcome-fields';
 import { TIMING_FIELDS, timingValue } from './timing-fields';
 
 export interface ObservabilityVNextCapabilities {
@@ -2622,6 +2624,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       }
     });
+
+    if (capabilities.traceQuery) {
+      createOutcomeFieldTests({ getStorage: () => storage, flushPendingMerges, refreshDiscovery });
+    }
 
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {
