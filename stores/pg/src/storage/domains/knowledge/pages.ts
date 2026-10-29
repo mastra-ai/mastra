@@ -136,7 +136,13 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
       "schemaVersion" integer NOT NULL
     )`,
     index('mastra_knowledge_pages_address_uq', t.pages, '"address"', '"isScope"', true),
-    index('mastra_knowledge_pages_key_uq', t.pages, '"scopeId","key"', '"key" IS NOT NULL AND "deletedAt" IS NULL', true),
+    index(
+      'mastra_knowledge_pages_key_uq',
+      t.pages,
+      '"scopeId","key"',
+      '"key" IS NOT NULL AND "deletedAt" IS NULL',
+      true,
+    ),
     index('mastra_knowledge_pages_parent_idx', t.pages, '"parentId","position","id"'),
     index('mastra_knowledge_pages_scope_name_idx', t.pages, '"scopeId","name","id"', '"deletedAt" IS NULL'),
     index('mastra_knowledge_pages_name_idx', t.pages, '"name","id"', '"deletedAt" IS NULL AND NOT "isScope"'),
@@ -505,10 +511,11 @@ export class PgKnowledgePages implements KnowledgePageStore {
       } else if (input.parentId && scope.parentId === null) {
         // Late link: the first non-null parent wins; the advisory lock above makes it atomic.
         await this.#requireLivePage(tx, input.parentId, false);
-        const rows = await this.#rows(tx, `UPDATE ${this.#pages} SET "parentId" = $2 WHERE "id" = $1 AND "parentId" IS NULL RETURNING *`, [
-          scope.id,
-          input.parentId,
-        ]);
+        const rows = await this.#rows(
+          tx,
+          `UPDATE ${this.#pages} SET "parentId" = $2 WHERE "id" = $1 AND "parentId" IS NULL RETURNING *`,
+          [scope.id, input.parentId],
+        );
         scope = toPage(rows[0]!);
       } else if (input.parentId !== undefined && (input.parentId ?? null) !== scope.parentId) {
         parentConflict = { existingParentId: scope.parentId, requestedParentId: input.parentId ?? null };
@@ -719,7 +726,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const params = new Params();
     const where = [`NOT p."isScope"`, `p."deletedAt" IS NULL`];
     if (input.scopeId) where.push(`p."scopeId" = ${params.add(input.scopeId)}`);
-    if (input.namePrefix) where.push(`starts_with(p."canonicalName", ${params.add(canonicalKnowledgeName(input.namePrefix))})`);
+    if (input.namePrefix)
+      where.push(`starts_with(p."canonicalName", ${params.add(canonicalKnowledgeName(input.namePrefix))})`);
     const filter = new ReadFilter(input.read, params);
     where.push(filter.readable('s'));
     if (input.cursor) {
@@ -772,8 +780,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const scopeId = input.parent.isScope ? input.parent.id : input.parent.scopeId;
     const depth = input.parent.isScope ? 1 : (await this.#depthOf(db, input.parent.id)) + 1;
     if (depth > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(id);
-    const position =
-      input.position ?? knowledgePositionBetween(await this.#lastPosition(db, input.parent.id));
+    const position = input.position ?? knowledgePositionBetween(await this.#lastPosition(db, input.parent.id));
     try {
       const rows = await this.#rows(
         db,
@@ -829,9 +836,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
       params.add(iso(now));
       params.add(JSON.stringify(input.provenance));
       if (input.name !== undefined) {
-        sets.push(`"name" = ${params.add(input.name)}`, `"canonicalName" = ${params.add(canonicalKnowledgeName(input.name))}`);
+        sets.push(
+          `"name" = ${params.add(input.name)}`,
+          `"canonicalName" = ${params.add(canonicalKnowledgeName(input.name))}`,
+        );
       }
-      if (input.description !== undefined) sets.push(`"description" = ${params.add(input.description === '' ? null : input.description)}`);
+      if (input.description !== undefined)
+        sets.push(`"description" = ${params.add(input.description === '' ? null : input.description)}`);
       if (input.body !== undefined) sets.push(`"body" = ${params.add(input.body)}`);
       const rows = await this.#rows(
         tx,
@@ -890,7 +901,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
         });
         return toPage(rows[0]!);
       } catch (error) {
-        if (isUniqueViolation(error)) throw new KnowledgeConflictError(page.key ? `${newScopeId}#${page.key}` : input.id);
+        if (isUniqueViolation(error))
+          throw new KnowledgeConflictError(page.key ? `${newScopeId}#${page.key}` : input.id);
         throw error;
       }
     });
@@ -898,7 +910,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   async mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
     return this.#tx(async tx => {
-      if (input.sourceId === input.targetId) throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
+      if (input.sourceId === input.targetId)
+        throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
       // Lock in id order so two opposing merges can't deadlock.
       const [firstId, secondId] = [input.sourceId, input.targetId].sort();
       await this.#lockPage(tx, firstId!);
@@ -939,9 +952,17 @@ export class PgKnowledgePages implements KnowledgePageStore {
       );
       await tx.query(`UPDATE ${this.#mentions} SET "pageId" = $2 WHERE "pageId" = $1`, [source.id, target.id]);
 
-      const sourcePin = (await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [source.id]))[0];
+      const sourcePin = (
+        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [source.id])
+      )[0];
       if (sourcePin) {
-        await this.#upsertPinAudience(tx, target.id, (sourcePin.audience as string[]) ?? [], String(sourcePin.createdBy), now);
+        await this.#upsertPinAudience(
+          tx,
+          target.id,
+          (sourcePin.audience as string[]) ?? [],
+          String(sourcePin.createdBy),
+          now,
+        );
         await tx.query(`DELETE FROM ${this.#pins} WHERE "id" = $1`, [String(sourcePin.id)]);
       }
 
@@ -992,7 +1013,11 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   // Notes ----------------------------------------------------------------------------------------
 
-  async getNote(input: { id: string; read: KnowledgeReadScope; includeDeleted?: boolean }): Promise<KnowledgeNote | null> {
+  async getNote(input: {
+    id: string;
+    read: KnowledgeReadScope;
+    includeDeleted?: boolean;
+  }): Promise<KnowledgeNote | null> {
     const params = new Params();
     const id = params.add(input.id);
     const filter = new ReadFilter(input.read, params);
@@ -1075,7 +1100,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
       await this.#assertScopePages(tx, stampIds);
       const mentionIds = [...new Set(input.mentions)];
       if (mentionIds.length) {
-        const found = await this.#rows(tx, `SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1::text[])`, [mentionIds]);
+        const found = await this.#rows(tx, `SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1::text[])`, [
+          mentionIds,
+        ]);
         const missing = mentionIds.find(id => !found.some(row => row.id === id));
         if (missing) throw new KnowledgeNotFoundError('page', missing);
       }
@@ -1085,12 +1112,12 @@ export class PgKnowledgePages implements KnowledgePageStore {
         `INSERT INTO ${this.#notes} ("id","pageId","text","when","provenance","version","createdAt","updatedAt") VALUES ($1,$2,$3,$4,$5::jsonb,1,$6,$6)`,
         [id, page.id, input.text, input.when ? iso(input.when) : null, JSON.stringify(input.provenance), iso(now)],
       );
-      await tx.query(
-        `INSERT INTO ${this.#stamps} ("noteId","scopeId") SELECT $1, unnest($2::text[])`,
-        [id, stampIds],
-      );
+      await tx.query(`INSERT INTO ${this.#stamps} ("noteId","scopeId") SELECT $1, unnest($2::text[])`, [id, stampIds]);
       if (mentionIds.length) {
-        await tx.query(`INSERT INTO ${this.#mentions} ("noteId","pageId") SELECT $1, unnest($2::text[])`, [id, mentionIds]);
+        await tx.query(`INSERT INTO ${this.#mentions} ("noteId","pageId") SELECT $1, unnest($2::text[])`, [
+          id,
+          mentionIds,
+        ]);
       }
       await this.#logActivity(tx, {
         action: 'note-added',
@@ -1105,11 +1132,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
 
   async #assertScopePages(db: Queryable, ids: string[]): Promise<void> {
-    const rows = await this.#rows(
-      db,
-      `SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1::text[]) AND "isScope"`,
-      [ids],
-    );
+    const rows = await this.#rows(db, `SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1::text[]) AND "isScope"`, [
+      ids,
+    ]);
     const missing = ids.find(id => !rows.some(row => row.id === id));
     if (missing) throw new Error(`Knowledge note stamp ${missing} is not a scope page`);
   }
@@ -1223,9 +1248,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       if (input.scopeIds?.length) where.push(`p."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
       for (const term of terms) {
         const pattern = params.add(`%${escapeLike(term)}%`);
-        where.push(
-          `(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`,
-        );
+        where.push(`(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`);
       }
       const rows = await this.#rows(
         this.#client,
@@ -1355,9 +1378,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return { pin: toPin(rows[0]!), changed: true };
   }
 
-  async removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null> {
+  async removePinAudience(input: {
+    pageId: string;
+    audience: string[];
+    removedBy: string;
+  }): Promise<KnowledgePin | null> {
     return this.#tx(async tx => {
-      const existing = (await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [input.pageId]))[0];
+      const existing = (
+        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [input.pageId])
+      )[0];
       if (!existing) return null;
       const current = (existing.audience as string[]) ?? [];
       const remaining = current.filter(entry => !input.audience.includes(entry));
