@@ -98,6 +98,12 @@ export interface KnowledgeScopePattern {
   type: string;
   segments: Segment[];
   params: string[];
+  /**
+   * Whether the last segment's value may hold `/`. True for types without template children, so a
+   * Memory id like `user/123` fills `resource:$resourceId`; false where `<address>/<name>` would
+   * read as a child scope.
+   */
+  slashInLast: boolean;
 }
 
 /** How a rule's principal reaches its target scopes. */
@@ -175,14 +181,15 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
   if (new Set(params).size !== params.length) {
     throw new KnowledgeDeclarationError(`${what} "${key}" repeats a param.`);
   }
-  return { key, type, segments, params };
+  return { key, type, segments, params, slashInLast: false };
 }
 
 function matchPattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
   const prefix = `${pattern.type}:`;
   if (!address.startsWith(prefix)) return null;
   const parts = address.slice(prefix.length).split(':');
-  if (parts.some(part => part.includes('/'))) return null;
+  const lastStart = pattern.segments.length - 1;
+  if (parts.some((part, i) => part.includes('/') && (i < lastStart || !pattern.slashInLast))) return null;
   const params: Record<string, string> = {};
   for (let i = 0; i < pattern.segments.length; i++) {
     const segment = pattern.segments[i]!;
@@ -200,12 +207,14 @@ function matchPattern(pattern: KnowledgeScopePattern, address: string): Record<s
 }
 
 /**
- * Whether `value` can fill a segment: never empty or holding `/`, and holding `:` only in the last
- * segment. A value like `a:b` bound into a middle segment would shift every later segment and
- * reach another tenant's scopes.
+ * Whether `value` can fill a segment: never empty, and holding `:` or `/` only in the last segment
+ * (`/` only where the type has no template children). A value like `a:b` bound into a middle segment
+ * would shift every later segment and reach another tenant's scopes.
  */
-function fitsSegment(value: string, last: boolean): boolean {
-  return value !== '' && !value.includes('/') && (last || !value.includes(':'));
+function fitsSegment(value: string, last: boolean, slashInLast: boolean): boolean {
+  if (value === '') return false;
+  if (!last) return !value.includes(':') && !value.includes('/');
+  return slashInLast || !value.includes('/');
 }
 
 /** Fills a pattern's params; returns null when one is missing or can't fill its segment. */
@@ -217,7 +226,7 @@ export function bindKnowledgePattern(pattern: KnowledgeScopePattern, params: Rec
       continue;
     }
     const value = params[segment.param];
-    if (value === undefined || !fitsSegment(value, i === pattern.segments.length - 1)) return null;
+    if (value === undefined || !fitsSegment(value, i === pattern.segments.length - 1, pattern.slashInLast)) return null;
     values.push(value);
   }
   return `${pattern.type}:${values.join(':')}`;
@@ -237,7 +246,7 @@ export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: R
     }
     const value = params[segment.param];
     if (value === undefined) break;
-    if (!fitsSegment(value, false)) return null;
+    if (!fitsSegment(value, false, false)) return null;
     prefix += `${value}:`;
   }
   return prefix;
@@ -330,6 +339,14 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     }
   }
 
+  const slashInLast = (type: string) => !byType.get(type)?.declaration.children?.length;
+  for (const compiled of byType.values()) compiled.pattern.slashInLast = slashInLast(compiled.pattern.type);
+  const typedPattern = (key: string, what: string) => {
+    const pattern = parsePattern(key, what);
+    pattern.slashInLast = slashInLast(pattern.type);
+    return pattern;
+  };
+
   const compiledScopes: CompiledKnowledgeScopes = {
     declarations: all,
     concrete,
@@ -363,7 +380,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
   };
 
   const principalPattern = (principal: string, target: string): KnowledgeScopePattern => {
-    const pattern = parsePattern(principal, `Knowledge rule principal on "${target}"`);
+    const pattern = typedPattern(principal, `Knowledge rule principal on "${target}"`);
     if (!compiledScopes.match(sampleAddress(pattern))) {
       throw new KnowledgeDeclarationError(
         `Knowledge rule principal "${principal}" on "${target}" is not a declared scope type; declare it or fix the typo.`,
@@ -413,7 +430,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
   for (const compiled of all.values()) {
     const parentDeclaration = compiled.child?.parent.declaration ?? compiled.declaration;
     if (!compiled.child && parentDeclaration.belongsTo) {
-      const belongsTo = parsePattern(parentDeclaration.belongsTo, `Knowledge belongsTo on "${compiled.key}"`);
+      const belongsTo = typedPattern(parentDeclaration.belongsTo, `Knowledge belongsTo on "${compiled.key}"`);
       if (!compiledScopes.match(sampleAddress(belongsTo))) {
         throw new KnowledgeDeclarationError(
           `Knowledge belongsTo "${parentDeclaration.belongsTo}" on "${compiled.key}" is not a declared scope type.`,
