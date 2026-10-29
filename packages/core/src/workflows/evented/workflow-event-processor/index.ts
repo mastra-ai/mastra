@@ -1974,6 +1974,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     );
   }
 
+  /**
+   * Nested dispatch publishes workflow.start/workflow.resume directly, bypassing
+   * Workflow.execute and its authorization gate. Require workflows:execute on
+   * the child workflow resource before any parent step record is written.
+   * False means errorWorkflow has settled the parent or the delivery was already
+   * handled and must be dropped instead of failed.
+   */
   async #authorizeNestedDispatch({
     args,
     workflow,
@@ -2083,6 +2090,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       !resumeSteps?.length &&
       step.type !== 'foreach';
     let nestedRunId = '';
+    let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
     if (nestedWorkflowStep) {
       const continueRedelivery = async () => {
         if (restart || timeTravel || resumeSteps?.length || step.type === 'foreach' || !workflowsStore) return false;
@@ -2116,11 +2124,19 @@ export class WorkflowEventProcessor extends EventProcessor {
         return false;
       };
       if (await continueRedelivery()) return;
+      // Classify once so authorization uses the dispatch's child run ID before
+      // the parent's running record or resume claim can be written.
       if (resumeSteps?.length && resumeSteps[0] === leafId) {
+        // Resume the child run identified by the suspension payload.
+        nestedDispatch = resumeSteps.length === 1 ? 'resume-single' : 'resume-many';
         nestedRunId = stepResults[leafId]?.suspendPayload?.__workflow_meta?.runId;
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
+        // Time travel reuses the recorded child run, or creates one if absent.
+        nestedDispatch = 'time-travel';
         nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
+        // Restart reuses the iteration's or step's child run, if recorded.
+        nestedDispatch = 'restart';
         nestedRunId =
           (step.type === 'foreach'
             ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
@@ -2128,6 +2144,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults[leafId]?.metadata?.nestedRunId ??
           globalThis.crypto.randomUUID();
       } else {
+        // A fresh dispatch creates a new child run.
+        nestedDispatch = 'start';
         nestedRunId = globalThis.crypto.randomUUID();
       }
       const fgaProvider = this.mastra.getServer()?.fga;
@@ -2341,7 +2359,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (nestedWorkflowStep) {
       const nestedWorkflow = nestedWorkflowStep;
       // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
-      if (resumeSteps?.length === 1 && resumeSteps[0] === leafId) {
+      if (nestedDispatch === 'resume-single') {
         if (!nestedRunId) {
           return this.errorWorkflow(
             {
@@ -2441,7 +2459,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             forEachIndex,
           },
         });
-      } else if (resumeSteps?.length > 1 && resumeSteps[0] === leafId) {
+      } else if (nestedDispatch === 'resume-many') {
         if (!nestedRunId) {
           return this.errorWorkflow(
             {
@@ -2514,7 +2532,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             forEachIndex,
           },
         });
-      } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
+      } else if (nestedDispatch === 'time-travel' && timeTravel) {
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2568,7 +2586,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else if (restart && !!restart.activeStepsPath?.[leafId]) {
+      } else if (nestedDispatch === 'restart') {
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2680,7 +2698,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else {
+      } else if (nestedDispatch === 'start') {
         coverNestedRun(runId, nestedRunId);
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({
