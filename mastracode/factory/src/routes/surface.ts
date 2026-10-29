@@ -3,6 +3,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
@@ -129,6 +130,8 @@ export interface FactoryApiRoutesDeps {
   mcpEnabled: boolean;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
+  /** App skills from `MastraFactory({ skills })`. */
+  skills?: readonly InlineSkill[];
   knowledgeKey?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
@@ -785,6 +788,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       controller: deps.controller,
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
+      ...(deps.skills ? { skills: deps.skills } : {}),
     }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
