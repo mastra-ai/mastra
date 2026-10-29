@@ -86,6 +86,12 @@ export type ResolveAgentScopesInput = {
    * Ignored on resume.
    */
   agentScopes?: readonly AgentScopeEntry[];
+  /**
+   * The incoming scopes `agentScopes` was computed from (see {@link incomingAgentScopes}), including
+   * `defaultOptions.scopes`. Every `resource:`/`thread:` scope in it must survive the Agent's
+   * function, and every read-only scope in it stays read-only.
+   */
+  incomingScopes?: readonly AgentScopeEntry[];
   /** Scopes passed on the call. */
   callScopes?: readonly AgentScopeEntry[];
   memory?: { resource?: string; thread?: string | { id: string } };
@@ -390,7 +396,8 @@ export function resolveAgentScopes(input: ResolveAgentScopesInput): ResolvedAgen
   if (input.agentScopes !== undefined && !snapshot?.scopes) {
     // The Agent's `scopes` option already ran on the incoming scopes; its result is the run's set.
     supplied = new Set(agentScopes.tags);
-    for (const scope of [...fromContextTags, ...callScopes.tags]) {
+    const incoming = validateScopes('incoming scopes', input.incomingScopes);
+    for (const scope of [...fromContextTags, ...callScopes.tags, ...incoming.tags]) {
       if (isIdentityAgentScope(scope) && !supplied.has(scope)) {
         throw scopesError(
           'AGENT_SCOPES_INVALID',
@@ -399,7 +406,12 @@ export function resolveAgentScopes(input: ResolveAgentScopesInput): ResolvedAgen
       }
     }
     // A tag a parent run held read-only stays read-only; the function can't widen it.
-    suppliedReadOnly = new Set([...agentScopes.readOnly, ...contextReadOnly]);
+    suppliedReadOnly = new Set([
+      ...agentScopes.readOnly,
+      ...contextReadOnly,
+      ...callScopes.readOnly,
+      ...incoming.readOnly,
+    ]);
   } else {
     // On resume the Agent's own configuration is not re-supplied by the caller: the suspended run
     // keeps its scopes, so an agent that adds or changes its resolver can still resume older runs.

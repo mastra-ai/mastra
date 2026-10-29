@@ -385,6 +385,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       const resolved = resolveAgentScopes({
         requestContext,
         agentScopes,
+        incomingScopes: incoming,
         callScopes,
         memory: execOptions.memory,
         mastra,

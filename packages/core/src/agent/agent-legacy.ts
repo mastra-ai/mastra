@@ -836,12 +836,14 @@ export class AgentLegacyHandler {
     // `resource:`/`thread:` and throw on conflict (see resolveAgentScopes).
     const resourceIdFromContext = callerRequestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = callerRequestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const incomingScopes = incomingAgentScopes({
+      requestContext: callerRequestContext,
+      mastra: this.capabilities.mastra,
+    });
     const resolvedScopes = resolveAgentScopes({
       requestContext: callerRequestContext,
-      agentScopes: await this.capabilities.getScopes({
-        requestContext: callerRequestContext,
-        scopes: incomingAgentScopes({ requestContext: callerRequestContext, mastra: this.capabilities.mastra }),
-      }),
+      agentScopes: await this.capabilities.getScopes({ requestContext: callerRequestContext, scopes: incomingScopes }),
+      incomingScopes,
       memory: args.memory as { resource?: string; thread?: string | { id: string } } | undefined,
       resourceId: resourceIdFromArgs,
       threadId: args.threadId,
