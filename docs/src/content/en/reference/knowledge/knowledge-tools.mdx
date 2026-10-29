@@ -174,7 +174,12 @@ Adds, restamps and removes notes. A note is one durable fact on a page. Link oth
   { name: 'page', type: 'string', description: 'Add: the page.', isOptional: true },
   { name: 'note', type: 'string', description: 'Restamp or remove: the note ID.', isOptional: true },
   { name: 'scope', type: 'string[]', description: 'Add or restamp: the stamp scope addresses.', isOptional: true },
-  { name: 'text', type: 'string', description: 'Add: the note, about 250 tokens at most; inline markdown is fine.', isOptional: true },
+  {
+    name: 'text',
+    type: 'string',
+    description: 'Add: the note, about 250 tokens at most; inline markdown is fine.',
+    isOptional: true,
+  },
   {
     name: 'when',
     type: 'string',
