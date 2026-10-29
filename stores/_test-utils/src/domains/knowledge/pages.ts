@@ -223,6 +223,22 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(await store.getPageByPath({ scopeId: acme.id, path: ['policies'], read: 'all' })).toBeNull();
       });
 
+      it("merges a child into its parent when the child's own child has the child's key", async () => {
+        const acme = await scope('org:acme', ORG);
+        const target = await page(acme.id, 'Target', { key: 't' });
+        const source = await page(target.id, 'X', { key: 'x' });
+        const grandchild = await page(source.id, 'Inner x', { key: 'x' });
+
+        // The source is deleted by the merge, so its key no longer clashes with its arriving child.
+        await store.mergePages({ sourceId: source.id, sourceVersion: 1, targetId: target.id, provenance: host });
+
+        const at = (path: string[]) =>
+          store.getPageByPath({ scopeId: acme.id, path, read: 'all' }).then(found => found?.id ?? null);
+        expect(await at(['t', 'x'])).toBe(grandchild.id);
+        expect(await at(['t', 'x', 'x'])).toBeNull();
+        expect((await store.getPage({ id: source.id, read: 'all' }))?.deletedAt).toBeTruthy();
+      });
+
       it('materializes concurrently without throwing or duplicating a template page', async () => {
         const nested = [{ key: 'policies', name: 'Policies', pages: [{ key: 'refund', name: 'Refund policy' }] }];
         const materialize = (pages: typeof nested) =>

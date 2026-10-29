@@ -428,7 +428,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     if (deepest > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(pageId);
     const arriving = rootCounts ? [subtree[0]!.page] : live.filter(entry => entry.relativeDepth === 1).map(e => e.page);
     for (const page of arriving) {
-      if (page.key !== undefined && this.#childByKey(parent.id, page.key, page.id)) {
+      if (page.key === undefined) continue;
+      const clash = this.#childByKey(parent.id, page.key, page.id);
+      // A merge deletes the source, so a source that is itself a child of the target frees its key.
+      if (clash && (rootCounts || clash.id !== pageId)) {
         throw new KnowledgePageKeyConflictError(page.key, parent.id);
       }
     }
