@@ -595,19 +595,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const startingSignal = signalSpanAttributes(messages);
   // A cold resume reattaches to the spans the run opened when it started (ended as `suspended`)
   // instead of opening a second root in a new trace. The resume then opens its own spans under them.
-  // A run that recorded no span stays unrecorded. An unsampled run saved a no-op span, whose id is
-  // not a hex span id, and rebuilding it would record spans the run never sampled.
+  // A run that recorded no span stays unrecorded. An unsampled run saved a no-op span (id `no-op`),
+  // and rebuilding it would record spans the run never sampled.
   const { agentSpanData, modelSpanData } = resumedSpanData ?? {};
   const agentSpanId = (agentSpanData as { id?: unknown } | undefined)?.id;
   const resumedObservability =
-    typeof agentSpanId === 'string' && /^[0-9a-f]{1,16}$/i.test(agentSpanId)
+    typeof agentSpanId === 'string' && agentSpanId !== 'no-op'
       ? mastra?.observability?.getSelectedInstance({ requestContext })
       : undefined;
   const resumedSpans = resumedSpanData && {
     agentSpan: resumedObservability?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>),
     modelSpan: modelSpanData
       ? (resumedObservability?.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-          AIModelGenerationSpan | undefined)
+          | AIModelGenerationSpan
+          | undefined)
       : undefined,
   };
   const agentSpan = resumedSpans
