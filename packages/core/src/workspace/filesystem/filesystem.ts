@@ -32,7 +32,7 @@ export type FileContent = string | Buffer | Uint8Array;
 export interface FileStat {
   /** File or directory name */
   name: string;
-  /** Absolute path */
+  /** Path relative to the filesystem basePath */
   path: string;
   /** 'file' or 'directory' */
   type: 'file' | 'directory';
