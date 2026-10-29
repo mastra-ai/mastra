@@ -779,7 +779,10 @@ export class PgKnowledgePages implements KnowledgePageStore {
       });
       return toPage(rows[0]!);
     } catch (error) {
-      if (isUniqueViolation(error)) throw new KnowledgeConflictError(input.key ? `${scopeId}#${input.key}` : id);
+      if (isUniqueViolation(error)) {
+        if (input.key) throw new Error(`Knowledge page key "${input.key}" already exists in scope ${scopeId}`);
+        throw new KnowledgeConflictError(id);
+      }
       throw error;
     }
   }
@@ -826,9 +829,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return this.#tx(async tx => {
       const page = await this.#requireLivePage(tx, input.id);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
-      if (page.isScope) throw new Error(`Page ${input.id} is a scope page; scope pages cannot be moved.`);
+      if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be moved`);
       if (input.parentId === input.id || (await this.#isInSubtree(tx, input.id, input.parentId))) {
-        throw new Error(`Page ${input.id} cannot move into itself or its own subtree.`);
+        throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       }
       const parent = await this.#requireLivePage(tx, input.parentId);
       const stats = await this.#subtreeStats(tx, input.id);
@@ -870,7 +873,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   async mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
     return this.#tx(async tx => {
-      if (input.sourceId === input.targetId) throw new Error('Cannot merge a page into itself.');
+      if (input.sourceId === input.targetId) throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
       // Lock in id order so two opposing merges can't deadlock.
       const [firstId, secondId] = [input.sourceId, input.targetId].sort();
       await this.#lockPage(tx, firstId!);
@@ -878,9 +881,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const source = await this.#requireLivePage(tx, input.sourceId, false);
       const target = await this.#requireLivePage(tx, input.targetId, false);
       if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
-      if (source.isScope || target.isScope) throw new Error('Scope pages cannot be merged.');
+      if (source.isScope || target.isScope) throw new Error("Knowledge scope pages can't be merged");
       if (await this.#isInSubtree(tx, source.id, target.id)) {
-        throw new Error(`Page ${target.id} is inside ${source.id}; a page cannot merge into its own subtree.`);
+        throw new Error(`Knowledge page ${source.id} can't merge into itself or its own subtree`);
       }
       const stats = await this.#subtreeStats(tx, source.id);
       if (stats.live > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(source.id, stats.live);
@@ -936,7 +939,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return this.#tx(async tx => {
       const page = await this.#requireLivePage(tx, input.id);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
-      if (page.isScope) throw new Error(`Page ${input.id} is a scope page; scope pages cannot be deleted.`);
+      if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be deleted`);
       const children = await this.#rows(
         tx,
         `SELECT 1 FROM ${this.#pages} WHERE "parentId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
@@ -1039,7 +1042,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async addNote(input: AddKnowledgeNoteInput): Promise<KnowledgeNote> {
     const bounds = await this.#bounds();
     bounds.assertKnowledgeNoteTextWithinBound(input.text);
-    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope.');
+    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope');
     return this.#tx(async tx => {
       const page = await this.#requireLivePage(tx, input.pageId, false);
       const stampIds = [...new Set(input.stampScopeIds)];
@@ -1082,7 +1085,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       [ids],
     );
     const missing = ids.find(id => !rows.some(row => row.id === id));
-    if (missing) throw new KnowledgeNotFoundError('scope', missing);
+    if (missing) throw new Error(`Knowledge note stamp ${missing} is not a scope page`);
   }
 
   async #noteById(db: Queryable, id: string, lock = false): Promise<KnowledgeNote> {
@@ -1101,7 +1104,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     stampScopeIds: string[];
     provenance: KnowledgeProvenance;
   }): Promise<KnowledgeNote> {
-    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope.');
+    if (input.stampScopeIds.length === 0) throw new Error('A Knowledge note needs at least one stamp scope');
     return this.#tx(async tx => {
       const lockedRows = await this.#rows(tx, `SELECT * FROM ${this.#notes} WHERE "id" = $1 FOR UPDATE`, [input.id]);
       const note = lockedRows[0];
@@ -1354,6 +1357,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
       });
       return pin;
     });
+  }
+
+  /** Deletes every row but keeps the tables and the schema-version marker. */
+  async clearAll(): Promise<void> {
+    const t = PG_KNOWLEDGE_PAGES_TABLES;
+    const tables = [t.activity, t.pins, t.mentions, t.stamps, t.notes, t.pages].map(name => this.#q(name)).join(', ');
+    await this.#client.query(`TRUNCATE ${tables}`);
   }
 
   async listPins(input: {
