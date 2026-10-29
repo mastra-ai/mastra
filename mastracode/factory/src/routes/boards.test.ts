@@ -13,6 +13,7 @@ import type { BoardPhaseDefinition } from '../boards/define-board.js';
 import { DRIFT_PROBLEM, ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import type { InstalledBoard } from '../boards/registry.js';
+import { reviewBoard } from '../boards/review.js';
 import { seedFromDefinition } from '../boards/stored-board.js';
 import { workBoard } from '../boards/work.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
@@ -275,7 +276,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
         ]),
       ),
     } as never) as InstalledBoard;
-    await b.boards.applySeed(scope, [seedFromDefinition(newerWork, 'builtin')]);
+    await b.boards.applySeed(scope, [
+      seedFromDefinition(newerWork, 'builtin'),
+      seedFromDefinition(reviewBoard, 'builtin'),
+      seedFromDefinition(releaseBoard(), 'app'),
+    ]);
     replicaA.clock.now += RECHECK_MS;
 
     const drifted = await getBoard(replicaA.send, base, 'work');
