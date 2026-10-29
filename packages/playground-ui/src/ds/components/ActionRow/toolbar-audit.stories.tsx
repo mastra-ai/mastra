@@ -412,7 +412,7 @@ export const AllToolbars: StoryObj = {
         <Case name="FilterBar input vs SearchInput" source="filter-bar-input.tsx:347, search-input.tsx:45">
           <div className="flex items-center gap-2">
             <Bar items={[]} placeholder="Filter datasets…" />
-            <SearchInput label="Search" placeholder="Search" value="" onValueChange={() => {}} size="sm" />
+            <SearchInput label="Search" placeholder="Search…" value="" onValueChange={() => {}} size="sm" />
           </div>
         </Case>
       </Group>
