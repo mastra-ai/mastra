@@ -186,11 +186,14 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
       continue;
     }
     // Only reasoning that runs straight into a kept call is replayed; anything else
-    // in between means the block belongs to an already-observed step.
+    // in between means the block belongs to an already-observed step. A sibling call
+    // from the same step does not end the block: parallel calls share one signed run,
+    // and only the one whose result is still pending survives the prune.
     if (part?.type === 'reasoning' && hasReplayableReasoningMetadata(part)) {
       pendingReasoning.push(i);
       continue;
     }
+    if (id !== undefined) continue;
     pendingReasoning = [];
   }
 

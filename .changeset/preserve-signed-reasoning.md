@@ -3,4 +3,4 @@
 '@mastra/memory': patch
 ---
 
-Keep signed reasoning blocks when rebuilding a conversation. A thinking block that carries a provider signature but no visible text is now replayed instead of dropped, and observational memory keeps the signed block of a tool call it is still holding open, so providers no longer lose the signature and re-bill the whole prompt.
+Keep signed reasoning blocks when a conversation is rebuilt. A thinking block with a provider signature but no visible text now survives conversion. Observational memory also keeps the signed block of a tool call it is still holding open, so the call can be replayed without losing its signature.

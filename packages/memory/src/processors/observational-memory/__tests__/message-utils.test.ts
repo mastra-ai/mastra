@@ -165,6 +165,18 @@ describe('pruning a message whose tool call is still pending', () => {
     expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
   });
 
+  it('keeps the signed block shared by parallel calls when only one is pending', () => {
+    const parts = pruneWith([
+      reasoning('parallel thinking', 'sig-parallel'),
+      call('done'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('parallel thinking', 'sig-parallel'), call('pending'), result('pending')]);
+  });
+
   it('drops unsigned reasoning and signed reasoning from an already-observed step', () => {
     const parts = pruneWith([
       reasoning('signed but observed', 'sig-old'),
