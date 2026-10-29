@@ -229,6 +229,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(rename.status).toBe(403);
     const remove = await replicaA.send('DELETE', `${base}/release?expectedRevision=1`, undefined, MEMBER);
     expect(remove.status).toBe(403);
+    const reset = await replicaA.send('POST', `${base}/work/reset`, { expectedRevision: work.revision }, MEMBER);
+    expect(reset.status).toBe(403);
 
     expect(await catalogBoard(replicaA.send, base, 'bugs')).toBeUndefined();
     expect(await getBoard(replicaA.send, base, 'work')).toMatchObject({ name: 'Work', revision: work.revision });
@@ -468,6 +470,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const deleted = await replicaA.send('DELETE', `${base}/release?expectedRevision=${release.revision}`);
     expect(deleted.status).toBe(204);
     expect(await catalogBoard(replicaA.send, base, 'release')).toBeUndefined();
+    const recreate = await replicaA.send('POST', base, seedFromDefinition(releaseBoard(), 'app').input);
+    expect(recreate).toMatchObject({ status: 409, body: { error: 'board_deleted' } });
 
     // A restart is a new process: a fresh cache that seeds the project again.
     const restarted = replica(a, orgId);

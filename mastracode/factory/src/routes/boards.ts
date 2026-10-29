@@ -119,7 +119,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
   }
 
   /** Validates a definition the way `defineBoard()` does, plus the skills its runners name. */
-  #validate(input: unknown): { input: StoredBoardInput; warnings: string[] } {
+  #validate(input: unknown): StoredBoardInput {
     const parsed = storedBoardInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new Refusal(422, { error: 'invalid_board', message: issueMessage(parsed.error.issues) });
@@ -131,7 +131,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     );
     const unknown = problems.filter(problem => problem.includes(UNKNOWN_SKILL));
     if (unknown.length > 0) throw new Refusal(422, { error: 'unknown_skill', message: unknown.join(' ') });
-    return { input: parsed.data, warnings: problems };
+    return parsed.data;
   }
 
   /** Compiles with the code behaviors the board carries, so an edit that breaks them is refused. */
@@ -182,6 +182,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     const project = await this.deps.boards.describe(scope);
     const row = await this.deps.storage.get(scope, key, { includeDeleted: true });
     if (!row) return c.json({ error: 'board_not_found' }, 404);
+    // A board that failed to load is missing from the details; its error is a project problem.
+    const loadProblems = project.problems.filter(problem => problem.startsWith(`Board '${key}' could not be loaded:`));
     return c.json(
       {
         board: {
@@ -194,7 +196,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
           customized: row.customized,
           drift: row.driftHash !== null,
           deleted: row.deletedAt !== null,
-          problems: project.details.get(key)?.problems ?? [],
+          problems: [...(project.details.get(key)?.problems ?? []), ...loadProblems],
         },
       },
       status,
@@ -248,16 +250,20 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     return [
       this.#route(contracts.boardGet, async c => {
         const scope = await this.#resolve(c);
-        const key = this.#boardKey(c);
-        await this.#existing(scope, key, { includeDeleted: true });
-        return this.#respond(c, scope, key);
+        return this.#respond(c, scope, this.#boardKey(c));
       }),
 
       this.#route(contracts.boardCreate, async c => {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
-        const { input } = this.#validate(await this.#body(c));
+        const input = this.#validate(await this.#body(c));
         await boards.describe(scope);
+        if ((await storage.get(scope, input.key, { includeDeleted: true }))?.deletedAt) {
+          throw new Refusal(409, {
+            error: 'board_deleted',
+            message: `Board "${input.key}" was deleted; reset it to restore it.`,
+          });
+        }
         await storage.create(scope, input, scope.userId);
         boards.invalidate(scope);
         await this.#audit(c, scope, 'created', input);
@@ -274,11 +280,14 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         }
         const { expectedRevision, ...definition } = parsed.data;
         const row = await this.#existing(scope, key);
-        const { input } = this.#validate({ key, ...definition });
-        if (row.seedSource && input.phases[0]!.key !== row.phases[0]?.key) {
+        const input = this.#validate({ key, ...definition });
+        const initialPhase = row.seedSource
+          ? (boards.seedFor(key)?.input.phases[0]?.key ?? row.phases[0]?.key)
+          : undefined;
+        if (initialPhase && input.phases[0]!.key !== initialPhase) {
           throw new Refusal(422, {
             error: 'initial_phase_locked',
-            message: `Board "${key}" is defined in code, which places new cards in "${row.phases[0]?.key}"; that phase must stay first.`,
+            message: `Board "${key}" is defined in code, which places new cards in "${initialPhase}"; that phase must stay first.`,
           });
         }
         this.#compileWithBehaviors(input, row);

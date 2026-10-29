@@ -57,7 +57,7 @@ MASTRA_TELEMETRY_DISABLED=true
 
 ### Stored boards
 
-Each project's boards live in the database. The runtime reads boards only from there: the catalog, card creation, transitions, the dispatcher, phase runs, Factory tools and the attention views all use the project's stored boards. Board definitions in code — the built-in Work and Review boards and boards passed to `new MastraFactory({ boards })` — are seed input: Factory writes them into every project's database at startup, and into a new project when it is created or first loaded. Existing apps need no change. Until someone edits a board, a project behaves exactly as it did with code boards.
+Each project's boards live in the database. The runtime reads boards from there: the catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs, Factory tools and the attention views all use the project's stored boards. Board definitions in code — the built-in Work and Review boards and boards passed to `new MastraFactory({ boards })` — are seed input: Factory writes them into every project's database at startup, and into a new project when it is created or first loaded. Existing apps need no change. Until someone edits a board, a project behaves exactly as it did with code boards. Integrations are the exception (see **Integrations** below).
 
 **Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases`. The first phase is the initial phase and must be `resting`. A code board whose `initialPhase` is not its first declared phase is stored with its initial phase first, so the catalog lists that phase first. Saved boards pass the same checks `defineBoard()` applies, with the same messages.
 
@@ -82,13 +82,13 @@ Resetting a board (`POST …/boards/:boardKey/reset`) writes the current code de
 - Board and phase keys never change. Renaming changes `name`.
 - Removing a phase, or changing its `kind`, while cards sit in it is refused with `409 phase_in_use` and the count per phase. Deleting a board that has cards is refused with `409 board_in_use`. Factory never moves cards for you. A card created between the check and the write can still land on a removed phase; it then shows as an unsupported item until it is moved.
 - Work and Review can be edited but not deleted (`409 builtin_board`): intake defaults, cards stored without a board, the review-requested filter and overview metrics refer to them by key.
-- A board seeded from code keeps its first phase first (`422 initial_phase_locked`), because integrations place new cards in the code board's initial phase.
+- A board seeded from code keeps the code board's initial phase first (`422 initial_phase_locked`), because integrations place new cards in that phase.
 - Deleting a board seeded from your app keeps a tombstone, so the next startup does not write it back. Reset restores it.
 - A runner skill that does not exist is refused (`422 unknown_skill`). A review skill outside the `review` context is saved with a warning in `problems`. A skill that disappears later never stops a board from loading; it shows in the catalog's `problems`.
 
 **Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
 
-**Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations still read the code boards: they evaluate code behaviors and place new cards in a code board's initial phase, which a stored board keeps first. Every card move they make goes through the transition service, which checks it against the stored board, so a move into a phase someone removed is refused. Intake bindings and label routes can target only boards defined in code.
+**Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations still read the code boards: they evaluate code behaviors and place new cards in a code board's initial phase, which a stored board keeps first. They keep using a board your app passes even after someone deletes it in a project; such cards show as unsupported items there. Every card move they make goes through the transition service, which checks it against the stored board, so a move into a phase someone removed is refused. Intake bindings and label routes can target only boards defined in code.
 
 **Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated`, `reset` and `deleted`.
 
@@ -129,7 +129,7 @@ jq '.board | { name, description, phases: (.phases | map(if .key == "execute" th
 [Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database and these definitions are only used as seed input. Manage boards through the boards API; see the README "Stored boards" section.
 ```
 
-Using only the built-in boards logs nothing. To move a board without code behaviors off code, create it in each project with `POST /web/factory/projects/:id/boards`, or keep passing it until a project has it, then stop passing it: the stored board stays. Boards with handlers, policies or rules keep needing their code definition for now.
+Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools can move off code: create it in each project with `POST /web/factory/projects/:id/boards`, or keep passing it until every project has it, then stop passing it; the stored board stays. Keep passing a board while integrations file cards onto it or intake bindings and label routes target it: those still need the code definition, and are refused once the board leaves code. Boards with handlers, policies or rules also keep needing their code definition for now.
 
 Removing `defineBoard()` later takes:
 

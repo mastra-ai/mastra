@@ -520,7 +520,7 @@ export class MastraFactory {
     if ('rules' in config) {
       throw new Error(
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
-          'rules on the owning board via defineBoard({ tools }).',
+          'rules on the owning board (`tools`).',
       );
     }
     this.#skills = assertFactorySkills(config.skills);
