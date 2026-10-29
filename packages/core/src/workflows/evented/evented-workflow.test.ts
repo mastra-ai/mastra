@@ -1466,6 +1466,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       provider = true,
       internal = false,
       parallel = false,
+      foreach = false,
       beforeEffect = async () => {},
     } = {}) {
       let effects = 0;
@@ -1488,8 +1489,13 @@ describe('Workflow (Evented Engine Specific)', () => {
       const child = createWorkflow({ id: 'nested-fga-child', inputSchema: schema, outputSchema: schema })
         .then(step)
         .commit();
-      const parent = createWorkflow({ id: 'nested-fga-parent', inputSchema: schema, outputSchema: z.any() });
-      if (parallel) parent.parallel([child]);
+      const parent = createWorkflow({
+        id: 'nested-fga-parent',
+        inputSchema: foreach ? schema.array() : schema,
+        outputSchema: z.any(),
+      });
+      if (foreach) parent.foreach(child);
+      else if (parallel) parent.parallel([child]);
       else parent.then(child);
       parent.commit();
       const fga = {
@@ -1594,6 +1600,35 @@ describe('Workflow (Evented Engine Specific)', () => {
       },
       15000,
     );
+
+    it.each([false, true])('settles nested foreach authorization (allowed=%s)', async allowed => {
+      const fixture = await setup({ foreach: true, allowed });
+      try {
+        const starting = fixture.run.start({
+          inputData: [{ value: 'ok' }],
+          requestContext: fixture.requestContext,
+        });
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalled());
+        const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+        await fixture.waitForDelivery(delivery, 1);
+        if (!allowed) {
+          expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(true);
+        }
+        const result = await starting;
+        expect(result.status).toBe(allowed ? 'success' : 'failed');
+        expect(fixture.effects()).toBe(allowed ? 1 : 0);
+        if (!allowed) {
+          expect(JSON.stringify(result)).toContain(`Denied workflows:execute on ${fixture.child.id}`);
+          expect(
+            fixture.publish.mock.calls.filter(
+              ([, event]) => event.type === 'workflow.start' && event.data?.workflowId === fixture.child.id,
+            ),
+          ).toHaveLength(0);
+        }
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    });
 
     it('retries an authorized child after a transient snapshot-read failure', async () => {
       const fixture = await setup();

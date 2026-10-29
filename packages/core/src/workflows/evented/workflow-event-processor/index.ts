@@ -1987,7 +1987,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     fgaProvider,
     nestedWorkflowStep,
     nestedRunId,
-    isFreshStart,
+    canDropRunningDenial,
     continueRedelivery,
   }: {
     args: ProcessorArgs;
@@ -1995,7 +1995,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     fgaProvider: RequireFGAOptions['fgaProvider'];
     nestedWorkflowStep: Workflow;
     nestedRunId: string;
-    isFreshStart: boolean;
+    canDropRunningDenial: boolean;
     continueRedelivery: () => Promise<boolean>;
   }): Promise<boolean> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -2015,7 +2015,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } catch (error) {
       // A concurrent delivery may have finished while authorization was pending.
       if (await continueRedelivery()) return false;
-      if (isFreshStart && workflowsStore) {
+      if (canDropRunningDenial && workflowsStore) {
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: args.runId });
         // This delivery has not claimed the step: a running leaf belongs to an
         // authorized delivery. If it crashed, leave the running step for recovery.
@@ -2167,7 +2167,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           fgaProvider,
           nestedWorkflowStep,
           nestedRunId,
-          isFreshStart: nestedDispatch === 'start',
+          // Foreach pre-writes running before authorization, so it does not prove another delivery owns the step.
+          canDropRunningDenial: nestedDispatch === 'start' && step.type !== 'foreach',
           continueRedelivery,
         });
         if (!authorized) return;
