@@ -5,7 +5,6 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import { DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
-import { isMastraTimeoutError } from '../../loop/timeout';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
@@ -140,6 +139,7 @@ export class MastraLLMVNext extends MastraBase {
     eagerToolExecution,
     _internal,
     onTracingTripwire,
+    onTracingTerminalError,
     tracingScope = createRunScope(),
     agentId,
     agentVersionId,
@@ -240,6 +240,13 @@ export class MastraLLMVNext extends MastraBase {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
         tracingScope,
+        onTracingTerminalError: error => {
+          try {
+            modelSpanTracker?.reportGenerationError({ error, ...executionFailureTermination(error) });
+          } finally {
+            onTracingTerminalError?.(error);
+          }
+        },
         onTracingTripwire: (tripwire, usage, text) => {
           modelSpanTracker?.endGeneration({
             ...agentLoopTermination({ tripwire }),
@@ -300,9 +307,9 @@ export class MastraLLMVNext extends MastraBase {
             modelSpanTracker?.reportGenerationError({
               error,
               ...executionFailureTermination(error),
-              // A total deadline bypasses onFinish; all other settled errors retain
-              // the generation until that callback supplies usage and output.
-              endSpan: isMastraTimeoutError(error) && error.timeoutType === 'total',
+              // The stream owner separately reports errors that cannot reach onFinish.
+              // Retain this span until usage/output arrive or that terminal notification.
+              endSpan: false,
             });
             await options?.onError?.(event);
           },

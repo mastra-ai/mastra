@@ -3,6 +3,7 @@ import { expect, it, onTestFinished } from 'vitest';
 import { ModelSpanTracker } from '../../../../../../../observability/mastra/src/model-tracing';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
+import { createScorer } from '../../../../evals';
 import { SCENARIO_MODEL_ID } from '../types';
 import { SamplingStrategyType, SpanType, TracingEventType } from '../../../../observability';
 import { createTool } from '../../../../tools';
@@ -623,6 +624,70 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(await output.text).toBe('Recovered.');
     expect(ended().at(-1)).toMatchObject({ outcome: 'success' });
     expect(ended(SpanType.MODEL_GENERATION)).toMatchObject([{ outcome: 'success', stopReason: null }]);
+  });
+
+  it.each([false, true])('closes tracing after a hard workflow failure (onError throws=%s)', async throwsOnError => {
+    const { observability, ended } = capture();
+    const errors: Array<{ error: Error | string }> = [];
+    let finishes = 0;
+    const callbackError = new Error('Error callback failed');
+    const scorer = createScorer({
+      id: 'broken-completion-check',
+      description: 'Task completion service is unavailable',
+    }).generateScore(() => 1);
+    const { chunks, requests, streamError } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Answer briefly',
+      collectChunks: true,
+      expectStreamError: throwsOnError,
+      isTaskComplete: {
+        scorers: [scorer],
+        onComplete: () => {
+          throw new Error('Completion callback failed');
+        },
+      },
+      onError: event => {
+        errors.push(event);
+        if (throwsOnError) throw callbackError;
+      },
+      onFinish: () => {
+        finishes++;
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'Accepted reply' }),
+    });
+    expect(requests).toHaveLength(1);
+    if (engine === 'normal' || engine === 'fs') {
+      // Completion callback errors escape the workflow step on the in-process engine. This
+      // branch closes its stream after onError, without ever calling onFinish.
+      expect(finishes).toBe(0);
+      if (throwsOnError) expect(streamError).toBe(callbackError);
+      expect(chunks?.filter(chunk => chunk.type === 'finish')).toEqual([]);
+      const errorChunks = chunks?.filter(chunk => chunk.type === 'error');
+      expect(errorChunks).toHaveLength(1);
+      expect(errors).toHaveLength(1);
+      expect(Object.keys(errors[0]!)).toEqual(['error']);
+      expect(errors[0]!.error).toBe(errorChunks![0]!.payload.error);
+      for (const type of [SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+        expect(ended(type)).toHaveLength(1);
+        expect(ended(type)[0]).toMatchObject({
+          outcome: 'error',
+          stopReason: 'runtime_error',
+          endTime: expect.any(Date),
+        });
+      }
+      // Provider completion preceded the failing workflow callback.
+      expect(ended(SpanType.MODEL_INFERENCE)).toMatchObject([{ outcome: 'success' }]);
+    } else {
+      // Durable engines retain their existing best-effort grading policy;
+      // Inngest does not run these completion checks.
+      expect(errors).toEqual([]);
+      expect(finishes).toBe(1);
+      for (const type of [SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+        expect(ended(type)).toMatchObject([{ outcome: 'success' }]);
+      }
+    }
   });
 
   it('retains successful-step usage when the next provider request fails', async () => {

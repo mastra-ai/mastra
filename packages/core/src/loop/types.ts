@@ -234,6 +234,8 @@ export type AgentLoopResumeClaim = {
 export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   /** @internal Live per-run tracing state, never part of step I/O or snapshots. */
   tracingScope?: import('../mastra/run-scope').RunScope;
+  /** @internal End owned spans when the stream fails without a subsequent finish callback. */
+  onTracingTerminalError?: (error: Error) => void;
   /** @internal Observes a terminal stream tripwire without invoking user lifecycle hooks. */
   onTracingTripwire?: (
     tripwire: import('../stream/types').StepTripwireData,

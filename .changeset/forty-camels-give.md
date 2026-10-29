@@ -16,3 +16,5 @@ function recordGuardrailBlock(observability: ObservabilityInstance, processorId:
 ```
 
 The public `outcome`, `stopReason`, and `stopReasonContext` fields now also allow `null`. Exporter and other consumer types must handle `null` alongside an absent value; arbitrary custom outcome strings and context objects remain supported. Workflow events and durable snapshots can now include tripwire details, including processor-supplied metadata.
+
+Agent and generation spans also close when the internal workflow fails without a finish callback, while errors followed by a finish retain their final usage and output.

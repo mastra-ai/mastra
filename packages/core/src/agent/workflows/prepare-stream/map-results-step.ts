@@ -377,6 +377,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       agentRunSpan: agentSpan,
+      onTracingTerminalError: (error: Error) => {
+        agentSpan?.error({ error, ...executionFailureTermination(error), endTree: true });
+      },
       onTracingTripwire: (tripwire: StepTripwireData, text: string) => {
         agentSpan?.end({ ...agentLoopTermination({ tripwire }), output: { text }, endTree: true });
       },
@@ -577,14 +580,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
             }
           }
           const spanError = error instanceof Error ? error : new Error(String(error));
-          // Ordinary errors still produce onFinish, which records generation usage before
-          // ending the agent. A total deadline has no finish chunk and needs cleanup here.
-          const endsWithoutFinish = isMastraTimeoutError(error) && error.timeoutType === 'total';
+          // Record the failure without preempting model usage/output finalization.
+          // The stream owner notifies tracing separately if no finish will follow.
           agentSpan?.error({
             error: spanError,
             ...executionFailureTermination(error),
-            endSpan: endsWithoutFinish,
-            ...(endsWithoutFinish ? { endTree: true } : {}),
+            endSpan: false,
           });
           await options.onError?.({ error });
         },
