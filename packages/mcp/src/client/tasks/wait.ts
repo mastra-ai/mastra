@@ -55,6 +55,8 @@ const DEFAULT_MAX_OUTAGE_MS = 5 * 60_000;
 const MAX_OUTAGE_BACKOFF_MS = 30_000;
 /** The shortest wait between polls, whatever interval the server suggests, so a server can't make the client spin. */
 export const MIN_TASK_POLL_INTERVAL_MS = 100;
+/** Polls at least this often, whatever the server suggests. */
+export const MAX_TASK_POLL_INTERVAL_MS = 3_600_000;
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -157,7 +159,7 @@ export async function waitForTask(
     function pollIntervalOf(current: MCPTask): number {
       const suggested = current.pollIntervalMs ?? options.pollIntervalMs ?? DEFAULT_TASK_POLL_INTERVAL_MS;
       return Number.isFinite(suggested)
-        ? Math.max(MIN_TASK_POLL_INTERVAL_MS, suggested)
+        ? Math.min(MAX_TASK_POLL_INTERVAL_MS, Math.max(MIN_TASK_POLL_INTERVAL_MS, suggested))
         : DEFAULT_TASK_POLL_INTERVAL_MS;
     }
 

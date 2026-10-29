@@ -1,5 +1,8 @@
 import type { MCPClientTasksOptions } from '../types';
 
+/** `setTimeout` fires at once for longer delays. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 /** Normalises a server's `tasks` option; `undefined` means tasks are off. */
 export function resolveTasksOptions(
   serverName: string,
@@ -9,8 +12,10 @@ export function resolveTasksOptions(
   if (option === true) return {};
   for (const key of ['pollIntervalMs', 'maxWaitMs'] as const) {
     const value = option[key];
-    if (value !== undefined && (!Number.isInteger(value) || value <= 0)) {
-      throw new RangeError(`MCP server '${serverName}': tasks.${key} must be a positive integer`);
+    if (value !== undefined && (!Number.isInteger(value) || value <= 0 || value > MAX_TIMER_DELAY_MS)) {
+      throw new RangeError(
+        `MCP server '${serverName}': tasks.${key} must be a positive integer of at most ${MAX_TIMER_DELAY_MS}`,
+      );
     }
   }
   return option;

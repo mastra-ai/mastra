@@ -1889,15 +1889,22 @@ export class InternalMastraMCPClient extends MastraBase {
     const fail = (id: Uppercase<string>, text: string, cause?: unknown) =>
       new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, text, details }, cause);
 
+    // Captured once, like the tool-call path: a disconnect during the wait must not reconnect, and a
+    // recovery must compare against the transport the failed poll used, not whatever is current.
+    const lifecycleGeneration = this.lifecycleGeneration;
+    let polledTransport: Transport | undefined;
     let terminal: MCPTerminalTask;
     try {
       terminal = await waitForTask(
         {
-          get: (taskId, options) => this.taskRequester.get(taskId, options),
+          get: (taskId, options) => {
+            polledTransport = this.transport;
+            return this.taskRequester.get(taskId, options);
+          },
           update: (taskId, responses, options) => this.taskRequester.update(taskId, responses, options),
           cancel: taskId => this.taskRequester.cancel(taskId),
           isRecoverable: isRecoverableTaskPollError,
-          recover: () => this.reconnectAfterTransportFailure(this.transport, this.lifecycleGeneration),
+          recover: () => this.reconnectAfterTransportFailure(polledTransport, lifecycleGeneration),
         },
         task,
         {
