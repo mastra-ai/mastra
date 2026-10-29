@@ -38,6 +38,7 @@ describe('knowledgePositionBetween', () => {
     const first = knowledgePositionBetween();
     const second = knowledgePositionBetween(first);
     const between = knowledgePositionBetween(first, second);
+    expect(between > first && between < second).toBe(true);
     expect(knowledgePositionBetween(between) > between).toBe(true);
     for (const old of ['i', 'k', 'z', 'zi', 'zzzzk', '2']) {
       const key = knowledgePositionBetween(old);

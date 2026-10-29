@@ -371,7 +371,8 @@ function positionAfter(before: string): string {
 /**
  * A position key strictly between `before` and `after` (either may be absent), for fractional
  * sibling ordering. Keys are base-36 strings compared by code unit and never end in `0`, so there's
- * always room between two keys.
+ * always room between two keys. Appends stay short; prepends (no `before`) still halve toward `0`
+ * and grow by about a character every few calls, so nothing should prepend in a loop.
  *
  * @experimental
  */
