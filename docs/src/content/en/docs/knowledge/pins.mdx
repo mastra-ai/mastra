@@ -74,7 +74,9 @@ const knowledge = new Knowledge({
 })
 ```
 
-A config pin is a keyed page reference, `<scope>#<key>`. Its `$params` bind from the scope the run holds: a run holding `role:acme:support` gets `policy:acme#refund-policy`, and a run holding `role:globex:support` gets Globex's own `policy:globex#refund-policy`. The page normally comes from the target scope's `pages` template. Until the page exists and has a body, the pin delivers nothing, without an error.
+A config pin is a page path, `<scope>#<key>[/<key>…]`, such as `policy:$orgId#refund-policy` or `org:$orgId#policies/refund`. Its `$params` bind from the scope the run holds: a run holding `role:acme:support` gets `policy:acme#refund-policy`, and a run holding `role:globex:support` gets Globex's own `policy:globex#refund-policy`. A malformed path fails at startup.
+
+Knowledge resolves the path on every run. Point it at a template page from the target scope's `pages`, which tools can't move away. A pin at an ordinary page stops delivering if the page is moved, so update the pin when you move it. Until the page exists and has a body, the pin delivers nothing, without an error or a log.
 
 | Run holds | Gets Refund Policy pinned | Can unpin |
 | - | - | - |
@@ -92,7 +94,7 @@ Agents add and remove stored pins at runtime with `knowledge_pin`. `audience` li
 { "op": "pin", "page": "policy:acme#refund-policy", "audience": ["role:acme:support"] }
 ```
 
-`op: "unpin"` takes the same arguments and removes those audience entries. `page` takes a page ID, a `<scope>#<key>` reference or an exact page name, as the other tools do.
+`op: "unpin"` takes the same arguments and removes those audience entries. `page` takes a page ID, a path or an exact page name, as the other tools do. A stored pin keeps the page's ID, so it follows the page when the page moves.
 
 Pinning and unpinning need two things:
 

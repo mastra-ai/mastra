@@ -160,7 +160,7 @@ This shapes two setups:
 
 ## Check what a run can reach
 
-`explainAccess()` tells you a run's role on a scope or page and the rules that give it. Pass the raw run scopes and a scope address, a page id or `<scope>#<key>`:
+`explainAccess()` tells you a run's role on a scope or page and the rules that give it. Pass the raw run scopes and a scope address, a page id or a page path such as `policy:acme#refund-policy`:
 
 ```typescript
 await knowledge.explainAccess(['org:acme', 'role:acme:admin'], { scope: 'team:acme:support' })

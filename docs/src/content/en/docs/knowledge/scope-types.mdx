@@ -133,7 +133,7 @@ The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from
 
 ## Child scopes and keyed pages
 
-`children` declares scopes created with each scope of the type, at `<address>/<name>`. `pages` declares keyed pages created there:
+`children` declares scopes created with each scope of the type, at `<address>/<name>`. `pages` declares template pages, keyed pages every scope of the type has. A template can list its own `pages` to nest them:
 
 ```typescript oxfmt:false
 'team:$orgId:$teamId': {
@@ -148,11 +148,27 @@ The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from
       access: [{ principal: 'team:$orgId:$teamId', role: 'editor' }],
     },
   ],
-  pages: [{ key: 'handbook', name: 'Team Handbook' }],
+  pages: [
+    {
+      key: 'handbook',
+      name: 'Team Handbook',
+      pages: [{ key: 'on-call', name: 'On-call rota' }],
+    },
+  ],
 },
 ```
 
-Every team now has `team:acme:support/private` and a page the tools can name as `team:acme:support#handbook`.
+Every team now has `team:acme:support/private`, a page the tools can name as `team:acme:support#handbook`, and a page under it at `team:acme:support#handbook/on-call`.
+
+Keys are unique among siblings and can't contain `/`, `#` or `%`. A duplicate or invalid key fails at startup.
+
+Template pages belong to the config:
+
+- Runs create any template page a scope is missing, including ones you add to the config later. A page already sitting at that path is adopted instead, and becomes a template page.
+- Tools can edit a template page's name, description and body under the usual roles, add notes to it, and merge other pages into it.
+- Tools can't move a template page or merge it away. They get `"team:acme:support#handbook" is declared in config; change the scope's pages to move it.`
+- A page you take out of `pages` becomes an ordinary page and keeps its key. Putting the template back adopts the page at that path, with its body and notes. If the page has moved, the run creates a new one there.
+- If host code deletes a template page through the store, the next run creates a new, empty one at that path.
 
 A child gets no rules from its parent. List every rule it needs, with params bound from the parent's address. In a child's rules `self` is the child, which no run holds, so name the parent's pattern as the principal, as above. A run holding `org:acme` reads the team's pages but not the private child's.
 

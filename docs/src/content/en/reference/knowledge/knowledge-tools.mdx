@@ -35,7 +35,7 @@ Arguments named `page` (and `into`, `parent`) take any of these:
 
 - a page ID;
 - a scope address, such as `org:acme`, for the scope's own page;
-- a keyed page, `<scope>#<key>`, such as `policy:acme#refund-policy`;
+- a page path, `<scope>#<key>[/<key>…]`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`. A `/` before the `#` names a child scope; after it, a child page. Paths resolve when used. A moved page answers only to its new path;
 - an exact page name.
 
 A name that matches more than one readable page is refused with the candidate IDs:
@@ -110,7 +110,13 @@ Creates, edits, moves and merges pages. `scope` only names the destination: the 
     description: "Merge: the page that remains. Both pages' notes are kept.",
     isOptional: true,
   },
-  { name: 'key', type: 'string', description: 'Create: a stable key, unique in the scope.', isOptional: true },
+  {
+    name: 'key',
+    type: 'string',
+    description:
+      'Create: one path segment, unique among the page\'s siblings, with no "/", "#" or "%". `parent` supplies the rest of the path.',
+    isOptional: true,
+  },
   { name: 'name', type: 'string', description: 'The page name. Required on create.', isOptional: true },
   {
     name: 'description',
@@ -136,6 +142,8 @@ Creates, edits, moves and merges pages. `scope` only names the destination: the 
 | Move to another scope | `owner` on the page's scope and on `scope` |
 | Merge | `owner` on the merged page's scope, `editor` on the scope of `into` |
 
+Template pages, declared in a scope's `pages`, can be edited, given notes and merged into, but not moved or merged away, whatever the run's role.
+
 Errors:
 
 ```text
@@ -144,6 +152,11 @@ Editing a page needs at least one of name, description or body.
 Editing a page takes no scope, parent or key; use op "move" to relocate it.
 Moving a page needs the destination scope.
 Merging needs into: the page that remains.
+Knowledge page "org:acme#policies/escalation" not found.
+Knowledge page key "a/b" must not contain "/", "#" or "%"
+Knowledge page key "escalation" already exists under page aa8f6099-6111-4952-b9cb-04cb97eb2bb5. Keys are unique among siblings; pick another key or move one of the pages.
+"org:acme#policies/refund" is declared in config; change the scope's pages to move it.
+"org:acme#policies/refund" is declared in config; change the scope's pages to remove it.
 Editing a page needs editor on "team:acme:support"; this run has viewer there.
 Moving a page across scopes needs owner on "org:acme"; this run has editor there.
 Merging a page away needs owner on "team:acme:support"; this run has editor there.

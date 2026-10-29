@@ -95,7 +95,12 @@ Editing a page needs editor on "policy:acme"; this run has viewer there.
 
 A **page** is a topic with a name, a short description and a body. Each page has one home scope and can sit under a parent page. A scope holds a tree of pages. The body is the curated summary of the topic, and only editors change it.
 
-Tools refer to a page by its ID, by `<scope>#<key>` for pages created with a key (such as `policy:acme#refund-policy`), or by its exact name. A name that matches more than one readable page is refused with the candidate IDs.
+A page can have a **key**, a short name unique among its siblings. Tools refer to a page by its ID, by its path, or by its exact name:
+
+- A path is the scope address, `#`, then the keys from the top of the tree down, joined with `/`: `policy:acme#refund-policy` for a top-level page, `org:acme#policies/refund` for the `refund` page under `policies`.
+- A `/` before the `#` names a child scope, and a `/` after it names a child page. `org:acme/private#refund` and `org:acme#private/refund` are different pages.
+- A path resolves when it's used. A moved page answers to its new path, and the old path finds nothing.
+- A name that matches more than one readable page is refused with the candidate IDs.
 
 ## Notes
 

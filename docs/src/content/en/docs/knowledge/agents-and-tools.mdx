@@ -41,10 +41,16 @@ Every tool that takes a `page` accepts:
 
 - the page ID
 - a scope address, such as `org:acme`, which reads that scope
-- `<scope>#<key>` for a page created with a key, such as `policy:acme#refund-policy`
+- a page path: the scope address, `#`, then the page keys from the top of the tree joined with `/`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`
 - the page's exact name
 
-A name that matches more than one readable page is refused, and the error lists the candidate IDs. A page the run can't read is reported as not found, the same as a page that doesn't exist.
+A `/` before the `#` names a child scope and a `/` after it names a child page. A path resolves when it's used: after a move, the page answers to its new path and the old one finds nothing.
+
+A name that matches more than one readable page is refused, and the error lists the candidate IDs. A page the run can't read is reported as not found, the same as a page that doesn't exist:
+
+```text
+Knowledge page "org:acme#policies/escalation" not found.
+```
 
 ## Search and read
 
@@ -80,7 +86,11 @@ Create a page in a scope:
 }
 ```
 
-Creating needs `contributor` on `scope`. Add `parent` to create it under another page in the same scope, and `key` to give it a stable key that `<scope>#<key>` can refer to.
+Creating needs `contributor` on `scope`. Add `parent` to create it under another page in the same scope, and `key` to give it a path. `key` is one segment; `parent` supplies the rest, so `"key": "escalation", "parent": "org:acme#policies"` creates `org:acme#policies/escalation`. Keys are unique among siblings and can't contain `/`, `#` or `%`:
+
+```text
+Knowledge page key "escalation" already exists under page aa8f6099-…. Keys are unique among siblings; pick another key or move one of the pages.
+```
 
 Edit a page's name, description or body:
 
@@ -113,6 +123,12 @@ Moving a page across scopes needs owner on "org:acme"; this run has editor there
 
 ```json
 { "op": "merge", "page": "Dana prefs", "into": "Ticket notes" }
+```
+
+Pages declared in a scope's `pages` [template](/docs/knowledge/scope-types#child-scopes-and-keyed-pages) belong to the config. Tools can edit them, add notes and merge other pages into them, but can't move them or merge them away:
+
+```text
+"org:acme#policies/refund" is declared in config; change the scope's pages to move it.
 ```
 
 ## Where writes land

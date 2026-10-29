@@ -163,7 +163,7 @@ explainAccess(
 ): Promise<KnowledgeAccessExplanation>
 ```
 
-Says why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are raw run scopes, as you'd pass to an agent. `target.page` takes a page ID or `<scope>#<key>`. A run scope with no declaration throws, as it does at run start:
+Says why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are raw run scopes, as you'd pass to an agent. `target.page` takes a page ID or a page path such as `org:acme#policies/refund`. A run scope with no declaration throws, as it does at run start:
 
 ```text
 Knowledge run scope "project:x" does not match a declared scope type. Declare it in Knowledge `scopes` (for Memory's resource:/thread: scopes, spread `...knowledgeMemoryScopes()`).
@@ -238,7 +238,7 @@ Host code such as admin pages, deletes and your own import scripts uses the retu
 const store = await knowledge.getStorage()
 const read = await knowledge.readScopeFor(['org:acme'])
 const [scope] = await store.getScopesByAddress(['team:acme:support'])
-const page = await store.getPageByKey({ scopeId: scope.id, key: 'refunds', read })
+const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', 'refunds'], read })
 ```
 
 ### `pinnedContextEnabled`
