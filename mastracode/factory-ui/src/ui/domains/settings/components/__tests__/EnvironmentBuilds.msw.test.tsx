@@ -12,7 +12,7 @@ import type {
   FactoryEnvironmentPatch,
   FactoryEnvironmentPayload,
 } from '../../../workspaces/services/environment';
-import { EnvironmentSection } from '../EnvironmentSection';
+import { FactoryManagementSection } from '../FactoryManagementSection';
 import {
   buildHistory,
   buildTriggers,
@@ -32,7 +32,6 @@ function useFactory() {
   );
 }
 
-/** Serves the environment from a mutable holder so a handler can change what the next GET returns. */
 function useEnvironment(holder: { environment: FactoryEnvironmentPayload }) {
   const reads = { count: 0 };
   server.use(
@@ -47,8 +46,8 @@ function useEnvironment(holder: { environment: FactoryEnvironmentPayload }) {
 function recordPatches(holder: { environment: FactoryEnvironmentPayload }) {
   const patches: FactoryEnvironmentPatch[] = [];
   server.use(
-    http.patch(ENVIRONMENT_URL, async ({ request }) => {
-      const patch = (await request.json()) as FactoryEnvironmentPatch;
+    http.patch<never, FactoryEnvironmentPatch>(ENVIRONMENT_URL, async ({ request }) => {
+      const patch = await request.json();
       patches.push(patch);
       const schedule = patch.buildTriggers?.schedule;
       if (schedule && holder.environment.buildTriggers) {
@@ -72,9 +71,9 @@ function recordPatches(holder: { environment: FactoryEnvironmentPayload }) {
 
 function renderEnvironmentSettings() {
   renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/environment`]}>
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/factory`]}>
       <Routes>
-        <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+        <Route path="/factories/:factoryId/settings/factory" element={<FactoryManagementSection />} />
       </Routes>
       <Toaster position="bottom-right" />
     </MemoryRouter>,
@@ -88,7 +87,7 @@ describe('Environment builds', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /build now/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
     expect(screen.queryByRole('switch', { name: 'Rebuild on push' })).toBeNull();
@@ -128,12 +127,8 @@ describe('Environment builds', () => {
     expect(await screen.findByText('Build started')).toBeInTheDocument();
     expect(posts).toBe(1);
     expect(await screen.findByText('Building')).toBeInTheDocument();
-    // The second status read answers ready; the poll interval is 10 s, so force the refetch React Query
-    // does when the tab becomes visible again.
     window.dispatchEvent(new Event('visibilitychange'));
     expect(await screen.findByText('Ready', {}, { timeout: 5_000 })).toBeInTheDocument();
-    // The workflow pins the template on its own poll after the provider reports
-    // ready, so the environment keeps refetching every 5 s until the pin shows.
     const readsAtReady = reads.count;
     holder.environment = { ...holder.environment, activeTemplateId: 'tpl-1' };
     await waitFor(() => expect(reads.count).toBeGreaterThan(readsAtReady), { timeout: 8_000 });

@@ -369,8 +369,8 @@ describe('Drawer', () => {
     expect(popup?.getAttribute('data-size')).toBe('lg');
     expect(popup?.classList.contains('w-2xl')).toBe(true);
     expect(popup?.classList.contains('w-[32rem]')).toBe(false);
-    expect(viewport?.classList.contains('w-[calc(var(--container-2xl)+1.5rem)]')).toBe(true);
-    expect(viewport?.classList.contains('sm:w-[calc(var(--container-2xl)+2rem)]')).toBe(true);
+    expect(viewport?.classList.contains('w-[calc(42rem+1.5rem)]')).toBe(true);
+    expect(viewport?.classList.contains('sm:w-[calc(42rem+2rem)]')).toBe(true);
     expect(viewport?.classList.contains('w-[calc(32rem+1.5rem)]')).toBe(false);
   });
 
@@ -401,9 +401,9 @@ describe('Drawer', () => {
     );
 
     const viewport = document.querySelector('[data-slot="drawer-viewport"]');
-    expect(viewport?.classList.contains('w-[calc(var(--container-4xl)+1.5rem)]')).toBe(true);
-    expect(viewport?.classList.contains('sm:w-[calc(var(--container-4xl)+2rem)]')).toBe(true);
-    expect(viewport?.classList.contains('w-[calc(var(--container-2xl)+1.5rem)]')).toBe(false);
+    expect(viewport?.classList.contains('w-[calc(56rem+1.5rem)]')).toBe(true);
+    expect(viewport?.classList.contains('sm:w-[calc(56rem+2rem)]')).toBe(true);
+    expect(viewport?.classList.contains('w-[calc(42rem+1.5rem)]')).toBe(false);
   });
 
   it('keeps top and bottom drawers full width regardless of `size`', () => {

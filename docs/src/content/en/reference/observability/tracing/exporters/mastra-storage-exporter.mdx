@@ -17,6 +17,10 @@ Persists traces to Mastra's configured storage with automatic batching and retry
 
 :::
 
+## Span previews
+
+`MastraStorageExporter` automatically generates short, readable `inputPreview`, `outputPreview`, and `errorPreview` summaries based on the span type. Each preview contains up to 100 characters plus an ellipsis when truncated. Full payloads remain available separately.
+
 ## Constructor
 
 ```typescript oxfmt:false

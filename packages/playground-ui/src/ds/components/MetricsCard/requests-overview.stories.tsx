@@ -5,9 +5,9 @@ import type { ReactNode } from 'react';
 import { MetricsCardGroup } from '../MetricsCardGroup';
 import { MetricsKpiCard } from '../MetricsKpiCard';
 import { MetricsLineChart } from '../MetricsLineChart';
-import { MetricsShareList } from '../MetricsShareList';
-import type { MetricsShareListColumn, MetricsShareListRow } from '../MetricsShareList';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
+import { MetricsTable } from '../MetricsTable';
+import type { MetricsTableColumn } from '../MetricsTable';
 import { Txt } from '../Txt';
 import { MetricsCard } from './metrics-card';
 import {
@@ -137,60 +137,39 @@ const duration = (value: number) => {
   return hours >= 1 ? `${hours.toFixed(1)}h` : `${Math.round(value / 60_000)}m`;
 };
 
-type Column = MetricsShareListColumn & { cell: (r: RouteStat) => string };
+type Column = { id: string; header: string; cell: (r: RouteStat) => string; sort: (r: RouteStat) => number };
 
 const COLUMNS = {
-  requests: { label: 'Requests', width: 'w-16', cell: r => count(r.requests) },
-  rate: { label: '5xx rate', width: 'w-16', cell: r => percent(r.e5xx / r.requests) },
-  c4xx: { label: '4xx', width: 'w-14', cell: r => count(r.e4xx) },
-  p50: { label: 'P50', width: 'w-14', cell: r => ms(r.p50) },
-  p95: { label: 'P95', width: 'w-14', cell: r => ms(r.p95) },
+  requests: { id: 'requests', header: 'Requests', cell: r => count(r.requests), sort: r => r.requests },
+  rate: { id: 'rate', header: '5xx rate', cell: r => percent(r.e5xx / r.requests), sort: r => r.e5xx / r.requests },
+  c4xx: { id: 'c4xx', header: '4xx', cell: r => count(r.e4xx), sort: r => r.e4xx },
+  p50: { id: 'p50', header: 'P50', cell: r => ms(r.p50), sort: r => r.p50 },
+  p95: { id: 'p95', header: 'P95', cell: r => ms(r.p95), sort: r => r.p95 },
 } satisfies Record<string, Column>;
 
 /**
- * Per lens: the measure the strip divides (it must add up to a total, so "Time spent" shares
- * requests x latency rather than P95), its column, and the supporting columns.
+ * Per lens: the measure the table ranks by and its column, and the supporting columns. "Time
+ * spent" ranks by requests x latency, so the share column still adds up to a total.
  */
-const LENSES: Record<
-  Lens,
-  {
-    color: string;
-    share: (r: RouteStat) => number;
-    value: (r: RouteStat) => string;
-    valueLabel: string;
-    valueWidth: string;
-    columns: Column[];
-    empty: string;
-  }
-> = {
+const LENSES: Record<Lens, { value: Column; columns: Column[]; empty: string }> = {
   busiest: {
-    color: 'var(--chart-blue)',
-    share: r => r.requests,
-    value: r => count(r.requests),
-    valueLabel: 'Requests',
-    valueWidth: 'w-16',
+    value: COLUMNS.requests,
     columns: [COLUMNS.rate, COLUMNS.p50, COLUMNS.p95],
     empty: 'No requests in this range.',
   },
   slowest: {
-    color: 'var(--chart-sequential-3)',
-    share: r => r.timeSpentMs,
-    value: r => duration(r.timeSpentMs),
-    valueLabel: 'Time spent',
-    valueWidth: 'w-20',
+    value: { id: 'time', header: 'Time spent', cell: r => duration(r.timeSpentMs), sort: r => r.timeSpentMs },
     columns: [COLUMNS.requests, COLUMNS.p50, COLUMNS.p95],
     empty: 'No requests in this range.',
   },
   failing: {
-    color: 'var(--chart-red)',
-    share: r => r.e5xx,
-    value: r => count(r.e5xx),
-    valueLabel: '5xx',
-    valueWidth: 'w-14',
+    value: { id: 'e5xx', header: '5xx', cell: r => count(r.e5xx), sort: r => r.e5xx },
     columns: [COLUMNS.requests, COLUMNS.c4xx, COLUMNS.rate],
     empty: 'No 5xx responses in this range.',
   },
 };
+
+const routeKey = (r: RouteStat) => `${r.method} ${r.path}`;
 
 function RouteName({ route }: { route: RouteStat }) {
   return (
@@ -209,20 +188,26 @@ function RoutesCard({ isLoading }: { isLoading: boolean }) {
   const [lens, setLens] = useState<Lens>('busiest');
   const [active, setActive] = useState<string>();
   const spec = LENSES[lens];
-  const rows: MetricsShareListRow[] = routeStats
-    .filter(r => spec.share(r) > 0)
-    .map(r => {
-      const key = `${r.method} ${r.path}`;
-      return {
-        key,
-        label: <RouteName route={r} />,
-        title: key,
-        share: spec.share(r),
-        value: spec.value(r),
-        cells: spec.columns.map(c => c.cell(r)),
-        onClick: () => setActive(current => (current === key ? undefined : key)),
-      };
-    });
+  const rows = routeStats.filter(r => spec.value.sort(r) > 0);
+  const total = rows.reduce((sum, r) => sum + spec.value.sort(r), 0);
+  const figure = (c: Column, muted: boolean): MetricsTableColumn<RouteStat> => ({
+    id: c.id,
+    header: c.header,
+    align: 'end',
+    sortValue: c.sort,
+    cell: r => <span className={muted ? 'text-muted-foreground tabular-nums' : 'tabular-nums'}>{c.cell(r)}</span>,
+  });
+  const columns: MetricsTableColumn<RouteStat>[] = [
+    { id: 'route', header: 'Route', width: 'minmax(16rem,3fr)', cell: r => <RouteName route={r} /> },
+    ...spec.columns.map(c => figure(c, true)),
+    {
+      id: 'share',
+      header: 'Share',
+      align: 'end',
+      cell: r => <span className="text-muted-foreground tabular-nums">{percent(spec.value.sort(r) / total)}</span>,
+    },
+    figure(spec.value, false),
+  ];
   return (
     <Card
       title="Routes"
@@ -236,22 +221,20 @@ function RoutesCard({ isLoading }: { isLoading: boolean }) {
           <MetricsCard.Tab value="slowest">Time spent</MetricsCard.Tab>
           <MetricsCard.Tab value="failing">Failing</MetricsCard.Tab>
         </MetricsCard.Tabs>
-        <MetricsShareList.Header columns={spec.columns} valueLabel={spec.valueLabel} valueWidth={spec.valueWidth} />
       </MetricsCard.Toolbar>
-      {/* Remount per lens, so paging and hover reset with the question. */}
-      <MetricsShareList
+      {/* Remount per lens, so sort and page reset with the question. */}
+      <MetricsTable
         key={lens}
+        aria-label="Routes"
+        columns={columns}
         rows={rows}
-        columns={spec.columns}
-        valueLabel={spec.valueLabel}
-        valueWidth={spec.valueWidth}
-        showHeader={false}
-        palette="hues"
-        color={spec.color}
-        limit={15}
-        overflow="more"
-        activeKey={active}
-        emptyState={spec.empty}
+        getRowKey={routeKey}
+        defaultSort={{ column: spec.value.id, direction: 'desc' }}
+        onRowClick={r => setActive(current => (current === routeKey(r) ? undefined : routeKey(r)))}
+        isRowActive={r => routeKey(r) === active}
+        rowTitle={routeKey}
+        pageSize={15}
+        empty={spec.empty}
         isLoading={isLoading}
       />
     </Card>

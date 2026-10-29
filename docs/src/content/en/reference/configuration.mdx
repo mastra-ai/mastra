@@ -1173,6 +1173,8 @@ export const mastra = new Mastra({
 
 Request timeout in milliseconds. Requests that exceed this duration will be terminated.
 
+On serverless platforms this limit is independent of the platform's own function timeout. For example, the [Vercel deployer](/reference/deployer/vercel#request-timeouts) sets Vercel's limit with `maxDuration` (seconds) while `server.timeout` still applies, so long requests need both raised.
+
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 

@@ -405,6 +405,14 @@ const { messages, initialHistoryPagination } = useChat({
     description: 'Thread ID to subscribe to.',
   },
   {
+    name: 'withRunStatus',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Emit live and retained thread-run-status outcomes. Callback types include these chunks only when requested. useChat enables this for its thread subscription.',
+  },
+  {
     name: 'processDataStream().reconnect',
     type: 'boolean | { maxRetries?: number; delayMs?: number }',
     isOptional: true,

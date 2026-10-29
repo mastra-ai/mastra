@@ -6,6 +6,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
@@ -39,9 +40,10 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
-import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
@@ -196,7 +198,7 @@ interface DurablePreparationAgent {
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
-  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void;
+  __getSubscribePendingSignals(): (runId: string, listener: PendingSignalListener) => () => void;
   __getEnqueuePendingSignal(): (
     target: { runId: string; resourceId?: string; threadId?: string },
     signalInput: AgentSignalInput,
@@ -586,6 +588,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const startingSignal = signalSpanAttributes(messages);
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
+    outcome: null,
     name: `agent run: '${publicAgentId}'`,
     entityType: EntityType.AGENT,
     entityId: publicAgentId,
@@ -594,6 +597,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     attributes: {
       conversationId: threadId,
       instructions: convertInstructionsToString(instructions),
+      ...modelSpanAttributes(model),
       ...(startingSignal ? { signal: startingSignal } : {}),
       // @deprecated — use entityVersionId (top-level span context field) instead.
       // Kept for backward compatibility during migration.
@@ -658,7 +662,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           },
           error,
         );
-        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        agentSpan?.error({
+          error: inputProcessorError,
+          ...executionFailureTermination(inputProcessorError),
+          endTree: true,
+        });
         throw inputProcessorError;
       }
     }
@@ -833,6 +841,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // observability is off.
   const modelSpan = agentSpan?.createChildSpan({
     type: SpanType.MODEL_GENERATION,
+    outcome: null,
     name: `llm: '${model.modelId}'`,
     attributes: {
       model: model.modelId,

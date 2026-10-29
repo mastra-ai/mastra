@@ -3,7 +3,7 @@
  * one `thread-history` chunk from storage, then only the retained parts that
  * history does not already cover, then live parts.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list/types';
@@ -50,7 +50,7 @@ function setup(stored: () => MastraDBMessage[]) {
   ) => {
     const subscription = await runtime.subscribeToThread(
       agent,
-      { threadId, resourceId, withInitialHistory },
+      { threadId, resourceId, withInitialHistory, withRunStatus: true },
       ctx.pubsub,
     );
     const collected: any[] = [];
@@ -63,6 +63,138 @@ function setup(stored: () => MastraDBMessage[]) {
 }
 
 describe('subscribeToThread withInitialHistory', () => {
+  it('reports the lease owner even when a fresh runtime has no registration', async () => {
+    const { pubsub, subscribe } = setup(() => []);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const { subscription, collected, consumed } = await subscribe();
+    await nextTicks(10);
+    expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: runId } });
+    subscription.unsubscribe();
+    await consumed;
+  });
+
+  it.each([false, true])('normalizes a retake lease owner with settled=%s', async settled => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), `${runId}\u0000retake\u0000claim-token`);
+    if (settled) {
+      await emitRun(runId, streamId).registered();
+      await emitRun(runId, streamId).completed();
+    }
+    const { subscription, collected, consumed } = await subscribe();
+    try {
+      await nextTicks(10);
+      expect(collected[0]).toMatchObject({
+        type: 'thread-history',
+        payload: { activeRunId: settled ? null : runId },
+      });
+    } finally {
+      subscription.unsubscribe();
+      await consumed;
+    }
+  });
+
+  it('rechecks ownership when a follow-up run acquires the lease during hydration', async () => {
+    const { pubsub, subscribe } = setup(() => []);
+    vi.spyOn(pubsub, 'getLeaseOwner').mockResolvedValueOnce('old-run').mockResolvedValue('next-run');
+    const { subscription, collected, consumed } = await subscribe();
+    await nextTicks(10);
+    expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: 'next-run' } });
+    subscription.unsubscribe();
+    await consumed;
+  });
+
+  it('does not turn a failed lease read into an idle snapshot', async () => {
+    const { pubsub, subscribe } = setup(() => []);
+    vi.spyOn(pubsub, 'getLeaseOwner').mockRejectedValue(new Error('Lease unavailable'));
+    await expect(subscribe()).rejects.toThrow('Lease unavailable');
+  });
+
+  it('delivers deferred output before its outcome and keeps serving later runs', async () => {
+    const { emit, subscribe } = setup(() => []);
+    const { subscription, collected, consumed } = await subscribe(false);
+    try {
+      for (const id of ['first', 'second']) {
+        await emit({ type: 'run-registered', runId: id, streamId: id, streamSeq: 1 });
+        await emit({
+          type: 'stream-part',
+          runId: id,
+          streamId: id,
+          part: { type: 'text-delta', payload: { text: id } },
+        });
+        await emit({ type: 'run-completed', runId: id, streamId: id, persisted: true, status: 'success' });
+        await nextTicks(10);
+      }
+      expect(collected.map(p => [p.type, p.runId])).toEqual([
+        ['text-delta', 'first'],
+        ['thread-run-status', 'first'],
+        ['text-delta', 'second'],
+        ['thread-run-status', 'second'],
+      ]);
+    } finally {
+      subscription.unsubscribe();
+      await consumed;
+    }
+  });
+
+  it('recovers the authoritative outcome after a restart and trim of superseded executions (COR-1500)', async () => {
+    const { emit, pubsub, subscribe } = setup(() => []);
+    await emit({ type: 'run-registered', runId, streamId: 'old', streamSeq: 1, generation: 1 });
+    await emit({ type: 'run-registered', runId, streamId: 'new', streamSeq: 2, generation: 2, supersedes: true });
+    await emit({ type: 'run-completed', runId, streamId: 'old', status: 'failed', persisted: false });
+    await emit({ type: 'run-completed', runId, streamId: 'new', status: 'success', persisted: true });
+    await pubsub.trimTopic(topic, { runId, retainTerminalEvents: true });
+    const { subscription, collected, consumed } = await subscribe(true, new AgentThreadStreamRuntime());
+    await nextTicks(10);
+    expect(collected.filter(p => p.type === 'thread-run-status')).toEqual([
+      expect.objectContaining({ runId, payload: { status: 'success' } }),
+    ]);
+    subscription.unsubscribe();
+    await consumed;
+  });
+
+  it('does not let a superseded execution suppress the recovered run outcome', async () => {
+    const { emit, pubsub, subscribe } = setup(() => []);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const { subscription, collected, consumed } = await subscribe();
+    try {
+      await emit({ type: 'run-registered', runId, streamId: 'old', streamSeq: 1, generation: 1 });
+      await emit({ type: 'run-registered', runId, streamId: 'new', streamSeq: 2, generation: 2, supersedes: true });
+      await emit({ type: 'run-completed', runId, streamId: 'old', status: 'failed', persisted: false });
+      await emit({
+        type: 'stream-part',
+        runId,
+        streamId: 'new',
+        part: { type: 'text-delta', payload: { text: 'recovered' } },
+      });
+      await emit({ type: 'run-completed', runId, streamId: 'new', status: 'success', persisted: true });
+      await emit({ type: 'run-completed', runId, streamId: 'new', status: 'success', persisted: true });
+      await nextTicks(10);
+      expect(collected.filter(p => p.type === 'thread-run-status')).toEqual([
+        expect.objectContaining({ runId, payload: { status: 'success' } }),
+      ]);
+      expect(collected.findIndex(p => p.type === 'text-delta')).toBeLessThan(
+        collected.findIndex(p => p.type === 'thread-run-status'),
+      );
+    } finally {
+      subscription.unsubscribe();
+      await consumed;
+    }
+  });
+
+  it.each(['failed', 'canceled'] as const)(
+    'reports a retained %s outcome without replaying unsaved output',
+    async status => {
+      const { emit, subscribe } = setup(() => []);
+      await emit({ type: 'run-completed', runId, streamId, status, persisted: false });
+      const { subscription, collected, consumed } = await subscribe();
+      await nextTicks(10);
+      expect(collected.map(p => p.type)).toEqual(['thread-history', 'thread-run-status']);
+      expect(collected[1]).toMatchObject({ runId, payload: { status: status === 'canceled' ? 'aborted' : 'failed' } });
+      subscription.unsubscribe();
+      await consumed;
+    },
+  );
+
   it('emits history and drops every part of completed runs already stored', async () => {
     let stored: MastraDBMessage[] = [];
     const { emitRun, subscribe } = setup(() => stored);
@@ -81,7 +213,12 @@ describe('subscribeToThread withInitialHistory', () => {
     const { subscription, collected, consumed } = await subscribe();
     await nextTicks(10);
 
-    expect(collected.map(p => p.type)).toEqual(['thread-history']);
+    expect(collected.map(p => p.type)).toEqual(['thread-history', 'thread-run-status', 'thread-run-status']);
+    expect(collected.slice(1)).toMatchObject([
+      { runId: 'run-0', payload: { status: 'success' } },
+      { runId: 'run-1', payload: { status: 'success' } },
+    ]);
+    expect(collected[0].payload.activeRunId).toBeNull();
     expect(collected[0].payload.messages.map((m: MastraDBMessage) => m.id)).toEqual(['m1', 'm2']);
     subscription.unsubscribe();
     await consumed;
@@ -105,7 +242,7 @@ describe('subscribeToThread withInitialHistory', () => {
     const { subscription, collected, consumed } = await subscribe();
     await nextTicks(10);
 
-    expect(collected.map(p => p.type)).toEqual(['thread-history', 'tool-call-approval']);
+    expect(collected.map(p => p.type)).toEqual(['thread-history', 'tool-call-approval', 'thread-run-status']);
     subscription.unsubscribe();
     await consumed;
   });
@@ -130,7 +267,7 @@ describe('subscribeToThread withInitialHistory', () => {
     const { subscription, collected, consumed } = await subscribe();
     await nextTicks(10);
 
-    expect(collected.map(p => p.type)).toEqual(['thread-history']);
+    expect(collected.map(p => p.type)).toEqual(['thread-history', 'thread-run-status']);
     subscription.unsubscribe();
     await consumed;
   });

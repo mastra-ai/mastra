@@ -1,20 +1,18 @@
-import { useQueryThreads } from '@mastra/react/hooks/traces';
 import type { ThreadQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
+import { useThreadsListSource } from '../hooks/use-threads-list-source';
 import { buildThreadQueryWhere } from '../thread-filters';
 import { threadToListRow } from '../thread-list-row';
 import { ThreadsFilterBar } from './threads-filter-bar';
 import { useFeedbackAvailable, useTraceQueryAvailable } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
-import {
-  observabilityListQueryOptions,
-  useObservabilityListFilters,
-} from '@/domains/observability/hooks/use-observability-list-filters';
+import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import { THREAD_LIST_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-columns';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export type ThreadsExplorerBodyProps = {
@@ -46,10 +44,8 @@ export function ThreadsExplorerBody({
     };
   }, [timeRange, sort, tokens, groups]);
 
-  const { threads, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useQueryThreads({
-    query,
-    queryOptions: observabilityListQueryOptions,
-  });
+  const { threads, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } =
+    useThreadsListSource({ query, rolling: filters.rolling });
 
   const rows = useMemo(() => (threads ?? []).map(threadToListRow), [threads]);
   const selectedRow = rows.find(row => row.threadId === selectedThreadId);
@@ -103,6 +99,7 @@ export function ThreadsExplorerBody({
       >
         <TracesListView
           listId="all-threads"
+          columnPreferences={THREAD_LIST_COLUMN_PREFERENCES}
           traces={rows}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}

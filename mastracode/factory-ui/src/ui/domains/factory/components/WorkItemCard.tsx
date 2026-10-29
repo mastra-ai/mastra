@@ -3,6 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 
@@ -265,7 +266,8 @@ export function WorkItemCard({
           if (dragPayload) setDragPayload(event, dragPayload);
         }}
         className={cn(
-          'group relative flex min-h-36 flex-col gap-3 rounded-card border border-surface-rim bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
+          BOARD_CARD_LAYOUT_CLASS,
+          'group outline-none transition-colors hover:bg-fill-hover',
           // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
           wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',

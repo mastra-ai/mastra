@@ -1,5 +1,5 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { TRACES_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
+import { OBSERVABILITY_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/observability/list-polling';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -526,7 +526,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       serverDown = false;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS));
 
       expect(await screen.findByText('agent run: weather')).toBeTruthy();
     });
@@ -546,7 +546,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       const requestsAfterFailure = requests.length;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3));
 
       expect(requests).toHaveLength(requestsAfterFailure);
     });

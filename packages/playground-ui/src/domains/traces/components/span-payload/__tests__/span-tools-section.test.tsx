@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,21 +26,23 @@ const LAYOUTS = [
 ] as const;
 
 const toolsSection = () => {
-  const found = screen.getByText(/^Tools \(\d+\)$/).closest('[data-slot="span-payload-section"]');
+  const found = screen.getByText(/^Available tools \(\d+\)$/).closest('[data-slot="span-payload-section"]');
   if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');
   return found;
 };
 
 describe.each(LAYOUTS)('Tools section (%s)', (_layout, renderSpan) => {
-  const renderWithLinks = (span: SpanRecord) =>
-    renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
+  const renderWithLinks = (span: SpanRecord) => {
+    const view = renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
+    return view;
+  };
 
   describe('when a processor span recorded the tools offered to the model', () => {
     it('lists each tool with its description', () => {
       renderWithLinks(processorToolsSpan);
 
       const section = toolsSection();
-      expect(within(section).getByText('Tools (2)')).toBeTruthy();
+      expect(within(section).getByText('Available tools (2)')).toBeTruthy();
       expect(within(section).getByText('Suggests a recipe from what is in the fridge.')).toBeTruthy();
       expect(within(section).getByText('Reads a workspace file.')).toBeTruthy();
     });
@@ -59,7 +61,7 @@ describe.each(LAYOUTS)('Tools section (%s)', (_layout, renderSpan) => {
 
       const input = screen.getByText('Input').closest('[data-slot="span-payload-section"]');
       if (!(input instanceof HTMLElement)) throw new Error('Missing Input section');
-      expect(within(input).queryByText(/^Tools/)).toBeNull();
+      expect(within(input).queryByText(/^Available tools/)).toBeNull();
       expect(within(input).queryByText('Tool choice')).toBeNull();
       expect(within(input).getByText('What should I cook tonight?')).toBeTruthy();
     });
@@ -78,7 +80,7 @@ describe.each(LAYOUTS)('Tools section (%s)', (_layout, renderSpan) => {
     it('has no Tools section', () => {
       renderWithLinks(makeSpan({ spanId: 'span-no-tools', input: { prompt: 'hi' } }));
 
-      expect(screen.queryByText(/^Tools \(\d+\)$/)).toBeNull();
+      expect(screen.queryByText(/^Available tools \(\d+\)$/)).toBeNull();
     });
   });
 });

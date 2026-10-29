@@ -14,7 +14,7 @@ import type { Agent } from '../agent';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
-import type { AgentSignalType, CreatedAgentSignal } from '../agent/signals';
+import type { PendingSignalListener, AgentSignalType, CreatedAgentSignal } from '../agent/signals';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -169,7 +169,7 @@ export type StreamInternal = {
   /** @deprecated Use `runScope.get(DRAIN_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   /** @deprecated Use `runScope.get(SUBSCRIBE_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
-  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
+  subscribePendingSignals?: (runId: string, listener: PendingSignalListener) => () => void;
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */
@@ -232,6 +232,16 @@ export type AgentLoopResumeClaim = {
 };
 
 export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
+  /** @internal Live per-run tracing state, never part of step I/O or snapshots. */
+  tracingScope?: import('../mastra/run-scope').RunScope;
+  /** @internal End owned spans when the stream fails without a subsequent finish callback. */
+  onTracingTerminalError?: (error: Error) => void;
+  /** @internal Observes a terminal stream tripwire without invoking user lifecycle hooks. */
+  onTracingTripwire?: (
+    tripwire: import('../stream/types').StepTripwireData,
+    usage: import('../stream/types').LanguageModelUsage,
+    text: string,
+  ) => void;
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;

@@ -2,12 +2,13 @@ import EventEmitter from 'node:events';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
+import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { resolveExportedSpanId } from '../../../observability';
+import { SpanType, resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import { coverNestedRun } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
@@ -21,8 +22,10 @@ import type {
   StepSuccess,
   TimeTravelExecutionParams,
   WorkflowRunState,
+  WorkflowRunStatus,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
+import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
 import type { ScheduledWorkflowTrigger } from '../../scheduler/types';
 import {
@@ -546,6 +549,34 @@ export class WorkflowEventProcessor extends EventProcessor {
       current = this.parentChildRelationships.get(current);
     }
     return undefined;
+  }
+
+  private endRunSpans(args: ProcessorArgs, status: WorkflowRunStatus) {
+    const failure = args.prevResult?.status === 'failed' ? args.prevResult : undefined;
+    const termination =
+      failure && args.workflow?.options?.isOwnershipLostError?.(failure.error)
+        ? { outcome: 'interrupted' as const, stopReason: null, stopReasonContext: null }
+        : workflowTermination({
+            status,
+            error: failure?.error,
+            tripwire: failure?.tripwire,
+          });
+    const root = this.mastra.__getRunTracingContext(args.runId)?.currentSpan;
+    if (root?.type === SpanType.WORKFLOW_RUN && root.entityId === args.workflowId) {
+      completeWorkflowSpan(
+        root,
+        failure && termination.outcome !== 'interrupted'
+          ? { error: { ...termination, error: getErrorFromUnknown(failure?.error), endTree: true } }
+          : {
+              end: {
+                ...termination,
+                output: args.prevResult?.status === 'success' ? args.prevResult.output : undefined,
+                endTree: true,
+              },
+            },
+      );
+      this.mastra.__unregisterRunTracingContext(args.runId);
+    }
   }
 
   /**
@@ -1197,6 +1228,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    this.endRunSpans(args, finalStatus);
+
     if (perStep) {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
@@ -1231,6 +1264,47 @@ export class WorkflowEventProcessor extends EventProcessor {
         deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
       },
     });
+  }
+
+  private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
+    for (;;) {
+      try {
+        await this.mastra.pubsub.publish('workflows-finish', event);
+        return;
+      } catch (error) {
+        if (!(error instanceof PublisherQueueLimitError)) {
+          throw error;
+        }
+        if (error.waitForCapacity) {
+          await error.waitForCapacity();
+          continue;
+        }
+        // Only permanently oversized results need a compact notification. If
+        // the broker stays stalled, even this notification cannot be delivered.
+        const notification = {
+          type: 'workflow.publish-failed',
+          runId: event.runId,
+          data: {
+            message: error.message,
+            workflowId: event.data.workflowId,
+            runId: event.runId,
+            requestContext: event.data.requestContext,
+            finishPendingCleanup: event.data.finishPendingCleanup,
+          },
+        };
+        for (;;) {
+          try {
+            await this.mastra.pubsub.publish('workflows-finish', notification);
+            return;
+          } catch (notificationError) {
+            if (!(notificationError instanceof PublisherQueueLimitError) || !notificationError.waitForCapacity) {
+              throw notificationError;
+            }
+            await notificationError.waitForCapacity();
+          }
+        }
+      }
+    }
   }
 
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
@@ -1274,6 +1348,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
+
+    this.endRunSpans(args, perStep ? 'paused' : (args.prevResult?.status ?? 'pending'));
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
@@ -1362,10 +1438,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.end',
       runId,
-      data: { ...finishArgs, workflow: undefined, state: finalState },
+      data: {
+        ...finishArgs,
+        workflow: undefined,
+        state: finalState,
+        finishPendingCleanup: deleteSnapshotAfterEnd === true,
+      },
     });
 
     if (deleteSnapshotAfterEnd === true) {
@@ -1377,6 +1458,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
+      await this.publishFinishEvent({
+        type: 'workflow.finish-cleanup-complete',
+        runId,
+        data: { workflowId, requestContext },
+      });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1387,6 +1473,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
+    this.endRunSpans(args, 'suspended');
     const {
       workflow,
       executionPath,
@@ -1470,7 +1557,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.suspend',
       runId,
       data: { ...args, workflow: undefined, state: finalState },
@@ -1499,6 +1586,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowFail(args: ProcessorArgs) {
+    this.endRunSpans(args, 'failed');
     const {
       workflowId,
       runId,
@@ -1594,10 +1682,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.fail',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: { ...args, workflow: undefined, state: finalState, finishPendingCleanup: !ownershipLost && !shouldPersist },
     });
 
     if (!ownershipLost && !shouldPersist) {
@@ -1607,6 +1695,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
+      await this.publishFinishEvent({
+        type: 'workflow.finish-cleanup-complete',
+        runId,
+        data: { workflowId, requestContext },
+      });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -2892,40 +2985,39 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
         return;
-      } else {
-        if (guardStart && !completedResult) {
-          await workflowsStore!.updateWorkflowResults({
-            workflowName: workflowId,
-            runId,
-            stepId: leafId,
-            result: stepResult,
-            requestContext: withoutAuthToken(requestContext),
-            completionGuard: { eventId: args.eventId! },
-          });
-        }
-        if (guardStart) stepResults[leafId] = stepResult;
-        return this.mastra.pubsub.publish('workflows', {
-          type: 'workflow.step.run',
+      }
+      if (guardStart && !completedResult) {
+        await workflowsStore!.updateWorkflowResults({
+          workflowName: workflowId,
           runId,
-          data: {
-            parentWorkflow,
-            workflowId,
-            runId,
-            executionPath,
-            resumeSteps,
-            stepResults,
-            timeTravel,
-            restart,
-            prevResult,
-            activeStepsPath,
-            requestContext,
-            actor,
-            retryCount: retryCount + 1,
-            state: currentState,
-            outputOptions,
-          },
+          stepId: leafId,
+          result: stepResult,
+          requestContext: withoutAuthToken(requestContext),
+          completionGuard: { eventId: args.eventId! },
         });
       }
+      if (guardStart) stepResults[leafId] = stepResult;
+      return this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          timeTravel,
+          restart,
+          prevResult,
+          activeStepsPath,
+          requestContext,
+          actor,
+          retryCount: retryCount + 1,
+          state: currentState,
+          outputOptions,
+        },
+      });
     }
 
     if (step.type === 'loop' && stepResult.status === 'suspended') {

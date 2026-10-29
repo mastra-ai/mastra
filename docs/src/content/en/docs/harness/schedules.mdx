@@ -20,6 +20,8 @@ Schedules require a [storage](/docs/storage) adapter that implements the schedul
 
 :::
 
+Persisting a schedule doesn't guarantee delivery of each occurrence. Publication is best-effort: the scheduler makes up to three publication attempts, but exhausted attempts or a publisher crash can skip an occurrence. Skipped occurrences aren't replayed, while later recurring fires can continue. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
+
 ## Quickstart
 
 The following schedule runs the `pinger` agent every hour. It has no thread, so each fire is an isolated `agent.generate()` run.

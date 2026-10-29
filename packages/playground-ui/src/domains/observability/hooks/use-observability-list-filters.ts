@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
+import { recoveryRefetchInterval } from '@/domains/observability/list-polling';
 import {
   DEFAULT_TRACES_FILTERS,
   resolveTracesDateWindow,
 } from '@/domains/traces/components/traces-explorer/traces-explorer-actions';
-import { recoveryRefetchInterval } from '@/domains/traces/hooks/use-traces-list-source';
 import { resolveTraceQueryTimeRange } from '@/domains/traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '@/domains/traces/trace-query-filters';
 import type { TraceDatePreset } from '@/domains/traces/types';
@@ -68,6 +68,8 @@ export function useObservabilityListFilters() {
     dateFrom,
     dateTo,
     timeRange,
+    /** The window ends at "now", so new rows can still land in it. */
+    rolling: dateTo === undefined,
     tokens,
     groups,
     sort,

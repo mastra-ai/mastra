@@ -79,6 +79,7 @@ function renderModelCredential({
   const models: ChatModelsApi = {
     activeModelId: modelId,
     defaultModelId: undefined,
+    pendingModelId: undefined,
     isLoading: false,
     error: undefined,
     setModel: async () => {},

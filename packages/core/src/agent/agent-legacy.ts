@@ -39,6 +39,7 @@ import type { OutputWriter } from '../workflows';
 import { assertThreadOwnedByResource } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
+import { modelSpanAttributes } from './model-span-attributes';
 import { deriveAgentRunRequestContext, parseAgentScope, resolveAgentScopes } from './scopes';
 import type {
   ZodSchema,
@@ -245,6 +246,7 @@ export class AgentLegacyHandler {
   private __primitive({
     instructions,
     messages,
+    model,
     context,
     thread,
     memoryConfig,
@@ -263,6 +265,8 @@ export class AgentLegacyHandler {
     ...rest
   }: {
     instructions: AgentInstructions;
+    /** The resolved model this run was prepared with, named on the AGENT_RUN span */
+    model?: { modelId?: unknown; provider?: unknown };
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -294,6 +298,7 @@ export class AgentLegacyHandler {
           },
           attributes: {
             instructions: this.capabilities.convertInstructionsToString(instructions),
+            ...modelSpanAttributes(model),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
@@ -879,6 +884,7 @@ export class AgentLegacyHandler {
     const { before, after } = this.__primitive({
       messages,
       instructions,
+      model: llm.getModel(),
       context,
       thread: threadFromArgs,
       memoryConfig,
