@@ -5,7 +5,7 @@
  * and passed to tool execution context.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';

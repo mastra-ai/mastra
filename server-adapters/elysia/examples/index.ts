@@ -227,7 +227,7 @@ const planActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ getInitData, inputData, mastra }) => {
-    const { city } = getInitData();
+    const { city } = getInitData<typeof weatherWorkflow>();
     const forecast = inputData;
 
     const prompt = `Based on the following weather forecast for ${city}, suggest appropriate activities:
@@ -375,7 +375,7 @@ const travelPlannerStep = createStep({
     travelPlan: z.string(),
   }),
   execute: async ({ inputData, mastra, getInitData }) => {
-    const { vacationDescription } = getInitData();
+    const { vacationDescription } = getInitData<{ vacationDescription: string }>();
 
     const travelAgent = mastra.getAgent('travelAgent');
 

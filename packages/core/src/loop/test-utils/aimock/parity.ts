@@ -117,7 +117,7 @@ import { createEventedAgent } from '../../../agent/durable/create-evented-agent'
 import type { DurableAgent, DurableAgentStreamOptions } from '../../../agent/durable/durable-agent';
 import type { MessageListInput } from '../../../agent/message-list/types';
 import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraCompositeStore } from '../../../storage/base';
@@ -847,7 +847,7 @@ export interface EngineParityScenario {
    * to a foreground run, so the scenario would pass without ever dispatching
    * anything.
    */
-  host?: { backgroundTasks?: BackgroundTaskManagerConfig };
+  host?: { backgroundTasks?: BackgroundTaskManagerConfig; pubsub?: PubSub };
 }
 
 export interface EngineRunResult extends EngineObservation {
@@ -939,6 +939,23 @@ export async function expectEngineParity(scenario: EngineParityScenario): Promis
 }
 
 /**
+ * Waits for the host's dispatched background tasks to settle before shutdown.
+ * A dispatch still in flight on the bus when the workers stop is left unacked
+ * for redelivery and never runs, so on a bus with real delivery latency the
+ * turn would end before its own background task executed.
+ */
+async function settleBackgroundTasks(host: Mastra, timeoutMs = 5_000): Promise<void> {
+  const manager = host.backgroundTaskManager;
+  if (!manager) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const { total } = await manager.listTasks({ status: ['pending', 'running'] });
+    if (total === 0) return;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
+/**
  * Runs the scenario on one engine and returns what it observed, without
  * comparing it to anything. For scenarios whose assertion is per engine (e.g.
  * "every engine sends the merged settings") rather than engine-vs-plain.
@@ -949,7 +966,7 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
 
   let wrapper: DurableAgent<string, any, any> | undefined;
   if (engine === 'durable') {
-    wrapper = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    wrapper = createDurableAgent({ agent });
   } else if (engine === 'evented') {
     wrapper = createEventedAgent({ agent });
   }
@@ -1091,6 +1108,11 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
     // Stop the host so many scenarios in one file don't pile up, including the
     // workers a background-task scenario started. Done last, after the runs'
     // own cleanups.
+    try {
+      await settleBackgroundTasks(host);
+    } catch (error) {
+      errors.push(error);
+    }
     try {
       await host.shutdown();
     } catch (error) {

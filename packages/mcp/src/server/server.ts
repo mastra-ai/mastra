@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { Agent, ToolsInput } from '@mastra/core/agent';
@@ -14,7 +15,7 @@ import type {
 } from '@mastra/core/mcp';
 import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
 import type { Span, TracingContext } from '@mastra/core/observability';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool, isValidationError } from '@mastra/core/tools';
@@ -26,7 +27,9 @@ import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol
 import { hostHeaderValidation, originValidation, toNodeHandler } from '@modelcontextprotocol/node';
 import type { NodeMcpRequestHandler } from '@modelcontextprotocol/node';
 import {
+  CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
+  MissingRequiredClientCapabilityError,
   PROTOCOL_VERSION_META_KEY,
   Server,
   ProtocolError,
@@ -34,11 +37,13 @@ import {
   createMcpHandler,
   createRequestStateCodec,
   inputRequired,
+  inputResponse,
   specTypeSchemas,
 } from '@modelcontextprotocol/server';
 import type {
   BlobResourceContents,
   CallToolResult,
+  ClientCapabilities,
   HandlerResultTypeMap,
   Implementation,
   InputRequiredResult,
@@ -60,6 +65,8 @@ import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, EVENTS_EXTENSION_ID } from '../shared/events';
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { hasTasksCapability, tasksCapabilityEntry } from '../shared/tasks';
+import type { MCPTaskInputRequests } from '../shared/tasks';
 import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
 import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
@@ -79,6 +86,12 @@ import {
   toToolExecutionContext,
 } from './request';
 import type { ContinuationEnvelope } from './request';
+import { resolveTasksConfig } from './tasks/config';
+import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode } from './tasks/config';
+import { emitTaskResults, taskHandleResult } from './tasks/emit';
+import { registerTaskHandlers } from './tasks/handlers';
+import { MCPTaskLimitError } from './tasks/store';
+import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskWork } from './tasks/store';
 import type {
   AppResources,
   MCPAuthInfoToUserMapper,
@@ -113,6 +126,24 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    * @experimental SEP-3415 is a draft; this API may change.
    */
   eventsOptions?: MCPServerEventsOptions;
+  /**
+   * Serves `tools/call` as MCP Tasks (`io.modelcontextprotocol/tasks`) for the tools you opt in: a
+   * client that declared the extension gets a task handle and polls `tasks/get` for the result.
+   * Other clients keep getting synchronous answers.
+   *
+   * @experimental SEP-2663 extension; API may change.
+   */
+  tasks?: MCPServerTasksOptions;
+  /**
+   * How requests from 2025-era clients (those that open with `initialize`) are served
+   * over HTTP.
+   *
+   * - `'reject'` (default): they get the unsupported-protocol-version error.
+   * - `'stateless'`: each one is answered by a fresh server instance without a session.
+   *   `GET` and `DELETE` session operations get `405`. Features that need 2026-07-28
+   *   (suspend/resume, `subscriptions/listen`, events) are not available to these clients.
+   */
+  legacy?: 'reject' | 'stateless';
 }
 
 export interface MCPServerHTTPOptions {
@@ -148,6 +179,29 @@ interface Suspension {
   suspendPayload: unknown;
   resumeSchema: JSONSchema7 | undefined;
 }
+
+interface RunToolOptions {
+  requestContext?: RequestContext;
+  mcp?: MCPToolExecutionContext;
+  tracingContext?: TracingContext;
+  /** Overrides the request's signal, for work that outlives the request. */
+  abortSignal?: AbortSignal;
+  resumeData?: unknown;
+  suspendPayload?: unknown;
+}
+
+/**
+ * What a tool task records at creation: everything its work needs to be rebuilt, and nothing tied to
+ * the request that started it.
+ */
+type ToolTaskContext = {
+  toolName: string;
+  args: unknown;
+  /** The caller's request context, minus the bearer token. */
+  requestContext: Record<string, unknown>;
+  /** The answered `input_required` round the creating `tools/call` carried, if any. */
+  resume?: { resumeData: unknown; suspendPayload: unknown };
+};
 
 /**
  * Exposes Mastra tools, agents, workflows, resources and prompts to Model Context
@@ -204,6 +258,8 @@ export class MCPServer extends MCPServerBase {
   private readonly eventsOptions: MCPServerEventsOptions;
   private eventsInspector: MCPServerEventsInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
+  private readonly legacy: 'reject' | 'stateless';
+  private readonly tasks: ResolvedTasksConfig;
 
   private httpHandler?: McpHttpHandler;
   private nodeHandler?: NodeMcpRequestHandler;
@@ -221,6 +277,8 @@ export class MCPServer extends MCPServerBase {
     this.loadAppResources(config.appResources);
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
+    this.legacy = config.legacy ?? 'reject';
+    this.tasks = resolveTasksConfig(config.tasks, Object.keys(config.tools ?? {}));
     const webhook = this.eventsOptions.webhook;
     this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
     if (webhook && this.eventRegistry.size > 0) {
@@ -540,6 +598,9 @@ export class MCPServer extends MCPServerBase {
     if (this.eventRegistry.size > 0) {
       capabilities.extensions = { ...capabilities.extensions, [EVENTS_EXTENSION_ID]: this.eventsCapability() };
     }
+    if (this.tasks.enabled) {
+      capabilities.extensions = { ...capabilities.extensions, ...tasksCapabilityEntry() };
+    }
     return capabilities;
   }
 
@@ -588,6 +649,20 @@ export class MCPServer extends MCPServerBase {
         jsonSchema: (schema, options) => this.jsonSchema(schema, options),
         trace: (instance, method, params, ctx, fn) => this.traceCustomRequest(instance, method, params, ctx, fn),
       });
+    }
+    if (this.tasks.enabled) {
+      registerTaskHandlers(server, {
+        store: this.tasks.store,
+        authorize: this.tasks.authorize,
+        principal: principalOf,
+        trace: (instance, method, params, ctx, fn) => this.traceCustomRequest(instance, method, params, ctx, fn),
+      });
+      // A tool handler can only return a CallToolResult; task handles are rewritten on the way out.
+      const connect = server.connect.bind(server);
+      server.connect = async transport => {
+        emitTaskResults(transport);
+        return connect(transport);
+      };
     }
     return server;
   }
@@ -763,21 +838,9 @@ export class MCPServer extends MCPServerBase {
     requestContext: RequestContext,
     suspension: Suspension,
   ): Promise<InputRequiredResult> {
-    const payload = suspension.suspendPayload as { message?: unknown } | undefined;
-    const message =
-      typeof payload?.message === 'string'
-        ? payload.message
-        : typeof suspension.resumeSchema?.description === 'string'
-          ? suspension.resumeSchema.description
-          : `"${suspension.name}" needs more input`;
     const { method, name, argsHash, round, suspendPayload } = suspension;
     return inputRequired({
-      inputRequests: {
-        [INPUT_KEY]: inputRequired.elicit({
-          message,
-          requestedSchema: (suspension.resumeSchema ?? { type: 'object', properties: {} }) as never,
-        }),
-      },
+      inputRequests: { [INPUT_KEY]: this.inputRequestForm(name, suspendPayload, suspension.resumeSchema) },
       requestState: await this.requestStateCodec.mint({
         method,
         name,
@@ -787,6 +850,21 @@ export class MCPServer extends MCPServerBase {
         principal: principalOf(ctx, requestContext),
         iat: Math.floor(Date.now() / 1000),
       }),
+    });
+  }
+
+  /** The form a suspended handler asks the client to fill in. */
+  private inputRequestForm(name: string, suspendPayload: unknown, resumeSchema: JSONSchema7 | undefined) {
+    const payload = suspendPayload as { message?: unknown } | undefined;
+    const message =
+      typeof payload?.message === 'string'
+        ? payload.message
+        : typeof resumeSchema?.description === 'string'
+          ? resumeSchema.description
+          : `"${name}" needs more input`;
+    return inputRequired.elicit({
+      message,
+      requestedSchema: (resumeSchema ?? { type: 'object', properties: {} }) as never,
     });
   }
 
@@ -851,13 +929,40 @@ export class MCPServer extends MCPServerBase {
         if (continuation && continuation.outcome !== 'accept') {
           return errorResult(`Tool '${name}' was ${continuation.outcome === 'decline' ? 'declined' : 'cancelled'}`);
         }
-        const execution = await this.runTool(name, tool, args, {
+        const resume = continuation && {
+          resumeData: continuation.resumeData,
+          suspendPayload: continuation.suspendPayload,
+        };
+        const taskMode = this.tasks.modeFor(name, tool.mcp?.toolType);
+        const asTask = taskMode.mode !== 'off' && clientDeclaredTasks(ctx);
+        if (taskMode.mode !== 'off' && !asTask && this.tasks.required.has(name)) {
+          throw new MissingRequiredClientCapabilityError(
+            { requiredCapabilities: { extensions: tasksCapabilityEntry() } },
+            `Tool '${name}' only runs as a task; declare the io.modelcontextprotocol/tasks extension`,
+          );
+        }
+        if (asTask && taskMode.mode === 'always') {
+          try {
+            return await this.startToolTask(ctx, requestContext, name, args, taskMode, { resume });
+          } catch (error) {
+            if (error instanceof MCPTaskLimitError) return errorResult(taskLimitMessage(error));
+            throw error;
+          }
+        }
+        const options = {
           requestContext,
           mcp,
           tracingContext: { currentSpan: trace.requestSpan },
-          resumeData: continuation?.resumeData,
-          suspendPayload: continuation?.suspendPayload,
-        });
+          ...resume,
+        };
+        let execution: MCPToolExecutionResultV2;
+        if (asTask) {
+          const raced = await this.runWithinSyncWindow(ctx, requestContext, name, tool, args, taskMode, options);
+          if ('task' in raced) return raced.task;
+          execution = raced.execution;
+        } else {
+          execution = await this.runTool(name, tool, args, options);
+        }
         if (execution.status === 'suspended') {
           this.logger.debug(`Tool '${name}' requires client input.`);
           return this.inputRequired(ctx, requestContext, {
@@ -869,30 +974,226 @@ export class MCPServer extends MCPServerBase {
             resumeSchema: execution.resumeSchema,
           });
         }
-        const result = this.toCallToolResult(name, tool, execution.output);
+        // 2025-era clients need non-object structured results wrapped as `{ result }`; the codec decides per era.
+        const result = server.projectCallToolResult(
+          this.toCallToolResult(name, tool, execution.output),
+          this.toolInfo(name, tool).outputSchema,
+        );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
         return result;
       } catch (error) {
         if (error instanceof ProtocolError) throw error;
-        this.logger.error('Tool execution failed', { tool: name, error });
-        const mastraError =
-          error instanceof MastraError
-            ? error
-            : new MastraError(
-                {
-                  id: 'TOOL_EXECUTION_FAILED',
-                  domain: ErrorDomain.TOOL,
-                  category: ErrorCategory.USER,
-                  details: { toolName: name },
-                },
-                error,
-              );
+        const mastraError = this.toolError(name, error);
         // The client still receives the serialized error, but the span keeps the
         // original so its id and message survive instead of a JSON blob.
         trace.reportError(mastraError);
         return errorResult(JSON.stringify(mastraError.toJSON()));
       }
     });
+  }
+
+  /** Logs a tool's failure and wraps it as the error a client receives. */
+  private toolError(name: string, error: unknown): MastraError {
+    this.logger.error('Tool execution failed', { tool: name, error });
+    return error instanceof MastraError
+      ? error
+      : new MastraError(
+          {
+            id: 'TOOL_EXECUTION_FAILED',
+            domain: ErrorDomain.TOOL,
+            category: ErrorCategory.USER,
+            details: { toolName: name },
+          },
+          error,
+        );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tasks
+
+  /**
+   * `'auto'` mode: runs the tool under the request for up to `syncWindowMs`. A tool that settles in
+   * time is answered like any synchronous call; otherwise the same execution carries on as a task,
+   * no longer tied to the request's cancellation.
+   */
+  private async runWithinSyncWindow(
+    ctx: ServerContext,
+    requestContext: RequestContext,
+    name: string,
+    tool: InternalCoreTool,
+    args: unknown,
+    taskMode: ResolvedToolTaskMode,
+    options: RunToolOptions & { mcp: MCPToolExecutionContext },
+  ): Promise<{ execution: MCPToolExecutionResultV2 } | { task: CallToolResult }> {
+    const controller = new AbortController();
+    const requestSignal = ctx.mcpReq.signal;
+    const followRequest = () => controller.abort(requestSignal.reason);
+    if (requestSignal.aborted) followRequest();
+    else requestSignal.addEventListener('abort', followRequest, { once: true });
+
+    const settled = this.runTool(name, tool, args, {
+      ...options,
+      abortSignal: controller.signal,
+      // The request may be answered while the tool still runs; its notifications then have nowhere to go.
+      mcp: {
+        ...options.mcp,
+        extra: { ...options.mcp.extra, signal: controller.signal },
+        log: (...params) => options.mcp.log!(...params).catch(() => {}),
+        progress: params => options.mcp.progress!(params).catch(() => {}),
+      },
+    }).then(
+      execution => ({ execution }),
+      (error: unknown) => ({ error }),
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<'timeout'>(resolve => {
+      timer = setTimeout(() => resolve('timeout'), taskMode.syncWindowMs);
+    });
+    const winner = await Promise.race([settled, deadline]);
+    clearTimeout(timer);
+    requestSignal.removeEventListener('abort', followRequest);
+    if (winner !== 'timeout') {
+      if ('error' in winner) throw winner.error;
+      return winner;
+    }
+    try {
+      return {
+        task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
+          resume:
+            options.resumeData === undefined
+              ? undefined
+              : { resumeData: options.resumeData, suspendPayload: options.suspendPayload },
+          initialAttempt: () => ({
+            outcome: settled.then(
+              (outcome): MCPTaskAttemptOutcome =>
+                'error' in outcome
+                  ? this.toolErrorOutcome(name, outcome.error)
+                  : this.toTaskOutcome(name, tool, outcome.execution),
+            ),
+            abort: reason => controller.abort(reason),
+          }),
+        }),
+      };
+    } catch (error) {
+      if (!(error instanceof MCPTaskLimitError)) {
+        // No task owns the execution, so nothing could ever cancel it.
+        controller.abort(error);
+        throw error;
+      }
+    }
+    // At a task cap: the tool already started, so answer this call synchronously instead.
+    this.logger.debug(`Tool '${name}' outlived its sync window at a task cap; answering synchronously.`);
+    if (requestSignal.aborted) followRequest();
+    else requestSignal.addEventListener('abort', followRequest, { once: true });
+    const outcome = await settled;
+    requestSignal.removeEventListener('abort', followRequest);
+    if ('error' in outcome) throw outcome.error;
+    return outcome;
+  }
+
+  /**
+   * Creates the task (durably, before answering) and hands its work to the store. `initialAttempt`
+   * builds the run of an execution that already started under the request; it stays in this
+   * process. Rejects with {@link MCPTaskLimitError}, creating nothing, at a task cap.
+   */
+  private async startToolTask(
+    ctx: ServerContext,
+    requestContext: RequestContext,
+    name: string,
+    args: unknown,
+    taskMode: ResolvedToolTaskMode,
+    {
+      resume,
+      initialAttempt,
+    }: { resume?: ToolTaskContext['resume']; initialAttempt?: () => MCPTaskRunOptions['initialAttempt'] },
+  ): Promise<CallToolResult> {
+    const { persisted, dropped } = persistableRequestContext(requestContext);
+    if (dropped.length > 0) {
+      // Later runs only see what was persisted; a missing `user` fails their authorization checks.
+      this.logger.warn(`Tool task '${name}' can't persist request context keys; runs from the task won't see them`, {
+        tool: name,
+        keys: dropped,
+      });
+    }
+    const context: ToolTaskContext = {
+      toolName: name,
+      args,
+      requestContext: persisted,
+      ...(resume && { resume }),
+    };
+    const task = await this.tasks.store.create({
+      ttlMs: taskMode.ttlMs,
+      principal: principalOf(ctx, requestContext),
+      context,
+      limits: this.tasks.limits,
+    });
+    this.tasks.store.run(task.taskId, this.toolTaskWork(context), { initialAttempt: initialAttempt?.() });
+    this.logger.debug(`Tool '${name}' continues as task.`);
+    return taskHandleResult(task);
+  }
+
+  /**
+   * The work of a tool task, rebuilt from nothing but what the task's `context` records, so a store
+   * can dispatch it again after a restart. Each attempt runs the tool once; an answered suspension
+   * runs it again with `resumeData`, as everywhere else in Mastra.
+   */
+  private toolTaskWork(context: ToolTaskContext): MCPTaskWork {
+    const name = context.toolName;
+    return async attempt => {
+      const tool = this.convertedTools[name];
+      if (!tool) throw new Error(`Tool '${name}' is no longer served`);
+      const requestContext: RequestContext = new RequestContext(Object.entries(context.requestContext));
+      try {
+        // Every attempt is authorized on its own, against the persisted caller, like every synchronous round.
+        await this.enforceToolExecutionFGA(name, requestContext);
+      } catch (error) {
+        return this.toolErrorOutcome(name, error);
+      }
+      let { resumeData, suspendPayload } = context.resume ?? {};
+      if (attempt.resume) {
+        // One key is enough: the server emits exactly one input request per suspension (see toTaskOutcome).
+        const [key] = Object.keys(attempt.resume.inputResponses);
+        const answer = inputResponse(attempt.resume.inputResponses, key!);
+        if (answer.kind !== 'elicit') return completed(errorResult(`Unsupported input response for tool '${name}'`));
+        if (answer.action !== 'accept') {
+          return completed(errorResult(`Tool '${name}' was ${answer.action === 'decline' ? 'declined' : 'cancelled'}`));
+        }
+        resumeData = answer.content ?? {};
+        suspendPayload = attempt.resume.suspendPayload;
+      }
+      try {
+        const execution = await this.runTool(name, tool, context.args, {
+          requestContext,
+          abortSignal: attempt.signal,
+          resumeData,
+          suspendPayload,
+        });
+        return this.toTaskOutcome(name, tool, execution);
+      } catch (error) {
+        return this.toolErrorOutcome(name, error);
+      }
+    };
+  }
+
+  private toTaskOutcome(
+    name: string,
+    tool: InternalCoreTool,
+    execution: MCPToolExecutionResultV2,
+  ): MCPTaskAttemptOutcome {
+    if (execution.status === 'suspended') {
+      this.logger.debug(`Tool task '${name}' requires client input.`);
+      // A fresh key per suspension: a task's keys must be unique over its lifetime.
+      const inputRequests = {
+        [`${INPUT_KEY}-${randomUUID()}`]: this.inputRequestForm(name, execution.suspendPayload, execution.resumeSchema),
+      } as MCPTaskInputRequests;
+      return { status: 'input_required', inputRequests, suspendPayload: execution.suspendPayload };
+    }
+    return completed(this.toCallToolResult(name, tool, execution.output));
+  }
+
+  /** A tool that throws inside a task completes it with `isError`, as a synchronous call would answer. */
+  private toolErrorOutcome(name: string, error: unknown): MCPTaskAttemptOutcome {
+    return completed(errorResult(JSON.stringify(this.toolError(name, error).toJSON())));
   }
 
   /**
@@ -904,13 +1205,7 @@ export class MCPServer extends MCPServerBase {
     name: string,
     tool: InternalCoreTool,
     args: unknown,
-    options: {
-      requestContext?: RequestContext;
-      mcp?: MCPToolExecutionContext;
-      tracingContext?: TracingContext;
-      resumeData?: unknown;
-      suspendPayload?: unknown;
-    },
+    options: RunToolOptions,
   ): Promise<MCPToolExecutionResultV2> {
     if (!tool.execute) throw new Error(`Tool '${name}' cannot be executed.`);
     let suspension: { payload: unknown; resumeSchema?: string } | undefined;
@@ -922,7 +1217,7 @@ export class MCPServer extends MCPServerBase {
       skipToolSpan: true,
       requestContext: options.requestContext,
       tracingContext: options.tracingContext,
-      abortSignal: options.mcp?.extra.signal,
+      abortSignal: options.abortSignal ?? options.mcp?.extra.signal,
       ...(options.mcp ? { mcp: options.mcp } : {}),
       suspend: async (payload: unknown, suspendOptions?: SuspendOptions) => {
         suspension = { payload, resumeSchema: suspendOptions?.resumeSchema };
@@ -951,19 +1246,23 @@ export class MCPServer extends MCPServerBase {
     // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
     const resourceUri = uiResourceUri(tool.mcp?._meta);
     const meta = resourceUri ? { _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri } } : {};
+    // `JSON.stringify` yields `undefined` for a void return (and for functions or symbols). That has
+    // no text form, so the call succeeded with no content rather than with a text block missing `text`.
     if (!tool.outputSchema) {
-      return {
-        isError: false,
-        content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
-        ...meta,
-      };
+      const text = typeof value === 'string' ? value : JSON.stringify(value);
+      return { isError: false, content: text === undefined ? [] : [{ type: 'text', text }], ...meta };
     }
-    // Tools with an output schema already validated `value` against it.
-    const structuredContent = value as Record<string, unknown>;
+    // Tools with an output schema already validated `value` against it; an optional schema can let `undefined` through.
+    // A success result must then carry `structuredContent`, so report the missing output in-band instead.
+    const text = JSON.stringify(value);
+    if (text === undefined) {
+      this.logger.warn(`Tool '${name}' declares an outputSchema but returned no structured output.`);
+      return { ...errorResult(`Tool '${name}' declares an outputSchema but returned no output.`), ...meta };
+    }
     return {
       isError: false,
-      structuredContent,
-      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      structuredContent: value as Record<string, unknown>,
+      content: [{ type: 'text', text }],
       ...meta,
     };
   }
@@ -1192,7 +1491,7 @@ export class MCPServer extends MCPServerBase {
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
       this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
-        legacy: 'reject',
+        legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
       this.nodeHandler = toNodeHandler(this.httpHandler, {
@@ -1219,7 +1518,8 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Handles one Streamable HTTP request at `httpPath`. Every request is
-   * self-contained; requests without a 2026-07-28 envelope are rejected.
+   * self-contained; requests without a 2026-07-28 envelope are rejected unless
+   * `legacy: 'stateless'` is configured.
    */
   async startHTTP({ url, httpPath, req, res, options }: MCPServerHTTPOptions): Promise<void> {
     if (url.pathname !== httpPath) {
@@ -1279,6 +1579,8 @@ export class MCPServer extends MCPServerBase {
       this.httpHandler = undefined;
       this.nodeHandler = undefined;
     }
+    // Aborts tasks still running; a store passed in by the application is left to it.
+    this.tasks.ownedStore?.close();
   }
 
   // ---------------------------------------------------------------------------
@@ -1442,8 +1744,54 @@ function isRegistrableTool(tool: ToolsInput[string]): tool is ToolAction<any, an
   return !!tool && typeof tool === 'object' && 'id' in tool && typeof tool.id === 'string';
 }
 
+function taskLimitMessage({ scope, limit, kind }: MCPTaskLimitError): string {
+  if (kind === 'retained') {
+    return scope === 'principal'
+      ? `Too many recent tasks for this client (limit ${limit}). Try again once older tasks expire.`
+      : `Too many recent tasks on this server (limit ${limit}). Try again later.`;
+  }
+  return scope === 'principal'
+    ? `Too many open tasks for this client (limit ${limit}). Wait for one to finish or cancel one.`
+    : `Too many open tasks on this server (limit ${limit}). Try again later.`;
+}
+
 function errorResult(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true };
+}
+
+function completed(result: CallToolResult): MCPTaskAttemptOutcome {
+  return { status: 'completed', result };
+}
+
+/** Whether this request's client declared the Tasks extension; only 2026-07-28 requests carry it. */
+function clientDeclaredTasks(ctx: ServerContext): boolean {
+  const envelope = ctx.mcpReq.envelope as Record<string, unknown> | undefined;
+  return hasTasksCapability(envelope?.[CLIENT_CAPABILITIES_META_KEY] as ClientCapabilities | undefined);
+}
+
+/** The request context a task keeps. Bearer tokens are dropped so they are never stored with the task. */
+function persistableRequestContext(requestContext: RequestContext): {
+  persisted: Record<string, unknown>;
+  dropped: string[];
+} {
+  const { authInfo, [MASTRA_AUTH_TOKEN_KEY]: _authToken, ...rest } = requestContext.toJSON() as Record<string, unknown>;
+  let stripped = rest;
+  if (authInfo && typeof authInfo === 'object') {
+    const { token: _token, ...withoutToken } = authInfo as Record<string, unknown>;
+    stripped = { ...rest, authInfo: withoutToken };
+  } else if (authInfo !== undefined) {
+    stripped = { ...rest, authInfo };
+  }
+  // A JSON round trip, so every store sees what a durable one would read back: plain objects, no shared references.
+  const persisted = JSON.parse(JSON.stringify(stripped)) as Record<string, unknown>;
+  const dropped = [...requestContext.keys()].filter(
+    key =>
+      typeof key === 'string' &&
+      key !== MASTRA_AUTH_TOKEN_KEY &&
+      requestContext.get(key) !== undefined &&
+      !(key in persisted),
+  ) as string[];
+  return { persisted, dropped };
 }
 
 /** The tool's MCP App URI; the nested key wins over the flat one, as in ext-apps' `getToolUiResourceUri`. */

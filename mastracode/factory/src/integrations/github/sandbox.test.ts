@@ -354,12 +354,25 @@ describe('materializeRepo', () => {
     expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
   });
 
-  it('throws git-missing when git is absent', async () => {
+  it('throws git-missing with the exit code and output when git is absent', async () => {
     const sandbox = new FakeSandbox(script =>
-      script === 'git --version' ? { exitCode: 127, stdout: '', stderr: 'not found' } : OK,
+      script === 'git --version' ? { exitCode: 127, stdout: '', stderr: 'sh: git: not found' } : OK,
     );
     await expect(materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok')).rejects.toMatchObject({
       code: 'git-missing',
+      message: expect.stringContaining('exited 127: sh: git: not found'),
+    });
+  });
+
+  it('reports a timed-out git preflight as an unresponsive sandbox, not a missing git', async () => {
+    // Providers map a command timeout to exit 124. During the Oct 29 incident
+    // every "git is not installed" failure followed timeouts on a stalled VM.
+    const sandbox = new FakeSandbox(script =>
+      script === 'git --version' ? { exitCode: 124, stdout: '', stderr: '' } : OK,
+    );
+    await expect(materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok')).rejects.toMatchObject({
+      code: 'sandbox-unresponsive',
+      message: expect.stringContaining('stopped responding'),
     });
   });
 
@@ -794,7 +807,7 @@ describe('syncEnvironmentRepository', () => {
       outcome: 'kept',
       branch: 'factory/issue-7',
     });
-    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls.join('\n')).not.toMatch(/ls-remote|fetch|checkout/);
   });
 
   it('keeps local work when the resume checkout is blocked by uncommitted changes', async () => {

@@ -15,7 +15,12 @@
         "type": "toggle"
       }
     ],
-    "kimi-k3:fast": [
+    "deepseek-v4.1-flash:fast": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "toggle"
       }
@@ -25,12 +30,7 @@
         "type": "toggle"
       }
     ],
-    "deepseek-v4.1-flash:fast": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
+    "kimi-k3:fast": [
       {
         "type": "toggle"
       }

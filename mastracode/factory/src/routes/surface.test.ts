@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
@@ -164,7 +164,7 @@ describe('prepareFactoryRuleBinding', () => {
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(userId).toBe('user-1');
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
-      expect.objectContaining({ branch: 'factory/issue-49', baseBranch: 'main', userId: 'user-1' }),
+      expect.objectContaining({ branch: 'factory/issue-49-item1', baseBranch: 'main', userId: 'user-1' }),
     );
   });
 
@@ -677,7 +677,7 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(0);
   });
 
-  it("names the card's repository when it is linked but turned out of the environment", async () => {
+  it("names the card's repository when it is linked but not pre-cloned", async () => {
     const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
     await sourceControl.projectRepositories.update({
       orgId: 'org-1',
@@ -697,7 +697,7 @@ describe('prepareFactoryRuleBinding', () => {
     expect(error).toBeInstanceOf(FactoryDispatchError);
     expect(error).toMatchObject({ code: 'source_repository_missing' });
     expect(error.message).toBe(
-      "Repository mastra-ai/mastra is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.",
+      'Repository mastra-ai/mastra is linked but not pre-cloned for this Factory. Turn on Pre-clone under Settings → Repositories, then retry.',
     );
     expect(prepare).not.toHaveBeenCalled();
   });
@@ -800,6 +800,40 @@ describe('prepareFactoryRuleBinding', () => {
       bindingInput(project.id, ['shipping'], { role: 'release', board: 'release' }),
     );
     expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'shipping' }));
+  });
+
+  it('gives a board installed as work in place of the built-in one only the lanes it declares', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const replacement = createBoardRegistry({
+      boards: [
+        defineBoard({
+          id: 'work',
+          name: 'Work',
+          initialPhase: 'intake',
+          phases: {
+            intake: { kind: 'resting', name: 'Intake', nextPhases: ['fixing', 'done'] },
+            fixing: { kind: 'working', name: 'Fixing', runner: { context: 'work' }, nextPhases: ['done'] },
+            done: { kind: 'terminal', name: 'Done' },
+          },
+        }),
+      ],
+      includeDefaultBoards: false,
+    });
+    const start = (role: string) =>
+      prepareFactoryRuleBinding(
+        github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seeded.projects,
+        replacement,
+        bindingInput(project.id, ['intake'], { role }),
+      );
+
+    // No `execute` phase here, so the built-in Work lane does not apply.
+    await start('work');
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'fixing' }));
+    // Nor is there a Planning phase for the old `plan` role.
+    expect(await start('plan').catch(failure => failure)).toMatchObject({ code: 'unsupported_provider_item' });
   });
 
   it('rejects runs with no lane before creating a source-control session', async () => {

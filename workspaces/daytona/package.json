@@ -1,6 +1,6 @@
 {
   "name": "@mastra/daytona",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "description": "Daytona cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -40,11 +40,11 @@
     "@mastra/core": "workspace:*",
     "@mastra/gcs": "workspace:*",
     "@mastra/s3": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

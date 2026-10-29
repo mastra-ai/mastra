@@ -7,7 +7,7 @@ description: "Browse Neuralwatt model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/neuralwatt.svg" alt="Neuralwatt logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Neuralwatt
 
-Access 31 Neuralwatt models through Mastra's model router. Authentication is handled automatically using the `NEURALWATT_API_KEY` environment variable.
+Access 23 Neuralwatt models through Mastra's model router. Authentication is handled automatically using the `NEURALWATT_API_KEY` environment variable.
 
 Learn more in the [Neuralwatt documentation](https://portal.neuralwatt.com/docs).
 
@@ -295,6 +295,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -312,6 +314,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

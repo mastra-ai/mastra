@@ -279,6 +279,26 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     } catch {}
   });
 
+  it('preserves project names and missing-manifest errors in the installed deployer', async () => {
+    const appDir = join(fixturePath, 'apps', 'custom');
+    const missingProject = join(fixturePath, 'missing-project');
+    await execa(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        `import assert from 'node:assert/strict';
+import { DepsService } from '@mastra/deployer/services';
+assert.equal(await new DepsService(${JSON.stringify(appDir)}).getProjectName(), '@inner/app');
+await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProjectName(), {
+  code: 'ENOENT',
+  path: ${JSON.stringify(join(missingProject, 'package.json'))},
+});`,
+      ],
+      { cwd: appDir },
+    );
+  });
+
   function runApiTests(port: number) {
     it('should resolve api routes', async () => {
       const res = await fetch(`http://localhost:${port}/test`);
@@ -777,6 +797,28 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
 `,
         );
         await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+import { camelCase } from 'lodash';
+import { getDaysInMonth, isLeapYear } from 'date-fns';
+import { greet } from '@inner/raw-ts';
+import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { toPath } from 'unicorn-magic';
+
+export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependencies', {
+  method: 'GET',
+  handler: async c => c.json({
+    label: camelCase('virtual dependency entries'),
+    days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
+    externalFile: basename(toPath(pathToFileURL(join(process.cwd(), 'optimized-entry.txt')))),
+    leapYear: isLeapYear(new Date('2028-02-10T12:00:00Z')),
+    workspaceGreeting: greet('workspace'),
+  }),
+});
+`,
+        );
+        await writeFile(
           mastraConfigPath,
           originalMastraConfig
             .replace(
@@ -785,9 +827,12 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
             )
             .replace(
               "import { testRoute } from '@/api/route/test';",
-              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';",
             )
-            .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute,'),
+            .replace(
+              /apiRoutes: \[\s*testRoute,/,
+              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute,',
+            ),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
@@ -862,6 +907,66 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
       expect(content).not.toContain('@/agents');
     });
 
+    it('type-checks a @mastra/deployer Deployer subclass as the Mastra deployer', async () => {
+      // @mastra/deployer bundles its own copy of the base class declarations, so this guards
+      // assignability of its Deployer to Mastra's `deployer` option across the installed packages.
+      const appDir = join(fixturePath, 'apps', 'custom');
+      const sourceFile = join(appDir, 'deployer-typecheck.ts');
+      const tsconfigFile = join(appDir, 'tsconfig.deployer-typecheck.json');
+
+      // skipLibCheck would hide an unresolved bundled `@internal/*` specifier (the base class would
+      // silently become `any`), so assert the installed declarations have none.
+      for (const pkg of ['core', 'deployer']) {
+        const packageDir = join(appDir, 'node_modules', '@mastra', pkg);
+        const declarations = await glob('**/*.d.ts', {
+          cwd: packageDir,
+          absolute: true,
+          ignore: ['node_modules/**'],
+        });
+        expect(declarations.length).toBeGreaterThan(0);
+        for (const file of declarations) {
+          expect(await readFile(file, 'utf-8'), file).not.toMatch(/['"]@internal\//);
+        }
+      }
+
+      try {
+        await writeFile(
+          sourceFile,
+          [
+            "import { Mastra } from '@mastra/core/mastra';",
+            "import { Deployer } from '@mastra/deployer';",
+            '',
+            'class TestDeployer extends Deployer {',
+            '  async bundle() {}',
+            '  async deploy() {}',
+            '}',
+            '',
+            "new Mastra({ deployer: new TestDeployer({ name: 'test' }) });",
+            '',
+          ].join('\n'),
+        );
+        await writeFile(
+          tsconfigFile,
+          JSON.stringify({
+            extends: './tsconfig.json',
+            compilerOptions: { noEmit: true, skipLibCheck: true, types: [] },
+            include: ['deployer-typecheck.ts'],
+          }),
+        );
+
+        const result = await execa('pnpm', ['exec', 'tsc', '-p', 'tsconfig.deployer-typecheck.json'], {
+          cwd: appDir,
+          reject: false,
+        });
+
+        expect(result.stdout + result.stderr).not.toContain('error TS');
+        expect(result.exitCode).toBe(0);
+      } finally {
+        await rm(sourceFile, { force: true });
+        await rm(tsconfigFile, { force: true });
+      }
+    });
+
     it('should resolve workspace package tsconfig paths', async () => {
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
       const content = await readFile(inputFile, 'utf-8');
@@ -870,6 +975,25 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
       const hasWorkspaceMappedPath = content.includes('~/utils');
 
       expect(hasWorkspaceMappedPath).toBeFalsy();
+    });
+
+    it('should resolve tsconfig paths to files with dots in their names', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      expect(content).not.toContain('@/api/route/test.response');
+    });
+
+    it('should preserve exports from multiple optimized dependency entries', async () => {
+      const response = await fetch(`http://localhost:${port}/optimized-dependencies`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        label: 'virtualDependencyEntries',
+        days: 28,
+        externalFile: 'optimized-entry.txt',
+        leapYear: true,
+        workspaceGreeting: 'hello workspace c',
+      });
     });
 
     it('should keep deprecated externals out of optimized dependency bundles', async () => {
@@ -881,10 +1005,11 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
         )
       ).join('\n');
       const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+      const appPackageJson = JSON.parse(await readFile(join(fixturePath, 'apps', 'custom', 'package.json'), 'utf-8'));
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^10.1.1');
+      expect(packageJson.dependencies?.nodemailer).toBe(appPackageJson.dependencies.nodemailer);
     });
 
     it('should keep configured workspace externals out of bundles without inlining default externals', async () => {
@@ -1550,10 +1675,19 @@ class AliasDeployer extends Deployer {
           );
           expect(await readFile(join(outputDir, 'workspace-module', 'inner-subpath-only-1.0.0.tgz'))).toBeTruthy();
 
-          const importResult = await execa('node', ['--input-type=module', '-e', "import('@inner/subpath-only')"], {
-            cwd: outputDir,
-            reject: false,
-          });
+          const importResult = await execa(
+            'node',
+            [
+              '--input-type=module',
+              '-e',
+              `import assert from 'node:assert/strict';
+import { rootValue } from '@inner/subpath-only';
+import { subpathOnlyValue } from '@inner/subpath-only/value';
+assert.equal(rootValue, 'external-workspace-root-implementation-marker');
+assert.equal(subpathOnlyValue, 'c');`,
+            ],
+            { cwd: outputDir, reject: false },
+          );
           expect(importResult.exitCode, `${importResult.stdout}\n${importResult.stderr}`).toBe(0);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
@@ -2101,6 +2235,7 @@ class AliasDeployer extends Deployer {
           const outputRoot = join(appDir, '.mastra', 'output');
 
           await removeOutputDir(isolatedFixturePath);
+          await expect(readFile(join(appDir, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           const skipBuild = await execa(pkgManager, ['build'], {
             cwd: appDir,
             env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -2110,6 +2245,7 @@ class AliasDeployer extends Deployer {
 
           expect(skipBuild.exitCode).toBe(0);
           expect(skipOutput).toContain('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
+          await expect(readFile(join(outputRoot, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           // No dependencies installed and no lockfile generated anywhere in the build output.
           expect(await findInDir(outputRoot, 'node_modules')).toBe(false);
           expect(await findInDir(outputRoot, 'package-lock.json')).toBe(false);

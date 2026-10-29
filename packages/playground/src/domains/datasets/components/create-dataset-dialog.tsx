@@ -116,7 +116,7 @@ function CreateDatasetDialogForm({ createDataset, targetType, targetIds, onCreat
       <DialogFooter>
         <DialogCancel>Cancel</DialogCancel>
         <DialogAction type="submit" disabled={!name.trim()}>
-          {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
+          {createDataset.isPending ? 'Creating...' : 'Create dataset'}
         </DialogAction>
       </DialogFooter>
     </Form>

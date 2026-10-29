@@ -131,7 +131,7 @@ function ExperimentPage() {
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
           <Button render={<Link to="/experiments" />} icon={<ArrowLeft />}>
-            Back to Experiments
+            Back to experiments
           </Button>
         }
       />

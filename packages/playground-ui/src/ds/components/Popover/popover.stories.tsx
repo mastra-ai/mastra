@@ -76,7 +76,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger render={<Button size="md">Open Popover</Button>} />
+      <PopoverTrigger render={<Button size="md">Open popover</Button>} />
       <PopoverContent>
         <p className="text-body">Popover content.</p>
       </PopoverContent>

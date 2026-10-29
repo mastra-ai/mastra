@@ -24,7 +24,7 @@ const headingRoles: TextRole[] = [
   'card-title-tight',
   'card-title-strong',
 ];
-const textRoles: TextRole[] = ['body', 'label', 'body-sm', 'column', 'caption', 'meta'];
+const textRoles: TextRole[] = ['body', 'label', 'body-sm', 'menu', 'column', 'caption', 'meta'];
 const monoRoles: TextRole[] = ['body', 'body-sm', 'caption', 'meta'];
 
 const families: { token: string; use: string; className: string; sample: string }[] = [
@@ -62,7 +62,8 @@ const samples: Record<TextRole, string> = {
   'card-title': 'Fix the deployment configuration',
   'card-title-tight': 'Review the deployment configuration',
   'card-title-strong': 'Investigate the deployment configuration',
-  'body-sm': 'Table cells, menu items and field values',
+  'body-sm': 'Table cells and field values',
+  menu: 'Sort · Activity · Reset to default',
   column: 'STATUS',
   caption: 'Secondary information and supporting copy',
   meta: 'METADATA · 12:42 PM',

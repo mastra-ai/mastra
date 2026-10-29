@@ -312,7 +312,7 @@ describe('DatasetReview scoped to an agent', () => {
 
       await screen.findByText(/exp one input/);
       await screen.findByText(/exp two input/);
-      fireEvent.click(screen.getByRole('button', { name: 'Create Scorer' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Create scorer' }));
 
       expect(onCreateScorer).toHaveBeenCalledTimes(1);
       expect(onCreateScorer.mock.calls[0]?.[0]).toEqual(
@@ -325,12 +325,12 @@ describe('DatasetReview scoped to an agent', () => {
   });
 
   describe('when onCreateScorer is not provided', () => {
-    it('does not render the Create Scorer action', async () => {
+    it('does not render the Create scorer action', async () => {
       setupHandlers();
       renderWithProviders(<DatasetReview withQueryTrace withFeedback targetType="agent" targetId="chef-agent" />);
 
       await screen.findByText(/exp one input/);
-      expect(screen.queryByRole('button', { name: 'Create Scorer' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Create scorer' })).toBeNull();
     });
   });
 });

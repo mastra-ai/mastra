@@ -11,7 +11,7 @@ import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
+import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 
 const SERIES = [{ dataKey: 'failureRate', label: 'Failed runs', color: CHART_COLORS.error }];
 
@@ -38,6 +38,11 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
     title: 'Failure rate',
     description: 'Share of agent runs that failed.',
     actions: onViewErrors && <OpenErrorsInLogsButton onClick={onViewErrors} />,
+    toolbar: (
+      <MetricsCard.Toolbar>
+        <MetricsLineChartLegend series={SERIES} />
+      </MetricsCard.Toolbar>
+    ),
   };
 
   if (isError) {
@@ -62,6 +67,7 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
           series={SERIES}
           height="fill"
           xLabels="edges"
+          showLegend={false}
           valueFormatter={formatPercent}
           axisFormatter={axisPercent}
           yDomain={yDomain}

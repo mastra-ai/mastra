@@ -116,6 +116,20 @@ describe('buildLinearAgentTools — exposure gating', () => {
     expect(tools).toHaveProperty('linear_create_comment');
   });
 
+  it('tells the agent how issues in the connected workspace link', async () => {
+    await seedProject();
+    await seedConnection();
+    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools.linear_get_issue?.description).toContain('https://linear.app/acme/issue/<identifier>');
+  });
+
+  it('leaves the link pattern out when the workspace slug is unknown', async () => {
+    await seedProject();
+    await seedConnection({ workspaceUrlKey: null });
+    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools.linear_get_issue?.description).not.toContain('linear.app');
+  });
+
   it('resolves a board run from its factory project instead of its work-item session id', async () => {
     await seedProject();
     await seedConnection();

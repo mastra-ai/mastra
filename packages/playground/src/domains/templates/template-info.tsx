@@ -95,7 +95,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           )}
         </div>
 
-        {infoData && <KeyValueList data={infoData} labelsAreHidden={true} isLoading={isLoading} />}
+        {infoData && <KeyValueList data={infoData} labelsAreHidden isLoading={isLoading} />}
       </div>
     </>
   );

@@ -16,6 +16,7 @@ export async function recordPullRequestHead(
     id: string;
     headSha: string;
     headAt: number | undefined;
+    deliveryId?: string;
     /** Only write while the card has no open pull request or has this one out. */
     ownedPullRequestNumber?: number;
   },
@@ -38,7 +39,16 @@ export async function recordPullRequestHead(
         id: card.id,
         userId: 'factory-rule-dispatcher',
         expectedRevision: card.revision,
-        patch: { metadata: { pullRequestHeadSha: input.headSha, pullRequestHeadAt: input.headAt } },
+        patch: {
+          metadata: {
+            pullRequestHeadSha: input.headSha,
+            pullRequestHeadAt: input.headAt,
+            pullRequestHeadDeliveryId:
+              card.metadata?.pullRequestHeadSha === input.headSha
+                ? (card.metadata?.pullRequestHeadDeliveryId ?? null)
+                : (input.deliveryId ?? null),
+          },
+        },
       });
       return;
     } catch (error) {

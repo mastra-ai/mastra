@@ -38,18 +38,11 @@ export function sessionOwnerFilterValue(userId: string): string {
   return `${SESSION_OWNER_PREFIX}${userId}`;
 }
 
-export function defaultSessionFilters(viewerUserId: string | undefined): SessionFiltersState {
-  return viewerUserId ? { ...EMPTY_SESSION_FILTERS, owner: MY_SESSIONS } : EMPTY_SESSION_FILTERS;
-}
-
-export function activeSessionFilterCount(
-  filters: SessionFiltersState,
-  defaults: SessionFiltersState = EMPTY_SESSION_FILTERS,
-): number {
+export function activeSessionFilterCount(filters: SessionFiltersState): number {
   return (
-    Number(filters.owner !== defaults.owner) +
-    Number(filters.status !== defaults.status) +
-    Number(filters.updated !== defaults.updated)
+    Number(filters.owner !== EMPTY_SESSION_FILTERS.owner) +
+    Number(filters.status !== EMPTY_SESSION_FILTERS.status) +
+    Number(filters.updated !== EMPTY_SESSION_FILTERS.updated)
   );
 }
 

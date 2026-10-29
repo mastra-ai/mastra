@@ -15,6 +15,13 @@ export type {
   ComposerTone,
   ComposerToneLabelProps,
 } from './composer';
+export { ComposerHeader, ComposerHeaderActions, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
+export type {
+  ComposerHeaderActionsProps,
+  ComposerHeaderContentProps,
+  ComposerHeaderProps,
+  ComposerHeaderRowProps,
+} from './composer-header';
 export { ComposerSuggestions } from './commands/composer-suggestions';
 export type { ComposerSuggestionItem, ComposerSuggestionsProps } from './commands/composer-suggestions';
 export { useComposerCommands } from './commands/use-composer-commands';

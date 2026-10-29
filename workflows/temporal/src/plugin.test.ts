@@ -198,7 +198,7 @@ describe('Temporal prebuild integration', () => {
     expect(workflowSource).toContain('const complexWorkflow =');
     expect(workflowSource).toContain('const innerWorkflow =');
     expect(workflowSource).toContain('.then("step1")');
-    expect(workflowSource).toContain('.thenWorkflow("innerWorkflow")');
+    expect(workflowSource).toContain('.thenWorkflow("innerWorkflow", "inner-workflow")');
     expect(normalizedWorkflowSource).toContain(
       '.parallel([{ type: "step", step: { id: "step2" } }, { type: "step", step: { id: "step3" } }])',
     );
@@ -269,7 +269,7 @@ describe('Temporal prebuild integration', () => {
       state: undefined,
       steps: {
         step1: { value: 'test-step1' },
-        innerWorkflow: { value: 'test-step1-inner' },
+        'inner-workflow': { value: 'test-step1-inner' },
         step2: { step2: 'test-step1-inner-step2' },
         step3: { step3: 'test-step1-inner-step3' },
         step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },

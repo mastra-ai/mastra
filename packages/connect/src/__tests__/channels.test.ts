@@ -738,6 +738,10 @@ describe('channels()', () => {
   });
 
   it('warns and skips a channel when its provider module fails to load, keeping the others', async () => {
+    // Vitest resolves consecutive doMock calls in parallel, so re-mocking
+    // directly after beforeEach's mock can let the default fake win the race.
+    // An unmock in between forces the two registrations to apply in order.
+    vi.doUnmock('@mastra/slack');
     vi.doMock('@mastra/slack', () => {
       throw new Error("Cannot find module '@mastra/slack'");
     });

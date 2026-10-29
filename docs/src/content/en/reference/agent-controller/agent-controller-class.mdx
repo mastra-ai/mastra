@@ -601,7 +601,7 @@ Returns: `Promise<StorageListMessagesOutput>` with controller-format messages.
 
 #### `generateThreadTitle(options)`
 
-Generate and store a title from a thread's conversation without creating a Session. `threadId` is required. `sessionId`, `model`, and `requestContext` are optional; pass `sessionId` to borrow a live session's agent and request context. The method throws when the thread doesn't exist and returns `undefined` when the model produces no title.
+Generate and store a title from a thread's conversation without creating a Session. `threadId` is required. Optional fields include `sessionId`, `model`, and `requestContext`. Passing `sessionId` borrows a live session's agent and request context. The method throws when the thread doesn't exist and returns `undefined` when the model produces no title.
 
 ```typescript
 const title = await controller.generateThreadTitle({

@@ -3,6 +3,7 @@ import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/
 import { TRACE_PROPERTY_FILTER_PARAM_BY_FIELD } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
+import { STUDIO_TRACES_FEATURES } from './features';
 import { useTraceFilterPersistence } from './hooks/use-trace-filter-persistence';
 import { useTracesRouteState } from './hooks/use-traces-route-state';
 import { useTracesScopeParams } from './hooks/use-traces-scope-params';
@@ -45,9 +46,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       selection={route.selection}
       filters={route.filters}
       onChange={route.setState}
-      sortDirection={route.sortDirection}
-      onSortDirectionChange={route.setSortDirection}
+      sort={route.sort}
+      onSortChange={route.setSort}
       scope={scope}
+      features={STUDIO_TRACES_FEATURES}
     >
       <TracesPageContent isScoped={isScoped} />
     </TracesExplorer>

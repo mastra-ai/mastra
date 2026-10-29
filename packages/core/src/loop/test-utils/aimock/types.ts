@@ -1,11 +1,15 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
+import type { MastraServerCache } from '../../../cache';
+import type { ObservabilityEntrypoint, TracingOptions } from '../../../observability';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
+import type { MemoryConfigInternal } from '../../../memory/types';
 import type { RequestContext } from '../../../request-context';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
+import type { ToolHooks } from '../../../tools/types';
 import type { AnyWorkspace } from '../../../workspace/workspace';
 
 /**
@@ -51,6 +55,12 @@ export interface LoopScenarioResult {
    * `mastra.backgroundTaskManager` for background task assertions or shutdown.
    */
   mastra?: any;
+  /**
+   * The error thrown while {@link runLoopScenario} drained `fullStream`. Only
+   * returned when {@link RunLoopScenarioOptions.expectStreamError} is set;
+   * otherwise the harness rethrows it.
+   */
+  streamError?: unknown;
 }
 
 /**
@@ -110,6 +120,8 @@ export function isDurableEngineVariant(engine: EngineVariant | undefined): boole
 }
 
 export interface RunLoopScenarioOptions {
+  /** Wait for run-side effects after the consumer stream ends, before disposing its resources. */
+  afterStream?: () => Promise<void>;
   /** Active AIMock handle for the current suite (from {@link useLoopScenarioAimock}). */
   llm: LLMock;
   /**
@@ -123,6 +135,8 @@ export interface RunLoopScenarioOptions {
    * Runs once before the loop starts.
    */
   fixtures: (llm: LLMock) => void;
+  /** Real observability implementation for exported-span assertions. */
+  observability?: ObservabilityEntrypoint;
   /** The input that kicks off the loop: a user prompt, or messages (e.g. ending on an assistant prefill). */
   prompt: string | MessageListInput;
   /**
@@ -132,7 +146,10 @@ export interface RunLoopScenarioOptions {
   defaultOptions?: {
     autoResumeSuspendedTools?: boolean;
     inputProcessors?: any;
+    hooks?: ToolHooks;
   };
+  /** Per-call tool hooks forwarded to agent.stream(). */
+  hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
   /** Signal providers registered on the Agent constructor. */
@@ -172,6 +189,8 @@ export interface RunLoopScenarioOptions {
    * pass `false` to test tool-level `requireApproval`, or a function to decide per tool call.
    */
   requireToolApproval?: boolean | ((context: { toolName: string; args?: unknown }) => boolean);
+  /** Close a durable stream on approval suspension so its output promises settle. */
+  closeOnSuspend?: boolean;
   /**
    * Stop condition for the loop. Forwarded to `agent.stream({ stopWhen })`.
    * Use this to bound long/looping tool scenarios.
@@ -345,6 +364,8 @@ export interface RunLoopScenarioOptions {
    * assert transform/redact behavior over the loop output.
    */
   outputProcessors?: any;
+  /** Output processors set on the Agent constructor (static array or a `({ requestContext }) => processors` function). */
+  agentOutputProcessors?: any;
   /** Forwarded to `agent.stream({ maxProcessorRetries })`. */
   maxProcessorRetries?: number;
   /**
@@ -373,7 +394,7 @@ export interface RunLoopScenarioOptions {
    * Controls recall behavior like `lastMessages` (number of messages to recall)
    * or `semanticRecall` (enable/disable semantic recall).
    */
-  memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory' | 'readOnly'>;
   /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
   onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
@@ -387,6 +408,8 @@ export interface RunLoopScenarioOptions {
    * Use for testing the signal integration (subscribe → sendMessage → receive response).
    */
   pubsub?: PubSub;
+  /** Shared cache for durable/evented pubsub scenarios. */
+  cache?: MastraServerCache;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted
@@ -394,6 +417,13 @@ export interface RunLoopScenarioOptions {
    * fidelity assertions (text-delta ordering, reasoning chunks, etc.).
    */
   collectChunks?: boolean;
+  /**
+   * The scenario deliberately makes the stream throw (provider error, tripwire,
+   * abort, …). When set, a drain error is returned on
+   * {@link LoopScenarioResult.streamError}; when unset, {@link runLoopScenario}
+   * rethrows it with the original error as `cause`.
+   */
+  expectStreamError?: boolean;
   /**
    * When set, {@link runLoopScenario} returns the output WITHOUT consuming the
    * stream. The test must manually drain `output.fullStream` after publishing
@@ -428,8 +458,18 @@ export interface RunLoopScenarioOptions {
  */
 export interface RunApprovalScenarioOptions extends Pick<
   RunLoopScenarioOptions,
-  'llm' | 'fixtures' | 'prompt' | 'tools' | 'instructions' | 'stopWhen' | 'requireToolApproval' | 'engine'
+  | 'llm'
+  | 'fixtures'
+  | 'prompt'
+  | 'tools'
+  | 'instructions'
+  | 'stopWhen'
+  | 'requireToolApproval'
+  | 'engine'
+  | 'observability'
+  | 'afterStream'
 > {
+  tracingOptions?: TracingOptions;
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based

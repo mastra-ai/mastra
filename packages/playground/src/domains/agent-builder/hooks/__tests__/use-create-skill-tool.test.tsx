@@ -55,8 +55,7 @@ type SkillToolInput = Parameters<NonNullable<SkillTool['execute']>>[0];
 type SkillToolContext = Parameters<NonNullable<SkillTool['execute']>>[1];
 
 /** Invokes the tool the way the agent runtime does (input + execution context). */
-const runTool = (tool: SkillTool, input: Partial<SkillToolInput>) =>
-  tool.execute!(input as SkillToolInput, {} as SkillToolContext);
+const runTool = (tool: SkillTool, input: Partial<SkillToolInput>) => tool.execute!(input, {} as SkillToolContext);
 
 const renderCreateSkillTool = (options: { availableWorkspaces?: { id: string; name: string }[] } = {}) => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = { current: null };

@@ -53,7 +53,7 @@ function createClientToolModel() {
               toolCallType: 'function',
               toolCallId: 'call-clipboard-1',
               toolName: 'get_clipboard',
-              args: '{}',
+              input: '{}',
             },
             {
               type: 'finish',
@@ -64,28 +64,27 @@ function createClientToolModel() {
           rawCall: { rawPrompt: [], rawSettings: {} },
           warnings: [],
         };
-      } else {
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'resp-2', modelId: 'mock', timestamp: new Date() },
-            { type: 'text-start', id: 'text-1' },
-            {
-              type: 'text-delta',
-              id: 'text-1',
-              delta: 'Your clipboard contains: Meeting notes for Monday standup.',
-            },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
-            },
-          ] as any),
-          rawCall: { rawPrompt: [], rawSettings: {} },
-          warnings: [],
-        };
       }
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'resp-2', modelId: 'mock', timestamp: new Date() },
+          { type: 'text-start', id: 'text-1' },
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: 'Your clipboard contains: Meeting notes for Monday standup.',
+          },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
+          },
+        ] as any),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+        warnings: [],
+      };
     },
   });
 }

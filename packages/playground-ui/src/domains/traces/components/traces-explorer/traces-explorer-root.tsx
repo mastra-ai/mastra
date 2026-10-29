@@ -13,18 +13,14 @@ import {
   isSelectionEmpty,
   resolveTracesDateWindow,
   sanitizeTracesFilters,
+  selectsRunningStatus,
   selectScore,
   selectSpan,
   selectTrace,
   setSpanTab,
   setSpanView,
 } from './traces-explorer-actions';
-import type {
-  TracesExplorerState,
-  TracesFilters,
-  TracesSelection,
-  TracesSortDirection,
-} from './traces-explorer-actions';
+import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
 import { TracesColumnsProvider } from './traces-explorer-columns-provider';
 import { TracesConfigContext, TracesFiltersContext, TracesSelectionContext } from './traces-explorer-context';
 import type {
@@ -40,6 +36,9 @@ import type {
 import { TracesListProvider } from './traces-explorer-list-provider';
 import {
   useFeedbackAvailable,
+  useObservabilityCapabilities,
+  useSpanQueryAvailable,
+  useThreadQueryAvailable,
   useTraceQueryAvailable,
   useTraceQueryDeltaPollingAvailable,
   useTraceQueryDiscoveryAvailable,
@@ -51,8 +50,8 @@ export type TracesExplorerRootProps = {
   filters: TracesFilters;
   /** Receives the full next state once per user action, so a filter edit and the selection it clears land together. */
   onChange: (next: TracesExplorerState) => void;
-  sortDirection: TracesSortDirection;
-  onSortDirectionChange: (next: TracesSortDirection) => void;
+  sort: TracesSort;
+  onSortChange: (next: TracesSort) => void;
   /** Pins the explorer to one entity: its fields stay in the filters but never surface as chips. */
   scope?: TracesExplorerScope;
   /** Resolved by the host, which may know better than the storage capabilities (e.g. hosted deployments). */
@@ -76,7 +75,7 @@ const listIdForScope = (scope?: TracesExplorerScope) =>
       ? 'workflows-traces'
       : 'all-traces';
 
-type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortDirectionChange'> & {
+type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortChange'> & {
   scopedFieldIds: ReadonlySet<string>;
 };
 
@@ -84,8 +83,8 @@ export function TracesExplorerRoot({
   selection,
   filters: rawFilters,
   onChange,
-  sortDirection,
-  onSortDirectionChange,
+  sort,
+  onSortChange: onHostSortChange,
   scope,
   metricsSupport,
   features,
@@ -96,12 +95,25 @@ export function TracesExplorerRoot({
   const traceQuery = useTraceQueryAvailable();
   const withQueryTrace = traceQuery.enabled && features?.traceQuery !== false;
   const withFeedback = useFeedbackAvailable().enabled && features?.feedback !== false;
+  // Opt-in: span queries need both the server capability and the host turning them on.
+  const withSpanQuery = useSpanQueryAvailable().enabled && features?.spanQuery === true;
+  // Opt-in like span queries: thread rows need the server capability and the host turning them on.
+  const withThreadQuery = useThreadQueryAvailable().enabled && features?.threadQuery === true;
   const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
   const { enabled: withDeltaPolling } = useTraceQueryDeltaPollingAvailable();
   const withDiscovery = useTraceQueryDiscoveryAvailable().enabled && withQueryTrace;
+  // `listTracesLight` rows never carry it, so it needs the trace query API as well.
+  const { data: capabilities } = useObservabilityCapabilities();
+  const withTimeToFirstChunk = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
+  const withTimeToFirstChunkSort =
+    withTimeToFirstChunk && (capabilities?.capabilities.traceQueryTimeToFirstChunkSort ?? false);
+  const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(() => sanitizeTracesFilters(rawFilters, withRootDuration), [rawFilters, withRootDuration]);
+  const filters = useMemo(
+    () => sanitizeTracesFilters(rawFilters, withRootDuration, withOutcomeFields),
+    [rawFilters, withRootDuration, withOutcomeFields],
+  );
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -123,7 +135,7 @@ export function TracesExplorerRoot({
   // Actions read the latest props when they run, so the host doesn't need stable callbacks.
   // `latest` is written as soon as a change is emitted, so a second action in the same tick
   // (the date picker fires a preset then its dates) builds on the first instead of the stale props.
-  const current: Latest = { selection, filters: rawFilters, onChange, onSortDirectionChange, scopedFieldIds };
+  const current: Latest = { selection, filters: rawFilters, onChange, onSortChange: onHostSortChange, scopedFieldIds };
   const latest = useRef(current);
   latest.current = current;
 
@@ -168,7 +180,7 @@ export function TracesExplorerRoot({
       setDate: (value, end) => updateFilters(applyDate(latest.current.filters, value, end)),
       setDateRange: (from, to) => updateFilters(applyDateRange(latest.current.filters, from, to)),
     };
-    const onSortChange = (direction: TracesSortDirection) => latest.current.onSortDirectionChange(direction);
+    const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
     return { selectionActions, filtersActions, onSortChange };
   }, []);
   const { selectionActions, filtersActions, onSortChange } = actions;
@@ -189,7 +201,12 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      withSpanQuery,
+      withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
+      withTimeToFirstChunk,
+      withTimeToFirstChunkSort,
       withDeltaPolling,
       withDiscovery,
       isCapabilitiesLoading: traceQuery.isLoading,
@@ -202,7 +219,12 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      withSpanQuery,
+      withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
+      withTimeToFirstChunk,
+      withTimeToFirstChunkSort,
       withDeltaPolling,
       withDiscovery,
       traceQuery.isLoading,
@@ -213,6 +235,7 @@ export function TracesExplorerRoot({
 
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
+  const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
     () => ({
       ...filtersActions,
@@ -221,8 +244,9 @@ export function TracesExplorerRoot({
       dateTo,
       filtersApplied,
       contentFiltersApplied,
+      runningSelected,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
+    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list
@@ -237,9 +261,11 @@ export function TracesExplorerRoot({
     <TracesConfigContext.Provider value={configValue}>
       <TracesFiltersContext.Provider value={filtersValue}>
         <TracesSelectionContext.Provider value={selectionValue}>
-          <TracesListProvider sortDirection={sortDirection} onSortChange={onSortChange}>
-            <TracesColumnsProvider>{children}</TracesColumnsProvider>
-          </TracesListProvider>
+          <TracesColumnsProvider>
+            <TracesListProvider sort={sort} onSortChange={onSortChange}>
+              {children}
+            </TracesListProvider>
+          </TracesColumnsProvider>
         </TracesSelectionContext.Provider>
       </TracesFiltersContext.Provider>
     </TracesConfigContext.Provider>

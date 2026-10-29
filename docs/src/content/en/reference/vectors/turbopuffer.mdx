@@ -75,7 +75,7 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 
 ### `createIndex()`
 
-Turbopuffer has no explicit create-index operation. `createIndex()` validates the arguments and records the dimension and metric locally; the namespace is created in Turbopuffer on the first `upsert()`.
+Turbopuffer has no explicit create-index operation. `createIndex()` validates the arguments and records the dimension and metric locally. The first `upsert()` creates the namespace in Turbopuffer.
 
 <PropertiesTable
   content={[

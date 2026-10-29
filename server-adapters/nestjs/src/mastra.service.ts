@@ -66,6 +66,21 @@ export class MastraService implements OnModuleInit {
 
     this.serverAdapter = new NestMastraServer(app, this.routeHandler);
     this.mastra.setMastraServer(this.serverAdapter);
+    this.warnIfServerMiddlewareConfigured();
+  }
+
+  /** Mastra server middleware uses Hono's `(c, next)` signature, so NestJS cannot run it. */
+  private warnIfServerMiddlewareConfigured(): void {
+    const instanceMiddleware = this.mastra.getServerMiddleware?.() ?? [];
+    const configMiddleware = this.mastra.getServer()?.middleware;
+    const hasConfigMiddleware = Array.isArray(configMiddleware) ? configMiddleware.length > 0 : !!configMiddleware;
+    if (instanceMiddleware.length === 0 && !hasConfigMiddleware) return;
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        'Mastra server middleware (`server.middleware` or `setServerMiddleware()`) is configured, but this server adapter cannot run Hono middleware handlers. The configured middleware will not run — register middleware through your server framework instead.',
+      );
   }
 
   /**

@@ -161,9 +161,11 @@ export function FilterBarChip({
   children,
 }: FilterBarChipProps) {
   const ctx = useFilterBarContext();
+  const [initial] = useState(() => !ctx.mounted);
   const [openSegment, setOpenSegment] = useState<FilterBarSegment | null>(null);
   const field = ctx.getField(item.fieldId);
-  const operator = ctx.getOperator(item.operatorId);
+  const operator =
+    (field && ctx.getFieldOperators(field).find(o => o.id === item.operatorId)) ?? ctx.getOperator(item.operatorId);
   const index = ctx.items.findIndex(i => i.id === item.id);
   const rootRef = useRef<HTMLDivElement>(null);
   const leaving = ctx.leaving.has(item.id);
@@ -241,7 +243,7 @@ export function FilterBarChip({
           event.preventDefault();
           ctx.removeItem(item.id);
           ctx.focusAfterRemove(index);
-          return;
+          break;
         default:
       }
     },
@@ -270,6 +272,7 @@ export function FilterBarChip({
         aria-hidden={draft || leaving || undefined}
         data-slot="filter-bar-chip"
         data-draft={draft || undefined}
+        data-initial={initial || undefined}
         data-readonly={readOnly || undefined}
         data-leaving={leaving || undefined}
         data-shine={(shine && !leaving) || undefined}
@@ -699,15 +702,20 @@ export function FilterBarChipValue() {
   return <ValueEditor />;
 }
 
+/** The trailing × segment of a chip. */
+export const removeSegmentClass = cn(
+  editableSegmentClass,
+  'px-1.5 text-muted-foreground [--filter-bar-segment-padding:0.375rem]',
+);
+
 export function FilterBarChipRemove() {
   const ctx = useFilterBarContext();
   const chip = useChip();
   if (chip.readOnly || chip.draft) return null;
-  const removeClass = cn(editableSegmentClass, 'px-1.5 text-muted-foreground [--filter-bar-segment-padding:0.375rem]');
   if (chip.leaving) {
     // Keep the × on screen so it folds away with the other segments.
     return (
-      <span className={removeClass}>
+      <span className={removeSegmentClass}>
         <XIcon className="size-[1.1em]" />
       </span>
     );
@@ -721,7 +729,7 @@ export function FilterBarChipRemove() {
       aria-label={label}
       title={label}
       ref={el => ctx.registerSegment(chip.item.id, 'remove', el)}
-      className={removeClass}
+      className={removeSegmentClass}
       onClick={() => {
         ctx.removeItem(chip.item.id);
         ctx.focusAfterRemove(chip.index);

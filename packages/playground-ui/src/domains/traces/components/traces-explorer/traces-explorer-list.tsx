@@ -11,17 +11,9 @@ import {
 import { useTracesFilterBar } from './use-traces-filter-bar';
 
 export function TracesExplorerList() {
-  const { listId } = useTracesConfig();
-  const {
-    rows,
-    isLoading,
-    isFetchingNextPage,
-    hasNextPage,
-    setEndOfListElement,
-    autoRefetch,
-    sortDirection,
-    onSortChange,
-  } = useTracesList();
+  const { listId, withTimeToFirstChunkSort } = useTracesConfig();
+  const { rows, isLoading, isFetchingNextPage, hasNextPage, setEndOfListElement, autoRefetch, sort, onSortChange } =
+    useTracesList();
   const { filtersApplied } = useTracesFilters();
   const { onFilterByField } = useTracesFilterBar();
   const { selectedTraceId, selectTrace, closeTrace } = useTracesSelection();
@@ -51,8 +43,12 @@ export function TracesExplorerList() {
       featuredTraceId={selectedTraceId}
       columnPreferences={displayedPreferences}
       usageByTraceId={usageByTraceId}
-      createdSort={sortDirection}
-      onSortChange={onSortChange}
+      createdSort={sort.field === 'startedAt' ? sort.direction : undefined}
+      onSortChange={direction => onSortChange({ field: 'startedAt', direction })}
+      timeToFirstChunkSort={sort.field === 'timeToFirstChunkMs' ? sort.direction : undefined}
+      onTimeToFirstChunkSortChange={
+        withTimeToFirstChunkSort ? direction => onSortChange({ field: 'timeToFirstChunkMs', direction }) : undefined
+      }
       onFilterByField={onFilterByField}
       onTraceClick={handleTraceClick}
     />

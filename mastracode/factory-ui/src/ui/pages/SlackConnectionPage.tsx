@@ -1,3 +1,4 @@
+import { SettingsRowsSkeleton } from '../ui/SettingsRowsSkeleton';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
@@ -113,9 +114,11 @@ export function SlackConnectionSettings() {
   return (
     <div className="mt-6 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
-        <Txt tone="muted" as="p" variant="caption" role="status">
-          Loading Slack connection…
-        </Txt>
+        <SettingsSubsection scope="personal" title="Connection">
+          <SettingsContainer>
+            <SettingsRowsSkeleton label="Loading Slack connection" rows={1} />
+          </SettingsContainer>
+        </SettingsSubsection>
       ) : accountsQuery.error ? (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}

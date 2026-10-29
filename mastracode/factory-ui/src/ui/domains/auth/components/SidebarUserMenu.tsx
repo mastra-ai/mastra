@@ -11,7 +11,7 @@ import { Link, useLocation, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { PERSONAL_SETTINGS_GROUP } from '../../settings/components/SettingsNavigation';
+import { ACCOUNT_SETTINGS_GROUP } from '../../settings/components/SettingsNavigation';
 import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
 import { clearMastraCodeStorage, logoutUrl } from '../services/auth';
@@ -29,10 +29,21 @@ export function SidebarUserMenu() {
 
   if (auth.isLoading) {
     return (
-      <li role="status" aria-label="Checking sign-in" className="flex h-9 items-center gap-2 px-3">
-        <Skeleton className="size-4 rounded-full" />
-        <Skeleton className="h-3 w-24" />
-      </li>
+      <Sidebar.NavLink
+        role="status"
+        aria-label="Checking sign-in"
+        render={
+          <div aria-hidden className="pointer-events-none h-auto min-h-10 py-1.5">
+            <Skeleton className="size-avatar-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
+            <Sidebar.NavLabel>
+              <span className="flex min-w-0 flex-col gap-1.5">
+                <Skeleton className="h-3 w-24 max-w-full motion-reduce:before:animate-none" />
+                <Skeleton className="h-2.5 w-32 max-w-full motion-reduce:before:animate-none" />
+              </span>
+            </Sidebar.NavLabel>
+          </div>
+        }
+      />
     );
   }
 
@@ -41,7 +52,7 @@ export function SidebarUserMenu() {
   const triggerLabel = signedIn ? account.user?.name?.trim() || account.user?.email || 'User' : 'Settings';
   const email = signedIn ? account.user?.email : undefined;
   const menuLabel = signedIn ? 'User menu' : 'Settings menu';
-  const personalSettings = PERSONAL_SETTINGS_GROUP.items.filter(item => signedIn || item.id !== 'account');
+  const accountSettings = ACCOUNT_SETTINGS_GROUP.items.filter(item => signedIn || item.id !== 'account');
   const backToAppState = settingsOpen ? location.state : { from: location };
 
   return (
@@ -84,8 +95,8 @@ export function SidebarUserMenu() {
             <DropdownMenu.Separator />
           </>
         )}
-        <DropdownMenu.Label>{PERSONAL_SETTINGS_GROUP.label}</DropdownMenu.Label>
-        {personalSettings.map(({ id, label, icon: Icon }) => (
+        <DropdownMenu.Label>{ACCOUNT_SETTINGS_GROUP.label}</DropdownMenu.Label>
+        {accountSettings.map(({ id, label, icon: Icon }) => (
           <DropdownMenu.Item
             key={id}
             render={<Link to={settingsSectionPath(factoryId, id)} state={backToAppState} />}

@@ -601,32 +601,35 @@ const ComposerSendButton = ({
   onCancel,
 }: ComposerSendButtonProps) => {
   const { isAddingAttachments } = useComposerAttachments();
-  // While streaming and not allowed to send mid-stream, the only action is cancel.
-  if (isRunning && !canSendWhileStreaming) {
+  const draftCanSteerRun = canSendWhileStreaming && !isEmpty;
+  if (isRunning && !draftCanSteerRun) {
     return (
-      <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
+      <Button
+        variant="default"
+        size="icon-md"
+        type="button"
+        tooltip="Cancel"
+        onClick={event => {
+          // Send turns into Cancel under the pointer: a double-click on Send must not cancel.
+          if (event.detail > 1) return;
+          onCancel();
+        }}
+      >
         <CircleStopIcon />
       </Button>
     );
   }
 
   return (
-    <>
-      <Button
-        type="submit"
-        variant="default"
-        size="icon-md"
-        tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        disabled={!canExecute || isEmpty || isAddingAttachments}
-      >
-        <ArrowUp />
-      </Button>
-      {isRunning && (
-        <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
-          <CircleStopIcon />
-        </Button>
-      )}
-    </>
+    <Button
+      type="submit"
+      variant="default"
+      size="icon-md"
+      tooltip={canExecute ? 'Send' : 'No permission to execute'}
+      disabled={!canExecute || isEmpty || isAddingAttachments}
+    >
+      <ArrowUp />
+    </Button>
   );
 };
 

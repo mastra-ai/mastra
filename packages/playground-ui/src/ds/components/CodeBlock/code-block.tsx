@@ -122,7 +122,6 @@ export function CodeBlock({
           content={code}
           copyMessage={copyMessage}
           tooltip={copyTooltip}
-          size="sm"
           className={cn(
             'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
             transitions.opacity,

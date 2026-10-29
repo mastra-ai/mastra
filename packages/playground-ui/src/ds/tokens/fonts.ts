@@ -20,6 +20,7 @@ export const TextRoles = [
   'card-title-tight',
   'card-title-strong',
   'body-sm',
+  'menu',
   'column',
   'caption',
   'eyebrow',

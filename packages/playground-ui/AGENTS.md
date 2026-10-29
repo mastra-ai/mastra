@@ -2,10 +2,10 @@ Build from root: pnpm build:playground-ui
 Test from root: pnpm --filter ./packages/playground-ui test
 Typecheck: pnpm --filter ./packages/playground-ui typecheck (standalone `tsc`)
 
-`build` is `vite build` only; vite-plugin-dts emits declarations and gates type
-errors via the `afterDiagnostic` hook in vite.config.ts. Use the `typecheck`
-script for an explicit `tsc` gate (CI runs turbo `typecheck`). The package's own
-build is ~8s; a slow `build:playground-ui` is the cold turbo cache rebuilding
+`build` is `vite build` only; a plugin in vite.config.ts runs TypeScript 7 `tsc`
+(`tsconfig.build.json`) alongside the bundle to emit declarations and fails the
+build on type errors. Use the `typecheck` script for an explicit `tsc` gate (CI
+runs turbo `typecheck`). The package's own build is ~5s; a slow `build:playground-ui` is the cold turbo cache rebuilding
 upstream deps (`^build`), not this package.
 
 PRIMARY testing strategy: Vitest + MSW + typed @mastra/client-js fixtures.

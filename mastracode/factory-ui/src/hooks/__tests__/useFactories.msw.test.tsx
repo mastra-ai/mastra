@@ -1,21 +1,19 @@
-/**
- * BDD coverage for the repository link mutation. Every place that links a
- * repository to a Factory (onboarding, the wizard, Settings › Repositories)
- * routes through it, so this is where "a linked repository feeds the board"
- * is guaranteed.
- *
- * Drives the real services + React Query cache; only the network is mocked
- * (MSW) on the ApiConfig base URL the test providers inject.
- */
 import { http, HttpResponse } from 'msw';
+import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
 import type { GitLabRepository } from '../../ui/domains/factory/services/gitlab';
-import type { GithubRepo } from '../../ui/domains/workspaces/services/github';
-import { useFactoriesQuery, useLinkRepositoryMutation } from '../useFactories';
+import type { FactoryProject, GithubRepo } from '../../ui/domains/workspaces/services/github';
+import {
+  environmentPayload,
+  environmentRepository,
+} from '../../ui/domains/settings/components/__tests__/fixtures/environment';
+import { useFactoryEnvironmentQuery } from '../useFactoryEnvironment';
+import { useFactoriesQuery, useFactoryQuery, useLinkRepositoryMutation } from '../useFactories';
 import { useIntakeConfigQuery } from '../useIntakeConfig';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
@@ -64,7 +62,6 @@ function stubRepositoryLink() {
   );
 }
 
-/** Stateful intake config: each PUT becomes what the next GET returns. */
 function stubIntakeConfig(initial: Partial<IntakeConfig>) {
   let config: Partial<IntakeConfig> = initial;
   const saved: IntakeConfig[] = [];
@@ -227,16 +224,90 @@ describe('useLinkRepositoryMutation', () => {
     expect(saved).toEqual([]);
   });
 
-  it('given the intake write fails, when a repository is linked, then the error surfaces and the Factory list still refreshes', async () => {
-    stubRepositoryLink();
-    let factoryListReads = 0;
+  it('given the intake write fails, when a repository is linked, then the error surfaces and the Factory repositories still refresh', async () => {
+    let linked = false;
+    const projectRepository = {
+      id: 'ghp_1',
+      branch: 'main',
+      sandboxWorkdir: '/workspace/hello',
+      repository: { slug: 'octo/hello', defaultBranch: 'main' },
+    };
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
-        factoryListReads += 1;
-        return HttpResponse.json({ projects: [] });
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [{ id: 'conn-1', installationId: 'inst-7', repositories: linked ? [projectRepository] : [] }],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () => {
+        linked = true;
+        return HttpResponse.json({ projectRepository });
       }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/environment`, () =>
+        HttpResponse.json({
+          environment: environmentPayload({
+            repositories: linked ? [environmentRepository({ projectRepositoryId: 'ghp_1', slug: 'octo/hello' })] : [],
+          }),
+        }),
+      ),
       http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
       http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })),
+    );
+
+    const { client, result } = renderHookWithProviders(() => ({
+      link: useLinkRepositoryMutation(),
+      factory: useFactoryQuery('fp-1'),
+      environment: useFactoryEnvironmentQuery('fp-1'),
+    }));
+    await waitForMutationsIdle(client);
+    expect(result.current.factory.data?.repositories).toEqual([]);
+    expect(result.current.environment.data?.repositories).toEqual([]);
+
+    result.current.link.mutate({ factoryProjectId: 'fp-1', repo });
+
+    await waitForMutationsIdle(client);
+    expect(result.current.link.error?.message).toBe('invalid_config');
+    expect(result.current.factory.data?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
+    expect(result.current.environment.data?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
+  });
+
+  it('given a link, when the intake config is slow, then the Factory list refresh starts without waiting for it', async () => {
+    let linked = false;
+    const events: string[] = [];
+    let markRefresh!: () => void;
+    const refreshStarted = new Promise<void>(resolve => (markRefresh = resolve));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Factory' }] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () => {
+        if (linked) {
+          events.push('list refresh');
+          markRefresh();
+        }
+        return HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              installationId: 'inst-7',
+              repositories: linked ? [{ id: 'ghp_1', repository: { slug: 'octo/hello' } }] : [],
+            },
+          ],
+        });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () => {
+        linked = true;
+        return HttpResponse.json({ projectRepository: { id: 'ghp_1', repository: { slug: 'octo/hello' } } });
+      }),
+      // Hold the intake read until the list refresh starts (or give up after 1s).
+      http.get(CONFIG_URL, async () => {
+        await Promise.race([refreshStarted, new Promise(resolve => setTimeout(resolve, 1_000))]);
+        events.push('intake answered');
+        return HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['octo/hello'] } } });
+      }),
     );
 
     const { client, result } = renderHookWithProviders(() => ({
@@ -244,12 +315,11 @@ describe('useLinkRepositoryMutation', () => {
       factories: useFactoriesQuery(),
     }));
     await waitForMutationsIdle(client);
-    expect(factoryListReads).toBe(1);
 
-    result.current.link.mutate({ factoryProjectId: 'fp-1', repo });
+    await act(() => result.current.link.mutateAsync({ factoryProjectId: 'fp-1', repo }));
 
-    await waitForMutationsIdle(client);
-    expect(result.current.link.error?.message).toBe('invalid_config');
-    expect(factoryListReads).toBe(2);
+    expect(events.slice(0, 2)).toEqual(['list refresh', 'intake answered']);
+    const factories = client.getQueryData<FactoryProject[]>(queryKeys.factories());
+    expect(factories?.[0]?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
   });
 });

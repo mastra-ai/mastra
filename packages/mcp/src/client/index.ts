@@ -6,6 +6,7 @@ export type {
   MCPClientCapabilities,
   MCPClientInfo,
   MCPClientProtocolVersion,
+  MCPClientTasksOptions,
   MCPInputRequest,
   MCPInputRequestHandler,
   MCPServerImplementation,
@@ -17,10 +18,15 @@ export type {
   ToolAnnotations,
   SerializableMCPToolDefinition,
   SerializableMCPToolCatalog,
+  MCPServerMap,
+  MCPClientServers,
+  MCPClientTools,
+  MCPClientToolsets,
 } from './types';
 export { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 export * from './client';
 export type * from './events';
+export type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../shared/tasks';
 export * from './configuration';
 export type { MCPDiscoveryErrorDetails } from './error-utils';
 export * from './oauth-provider';

@@ -11,7 +11,7 @@ import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../../hoo
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { useConnectPlatformProviderMutation } from '../../../../../hooks/usePlatformConnections';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { GitLabIcon } from '../../../../ui/icons';
 import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
@@ -63,7 +63,7 @@ export function CreateFactoryRepositoryRows({
   };
 
   if (githubStatus.isPending || gitlabStatus.isPending) {
-    return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading repositories" rows={3} />;
   }
 
   const githubRows = !connected ? (
@@ -150,7 +150,7 @@ function GithubRepositoryResults({
   const repos = useGithubReposQuery(debouncedQuery || undefined, true);
 
   if (repos.isPending) {
-    return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading repositories" rows={3} />;
   }
   if (repos.isError) return <CreateFactoryPaletteAlert>{repos.error.message}</CreateFactoryPaletteAlert>;
   if (repos.data.length === 0) return <CreateFactoryPaletteMessage>No repositories found.</CreateFactoryPaletteMessage>;
@@ -187,7 +187,7 @@ function GitLabRepositoryResults({
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (projects ?? []).filter(project => project.fullName.toLowerCase().includes(normalizedQuery));
   if (pending) {
-    return <SkeletonRows label="Loading GitLab repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading GitLab repositories" rows={3} />;
   }
   if (error) return <CreateFactoryPaletteAlert>{error.message}</CreateFactoryPaletteAlert>;
   return (

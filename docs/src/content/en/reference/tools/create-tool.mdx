@@ -41,6 +41,21 @@ export const weatherTool = createTool({
 
 The first `execute` parameter is the validated value from `inputSchema`. Destructure schema fields directly in the function signature, as shown with `{ location }`. The optional second parameter contains the execution context.
 
+### Display-only tools
+
+For a tool that only asks the client to display something, set `renderOnly: true` instead of defining `execute`:
+
+```typescript
+const showCard = createTool({
+  id: 'show-card',
+  description: 'Display a product card',
+  inputSchema: z.object({ productId: z.string() }),
+  renderOnly: true,
+})
+```
+
+Mastra streams the tool call and returns `{ acknowledged: true }` as its result, allowing the agent to continue generating text without a client round trip. This also works for tools owned by sub-agents. Their calls appear as nested `tool-output` stream events. Don't set an incompatible `outputSchema` on a render-only tool. The acknowledgement means the call was emitted, **not** that the browser rendered it. Don't use this for client actions whose outcome matters to the agent. For those, omit `execute` and return the result from the client, or use a suspending server tool when a sub-agent needs user input.
+
 ## Parameters
 
 <PropertiesTable
@@ -74,6 +89,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     name: 'outputSchema',
     type: 'StandardJSONSchemaV1',
     description: "A Standard JSON Schema defining the expected output structure of the tool's `execute` function.",
+    isOptional: true,
+  },
+  {
+    name: 'renderOnly',
+    type: 'boolean',
+    description:
+      'When true, streams a display-only tool call and automatically returns `{ acknowledged: true }` to the model so it can continue. Cannot be used with `execute`. The acknowledgement does not confirm that the client rendered the call.',
     isOptional: true,
   },
   {
@@ -464,7 +486,7 @@ export const weatherTool = createTool({
 })
 ```
 
-Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that don't support strict tool calling, Mastra ignores this option.
+Mastra forwards `strict: true` to model adapters that support strict tool calling and ignores the option for other adapters.
 
 ## Example with `toModelOutput`
 
@@ -722,7 +744,7 @@ Client-executed tools don't define an `execute` function. The browser runs the t
 
 For client-executed results, the follow-up request must include both the assistant tool call and the tool result, which `@mastra/client-js` sends automatically. A request that carries only the tool result doesn't fire the hook. In this case the callback receives `{ toolCallId, toolName, output, abortSignal }` only.
 
-Delivery is at least once, so a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
+At-least-once delivery means a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
 
 ### Hook execution order
 

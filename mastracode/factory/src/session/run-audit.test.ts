@@ -149,6 +149,20 @@ describe('Factory run lifecycle audit', () => {
     expect((await events()).find(event => event.action === 'factory.run.ended')?.metadata.reason).toBe('error');
   });
 
+  it('dates each run end from its kickoff, so a session timeline can draw the whole run', async () => {
+    const { start, emit, events } = await setup();
+    const beforeKickoff = Date.now();
+    await start();
+    emit('complete');
+
+    await vi.waitFor(async () => expect(await events()).toHaveLength(2));
+    const ended = (await events()).find(event => event.action === 'factory.run.ended');
+    const startedAt = ended?.metadata.startedAt;
+    expect(startedAt).toEqual(expect.any(Number));
+    expect(startedAt).toBeGreaterThanOrEqual(beforeKickoff);
+    expect(startedAt).toBeLessThanOrEqual(ended!.occurredAt.getTime());
+  });
+
   it('records a run that finishes before its delivery acknowledgement', async () => {
     const { start, emit, events } = await setup();
     emit('complete');

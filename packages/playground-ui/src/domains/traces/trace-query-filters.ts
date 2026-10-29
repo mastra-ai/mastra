@@ -80,11 +80,20 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'threadId',
   'resourceId',
   'durationMs',
+  'outcome',
+  'stopReason',
 ]);
 
 /** Trace-level fields that may be unset. "is not X" on these must also keep traces
  *  where the field is missing, so the predicate is `or[ne, notExists]`. */
-export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment', 'durationMs']);
+export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set([
+  'threadId',
+  'resourceId',
+  'environment',
+  'durationMs',
+  'outcome',
+  'stopReason',
+]);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */
 const NEGATIVE_TO_POSITIVE = {
@@ -112,7 +121,7 @@ function resolveTraceQueryPath(fieldId: string): { scope?: TraceQueryRelatedScop
   return { path: fieldId };
 }
 
-function scalarPredicate(
+export function scalarPredicate(
   op: TraceFilterOperatorId,
   path: string,
   values: (string | number)[],

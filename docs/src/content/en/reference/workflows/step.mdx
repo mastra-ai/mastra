@@ -128,6 +128,7 @@ You can create a step directly from an agent. The step will use the agent's name
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testAgent } from '../agents/test-agent'
+import { createStep } from '@mastra/core/workflows'
 
 const agentStep = createStep(testAgent)
 // inputSchema: { prompt: string }
@@ -139,6 +140,9 @@ const agentStep = createStep(testAgent)
 Pass `structuredOutput` to have the agent return typed structured data:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const articleSchema = z.object({
   title: z.string(),
   summary: z.string(),

@@ -288,6 +288,15 @@ export class RedeliveryDriver {
       );
     }
 
+    return this.redeliverEvent(original, options);
+  }
+
+  /** Re-delivers a captured control or step event through the real worker subscription. */
+  async redeliverEvent(
+    original: Event,
+    options: { deliveryAttempt?: number; viaPublish?: boolean } = {},
+  ): Promise<RedeliveryOutcome> {
+    if (this.#disposed) throw new Error('RedeliveryDriver is disposed');
     const before = this.#handled.length;
     let event: Event;
     if (options.viaPublish) {
@@ -296,7 +305,7 @@ export class RedeliveryDriver {
       const capturedBefore = this.events.length;
       await this.pubsub.publish(WORKFLOWS_TOPIC, snapshotClone(original));
       const published = this.events[capturedBefore];
-      if (!published) throw new Error(`Replaying "${match.spec}" did not publish a workflows event`);
+      if (!published) throw new Error(`Replaying ${original.type} did not publish a workflows event`);
       event = published;
     } else {
       event = {
@@ -317,7 +326,7 @@ export class RedeliveryDriver {
     const calls = this.#handled.slice(before).filter(h => h.event.id === event.id);
     if (calls.length === 0) {
       throw new Error(
-        `Redelivered workflow.step.run for "${match.spec}" was not consumed by any workflow event processor (are workers started?)`,
+        `Redelivered ${original.type} was not consumed by any workflow event processor (are workers started?)`,
       );
     }
     const handled = await Promise.all(calls.map(async c => ({ event: c.event, result: await c.result })));

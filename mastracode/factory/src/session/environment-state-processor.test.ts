@@ -45,7 +45,6 @@ const environment: SessionEnvironmentState = {
       dir: '/home/user/template-docs-expert',
       branch: 'factory/issue-7',
       defaultBranch: 'main',
-      position: 1,
       setupStatus: 'ok',
     },
     {
@@ -53,7 +52,6 @@ const environment: SessionEnvironmentState = {
       dir: '/home/user/mastra',
       branch: null,
       defaultBranch: 'main',
-      position: 2,
       setupStatus: 'skipped',
     },
   ],

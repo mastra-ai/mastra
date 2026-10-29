@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turso",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Turso Database storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -37,10 +37,10 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

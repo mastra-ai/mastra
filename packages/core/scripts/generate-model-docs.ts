@@ -376,6 +376,8 @@ ${modelsDevAttribution}
 ### Custom headers
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -397,6 +399,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
@@ -880,6 +884,8 @@ const reasoningAgent = new Agent({
 Since models are just strings, you can select them dynamically based on [request context](/docs/server/request-context), variables, or any other logic.
 
 \`\`\`typescript title="src/mastra/agents/dynamic-assistant-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-assistant",
   name: "Dynamic Assistant",
@@ -902,6 +908,8 @@ This enables powerful patterns:
 Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoningEffort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
 
 \`\`\`typescript title="src/mastra/agents/planner-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 // Agent level (apply to all future messages)
 const planner = new Agent({
   id: "planner",
@@ -936,6 +944,8 @@ const highEffort = await planner.generate([
 If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax.
 
 \`\`\`typescript title="src/mastra/agents/custom-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "Custom Agent",
@@ -976,7 +986,7 @@ const agent = new Agent({
       maxRetries: 2,
     },
     {
-      model: "__GATEWAY_GOOGLE_MODEL__",
+      model: "__GATEWAY_GOOGLE_MODEL_FLASH__",
       maxRetries: 2,
     },
   ],
@@ -1006,7 +1016,7 @@ const agent = new Agent({
       providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
     },
     {
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       maxRetries: 2,
       modelSettings: { temperature: 0.7 },
       providerOptions: { openai: { reasoningEffort: 'low' } },
@@ -1065,7 +1075,7 @@ const agent = new Agent({
 
 ### Example: LMStudio
 
-After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/$\{modelId\}\`) which will be displayed in the LMStudio interface.
+After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/\${modelId}\`) which will be displayed in the LMStudio interface.
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -1224,10 +1234,7 @@ ${allProviders
       logo="${getLogoUrl(p.id)}"
     />`,
   )
-  .join(
-    '\
-',
-  )}
+  .join('')}
 </CardGrid>`;
 }
 
@@ -1407,10 +1414,7 @@ async function generateDocs() {
   console.info('✅ Generated gateways/index.mdx');
 
   // Generate AI SDK provider documentation
-  console.info(
-    '\
-🔍 Filtering AI SDK providers...',
-  );
+  console.info('🔍 Filtering AI SDK providers...');
   const supportedProviderIds = new Set(Object.keys(providerRegistry));
   const aiSdkProviders = allModelsDevProviders
     .filter(p => {

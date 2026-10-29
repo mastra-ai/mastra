@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
 import {
   defaultDeltaLimit,
@@ -23,18 +22,22 @@ export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
+const TRACE_QUERY_NUMERIC_ORDER_FIELDS = ['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const;
+
 /**
- * Fields trace and span queries can sort by. `timeToFirstChunkMs` is a number that can be empty;
- * empty values sort last in both directions.
+ * Fields trace and span queries can sort by. `timeToFirstChunkMs` and `timeToFirstTokenMs` are
+ * numbers that can be empty; empty values sort last in both directions.
  */
-export const TRACE_QUERY_ORDER_FIELDS = ['startedAt', 'endedAt', 'timeToFirstChunkMs'] as const;
+export const TRACE_QUERY_ORDER_FIELDS = ['startedAt', 'endedAt', ...TRACE_QUERY_NUMERIC_ORDER_FIELDS] as const;
 export type TraceQueryOrderField = (typeof TRACE_QUERY_ORDER_FIELDS)[number];
-/** A keyset cursor's sort value: an ISO timestamp, or a number or `null` for `timeToFirstChunkMs`. */
+/** A keyset cursor's sort value: an ISO timestamp, or a number or `null` for a numeric order field. */
 export type TraceQuerySortValue = string | number | null;
 
 /** @internal Whether a decoded cursor's sort value has the kind its order field produces. */
 export function isTraceQuerySortValueFor(field: TraceQueryOrderField, value: TraceQuerySortValue): boolean {
-  return field === 'timeToFirstChunkMs' ? value === null || typeof value === 'number' : typeof value === 'string';
+  return (TRACE_QUERY_NUMERIC_ORDER_FIELDS as readonly string[]).includes(field)
+    ? value === null || typeof value === 'number'
+    : typeof value === 'string';
 }
 
 /** @internal Cursor sort values: ISO timestamps, or finite numbers and `null` for numeric fields. */
@@ -52,7 +55,7 @@ export function compareTraceQueryStrings(left: string, right: string): number {
   return 0;
 }
 
-const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
+const hasMaxUtf8Bytes = (value: string, maxBytes: number) => new TextEncoder().encode(value).length <= maxBytes;
 const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
@@ -78,38 +81,39 @@ const membershipSetSchema = z
   .refine(set => set.length <= TRACE_QUERY_MAX_SET_VALUES, 'Membership set is too large')
   .meta({ maxItems: TRACE_QUERY_MAX_SET_VALUES });
 
-export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicate> = z.lazy(() =>
-  z.union([
-    z
-      .object({
-        op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
-        left: pathOrLiteralSchema,
-        right: pathOrLiteralSchema,
-      })
-      .strict(),
-    z
-      .object({
-        op: z.enum(['in', 'notIn']),
-        value: pathOrLiteralSchema,
-        set: membershipSetSchema,
-      })
-      .strict(),
-    z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
-    z
-      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
-      .strict(),
-    z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
-    z
-      .object({
-        op: z.enum(['and', 'or']),
-        args: z.array(traceQueryScalarPredicateSchema).min(1),
-      })
-      .strict(),
-    z.object({ op: z.literal('not'), arg: traceQueryScalarPredicateSchema }).strict(),
-  ]),
+export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicate, TraceQueryScalarPredicate> = z.lazy(
+  () =>
+    z.union([
+      z
+        .object({
+          op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
+          left: pathOrLiteralSchema,
+          right: pathOrLiteralSchema,
+        })
+        .strict(),
+      z
+        .object({
+          op: z.enum(['in', 'notIn']),
+          value: pathOrLiteralSchema,
+          set: membershipSetSchema,
+        })
+        .strict(),
+      z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
+      z
+        .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
+        .strict(),
+      z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
+      z
+        .object({
+          op: z.enum(['and', 'or']),
+          args: z.array(traceQueryScalarPredicateSchema).min(1),
+        })
+        .strict(),
+      z.object({ op: z.literal('not'), arg: traceQueryScalarPredicateSchema }).strict(),
+    ]),
 );
 
-export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(() =>
+export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate, TraceQueryPredicate> = z.lazy(() =>
   z.union([
     z
       .object({
@@ -446,6 +450,27 @@ export const traceQueryTraceSchema = z
      * Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
      */
     timeToFirstChunkMs: z.number().nullable().optional(),
+    /**
+     * The root span's time to first token; `null` when the root has none.
+     * Absent when the store lacks the `trace-query-time-to-first-token` feature.
+     */
+    timeToFirstTokenMs: z.number().nullable().optional(),
+    /**
+     * How the root span ended, for example `success`, `limit` or a custom string. Separate from
+     * `status`, which reflects only `error`. `null` when not recorded (older SDKs or a running root),
+     * which does not mean success. Absent when the store lacks the `trace-query-outcome-fields` feature.
+     */
+    outcome: z.string().nullable().optional(),
+    /**
+     * Why the root span stopped, for example `max_steps`. `null` when not recorded.
+     * Absent when the store lacks the `trace-query-outcome-fields` feature.
+     */
+    stopReason: z.string().nullable().optional(),
+    /**
+     * Details for the root span's `stopReason`. Returned only; not filterable.
+     * Absent when the store lacks the `trace-query-outcome-fields` feature.
+     */
+    stopReasonContext: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .strict();
 
@@ -600,6 +625,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
     timeToFirstChunkMs: orderedField('number'),
+    timeToFirstTokenMs: orderedField('number'),
     entityId: stringField(false),
     entityName: stringField(true),
     entityType: stringField(true),
@@ -607,6 +633,8 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     spanType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
+    outcome: stringField(true),
+    stopReason: stringField(true),
     tags: arrayField(),
   },
   spans: {
@@ -618,7 +646,10 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
     timeToFirstChunkMs: orderedField('number'),
+    timeToFirstTokenMs: orderedField('number'),
     status: stringField(true),
+    outcome: stringField(true),
+    stopReason: stringField(true),
     error: presenceField(),
     entityType: stringField(true),
     entityId: stringField(false),
@@ -660,12 +691,17 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
 export const SPAN_QUERY_FIELD_REGISTRY = {
   name: textField(true),
   spanType: stringField(true),
+  model: stringField(true),
+  provider: stringField(true),
   status: stringField(true),
+  outcome: stringField(true),
+  stopReason: stringField(true),
   error: presenceField(),
   startedAt: orderedField('timestamp'),
   endedAt: orderedField('timestamp'),
   durationMs: orderedField('number'),
   timeToFirstChunkMs: orderedField('number'),
+  timeToFirstTokenMs: orderedField('number'),
   traceId: stringField(false),
   spanId: stringField(false),
   parentSpanId: stringField(false),
@@ -720,6 +756,7 @@ export const THREAD_QUERY_FIELD_REGISTRY = {
   endedAt: orderedField('timestamp'),
   traceCount: { ...orderedField('number'), operators: ['eq', 'ne', 'lt', 'lte', 'gt', 'gte'] },
   timeToFirstChunkMs: orderedField('number'),
+  timeToFirstTokenMs: orderedField('number'),
 } as const satisfies Record<string, FieldRule>;
 
 export type ThreadQueryField = keyof typeof THREAD_QUERY_FIELD_REGISTRY;
@@ -834,7 +871,7 @@ export interface TrustedTraceQueryPagePlan {
 
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
-  /** Empty `timeToFirstChunkMs` values sort last in both directions; ties break by ascending `traceId`. */
+  /** Empty numeric sort values sort last in both directions; ties break by ascending `traceId`. */
   orderBy: {
     field: TraceQueryOrderField;
     direction: 'asc' | 'desc';
@@ -979,7 +1016,8 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
 
 type PredicateContext = TraceQueryPredicateScope | 'spanQuery' | 'threadQuery';
 
-interface PlannerState {
+/** @internal */
+export interface PlannerState {
   nodes: number;
   relatedClauses: number;
   literalUnits: number;
@@ -1203,269 +1241,8 @@ export function parseQueryThreadsInput(input: unknown): NormalizedQueryThreadsIn
   return result.data;
 }
 
-/**
- * Converts a structurally valid trace-query request into the canonical plan consumed by
- * observability storage adapters.
- *
- * @internal This is a trusted server/storage boundary, not a client-side query builder.
- */
-export function planTraceQuery(
-  request: NormalizedTraceQueryRequest,
-  options: TraceQueryPlanOptions = {},
-): TrustedTraceQueryPlan {
-  const issues: TraceQueryIssue[] = [];
-  const from = new Date(request.timeRange.from);
-  const to = new Date(request.timeRange.to);
-  if (from >= to) {
-    issues.push({ code: 'invalid_time_range', path: ['timeRange'], message: '`from` must be earlier than `to`' });
-  }
-
-  if (request.group && request.orderBy) {
-    issues.push({
-      code: 'group_order_not_supported',
-      path: ['orderBy'],
-      message: 'Grouped trace queries use fixed threadId ordering',
-    });
-  }
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
-  const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
-  if (issues.length > 0) throw new TraceQueryValidationError(issues);
-
-  const timeRange = { from: from.toISOString(), to: to.toISOString() };
-  const scope = normalizeTraceQueryTenantScope(options.scope);
-
-  if (request.group) {
-    const result = 'groups' as const;
-    const orderBy = { field: 'threadId', direction: 'asc' } as const;
-    const binding = digestBinding({
-      timeRange,
-      where,
-      result,
-      orderBy,
-      authorization: options.authorizationBinding,
-      scope,
-    });
-    const page = request.page ?? { limit: 100 };
-    const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
-    return {
-      result,
-      timeRange,
-      where,
-      scope,
-      orderBy,
-      paginationMode: 'keyset',
-      limit: page.limit,
-      binding,
-      cursor: cursor?.result === 'groups' ? { threadId: cursor.threadId } : undefined,
-    };
-  }
-
-  const result = 'traces' as const;
-  const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
-  const deltaBinding = digestBinding({
-    timeRange,
-    where,
-    result: 'trace-delta',
-    authorization: options.authorizationBinding,
-    scope,
-  });
-  if (request.mode === 'delta') {
-    return {
-      result,
-      timeRange,
-      where,
-      scope,
-      orderBy,
-      paginationMode: 'delta',
-      limit: request.limit ?? defaultDeltaLimit,
-      binding: deltaBinding,
-      deltaCursor: request.after === undefined ? undefined : decodeTraceQueryDeltaCursor(request.after, deltaBinding),
-    };
-  }
-  if (request.pagination) {
-    return {
-      result,
-      timeRange,
-      where,
-      scope,
-      orderBy,
-      paginationMode: 'page',
-      page: request.pagination.page,
-      perPage: request.pagination.perPage,
-      deltaBinding,
-    };
-  }
-
-  const page = request.page ?? { limit: 100 };
-  const binding = digestBinding({
-    timeRange,
-    where,
-    result,
-    orderBy,
-    authorization: options.authorizationBinding,
-    scope,
-  });
-  const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
-  if (cursor?.result === 'traces' && !isTraceQuerySortValueFor(orderBy.field, cursor.sortValue)) {
-    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
-  }
-  return {
-    result,
-    timeRange,
-    where,
-    scope,
-    orderBy,
-    paginationMode: 'keyset',
-    limit: page.limit,
-    binding,
-    cursor: cursor?.result === 'traces' ? { sortValue: cursor.sortValue, traceId: cursor.traceId } : undefined,
-  };
-}
-
-/**
- * Converts a structurally valid thread-query request into the canonical plan consumed by
- * observability storage adapters.
- *
- * @internal This is a trusted server/storage boundary, not a client-side query builder.
- */
-export function planThreadQuery(
-  request: NormalizedQueryThreadsInput,
-  options: TraceQueryPlanOptions = {},
-): TrustedThreadQueryPlan {
-  const issues: TraceQueryIssue[] = [];
-  const from = new Date(request.traces.timeRange.from);
-  const to = new Date(request.traces.timeRange.to);
-  if (from >= to) {
-    issues.push({
-      code: 'invalid_time_range',
-      path: ['traces', 'timeRange'],
-      message: '`from` must be earlier than `to`',
-    });
-  }
-
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
-  const traceWhere = request.traces.where
-    ? planPredicate(request.traces.where, 'trace', ['traces', 'where'], 1, state)
-    : undefined;
-  const where = request.where ? planThreadPredicate(request.where, ['where'], 1, state) : undefined;
-  if (issues.length > 0) throw new TraceQueryValidationError(issues);
-
-  const result = 'threads' as const;
-  const traces = {
-    timeRange: { from: from.toISOString(), to: to.toISOString() },
-    where: traceWhere,
-  };
-  const orderBy = { field: 'threadId', direction: 'asc' } as const;
-  const scope = normalizeTraceQueryTenantScope(options.scope);
-  const binding = digestBinding({ traces, where, result, orderBy, authorization: options.authorizationBinding, scope });
-  const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
-
-  return {
-    result,
-    traces,
-    where,
-    scope,
-    orderBy,
-    limit: request.page.limit,
-    binding,
-    cursor: cursor?.result === 'threads' ? { threadId: cursor.threadId } : undefined,
-  };
-}
-
-export function encodeTraceQueryCursor(plan: TraceQueryCursorPlan, values: TraceQueryCursorValues): string {
-  if (values.result !== plan.result) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
-  return Buffer.from(JSON.stringify({ version: 1, binding: plan.binding, values }), 'utf8').toString('base64url');
-}
-
-const deltaCursorEnvelopeSchema = z
-  .object({
-    version: z.literal(1),
-    kind: z.literal('trace-delta'),
-    binding: z.string().length(64),
-    adapter: z.string().min(1).max(100),
-    watermark: z.string().min(1).max(4096),
-  })
-  .strict();
-
-/** Wraps a storage-native watermark in a query-bound, delta-only cursor. */
-export function encodeTraceQueryDeltaCursor(
-  plan: TrustedTraceQueryPaginatedTracesPlan | TrustedTraceQueryDeltaTracesPlan,
-  adapter: string,
-  watermark: string,
-): string {
-  const envelope = deltaCursorEnvelopeSchema.parse({
-    version: 1,
-    kind: 'trace-delta',
-    binding: 'deltaBinding' in plan ? plan.deltaBinding : plan.binding,
-    adapter,
-    watermark,
-  });
-  return Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url');
-}
-
-function decodeTraceQueryDeltaCursor(cursor: string, binding: string): { adapter: string; watermark: string } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-  } catch {
-    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
-  }
-  const envelope = deltaCursorEnvelopeSchema.safeParse(parsed);
-  if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
-  if (envelope.data.binding !== binding) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
-  return { adapter: envelope.data.adapter, watermark: envelope.data.watermark };
-}
-
-/** Storage adapters must check cursor ownership before interpreting the native watermark. */
-export function getTraceQueryDeltaWatermark(
-  plan: TrustedTraceQueryDeltaTracesPlan,
-  adapter: string,
-): string | undefined {
-  if (plan.deltaCursor && plan.deltaCursor.adapter !== adapter) {
-    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
-  }
-  return plan.deltaCursor?.watermark;
-}
-
-function decodeTraceQueryCursor(
-  cursor: string,
-  expectedResult: TraceQueryCursorValues['result'],
-  expectedBinding: string,
-): TraceQueryCursorValues {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-  } catch {
-    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
-  }
-
-  const envelope = cursorEnvelopeSchema.safeParse(parsed);
-  if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
-  if (envelope.data.binding !== expectedBinding || envelope.data.values.result !== expectedResult) {
-    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
-  }
-  return envelope.data.values;
-}
-
-const cursorEnvelopeSchema = z
-  .object({
-    version: z.literal(1),
-    binding: z.string().length(64),
-    values: z.discriminatedUnion('result', [
-      z
-        .object({
-          result: z.literal('traces'),
-          sortValue: traceQuerySortValueSchema,
-          traceId: z.string().min(1),
-        })
-        .strict(),
-      z.object({ result: z.literal('groups'), threadId: z.string().min(1) }).strict(),
-      z.object({ result: z.literal('threads'), threadId: z.string().min(1) }).strict(),
-    ]),
-  })
-  .strict();
-
-function planThreadPredicate(
+/** @internal */
+export function planThreadPredicate(
   predicate: ThreadPredicate,
   path: Array<string | number>,
   depth: number,
@@ -1542,7 +1319,8 @@ export function planThreadQuerySelectionPredicate(
   return planPredicate(where, 'threadQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
-function planPredicate(
+/** @internal */
+export function planPredicate(
   predicate: TraceQueryPredicate | TraceQueryScalarPredicate,
   context: PredicateContext,
   path: Array<string | number>,
@@ -1834,21 +1612,4 @@ function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<strin
   if (rule.valueKind === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
     return undefined;
   return normalized as Array<string | number>;
-}
-
-/** @internal Shared query binding with property-order-independent serialization. */
-export function digestBinding(value: unknown): string {
-  return createHash('sha256').update(stableStringify(value)).digest('hex');
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value)
-      .filter(([, nested]) => nested !== undefined)
-      .sort(([left], [right]) => compareTraceQueryStrings(left, right))
-      .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
 }

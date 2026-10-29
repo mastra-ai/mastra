@@ -361,6 +361,12 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   prompt: LanguageModelV2Prompt;
   /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
   model: MastraLanguageModel;
+  /**
+   * Provider id of the API the prompt is sent to, e.g. `openai.chat`, `groq.chat` or `openai.responses`.
+   * Unlike `model.provider`, router models (`'groq/...'`) report the model they resolve to, so a
+   * processor can tell a Chat Completions endpoint from a Responses one. Undefined when it couldn't be resolved.
+   */
+  apiProviderId?: string;
   /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
   messageList?: MessageList;
   /** The workspace of this step, the one the agent's tools use. Undefined when the agent has none. */

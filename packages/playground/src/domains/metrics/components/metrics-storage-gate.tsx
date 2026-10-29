@@ -65,7 +65,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
 
             icon={<ExternalLinkIcon />}
           >
-            Metrics Documentation
+            Metrics documentation
           </Button>
         }
         variant="fill"

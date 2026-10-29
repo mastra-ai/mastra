@@ -26,6 +26,8 @@ Returns a record of agent IDs to their serialized agent configurations.
 Get an instance of a specific agent by its ID:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const myAgent = new Agent({
   id: 'my-agent',
 })
@@ -403,6 +405,14 @@ const { messages, initialHistoryPagination } = useChat({
     description: 'Thread ID to subscribe to.',
   },
   {
+    name: 'withRunStatus',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Emit live and retained thread-run-status outcomes. Callback types include these chunks only when requested. useChat enables this for its thread subscription.',
+  },
+  {
     name: 'processDataStream().reconnect',
     type: 'boolean | { maxRetries?: number; delayMs?: number }',
     isOptional: true,
@@ -413,6 +423,22 @@ const { messages, initialHistoryPagination } = useChat({
 />
 
 The subscription also exposes `abort(options?)` and `unsubscribe()`. `await subscription.abort({ clearPendingSignals: true })` requests an abort and clears pending signals without closing the subscription. Omit the flag to preserve pending input. `unsubscribe()` closes the subscription without aborting the run.
+
+### `abortRun(runId)`
+
+Requests cancellation of a durable run by its ID, including a run without a memory thread. Cancelling the response body or aborting the client-wide `abortSignal` only disconnects the observer from durable execution. A per-call `abortSignal` passed to a streaming method requests cancellation for you. Use `abortRun()` to stop a run without that signal.
+
+```typescript
+const runId = crypto.randomUUID()
+const response = await agent.stream('Research this topic', { runId })
+
+// When the user chooses Stop:
+const { aborted } = await agent.abortRun(runId)
+```
+
+<PropertiesTable content={[{ name: 'runId', type: 'string', description: 'ID of the durable run to cancel.' }]} />
+
+Returns `{ aborted: boolean }`. A remote abort request is asynchronous, so `true` doesn't confirm that the worker has stopped. Unknown or completed runs return `false`. This method requires a durable agent and Agent execution permission. Run ownership checks apply. Runs with memory threads also require `memory:write` permission when fine-grained authorization is enabled. Non-durable agents return HTTP 501.
 
 ### `abortThread()`
 
@@ -826,7 +852,7 @@ response.processDataStream({
 
 ### Shape client tool output for the model
 
-Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The transformed output is sent back to the server alongside the raw result, so the raw result stays available for storage and application logic.
+Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The client sends both the transformed output and the raw result back to the server, keeping the raw result available for storage and application logic.
 
 ```typescript
 const screenshotTool = createTool({

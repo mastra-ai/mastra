@@ -11,6 +11,7 @@ import {
   CloudIcon,
   CpuIcon,
   FingerprintIcon,
+  FlagIcon,
   FlaskConicalIcon,
   GaugeIcon,
   GitBranchIcon,
@@ -19,6 +20,7 @@ import {
   LayersIcon,
   MessageCircleIcon,
   MessageSquareIcon,
+  OctagonIcon,
   PercentIcon,
   PlayIcon,
   RadioIcon,
@@ -163,6 +165,8 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   serviceName: 'filterServiceName',
   environment: 'filterEnvironment',
   experimentId: 'filterExperimentId',
+  outcome: 'filterOutcome',
+  stopReason: 'filterStopReason',
   'spans.name': 'filterSpanName',
   'spans.spanType': 'filterSpanType',
   'spans.model': 'filterSpanModel',
@@ -297,12 +301,12 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'notMatches', label: 'does not match', freeText: true },
 ];
 
-const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
+export const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
 /** Human-written text fields also support case-insensitive word matching. */
-const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
+export const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
 /** Fields every trace carries (`traceId`, `entityName`): presence operators would never be false. */
-const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
-const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
+export const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
+export const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'is',
   'isNot',
   'gt',
@@ -314,8 +318,8 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
 ];
 /** Root duration: only ranges make sense on a millisecond value. */
 const TRACE_ROOT_DURATION_OPERATORS: TraceFilterOperatorId[] = ['gt', 'gte', 'lt', 'lte'];
-const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
-const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
+export const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
+export const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
 const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
   in: 'includes',
   notIn: 'notIncludes',
@@ -330,15 +334,17 @@ export type TraceQueryCanonicalFieldDescriptor = {
   valueSuggestions: boolean;
 };
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
-const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
+export const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 // The legacy list endpoint only matches by equality.
 const TRACE_LEGACY_OPERATORS: TraceFilterOperatorId[] = ['is'];
 
-const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
+export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   rootEntityType: 'Primitive type',
   entityName: 'Primitive name',
   entityId: 'Primitive ID',
   status: 'Status',
+  outcome: 'Outcome',
+  stopReason: 'Stop reason',
   tags: 'Tags',
   serviceName: 'Service Name',
   environment: 'Environment',
@@ -353,7 +359,7 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   experimentId: 'Experiment ID',
   'spans.name': 'Span name',
   'spans.spanType': 'Span type',
-  'spans.model': 'Model',
+  'spans.model': 'Span Model',
   'spans.provider': 'Provider',
   durationMs: 'Duration (ms)',
   'spans.durationMs': 'Span duration (ms)',
@@ -371,6 +377,8 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   entityName: TagIcon,
   entityId: FingerprintIcon,
   status: ActivityIcon,
+  outcome: FlagIcon,
+  stopReason: OctagonIcon,
   tags: TagsIcon,
   serviceName: ServerIcon,
   environment: GlobeIcon,
@@ -444,6 +452,22 @@ const TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS = new Set<string>(['feedback.
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
 
+/** Outcome and stop reason: free text (custom spans set arbitrary values) with discovered suggestions. */
+export function createOutcomeFilterBarFields(
+  base: (id: string) => Pick<FilterBarField, 'id' | 'label' | 'icon' | 'color'>,
+  valueSuggestions?: (path: string) => FilterBarSuggestionsResolver | undefined,
+): FilterBarField[] {
+  return (['outcome', 'stopReason'] as const).map(id => {
+    const suggestions = valueSuggestions?.(id);
+    return {
+      ...base(id),
+      operators: TRACE_STRING_OPERATORS,
+      ...(id === 'outcome' ? { operatorLabels: { notExists: 'is not recorded' } } : {}),
+      ...(suggestions ? { suggestions } : {}),
+    };
+  });
+}
+
 /** The Tags field, or `undefined` until the backend describes `tags`: its operators
  *  can't be inferred safely from the static catalog. Only UI operators whose query
  *  operator the backend accepts are offered, and suggestions are wired only when the
@@ -478,9 +502,12 @@ export function createTraceFilterBarFields({
   valueSuggestions,
   withQueryTrace = true,
   withRootDuration = false,
+  withOutcomeFields = false,
 }: {
   /** Offer the root `durationMs` field. Only when the server declares `traceQueryRootDuration`. */
   withRootDuration?: boolean;
+  /** Offer the root `outcome` and `stopReason` fields. Only when the server declares `traceQueryOutcomeFields`. */
+  withOutcomeFields?: boolean;
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
@@ -584,6 +611,9 @@ export function createTraceFilterBarFields({
     ...[
       ...textFields,
       ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
+      ...(withOutcomeFields
+        ? createOutcomeFilterBarFields(traceFieldBase, path => valueSuggestions?.('trace', path))
+        : []),
     ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),

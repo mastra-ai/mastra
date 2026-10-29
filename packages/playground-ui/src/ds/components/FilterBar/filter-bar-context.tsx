@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   clearRemovable,
@@ -75,6 +75,8 @@ export type FilterBarContextValue = {
   /** The draft that just became an item, until its chip has glinted or the bar moves on. */
   lastCommit: FilterBarCommit | null;
   settleCommit: () => void;
+  /** False during the bar's first render: chips rendered then were there from the start and skip their entrance. */
+  mounted: boolean;
   updateItem: (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => void;
   /** Removes a leaf. Its group stays, even empty, until the popover closes (see `setOpenGroup`). */
   removeItem: (id: string) => void;
@@ -224,6 +226,8 @@ export function FilterBarProvider({
   const [nonRemovableIds, setNonRemovableIds] = useState<ReadonlySet<string>>(() => new Set());
   const [inputTarget, setInputTarget] = useState<string | undefined>(undefined);
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const emit = useCallback(
     (next: FilterBarExpression) => onValueChange(denormalize(next, flat)),
@@ -232,14 +236,23 @@ export function FilterBarProvider({
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
-  const getFieldOperators = useCallback(
-    (field: FilterBarField) => {
-      if (!field.operators) return operators;
-      const allowed = new Set(field.operators);
-      return operators.filter(o => allowed.has(o.id));
-    },
-    [operators],
-  );
+  // Cached per field so a chip's operator and its option list stay the same objects across renders.
+  const getFieldOperators = useMemo(() => {
+    const cache = new WeakMap<FilterBarField, FilterBarOperator[]>();
+    return (field: FilterBarField) => {
+      const cached = cache.get(field);
+      if (cached) return cached;
+      const allowed = field.operators ? new Set(field.operators) : undefined;
+      const result = operators
+        .filter(o => !allowed || allowed.has(o.id))
+        .map((o): FilterBarOperator => {
+          const label = field.operatorLabels?.[o.id];
+          return label ? { ...o, label } : o;
+        });
+      cache.set(field, result);
+      return result;
+    };
+  }, [operators]);
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
@@ -550,6 +563,7 @@ export function FilterBarProvider({
       commitDraft,
       lastCommit,
       settleCommit,
+      mounted,
       updateItem,
       removeItem,
       leaving,
@@ -590,6 +604,7 @@ export function FilterBarProvider({
       commitDraft,
       lastCommit,
       settleCommit,
+      mounted,
       updateItem,
       removeItem,
       leaving,

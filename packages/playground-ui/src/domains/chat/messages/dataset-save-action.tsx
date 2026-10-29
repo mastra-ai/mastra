@@ -149,7 +149,7 @@ function DatasetSaveDialog({
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
           <DialogAction onConfirm={handleSubmit} disabled={!selectedDatasetId || datasets.length === 0}>
-            {addItem.isPending ? 'Saving...' : 'Save Item'}
+            {addItem.isPending ? 'Saving...' : 'Save item'}
           </DialogAction>
         </DialogFooter>
       </DialogContent>
