@@ -12,10 +12,10 @@ import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE } from './analyze/constants';
-import { normalizeExternals } from './analyze/externals';
+import { isUserListedExternal, normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports, mayContainPinoTransport } from './babel/detect-pino-transports';
-import { getPackageMetadata, isOptionalPeerOfImporter } from './package-info';
+import { getPackageMetadata, getPackageRootPath, isOptionalPeerOfImporter } from './package-info';
 import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
 import {
   getPackageName,
@@ -73,13 +73,24 @@ async function resolveDependencyInfo(
   return existing ?? {};
 }
 
-/** An external without install metadata that its importer declares as an optional peer: leave it out. */
+/**
+ * An external that its importer declares as an optional peer and that isn't installed (no install metadata and no
+ * package root), unless the user listed it in `bundler.externals`: leave it out.
+ */
 async function isUninstalledOptionalPeer(
+  dep: string,
   pkgName: string,
   info: ExternalDependencyInfo,
   importerId: string | undefined,
+  parentPaths: string[],
+  mergedExternals: string[],
 ): Promise<boolean> {
-  return !info.version && !info.packageSpec && (await isOptionalPeerOfImporter(pkgName, importerId));
+  if (info.version || info.packageSpec || isUserListedExternal(dep, mergedExternals)) return false;
+  if (!(await isOptionalPeerOfImporter(pkgName, importerId))) return false;
+  for (const parentPath of [...parentPaths, undefined]) {
+    if (await getPackageRootPath(pkgName, parentPath)) return false;
+  }
+  return true;
 }
 
 function importerParentPaths(importerId: string | undefined, base: string[]): string[] {
@@ -334,12 +345,9 @@ async function validateOutput(
       if (pkgName) {
         // Use version info from analysis if available, then resolve from the module that imported the external.
         const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(
-          dep,
-          versionInfo,
-          importerParentPaths(importerId, externalMetadataParentPaths),
-        );
-        if (await isUninstalledOptionalPeer(pkgName, dependencyInfo, importerId)) {
+        const parentPaths = importerParentPaths(importerId, externalMetadataParentPaths);
+        const dependencyInfo = await resolveDependencyInfo(dep, versionInfo, parentPaths);
+        if (await isUninstalledOptionalPeer(dep, pkgName, dependencyInfo, importerId, parentPaths, mergedExternals)) {
           continue;
         }
         result.externalDependencies.set(
@@ -600,15 +608,12 @@ export async function analyzeBundle(
       if (pkgName) {
         // Try to get version info from our tracked dependencies, then resolve from the chunk's source module.
         const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(
-          i,
-          versionInfo,
-          importerParentPaths(importerId, [
-            projectRoot,
-            ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
-          ]),
-        );
-        if (await isUninstalledOptionalPeer(pkgName, dependencyInfo, importerId)) {
+        const parentPaths = importerParentPaths(importerId, [
+          projectRoot,
+          ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+        ]);
+        const dependencyInfo = await resolveDependencyInfo(i, versionInfo, parentPaths);
+        if (await isUninstalledOptionalPeer(i, pkgName, dependencyInfo, importerId, parentPaths, mergedExternals)) {
           continue;
         }
         allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));

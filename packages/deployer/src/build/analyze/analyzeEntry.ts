@@ -18,6 +18,7 @@ import type { DependencyMetadata } from '../types';
 import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
 import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
+import { isUserListedExternal } from './externals';
 
 function analysisExternals({
   workspaceMap,
@@ -315,13 +316,13 @@ async function captureDependenciesToOptimize(
           packageSpec = metadata.packageSpec;
         }
 
-        if (pkgName && !rootPath && !version && !packageSpec) {
-          // Not installed: leave it out when an importing package declares it as an optional peer.
+        if (pkgName && !rootPath && !version && !packageSpec && !isUserListedExternal(dynamicImport, externals)) {
+          // Not installed: leave it out only when every importing package declares it as an optional peer.
           const importers = dynamicImporters.get(dynamicImport) ?? [];
           const optionalPeerChecks = await Promise.all(
             importers.map(importer => isOptionalPeerOfImporter(pkgName, importer)),
           );
-          if (optionalPeerChecks.some(Boolean)) {
+          if (optionalPeerChecks.length && optionalPeerChecks.every(Boolean)) {
             continue;
           }
         }

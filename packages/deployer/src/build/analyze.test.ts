@@ -189,16 +189,21 @@ describe('external dependency versions', () => {
     const appDir = join(tempDir, 'apps', 'app');
     const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
     const installedPeerDir = join(workspacePackageDir, 'node_modules', 'installed-peer');
+    // `nodemailer` and `fastembed` are default externals (DEPRECATED_EXTERNALS), so they are externalized without
+    // being listed in `bundler.externals`.
+    const versionlessPeerDir = join(workspacePackageDir, 'node_modules', 'nodemailer');
     const entryFile = join(appDir, 'index.ts');
     const outputDir = join(appDir, '.mastra', '.build');
 
     await mkdir(outputDir, { recursive: true });
     await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
     await mkdir(installedPeerDir, { recursive: true });
+    await mkdir(versionlessPeerDir, { recursive: true });
     await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
     await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
     await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
     await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    const optionalPeers = ['fastembed', 'listed-peer', 'installed-peer', 'nodemailer'];
     await writeFile(
       join(workspacePackageDir, 'package.json'),
       JSON.stringify({
@@ -206,8 +211,8 @@ describe('external dependency versions', () => {
         version: '1.0.0',
         type: 'module',
         main: './src/index.js',
-        peerDependencies: { 'missing-peer': '^1.0.0', 'installed-peer': '^2.0.0' },
-        peerDependenciesMeta: { 'missing-peer': { optional: true }, 'installed-peer': { optional: true } },
+        peerDependencies: Object.fromEntries(optionalPeers.map(name => [name, '*'])),
+        peerDependenciesMeta: Object.fromEntries(optionalPeers.map(name => [name, { optional: true }])),
       }),
     );
     await writeFile(
@@ -215,18 +220,25 @@ describe('external dependency versions', () => {
       JSON.stringify({ name: 'installed-peer', version: '2.3.4', type: 'module', main: './index.js' }),
     );
     await writeFile(join(installedPeerDir, 'index.js'), `export const value = 1;`);
+    // Installed, but its manifest has no version.
+    await writeFile(
+      join(versionlessPeerDir, 'package.json'),
+      JSON.stringify({ name: 'nodemailer', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(versionlessPeerDir, 'index.js'), `export const value = 1;`);
     await writeFile(
       join(workspacePackageDir, 'src', 'index.js'),
-      `export const loadMissing = () => import('missing-peer');
-export const loadInstalled = () => import('installed-peer');
-export const loadUndeclared = () => import('missing-undeclared');
+      `export const loaders = [
+  () => import('fastembed'),
+  () => import('listed-peer'),
+  () => import('installed-peer'),
+  () => import('nodemailer'),
+  () => import('missing-undeclared'),
+];
 `,
     );
     await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
-    await writeFile(
-      entryFile,
-      `import { loadMissing, loadInstalled, loadUndeclared } from '@internal/workspace-package';\nexport const value = [loadMissing, loadInstalled, loadUndeclared];`,
-    );
+    await writeFile(entryFile, `import { loaders } from '@internal/workspace-package';\nexport const value = loaders;`);
 
     const originalCwd = process.cwd();
     process.chdir(tempDir);
@@ -240,15 +252,20 @@ export const loadUndeclared = () => import('missing-undeclared');
           platform: 'node',
           isDev: true,
           bundlerOptions: {
-            externals: ['missing-peer', 'installed-peer', 'missing-undeclared'],
+            externals: ['listed-peer', 'installed-peer', 'missing-undeclared'],
             enableSourcemap: false,
           },
         },
         noopLogger,
       );
 
-      expect(result.externalDependencies.has('missing-peer')).toBe(false);
+      // Uninstalled optional peer: left out instead of being installed as `latest`.
+      expect(result.externalDependencies.has('fastembed')).toBe(false);
+      // Listed in `bundler.externals` by the user: always kept.
+      expect(result.externalDependencies.has('listed-peer')).toBe(true);
       expect(result.externalDependencies.get('installed-peer')).toEqual({ version: '2.3.4', packageSpec: undefined });
+      // Installed without a version: kept.
+      expect(result.externalDependencies.has('nodemailer')).toBe(true);
       // Not declared as an optional peer: unchanged behavior, kept without version info.
       expect(result.externalDependencies.has('missing-undeclared')).toBe(true);
     } finally {

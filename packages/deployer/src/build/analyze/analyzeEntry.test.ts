@@ -406,6 +406,54 @@ export const loadUndeclared = () => import('missing-undeclared');
     }
   });
 
+  it('should keep an uninstalled optional peer that the user externalizes or that another importer needs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-optional-peer-kept-'));
+    const hostDir = join(root, 'linked', 'host-pkg');
+    const entryFilePath = join(root, 'entry.ts');
+
+    try {
+      await mkdir(join(hostDir, 'dist'), { recursive: true });
+      await Promise.all([
+        writeFile(join(root, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' })),
+        writeFile(
+          join(hostDir, 'package.json'),
+          JSON.stringify({
+            name: 'host-pkg',
+            version: '1.0.0',
+            type: 'module',
+            exports: { '.': './dist/index.js' },
+            peerDependencies: { 'listed-peer': '*', 'shared-peer': '*' },
+            peerDependenciesMeta: { 'listed-peer': { optional: true }, 'shared-peer': { optional: true } },
+          }),
+        ),
+        writeFile(
+          join(hostDir, 'dist', 'index.js'),
+          `export const loadListed = () => import('listed-peer');
+export const loadShared = () => import('shared-peer');
+`,
+        ),
+        // The app imports `shared-peer` itself without declaring it optional.
+        writeFile(
+          entryFilePath,
+          `export * from './linked/host-pkg/dist/index.js';\nexport const loadSharedToo = () => import('shared-peer');\n`,
+        ),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externals: ['listed-peer'],
+      });
+
+      expect(result.dependencies.has('listed-peer')).toBe(true);
+      expect(result.dependencies.has('shared-peer')).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('should ignore protocol imports like cloudflare:workers and node builtins', async () => {
     const entryWithProtocolImport = `
       import { env } from 'cloudflare:workers';
