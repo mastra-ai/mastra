@@ -571,6 +571,12 @@ describe('work item read wire', () => {
     const second = await titles(`${base}?stage=intake&sort=created-newest&limit=2&cursor=${first.nextCursor}`);
     expect(second).toEqual({ titles: ['Card 2'], nextCursor: undefined });
     expect((await titles(`${base}?stage=intake&sort=created-oldest&limit=1`)).titles).toEqual(['Card 2']);
+    expect((await titles(`${base}?sort=created-oldest`)).titles).toEqual([
+      'Card 1',
+      'Card 2',
+      'Login is broken',
+      'Card 4',
+    ]);
     expect((await titles(`${base}?q=login`)).titles).toEqual(['Login is broken']);
     expect((await titles(base)).titles).toHaveLength(4);
 

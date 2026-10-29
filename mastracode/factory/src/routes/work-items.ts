@@ -461,7 +461,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           const { sort, limit, cursor } = query.data;
           const filters = workItemFilters(query.data);
-          const paged = hasFilters(filters) || limit !== undefined || cursor !== undefined;
+          // The query defaults `sort`, so ask the request whether the caller picked one.
+          const paged =
+            hasFilters(filters) ||
+            context.req.query('sort') !== undefined ||
+            limit !== undefined ||
+            cursor !== undefined;
           const page = paged
             ? pageWorkItems(all, { ...filters, sort, userId: resolved.userId, limit, cursor })
             : { items: all };

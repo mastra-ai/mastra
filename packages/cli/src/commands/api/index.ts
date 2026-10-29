@@ -603,6 +603,12 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Count Factory work items per board and stage, optionally filtered',
     input: 'optional',
     routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Count the open Review cards of a project',
+        command: `mastra api factory work-item counts <project-id> '{"board":"review"}'`,
+      },
+    ],
   });
   addAction(factoryWorkItem, 'sources', FACTORY_API_ROUTE_CATALOG.workItemSources, {
     description: 'List the external sources Factory work items were created from',
@@ -612,6 +618,12 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Sync a board: open cards first, then only cards changed since the cursor',
     input: 'optional',
     routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Start a board sync, then pass the returned cursor to get only what changed',
+        command: `mastra api factory work-item sync <project-id> '{"cursor":"<cursor>"}'`,
+      },
+    ],
   });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
     description: 'Create a Factory work item in Intake',
