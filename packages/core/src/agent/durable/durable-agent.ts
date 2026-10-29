@@ -5598,9 +5598,11 @@ export class DurableAgent<
         ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
         : this.pubsub.subscribeWithReplay(topic, callback));
       await replayFloor.refreshReplayFilter?.();
-      while (bufferedEvents.length) {
-        await bufferedEvents.shift()!();
+      // Index cursor keeps the drain linear; live frames can still append while draining.
+      for (let i = 0; i < bufferedEvents.length; i++) {
+        await bufferedEvents[i]!();
       }
+      bufferedEvents.length = 0;
       bufferingReplay = false;
 
       const reconciledVersion = activityVersion;
