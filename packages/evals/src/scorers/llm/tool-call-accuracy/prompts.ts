@@ -83,7 +83,7 @@ STRICT EVALUATION CRITERIA:
 - If the user asked for "A", only tools that provide "A" should be marked appropriate
 - Additional tools the agent decided to call without being asked should be marked inappropriate
 
-Evaluate each tool that was called, or if no tools were called, evaluate whether that was the right decision.
+If tools were called, return exactly one evaluation per entry in TOOLS THE AGENT ACTUALLY CALLED, including repeated calls, in the same order. Repeated calls with different arguments can each be appropriate when they address the request. If no tools were called, evaluate whether that was the right decision.
 `;
 };
 

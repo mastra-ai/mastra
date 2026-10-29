@@ -678,6 +678,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
       evaluations: Array<{ toolCalled: string; wasAppropriate: boolean; reasoning: string }>,
       missingTools: string[],
       onReasonPrompt?: (prompt: string) => void,
+      onAnalyzePrompt?: (prompt: string) => void,
     ) {
       function responseFor(prompt: Array<{ role: string; content: unknown }>) {
         const user = prompt.findLast(message => message.role === 'user');
@@ -687,6 +688,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
           onReasonPrompt?.(text);
           return 'Tool selections evaluated.';
         }
+        onAnalyzePrompt?.(text);
         return JSON.stringify({ evaluations, missingTools });
       }
 
@@ -744,6 +746,22 @@ describe('createToolCallAccuracyScorerLLM', () => {
         availableTools,
       });
       expect((await scorer.run(run(['weather-tool']))).score).toBe(0.5);
+    });
+
+    it('asks the judge to evaluate each repeated call separately', async () => {
+      let analyzePrompt = '';
+      const scorer = createToolCallAccuracyScorerLLM({
+        model: judge([appropriate('weather-tool'), appropriate('weather-tool')], [], undefined, prompt => {
+          analyzePrompt = prompt;
+        }),
+        availableTools,
+      });
+      expect((await scorer.run(run(['weather-tool', 'weather-tool']))).score).toBe(1);
+      expect(analyzePrompt).toContain('TOOLS THE AGENT ACTUALLY CALLED: weather-tool, weather-tool');
+      expect(analyzePrompt).toContain('one evaluation per entry');
+      expect(analyzePrompt).toContain('repeated calls');
+      expect(analyzePrompt).toContain('same order');
+      expect(analyzePrompt).toContain('different arguments');
     });
 
     it('counts every actual call when the judge omits a duplicate evaluation', async () => {
