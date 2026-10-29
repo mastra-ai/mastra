@@ -9,9 +9,39 @@ import { factoryLaneForRole } from '../rules/types.js';
 
 const LEGACY_PLAN_ROLE = 'plan';
 
-/** The Work lane a role's run belongs to: `plan` plans, `work` builds. Undefined on other boards. */
-export function workLaneForRole(boardId: string, role: string): string | undefined {
-  return boardId === 'work' ? factoryLaneForRole(role) : undefined;
+/**
+ * The Work lane a role's run belongs to: `plan` plans, `work` builds. Undefined
+ * on other boards, and when a board installed as `work` in place of the built-in
+ * one does not declare that lane as a working phase.
+ */
+export function workLaneForRole(
+  boardId: string,
+  role: string,
+  board: { isWorking(phase: string): boolean } | undefined,
+): string | undefined {
+  const lane = boardId === 'work' ? factoryLaneForRole(role) : undefined;
+  return lane !== undefined && board?.isWorking(lane) ? lane : undefined;
+}
+
+/**
+ * Whether a Work stage carries a run decided for `role`. Planning, Building and
+ * Review share the `work` context, so the skill tells them apart: Planning
+ * carries `factory-plan` runs (and runs for the old `plan` role), Building and
+ * Review the other `work` runs.
+ * Undefined on other boards.
+ */
+export function workStageCarries(
+  boardId: string,
+  stage: string,
+  role: string,
+  skillName: unknown,
+  contextOf: (stage: string) => string | undefined,
+): boolean | undefined {
+  if (boardId !== 'work') return undefined;
+  if (role === LEGACY_PLAN_ROLE) return stage === 'planning';
+  if (role !== 'work') return contextOf(stage) === role;
+  if (contextOf(stage) !== 'work') return false;
+  return (stage === 'planning') === (skillName === 'factory-plan');
 }
 
 /** The session key a Work build falls back to when the card has no `work` session yet. */

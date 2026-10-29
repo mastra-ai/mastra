@@ -258,10 +258,10 @@ async function legacyPlanSession(
  */
 function restingExitLane(
   boardId: string,
-  board: { phaseForRole(role: string): string | undefined } | undefined,
+  board: { phaseForRole(role: string): string | undefined; isWorking(phase: string): boolean } | undefined,
   role: string,
 ): string | undefined {
-  return workLaneForRole(boardId, role) ?? board?.phaseForRole(role);
+  return workLaneForRole(boardId, role, board) ?? board?.phaseForRole(role);
 }
 
 /**

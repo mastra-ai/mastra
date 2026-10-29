@@ -1,6 +1,6 @@
 import { boardForWorkItem, resolvePhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { workLaneForRole } from '../boards/legacy-plan-role.js';
+import { workStageCarries } from '../boards/legacy-plan-role.js';
 import type {
   FactoryDeferredDecisionRecord,
   WorkItemRow,
@@ -52,9 +52,10 @@ export function decisionOvertaken(input: {
   // triage in Intake) is fulfilled, not overtaken, when the card first
   // enters a stage that seat carries — e.g. the Investigate click.
   const board = boardForWorkItem(item);
-  // Work's roles keep their lanes, so a run decided for the old `plan` role still belongs to Planning.
+  const contextOf = (stage: string) => resolvePhaseSemantics(boards, board, stage)?.role;
+  // Work's phases share a context, so its lanes also follow the decision's skill and the old `plan` role.
   const carriesRole = (stage: string) =>
-    resolvePhaseSemantics(boards, board, stage)?.role === role || workLaneForRole(board, role) === stage;
+    workStageCarries(board, stage, role, record.decision.skillName, contextOf) ?? contextOf(stage) === role;
   const decidedOutsideRole = !item.stageHistory.some(
     entry =>
       new Date(entry.enteredAt).getTime() <= decidedAt &&
