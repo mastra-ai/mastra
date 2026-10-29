@@ -1006,6 +1006,19 @@ describe('factory_start_session in work-item mode', () => {
     expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId });
   });
 
+  it("still starts Work's old plan role, which no phase names as its context any more", async () => {
+    const { start, item, seed } = await withItem();
+
+    const result = (await start({ prompt: 'Plan it.', workItem: item.id, role: 'plan' })) as Started;
+
+    expect(result).toMatchObject({ mode: 'work-item', role: 'plan' });
+    const after = (await seed.workItems.get({ orgId: 'org-1', id: item.id }))!;
+    expect(after.sessions.plan).toMatchObject({ sessionId: result.sessionId });
+    await expect(start({ prompt: 'Go.', workItem: item.id, role: 'spectator' })).rejects.toThrow(
+      'board has no spectator role.',
+    );
+  });
+
   it('starts a work-item run shared with the org even from a private session', async () => {
     const { start, item, sessions, sourceControl } = await withItem('private');
 

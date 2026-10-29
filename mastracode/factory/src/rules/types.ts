@@ -239,8 +239,12 @@ export interface FactoryRuleCausalEntry {
 export interface FactoryRulePhaseContext {
   id: string;
   kind: 'resting' | 'working' | 'terminal';
-  /** Seat carrying a working phase; absent for resting and terminal phases. */
+  /** Session context a working phase runs in; absent for resting and terminal phases. */
+  context?: string;
+  /** @deprecated Use `context`. */
   role?: string;
+  /** Phases the card may move to from here. */
+  nextPhases: readonly string[];
   /** Outcome names the phase declares, e.g. `approved` or `canceled`; empty when it declares none. */
   outcomes: readonly string[];
 }
@@ -618,6 +622,13 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
+  /**
+   * Start this run even when the card was moved by the agent already running in
+   * this role's session. The prompt is queued onto that agent's run, so a phase
+   * that shares its context with the one before it still gets its own work.
+   * Without it, an agent's own move into a phase of its role starts nothing.
+   */
+  startsAfterOwnMove?: boolean;
 }
 
 /**

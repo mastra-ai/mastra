@@ -12,14 +12,13 @@
     "minimax/minimax-m3"
   ],
   "reasoning": {
-    "google/gemma-4-31b-it": [
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "minimax/minimax-m3": [
+      },
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "MiniMaxAI/MiniMax-M3.1-Flash": [
@@ -28,13 +27,14 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "minimax/minimax-m3": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "google/gemma-4-31b-it": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ]
   }

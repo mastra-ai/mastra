@@ -945,10 +945,11 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
         )
       ).join('\n');
       const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+      const appPackageJson = JSON.parse(await readFile(join(fixturePath, 'apps', 'custom', 'package.json'), 'utf-8'));
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^10.1.1');
+      expect(packageJson.dependencies?.nodemailer).toBe(appPackageJson.dependencies.nodemailer);
     });
 
     it('should keep configured workspace externals out of bundles without inlining default externals', async () => {

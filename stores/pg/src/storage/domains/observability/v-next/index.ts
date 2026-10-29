@@ -147,7 +147,7 @@ import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { detectPartman, detectTimescale, resolveMode, setupPartitioning } from './partitioning';
+import { detectPartman, detectTimescale, ensureNativePartitions, resolveMode, setupPartitioning } from './partitioning';
 import type { PartitioningOptions, PartitionMode } from './partitioning';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
@@ -319,6 +319,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return this.#partitionMode;
   }
 
+  /**
+   * Create any missing day partitions from yesterday through today +
+   * `futureDays`, without the rest of init(). For apps whose runtime role
+   * cannot run DDL: call it on a schedule with a role that owns the
+   * observability tables. Safe to call repeatedly on one instance. Does
+   * nothing with TimescaleDB or pg_partman, which create their own partitions.
+   */
+  async ensurePartitions(): Promise<void> {
+    return this.#run('VNEXT_ENSURE_PARTITIONS', async () => {
+      const mode = (this.#partitionMode ??= await resolveMode(this.#client, this.#partitioning));
+      if (mode === 'native') await ensureNativePartitions(this.#client, this.#schema, this.#partitioning);
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Retention
   // -------------------------------------------------------------------------
@@ -406,7 +420,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
-        ...traceQueryOps.timeToFirstChunkFeatures,
+        ...traceQueryOps.timingFeatures,
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ] as const;
@@ -432,10 +446,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
-      ...traceQueryOps.timeToFirstChunkFeatures,
+      ...traceQueryOps.timingFeatures,
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
     ] as const;
+  }
+
+  /**
+   * Partitioning options for the write path, with `mode` fixed to the mode
+   * this store resolved (in init(), or lazily in prune()) so the write path
+   * does not detect it again. Until then the configured mode stands in and
+   * the write path resolves it itself when a partition is missing.
+   */
+  #writePartitioning(): PartitioningOptions {
+    return { ...this.#partitioning, mode: this.#partitionMode ?? this.#partitioning.mode };
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -451,16 +475,24 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async createSpan(args: CreateSpanArgs): Promise<void> {
-    await this.#run('CREATE_SPAN', () => tracingOps.createSpan(this.#client, this.#schema, args), {
-      traceId: args.span.traceId,
-      spanId: args.span.spanId,
-    });
+    await this.#run(
+      'CREATE_SPAN',
+      () => tracingOps.createSpan(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        traceId: args.span.traceId,
+        spanId: args.span.spanId,
+      },
+    );
   }
 
   override async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_SPANS', () => tracingOps.batchCreateSpans(this.#client, this.#schema, args), {
-      count: args.records.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_SPANS',
+      () => tracingOps.batchCreateSpans(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.records.length,
+      },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -568,35 +600,55 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_LOGS', () => logsOps.batchCreateLogs(this.#client, this.#schema, args), {
-      count: args.logs.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_LOGS',
+      () => logsOps.batchCreateLogs(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.logs.length,
+      },
+    );
   }
 
   override async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_METRICS', () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args), {
-      count: args.metrics.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_METRICS',
+      () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.metrics.length,
+      },
+    );
   }
 
   override async createScore(args: CreateScoreArgs): Promise<void> {
-    await this.#run('CREATE_SCORE', () => scoresOps.createScore(this.#client, this.#schema, args));
+    await this.#run('CREATE_SCORE', () =>
+      scoresOps.createScore(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
   }
 
   override async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_SCORES', () => scoresOps.batchCreateScores(this.#client, this.#schema, args), {
-      count: args.scores.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_SCORES',
+      () => scoresOps.batchCreateScores(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.scores.length,
+      },
+    );
   }
 
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
-    await this.#run('CREATE_FEEDBACK', () => feedbackOps.createFeedback(this.#client, this.#schema, args));
+    await this.#run('CREATE_FEEDBACK', () =>
+      feedbackOps.createFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
   }
 
   override async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_FEEDBACK', () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args), {
-      count: args.feedbacks.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_FEEDBACK',
+      () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.feedbacks.length,
+      },
+    );
   }
 
   // -------------------------------------------------------------------------
