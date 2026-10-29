@@ -13,6 +13,7 @@
 
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,6 +51,11 @@ const SERVER_PREFIXES = ['/api', '/web', '/auth', '/connect'];
  *      and `mastra start` (cwd is `.mastra/output`) expose assets this way.
  *   3. `factory/` next to the bundled server module.
  *   4. Source-layout fallbacks under `MASTRA_PROJECT_ROOT` or cwd.
+ *   5. `mastra/dist/factory/` resolved from `node_modules` — where the npm
+ *      `mastra` package ships the prebuilt SPA. This is the production path
+ *      for deploy artifacts: the SPA is no longer copied into
+ *      `.mastra/output/public/factory/`; the middleware finds it here
+ *      instead.
  * Returns `undefined` when no build is found (e.g. plain `mastra dev` without
  * a prior vite build), in which case the middleware is simply not mounted.
  */
@@ -61,11 +67,36 @@ export function resolveUiDistDir(): string | undefined {
     join(dirname(fileURLToPath(import.meta.url)), 'factory'),
     projectRoot && resolve(projectRoot, 'src/mastra/public/factory'),
     resolve(process.cwd(), 'src/mastra/public/factory'),
+    resolveMastraCliFactoryDist(),
   ];
   for (const candidate of candidates) {
     if (candidate && existsSync(join(candidate, 'index.html'))) return resolve(candidate);
   }
   return undefined;
+}
+
+/**
+ * Resolve `mastra/dist/factory/` via the standard Node module resolver.
+ *
+ * The `mastra` CLI package publishes the prebuilt Factory SPA under
+ * `dist/factory/` (see `packages/cli/tsdown.config.ts`) and exposes it via the
+ * `./dist/*` package export. Using `createRequire(import.meta.url).resolve()`
+ * lets Node walk `node_modules` from this module's location, so the same
+ * lookup works when this file is executing from the source tree, from the
+ * bundled deploy artifact next to `node_modules/mastra/`, or from a Docker
+ * image where `mastra` is installed as a peer.
+ *
+ * Returns `undefined` when the package is not installed (e.g. tests running
+ * in isolation) so the caller can fall through to the earlier candidates.
+ */
+function resolveMastraCliFactoryDist(): string | undefined {
+  try {
+    const require = createRequire(import.meta.url);
+    const indexHtml = require.resolve('mastra/dist/factory/index.html');
+    return dirname(indexHtml);
+  } catch {
+    return undefined;
+  }
 }
 
 async function isFile(path: string): Promise<boolean> {
