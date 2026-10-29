@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
@@ -84,16 +85,27 @@ const CONCEPTS: Record<string, number> = {
   vacation: 2,
   leave: 2,
 };
-function conceptEmbedder(state: { fail: boolean; calls: number }): MastraEmbeddingModel<string> {
+type EmbedderState = { fail: boolean; calls: number; transient?: number; options?: Record<string, unknown>[] };
+function conceptEmbedder(state: EmbedderState): MastraEmbeddingModel<string> {
   return {
     specificationVersion: 'v2',
     provider: 'test',
     modelId: 'concepts',
     maxEmbeddingsPerCall: 1,
     supportsParallelCalls: true,
-    doEmbed: async ({ values }: { values: string[] }) => {
+    doEmbed: async ({ values, ...options }: { values: string[] } & Record<string, unknown>) => {
       state.calls++;
+      state.options?.push(options);
       if (state.fail) throw new Error('embedder down');
+      if (state.transient && state.transient-- > 0) {
+        throw new APICallError({
+          message: 'rate limited',
+          url: 'x',
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: true,
+        });
+      }
       return {
         embeddings: values.map(text => {
           const v = [0.01, 0.01, 0.01, 0.01];
@@ -113,7 +125,7 @@ type Result = Record<string, any>;
 describe('Knowledge semantic search', () => {
   let store: KnowledgeStorage;
   let vector: MemoryVector;
-  let embedder: { fail: boolean; calls: number };
+  let embedder: EmbedderState;
   let warnings: string[];
   let knowledge: Knowledge;
 
@@ -271,6 +283,43 @@ describe('Knowledge semantic search', () => {
     // Scope pages are not embedded; the one ordinary page is.
     expect(await knowledge.reindex()).toBe(1);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
+  });
+
+  it('reindex() repairs notes written on scope pages, which listPages leaves out', async () => {
+    embedder.fail = true;
+    await acme()('knowledge_note', {
+      op: 'add',
+      page: 'org:acme',
+      scope: ['org:acme'],
+      text: 'Vacation requests go to HR.',
+    });
+    expect(vector.ids()).toEqual([]);
+    embedder.fail = false;
+
+    expect(await knowledge.reindex()).toBe(1);
+    expect(titles(await acme()('knowledge_search', { query: 'holiday' }))).toEqual([
+      'note:Vacation requests go to HR.',
+    ]);
+  });
+
+  it('embeds through the SDK: maxRetries retries transient failures, headers and providerOptions reach the model', async () => {
+    const state: EmbedderState = { fail: false, calls: 0, transient: 2, options: [] };
+    knowledge = new Knowledge({
+      storage: new InMemoryStore(),
+      scopes: knowledgeMemoryScopes(),
+      tools: true,
+      vector,
+      embedder: conceptEmbedder(state),
+      embedderOptions: { maxRetries: 2, headers: { 'x-team': 'kb' }, providerOptions: { test: { dims: 4 } } },
+    });
+    (knowledge as any).logger = { warn: (m: string) => warnings.push(m), debug() {}, info() {}, error() {} };
+
+    await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Refund policy', body: 'Refunds.' });
+    expect(warnings).toEqual([]);
+    expect(state.calls).toBe(3);
+    expect(vector.ids()).toHaveLength(1);
+    expect(state.options![0]).toMatchObject({ headers: { 'x-team': 'kb' }, providerOptions: { test: { dims: 4 } } });
+    expect(state.options![0]).not.toHaveProperty('maxRetries');
   });
 
   it('a stale vector for a deleted page never surfaces', async () => {

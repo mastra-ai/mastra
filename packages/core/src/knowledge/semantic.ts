@@ -1,5 +1,6 @@
 import type { KnowledgeNote, KnowledgePage, KnowledgeStorage } from '../storage/domains/knowledge';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+import { embedV1, embedV2, embedV3, embedV4 } from '../vector/embed';
 
 /** How far one semantic search over-fetches before it stops refilling. */
 const MAX_CANDIDATES = 1000;
@@ -70,38 +71,62 @@ export class KnowledgeSemanticIndex {
     }
   }
 
-  /** Re-embeds every live ordinary page and note in the store. Returns how many were indexed. */
+  /**
+   * Re-embeds every live ordinary page and every live note in the store, including notes on scope
+   * pages (scope pages themselves aren't embedded). Returns how many were indexed.
+   */
   async reindex(storage: KnowledgeStorage): Promise<number> {
     let count = 0;
+    const indexNotesOn = async (pageId: string) => {
+      let cursor: string | undefined;
+      do {
+        const { notes, nextCursor } = await storage.listNotes({ pageId, read: 'all', cursor, limit: REINDEX_PAGE });
+        for (const note of notes) {
+          await this.indexNote(note);
+          count++;
+        }
+        cursor = nextCursor;
+      } while (cursor);
+    };
+
+    // listPages leaves scope pages out, so walk the scope tree for the notes written on them.
+    const scopeParents: Array<string | null> = [null];
+    while (scopeParents.length) {
+      const parentId = scopeParents.pop()!;
+      let cursor: string | undefined;
+      do {
+        const { pages, nextCursor } = await storage.listChildScopes({ parentId, cursor, limit: REINDEX_PAGE });
+        for (const scope of pages) {
+          await indexNotesOn(scope.id);
+          scopeParents.push(scope.id);
+        }
+        cursor = nextCursor;
+      } while (cursor);
+    }
+
     let cursor: string | undefined;
     do {
       const { pages, nextCursor } = await storage.listPages({ read: 'all', cursor, limit: REINDEX_PAGE });
       for (const page of pages) {
         await this.indexPage(page);
         count++;
-        let noteCursor: string | undefined;
-        do {
-          const { notes, nextCursor: next } = await storage.listNotes({
-            pageId: page.id,
-            read: 'all',
-            cursor: noteCursor,
-            limit: REINDEX_PAGE,
-          });
-          for (const note of notes) {
-            await this.indexNote(note);
-            count++;
-          }
-          noteCursor = next;
-        } while (noteCursor);
+        await indexNotesOn(page.id);
       }
       cursor = nextCursor;
     } while (cursor);
     return count;
   }
 
-  async #embed(text: string): Promise<number[]> {
-    const result = await this.embedder.doEmbed({ values: [text], ...(this.embedderOptions as any) });
-    const embedding = result.embeddings[0];
+  /** Through the SDK's `embed`, so `maxRetries`, `headers`, `providerOptions` and `telemetry` mean what they do elsewhere. */
+  async #embed(value: string): Promise<number[]> {
+    const model = this.embedder;
+    const { maxRetries, headers, providerOptions, telemetry } = this.embedderOptions ?? {};
+    const options = { value, maxRetries, headers, providerOptions, experimental_telemetry: telemetry } as any;
+    let embedding: number[] | undefined;
+    if (model.specificationVersion === 'v4') embedding = (await embedV4({ ...options, model })).embedding;
+    else if (model.specificationVersion === 'v3') embedding = (await embedV3({ ...options, model })).embedding;
+    else if (model.specificationVersion === 'v2') embedding = (await embedV2({ ...options, model })).embedding;
+    else embedding = (await embedV1({ ...options, model })).embedding;
     if (!embedding?.length) throw new Error('Knowledge embedder returned no vector.');
     return embedding;
   }
