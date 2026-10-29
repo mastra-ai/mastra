@@ -115,26 +115,28 @@ export const applyDateRange = (
   dateTo: Date | undefined,
 ): TracesFilters => (filters.datePreset === 'custom' ? { ...filters, dateFrom, dateTo } : filters);
 
-const ROOT_DURATION_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs']);
-const NO_FIELD_IDS: ReadonlySet<string> = new Set();
-
-/** Fields this server can't query on top of the always-unsupported ones: root duration needs its capability. */
-const serverUnqueryableFieldIds = (withRootDuration: boolean) =>
-  withRootDuration ? NO_FIELD_IDS : ROOT_DURATION_FIELD_IDS;
-
-const isQueryableToken = (token: TraceFilterToken, withRootDuration: boolean) => {
-  if (token.fieldId === 'status' && token.value === 'running') return false;
-  if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return false;
-  return !serverUnqueryableFieldIds(withRootDuration).has(token.fieldId);
-};
+/** Fields this server can't query on top of the always-unsupported ones: root duration and
+ *  outcome fields each need their capability. */
+const serverUnqueryableFieldIds = (withRootDuration: boolean, withOutcomeFields: boolean): ReadonlySet<string> =>
+  new Set([...(withRootDuration ? [] : ['durationMs']), ...(withOutcomeFields ? [] : ['outcome', 'stopReason'])]);
 
 /**
  * Drops the top-level tokens the trace query can't run, so no chip advertises a filter with no effect.
  * Groups pass through and stay visible in the bar: `buildTracesQueryRequest` leaves their unqueryable
  * conditions out of the query. Returns the same object when nothing is dropped.
  */
-export const sanitizeTracesFilters = (filters: TracesFilters, withRootDuration: boolean): TracesFilters => {
-  const tokens = filters.tokens.filter(token => isQueryableToken(token, withRootDuration));
+export const sanitizeTracesFilters = (
+  filters: TracesFilters,
+  withRootDuration: boolean,
+  withOutcomeFields = false,
+): TracesFilters => {
+  const unqueryable = serverUnqueryableFieldIds(withRootDuration, withOutcomeFields);
+  const tokens = filters.tokens.filter(
+    token =>
+      !(token.fieldId === 'status' && token.value === 'running') &&
+      !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId) &&
+      !unqueryable.has(token.fieldId),
+  );
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
 
@@ -171,8 +173,9 @@ export const buildTracesQueryRequest = ({
   dateFrom,
   dateTo,
   withRootDuration,
+  withOutcomeFields = false,
   now,
-}: TracesQueryWindow & { withRootDuration: boolean; now: Date }) =>
+}: TracesQueryWindow & { withRootDuration: boolean; withOutcomeFields?: boolean; now: Date }) =>
   buildTraceQueryRequest({
     rootEntityType: getSelectedEntityOption(filters.tokens)?.entityType,
     status: getSelectedStatus(filters.tokens),
@@ -180,7 +183,7 @@ export const buildTracesQueryRequest = ({
     dateTo,
     tokens: filters.tokens,
     groups: filters.groups,
-    excludedFieldIds: serverUnqueryableFieldIds(withRootDuration),
+    excludedFieldIds: serverUnqueryableFieldIds(withRootDuration, withOutcomeFields),
     now,
   });
 

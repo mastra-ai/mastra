@@ -34,6 +34,12 @@ export const spanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
   },
 };
 
+/** A store that records span outcomes and stop reasons and filters span queries on them. */
+export const spanOutcomeCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanQueryOutcomeFields: true },
+};
+
 export const spanQueryCoreOnlyCapabilities: GetObservabilityCapabilitiesResponse = {
   ...spanQueryCapabilities,
   capabilities: { ...spanQueryCapabilities.capabilities, spanQueryContextFields: false },
@@ -169,6 +175,21 @@ export const spanRowsPage: QuerySpansResult = {
       entityType: 'tool',
       entityId: 'get-weather',
       entityName: 'Get Weather Tool',
+    }),
+  ],
+  page: { next: null },
+};
+
+/** An agent run stopped by its step limit. */
+export const limitedSpanPage: QuerySpansResult = {
+  spans: [
+    makeSpan({
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      name: 'agent run: weather',
+      outcome: 'limit',
+      stopReason: 'max_steps',
+      stopReasonContext: { maxSteps: 5 },
     }),
   ],
   page: { next: null },

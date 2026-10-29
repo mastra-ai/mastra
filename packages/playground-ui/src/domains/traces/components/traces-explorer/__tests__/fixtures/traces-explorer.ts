@@ -53,6 +53,12 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
 };
 
+/** A store that records each root's outcome and stop reason and filters trace queries on them. */
+export const outcomeCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceQueryOutcomeFields: true },
+};
+
 export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: {
@@ -138,6 +144,15 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
       createdAt: '2026-09-15T11:00:00.000Z',
       inputPreview: 'Book a table for two',
     },
+  ],
+  page: { next: null },
+};
+
+/** One root stopped by a step limit, one from a store or SDK that recorded no outcome. */
+export const outcomeTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [
+    { ...weatherTrace, outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps: 5 } },
+    { ...twoTracesPage.traces[1], status: 'error', outcome: null, stopReason: null, stopReasonContext: null },
   ],
   page: { next: null },
 };

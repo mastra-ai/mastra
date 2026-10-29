@@ -131,6 +131,11 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-query-time-to-first-chunk-sort`: `orderBy` on `timeToFirstChunkMs` in trace and span queries
  * - `trace-query-time-to-first-token`: `timeToFirstTokenMs` on trace, thread and span query results and predicates
  * - `trace-query-time-to-first-token-sort`: `orderBy` on `timeToFirstTokenMs` in trace and span queries
+ * - `span-query-outcome-fields`: `outcome` and `stopReason` predicates in `querySpans` and `aggregateSpans`
+ *   (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows
+ * - `trace-query-outcome-fields`: the root span's `outcome` and `stopReason` in trace-scope predicates and
+ *   trace aggregate `groupBy`/`countDistinct`, both fields in `spans.some`/`spans.none` predicates, and the root
+ *   span's `outcome`, `stopReason` and `stopReasonContext` on trace rows
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
@@ -164,7 +169,9 @@ export type ObservabilityStorageFeature =
   | 'trace-query-root-entity-id'
   | 'trace-query-time-to-first-chunk-sort'
   | 'trace-query-time-to-first-token'
-  | 'trace-query-time-to-first-token-sort';
+  | 'trace-query-time-to-first-token-sort'
+  | 'span-query-outcome-fields'
+  | 'trace-query-outcome-fields';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

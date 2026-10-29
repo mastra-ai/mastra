@@ -15,6 +15,7 @@ import {
   timeToFirstChunkSupported,
   timeToFirstTokenSupported,
   runWithPostgresTraceQueryTimeout,
+  spanQueryOutcomeFieldsSupported,
 } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -46,6 +47,8 @@ const fields = [
   'executionSource',
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -201,10 +204,20 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
       const query = compilePostgresSpanQuery(schema, plan);
       const rows = await tx.any<Selected>(query.text, query.values);
       const selected = rows.map(
-        ({ version: _version, startedAt, endedAt, timeToFirstChunkMs, timeToFirstTokenMs, ...row }) => ({
+        ({
+          version: _version,
+          startedAt,
+          endedAt,
+          timeToFirstChunkMs,
+          timeToFirstTokenMs,
+          outcome,
+          stopReason,
+          ...row
+        }) => ({
           ...row,
           ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
           ...(timeToFirstTokenSupported && { timeToFirstTokenMs }),
+          ...(spanQueryOutcomeFieldsSupported && { outcome, stopReason }),
           startedAt: startedAt.toISOString(),
           endedAt: endedAt.toISOString(),
         }),
@@ -230,9 +243,14 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
       // fall back to span attributes for rows written before their columns existed; that fallback
       // is returned, never filtered on.
       const payloadRows = await tx.any<
-        SpanQueryIdentity & Record<string, unknown> & { model: string | null; provider: string | null }
+        SpanQueryIdentity &
+          Record<string, unknown> & {
+            model: string | null;
+            provider: string | null;
+            stopReasonContext: Record<string, unknown> | null;
+          }
       >(
-        `SELECT ${identities},
+        `SELECT ${identities}, "stopReasonContext",
       COALESCE("model", CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END) AS model,
       COALESCE("provider", CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END) AS provider,
       ${PREVIEW_PAYLOADS.map(([preview, payload]) => `"${preview}", CASE WHEN ${missingPreviewSql(`"${preview}"`)} THEN "${payload}" END AS "${payload}"`).join(',\n      ')}
@@ -241,11 +259,15 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
       );
       const payloads = payloadRows.map(toSpanQueryPayload);
       const metadata = new Map(payloadRows.map(row => [coreStorage.spanQueryIdentityKey(row), row]));
-      const hydrated = selected.map(row => ({
-        ...row,
-        model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
-        provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
-      }));
+      const hydrated = selected.map(row => {
+        const stored = metadata.get(coreStorage.spanQueryIdentityKey(row));
+        return {
+          ...row,
+          model: stored?.model ?? null,
+          provider: stored?.provider ?? null,
+          ...(spanQueryOutcomeFieldsSupported && { stopReasonContext: stored?.stopReasonContext ?? null }),
+        };
+      });
       // Preserve costs only for older core contracts that still return them.
       let metrics: SpanQueryCostMetric[] = [];
       if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY) {
