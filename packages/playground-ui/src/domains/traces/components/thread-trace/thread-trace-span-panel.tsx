@@ -21,7 +21,7 @@ export function ThreadTraceSpanPanel({ className, panelClassName, ...props }: Th
   return (
     <>
       <PanelSeparator variant="pill" />
-      <Panel id="thread-trace-span" minSize={320} defaultSize="35%" maxSize="50%">
+      <Panel id="thread-trace-span" minSize={384} defaultSize="35%" maxSize="50%">
         <div
           data-slot="thread-trace-span-panel"
           className={cn(

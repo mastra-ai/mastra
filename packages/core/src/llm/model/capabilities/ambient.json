@@ -37,13 +37,7 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "z-ai/glm-5.2": [
+    "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -54,7 +48,13 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]

@@ -13,6 +13,21 @@ export const CHART_GRID_PROPS = {
 export const CHART_CURSOR_PROPS = { stroke: 'var(--border)', strokeDasharray: '3 3', strokeWidth: 0.8 } as const;
 
 /**
+ * Recharts `<Tooltip>` settings for the metrics charts, used with `ChartTooltipPosition`:
+ * - No animation: the tooltip snaps to the hovered point, like the hover line and dots.
+ * - `filterNull: false`: a bucket with no readings still gets a tooltip (with dashes); Recharts
+ *   otherwise drops every empty reading and renders nothing.
+ * - The wrapper stays at the chart's origin and may leave the plot; `ChartTooltipPosition` portals
+ *   the box to `document.body` and places it there.
+ */
+export const CHART_TOOLTIP_PROPS = {
+  isAnimationActive: false,
+  filterNull: false,
+  position: { x: 0, y: 0 },
+  allowEscapeViewBox: { x: true, y: true },
+};
+
+/**
  * How x-axis labels are placed.
  * - `auto`: as many labels as fit the width, on round clock times (12 AM, 6 AM, ...) when the
  *   rows carry timestamps, so every chart on a page shares one time grid.
@@ -88,9 +103,9 @@ const LABEL_GAP = 48;
 export const labelWidth = (text: string) => text.length * CHART_AXIS_FONT_SIZE * 0.58;
 
 /**
- * Which buckets get a label: the smallest round step whose labels fit the width, on
- * clock-aligned times (hours divisible by the step, days on local midnight or, for daily
- * buckets, on their local date). Without
+ * Which buckets get a label: the smallest round step whose labels fit the width, on the first
+ * bucket at or after each clock-aligned time (hours divisible by the step, days on local
+ * midnight or, for daily buckets, on their local date). Without
  * timestamps, evenly spaced buckets that fit; when fewer than three would show, just the
  * first and last bucket.
  */
@@ -126,16 +141,17 @@ export function pickTimeTicks(
     return even.size < 3 ? ends : even;
   }
   const picked = new Set<number>();
+  const bucketMinutes = bucket / MINUTE;
   ts.forEach((t, i) => {
     const d = new Date(t);
     const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    // Daily buckets are often cut on UTC midnight, which isn't local midnight: they align by
-    // local date. Shorter buckets need the clock time itself.
-    const onClock = bucket >= DAY || (d.getHours() === 0 && d.getMinutes() === 0);
+    // Buckets are cut on UTC, so in a zone off the step (Paris in winter, Kolkata) none starts on
+    // the round local time: label the first bucket that starts at or after it.
+    const sinceMidnight = (t - midnight) / MINUTE;
+    // Daily buckets align by local date.
+    const onClock = bucket >= DAY || sinceMidnight < bucketMinutes;
     const onStep =
-      step < 1440
-        ? d.getSeconds() === 0 && (d.getHours() * 60 + d.getMinutes()) % step === 0
-        : onClock && Math.round(midnight / DAY) % (step / 1440) === 0;
+      step < 1440 ? sinceMidnight % step < bucketMinutes : onClock && Math.round(midnight / DAY) % (step / 1440) === 0;
     if (onStep) picked.add(i);
   });
   // Two clock labels land off-centre (one mid-plot, one at an edge): label the ends instead.

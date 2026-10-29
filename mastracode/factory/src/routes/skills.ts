@@ -3,6 +3,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { Context } from 'hono';
 
 import { listFactorySkills } from '../skills/catalog.js';
@@ -35,6 +36,8 @@ export interface SkillRoutesDeps extends RouteDependencies {
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
   authorizeSessionAddress?: (context: Context, address: { sessionId: string }) => Promise<SessionAuthorizationResult>;
+  /** App skills from `MastraFactory({ skills })`, listed in the catalog alongside folder and bundled skills. */
+  skills?: readonly InlineSkill[];
 }
 
 function loose(context: unknown): Context {
@@ -160,7 +163,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
           return c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401);
         }
       }
-      return c.json({ skills: await listFactorySkills() });
+      return c.json({ skills: await listFactorySkills(this.deps.skills) });
     };
 
     return [

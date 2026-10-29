@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { RequestContext } from '@mastra/core/request-context';
+import { createSkill } from '@mastra/core/skills';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -437,7 +439,7 @@ describe('workspace skill invocation route', () => {
 });
 
 describe('factory skills catalog route', () => {
-  function createCatalogApp(options: { authEnabled?: boolean; user?: TestAuthUser } = {}) {
+  function createCatalogApp(options: { authEnabled?: boolean; user?: TestAuthUser; skills?: InlineSkill[] } = {}) {
     const app = new Hono();
     if (options.user) {
       app.use('*', async (c, next) => {
@@ -451,6 +453,7 @@ describe('factory skills catalog route', () => {
         auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
         controllerId: 'code',
         controller: { getSession: vi.fn(async () => undefined) } as never,
+        ...(options.skills ? { skills: options.skills } : {}),
       }).routes(),
     );
     return app;
@@ -505,14 +508,58 @@ describe('factory skills catalog route', () => {
       writeFileSync(join(projectDir, 'factory-skills', dir, 'SKILL.md'), content);
     }
 
-    async function listSkills() {
-      const response = await createCatalogApp({ authEnabled: false }).request('/web/factory/skills');
+    async function listSkills(codeSkills?: InlineSkill[]) {
+      const response = await createCatalogApp({ authEnabled: false, skills: codeSkills }).request(
+        '/web/factory/skills',
+      );
       expect(response.status).toBe(200);
       const { skills } = (await response.json()) as {
-        skills: { name: string; description: string; content: string; error?: string }[];
+        skills: {
+          name: string;
+          description: string;
+          content: string;
+          origin: string;
+          builtIn: boolean;
+          error?: string;
+        }[];
       };
       return skills;
     }
+
+    it('lists an app skill a custom board runs next to the built-in skills', async () => {
+      writeLocalSkill('release-notes', '---\nname: release-notes\ndescription: Draft notes\n---\n\n# Release Notes\n');
+      writeLocalSkill('factory-triage', '---\nname: factory-triage\ndescription: Our triage\n---\n\n# Our Triage\n');
+      const skills = await listSkills();
+      expect(skills.find(s => s.name === 'release-notes')).toEqual({
+        name: 'release-notes',
+        description: 'Draft notes',
+        content: '# Release Notes',
+        origin: 'folder',
+        builtIn: false,
+      });
+      expect(skills.find(s => s.name === 'factory-triage')).toMatchObject({
+        content: '# Our Triage',
+        origin: 'folder',
+        builtIn: true,
+      });
+      expect(skills.find(s => s.name === 'factory-plan')).toMatchObject({ origin: 'bundled', builtIn: true });
+    });
+
+    it('lists code skills over folder and bundled skills of the same name', async () => {
+      writeLocalSkill('release-notes', '---\nname: release-notes\ndescription: Folder notes\n---\n\n# Folder\n');
+      const skills = await listSkills([
+        createSkill({ name: 'release-notes', description: 'Code notes', instructions: '# From code' }),
+        createSkill({ name: 'factory-plan', description: 'Our plan', instructions: '# Our plan' }),
+      ]);
+      expect(skills.filter(s => s.name === 'release-notes')).toEqual([
+        { name: 'release-notes', description: 'Code notes', content: '# From code', origin: 'code', builtIn: false },
+      ]);
+      expect(skills.find(s => s.name === 'factory-plan')).toMatchObject({
+        content: '# Our plan',
+        origin: 'code',
+        builtIn: true,
+      });
+    });
 
     it('reports a skill whose frontmatter the runtime cannot parse', async () => {
       writeLocalSkill(

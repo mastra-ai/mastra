@@ -229,6 +229,37 @@ const storage = new PostgresStoreVNext({
 
 Lower `lookbackSeconds` if refreshes are slow, and raise `ttlSeconds` if they run more often than your filter values change. Only one process refreshes a given cache entry at a time, so adding server instances doesn't multiply the work.
 
+#### Day partitions
+
+`PostgresStoreVNext` stores observability events in tables partitioned by day. If TimescaleDB or pg_partman is installed, that extension creates partitions for you. Without an extension, `init()` creates the partitions for yesterday, today, and the next `futureDays` days (default 14), and a write that lands on a day inside that window with no partition creates it before it retries, so writes keep working after the pre-created window runs out. Rows dated outside the window are still rejected.
+
+Creating a partition is DDL. If the role your app runs with cannot create tables, or does not own the observability tables, the write fails with an error that names the table and the missing day, and the exporter drops that batch after its retries. In that setup, call `ensurePartitions()` on a schedule, at least once every `futureDays` days, with a role that can create tables and owns the observability tables. It only extends the native day-partition window, and does nothing with TimescaleDB or pg_partman. You can also install TimescaleDB, or pg_partman with its background worker or a scheduled `run_maintenance()` call, so the database maintains the partitions itself.
+
+A larger `futureDays` gives the scheduled job more time between runs:
+
+```typescript
+import { PostgresStoreVNext } from '@mastra/pg'
+
+const storage = new PostgresStoreVNext({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  observability: {
+    connectionString: process.env.OBSERVABILITY_DATABASE_URL,
+    partitioning: {
+      futureDays: 60, // pre-create 60 days of partitions on init()
+    },
+  },
+})
+```
+
+Then call `ensurePartitions()` from the scheduled job:
+
+```typescript
+// OBSERVABILITY_DATABASE_URL connects as a role that owns the observability tables
+await storage.ensurePartitions()
+await storage.close()
+```
+
 ### Initialization
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:

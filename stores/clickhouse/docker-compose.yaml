@@ -1,6 +1,6 @@
 services:
   db:
-    image: clickhouse/clickhouse-server:26.6.1.1193
+    image: clickhouse/clickhouse-server:26.10.3.7
     container_name: 'clickhouse-test-db'
     ports:
       - '8123:8123'

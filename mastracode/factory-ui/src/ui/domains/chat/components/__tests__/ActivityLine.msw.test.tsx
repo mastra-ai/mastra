@@ -56,7 +56,7 @@ describe('ActivityLine', () => {
     await session.emit({ type: 'tool_start', toolCallId: 'call-ask', toolName: 'ask_user', args: {} });
     await waitForMutationsIdle(client);
 
-    expect(screen.queryByRole('group', { name: /^Tool: / })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-slot="activity-stretch"]')).toBeNull();
     expect(screen.getByText('Thinking')).toBeInTheDocument();
   });
 
@@ -74,7 +74,7 @@ describe('ActivityLine', () => {
       args: { path: 'src/index.ts' },
     });
 
-    await screen.findByRole('group', { name: 'Tool: view' }, { timeout: 3000 });
+    await screen.findByRole('group', { name: /^Reading/ }, { timeout: 3000 });
     await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
   });
 

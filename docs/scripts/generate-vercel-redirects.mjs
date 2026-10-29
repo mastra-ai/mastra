@@ -78,6 +78,10 @@ export function createLlmsRedirect(redirect) {
   }
 }
 
+export function hasWildcardSource(source) {
+  return source.includes(':path') || source.includes('*')
+}
+
 export function assertNoDuplicateSources(redirects) {
   const seen = new Map()
 
@@ -113,7 +117,13 @@ export function generateRedirects(sourceRedirects) {
   assertNoRedirectChains(sourceRedirects)
 
   const generated = sourceRedirects.filter(shouldGenerateLlmsRedirect).map(createLlmsRedirect)
-  const redirects = [...sourceRedirects, ...generated]
+  // Vercel takes the first matching rule, so a wildcard source has to come after every more
+  // specific rule it would otherwise swallow, including the `/llms.txt` companions generated below.
+  const redirects = [
+    ...sourceRedirects.filter(redirect => !hasWildcardSource(redirect.source)),
+    ...generated,
+    ...sourceRedirects.filter(redirect => hasWildcardSource(redirect.source)),
+  ]
   assertNoDuplicateSources(redirects)
   return redirects
 }

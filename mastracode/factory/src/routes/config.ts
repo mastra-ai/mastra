@@ -110,6 +110,8 @@ export interface ProviderInfo {
   orgCredentialExpired?: true;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
+  /** The provider is a stored custom OpenAI-compatible endpoint. */
+  custom?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -150,11 +152,13 @@ export async function listProviders({
   authStorage,
   tenantCredentials,
   deploymentProviders,
+  listCustomProviders,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
+  listCustomProviders?: () => Promise<CustomProviderRecord[]>;
 }): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
@@ -219,6 +223,21 @@ export async function listProviders({
       ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
+  }
+
+  if (listCustomProviders) {
+    try {
+      for (const record of await listCustomProviders()) {
+        if (seen.has(record.providerId)) continue;
+        seen.set(record.providerId, {
+          provider: record.providerId,
+          source: tenantCredentials ? 'stored-org' : 'stored',
+          custom: true,
+        });
+      }
+    } catch {
+      // Keep the built-in provider catalog available if custom-provider storage is unavailable.
+    }
   }
 
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
@@ -941,12 +960,20 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // keys, so the settings UI can gate the "Everyone in org" option.
             const tenant = auth.tenant(loose(c));
             const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
+            const customProviders = options.customProviders;
+            const listCustomProviders = customProviders
+              ? async () => {
+                  const ctx = await resolveCustomProvidersContext({ c: loose(c), auth, customProviders });
+                  return 'response' in ctx ? [] : ctx.storage.list({ orgId: ctx.orgId });
+                }
+              : undefined;
             return c.json({
               providers: await listProviders({
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
                 deploymentProviders,
+                listCustomProviders,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
