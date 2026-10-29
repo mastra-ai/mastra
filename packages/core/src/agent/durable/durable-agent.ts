@@ -4358,6 +4358,7 @@ export class DurableAgent<
     let executionFence: ExecutionFence | undefined;
     let recoveryState: RehydratedRecoveryState;
     let finishPublishedBeforeCrash: boolean;
+    let claimedSnapshot: WorkflowRunState;
     try {
       // A run this process is still executing is not orphaned. Recovering it
       // here would replace the live execution's registry entry mid-flight
@@ -4389,6 +4390,7 @@ export class DurableAgent<
       // from the pre-claim copy.
       const loaded = await this.#loadRecoverableSnapshot(workflowsStore, runId);
       workflowInput = loaded.workflowInput;
+      claimedSnapshot = loaded.snapshot;
       // map-final-output publishes FINISH before saving its result. Restart skips
       // that saved success, so recovery must publish FINISH for the new subscriber.
       finishPublishedBeforeCrash = loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
@@ -4419,7 +4421,7 @@ export class DurableAgent<
     if (executionFence.generation !== undefined) {
       // Record the earliest event from the step the persisted snapshot will re-execute.
       // A replay can then omit the abandoned tail without losing completed iterations.
-      const supersededFrom = await this.#supersededFrom(workflowsStore, runId);
+      const supersededFrom = await this.#supersededFrom(workflowsStore, runId, claimedSnapshot);
       await emitOwnershipClaimedEvent(this.pubsub, runId, executionFence.generation, supersededFrom).catch(error => {
         this.logger.warn(`[DurableAgent] recover(${runId}) failed to announce its claim on the run stream`, {
           runId,
@@ -5334,11 +5336,13 @@ export class DurableAgent<
   }
 
   /** Locate the start of the model step that recovery will re-execute, if it was published. */
-  async #supersededFrom(workflowsStore: WorkflowsStorage, runId: string): Promise<number | undefined> {
+  async #supersededFrom(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    parentSnapshot: WorkflowRunState,
+  ): Promise<number | undefined> {
     try {
-      const parent = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-      const parentSnapshot = typeof parent?.snapshot === 'string' ? JSON.parse(parent.snapshot) : parent?.snapshot;
-      const nestedRunId = parentSnapshot?.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+      const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
       const nested = await workflowsStore.getWorkflowRunById({
         runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
         workflowName: DurableStepIds.AGENTIC_EXECUTION,
