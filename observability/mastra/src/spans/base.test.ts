@@ -611,18 +611,23 @@ describe('Span', () => {
       }
     });
 
-    it('drops diagnostic payloads and oversized identifiers from stopReasonContext', () => {
+    it('preserves custom producer values through update, end and rebuild', () => {
       const instance = tracing();
-      const context = { processorId: 'policy', tripwire: { metadata: { password: 'secret', steps: 10n } } };
-      const span = instance.startSpan({
-        type: SpanType.GENERIC,
-        name: 'run',
-        stopReason: 'guardrail',
-        stopReasonContext: context,
-      });
-      expect(span.exportSpan().stopReasonContext).toEqual({ processorId: 'policy' });
-      span.update({ stopReasonContext: { processorId: 'x'.repeat(129) } });
-      expect(span.exportSpan().stopReasonContext).toBeNull();
+      const fields = {
+        outcome: 'custom_result',
+        stopReason: 'custom_policy',
+        stopReasonContext: { ticket: 'SUP-123', details: { retry: true } },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'custom', ...fields });
+      expect(span.exportSpan()).toMatchObject(fields);
+      const rebuilt = instance.rebuildSpan(span.snapshot());
+      expect(rebuilt.exportSpan()).toMatchObject(fields);
+      rebuilt.update({ stopReasonContext: { custom: 'updated' } });
+      rebuilt.end();
+      expect(rebuilt.exportSpan()).toMatchObject({ ...fields, stopReasonContext: { custom: 'updated' } });
+      const knownReason = instance.startSpan({ type: SpanType.GENERIC, name: 'custom guardrail' });
+      knownReason.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { custom: 'retained' } });
+      expect(knownReason.exportSpan().stopReasonContext).toEqual({ custom: 'retained' });
     });
   });
 

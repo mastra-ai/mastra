@@ -12,11 +12,11 @@ export const SPAN_OUTCOMES = [
 export type SpanOutcome = (typeof SPAN_OUTCOMES)[number];
 
 /** Supplemental facts for runtime/model failures; never used to infer an outcome. */
-export interface SpanFailureContext {
+export type SpanFailureContext = {
   provider?: string;
   errorCode?: string;
   retryable?: boolean;
-}
+};
 
 /** Context for the initial OBS-724 reason codes. Runtime producers supply these facts. */
 export interface SpanStopReasonContextMap {
@@ -90,13 +90,15 @@ export type SpanTermination = { outcome: SpanOutcome } & (
   | { stopReason?: null; stopReasonContext?: null }
 );
 
-/** Native fields shared by live spans, snapshots, exports and lifecycle options. */
+/** Native fields shared by live spans, snapshots, exports and lifecycle options.
+ * Custom producers retain arbitrary values; framework producers use SpanTermination.
+ */
 export interface SpanOutcomeFields {
   /** Explicit null means ongoing for an adopted producer. Absence means unavailable. */
-  outcome?: SpanOutcome | null;
+  outcome?: string | null;
   /** Nullable machine-readable cause, supplied at the authoritative runtime boundary. */
-  stopReason?: SpanStopReason | null;
-  stopReasonContext?: SpanStopReasonContext | null;
+  stopReason?: string | null;
+  stopReasonContext?: Record<string, unknown> | null;
 }
 
 /** Typed metadata retained when an OM processor interrupts its primary agent. */

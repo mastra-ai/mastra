@@ -49,7 +49,7 @@ describe.each(['esm', 'cjs'] as const)('older core outcome compatibility (%s)', 
         const tracing = new DefaultObservabilityInstance({ name: 'compat', serviceName: 'compat', exporters: [] });
         const span = tracing.startSpan({ name: 'run', type: 'agent_run', outcome: null });
         span.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { processorId: 'policy' } });
-        if (span.exportSpan().stopReasonContext != null) throw new Error('Old core should omit unsupported context');
+        if (span.exportSpan().stopReasonContext?.processorId !== 'policy') throw new Error('Custom context must be preserved on old core');
         const tracker = new ModelSpanTracker();
         tracker.reportGenerationError({error: new Error('provider failed')});
         tracker.endGeneration({outcome:'abort', stopReason:'caller_cancelled'});

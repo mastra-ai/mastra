@@ -34,7 +34,7 @@ const contexts = {
   authorization: z.strictObject(failure),
 } satisfies { [Reason in SpanStopReason]: z.ZodType<SpanStopReasonContext<Reason>> };
 
-/** @internal Allowlist tooltip facts at the span boundary, including untyped callers. */
+/** @internal Allowlist tooltip facts for framework producers, including untyped runtime inputs. */
 export function compactStopReasonContext<Reason extends SpanStopReason>(
   stopReason: Reason | null | undefined,
   context: unknown,
