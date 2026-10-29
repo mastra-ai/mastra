@@ -8,16 +8,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3.1-pro": [
+    "k3-256k": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "k3.1-pro-highspeed": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "k3": [
@@ -26,10 +20,16 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3-256k": [
+    "k3.1-pro-highspeed": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

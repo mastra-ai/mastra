@@ -15,12 +15,12 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash:fast": [
+    "glm-5.3": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.3": [
+    "glm-5.3-flash:fast": [
       {
         "type": "toggle"
       }

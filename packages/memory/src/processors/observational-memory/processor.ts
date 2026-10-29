@@ -17,6 +17,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
+import { getOmFailureMetadata } from './error';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
@@ -432,7 +433,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           }
           state.__omTurn = undefined;
           if (typeof abort === 'function') {
-            abort(abortMessage);
+            abort(abortMessage, { metadata: getOmFailureMetadata(error, 'abort') });
           }
           throw err;
         }

@@ -30,7 +30,7 @@ import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSett
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
-import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
+import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
@@ -140,8 +140,8 @@ const AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS = readPositiveIntEnv(
 const AGENT_THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 // Long enough for live subscribers (including cross-process readers polling the
-// topic) to read a failed run's outcome before its entries are deleted.
-const FAILED_RUN_TRIM_DELAY_MS = 30_000;
+// topic) to read an unsaved run's output before its entries are deleted.
+const UNSAVED_RUN_TRIM_DELAY_MS = 30_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
 const RETAKE_LEASE_MARKER = '\u0000retake\u0000';
@@ -570,7 +570,7 @@ type AgentThreadRuntimeState = {
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
-  pendingSignalListenersByRunId: Map<string, Set<() => void>>;
+  pendingSignalListenersByRunId: Map<string, Set<PendingSignalListener>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
@@ -1564,7 +1564,7 @@ export class AgentThreadStreamRuntime {
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, data.runId, signal, 'pending');
-        this.#notifyPendingSignals(state, key);
+        this.#notifyPendingSignals(state, key, signal);
       } else if (data?.type === 'signals-cancelled') {
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
@@ -2530,7 +2530,7 @@ export class AgentThreadStreamRuntime {
           const queued: ClaimedQueuedMessage = { identity: messageIdentity };
           state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
-          this.#notifyPendingSignals(state, key);
+          this.#notifyPendingSignals(state, key, joinSignal ?? signal);
           const admission = await pendingAdmission.outcome.catch(() => undefined);
           if (queued.cancelled) {
             // Cancelled while waiting. It was admitted like queued input on an idle owner, so
@@ -2743,7 +2743,7 @@ export class AgentThreadStreamRuntime {
           runId,
           error: message,
         });
-        this.#trimFailedRun(pubsub, key, { agent: owner.agent, streamOptions: streamOptions ?? {}, runId });
+        this.#trimRunLater(pubsub, key, runId);
         if (!(await this.#drainPendingIdleSignals(state, pubsub, key, runId))) {
           this.#releaseThreadLease(pubsub, key, runId);
         }
@@ -3865,7 +3865,7 @@ export class AgentThreadStreamRuntime {
     state.pendingSignalsByThread.set(key, queue);
     this.#recordLocallyQueuedSignal(state, key, signal.id);
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
-    this.#notifyPendingSignals(state, key);
+    this.#notifyPendingSignals(state, key, signal);
     this.#publish(pubsub, key, {
       type: 'signal-enqueued',
       runId: record.runId,
@@ -4587,7 +4587,7 @@ export class AgentThreadStreamRuntime {
             record.output.status === 'success'
               ? this.#trimSavedRun(pubsub, key, record)
               : record.output.status !== 'suspended'
-                ? this.#trimFailedRun(pubsub, key, record)
+                ? this.#trimRunLater(pubsub, key, record.runId)
                 : undefined,
           )
           .catch(() => {});
@@ -4664,39 +4664,44 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Once a run saved successfully and the agent has storage, delete its output
-   * while retaining outcomes and execution authority. Matching by runId also
-   * removes output published before a restart, including a resumed run's
-   * suspended half. Other runs' entries are never touched.
+   * Delete a run's output while retaining outcomes and execution authority.
+   * Matching by runId also removes output published before a restart,
+   * including a resumed run's suspended half. Other runs' entries are never
+   * touched.
+   */
+  async #trimRun(pubsub: PubSub | undefined, key: string, runId: string) {
+    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), {
+      runId,
+      retainTerminalEvents: true,
+    });
+  }
+
+  /**
+   * Trim a run that finished successfully. With storage its output is saved,
+   * so it goes now. Without storage the topic is the only copy live readers
+   * have, so it goes after the same delay as an unsaved run.
    */
   async #trimSavedRun(
     pubsub: PubSub | undefined,
     key: string,
     record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId'>,
   ) {
-    // Without storage the topic is the only copy, so it stays.
     const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
-    if (!memory) return;
-    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), {
-      runId: record.runId,
-      retainTerminalEvents: true,
-    });
+    if (memory) await this.#trimRun(pubsub, key, record.runId);
+    else this.#trimRunLater(pubsub, key, record.runId);
   }
 
   /**
-   * Delay trimming failed, canceled, or aborted output so live subscribers can
-   * finish reading it. Keep compact terminal events and execution authority
-   * metadata so opted-in reconnecting subscribers can recover the outcome
-   * without replaying unsaved output.
+   * Delay trimming output that storage doesn't back (failed, canceled, or
+   * aborted runs, and every run of an agent without storage) so live
+   * subscribers can finish reading it. Keep compact terminal events and
+   * execution authority metadata so opted-in reconnecting subscribers can
+   * recover the outcome.
    */
-  #trimFailedRun(
-    pubsub: PubSub | undefined,
-    key: string,
-    record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId'>,
-  ) {
+  #trimRunLater(pubsub: PubSub | undefined, key: string, runId: string) {
     const timer = setTimeout(() => {
-      this.#trimSavedRun(pubsub, key, record).catch(() => {});
-    }, FAILED_RUN_TRIM_DELAY_MS);
+      this.#trimRun(pubsub, key, runId).catch(() => {});
+    }, UNSAVED_RUN_TRIM_DELAY_MS);
     timer.unref?.();
   }
 
@@ -4857,7 +4862,7 @@ export class AgentThreadStreamRuntime {
         error: `failed to start follow-up run for queued message: ${getErrorFromUnknown(err).message}${draining?.cancelled ? '; the message was cancelled' : '; the message was requeued and will deliver on the next turn'}`,
       });
       if (previousRun.runId !== failedRunId) {
-        this.#trimFailedRun(pubsub, key, { ...previousRun, runId: failedRunId });
+        this.#trimRunLater(pubsub, key, failedRunId);
       }
       if (previousRun.runId !== failedRunId) {
         // A synchronous throw from the lease transfer leaves the lease still
@@ -4982,7 +4987,7 @@ export class AgentThreadStreamRuntime {
           runId: pending.runId,
           error: getErrorFromUnknown(err).message,
         });
-        this.#trimFailedRun(pubsub, key, { ...pending, streamOptions: pending.streamOptions ?? {} });
+        this.#trimRunLater(pubsub, key, pending.runId);
         // Hand the lease to remaining queued work (transfer keeps the key from
         // going empty); only release once nothing is left to drain.
         void this.#drainPendingContinuations(state, pubsub, key, pending.runId).then(async started => {
@@ -5107,7 +5112,7 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: getErrorFromUnknown(err).message,
       });
-      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
+      this.#trimRunLater(pubsub, key, pendingIdle.runId);
       if (!(await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId))) {
         this.#releaseThreadLease(pubsub, key, fromRunId ?? pendingIdle.runId);
       }
@@ -5215,7 +5220,7 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: message,
       });
-      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
+      this.#trimRunLater(pubsub, key, pendingIdle.runId);
       // No completion watcher exists for a failed startup. Preserve pending-before-idle recovery here too.
       await this.#drainPendingSignals(state, pubsub, key, {
         agent: pendingIdle.agent,
@@ -5231,7 +5236,7 @@ export class AgentThreadStreamRuntime {
   }
 
   /** @internal Listen only to input actually admitted to this process's owning run. */
-  subscribePendingSignals(runId: string, listener: () => void, pubsub?: PubSub): () => void {
+  subscribePendingSignals(runId: string, listener: PendingSignalListener, pubsub?: PubSub): () => void {
     const state = this.#getState(pubsub);
     if (!state.threadKeysByRunId.has(runId)) return () => {};
     const listeners = state.pendingSignalListenersByRunId.get(runId) ?? new Set();
@@ -5245,7 +5250,7 @@ export class AgentThreadStreamRuntime {
     };
   }
 
-  #notifyPendingSignals(state: AgentThreadRuntimeState, key: string): void {
+  #notifyPendingSignals(state: AgentThreadRuntimeState, key: string, signal: CreatedAgentSignal): void {
     const runId = state.activeThreadRunIds.get(key);
     if (
       !runId ||
@@ -5255,7 +5260,10 @@ export class AgentThreadStreamRuntime {
     ) {
       return;
     }
-    for (const listener of [...(state.pendingSignalListenersByRunId.get(runId) ?? [])]) listener();
+    const listeners = [...(state.pendingSignalListenersByRunId.get(runId) ?? [])];
+    if (listeners.length === 0) return;
+    const signals = [signal.toDataPart().data];
+    for (const listener of listeners) listener(signals);
   }
 
   /**
@@ -7172,7 +7180,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
-          this.#notifyPendingSignals(state, key);
+          this.#notifyPendingSignals(state, key, signal);
           const accepted = pendingAdmission.outcome.then(async admission => {
             if (admission.action === 'local') {
               // The reserved run owns the lease and takes this signal from the pre-run queue.
@@ -7221,7 +7229,7 @@ export class AgentThreadStreamRuntime {
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
-          this.#notifyPendingSignals(state, key);
+          this.#notifyPendingSignals(state, key, signal);
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',
@@ -7470,11 +7478,7 @@ export class AgentThreadStreamRuntime {
           runId: reservedRunId,
           error: getErrorFromUnknown(error).message,
         });
-        this.#trimFailedRun(pubsub, reservedKey, {
-          agent,
-          streamOptions: target.ifIdle?.streamOptions ?? {},
-          runId: reservedRunId,
-        });
+        this.#trimRunLater(pubsub, reservedKey, reservedRunId);
         void this.#drainPendingIdleSignals(state, pubsub, reservedKey);
         throw error;
       }

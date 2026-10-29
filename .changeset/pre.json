@@ -193,5 +193,11 @@
     "@mastra/sprites": "0.1.2",
     "@mastra/vercel": "1.6.2"
   },
-  "changesets": []
+  "changesets": [
+    "better-rocks-vanish",
+    "brave-tokens-grant",
+    "eight-sides-lie",
+    "factory-run-error-more-recoveries",
+    "plain-towns-think"
+  ]
 }

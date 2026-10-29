@@ -68,6 +68,7 @@ import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
@@ -891,6 +892,7 @@ export class Mastra<
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
   #serverExplicit = false;
+  #signalProviderRouteOwners = new WeakMap<ApiRoute, SignalProvider>();
   #studio?: StudioConfig;
   #studioExplicit = false;
   #serverAdapter?: MastraServerBase;
@@ -2990,6 +2992,7 @@ export class Mastra<
         });
       }
 
+      this.#registerSignalProviderRoutes(underlyingAgent);
       this.#syncLateRegisteredAgentSchedules(underlyingAgent);
 
       return;
@@ -3110,7 +3113,71 @@ export class Mastra<
       });
     }
 
+    this.#registerSignalProviderRoutes(mastraAgent);
     this.#syncLateRegisteredAgentSchedules(mastraAgent);
+  }
+
+  /**
+   * Merge routes from the agent's signal providers into `server.apiRoutes`.
+   * Skips routes whose method and path are already registered, so a provider
+   * shared by several agents only mounts its routes once and existing routes
+   * win. Logs a warning when a route is skipped because something other than
+   * the same provider already holds that method and path.
+   */
+  #registerSignalProviderRoutes(agent: Agent<any, any, any>): void {
+    const existingRoutes = this.#server?.apiRoutes ?? [];
+    const newRoutes: ApiRoute[] = [];
+
+    for (const provider of agent.listSignalProviders?.() ?? []) {
+      for (const route of provider.getRoutes?.() ?? []) {
+        const registered = [...existingRoutes, ...newRoutes].find(
+          existing => existing.path === route.path && existing.method === route.method,
+        );
+        if (!registered) {
+          newRoutes.push(route);
+          this.#signalProviderRouteOwners.set(route, provider);
+          continue;
+        }
+        if (this.#signalProviderRouteOwners.get(registered) !== provider) {
+          this.getLogger().warn(
+            `Signal provider "${provider.id}" on agent "${agent.id}" declares ${route.method} ${route.path}, but that route is already registered. Skipping the provider route.`,
+          );
+        }
+      }
+    }
+
+    if (newRoutes.length > 0) {
+      this.#server = { ...this.#server, apiRoutes: [...existingRoutes, ...newRoutes] };
+    }
+  }
+
+  /**
+   * Remove routes added by a removed agent's signal providers, unless another
+   * registered agent still uses the same provider instance.
+   */
+  #unregisterSignalProviderRoutes(removedAgent: Agent<any, any, any> | undefined): void {
+    const routes = this.#server?.apiRoutes;
+    const removedProviders = new Set(this.#listAgentSignalProviders(removedAgent));
+    if (!routes || removedProviders.size === 0) return;
+
+    const providersInUse = new Set(
+      Object.values(this.#agents as Record<string, Agent<any, any, any>>).flatMap(agent =>
+        this.#listAgentSignalProviders(agent),
+      ),
+    );
+    const keptRoutes = routes.filter(route => {
+      const provider = this.#signalProviderRouteOwners.get(route);
+      return !provider || !removedProviders.has(provider) || providersInUse.has(provider);
+    });
+
+    if (keptRoutes.length !== routes.length) {
+      this.#server = { ...this.#server, apiRoutes: keptRoutes };
+    }
+  }
+
+  #listAgentSignalProviders(agent: Agent<any, any, any> | undefined): SignalProvider[] {
+    const target = agent && isDurableAgentLike(agent) ? (agent as DurableAgentLike).agent : agent;
+    return target?.listSignalProviders?.() ?? [];
   }
 
   /**
@@ -3353,8 +3420,19 @@ export class Mastra<
     // Preserve apiRoutes accumulated during construction (e.g. channel
     // webhook routes) — they live on #server even when the user never
     // passed a server config explicitly.
-    const existingRoutes = this.#server?.apiRoutes ?? [];
+    // File-system routes win over signal provider routes on the same method and path.
     const fsRoutes = fsServer.apiRoutes ?? [];
+    const existingRoutes = (this.#server?.apiRoutes ?? []).filter(route => {
+      const provider = this.#signalProviderRouteOwners.get(route);
+      if (!provider) return true;
+      const overridden = fsRoutes.some(fsRoute => fsRoute.path === route.path && fsRoute.method === route.method);
+      if (overridden) {
+        this.getLogger().warn(
+          `Signal provider "${provider.id}" route ${route.method} ${route.path} is overridden by a file-system route.`,
+        );
+      }
+      return !overridden;
+    });
     const mergedRoutes = [...existingRoutes, ...fsRoutes];
     this.setServer({
       ...fsServer,
@@ -3406,8 +3484,10 @@ export class Mastra<
 
     // Try direct key lookup first
     if (agents[keyOrId]) {
-      const agentId = agents[keyOrId]?.id;
+      const removedAgent = agents[keyOrId];
+      const agentId = removedAgent?.id;
       delete agents[keyOrId];
+      this.#unregisterSignalProviderRoutes(removedAgent);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
@@ -3418,8 +3498,10 @@ export class Mastra<
     // Try finding by ID
     const key = Object.keys(agents).find(k => agents[k]?.id === keyOrId);
     if (key) {
-      const agentId = agents[key]?.id;
+      const removedAgent = agents[key];
+      const agentId = removedAgent?.id;
       delete agents[key];
+      this.#unregisterSignalProviderRoutes(removedAgent);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
@@ -7936,13 +8018,14 @@ export class Mastra<
       }
     }
 
+    // Flush observability exporters while their storage is still open.
+    await this.#observability.shutdown();
+
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
     if (this.#storage?.close) {
       await this.#storage.close();
     }
-    // Shutdown observability registry, exporters, etc...
-    await this.#observability.shutdown();
 
     this.#logger?.info('Mastra shutdown completed');
   }

@@ -131,6 +131,11 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
      * streamed one. Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
      */
     timeToFirstChunkMs: z.number().nullable().optional(),
+    /**
+     * Time from the first model inference's start to its first response chunk; `null` when the
+     * span has none. Absent when the store lacks the `trace-query-time-to-first-token` feature.
+     */
+    timeToFirstTokenMs: z.number().nullable().optional(),
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);
@@ -194,7 +199,8 @@ const cursorEnvelopeSchema = z
  * Ordering semantics every store compiler must implement:
  * - Sort by `orderBy.field` in the requested direction, then break ties by
  *   organizationId, resourceId, traceId, and spanId, in that order, all ascending.
- *   Empty `timeToFirstChunkMs` values sort last in both directions and tie with each other.
+ *   Empty `timeToFirstChunkMs` and `timeToFirstTokenMs` values sort last in both directions and tie
+ *   with each other.
  * - Compare non-null IDs lexicographically by UTF-8 bytes, without locale collation.
  *   Null organizationId/resourceId values sort last and compare equal to other nulls.
  * - Resume strictly after the cursor using that same complete ordering. Apply the

@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import type { LanguageModelRequestMetadata } from '@internal/ai-sdk-v5';
 import { expandDurableSteps } from '@internal/core/durable';
 import { MastraError } from '../../error';
 import { withAck } from '../../events/acking-callback';
@@ -374,6 +375,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
   requestContext?: RequestContext;
+  /** @internal Only fresh in-process callers can read private provider request metadata. */
+  readLocalRequest?: () => LanguageModelRequestMetadata | undefined;
   /** Tracing context whose current span is the run's AGENT_RUN span; parents per-chunk processor spans. */
   tracingContext?: TracingContext;
   /** Experimental transforms applied whenever the returned full stream is consumed. */
@@ -486,6 +489,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const onStepFinishWithRunId = onStepFinish
     ? (data: AgentStepFinishEventData) => onStepFinish({ ...data, runId })
     : undefined;
+
+  let readLocalRequest = options.readLocalRequest;
+  // Do not keep the originating run scope alive through the options closure.
+  options = { ...options, readLocalRequest: undefined };
+  let terminalRequest: LanguageModelRequestMetadata | undefined;
 
   // Track subscription state
   let isSubscribed = false;
@@ -659,6 +667,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       if (!controller || terminated) return;
     }
     if (!keep) return;
+    if (
+      (streamEvent.generation !== undefined && streamEvent.generation !== minGeneration) ||
+      streamEvent.type === AgentStreamEventTypes.SUSPENDED
+    ) {
+      readLocalRequest = undefined;
+    }
     activityVersion++;
 
     // Any event proves the producer is alive — restart the idle countdown.
@@ -670,6 +684,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
+          if (chunk.type === 'agent-execution-suspended' || chunk.type === 'tripwire') readLocalRequest = undefined;
           if (typeof streamEvent.producedAt === 'number') stampChunkProducedAt(chunk, streamEvent.producedAt);
           if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);
           // Track error chunks for onError callback
@@ -716,6 +731,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
+          if (
+            ['stop', 'length', 'tool-calls', 'content-filter', 'other', 'unknown', 'error'].includes(finishReason ?? '')
+          ) {
+            terminalRequest = readLocalRequest?.();
+          }
+          readLocalRequest = undefined;
 
           if (finishReason === 'abort') {
             safeEnqueue(controller, {
@@ -805,7 +826,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 usage: normalizeUsage(data.output?.usage),
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
-                request: { body: undefined },
+                request: terminalRequest ?? { body: undefined },
                 response: steps.at(-1)?.response ?? {},
                 reasoningText: undefined,
                 providerMetadata: undefined,
@@ -1050,6 +1071,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Sets cancelled=true so the subscribe .then() handler will unsubscribe
   // if cleanup runs before the subscription promise resolves.
   const cleanup = () => {
+    readLocalRequest = undefined;
     markTerminated();
     cancelled = true;
     releaseLogIndexWaiters();
@@ -1089,6 +1111,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       initialToolCalls,
       resumedText,
       finishUsageIsTotal: true,
+      getTerminalRequest: () => terminalRequest,
       options: {
         runId,
         onStepFinish: onStepFinishWithRunId as MastraOnStepFinishCallback<OUTPUT> | undefined,

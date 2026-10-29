@@ -11,9 +11,7 @@ import {
   countDescription,
   drilldownFor,
   isChangeMetric,
-  rowLabel,
   showsProject,
-  tableMinWidth,
   tableRows,
   volumeLabel,
 } from '../../lib/breakdown-table';
@@ -23,21 +21,32 @@ import { ChartCardError } from '../chart-card-error';
 import { BreakdownChangeCell } from './breakdown-change-cell';
 import { BreakdownChangeDescription } from './breakdown-change-description';
 import { BreakdownCostCell } from './breakdown-cost-cell';
+import { BreakdownFigure } from './breakdown-figure';
 import { BreakdownFrame } from './breakdown-frame';
 import type { BreakdownFrameProps } from './breakdown-frame';
-import type {
-  MetricsShareListColumn,
-  MetricsShareListRow,
-  MetricsShareListSort,
-} from '@/ds/components/MetricsShareList';
-import { MetricsShareList } from '@/ds/components/MetricsShareList';
+import { BreakdownRowName } from './breakdown-row-name';
+import { BreakdownText } from './breakdown-text';
+import { MetricsTable } from '@/ds/components/MetricsTable';
+import type { MetricsTableColumn, MetricsTableSort } from '@/ds/components/MetricsTable';
 import { Txt } from '@/ds/components/Txt';
 
 type UsageTotals = ReturnType<typeof useMetricsUsageTotals>;
 
-/** Rows shown before "Show more", then per page. */
-const LIMIT = 10;
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 13;
+
+/** Busiest first; where a third click on a column's header returns to. */
+const DEFAULT_SORT: MetricsTableSort = { column: 'count', direction: 'desc' };
+
+/** The first column's header: what each row is. */
+const NAME_HEADER: Record<BreakdownTab, string> = {
+  projects: 'Project',
+  agents: 'Agent',
+  workflows: 'Workflow',
+  tools: 'Tool',
+  models: 'Model',
+  threads: 'Thread',
+  environments: 'Environment',
+};
 
 const EMPTY: Record<BreakdownTab, string> = {
   projects: 'No traces in this range.',
@@ -83,11 +92,11 @@ export function BreakdownTable({
   ...frame
 }: BreakdownTableProps) {
   const scope = useMetricsScope();
-  const [sort, setSort] = useState<MetricsShareListSort>({ key: 'count', direction: 'descending' });
+  const [sort, setSort] = useState<MetricsTableSort>(DEFAULT_SORT);
   const [metric, setMetric] = useState<ChangeMetric>('count');
-  const onSortChange = (next: MetricsShareListSort) => {
+  const onSortChange = (next = DEFAULT_SORT) => {
     setSort(next);
-    if (isChangeMetric(next.key)) setMetric(next.key);
+    if (isChangeMetric(next.column)) setMetric(next.column);
   };
 
   const current = [aggregate, totals, spans].filter(q => q !== undefined);
@@ -132,93 +141,117 @@ export function BreakdownTable({
   const rows = tableRows({ tab, built, previous, truncated, groupBy, usage });
   const volume = volumeLabel(tab);
 
-  const columns: MetricsShareListColumn[] = [
-    ...(project ? [{ label: 'Project', width: 'w-52', align: 'left' as const }] : []),
-    ...(tab === 'threads' ? [{ label: 'Resource', width: 'w-32', align: 'left' as const }] : []),
-    ...(errors
-      ? [
-          { label: 'Errors', sortKey: 'errorRate' },
-          { label: 'P95 latency', sortKey: 'p95', width: 'w-24' },
-        ]
-      : []),
-    ...(usage ? [{ label: 'Tokens', sortKey: 'tokens' }] : []),
-    ...(usage ? [{ label: 'Cost', sortKey: 'cost' }] : []),
-    { label: volume, sortKey: 'count', width: 'w-24', emphasis: true, description: countDescription(tab) },
-  ];
-
-  const toShareRow = (row: BreakdownRow): MetricsShareListRow => {
-    const name = rowLabel(tab, row, scope.projectLabel);
-    const change = previous ? rowChange(row, previous.get(row.key), metric) : undefined;
-    const projectName = row.projectId ? (scope.projectLabel?.(row.projectId) ?? row.projectId) : DASH;
-    return {
-      key: row.key,
-      label: name,
-      share: row.count,
-      value: <BreakdownChangeCell change={change} metric={metric} />,
-      sortValues: {
-        count: row.count,
-        errorRate: row.errorRate,
-        p95: row.p95,
-        tokens: row.tokens,
-        cost: row.cost,
-        // Sorted by the change shown: biggest rise first, biggest fall first the other way. New rows
-        // have no change to rank, so they sort last.
-        change: change?.change,
-      },
-      cells: [
-        ...(project
-          ? [
-              <span key="project" title={projectName}>
-                {projectName}
-              </span>,
-            ]
-          : []),
-        ...(tab === 'threads'
-          ? [
-              <span key="resource" title={row.resource}>
-                {row.resource ?? DASH}
-              </span>,
-            ]
-          : []),
-        ...(errors
-          ? [
-              row.errorRate === undefined ? DASH : formatPercent(row.errorRate),
-              row.p95 === undefined ? DASH : formatDuration(row.p95),
-            ]
-          : []),
-        ...(usage ? [row.tokens === undefined ? DASH : formatCount(row.tokens)] : []),
-        ...(usage ? [<BreakdownCostCell key="cost" row={row} />] : []),
-        formatCount(row.count),
-      ],
-      onClick: frame.onRowClick && (() => frame.onRowClick?.(drilldownFor(tab, row))),
-    };
+  const changeOf = (row: BreakdownRow) => (previous ? rowChange(row, previous.get(row.key), metric) : undefined);
+  const projectName = (row: BreakdownRow) => {
+    if (!row.projectId) return DASH;
+    return scope.projectLabel?.(row.projectId) ?? row.projectId;
   };
+
+  const nameColumn: MetricsTableColumn<BreakdownRow> = {
+    id: 'name',
+    header: NAME_HEADER[tab],
+    width: 'minmax(12rem,3fr)',
+    cell: row => <BreakdownRowName tab={tab} row={row} />,
+  };
+  const projectColumn: MetricsTableColumn<BreakdownRow> = {
+    id: 'project',
+    header: 'Project',
+    width: 'minmax(8rem,2fr)',
+    cell: row => <BreakdownText text={projectName(row)} />,
+  };
+  const resourceColumn: MetricsTableColumn<BreakdownRow> = {
+    id: 'resource',
+    header: 'Resource',
+    width: 'minmax(6rem,1fr)',
+    cell: row => <BreakdownText text={row.resource ?? DASH} />,
+  };
+  const errorColumns: MetricsTableColumn<BreakdownRow>[] = [
+    {
+      id: 'errorRate',
+      header: 'Errors',
+      align: 'end',
+      sortValue: row => row.errorRate,
+      cell: row => (
+        <BreakdownFigure muted>{row.errorRate === undefined ? DASH : formatPercent(row.errorRate)}</BreakdownFigure>
+      ),
+    },
+    {
+      id: 'p95',
+      header: 'P95 latency',
+      align: 'end',
+      sortValue: row => row.p95,
+      cell: row => <BreakdownFigure muted>{row.p95 === undefined ? DASH : formatDuration(row.p95)}</BreakdownFigure>,
+    },
+  ];
+  const usageColumns: MetricsTableColumn<BreakdownRow>[] = [
+    {
+      id: 'tokens',
+      header: 'Tokens',
+      align: 'end',
+      sortValue: row => row.tokens,
+      cell: row => <BreakdownFigure muted>{row.tokens === undefined ? DASH : formatCount(row.tokens)}</BreakdownFigure>,
+    },
+    {
+      id: 'cost',
+      header: 'Cost',
+      align: 'end',
+      sortValue: row => row.cost,
+      cell: row => (
+        <BreakdownFigure muted>
+          <BreakdownCostCell row={row} />
+        </BreakdownFigure>
+      ),
+    },
+  ];
+  const countColumn: MetricsTableColumn<BreakdownRow> = {
+    id: 'count',
+    header: volume,
+    align: 'end',
+    description: countDescription(tab),
+    sortValue: row => row.count,
+    cell: row => <BreakdownFigure>{formatCount(row.count)}</BreakdownFigure>,
+  };
+  const changeColumn: MetricsTableColumn<BreakdownRow> = {
+    id: 'change',
+    header: '% Change',
+    align: 'end',
+    description: <BreakdownChangeDescription window={window} label={comparedLabel(tab, metric)} />,
+    // Sorted by the change shown: biggest rise first, biggest fall first the other way. New rows
+    // have no change to rank, so they sort last.
+    sortValue: row => changeOf(row)?.change,
+    cell: row => (
+      <BreakdownFigure>
+        <BreakdownChangeCell change={changeOf(row)} metric={metric} />
+      </BreakdownFigure>
+    ),
+  };
+  const columns = [
+    nameColumn,
+    ...(project ? [projectColumn] : []),
+    ...(tab === 'threads' ? [resourceColumn] : []),
+    ...(errors ? errorColumns : []),
+    ...(usage ? usageColumns : []),
+    countColumn,
+    changeColumn,
+  ];
 
   return (
     <BreakdownFrame {...frame} tab={tab} isUpdating={aggregate?.isPlaceholderData}>
       <ChartArea>
-        {/* The columns don't fit a phone or tablet: the table scrolls sideways, names stay readable.
-            The padding holds the rows' hover background, which reaches 8px past the list. */}
-        <div className="-mx-2 min-w-0 overflow-x-auto px-2">
-          <MetricsShareList
-            className={tableMinWidth(project, tab === 'threads')}
-            rows={rows.map(toShareRow)}
-            columns={columns}
-            valueLabel="% Change"
-            valueWidth="w-28"
-            valueSortKey="change"
-            valueDescription={<BreakdownChangeDescription window={window} label={comparedLabel(tab, metric)} />}
-            showShare={false}
-            showStrip={false}
-            sort={sort}
-            onSortChange={onSortChange}
-            limit={LIMIT}
-            overflow="more"
-            pageSize={PAGE_SIZE}
-            emptyState={EMPTY[tab]}
-            isLoading={isLoading}
-          />
-        </div>
+        <MetricsTable
+          key={tab}
+          aria-label={`${NAME_HEADER[tab]} breakdown`}
+          columns={columns}
+          rows={rows}
+          getRowKey={row => row.key}
+          sort={sort}
+          defaultSort={DEFAULT_SORT}
+          onSortChange={onSortChange}
+          onRowClick={frame.onRowClick && (row => frame.onRowClick?.(drilldownFor(tab, row)))}
+          pageSize={PAGE_SIZE}
+          isLoading={isLoading}
+          empty={EMPTY[tab]}
+        />
         {!isLoading && truncated && (
           <Txt variant="caption" tone="muted" className="pt-2">
             Showing the {formatCount(limit)} busiest; sorting covers only these.
