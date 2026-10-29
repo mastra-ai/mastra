@@ -59,6 +59,8 @@ export interface KnowledgeImporterSummary {
 
 export interface ListKnowledgeImportersResponse {
   summaries: KnowledgeImporterSummary[];
+  /** Whether the caller may save settings or start runs. Read-only callers get 403 `forbidden` on writes. */
+  canWrite: boolean;
 }
 
 export interface KnowledgeImporterConnection {

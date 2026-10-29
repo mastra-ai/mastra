@@ -41,6 +41,17 @@ export function isDraftDirty(draft: ImporterDraft, settings: KnowledgeImporterSe
 }
 
 /** Lists are allowlists: an empty one imports nothing, never everything. */
+/** Contract: disabling or narrowing never purges what was imported. */
+export const STOPS_NEW_IMPORTS_NOTE = 'Stops new imports. Knowledge already imported stays.';
+
+export const READ_ONLY_NOTE = 'Read-only: ask an org admin';
+
+/** The server answers writes from read-only callers with `403 { error: { code: 'forbidden' } }`. */
+export const isForbiddenError = (error: unknown) => {
+  const { status, code } = readApiError(error);
+  return code === 'forbidden' || status === 403;
+};
+
 export function describeAllowlist(values: readonly string[]): string {
   if (values.length === 0) return 'Empty — imports nothing. Add at least one entry.';
   return values.length === 1 ? 'Imports only this one.' : `Imports only these ${values.length}.`;

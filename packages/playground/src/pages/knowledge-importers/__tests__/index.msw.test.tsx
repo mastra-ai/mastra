@@ -21,10 +21,12 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 // Custom server routes mount at their own path, not under /api.
 const API = `${TEST_BASE_URL}/knowledge-importers`;
 const POLL_TIMEOUT = { timeout: 5000 };
+const NARROWING_COPY = 'Stops new imports. Knowledge already imported stays.';
+const READ_ONLY_COPY = 'Read-only: ask an org admin';
 
-const useSummaries = (summaries: KnowledgeImporterSummary[]) => {
+const useSummaries = (summaries: KnowledgeImporterSummary[], canWrite = true) => {
   server.use(
-    http.get(API, () => HttpResponse.json(buildListImportersResponse(summaries))),
+    http.get(API, () => HttpResponse.json(buildListImportersResponse(summaries, canWrite))),
     http.get(`${API}/:importerId/connections`, () => HttpResponse.json(notionConnections)),
     http.get(`${API}/:importerId/runs`, () => HttpResponse.json({ runs: [] })),
   );
@@ -271,6 +273,95 @@ describe('Knowledge importers page', () => {
       expect(
         await screen.findByText('A run is already in progress for this importer. Wait for it to finish.'),
       ).toBeTruthy();
+    });
+  });
+
+  describe('when the allowlist has entries', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('says narrowing it keeps knowledge already imported', async () => {
+      renderPage();
+      const field = (await screen.findByLabelText('Add to Teamspaces')).closest('[data-slot="field"]');
+      expect(field).not.toBeNull();
+      expect(within(field as HTMLElement).getByText(NARROWING_COPY)).toBeTruthy();
+    });
+  });
+
+  describe('when turning off automatic imports', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('confirms that knowledge already imported stays', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('switch', { name: 'Automatic imports' }));
+      const dialog = await screen.findByRole('alertdialog');
+      expect(within(dialog).getByText(NARROWING_COPY, { exact: false })).toBeTruthy();
+    });
+
+    it('turns them off once confirmed', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('switch', { name: 'Automatic imports' }));
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Turn off' }));
+      expect(await screen.findByText('Off — only manual runs.')).toBeTruthy();
+    });
+  });
+
+  describe('when the caller cannot write', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()], false));
+
+    it('says the page is read-only', async () => {
+      renderPage();
+      expect(await screen.findByText(READ_ONLY_COPY)).toBeTruthy();
+    });
+
+    it('hides save, reset, dry run and run now', async () => {
+      renderPage();
+      await screen.findByText(READ_ONLY_COPY);
+      const names = ['Save', 'Reset to environment', 'Dry run', 'Run now'];
+      expect(names.filter(name => screen.queryByRole('button', { name }))).toEqual([]);
+    });
+
+    it('hides the automatic imports switch', async () => {
+      renderPage();
+      await screen.findByText(READ_ONLY_COPY);
+      expect(screen.queryByRole('switch', { name: 'Automatic imports' })).toBeNull();
+    });
+  });
+
+  describe('when the server forbids saving', () => {
+    beforeEach(() => {
+      useSummaries([buildNotionSummary()]);
+      server.use(
+        http.put(`${API}/notion/settings`, () =>
+          HttpResponse.json({ error: { code: 'forbidden', message: 'Write access required' } }, { status: 403 }),
+        ),
+      );
+    });
+
+    it('switches the page to read-only', async () => {
+      renderPage();
+      const input = await screen.findByLabelText('Add to Teamspaces');
+      fireEvent.change(input, { target: { value: 'Design' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText(READ_ONLY_COPY)).toBeTruthy();
+    });
+  });
+
+  describe('when the server forbids a dry run', () => {
+    beforeEach(() => {
+      useSummaries([buildNotionSummary()]);
+      server.use(
+        http.post(`${API}/notion/dry-run`, () =>
+          HttpResponse.json({ error: { code: 'forbidden', message: 'Write access required' } }, { status: 403 }),
+        ),
+      );
+    });
+
+    it('hides the run controls', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }));
+      await screen.findByText(READ_ONLY_COPY);
+      expect(screen.queryByRole('button', { name: 'Dry run' })).toBeNull();
     });
   });
 });
