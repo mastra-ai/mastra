@@ -794,8 +794,16 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
         }
       }
       await tx.execute({
-        sql: `UPDATE ${T.pages} SET deletedAt = ?, deletedBy = ?, mergedInto = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
-        args: [now, input.provenance.author, input.targetId, JSON.stringify(input.provenance), now, input.sourceId],
+        sql: `UPDATE ${T.pages} SET deletedAt = ?, deletedBy = ?, mergedInto = ?, scopeId = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
+        args: [
+          now,
+          input.provenance.author,
+          input.targetId,
+          String(target.scopeId),
+          JSON.stringify(input.provenance),
+          now,
+          input.sourceId,
+        ],
       });
       await this.#logActivity(
         tx,
