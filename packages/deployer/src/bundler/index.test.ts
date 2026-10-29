@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +9,15 @@ import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, is
 const depsMocks = vi.hoisted(() => ({
   setLogger: vi.fn(),
   install: vi.fn(),
+}));
+
+const childProcessMocks = vi.hoisted(() => ({
+  execFile: vi.fn(),
+}));
+
+vi.mock('node:child_process', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  execFile: childProcessMocks.execFile,
 }));
 
 vi.mock('../services/deps', () => ({
@@ -28,6 +38,10 @@ class TestBundler extends Bundler {
 
   installForTest(outputDirectory: string, rootDir: string, pnpmOverrides?: Record<string, string>) {
     return this.installDependencies(outputDirectory, rootDir, pnpmOverrides);
+  }
+
+  lockfileForTest(outputDir: string) {
+    return this.generateNpmLockfile(outputDir);
   }
 }
 
@@ -103,6 +117,73 @@ describe('Bundler.installDependencies', () => {
       pnpmNodeLinker: undefined,
       pnpmWorkspaceSettings: undefined,
     });
+  });
+});
+
+describe('Bundler.generateNpmLockfile', () => {
+  const makeOutputDir = async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-lockfile-'));
+    tempDirs.push(dir);
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'out', dependencies: {} }));
+    await mkdir(join(dir, 'node_modules'));
+    await writeFile(join(dir, 'node_modules', 'marker'), 'installed');
+    return dir;
+  };
+
+  afterEach(async () => {
+    childProcessMocks.execFile.mockReset();
+    await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+  });
+
+  it('generates package-lock.json with node_modules moved aside, then restores node_modules', async () => {
+    const dir = await makeOutputDir();
+    let nodeModulesDuringNpm: boolean | undefined;
+    childProcessMocks.execFile.mockImplementation((_cmd, _args, options, callback) => {
+      nodeModulesDuringNpm = existsSync(join(options.cwd, 'node_modules'));
+      mkdirSync(join(options.cwd, 'node_modules'));
+      writeFileSync(join(options.cwd, 'package-lock.json'), '{}');
+      callback(null, { stdout: '', stderr: '' });
+    });
+
+    await new TestBundler('Test').lockfileForTest(dir);
+
+    expect(childProcessMocks.execFile).toHaveBeenCalledTimes(1);
+    expect(childProcessMocks.execFile.mock.calls[0]!.slice(0, 2)).toEqual([
+      'npm',
+      ['install', '--package-lock-only', '--force'],
+    ]);
+    expect(childProcessMocks.execFile.mock.calls[0]![2]).toMatchObject({ cwd: dir });
+    expect(nodeModulesDuringNpm).toBe(false);
+    expect(await readFile(join(dir, 'node_modules', 'marker'), 'utf8')).toBe('installed');
+    expect(existsSync(join(dir, 'node_modules.__tmp'))).toBe(false);
+    expect(existsSync(join(dir, 'package-lock.json'))).toBe(true);
+  });
+
+  it('keeps an existing package-lock.json without running npm', async () => {
+    const dir = await makeOutputDir();
+    await writeFile(join(dir, 'package-lock.json'), '{"source":true}');
+
+    await new TestBundler('Test').lockfileForTest(dir);
+
+    expect(childProcessMocks.execFile).not.toHaveBeenCalled();
+    expect(await readFile(join(dir, 'package-lock.json'), 'utf8')).toBe('{"source":true}');
+  });
+
+  it('warns and restores node_modules when npm fails', async () => {
+    const dir = await makeOutputDir();
+    childProcessMocks.execFile.mockImplementation((_cmd, _args, _options, callback) => {
+      callback(new Error('ETARGET'));
+    });
+    const bundler = new TestBundler('Test');
+    const warn = vi.spyOn(bundler['logger'], 'warn');
+
+    await expect(bundler.lockfileForTest(dir)).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to generate package-lock.json'),
+      expect.anything(),
+    );
+    expect(await readFile(join(dir, 'node_modules', 'marker'), 'utf8')).toBe('installed');
   });
 });
 

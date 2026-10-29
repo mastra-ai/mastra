@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix, relative, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -416,6 +418,39 @@ export abstract class Bundler extends MastraBundler {
     this.logger.info('Done updating dependency lockfile and installing dependencies');
   }
 
+  /**
+   * Writes a package-lock.json into the output directory so deploy targets that install with npm
+   * can use `npm ci` instead of resolving versions against the live registry. Lockfile-only: no
+   * packages are downloaded. node_modules is moved aside because npm's arborist can't read pnpm's
+   * symlinked layout, and restored afterwards so `mastra start` still resolves dependencies.
+   */
+  protected async generateNpmLockfile(outputDir: string) {
+    if (existsSync(join(outputDir, 'package-lock.json'))) {
+      return;
+    }
+
+    const nodeModules = join(outputDir, 'node_modules');
+    const nodeModulesTmp = join(outputDir, 'node_modules.__tmp');
+    let movedNodeModules = false;
+    try {
+      if (existsSync(nodeModules)) {
+        await fsExtra.move(nodeModules, nodeModulesTmp, { overwrite: true });
+        movedNodeModules = true;
+      }
+      await promisify(execFile)('npm', ['install', '--package-lock-only', '--force'], {
+        cwd: outputDir,
+        timeout: 60_000,
+      });
+    } catch (error) {
+      this.logger.warn('Failed to generate package-lock.json — deploy will fall back to npm install', { error });
+    } finally {
+      if (movedNodeModules) {
+        await rm(nodeModules, { recursive: true, force: true });
+        await fsExtra.move(nodeModulesTmp, nodeModules, { overwrite: true });
+      }
+    }
+  }
+
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
     const publicDir = join(mastraDir, 'public');
 
@@ -816,6 +851,16 @@ export const tools = [${toolsExports.join(', ')}]`,
           transitiveWorkspaceDependencies.resolutions,
           bundlerOptions.pnpmWorkspaceSettings,
         );
+
+        if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
+          this.logger.info('Generating package-lock.json for deploy');
+          await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+          this.logger.info('Done generating package-lock.json');
+        } else {
+          this.logger.warn(
+            'Skipping package-lock.json generation because the output contains packed workspace dependencies',
+          );
+        }
       }
     } catch (error) {
       if (
