@@ -1,4 +1,4 @@
-import { createKnowledgePagesCoreLoader } from '@internal/core/knowledge-compat';
+import { createKnowledgePagesCoreLoader, knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
@@ -1246,20 +1246,26 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const query = input.query.trim();
-    if (!query) return [];
+    const words = knowledgeSearchWords(input.query);
+    if (!words.length) return [];
+    const phrase = input.query.trim().toLowerCase().replace(/\s+/g, ' ');
     const hits: KnowledgePageSearchHit[] = [];
 
     {
       const params = new Params();
       const filter = new ReadFilter(input.read, params);
-      const pattern = params.add(`%${escapeLike(query)}%`);
+      const patterns = words.map(word => params.add(`%${escapeLike(word)}%`));
+      const phrasePattern = params.add(`%${escapeLike(phrase)}%`);
       const where = [`p."deletedAt" IS NULL`, `NOT p."isScope"`, filter.readable('s')];
       if (input.scopeIds?.length) where.push(`p."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
-      where.push(`(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`);
+      for (const pattern of patterns) {
+        where.push(`(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`);
+      }
+      const nameHasAll = patterns.map(pattern => `p."name" ILIKE ${pattern}`).join(' AND ');
+      const tier = `CASE WHEN p."canonicalName" LIKE ${phrasePattern} THEN 0 WHEN ${nameHasAll} THEN 1 ELSE 2 END`;
       const rows = await this.#rows(
         this.#client,
-        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY (p."name" ILIKE ${pattern}) DESC, p."updatedAt" DESC, p."id" LIMIT ${limit}`,
+        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY ${tier}, p."updatedAt" DESC, p."id" ASC LIMIT ${limit}`,
         params.values,
       );
       for (const row of rows) hits.push({ type: 'page', page: toPage(row) });
@@ -1271,10 +1277,10 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const filter = new ReadFilter(input.read, params);
       const extra = [`n."deletedAt" IS NULL`, `np."deletedAt" IS NULL`];
       if (input.scopeIds?.length) extra.push(`np."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
-      extra.push(`n."text" ILIKE ${params.add(`%${escapeLike(query)}%`)}`);
+      for (const word of words) extra.push(`n."text" ILIKE ${params.add(`%${escapeLike(word)}%`)}`);
       const rows = await this.#rows(
         this.#client,
-        `SELECT ${this.#noteColumns()}, row_to_json(np) AS "pageJson" FROM ${this.#visibleNotes(filter)} AND ${extra.join(' AND ')} ORDER BY n."createdAt" DESC, n."id" DESC LIMIT ${limit - hits.length}`,
+        `SELECT ${this.#noteColumns()}, row_to_json(np) AS "pageJson" FROM ${this.#visibleNotes(filter)} AND ${extra.join(' AND ')} ORDER BY n."updatedAt" DESC, n."id" DESC LIMIT ${limit - hits.length}`,
         params.values,
       );
       for (const row of rows) {

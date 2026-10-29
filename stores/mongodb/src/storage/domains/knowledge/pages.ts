@@ -1,6 +1,7 @@
 import {
   createKnowledgePagesCoreLoader,
   inspectKnowledgePagesSchema,
+  knowledgeSearchWords,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   knowledgePagesResetMessage,
@@ -1306,8 +1307,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   async searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const query = input.query.trim();
-    if (!query) return [];
+    const words = knowledgeSearchWords(input.query);
+    if (!words.length) return [];
+    const phrase = input.query.trim().toLowerCase().replace(/\s+/g, ' ');
     const ids = await this.#readable(input.read);
     const scopes = input.scopeIds?.length ? input.scopeIds : undefined;
     const inScope = (field: string): Filter<Document> => {
@@ -1315,27 +1317,44 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const allowed = scopes ? scopes.filter(id => ids.includes(id)) : ids;
       return { [field]: { $in: allowed } };
     };
-    const matcher = { $regex: escapeRegex(query), $options: 'i' };
+    const matcher = (word: string) => ({ $regex: escapeRegex(word), $options: 'i' });
     const pages = await this.#c('pages');
-    const pageFilter = { ...live, ...notScope, ...inScope('scopeId') };
-    const hits: KnowledgePageSearchHit[] = [];
-    const nameRows = await pages
-      .find({ ...pageFilter, name: matcher }, noProjection)
-      .sort({ updatedAt: -1, id: 1 })
-      .limit(limit)
+    const pageFilter = {
+      ...live,
+      ...notScope,
+      ...inScope('scopeId'),
+      $and: words.map(word => ({ $or: [{ name: matcher(word) }, { description: matcher(word) }, { body: matcher(word) }] })),
+    };
+    const rows = await pages
+      .aggregate([
+        { $match: pageFilter },
+        {
+          $addFields: {
+            searchTier: {
+              $cond: [
+                { $regexMatch: { input: '$canonicalName', regex: escapeRegex(phrase) } },
+                0,
+                {
+                  $cond: [
+                    {
+                      $and: words.map(word => ({
+                        $regexMatch: { input: '$name', regex: escapeRegex(word), options: 'i' },
+                      })),
+                    },
+                    1,
+                    2,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        { $sort: { searchTier: 1, updatedAt: -1, id: 1 } },
+        { $limit: limit },
+        { $project: { searchTier: 0, _id: 0 } },
+      ])
       .toArray();
-    for (const row of nameRows) hits.push({ type: 'page', page: toPage(row) });
-    if (hits.length < limit) {
-      const otherRows = await pages
-        .find(
-          { ...pageFilter, name: { $not: matcher }, $or: [{ description: matcher }, { body: matcher }] },
-          noProjection,
-        )
-        .sort({ updatedAt: -1, id: 1 })
-        .limit(limit - hits.length)
-        .toArray();
-      for (const row of otherRows) hits.push({ type: 'page', page: toPage(row) });
-    }
+    const hits: KnowledgePageSearchHit[] = rows.map(row => ({ type: 'page' as const, page: toPage(row) }));
     if (hits.length >= limit) return hits;
 
     const noteRows = await (
@@ -1346,11 +1365,11 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           ...live,
           ...this.#visibleNotes(ids),
           ...(scopes ? { pageScopeId: { $in: ids === null ? scopes : scopes.filter(id => ids.includes(id)) } } : {}),
-          text: matcher,
+          $and: words.map(word => ({ text: matcher(word) })),
         },
         noProjection,
       )
-      .sort({ createdAt: -1, id: -1 })
+      .sort({ updatedAt: -1, id: -1 })
       .limit(limit - hits.length)
       .toArray();
     const notePages = new Map(
