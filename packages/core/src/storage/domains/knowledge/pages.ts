@@ -335,8 +335,9 @@ export interface MaterializeKnowledgeScopeInput {
   name: string;
   description?: string;
   /**
-   * Tree parent for a newly created scope page (from `belongsTo`). Ignored when the scope already
-   * exists: the first link is kept, and the result reports the conflict.
+   * Tree parent from `belongsTo`. Atomically sets the first non-null parent, including for an
+   * existing unlinked scope. Once linked, the parent is never replaced; a differing non-null
+   * request is reported as `parentConflict`. An absent/null request leaves an existing link alone.
    */
   parentId?: string | null;
   children?: Array<{ address: string; declaration: string; name: string; description?: string }>;

@@ -90,6 +90,32 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(overview).toMatchObject({ name: 'Overview', isScope: false, scopeId: first.scope.id });
       });
 
+      it('links an unplaced scope once and never replaces its first non-null parent', async () => {
+        const acme = await scope('org:acme', ORG);
+        const globex = await scope('org:globex', ORG);
+        const resource = await scope('resource:u1', RESOURCE);
+        expect(resource.parentId).toBeNull();
+        const linked = await store.materializeScope({
+          address: 'resource:u1',
+          declaration: RESOURCE,
+          name: 'u1',
+          parentId: acme.id,
+          provenance: host,
+        });
+        expect(linked).toMatchObject({ created: false, scope: { id: resource.id, parentId: acme.id } });
+        expect(linked.parentConflict).toBeUndefined();
+        const conflicting = await store.materializeScope({
+          address: 'resource:u1',
+          declaration: RESOURCE,
+          name: 'u1',
+          parentId: globex.id,
+          provenance: host,
+        });
+        expect(conflicting.scope.parentId).toBe(acme.id);
+        expect(conflicting.parentConflict).toEqual({ existingParentId: acme.id, requestedParentId: globex.id });
+        expect((await store.getScopesByAddress(['resource:u1']))[0]!.parentId).toBe(acme.id);
+      });
+
       it('adds template children and keyed pages declared after the scope was created', async () => {
         const account = await scope('account:acme:1', ACCOUNT);
         await store.materializeScope({

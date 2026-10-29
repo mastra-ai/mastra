@@ -229,7 +229,19 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const created = !scope;
     let parentConflict: { existingParentId: string | null; requestedParentId: string | null } | undefined;
     if (scope) {
-      if (input.parentId !== undefined && input.parentId !== scope.parentId) {
+      if (scope.parentId === null && input.parentId != null) {
+        if (!this.#page(input.parentId).isScope) {
+          throw new Error(`Knowledge scope ${input.address} must be placed under a scope page`);
+        }
+        if (input.parentId === scope.id || this.#subtree(scope).some(entry => entry.page.id === input.parentId)) {
+          throw new Error(`Knowledge scope placement must not form a cycle`);
+        }
+        scope.parentId = input.parentId;
+        scope.position = this.#nextPosition(input.parentId);
+        scope.version++;
+        scope.updatedAt = this.#now();
+        scope.updatedBy = clone(input.provenance);
+      } else if (input.parentId != null && input.parentId !== scope.parentId) {
         parentConflict = { existingParentId: scope.parentId, requestedParentId: input.parentId };
       }
     } else {
