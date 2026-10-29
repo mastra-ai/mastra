@@ -60,7 +60,7 @@ describe('savedViewStateSchema', () => {
     ['missing filters', { filters: undefined }],
     ['a token without a field', { filters: [{ fieldId: '', value: 'x' }] }],
     ['a token with a numeric value', { filters: [{ fieldId: 'status', value: 1 }] }],
-    ['an unknown operator', { filters: [{ fieldId: 'status', value: 'error', operatorId: 'like' }] }],
+    ['an empty operator', { filters: [{ fieldId: 'status', value: 'error', operatorId: '' }] }],
     ['a group with an unknown logic', { filters: [{ id: 'g', logic: 'xor', nodes: [] }] }],
     ['a group without an id', { filters: [{ id: '', logic: 'and', nodes: [] }] }],
     [

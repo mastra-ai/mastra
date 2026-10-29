@@ -1,5 +1,5 @@
 import { savedViewStateSchema } from '@mastra/core/storage';
-import type { SavedViewState } from '@mastra/core/storage';
+import type { FilterNode, SavedViewState } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import {
   writeObservabilityListDates,
@@ -261,6 +261,32 @@ describe('a view with parts the page no longer supports', () => {
       filters: [...tracesView.filters, { fieldId: 'status', value: 'error', operatorId: 'gt' }],
     });
     expect(applied(view).toString()).toBe(applied(tracesView).toString());
+  });
+
+  // The shared filter schema accepts any operator id, e.g. one a dashboard or a newer page added.
+  it.each([
+    // Known to the traces URL but not offered by its filter bar, so no per-field operator list.
+    ['traces', 'runId'],
+    ['spans', 'name'],
+    ['threads', 'resourceId'],
+    ['logs', 'resourceId'],
+  ] as const)(
+    'drops a %s filter with an operator the filter bar does not know, and applies the rest',
+    (page, fieldId) => {
+      const kept = { fieldId, value: 'a' };
+      const unknown = { fieldId, value: 'b', operatorId: 'startsWith' };
+      const base: SavedViewState = { schemaVersion: 1, page, filters: [kept] };
+      const view: SavedViewState = { ...base, filters: [kept, unknown] };
+      expect(applied(view).toString()).toBe(applied(base).toString());
+      expect(savedViewFromSearchParams(page, applied(view)).filters).toEqual([kept]);
+    },
+  );
+
+  it('drops a filter with an unknown operator inside a group and keeps the rest of the group', () => {
+    const group = (nodes: FilterNode[]): SavedViewState => tracesWith({ filters: [{ id: 'g1', logic: 'or', nodes }] });
+    const kept = { id: 't1', fieldId: 'environment', value: 'production' };
+    const view = group([kept, { id: 't2', fieldId: 'runId', value: 'run-1', operatorId: 'startsWith' }]);
+    expect(applied(view).toString()).toBe(applied(group([kept])).toString());
   });
 
   it('drops an unknown filter inside a group and keeps the group', () => {

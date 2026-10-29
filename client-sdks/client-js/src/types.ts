@@ -2569,7 +2569,6 @@ export type SendNotificationResult =
 export type {
   FilterGroup,
   FilterNode,
-  FilterOperatorId,
   FilterToken,
   SavedViewColumn,
   SavedViewDateRange,

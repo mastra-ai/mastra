@@ -4,28 +4,16 @@
  */
 import { z } from 'zod/v4';
 
-/** Operator ids the filter bar writes to the URL (`<param>.op`). Omitted means the field default. */
-export const FILTER_OPERATOR_IDS = [
-  'is',
-  'isNot',
-  'in',
-  'notIn',
-  'exists',
-  'notExists',
-  'gt',
-  'gte',
-  'lt',
-  'lte',
-  'matches',
-  'notMatches',
-] as const;
-
-export type FilterOperatorId = (typeof FILTER_OPERATOR_IDS)[number];
-
+// Plain `z.object` (not `.strict()`): unknown keys are dropped quietly.
 export const filterTokenSchema = z.object({
   fieldId: z.string().min(1),
   value: z.union([z.string(), z.array(z.string())]),
-  operatorId: z.enum(FILTER_OPERATOR_IDS).optional(),
+  /**
+   * The filter bar's operator id (`<param>.op` in the URL); omitted means the field default. Any id is
+   * accepted so a page or dashboard can add operators without a schema change; the UI drops a token
+   * whose operator it doesn't know.
+   */
+  operatorId: z.string().min(1).optional(),
   /** Set on tokens inside a group: a group may hold several tokens on the same field. */
   id: z.string().optional(),
 });

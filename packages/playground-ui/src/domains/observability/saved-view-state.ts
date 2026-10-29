@@ -71,6 +71,8 @@ import type {
   TraceCustomColumn,
   TraceOptionalColumn,
 } from '@/domains/traces/trace-list-columns';
+import { isTraceFilterGroup, isTraceFilterOperatorId } from '@/domains/traces/trace-query-filters';
+import type { TraceFilterGroup, TraceFilterNode, TraceFilterToken } from '@/domains/traces/trace-query-filters';
 import { SORT_DIR_PARAM, SORT_KEY_PARAM, readUrlSort } from '@/lib/sort/use-url-sort';
 
 const PAGE_PARAM = 'page';
@@ -81,7 +83,7 @@ const isGroup = (node: FilterNode): node is FilterGroup => 'nodes' in node;
 
 type PageSpec = {
   readFilters: (params: URLSearchParams) => FilterNode[];
-  writeFilters: (params: URLSearchParams, tokens: FilterToken[], groups: FilterGroup[]) => void;
+  writeFilters: (params: URLSearchParams, tokens: TraceFilterToken[], groups: TraceFilterGroup[]) => void;
   /** Whether a token is one the page can still show and run: a known field, with an operator it allows. */
   acceptsToken: (token: FilterToken) => boolean;
   groups: boolean;
@@ -115,9 +117,9 @@ const noOptions = {
   writeOptions: () => {},
 };
 
-const splitNodes = (nodes: FilterNode[]) => ({
-  tokens: nodes.filter((node): node is FilterToken => !isGroup(node)),
-  groups: nodes.filter(isGroup),
+const splitNodes = (nodes: TraceFilterNode[]) => ({
+  tokens: nodes.filter((node): node is TraceFilterToken => !isTraceFilterGroup(node)),
+  groups: nodes.filter(isTraceFilterGroup),
 });
 
 // The widest field set each page can offer (every server capability on); the page's own query
@@ -145,7 +147,7 @@ const observabilityListFilters = {
     const { tokens, groups } = readObservabilityListFilters(params);
     return [...tokens, ...groups];
   },
-  writeFilters: (params: URLSearchParams, tokens: FilterToken[], groups: FilterGroup[]) =>
+  writeFilters: (params: URLSearchParams, tokens: TraceFilterToken[], groups: TraceFilterGroup[]) =>
     writeObservabilityListFilters(params, { tokens, groups }),
   groups: true,
   defaultDatePreset: OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
@@ -215,10 +217,17 @@ const PAGE_SPECS: Record<SavedViewPage, PageSpec> = {
   },
 };
 
-/** Drops the nodes the page can't apply. A group emptied that way is dropped too; one saved empty is kept. */
-function keepApplicable(nodes: FilterNode[], spec: PageSpec): FilterNode[] {
-  return nodes.flatMap((node): FilterNode[] => {
-    if (!isGroup(node)) return spec.acceptsToken(node) ? [node] : [];
+/** A saved operator id may come from a newer page or a dashboard; the filter bar can't show one it doesn't know. */
+const hasKnownOperator = (token: FilterToken): token is TraceFilterToken =>
+  token.operatorId === undefined || isTraceFilterOperatorId(token.operatorId);
+
+/**
+ * Drops the nodes the page can't apply, each on its own. A group emptied that way is dropped too; one
+ * saved empty is kept.
+ */
+function keepApplicable(nodes: FilterNode[], spec: PageSpec): TraceFilterNode[] {
+  return nodes.flatMap((node): TraceFilterNode[] => {
+    if (!isGroup(node)) return hasKnownOperator(node) && spec.acceptsToken(node) ? [node] : [];
     if (!spec.groups) return [];
     const kept = keepApplicable(node.nodes, spec);
     return kept.length === 0 && node.nodes.length > 0 ? [] : [{ ...node, nodes: kept }];
