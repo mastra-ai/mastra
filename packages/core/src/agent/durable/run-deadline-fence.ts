@@ -29,6 +29,16 @@ async function resolveMemoryStore(
 
 const NO_FENCE = async () => {};
 
+/**
+ * Key of a run's deadline fence row. A runId can be supplied by the caller,
+ * so deadline fences live apart from execution-claim fences (keyed by the bare
+ * runId) and per agent: a timed stream that reuses another run's id cannot
+ * raise that run's claim fence or another agent's deadline fence.
+ */
+export function deadlineFenceKey(agentId: string, runId: string): string {
+  return `deadline:${agentId}:${runId}`;
+}
+
 async function retireFence(store: MemoryStorage, fence: RunFence): Promise<void> {
   // Retention prunes only retired fences; a failed retire just keeps the row.
   await store.retireRunFence(fence).catch(() => false);
@@ -56,7 +66,8 @@ export async function armRunDeadline(args: {
   // Claimed runs use small claim counters; claim-less runs order fences by time.
   // Sessions take odd generations and expiries even ones, so a session armed in
   // the same millisecond as an earlier session expired still outranks it.
-  const fence: RunFence = { runId, generation: Date.now() * 2 + 1, ownerId: `deadline:${expiresAt}` };
+  const fenceKey = deadlineFenceKey(args.agentId, runId);
+  const fence: RunFence = { runId: fenceKey, generation: Date.now() * 2 + 1, ownerId: `deadline:${expiresAt}` };
   const logger = args.mastra?.getLogger?.();
   let raised: boolean;
   try {
@@ -79,7 +90,7 @@ export async function armRunDeadline(args: {
     deadline: { expiresAt, fence: { generation: fence.generation, ownerId: fence.ownerId } },
     expire: async () => {
       const expired: RunFence = {
-        runId,
+        runId: fenceKey,
         // Just above this session: a later session (a higher odd generation)
         // already outranks it, so a stale timer cannot fence that session out.
         generation: fence.generation + 1,
@@ -112,7 +123,7 @@ export async function runInRunDeadlineScope<T>(
   if (!deadline?.fence) return fn();
   const store = await resolveMemoryStore(args.mastra, agentId, runId, requestContext);
   if (!store) return fn();
-  const fence: RunFence = { runId, ...deadline.fence };
+  const fence: RunFence = { runId: deadlineFenceKey(agentId, runId), ...deadline.fence };
   return runInRunFenceScope({ fenceFor: target => (target === store ? fence : undefined) }, fn);
 }
 

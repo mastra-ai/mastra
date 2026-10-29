@@ -5,7 +5,8 @@ import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
 import { withRunDeadline } from './run-deadline';
-import { armRunDeadline, runInRunDeadlineScope } from './run-deadline-fence';
+import { armRunDeadline, deadlineFenceKey, runInRunDeadlineScope } from './run-deadline-fence';
+import { runInRunFenceScope } from './run-fence-scope';
 
 const agentId = 'agent-1';
 const runId = 'run-1';
@@ -21,16 +22,17 @@ async function setup() {
   return { mastra, memoryStore };
 }
 
-async function arm(mastra: Mastra, budgetMs = 60_000) {
+async function arm(mastra: Mastra, budgetMs = 60_000, armingAgentId = agentId) {
   const armed = await armRunDeadline({
     mastra,
-    agentId,
+    agentId: armingAgentId,
     runId,
     requestContext: undefined,
     expiresAt: Date.now() + budgetMs,
   });
   const requestContext = new RequestContext(Object.entries(withRunDeadline({}, runId, armed.deadline)));
-  const inScope = <T>(fn: () => Promise<T>) => runInRunDeadlineScope({ mastra, agentId, runId, requestContext }, fn);
+  const inScope = <T>(fn: () => Promise<T>) =>
+    runInRunDeadlineScope({ mastra, agentId: armingAgentId, runId, requestContext }, fn);
   return { ...armed, inScope };
 }
 
@@ -136,7 +138,7 @@ describe('run deadline fence', () => {
     const { deadline, retire: settle } = await arm(mastra);
     await settle();
 
-    expect(retire).toHaveBeenCalledWith({ runId, ...deadline.fence });
+    expect(retire).toHaveBeenCalledWith({ runId: deadlineFenceKey(agentId, runId), ...deadline.fence });
     await expect(retire.mock.results[0]!.value).resolves.toBe(true);
   });
 
@@ -146,11 +148,43 @@ describe('run deadline fence', () => {
     const { expire, inScope } = await arm(mastra);
     await expire();
 
-    expect(retire).toHaveBeenCalledWith(expect.objectContaining({ runId, ownerId: 'deadline:expired' }));
+    expect(retire).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: deadlineFenceKey(agentId, runId), ownerId: 'deadline:expired' }),
+    );
     await expect(retire.mock.results[0]!.value).resolves.toBe(true);
     await expect(inScope(() => memoryStore.saveThread({ thread: thread() }))).rejects.toSatisfy(
       isRunFenceConflictError,
     );
+  });
+
+  it('does not fence out a claimed run whose id a timed stream reuses', async () => {
+    const { mastra, memoryStore } = await setup();
+    const claim = { runId, generation: 1, ownerId: 'execution-1' };
+    await memoryStore.raiseRunFence(claim);
+    const { expire } = await arm(mastra);
+    await expire();
+
+    await expect(
+      runInRunFenceScope({ fenceFor: target => (target === memoryStore ? claim : undefined) }, () =>
+        memoryStore.saveThread({ thread: thread() }),
+      ),
+    ).resolves.toMatchObject({ id: 't-1' });
+  });
+
+  it("does not fence out another agent's run that shares the run id", async () => {
+    const { mastra, memoryStore } = await setup();
+    const victim = await arm(mastra);
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1_000);
+    try {
+      const other = await arm(mastra, 60_000, 'agent-2');
+      await other.expire();
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    await expect(victim.inScope(() => memoryStore.saveThread({ thread: thread() }))).resolves.toMatchObject({
+      id: 't-1',
+    });
   });
 
   it('arms without a fence when the agent has no fencing memory store', async () => {
@@ -194,7 +228,11 @@ describe('run deadline fence', () => {
     it('logs at debug and arms without a fence when a newer session owns it', async () => {
       const storage = new InMemoryStore();
       const memoryStore = (await storage.getStore('memory')) as MemoryStorage;
-      await memoryStore.raiseRunFence({ runId, generation: Number.MAX_SAFE_INTEGER, ownerId: 'newer' });
+      await memoryStore.raiseRunFence({
+        runId: deadlineFenceKey(agentId, runId),
+        generation: Number.MAX_SAFE_INTEGER,
+        ownerId: 'newer',
+      });
       const log = logger();
       const mastra = {
         getAgentById: () => ({ getMemory: async () => ({ storage }) }),
