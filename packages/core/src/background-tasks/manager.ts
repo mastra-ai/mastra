@@ -2283,7 +2283,7 @@ export class BackgroundTaskManager {
           if (leaseExpiry !== undefined && leaseExpiry > now) {
             nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
           }
-          if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.dispatch(task);
+          if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.#dispatchRecoveredPin(task);
           continue;
         }
         if (await this.checkConcurrency(task.agentId)) {
@@ -2369,6 +2369,22 @@ export class BackgroundTaskManager {
   }
 
   /**
+   * Dispatches a row just unpinned by {@link #recoverLapsedPin}. The row is now
+   * unowned, so the pin sweep no longer sees it: if publishing fails, queue it
+   * locally so `drainPending()` (also run by every pin sweep) retries it.
+   */
+  async #dispatchRecoveredPin(task: BackgroundTask): Promise<void> {
+    try {
+      await this.dispatch(task);
+    } catch (error) {
+      this.localPendingTaskIds.add(task.id);
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn(`background-task dispatch failed after recovering pin ${task.id}:`, error as any);
+    }
+  }
+
+  /**
    * Periodically recovers lapsed `pinToWorker` rows. The startup scan only
    * sees rows that existed when this worker started, so without this a pin
    * enqueued later by a worker that then died would wait for a restart.
@@ -2379,6 +2395,8 @@ export class BackgroundTaskManager {
     if (this.shuttingDown || this.sweepingPins) return;
     this.sweepingPins = true;
     try {
+      // Retry recovered pins whose dispatch failed on an earlier tick.
+      if (this.localPendingTaskIds.size > 0) await this.drainPending();
       const storage = await this.getStorage();
       const now = Date.now();
       // One page per tick, so a long queue doesn't make every worker read every pending row each lease.
@@ -2392,7 +2410,7 @@ export class BackgroundTaskManager {
       this.pinSweepPage = tasks.length < PIN_SWEEP_PAGE_SIZE ? 0 : this.pinSweepPage + 1;
       for (const task of tasks) {
         if (!task.ownerId || this.shuttingDown) continue;
-        if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.dispatch(task);
+        if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.#dispatchRecoveredPin(task);
       }
     } catch (error) {
       this.#mastra?.getLogger()?.error('Failed to recover lapsed pinned background tasks', error);
