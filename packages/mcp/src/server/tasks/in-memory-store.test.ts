@@ -503,4 +503,71 @@ describe('InMemoryMCPTaskStore', () => {
       await expect(create('alice')).resolves.toMatchObject({ status: 'working' });
     });
   });
+
+  describe('retained task limits', () => {
+    // Open limits high enough that only the retained ones can refuse.
+    const limits = { perPrincipal: 100, total: 100, retainedPerPrincipal: 2, retainedTotal: 3 };
+    const finished = async (principal: string, ttlMs: number | null = null) => {
+      const task = await store.create({ ttlMs, principal, limits });
+      store.handle(task.taskId).complete(text(`done for ${principal}`));
+      return task;
+    };
+    const refusal = (principal: string) =>
+      store.create({ ttlMs: null, principal, limits }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    it('refuses a task past the per-principal retained limit even once earlier tasks finished', async () => {
+      store = new InMemoryMCPTaskStore();
+      await finished('alice');
+      await finished('alice');
+
+      const refused = await refusal('alice');
+      expect(refused).toBeInstanceOf(MCPTaskLimitError);
+      expect(refused).toMatchObject({ scope: 'principal', limit: 2, kind: 'retained' });
+      expect((refused as Error).message).toMatch(/retained/);
+      // A principal at its cap does not block one below it.
+      await expect(finished('bob')).resolves.toMatchObject({ status: 'working' });
+    });
+
+    it('refuses a task past the store-wide retained limit across principals', async () => {
+      store = new InMemoryMCPTaskStore();
+      await finished('alice');
+      await finished('alice');
+      await finished('bob');
+      expect(await refusal('carol')).toMatchObject({ scope: 'total', limit: 3, kind: 'retained' });
+    });
+
+    it('keeps admitted results readable for their whole TTL and frees the slot once they are purged', async () => {
+      vi.useFakeTimers({ now: 0 });
+      store = new InMemoryMCPTaskStore({ expiredRetentionMs: 500 });
+      const first = await finished('alice', 1_000);
+      await finished('alice', 1_000);
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(await refusal('alice')).toMatchObject({ kind: 'retained' });
+      expect(await store.get(first.taskId, alice)).toMatchObject({
+        status: 'completed',
+        result: text('done for alice'),
+      });
+
+      // Past the TTL the result is still served for the retention window, and still counts.
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await store.get(first.taskId, alice)).toMatchObject({ status: 'completed' });
+      expect(await refusal('alice')).toMatchObject({ kind: 'retained' });
+
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(finished('alice')).resolves.toMatchObject({ status: 'working' });
+      expect(await store.get(first.taskId, alice)).toBeUndefined();
+    });
+
+    it('starts counting from zero after close', async () => {
+      store = new InMemoryMCPTaskStore();
+      await finished('alice');
+      await finished('alice');
+      store.close();
+      await expect(finished('alice')).resolves.toMatchObject({ status: 'working' });
+    });
+  });
 });

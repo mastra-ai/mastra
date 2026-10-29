@@ -83,7 +83,9 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
  * the same instance and does not survive a restart, so use it for single-instance servers.
  *
  * When a task's TTL elapses its work is aborted and it turns `failed`; it is forgotten after
- * `expiredRetentionMs`.
+ * `expiredRetentionMs`. Finished tasks stay in memory until then, so `limits.retainedPerPrincipal`
+ * and `limits.retainedTotal` bound how many tasks it holds; a task with a `null` TTL counts until
+ * the store closes.
  *
  * @experimental SEP-2663 extension; API may change.
  */
@@ -92,6 +94,8 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
   /** Open (non-terminal) tasks per principal, and in total. */
   readonly #openByPrincipal = new Map<string, number>();
   #open = 0;
+  /** Every record held (open or finished, until purged) per principal, and in total. */
+  readonly #retainedByPrincipal = new Map<string, number>();
   readonly #now: () => number;
   readonly #expiredRetentionMs: number;
 
@@ -103,13 +107,18 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
   async create(params: MCPTaskCreateParams): Promise<MCPTask> {
     assertNonNegativeInteger('ttlMs', params.ttlMs);
     assertNonNegativeInteger('pollIntervalMs', params.pollIntervalMs);
-    this.#sweep();
     const openForPrincipal = this.#openByPrincipal.get(params.principal) ?? 0;
-    if (params.limits) {
-      if (openForPrincipal >= params.limits.perPrincipal) {
-        throw new MCPTaskLimitError('principal', params.limits.perPrincipal);
+    const retainedForPrincipal = this.#retainedByPrincipal.get(params.principal) ?? 0;
+    const { limits } = params;
+    if (limits) {
+      if (openForPrincipal >= limits.perPrincipal) throw new MCPTaskLimitError('principal', limits.perPrincipal);
+      if (this.#open >= limits.total) throw new MCPTaskLimitError('total', limits.total);
+      if (limits.retainedPerPrincipal !== undefined && retainedForPrincipal >= limits.retainedPerPrincipal) {
+        throw new MCPTaskLimitError('principal', limits.retainedPerPrincipal, 'retained');
       }
-      if (this.#open >= params.limits.total) throw new MCPTaskLimitError('total', params.limits.total);
+      if (limits.retainedTotal !== undefined && this.#tasks.size >= limits.retainedTotal) {
+        throw new MCPTaskLimitError('total', limits.retainedTotal, 'retained');
+      }
     }
     const now = this.#now();
     const record: TaskRecord = {
@@ -124,10 +133,11 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
       usedInputKeys: new Set(),
       abort: new AbortController(),
     };
-    if (record.ttlMs !== null) this.#armExpiry(record, now + record.ttlMs);
+    if (record.ttlMs !== null) this.#arm(record, now + record.ttlMs, () => this.#expire(record));
     this.#tasks.set(record.taskId, record);
     this.#openByPrincipal.set(record.principal, openForPrincipal + 1);
     this.#open++;
+    this.#retainedByPrincipal.set(record.principal, retainedForPrincipal + 1);
     return this.#snapshot(record);
   }
 
@@ -290,32 +300,36 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     this.#tasks.clear();
     this.#openByPrincipal.clear();
     this.#open = 0;
+    this.#retainedByPrincipal.clear();
   }
 
   #lookup(taskId: string, access: MCPTaskAccess): TaskRecord | undefined {
     const record = this.#tasks.get(taskId);
     if (!record || record.principal !== access.principal) return undefined;
     if (record.purgeAt !== undefined && this.#now() >= record.purgeAt) {
-      this.#tasks.delete(taskId);
+      this.#purge(record);
       return undefined;
     }
     return record;
   }
 
-  #sweep(): void {
-    const now = this.#now();
-    for (const [taskId, record] of this.#tasks) {
-      if (record.purgeAt !== undefined && now >= record.purgeAt) this.#tasks.delete(taskId);
-    }
+  /** Forgets an expired task, freeing its retained slot. */
+  #purge(record: TaskRecord): void {
+    if (this.#tasks.get(record.taskId) !== record) return;
+    clearTimeout(record.expiryTimer);
+    this.#tasks.delete(record.taskId);
+    const retained = this.#retainedByPrincipal.get(record.principal)! - 1;
+    if (retained === 0) this.#retainedByPrincipal.delete(record.principal);
+    else this.#retainedByPrincipal.set(record.principal, retained);
   }
 
-  /** setTimeout fires after 1 ms past 2^31-1 ms (~24.8 days), so a longer TTL waits in steps. */
-  #armExpiry(record: TaskRecord, expiresAt: number): void {
-    const delay = expiresAt - this.#now();
+  /** setTimeout fires after 1 ms past 2^31-1 ms (~24.8 days), so a longer wait goes in steps. */
+  #arm(record: TaskRecord, at: number, fire: () => void): void {
+    const delay = at - this.#now();
     record.expiryTimer =
       delay > MAX_TIMER_DELAY_MS
-        ? setTimeout(() => this.#armExpiry(record, expiresAt), MAX_TIMER_DELAY_MS)
-        : setTimeout(() => this.#expire(record), delay);
+        ? setTimeout(() => this.#arm(record, at, fire), MAX_TIMER_DELAY_MS)
+        : setTimeout(fire, delay);
     record.expiryTimer.unref?.();
   }
 
@@ -325,6 +339,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
       this.#finish(record, 'failed', new Error('Task expired'));
     }
     record.purgeAt = this.#now() + this.#expiredRetentionMs;
+    this.#arm(record, record.purgeAt, () => this.#purge(record));
   }
 
   #transition(record: TaskRecord, status: MCPTaskStatus): void {
