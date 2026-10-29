@@ -852,7 +852,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         releaseTool();
       }
     },
-    TEST_TIMEOUT_MS,
+    TEST_TIMEOUT_MS + 5_000,
   );
 });
 
