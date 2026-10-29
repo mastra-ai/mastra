@@ -96,7 +96,6 @@ import {
   mergeResumeRequestContext,
 } from '../durable-event-payload';
 
-import { endRunSpansWithError } from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
@@ -931,7 +930,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     entry.abortSignal = totalTimeout.signal;
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
-      endRunSpansWithError(runId, error);
+      // The worker owns span finalization and accumulated usage/output (OBS-754).
+      // Ending caller copies here races that finalization.
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });

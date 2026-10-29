@@ -39,10 +39,9 @@ describe.each(['esm', 'cjs'] as const)('outcome compatibility (%s)', format => {
         script,
         `${
           format === 'esm'
-            ? "import { workflowTermination, agentLoopTermination, endRunSpansWithError } from './dist/compat.mjs';"
-            : "const { workflowTermination, agentLoopTermination, endRunSpansWithError } = require('./dist/compat.cjs');"
+            ? "import { workflowTermination, agentLoopTermination } from './dist/compat.mjs';"
+            : "const { workflowTermination, agentLoopTermination } = require('./dist/compat.cjs');"
         }
-        endRunSpansWithError('run-id', new Error('deadline'));
         process.stdout.write(JSON.stringify([workflowTermination({status:'failed'}), agentLoopTermination({finishReason:'stop'})]));`,
       );
       expect(JSON.parse(execFileSync(process.execPath, [script], { encoding: 'utf8' }))).toEqual([{}, {}]);
