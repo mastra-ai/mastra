@@ -24,6 +24,29 @@ Cleaned up the tables in metrics cards: one table for figures, and a share bar t
 - `isRowActive` highlights a row, for example the one a page is filtered to.
 - Headers now line up with their columns, figure columns share spare width with the card, and every table uses the same 34.5px rows.
 
+```tsx
+<MetricsTable
+  aria-label="Agent runs"
+  columns={[
+    { id: 'name', header: 'Agent', width: 'minmax(12rem,3fr)', cell: row => row.name },
+    {
+      id: 'runs',
+      header: 'Runs',
+      align: 'end',
+      description: 'Runs that started in this range.',
+      sortValue: row => row.runs,
+      cell: row => formatCount(row.runs),
+    },
+  ]}
+  rows={rows}
+  getRowKey={row => row.name}
+  defaultSort={{ column: 'runs', direction: 'desc' }}
+  pageSize={13}
+  isLoading={isLoading}
+  empty="No agent runs in this range."
+/>
+```
+
 **New pieces for table rows**
 
 - `SegmentedName` shows a name in parts, such as `openai › gpt-5`. The traces timeline uses it for span names.
