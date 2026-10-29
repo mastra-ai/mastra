@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -67,6 +68,9 @@ vi.mock('@browserbasehq/stagehand', () => ({
     act = mockStagehand.act;
     extract = mockStagehand.extract;
     observe = mockStagehand.observe;
+    get state() {
+      return (mockStagehand as any).state;
+    }
   },
 }));
 
@@ -982,8 +986,40 @@ describe('StagehandBrowser thread scope on a profile', () => {
     await expect(browser.getManagerForThread('thread-2')).rejects.toThrow(/was retired/);
     await retiring;
 
-    expect(mockStagehand.close).toHaveBeenCalled();
+    // thread-1's Chrome (closed by retire()) and thread-2's late one.
+    expect(mockStagehand.close).toHaveBeenCalledTimes(2);
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'kills a Chrome that finished starting after retire() when closing it fails',
+    async () => {
+      const chrome = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      const exited = new Promise<NodeJS.Signals | null>(r => chrome.once('exit', (_code, signal) => r(signal)));
+      const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+      browser.setCurrentThread('thread-1');
+      await browser.ensureReady();
+      let retiring: Promise<void> | undefined;
+      mockStagehand.init.mockImplementationOnce(async () => {
+        // thread-2's local Chrome is up, but nothing has registered its PID yet.
+        (mockStagehand as any).state = { kind: 'LOCAL', chrome: { pid: chrome.pid } };
+        retiring = browser.retire();
+        await retiring;
+        mockStagehand.close.mockRejectedValueOnce(new Error('CDP gone'));
+      });
+      try {
+        await expect(browser.getManagerForThread('thread-2')).rejects.toThrow(/was retired/);
+
+        expect(await exited).toBe('SIGKILL');
+      } finally {
+        delete (mockStagehand as any).state;
+        chrome.kill('SIGKILL');
+      }
+    },
+    10_000,
+  );
 });
 
 describe('createStagehandTools', () => {

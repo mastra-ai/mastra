@@ -1034,10 +1034,11 @@ export abstract class MastraBrowser extends MastraBase {
 
     this._closePromise = (async () => {
       let closed = false;
+      // Snapshot before doClose(): a disconnect handler it triggers clears the tracked PIDs.
+      const pids = [this.sharedBrowserPid, ...this.threadBrowserPids.values()];
       try {
         await this.doClose();
         closed = true;
-        const pids = [this.sharedBrowserPid, ...this.threadBrowserPids.values()];
         // Kill orphaned child processes (GPU, renderer, crashpad, etc.) before
         // any further await: once status is 'closed', ensureReady() can relaunch
         // and register new PIDs that must not be killed.
@@ -1086,6 +1087,15 @@ export abstract class MastraBrowser extends MastraBase {
    * cannot be waited on (it hangs, or the process is about to exit), so the
    * browser does not outlive its owner and keep holding its profile.
    */
+  /**
+   * SIGKILL the process group of a local browser this class does not track
+   * (e.g. one that started after retire() and was never registered).
+   * Only pass PIDs of browsers launched on this machine.
+   */
+  protected killBrowserProcessGroup(pid: number | undefined): void {
+    killProcessGroup(pid, this.logger);
+  }
+
   killProcesses(): void {
     killProcessGroup(this.sharedBrowserPid, this.logger);
     this.sharedBrowserPid = undefined;

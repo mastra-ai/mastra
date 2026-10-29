@@ -34,6 +34,9 @@ import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
 import { getStagehandChromePid, patchProfileExitType } from './utils';
 
+/** How long to wait for a Chrome started after retire() to close before killing it. */
+const RETIRED_CLOSE_TIMEOUT_MS = 5000;
+
 // Type for Stagehand v3 Page
 type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
 
@@ -204,7 +207,20 @@ export class StagehandBrowser extends MastraBrowser {
     try {
       this.assertNotRetired();
     } catch (error) {
-      await stagehand.close().catch(() => {});
+      // Nothing tracks this Chrome yet, so if close fails or hangs, kill it.
+      const pid = this.isConnectedToRemoteBrowser() ? undefined : getStagehandChromePid(stagehand);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const closed = await Promise.race([
+        stagehand.close().then(
+          () => true,
+          () => false,
+        ),
+        new Promise<boolean>(resolve => {
+          timer = setTimeout(() => resolve(false), RETIRED_CLOSE_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (!closed) this.killBrowserProcessGroup(pid);
       throw error;
     }
     return stagehand;

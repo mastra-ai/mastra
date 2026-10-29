@@ -388,9 +388,13 @@ describe('MastraBrowser launch with a locked profile', () => {
     expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'removes its lock after a close whose Chrome takes a moment to exit, so it can relaunch at once',
-    async () => {
+  it.skipIf(process.platform === 'win32').each([
+    { label: 'close', disconnectsDuringClose: false },
+    // Closing Chrome fires the disconnect handler, which clears the tracked PIDs mid-close.
+    { label: 'close that fires the disconnect handler', disconnectsDuringClose: true },
+  ])(
+    'removes its lock after a $label whose Chrome takes a moment to exit, so it can relaunch at once',
+    async ({ disconnectsDuringClose }) => {
       // Fake Chrome: holds the profile's socket and, like real Chrome, keeps
       // serving it for a moment after being told to die.
       const socketPath = join(socketDir, 'SingletonSocket');
@@ -407,6 +411,13 @@ describe('MastraBrowser launch with a locked profile', () => {
         killProcesses() {
           if (this.sharedBrowserPid) process.kill(this.sharedBrowserPid, 'SIGTERM');
           this.sharedBrowserPid = undefined;
+        }
+        protected async doClose() {
+          if (disconnectsDuringClose) {
+            // Chrome is told to quit, then reports the disconnect.
+            process.kill(this.sharedBrowserPid!, 'SIGTERM');
+            this.handleBrowserDisconnected();
+          }
         }
       }
       try {
