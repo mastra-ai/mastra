@@ -23,11 +23,14 @@ export type FilterToken = z.infer<typeof filterTokenSchema>;
 export type FilterGroup = { id: string; logic: 'and' | 'or'; nodes: FilterNode[] };
 export type FilterNode = FilterToken | FilterGroup;
 
+// The `filterGroup` URL reader drops a grouped token without an id, so a group's tokens need one.
+const groupedFilterTokenSchema = filterTokenSchema.extend({ id: z.string().min(1) });
+
 export const filterGroupSchema: z.ZodType<FilterGroup> = z.object({
   id: z.string().min(1),
   logic: z.enum(['and', 'or']),
   get nodes() {
-    return z.array(filterNodeSchema);
+    return z.array(z.union([filterGroupSchema, groupedFilterTokenSchema]));
   },
 });
 
