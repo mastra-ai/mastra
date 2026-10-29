@@ -67,4 +67,24 @@ describe('ChartCard', () => {
       expect(screen.getByText('Each line is a model.')).toBeTruthy();
     });
   });
+
+  it('makes the title a link to a fuller view, with the given link component', () => {
+    const Link = ({ href, ...props }: { href: string }) => <a href={`/app${href}`} data-router-link {...props} />;
+    const { rerender } = render(
+      <ChartCard variant="compact" title="Spend by model" href="/query?metric=spend" total="$12">
+        <div />
+      </ChartCard>,
+    );
+    const link = screen.getByRole('link', { name: 'Spend by model' });
+    expect(link.getAttribute('href')).toBe('/query?metric=spend');
+    expect(screen.getByRole('heading', { name: 'Spend by model' }).contains(link)).toBe(true);
+
+    rerender(
+      <ChartCard title="Spend by model" description="Each line is a model." href="/query" LinkComponent={Link}>
+        <div />
+      </ChartCard>,
+    );
+    expect(screen.getByRole('link', { name: 'Spend by model' }).getAttribute('href')).toBe('/app/query');
+    expect(screen.getByText('Each line is a model.')).toBeTruthy();
+  });
 });

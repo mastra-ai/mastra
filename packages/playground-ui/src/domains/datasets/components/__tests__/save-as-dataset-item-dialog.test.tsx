@@ -163,9 +163,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"foo":1}'}
-              initialGroundTruth={'{"answer":true}'}
-              initialTrajectory={'{"steps":[]}'}
+              initialInput='{"foo":1}'
+              initialGroundTruth='{"answer":true}'
+              initialTrajectory='{"steps":[]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -195,9 +195,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"foo":1}'}
-              initialGroundTruth={'{"answer":true}'}
-              initialTrajectory={'{"steps":[]}'}
+              initialInput='{"foo":1}'
+              initialGroundTruth='{"answer":true}'
+              initialTrajectory='{"steps":[]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -241,9 +241,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"next":2}'}
-              initialGroundTruth={'{"expected":"next"}'}
-              initialTrajectory={'{"steps":["next"]}'}
+              initialInput='{"next":2}'
+              initialGroundTruth='{"expected":"next"}'
+              initialTrajectory='{"steps":["next"]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -276,7 +276,7 @@ describe('SaveAsDatasetItemDialog', () => {
         <SaveAsDatasetItemDialog
           initialInput="{}"
           initialGroundTruth=""
-          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          initialToolMocks='[{"toolName":"search","args":{},"output":"ok"}]'
           breadcrumb={<span>Trace</span>}
           isOpen
           onClose={vi.fn()}
@@ -300,7 +300,7 @@ describe('SaveAsDatasetItemDialog', () => {
         <SaveAsDatasetItemDialog
           initialInput="{}"
           initialGroundTruth=""
-          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          initialToolMocks='[{"toolName":"search","args":{},"output":"ok"}]'
           breadcrumb={<span>Trace</span>}
           isOpen
           onClose={vi.fn()}
@@ -327,7 +327,7 @@ describe('SaveAsDatasetItemDialog', () => {
           <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
             <Toaster />
             <SaveAsDatasetItemDialog
-              initialInput={'{"question":"hi"}'}
+              initialInput='{"question":"hi"}'
               initialGroundTruth=""
               breadcrumb={<span>Trace</span>}
               isOpen
@@ -359,7 +359,7 @@ describe('SaveAsDatasetItemDialog', () => {
           >
             <Toaster />
             <SaveAsDatasetItemDialog
-              initialInput={'{"question":"hi"}'}
+              initialInput='{"question":"hi"}'
               initialGroundTruth=""
               breadcrumb={<span>Trace</span>}
               isOpen

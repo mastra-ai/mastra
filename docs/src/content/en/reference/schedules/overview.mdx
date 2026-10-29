@@ -13,6 +13,22 @@ packages:
 
 For usage patterns and concepts, see [Schedules](/docs/harness/schedules).
 
+## Delivery guarantees
+
+Scheduled publication is best-effort, not at-least-once delivery. The scheduler atomically claims an occurrence and advances `nextFireAt` before publishing the agent or workflow start event. An exhausted cron schedule is marked `completed` in that claim. Completion means there are no remaining occurrences, not that the target started or succeeded.
+
+The scheduler makes up to three publication attempts for the same claimed occurrence, waiting 100 ms and then 200 ms between attempts. A transport can accept an event before returning an error, so retries can publish duplicates with the same run ID.
+
+After all three attempts fail, the scheduler logs the schedule ID, run ID, scheduled fire time, `publicationOutcome: 'unknown'`, and `automaticReplay: false`. It invokes the configured `scheduler.onError` hook and attempts to record a trigger with outcome `failed`. This failure describes the publication attempts. It doesn't prove that the target never started.
+
+Once those attempts are exhausted, the scheduler doesn't replay the occurrence. Recurring schedules remain active and can fire at their next scheduled time. Terminal schedules remain completed with any recorded failure details in trigger history.
+
+After a successful claim, an info-level `Claimed schedule occurrence` log identifies the schedule ID, run ID, and scheduled fire time. A matching `Published schedule occurrence` log reports transport acceptance. If neither that success log nor the final failure log follows a claim, publication is unconfirmed. These logs aren't durable state: a crash between the claim commit and logging, or before logs are flushed, can leave no log record.
+
+If a publisher process dies after the claim commits, or confirmation is lost, that occurrence may be skipped without a failed trigger. A replacement scheduler can't distinguish an unpublished event from one accepted before the crash using claim metadata or missing trigger history. It doesn't replay the occurrence or block later recurring fires. A publication acknowledgement also doesn't guarantee target execution, and transport redelivery can produce duplicates.
+
+Before manually rerunning missed work, check target execution and transport records independently. Missing trigger history or a failed publication attempt alone isn't evidence that rerunning is safe.
+
 ## Usage example
 
 Create an agent schedule:

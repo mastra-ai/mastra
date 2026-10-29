@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist",
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2022", "ES2022.Intl"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*", "test/**/*", "integration/**/*"]
+}

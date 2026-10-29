@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent/message-list';
@@ -1055,6 +1056,79 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER within MODEL_STEP: model_chunks → output_step_processor
       const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
       testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
+
+      await testExporter.finalExpectations();
+    });
+
+    /**
+     * Expected span structure:
+     * - test-agent AGENT_RUN (root)
+     *   - MODEL_GENERATION
+     *     - MODEL_STEP (step 0, the rejected call)
+     *       - request error processor: retry-once PROCESSOR_RUN
+     *     - MODEL_STEP (step 1, the retried call)
+     */
+    it('should nest request error processor spans under the model step whose call failed', async () => {
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          calls++;
+          if (calls === 1) {
+            throw new APICallError({
+              message: 'rate limited',
+              url: 'https://example.com/v1/messages',
+              requestBodyValues: {},
+              statusCode: 429,
+              isRetryable: false,
+            });
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'Mock response' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+            ]),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        maxProcessorRetries: 1,
+        errorProcessors: [
+          {
+            id: 'retry-once',
+            name: 'Retry once',
+            processAPIError: async () => ({ retry: true }),
+          },
+        ],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const result = await mastra.getAgent('agent').stream('Hello', { modelSettings: { maxRetries: 0 } });
+      for await (const _chunk of result.fullStream) {
+        // drain
+      }
+
+      const modelStepSpans = testExporter.getModelStepSpans();
+      expect(modelStepSpans.length).toBe(2);
+      const failedStepSpan = modelStepSpans.find(s => (s.attributes as any)?.stepIndex === 0);
+      expect(failedStepSpan).toBeDefined();
+
+      const errorProcessorSpans = testExporter
+        .getProcessorSpans()
+        .filter(s => s.name === 'request error processor: retry-once');
+      expect(errorProcessorSpans.length).toBe(1);
+      expect(errorProcessorSpans[0]?.parentSpanId).toBe(failedStepSpan?.id);
 
       await testExporter.finalExpectations();
     });

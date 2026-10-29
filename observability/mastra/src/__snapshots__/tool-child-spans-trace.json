@@ -30,8 +30,11 @@
         "entityId": "child-span-agent",
         "attributes": {
           "instructions": "You use tools that create child spans",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "availableTools": ["childSpanTool"],
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -80,6 +83,7 @@
                 }
               ],
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -147,8 +151,11 @@
                 "entityId": "child-span-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -325,6 +332,7 @@
                         }
                       ],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 10,
@@ -493,8 +501,11 @@
                 "entityId": "child-span-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -735,6 +746,7 @@
                         }
                       ],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,

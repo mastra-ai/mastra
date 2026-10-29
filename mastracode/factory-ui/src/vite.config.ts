@@ -51,6 +51,17 @@ function runtimeConfigPlugin(): Plugin {
   };
 }
 
+/** Green mark while developing Factory itself, so the dev tab is easy to tell apart from a deployed one. */
+function devFaviconPlugin(): Plugin {
+  return {
+    name: 'mastracode-dev-favicon',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace('href="/mastra.svg"', 'href="/mastra-dev.svg"');
+    },
+  };
+}
+
 /**
  * Emit `routes-manifest.json` alongside the built SPA — a sorted array of the
  * SPA's top-level URL segments (e.g. `factories`, `signin`). Deployers that
@@ -283,7 +294,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(here, 'ui'),
     envDir,
-    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
+    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), devFaviconPlugin(), routesManifestPlugin()],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single

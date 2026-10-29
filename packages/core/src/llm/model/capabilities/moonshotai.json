@@ -16,11 +16,6 @@
     "kimi-k3.1-pro-highspeed"
   ],
   "reasoning": {
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
     "kimi-k3.1-pro": [
       {
         "type": "effort",
@@ -37,6 +32,11 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
       }
     ]
   }

@@ -14,6 +14,7 @@ import { setCustomProvidersSource } from '../custom-provider-source.js';
 import { executeSubagent } from './execute.js';
 import { exploreSubagent } from './explore.js';
 import { planSubagent } from './plan.js';
+import { builtinSubagents } from './index.js';
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -94,6 +95,7 @@ describe('native subagents', () => {
         disableHooks: true,
         disablePlugins: true,
         disableGithubSignals: true,
+        subagents: [...builtinSubagents],
       });
       await controller.init();
       controller.getMastra()!.addGateway({
@@ -166,6 +168,7 @@ describe('native subagents', () => {
         disableHooks: true,
         disablePlugins: true,
         disableGithubSignals: true,
+        subagents: [...builtinSubagents],
       });
       await controller.init();
       // A disabled gateway is skipped by the router, so its claim must not win.
@@ -215,6 +218,7 @@ describe('native subagents', () => {
       disableHooks: true,
       disablePlugins: true,
       disableGithubSignals: true,
+      subagents: [...builtinSubagents],
     });
     await controller.init();
     controller.getMastra()!.addGateway({
@@ -278,14 +282,14 @@ describe('native subagents', () => {
       const session = await controller.createSession({ id: 'test', ownerId: 'test' });
       const toolsets = await controller['buildToolsets'](session, new RequestContext());
       const tool = toolsets.controllerBuiltIn?.subagent;
-      if (subagents?.length === 0) {
+      if (!subagents?.length) {
         expect(tool).toBeUndefined();
       } else {
         expect(tool).toBeDefined();
         const schema = tool!.inputSchema;
         for (const agentType of ['explore', 'plan', 'execute']) {
           expect(schema.safeParse({ agentType, task: 'Inspect the project' }).success).toBe(
-            subagents === undefined || subagents.some(agent => agent.id === agentType),
+            subagents.some(agent => agent.id === agentType),
           );
         }
       }

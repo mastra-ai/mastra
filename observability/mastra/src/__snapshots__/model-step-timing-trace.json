@@ -22,7 +22,10 @@
         "entityId": "delayed-agent",
         "attributes": {
           "instructions": "You are a test agent",
-          "completionStartTime": "<date>"
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -53,6 +56,7 @@
               "streaming": true,
               "parameters": {},
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "resp-1",
               "responseModel": "mock-model-id",
@@ -111,8 +115,11 @@
                 "entityId": "delayed-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 10,
                     "outputTokens": 5,
@@ -263,6 +270,7 @@
                       },
                       "availableTools": [],
                       "toolChoice": "auto",
+                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 10,
                         "outputTokens": 5,

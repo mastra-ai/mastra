@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { factoryWorkItemUrl } from '../links.js';
 import { transitionBodySchema } from '../routes/contracts.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
@@ -68,6 +69,12 @@ function briefItem(item: WorkItemRow) {
     number: workItemNumber(item),
     title: truncate(item.title, MAX_TEXT),
     stage: workItemStage(item),
+    url:
+      factoryWorkItemUrl({
+        factoryProjectId: item.factoryProjectId,
+        board: boardForWorkItem(item),
+        workItemId: item.id,
+      }) ?? null,
   };
 }
 

@@ -256,7 +256,8 @@ minimumReleaseAgeExclude:
   - fastify@5.12.5 || 5.12.6
   - '@blaxel/core@0.3.20'
   - '@fastify/proxy-addr@5.1.1'
-  - 'fast-uri@3.1.8'
+  # Renovate security update: fast-uri@4.2.3
+  - 'fast-uri@3.1.8 || 4.2.3'
   - 'fast-uri@4.2.1'
   - 'compression@1.8.2'
   - 'undici@8.11.2'
@@ -273,7 +274,8 @@ minimumReleaseAgeExclude:
   - 'cookies@0.9.2'
   - '@grpc/grpc-js@1.14.5'
   - 'ip-address@10.7.2'
-  - 'systeminformation@5.33.13'
+  # Renovate security update: systeminformation@5.33.16
+  - 'systeminformation@5.33.13 || 5.33.16'
   - 'tinypool@2.1.2'
   - '@fastify/forwarded@3.0.2'
   - 'ajv@8.20.0'
@@ -301,6 +303,8 @@ minimumReleaseAgeExclude:
   - "@storybook/addon-mcp@10.6.2"
   # Renovate security update: storybook@10.6.2
   - storybook@10.6.2
+  # Renovate security update: serialize-javascript@7.1.4
+  - serialize-javascript@7.1.4
 trustPolicyExclude:
   # Storybook 9.1.21 fixes the Storybook preview origin-validation advisories. It is
   # the official `v9` backport (GitHub Actions trusted publisher), but pnpm compares
@@ -353,8 +357,8 @@ overrides:
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
   # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
-  better-auth: ^1.7.7
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
+  better-auth: ^1.7.13
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.13
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<2.4.0: 2.4.0
@@ -363,7 +367,7 @@ overrides:
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
-  serialize-javascript@<7.0.5: ^7.0.5
+  serialize-javascript@<7.0.5: ^7.1.4
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 4.0.1
@@ -372,9 +376,10 @@ overrides:
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=8.0.0 <8.21.3: 8.22.0
   webpack-dev-server@<5.2.5: 5.2.6
-  qs@>=6.7.0 <6.16.0: 6.16.0
+  # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1
+  qs@>=6.7.0 <6.16.1: 6.16.1
   fast-uri@>=3.0.0 <3.1.9: 3.1.9
-  fast-uri@>=4.0.0 <4.1.5: 4.2.1
+  fast-uri@>=4.0.0 <4.1.5: 4.2.3
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
@@ -389,9 +394,9 @@ overrides:
   e2b>undici8: npm:undici@8.12.2
   multer@<2.5.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
-  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
-  '@opentelemetry/sdk-node@<0.217.0': 0.221.0
-  '@opentelemetry/exporter-prometheus@<0.217.0': 0.221.0
+  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
+  '@opentelemetry/sdk-node@<0.217.0': 0.300.0
+  '@opentelemetry/exporter-prometheus@<0.217.0': 0.300.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
   # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
@@ -403,7 +408,7 @@ overrides:
   launch-editor@<2.14.2: 2.14.2
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
   websocket-driver@<0.7.5: 0.7.5
-  '@babel/core@>=7.0.0 <7.29.6': 8.0.1
+  '@babel/core@>=7.0.0 <7.29.6': 8.0.7
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   # Vanta 2026-10-21: AIKIDO-2026-580831/-760928/-864217 fixed in 3.4.17 (mermaid/posthog-js)
   dompurify@>=3.0.0 <3.4.17: 3.4.17
@@ -457,10 +462,12 @@ overrides:
   '@modelcontextprotocol/server@>=2.0.0 <2.3.0': 2.3.1
   '@modelcontextprotocol/server-legacy@>=2.0.0 <2.3.1': 2.3.1
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': 2.3.1
+  # Vanta 2026-10-28: GHSA-f897-62hf-6gxq (MCP HTTP transports: no body-size / batch-length limit); published @mastra/mcp 1.18 pins node 2.0.0; 2.1.1 is the fixed release whose peer range (server ^2.3.0) matches its server 2.3.1
+  '@modelcontextprotocol/node@>=2.0.0 <2.1.0': 2.1.1
   '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
-  '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.40
+  '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.42
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
   # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
   # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.
@@ -486,14 +493,14 @@ overrides:
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   '@fastify/busboy@<3.2.2': 3.2.2
   '@fastify/forwarded@<=3.0.1': 3.0.2
-  systeminformation@<5.32.0: 5.33.13
+  systeminformation@<5.32.0: 5.33.16
   tinypool@<2.1.2: 2.1.2
   ajv@>=8.0.0 <8.20.0: 8.20.0
   # Vanta 2026-10-14: AIKIDO-2026-143019 fixed in 4.6.7
   zod@>=4.0.0 <4.6.7: 4.6.7
   # Vanta 2026-09-28: Aikido residuals (docusaurus search + inngest OTEL instrumentations)
   '@docsearch/react@>=4.0.0 <4.7.0': 4.7.0
-  '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
+  '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.82.0
   # @lancedb/lancedb pins @huggingface/transformers@3.0.2 -> onnxruntime-node@1.19.2 (AIKIDO-2026-10293, fixed 1.24.2)
   onnxruntime-node@<1.24.2: 1.24.3
   # Note: zod@3.x has no AIKIDO patches (fixes are 4.x-only); left as residual.

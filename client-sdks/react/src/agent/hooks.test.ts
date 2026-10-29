@@ -1495,7 +1495,7 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).toHaveBeenCalled();
     const subscribeCalls = subscribeToThreadMock.mock.calls as unknown as Array<[any]>;
     const params = subscribeCalls[0]?.[0];
-    expect(params).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
+    expect(params).toEqual({ resourceId: 'resource-1', threadId: 'thread-1', withRunStatus: true });
     const messageCalls = sendMessageMock.mock.calls as unknown as Array<[any]>;
     expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientTools).toBe(clientTools);
   });
@@ -1563,7 +1563,7 @@ describe('useChat forwards clientTools', () => {
 
     const subscribeCalls = subscribeToThreadMock.mock.calls as unknown as Array<[any]>;
     const subscribeParams = subscribeCalls[0]?.[0];
-    expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
+    expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1', withRunStatus: true });
 
     await act(async () => {
       await result.current.sendMessage({
@@ -1582,7 +1582,7 @@ describe('useChat forwards clientTools', () => {
     });
 
     expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
-    expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
+    expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1', withRunStatus: true });
 
     expect(sendMessageMock).toHaveBeenCalledTimes(2);
     const messageCalls = sendMessageMock.mock.calls as unknown as Array<[any]>;

@@ -94,7 +94,7 @@
 [data-sonner-toaster].mastra-toaster [data-content]:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: -2px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
 }
 
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-title] {
@@ -151,7 +151,7 @@
   margin: 0;
   margin-inline-end: var(--spacing);
   border: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   font: inherit;
   font-size: var(--text-label);
   font-weight: var(--text-label--font-weight);

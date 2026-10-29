@@ -1041,7 +1041,7 @@ export async function createNetworkLoop({
 
       let finalText = await result.text;
       if (toolCallDeclined) {
-        finalText = finalText + `\n\n${declineReason}`;
+        finalText += `\n\n${declineReason}`;
       }
 
       // When the sub-agent was aborted, skip saving partial results to memory
@@ -1138,35 +1138,34 @@ export async function createNetworkLoop({
             : {}),
           runId: stepId,
         });
-      } else {
-        const endPayload = {
-          task: inputData.task,
-          agentId,
-          result: finalText,
-          isComplete: false,
-          iteration: inputData.iteration,
-          runId: stepId,
-        };
-
-        await writer.write({
-          type: 'agent-execution-end',
-          payload: {
-            ...endPayload,
-            usage: await result.usage,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-
-        return {
-          task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: finalText,
-          isComplete: false,
-          iteration: inputData.iteration,
-        };
       }
+      const endPayload = {
+        task: inputData.task,
+        agentId,
+        result: finalText,
+        isComplete: false,
+        iteration: inputData.iteration,
+        runId: stepId,
+      };
+
+      await writer.write({
+        type: 'agent-execution-end',
+        payload: {
+          ...endPayload,
+          usage: await result.usage,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
+      return {
+        task: inputData.task,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
+        result: finalText,
+        isComplete: false,
+        iteration: inputData.iteration,
+      };
     },
   });
 
@@ -1454,31 +1453,30 @@ export async function createNetworkLoop({
           runId,
         });
         return suspend({ ...toolData, workflowSuspended: suspendPayload });
-      } else {
-        const endPayload = {
-          task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: finalResult,
-          isComplete: false,
-          iteration: inputData.iteration,
-        };
-
-        await writer?.write({
-          type: 'workflow-execution-end',
-          payload: {
-            ...endPayload,
-            result: workflowState,
-            name: wf.name,
-            runId: stepId,
-            usage: await stream.usage,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-
-        return endPayload;
       }
+      const endPayload = {
+        task: inputData.task,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
+        result: finalResult,
+        isComplete: false,
+        iteration: inputData.iteration,
+      };
+
+      await writer?.write({
+        type: 'workflow-execution-end',
+        payload: {
+          ...endPayload,
+          result: workflowState,
+          name: wf.name,
+          runId: stepId,
+          usage: await stream.usage,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
+      return endPayload;
     },
   });
 
@@ -2582,14 +2580,13 @@ export async function networkLoop<OUTPUT = undefined>({
           validationPassed: true,
           completionReason: completionResult.completionReason || 'Task complete',
         };
-      } else {
-        return {
-          ...inputData,
-          isComplete: false,
-          validationPassed: false,
-          validationFeedback: feedback,
-        };
       }
+      return {
+        ...inputData,
+        isComplete: false,
+        validationPassed: false,
+        validationFeedback: feedback,
+      };
     },
   });
 

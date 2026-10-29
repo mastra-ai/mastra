@@ -22,12 +22,11 @@ const ROOT_ENTITY: Record<LatencyEntity, EntityType> = {
   tools: EntityType.TOOL,
 };
 
-function seriesFor(entity: LatencyEntity): MetricsLineChartSeries[] {
-  return [
-    { dataKey: `${entity}P50`, label: 'P50', color: CHART_COLORS.sky },
-    { dataKey: `${entity}P95`, label: 'P95', color: CHART_COLORS.green, emphasis: true },
-  ];
-}
+const SERIES: MetricsLineChartSeries[] = [
+  { dataKey: 'p50', label: 'P50', color: CHART_COLORS.sky },
+  { dataKey: 'p95', label: 'P95', color: CHART_COLORS.green, emphasis: true },
+  { dataKey: 'p99', label: 'P99', color: CHART_COLORS.violet },
+];
 
 const EMPTY_NOUN: Record<LatencyEntity, string> = {
   agents: 'agent runs',
@@ -35,7 +34,7 @@ const EMPTY_NOUN: Record<LatencyEntity, string> = {
   tools: 'tool calls',
 };
 
-/** P50 and P95 durations of agent runs, workflow runs or tool calls; a point opens its traces. */
+/** P50, P95 and P99 durations of agent runs, workflow runs or tool calls; a point opens its traces. */
 export type LatencyCardProps = {
   /** Called from the "View in Traces" button with the entity type of the open tab. */
   onViewTraces?: (entityType: EntityType) => void;
@@ -45,12 +44,11 @@ export type LatencyCardProps = {
 
 export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps) {
   const [entity, setEntity] = useState<LatencyEntity>('agents');
-  const { data = [], isLoading, isError, isPlaceholderData } = useMetricsLatency();
+  const { data = [], isLoading, isError, isPlaceholderData } = useMetricsLatency(entity);
   const { timestamp } = useMetricsFilters();
   // The latency chart keeps the API's 1h or 1d buckets, so a point opens that window.
   const step = intervalHours(bucketPlan(timestamp.start, timestamp.end).interval);
-  const series = seriesFor(entity);
-  const peak = Math.max(0, ...data.map(b => b[`${entity}P95`] ?? 0));
+  const peak = Math.max(0, ...data.map(b => b.p95 ?? 0));
 
   const layout = {
     title: 'Latency',
@@ -58,7 +56,7 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
     actions: onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(ROOT_ENTITY[entity])} />,
     toolbar: (
       <MetricsCard.Toolbar>
-        <MetricsLineChartLegend series={series} />
+        <MetricsLineChartLegend series={SERIES} />
         <MetricsCard.Tabs<LatencyEntity> value={entity} onValueChange={setEntity}>
           <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
           <MetricsCard.Tab value="workflows">Workflows</MetricsCard.Tab>
@@ -87,7 +85,7 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
       <ChartArea isEmpty={!isLoading && peak === 0} emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}>
         <MetricsLineChart
           data={data}
-          series={series}
+          series={SERIES}
           height="fill"
           xLabels="edges"
           showLegend={false}

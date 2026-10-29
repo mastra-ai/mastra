@@ -554,7 +554,11 @@ export class ReflectorRunner {
                   return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM reflector');
                 } catch (error) {
                   if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
-                  throw new OmModelExecutionError('reflector-model', error);
+                  throw new OmModelExecutionError(
+                    'reflector-model',
+                    error,
+                    childObservabilityContext.tracingContext?.currentSpan,
+                  );
                 }
               }, abortSignal),
           }),

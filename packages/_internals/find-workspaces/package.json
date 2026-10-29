@@ -1,6 +1,6 @@
 {
   "name": "@internal/find-workspaces",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Vendored fork of find-workspaces@0.3.1 that globs with tinyglobby instead of fast-glob",
   "private": true,
   "type": "module",

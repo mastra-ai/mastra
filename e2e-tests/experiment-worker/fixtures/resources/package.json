@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mastra/core": "experiment-worker-e2e-test",
-    "@mastra/libsql": "experiment-worker-e2e-test",
+    "@mastra/core": "e2e-test",
+    "@mastra/libsql": "e2e-test",
     "execa": "^9.6.1",
     "typescript": "^5.9.2",
     "typescript-language-server": "^4.3.4",
@@ -14,6 +14,6 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "mastra": "experiment-worker-e2e-test"
+    "mastra": "e2e-test"
   }
 }

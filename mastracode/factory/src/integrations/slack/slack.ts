@@ -49,6 +49,7 @@ import { markNewChannelSession } from './channel-session-link-processor.js';
 
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
+import { slackRunErrorCard } from './run-error-card.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -1139,9 +1140,11 @@ async function setThreadMuted(
 
 /** Slack app credentials, passed in explicitly rather than read from env here. */
 interface SlackCredentials {
+  mode?: 'webhook' | 'socket';
   clientId?: string;
   clientSecret?: string;
-  signingSecret: string;
+  signingSecret?: string;
+  appToken?: string;
   botToken?: string;
 }
 
@@ -1149,10 +1152,11 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
   // Per HTTP attempt, not per call: the WebClient's own retry policy still
   // waits out a 429. Without it a dead socket hangs a post forever.
   const adapter = createSlackAdapter({ ...deps.slack, webClientOptions: { timeout: SLACK_REQUEST_TIMEOUT_MS } });
+  const formatError: SlackAdapterChannelConfig['formatError'] = deps.adapterOptions?.formatError ?? slackRunErrorCard;
   const slack =
     deps.adapterOptions?.streaming === false
-      ? { adapter, ...deps.adapterOptions }
-      : { adapter, ...deps.adapterOptions, streaming: deps.adapterOptions?.streaming ?? true };
+      ? { adapter, ...deps.adapterOptions, formatError }
+      : { adapter, ...deps.adapterOptions, formatError, streaming: deps.adapterOptions?.streaming ?? true };
 
   const startedSessions: SlackStartedSessions = new WeakMap();
   return {

@@ -107,7 +107,10 @@
                 "entityId": "workflow-agent",
                 "attributes": {
                   "instructions": "You are an agent in a workflow",
-                  "completionStartTime": "<date>"
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -138,6 +141,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "1",
                       "responseModel": "mock-model-id",
@@ -196,8 +200,11 @@
                         "entityId": "workflow-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
                           "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 10,
                             "outputTokens": 20,
@@ -348,6 +355,7 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
+                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 10,
                                 "outputTokens": 20,

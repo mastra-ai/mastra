@@ -13,6 +13,7 @@ import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
+import { withSpanPreviews } from './span-previews';
 
 export interface MastraPlatformExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -478,7 +479,7 @@ export class MastraPlatformExporter extends BaseExporter {
 
   private formatSpan(span: AnyExportedSpan): MastraPlatformSpanRecord {
     const spanRecord: MastraPlatformSpanRecord = {
-      ...span,
+      ...withSpanPreviews(span),
       spanId: span.id,
       spanType: span.type,
       startedAt: span.startTime,

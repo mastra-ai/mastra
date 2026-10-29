@@ -19,7 +19,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
-import type { ChannelContext, ChannelHandler } from '../types';
+import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -865,6 +865,31 @@ describe('AgentChannels', () => {
 
         expect(dispatchApproval).not.toHaveBeenCalled();
         expect(adapter.editMessage).not.toHaveBeenCalled();
+      });
+
+      it('does not resolve an approval when the action id has a suffix after the tool call id', async () => {
+        const { dispatchApproval, dispatchDecline, click } = await setup({ requesterId: 'alice' });
+
+        await click('tool_approve:tool-call-1:extra', 'alice');
+        await click('tool_deny:tool-call-1:extra', 'alice');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(dispatchDecline).not.toHaveBeenCalled();
+      });
+
+      it('resolves an approval when the tool call id contains a colon', async () => {
+        const ctx = await setup({ requesterId: 'alice' });
+        (ctx.channels as any).pendingApprovalCards.set('call:1', {
+          runId: 'run-2',
+          toolName: 'lookup',
+          args: {},
+          requesterId: 'alice',
+        });
+
+        await ctx.click('tool_approve:call:1', 'alice');
+
+        expect(ctx.dispatchApproval).toHaveBeenCalledTimes(1);
+        expect(ctx.dispatchApproval).toHaveBeenCalledWith(expect.objectContaining({ toolCallId: 'call:1' }));
       });
 
       it('lets the requester approve', async () => {
@@ -2269,7 +2294,7 @@ describe('AgentChannels', () => {
         options: {
           platform?: string;
           threadId?: string;
-          formatError?: (error: Error) => string;
+          formatError?: ChannelAdapterBaseConfig['formatError'];
           logger?: IMastraLogger;
         } = {},
       ) {
@@ -2343,13 +2368,13 @@ describe('AgentChannels', () => {
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: plain string');
       });
 
-      it('passes the original Error to the custom formatter', async () => {
+      it("passes the original Error and the run's request context to the custom formatter", async () => {
         const error = new Error('failure');
         const formatError = vi.fn(() => 'custom feedback');
         const f = await fixture(error, { formatError });
         await f.run();
         expect(f.record().error.message).toBe('failure');
-        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error, { requestContext: expect.any(RequestContext) });
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
       });
 
@@ -2452,7 +2477,7 @@ describe('AgentChannels', () => {
         });
         expect(toJSON).not.toHaveBeenCalled();
         expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
-        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error, { requestContext: expect.any(RequestContext) });
       });
 
       it('does not serialize non-string Mastra classification fields', async () => {
