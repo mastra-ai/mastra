@@ -282,22 +282,21 @@ async function runSingleToolSchemaTest(
         receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext,
         testId,
       };
-    } else {
-      const error =
-        toolResult?.payload?.result?.error ||
-        toolResult?.result?.error ||
-        response.text ||
-        'Tool call failed or result missing';
-      return {
-        modelName: model.modelId,
-        testName: toolName,
-        modelProvider: model.provider,
-        status: 'failure',
-        error: error,
-        receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext || null,
-        testId,
-      };
     }
+    const error =
+      toolResult?.payload?.result?.error ||
+      toolResult?.result?.error ||
+      response.text ||
+      'Tool call failed or result missing';
+    return {
+      modelName: model.modelId,
+      testName: toolName,
+      modelProvider: model.provider,
+      status: 'failure',
+      error: error,
+      receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext || null,
+      testId,
+    };
   } catch (e: any) {
     let status: Result['status'] = 'error';
     if (e.message.includes('does not support zod type:')) {

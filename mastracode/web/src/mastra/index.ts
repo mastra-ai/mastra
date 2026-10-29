@@ -19,6 +19,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { AgentBrowser } from '@mastra/agent-browser';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -330,35 +331,41 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
+const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
+
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
-// password, then the Slack signing secret so a Slack-only deployment still has
+// password, then a Slack transport secret so a Slack-only deployment still has
 // a stable signer. Unset → per-process random secret (single-process local dev
 // only).
 const stateSecret =
   process.env.GITHUB_APP_WEBHOOK_SECRET ||
   process.env.WORKOS_COOKIE_PASSWORD ||
-  process.env.SLACK_APP_SIGNING_SECRET ||
+  slackSigningSecret ||
+  slackAppToken ||
   undefined;
 
-// Slack channels + account linking. Optional: the Slack adapter validates the
-// signing secret at construction, so the integration is only built when the
-// Slack app env is configured. Repo-backed Slack threads come from the
-// factory's source-control owner (GitHub) — the integration wires itself.
-const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
-const slack = slackSigningSecret
-  ? new SlackIntegration({
-      signingSecret: slackSigningSecret,
-      botToken: process.env.SLACK_APP_BOT_TOKEN,
-      clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
-      clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
-      // Slack requires an HTTPS redirect_uri, which locally is the tunnel
-      // origin rather than the app's own public URL.
-      oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
-      uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
-    })
-  : undefined;
+// Slack channels + account linking. Socket Mode is selected when an app-level
+// token is configured; otherwise Slack uses HTTP webhook mode. Repo-backed
+// Slack threads come from the factory's source-control owner (GitHub) — the
+// integration wires itself.
+const slack =
+  slackAppToken || slackSigningSecret
+    ? new SlackIntegration({
+        mode: slackAppToken ? 'socket' : 'webhook',
+        appToken: slackAppToken,
+        signingSecret: slackSigningSecret,
+        botToken: process.env.SLACK_APP_BOT_TOKEN,
+        clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+        clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+        // Slack requires an HTTPS redirect_uri, which locally is the tunnel
+        // origin rather than the app's own public URL.
+        oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+        uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      })
+    : undefined;
 
 const integrations = [
   ...(github ? [github] : []),
@@ -400,6 +407,10 @@ const sandbox =
           env: localSandboxEnv(),
         });
 
+// One headless Chromium per session thread, so sessions don't share tabs.
+const browser =
+  process.env.FACTORY_BROWSER?.trim() === 'local' ? new AgentBrowser({ headless: true, scope: 'thread' }) : undefined;
+
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -409,6 +420,7 @@ export const factory = new MastraFactory({
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
+  browser,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

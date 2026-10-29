@@ -7,7 +7,7 @@ description: "Browse EmpirioLabs AI model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/empiriolabs.svg" alt="EmpirioLabs AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />EmpirioLabs AI
 
-Access 62 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
+Access 63 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
 
 Learn more in the [EmpirioLabs AI documentation](https://docs.empiriolabs.ai).
 
@@ -200,6 +200,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "empiriolabs/glm-4-7-flashx",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 131072,
+    "inputCost": 0.07,
+    "outputCost": 0.4
   },
   {
     "model": "empiriolabs/glm-5-1",

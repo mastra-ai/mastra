@@ -22,6 +22,7 @@ import { microsoftTeamsProvider } from './microsoft-teams/index.js';
 import { notionProvider } from './notion/index.js';
 import { oneDriveProvider } from './one-drive/index.js';
 import { openaiProvider } from './openai/index.js';
+import { outlookProvider } from './outlook/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
 import { slackProvider } from './slack/index.js';
@@ -52,6 +53,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   notionProvider,
   oneDriveProvider,
   openaiProvider,
+  outlookProvider,
   posthogProvider,
   resendProvider,
   slackProvider,

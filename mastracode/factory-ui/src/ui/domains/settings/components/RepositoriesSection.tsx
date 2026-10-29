@@ -5,7 +5,8 @@ import { Link, useParams } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { manageGithubConnection } from '../../workspaces/services/github';
 import { settingsSectionPath } from '../settingsSections';
@@ -20,7 +21,13 @@ export function RepositoriesSection() {
   const activeFactory = factoryQuery.data;
 
   if (factoryQuery.isLoading) {
-    return <SkeletonRows label="Loading repositories" rows={2} />;
+    return (
+      <SettingsSubsection scope="factory" title="Added to this Factory">
+        <SettingsContainer>
+          <SettingsRowsSkeleton label="Loading repositories" />
+        </SettingsContainer>
+      </SettingsSubsection>
+    );
   }
   if (factoryQuery.isError && !activeFactory) {
     return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;

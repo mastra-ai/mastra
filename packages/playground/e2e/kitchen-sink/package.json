@@ -15,7 +15,7 @@
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
-    "ai": "^5.0.196",
+    "ai": "^5.0.282",
     "mastra": "latest",
     "zod": "^4.6.4"
   },

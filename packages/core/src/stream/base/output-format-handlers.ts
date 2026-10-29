@@ -630,6 +630,16 @@ export function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: P
 }
 
 /**
+ * Errors this transformer emits itself (validation, truncation, malformed enum), as opposed to
+ * errors the provider streamed. They are enqueued before the model's `finish` chunk.
+ */
+const structuredOutputErrors = new WeakSet<object>();
+
+export function isStructuredOutputError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && structuredOutputErrors.has(error);
+}
+
+/**
  * Transforms raw text-delta chunks into structured object chunks for JSON mode streaming.
  *
  * For JSON response formats, this transformer:
@@ -771,6 +781,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         metadata: { fallback: true },
       });
     } else {
+      structuredOutputErrors.add(error);
       controller.enqueue({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',

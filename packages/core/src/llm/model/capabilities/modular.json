@@ -1,0 +1,41 @@
+{
+  "attachment": [
+    "MiniMaxAI/MiniMax-M3.1-Flash",
+    "deepseek/deepseek-v4.1-flash",
+    "google/gemma-4-31b-it",
+    "minimax/minimax-m3"
+  ],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M3.1-Flash",
+    "deepseek/deepseek-v4.1-flash",
+    "google/gemma-4-31b-it",
+    "minimax/minimax-m3"
+  ],
+  "reasoning": {
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
+}

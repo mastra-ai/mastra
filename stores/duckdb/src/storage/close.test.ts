@@ -1,23 +1,44 @@
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Mastra } from '@mastra/core';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DuckDBConnection } from './db';
 import { DuckDBStore } from './index';
 
 describe('DuckDBStore.close()', () => {
   let dir: string;
   let dbPath: string;
+  let duck: DuckDBStore | undefined;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'duckdb-close-'));
     dbPath = join(dir, 'observability.duckdb');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await duck?.close();
     rmSync(dir, { recursive: true, force: true });
   });
+
+  function reopenInAnotherProcess() {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        'import { DuckDBInstance } from "@duckdb/node-api"; const db = await DuckDBInstance.create(process.argv[1]); db.closeSync();',
+        dbPath,
+      ],
+      { cwd: join(import.meta.dirname, '../..'), encoding: 'utf8', timeout: 10_000 },
+    );
+    expect(result.status, result.stderr || result.error?.message).toBe(0);
+  }
 
   it('releases the native file lock so the same file can be reopened', async () => {
     const first = new DuckDBStore({ id: 'close-first', path: dbPath });
@@ -37,5 +58,97 @@ describe('DuckDBStore.close()', () => {
 
     await store.close();
     await expect(store.close()).resolves.toBeUndefined();
+  });
+
+  // A composed observability domain must release its own connection on close. (#28648)
+  it('releases the file lock when the composite store is closed', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const storage = new MastraCompositeStore({ id: 'app', domains: { observability: duck.observability } });
+    await storage.init();
+    await storage.close();
+
+    reopenInAnotherProcess();
+    await expect(duck.close()).resolves.toBeUndefined();
+  });
+
+  it('waits for pending observability init before releasing the file lock', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const storage = new MastraCompositeStore({ id: 'app', domains: { observability: duck.observability } });
+    const init = storage.init();
+    await Promise.resolve(); // Allow composite init to start the observability domain.
+    await storage.close();
+    await init;
+
+    reopenInAnotherProcess();
+    await expect(duck.observability.init()).rejects.toThrow('closed');
+    reopenInAnotherProcess();
+  });
+
+  it('waits for pending observability init when closing DuckDBStore directly', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const init = duck.observability.init();
+    await duck.close();
+    await init;
+
+    reopenInAnotherProcess();
+  });
+
+  it('does not reopen the file when an observability read follows shutdown', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    await duck.observability.init();
+    await duck.close();
+
+    await expect(duck.observability.getSpan({ spanId: 'missing' })).rejects.toThrow('closed');
+    reopenInAnotherProcess();
+  });
+
+  it('drains a publicly acquired connection when the caller closes it', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const connection = await duck.db.getConnection();
+    connection.closeSync();
+
+    await duck.close();
+    reopenInAnotherProcess();
+  });
+
+  it('waits for an active observability read before releasing the file lock', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    await duck.observability.init();
+
+    let releaseRead!: () => void;
+    const paused = new Promise<void>(resolve => (releaseRead = resolve));
+    let readStarted!: () => void;
+    const started = new Promise<void>(resolve => (readStarted = resolve));
+    const getConnection = DuckDBConnection.prototype.getConnection;
+    vi.spyOn(DuckDBConnection.prototype, 'getConnection').mockImplementation(async function (this: DuckDBConnection) {
+      const connection = await getConnection.call(this);
+      readStarted();
+      await paused;
+      return connection;
+    });
+
+    const read = duck.observability.getSpan({ spanId: 'missing' });
+    await started; // The native connection is open before shutdown begins.
+    let closed = false;
+    const closing = duck.close().then(() => (closed = true));
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(closed).toBe(false);
+    } finally {
+      releaseRead();
+      await closing;
+    }
+    await expect(read).resolves.toBeNull();
+    reopenInAnotherProcess();
+  });
+
+  it('releases the file lock when Mastra shuts down', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const storage = new MastraCompositeStore({ id: 'app', domains: { observability: duck.observability } });
+    const mastra = new Mastra({ storage });
+    await storage.init();
+    await mastra.shutdown();
+
+    reopenInAnotherProcess();
   });
 });

@@ -14,7 +14,7 @@
   ],
   "structuredOutput": ["qwen3-coder-next"],
   "reasoning": {
-    "qwen3.5-plus": [
+    "glm-4.7": [
       {
         "type": "toggle"
       }
@@ -24,7 +24,7 @@
         "type": "toggle"
       }
     ],
-    "glm-5": [
+    "qwen3.6-plus": [
       {
         "type": "toggle"
       }
@@ -34,12 +34,12 @@
         "type": "toggle"
       }
     ],
-    "qwen3.6-plus": [
+    "qwen3.5-plus": [
       {
         "type": "toggle"
       }
     ],
-    "glm-4.7": [
+    "glm-5": [
       {
         "type": "toggle"
       }
