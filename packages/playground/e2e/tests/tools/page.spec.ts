@@ -1,3 +1,4 @@
+import type { GetToolResponse } from '@mastra/client-js';
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 
@@ -10,7 +11,7 @@ test.describe('Tools list page', () => {
     test('scrolls the list under a search field that stays in view', async ({ page }) => {
       await page.route('**/api/tools', async route => {
         const response = await route.fetch();
-        const tools: Record<string, { id: string; description?: string }> = await response.json();
+        const tools: Record<string, GetToolResponse> = await response.json();
         const sample = Object.values(tools)[0];
         const fillers = Object.fromEntries(
           Array.from({ length: 60 }, (_, i) => [
