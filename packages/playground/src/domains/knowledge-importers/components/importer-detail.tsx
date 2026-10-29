@@ -19,10 +19,14 @@ import {
   draftFromSettings,
   draftToSettings,
   isDraftDirty,
+  isForbiddenError,
+  READ_ONLY_NOTE,
   readApiError,
+  STOPS_NEW_IMPORTS_NOTE,
 } from '../settings';
 import type { ImporterDraft } from '../settings';
 import {
+  useImporterCanWrite,
   useImporterConnections,
   useImporterSummaries,
   useResetImporterSettings,
@@ -85,6 +89,7 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
   const [baseVersion, setBaseVersion] = useState(settings.version);
   const [conflict, setConflict] = useState(false);
   const [confirmEnable, setConfirmEnable] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
   const [confirmRun, setConfirmRun] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string>();
 
@@ -93,12 +98,16 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
   const save = useSaveImporterSettings(importerId);
   const reset = useResetImporterSettings(importerId);
   const startRun = useStartImporterRun(importerId);
+  const canWrite = useImporterCanWrite();
 
   const gate = connectionGate(summary.connection, draft.connectionId);
   const blocked = gate.kind === 'disabled' ? gate.reason : undefined;
   const dirty = isDraftDirty(draft, settings);
   const scheduleInvalid = draft.schedule.trim() !== '' && !isFiveFieldCron(draft.schedule);
   const busy = save.isPending || reset.isPending;
+  // A 403 on any write means the list's canWrite was stale; trust the server.
+  const readOnly =
+    !canWrite || isForbiddenError(save.error) || isForbiddenError(reset.error) || isForbiddenError(startRun.error);
 
   const scheduleWords =
     draft.schedule.trim() !== ''
@@ -156,8 +165,8 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
     ? PAUSED
     : (SCHEDULE_PRESETS.find(preset => preset.cron === draft.schedule.trim())?.id ?? undefined);
 
-  const saveError = save.error && !conflict ? readApiError(save.error).message : undefined;
-  const runError = startRun.error ? describeRunError(startRun.error) : undefined;
+  const saveError = save.error && !conflict && !readOnly ? readApiError(save.error).message : undefined;
+  const runError = startRun.error && !readOnly ? describeRunError(startRun.error) : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -167,7 +176,15 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
         </Notice>
       ) : null}
 
-      {blocked ? (
+      {readOnly ? (
+        <Notice variant="info" title={READ_ONLY_NOTE}>
+          <Notice.Message>
+            You can see these settings and run history, but not change them or start runs.
+          </Notice.Message>
+        </Notice>
+      ) : null}
+
+      {blocked && !readOnly ? (
         <Notice variant="warning" title="Runs are unavailable">
           <Notice.Message>{blocked}</Notice.Message>
         </Notice>
@@ -184,17 +201,23 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
                   : 'Off — only manual runs.'}
               </FieldDescription>
             </FieldContent>
-            <Switch
-              aria-label="Automatic imports"
-              checked={draft.enabled}
-              disabled={busy || (!draft.enabled && blocked !== undefined)}
-              onCheckedChange={checked => (checked ? setConfirmEnable(true) : update({ enabled: false }))}
-            />
+            {readOnly ? null : (
+              <Switch
+                aria-label="Automatic imports"
+                checked={draft.enabled}
+                disabled={busy || (!draft.enabled && blocked !== undefined)}
+                onCheckedChange={checked => (checked ? setConfirmEnable(true) : setConfirmDisable(true))}
+              />
+            )}
           </Field>
 
           <Field>
             <FieldLabel>Connection</FieldLabel>
-            <Select value={draft.connectionId} onValueChange={value => update({ connectionId: value })}>
+            <Select
+              value={draft.connectionId}
+              disabled={readOnly}
+              onValueChange={value => update({ connectionId: value })}
+            >
               <SelectTrigger aria-label="Connection">
                 <SelectValue />
               </SelectTrigger>
@@ -217,27 +240,29 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
 
           <Field invalid={scheduleInvalid}>
             <FieldLabel>Schedule</FieldLabel>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Schedule presets">
-              {SCHEDULE_PRESETS.map(preset => (
+            {readOnly ? null : (
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Schedule presets">
+                {SCHEDULE_PRESETS.map(preset => (
+                  <Button
+                    key={preset.id}
+                    size="sm"
+                    variant={presetValue === preset.id ? 'primary' : 'default'}
+                    aria-pressed={presetValue === preset.id}
+                    onClick={() => update({ schedule: preset.cron })}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
                 <Button
-                  key={preset.id}
                   size="sm"
-                  variant={presetValue === preset.id ? 'primary' : 'default'}
-                  aria-pressed={presetValue === preset.id}
-                  onClick={() => update({ schedule: preset.cron })}
+                  variant={presetValue === PAUSED ? 'primary' : 'default'}
+                  aria-pressed={presetValue === PAUSED}
+                  onClick={() => (draft.enabled ? setConfirmDisable(true) : undefined)}
                 >
-                  {preset.label}
+                  Paused
                 </Button>
-              ))}
-              <Button
-                size="sm"
-                variant={presetValue === PAUSED ? 'primary' : 'default'}
-                aria-pressed={presetValue === PAUSED}
-                onClick={() => update({ enabled: false })}
-              >
-                Paused
-              </Button>
-            </div>
+              </div>
+            )}
             <Input
               aria-label="Cron expression"
               placeholder={
@@ -246,6 +271,7 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
                   : 'Default schedule'
               }
               value={draft.schedule}
+              disabled={readOnly}
               aria-invalid={scheduleInvalid}
               onChange={event => update({ schedule: event.target.value })}
             />
@@ -267,7 +293,7 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
           <OptionFields
             schema={summary.optionsSchema}
             values={draft.options}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={options => update({ options })}
           />
         ) : (
@@ -288,39 +314,41 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
         </Notice>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Save />}
-          disabled={!dirty || scheduleInvalid || busy}
-          onClick={handleSave}
-        >
-          {save.isPending ? 'Saving…' : 'Save'}
-        </Button>
-        <Button size="sm" icon={<RotateCcw />} disabled={settings.source !== 'saved' || busy} onClick={handleReset}>
-          Reset to environment
-        </Button>
-        <span className="flex-1" />
-        <Button
-          size="sm"
-          icon={<FlaskConical />}
-          disabled={blocked !== undefined || scheduleInvalid || startRun.isPending}
-          title={blocked}
-          onClick={() => start('dry-run')}
-        >
-          Dry run
-        </Button>
-        <Button
-          size="sm"
-          icon={<Play />}
-          disabled={blocked !== undefined || dirty || startRun.isPending}
-          title={blocked ?? (dirty ? 'Save changes first' : undefined)}
-          onClick={() => setConfirmRun(true)}
-        >
-          Run now
-        </Button>
-      </div>
+      {readOnly ? null : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Save />}
+            disabled={!dirty || scheduleInvalid || busy}
+            onClick={handleSave}
+          >
+            {save.isPending ? 'Saving…' : 'Save'}
+          </Button>
+          <Button size="sm" icon={<RotateCcw />} disabled={settings.source !== 'saved' || busy} onClick={handleReset}>
+            Reset to environment
+          </Button>
+          <span className="flex-1" />
+          <Button
+            size="sm"
+            icon={<FlaskConical />}
+            disabled={blocked !== undefined || scheduleInvalid || startRun.isPending}
+            title={blocked}
+            onClick={() => start('dry-run')}
+          >
+            Dry run
+          </Button>
+          <Button
+            size="sm"
+            icon={<Play />}
+            disabled={blocked !== undefined || dirty || startRun.isPending}
+            title={blocked ?? (dirty ? 'Save changes first' : undefined)}
+            onClick={() => setConfirmRun(true)}
+          >
+            Run now
+          </Button>
+        </div>
+      )}
 
       {activeRunId ? <RunResult importerId={importerId} runId={activeRunId} /> : null}
 
@@ -342,6 +370,27 @@ function ImporterSettingsForm({ summary }: { summary: KnowledgeImporterSummary }
               }}
             >
               Turn on
+            </Button>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDisable} onOpenChange={setConfirmDisable}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Turn off automatic imports?</AlertDialog.Title>
+            <AlertDialog.Description>{STOPS_NEW_IMPORTS_NOTE} Takes effect once you save.</AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <Button
+              variant="primary"
+              onClick={() => {
+                update({ enabled: false });
+                setConfirmDisable(false);
+              }}
+            >
+              Turn off
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

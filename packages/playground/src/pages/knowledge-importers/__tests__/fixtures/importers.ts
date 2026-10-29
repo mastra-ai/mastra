@@ -62,8 +62,12 @@ export const buildSlackSummary = (): KnowledgeImporterSummary => ({
   lastRun: null,
 });
 
-export const buildListImportersResponse = (summaries: KnowledgeImporterSummary[]): ListKnowledgeImportersResponse => ({
+export const buildListImportersResponse = (
+  summaries: KnowledgeImporterSummary[],
+  canWrite = true,
+): ListKnowledgeImportersResponse => ({
   summaries,
+  canWrite,
 });
 
 export const notionConnections: ListKnowledgeImporterConnectionsResponse = {

@@ -21,12 +21,26 @@ export const importerKeys = {
 export const isRunActive = (run: KnowledgeImporterRunSummary | undefined) =>
   run?.status === 'queued' || run?.status === 'running';
 
-export function useImporterSummaries() {
+// Summaries and canWrite share one cached list response; each hook selects its slice.
+function useImportersList<T>(select: (response: ListKnowledgeImportersResponse) => T) {
   const client = useMastraClient();
   return useQuery({
     queryKey: importerKeys.summaries(),
-    queryFn: async () => (await client.getKnowledgeImporters().list()).summaries,
+    queryFn: () => client.getKnowledgeImporters().list(),
+    select,
   });
+}
+
+const selectSummaries = (response: ListKnowledgeImportersResponse) => response.summaries;
+const selectCanWrite = (response: ListKnowledgeImportersResponse) => response.canWrite;
+
+export function useImporterSummaries() {
+  return useImportersList(selectSummaries);
+}
+
+/** False until the list loads, so write controls never flash for read-only callers. */
+export function useImporterCanWrite() {
+  return useImportersList(selectCanWrite).data === true;
 }
 
 export function useImporterConnections(importerId: string, enabled: boolean) {
@@ -71,8 +85,13 @@ export function useImporterRun(importerId: string, runId: string | undefined) {
 function useStoreSummary() {
   const queryClient = useQueryClient();
   return (summary: ListKnowledgeImportersResponse['summaries'][number]) =>
-    queryClient.setQueryData<ListKnowledgeImportersResponse['summaries']>(importerKeys.summaries(), previous =>
-      previous?.map(item => (item.importerId === summary.importerId ? summary : item)),
+    queryClient.setQueryData<ListKnowledgeImportersResponse>(importerKeys.summaries(), previous =>
+      previous
+        ? {
+            ...previous,
+            summaries: previous.summaries.map(item => (item.importerId === summary.importerId ? summary : item)),
+          }
+        : previous,
     );
 }
 

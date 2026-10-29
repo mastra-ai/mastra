@@ -6,7 +6,7 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { X } from 'lucide-react';
 import { useId, useState } from 'react';
-import { describeAllowlist } from '../settings';
+import { STOPS_NEW_IMPORTS_NOTE, describeAllowlist } from '../settings';
 
 export interface OptionFieldsProps {
   schema: KnowledgeImporterOptionField[];
@@ -182,6 +182,9 @@ function ListOptionField({ field, values, disabled, envHint, onChange }: ListOpt
       />
       <Txt id={summaryId} variant="caption" tone={values.length === 0 ? 'ink' : 'muted'}>
         {describeAllowlist(values)}
+      </Txt>
+      <Txt variant="caption" tone="muted">
+        {STOPS_NEW_IMPORTS_NOTE}
       </Txt>
       <FieldHelp help={field.help} envHint={envHint} />
     </Field>
