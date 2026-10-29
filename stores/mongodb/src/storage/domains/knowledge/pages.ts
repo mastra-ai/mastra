@@ -335,7 +335,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       at: Date;
     },
   ): Promise<void> {
-    await (await this.#c('activity')).insertOne(
+    await (
+      await this.#c('activity')
+    ).insertOne(
       {
         id: createKnowledgeUlid(),
         action: event.action,
@@ -351,7 +353,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async #lastPosition(parentId: string | null, session?: Session): Promise<string | undefined> {
-    const row = await (await this.#c('pages'))
+    const row = await (
+      await this.#c('pages')
+    )
       .find({ parentId, ...live }, { projection: { _id: 0, position: 1 }, session })
       .sort({ position: -1 })
       .limit(1)
@@ -367,7 +371,14 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     rootId: string,
     session?: Session,
     find?: string,
-  ): Promise<{ ids: string[]; live: number; maxDepth: number; liveKeys: string[]; found: boolean; truncated: boolean }> {
+  ): Promise<{
+    ids: string[];
+    live: number;
+    maxDepth: number;
+    liveKeys: string[];
+    found: boolean;
+    truncated: boolean;
+  }> {
     const pages = await this.#c('pages');
     const ids: string[] = [];
     let liveCount = 0;
@@ -384,7 +395,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       frontier = [];
       for (const row of rows) {
         const id = String(row.id);
-        if (find !== undefined && id === find) return { ids, live: liveCount, maxDepth, liveKeys, found: true, truncated: false };
+        if (find !== undefined && id === find)
+          return { ids, live: liveCount, maxDepth, liveKeys, found: true, truncated: false };
         ids.push(id);
         frontier.push(id);
         if (row.deletedAt == null) {
@@ -393,7 +405,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           if (row.key != null) liveKeys.push(String(row.key));
         }
       }
-      if (liveCount > MAX_KNOWLEDGE_MOVE_PAGES) return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: true };
+      if (liveCount > MAX_KNOWLEDGE_MOVE_PAGES)
+        return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: true };
     }
     return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: false };
   }
@@ -401,7 +414,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   /** Refuses before any write when a live carried page's key is already live in the destination scope. */
   async #assertNoKeyConflicts(keys: string[], scopeId: string, session?: Session): Promise<void> {
     if (!keys.length) return;
-    const clash = await (await this.#c('pages')).findOne({ ...live, scopeId, key: { $in: keys } }, { projection: { _id: 0, key: 1 }, session });
+    const clash = await (
+      await this.#c('pages')
+    ).findOne({ ...live, scopeId, key: { $in: keys } }, { projection: { _id: 0, key: 1 }, session });
     if (clash) throw new KnowledgePageKeyConflictError(String(clash.key), scopeId);
   }
 
@@ -485,7 +500,10 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
       const pages = await this.#c('pages');
       for (const page of input.pages ?? []) {
-        const existing = await pages.findOne({ scopeId: scope.id, key: page.key, ...live }, { projection: { id: 1 }, session });
+        const existing = await pages.findOne(
+          { scopeId: scope.id, key: page.key, ...live },
+          { projection: { id: 1 }, session },
+        );
         if (existing) continue;
         await this.#insertPage(session, {
           parent: scope,
@@ -555,7 +573,11 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   async getScopesByAddress(addresses: string[]): Promise<KnowledgePage[]> {
     if (addresses.length === 0) return [];
-    const rows = await (await this.#c('pages')).find({ isScope: true, address: { $in: addresses } }, noProjection).toArray();
+    const rows = await (
+      await this.#c('pages')
+    )
+      .find({ isScope: true, address: { $in: addresses } }, noProjection)
+      .toArray();
     const byAddress = new Map(rows.map(row => [String(row.address), toPage(row)]));
     return [...new Set(addresses)].flatMap(address => byAddress.get(address) ?? []);
   }
@@ -571,7 +593,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const [position, id] = decodeCursor(input.cursor);
       filter.$or = [{ position: { $gt: position } }, { position, id: { $gt: id } }];
     }
-    const rows = await (await this.#c('pages')).find(filter, noProjection).sort({ position: 1, id: 1 }).limit(limit + 1).toArray();
+    const rows = await (
+      await this.#c('pages')
+    )
+      .find(filter, noProjection)
+      .sort({ position: 1, id: 1 })
+      .limit(limit + 1)
+      .toArray();
     return this.#pageOutput(rows, limit, page => [page.position, page.id]);
   }
 
@@ -585,7 +613,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   async getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
     const ids = await this.#readable(input.read);
-    const row = await (await this.#c('pages')).findOne({ id: input.id, ...this.#inScopes('scopeId', ids) }, noProjection);
+    const row = await (
+      await this.#c('pages')
+    ).findOne({ id: input.id, ...this.#inScopes('scopeId', ids) }, noProjection);
     return row ? toPage(row) : null;
   }
 
@@ -607,7 +637,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const ids = await this.#readable(input.read);
     const filter: Filter<Document> = { canonicalName: canonicalKnowledgeName(input.name), ...live };
     this.#scopeFilter(filter, input.scopeId, ids);
-    const rows = await (await this.#c('pages')).find(filter, noProjection).sort({ createdAt: -1, id: -1 }).limit(limit).toArray();
+    const rows = await (
+      await this.#c('pages')
+    )
+      .find(filter, noProjection)
+      .sort({ createdAt: -1, id: -1 })
+      .limit(limit)
+      .toArray();
     return rows.map(toPage);
   }
 
@@ -629,12 +665,23 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }): Promise<KnowledgePageListOutput> {
     const limit = clampLimit(input.limit);
     const ids = await this.#readable(input.read);
-    const filter: Filter<Document> = { parentId: input.parentId, ...notScope, ...live, ...this.#inScopes('scopeId', ids) };
+    const filter: Filter<Document> = {
+      parentId: input.parentId,
+      ...notScope,
+      ...live,
+      ...this.#inScopes('scopeId', ids),
+    };
     if (input.cursor) {
       const [position, id] = decodeCursor(input.cursor);
       filter.$or = [{ position: { $gt: position } }, { position, id: { $gt: id } }];
     }
-    const rows = await (await this.#c('pages')).find(filter, noProjection).sort({ position: 1, id: 1 }).limit(limit + 1).toArray();
+    const rows = await (
+      await this.#c('pages')
+    )
+      .find(filter, noProjection)
+      .sort({ position: 1, id: 1 })
+      .limit(limit + 1)
+      .toArray();
     return this.#pageOutput(rows, limit, page => [page.position, page.id]);
   }
 
@@ -656,7 +703,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const [name, id] = decodeCursor(input.cursor);
       filter.$or = [{ name: { $gt: name } }, { name, id: { $gt: id } }];
     }
-    const rows = await (await this.#c('pages')).find(filter, noProjection).sort({ name: 1, id: 1 }).limit(limit + 1).toArray();
+    const rows = await (
+      await this.#c('pages')
+    )
+      .find(filter, noProjection)
+      .sort({ name: 1, id: 1 })
+      .limit(limit + 1)
+      .toArray();
     return this.#pageOutput(rows, limit, page => [page.name, page.id]);
   }
 
@@ -695,7 +748,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   ): Promise<KnowledgePage> {
     const id = input.id ?? createKnowledgeUlid();
     const scopeId = input.parent.isScope ? input.parent.id : input.parent.scopeId;
-    const depth = input.parent.isScope ? 1 : ((await this.#depthOf(input.parent.id, session)) + 1);
+    const depth = input.parent.isScope ? 1 : (await this.#depthOf(input.parent.id, session)) + 1;
     if (depth > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(id);
     const doc = {
       id,
@@ -724,7 +777,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       }
       throw error;
     }
-    await this.#log(session, { action: 'page-created', scopeId, pageId: id, provenance: input.provenance, at: input.at });
+    await this.#log(session, {
+      action: 'page-created',
+      scopeId,
+      pageId: id,
+      provenance: input.provenance,
+      at: input.at,
+    });
     return toPage(doc);
   }
 
@@ -781,8 +840,12 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         { session },
       );
     }
-    await (await this.#c('notes')).updateMany({ pageId: { $in: moved } }, { $set: { pageScopeId: scopeId } }, { session });
-    await (await this.#c('activity')).updateMany({ pageId: { $in: moved } }, { $set: { pageScopeId: scopeId } }, { session });
+    await (
+      await this.#c('notes')
+    ).updateMany({ pageId: { $in: moved } }, { $set: { pageScopeId: scopeId } }, { session });
+    await (
+      await this.#c('activity')
+    ).updateMany({ pageId: { $in: moved } }, { $set: { pageScopeId: scopeId } }, { session });
   }
 
   async movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage> {
@@ -790,7 +853,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const page = await this.#requireLivePage(input.id, session);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
       if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be moved`);
-      if (input.parentId === input.id) throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
+      if (input.parentId === input.id)
+        throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       const tree = await this.#subtree(input.id, session, input.parentId);
       if (tree.found) throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       const parent = await this.#requireLivePage(input.parentId, session);
@@ -846,7 +910,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   async mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage> {
     return this.#tx(async session => {
-      if (input.sourceId === input.targetId) throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
+      if (input.sourceId === input.targetId)
+        throw new Error(`Knowledge page ${input.sourceId} can't merge into itself or its own subtree`);
       const source = await this.#requireLivePage(input.sourceId, session);
       const target = await this.#requireLivePage(input.targetId, session);
       if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
@@ -869,22 +934,27 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         if (tree.ids.length) {
           await pages.updateMany(
             { id: { $in: tree.ids } },
-            [{ $set: { scopeId: target.scopeId, depth: { $add: ['$depth', delta] } } }, recomputeActiveKey(target.scopeId)],
+            [
+              { $set: { scopeId: target.scopeId, depth: { $add: ['$depth', delta] } } },
+              recomputeActiveKey(target.scopeId),
+            ],
             { session },
           );
           await notes.updateMany({ pageId: { $in: tree.ids } }, { $set: { pageScopeId: target.scopeId } }, { session });
-          await (await this.#c('activity')).updateMany(
-            { pageId: { $in: tree.ids } },
-            { $set: { pageScopeId: target.scopeId } },
-            { session },
-          );
+          await (
+            await this.#c('activity')
+          ).updateMany({ pageId: { $in: tree.ids } }, { $set: { pageScopeId: target.scopeId } }, { session });
         }
         await pages.updateMany({ parentId: source.id, ...notScope }, { $set: { parentId: target.id } }, { session });
       } catch (error) {
         if (isDuplicateKey(error)) throw new KnowledgeConflictError(source.id);
         throw error;
       }
-      await notes.updateMany({ pageId: source.id }, { $set: { pageId: target.id, pageScopeId: target.scopeId } }, { session });
+      await notes.updateMany(
+        { pageId: source.id },
+        { $set: { pageId: target.id, pageScopeId: target.scopeId } },
+        { session },
+      );
       await notes.updateMany(
         { mentions: source.id },
         [
@@ -892,7 +962,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
             $set: {
               mentions: {
                 $setUnion: [
-                  { $map: { input: '$mentions', in: { $cond: [{ $eq: ['$$this', source.id] }, target.id, '$$this'] } } },
+                  {
+                    $map: { input: '$mentions', in: { $cond: [{ $eq: ['$$this', source.id] }, target.id, '$$this'] } },
+                  },
                 ],
               },
             },
@@ -905,7 +977,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const pins = await this.#c('pins');
       const sourcePin = await pins.findOne({ pageId: source.id }, { ...noProjection, session });
       if (sourcePin) {
-        await this.#upsertPinAudience(session, target.id, (sourcePin.audience as string[]) ?? [], String(sourcePin.createdBy), now);
+        await this.#upsertPinAudience(
+          session,
+          target.id,
+          (sourcePin.audience as string[]) ?? [],
+          String(sourcePin.createdBy),
+          now,
+        );
         await pins.deleteOne({ id: sourcePin.id }, { session });
       }
 
@@ -926,7 +1004,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         { session },
       );
       if (deleted.matchedCount === 0) throw new KnowledgeConflictError(input.sourceId);
-      await (await this.#c('activity')).updateMany({ pageId: source.id }, { $set: { pageScopeId: target.scopeId } }, { session });
+      await (
+        await this.#c('activity')
+      ).updateMany({ pageId: source.id }, { $set: { pageScopeId: target.scopeId } }, { session });
       await this.#log(session, {
         action: 'page-merged',
         scopeId: target.scopeId,
@@ -973,7 +1053,11 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   // Notes ----------------------------------------------------------------------------------------
 
-  async getNote(input: { id: string; read: KnowledgeReadScope; includeDeleted?: boolean }): Promise<KnowledgeNote | null> {
+  async getNote(input: {
+    id: string;
+    read: KnowledgeReadScope;
+    includeDeleted?: boolean;
+  }): Promise<KnowledgeNote | null> {
     const ids = await this.#readable(input.read);
     const filter: Filter<Document> = { id: input.id, ...this.#visibleNotes(ids) };
     if (!input.includeDeleted) Object.assign(filter, live);
@@ -997,7 +1081,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const at = new Date(createdAt);
       filter.$or = [{ createdAt: { $gt: at } }, { createdAt: at, id: { $gt: id } }];
     }
-    const rows = await (await this.#c('notes')).find(filter, noProjection).sort({ createdAt: 1, id: 1 }).limit(limit + 1).toArray();
+    const rows = await (
+      await this.#c('notes')
+    )
+      .find(filter, noProjection)
+      .sort({ createdAt: 1, id: 1 })
+      .limit(limit + 1)
+      .toArray();
     return this.#noteOutput(rows, limit);
   }
 
@@ -1020,10 +1110,19 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const at = new Date(createdAt);
       match.$or = [{ createdAt: { $lt: at } }, { createdAt: at, id: { $lt: id } }];
     }
-    const rows = await (await this.#c('notes'))
+    const rows = await (
+      await this.#c('notes')
+    )
       .aggregate([
         { $match: match },
-        { $lookup: { from: MONGO_KNOWLEDGE_PAGES_COLLECTIONS.pages, localField: 'pageId', foreignField: 'id', as: 'page' } },
+        {
+          $lookup: {
+            from: MONGO_KNOWLEDGE_PAGES_COLLECTIONS.pages,
+            localField: 'pageId',
+            foreignField: 'id',
+            as: 'page',
+          },
+        },
         { $match: { 'page.deletedAt': { $exists: false } } },
         { $project: { _id: 0, page: 0 } },
         { $sort: { createdAt: -1, id: -1 } },
@@ -1043,7 +1142,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async #assertScopePages(ids: string[], session: Session): Promise<void> {
-    const rows = await (await this.#c('pages'))
+    const rows = await (
+      await this.#c('pages')
+    )
       .find({ id: { $in: ids }, isScope: true }, { projection: { _id: 0, id: 1 }, session })
       .toArray();
     const found = new Set(rows.map(row => String(row.id)));
@@ -1062,7 +1163,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const mentionIds = [...new Set(input.mentions)];
       let mentionScopeIds: string[] = [];
       if (mentionIds.length) {
-        const found = await (await this.#c('pages'))
+        const found = await (
+          await this.#c('pages')
+        )
           .find({ id: { $in: mentionIds } }, { projection: { _id: 0, id: 1, scopeId: 1 }, session })
           .toArray();
         const known = new Set(found.map(row => String(row.id)));
@@ -1248,7 +1351,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       .toArray();
     const notePages = new Map(
       (
-        await (await this.#c('pages'))
+        await (
+          await this.#c('pages')
+        )
           .find({ id: { $in: [...new Set(noteRows.map(row => String(row.pageId)))] }, ...live }, noProjection)
           .toArray()
       ).map(row => [String(row.id), toPage(row)]),
@@ -1296,13 +1401,19 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const events: Row[] = [];
     let cursorFilter = filter;
     for (;;) {
-      const batch = await activity.find(cursorFilter, noProjection).sort({ createdAt: -1, id: -1 }).limit(limit * 4 + 1).toArray();
+      const batch = await activity
+        .find(cursorFilter, noProjection)
+        .sort({ createdAt: -1, id: -1 })
+        .limit(limit * 4 + 1)
+        .toArray();
       const noteIds = [...new Set(batch.flatMap(row => (row.noteId ? [String(row.noteId)] : [])))];
       const visible = new Set(
         noteIds.length
-          ? (await notes.find({ id: { $in: noteIds }, ...this.#visibleNotes(ids) }, { projection: { _id: 0, id: 1 } }).toArray()).map(
-              row => String(row.id),
-            )
+          ? (
+              await notes
+                .find({ id: { $in: noteIds }, ...this.#visibleNotes(ids) }, { projection: { _id: 0, id: 1 } })
+                .toArray()
+            ).map(row => String(row.id))
           : [],
       );
       for (const row of batch) {
@@ -1312,7 +1423,10 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       }
       if (events.length > limit || batch.length <= limit * 4) break;
       const last = batch[batch.length - 1]!;
-      cursorFilter = { ...filter, $or: [{ createdAt: { $lt: last.createdAt } }, { createdAt: last.createdAt, id: { $lt: last.id } }] };
+      cursorFilter = {
+        ...filter,
+        $or: [{ createdAt: { $lt: last.createdAt } }, { createdAt: last.createdAt, id: { $lt: last.id } }],
+      };
     }
 
     const page = events.slice(0, limit).map(
@@ -1399,7 +1513,11 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return { pin: toPin(updated!), changed: true };
   }
 
-  async removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null> {
+  async removePinAudience(input: {
+    pageId: string;
+    audience: string[];
+    removedBy: string;
+  }): Promise<KnowledgePin | null> {
     return this.#tx(async session => {
       const pins = await this.#c('pins');
       const existing = await pins.findOne({ pageId: input.pageId }, { ...noProjection, session });
@@ -1448,10 +1566,19 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const at = new Date(createdAt);
       match.$or = [{ createdAt: { $lt: at } }, { createdAt: at, id: { $lt: id } }];
     }
-    const rows = await (await this.#c('pins'))
+    const rows = await (
+      await this.#c('pins')
+    )
       .aggregate([
         { $match: match },
-        { $lookup: { from: MONGO_KNOWLEDGE_PAGES_COLLECTIONS.pages, localField: 'pageId', foreignField: 'id', as: 'page' } },
+        {
+          $lookup: {
+            from: MONGO_KNOWLEDGE_PAGES_COLLECTIONS.pages,
+            localField: 'pageId',
+            foreignField: 'id',
+            as: 'page',
+          },
+        },
         {
           $match: {
             'page.deletedAt': { $exists: false },
