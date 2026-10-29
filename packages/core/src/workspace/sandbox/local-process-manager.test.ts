@@ -158,6 +158,28 @@ describe('LocalProcessManager Windows POSIX shell for argv commands', () => {
     expect(execa.mock.calls[0]?.[2]).toMatchObject({ shell: 'D:\\Tools\\Git\\bin\\bash.exe' });
   });
 
+  it('searches the PATH the command runs with', async () => {
+    const sandbox = await setup(['D:\\Tools\\Git\\cmd\\git.exe', 'D:\\Tools\\Git\\bin\\bash.exe']);
+
+    await sandbox.executeCommand!('git', ['status'], { env: { PATH: 'D:\\Tools\\Git\\cmd' } });
+
+    expect(execa.mock.calls[0]?.[2]).toMatchObject({ shell: 'D:\\Tools\\Git\\bin\\bash.exe' });
+  });
+
+  it('runs argv commands through cmd.exe when MASTRA_WINDOWS_SHELL points at it', async () => {
+    const cmd = 'C:\\Windows\\System32\\cmd.exe';
+    const sandbox = await setup([cmd, gitBash]);
+    vi.stubEnv('MASTRA_WINDOWS_SHELL', cmd);
+
+    await sandbox.executeCommand!('dir', ['/b']);
+
+    expect(execa).toHaveBeenCalledWith('dir /b', [], expect.objectContaining({ shell: cmd }));
+
+    await sandbox.executeCommand!('sh', ['-c', 'echo ok']);
+
+    expect(execa.mock.calls[1]?.[0]).toBe('sh');
+  });
+
   it('prefers MASTRA_WINDOWS_SHELL', async () => {
     const sandbox = await setup(['E:\\msys64\\usr\\bin\\bash.exe', gitBash]);
     vi.stubEnv('MASTRA_WINDOWS_SHELL', 'E:\\msys64\\usr\\bin\\bash.exe');

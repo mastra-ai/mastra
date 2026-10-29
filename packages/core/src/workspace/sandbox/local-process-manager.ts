@@ -27,16 +27,16 @@ const EXIT_OUTPUT_GRACE_MS = 2_000;
 
 /**
  * Find a POSIX shell on Windows for commands built with POSIX quoting.
- * Checks `MASTRA_WINDOWS_SHELL`, then Git Bash next to a `git.exe` on PATH
+ * Checks `MASTRA_WINDOWS_SHELL`, then Git Bash next to a `git.exe` on the command's PATH
  * (Git for Windows puts `Git\cmd` on PATH, not `Git\bin`), then the default
  * Git for Windows install location. Bare `bash` on PATH is skipped on purpose:
  * it is often WSL's launcher, which can't see Windows paths.
  */
-function findWindowsPosixShell(): string | undefined {
+function findWindowsPosixShell(searchPath: string | undefined): string | undefined {
   const candidates: string[] = [];
   const configured = process.env.MASTRA_WINDOWS_SHELL?.trim();
   if (configured) candidates.push(configured);
-  for (const dir of (process.env.PATH ?? '').split(path.win32.delimiter)) {
+  for (const dir of (searchPath ?? '').split(path.win32.delimiter)) {
     if (dir && existsSync(path.win32.join(dir, 'git.exe'))) {
       candidates.push(
         path.win32.join(dir, '..', 'bin', 'bash.exe'),
@@ -320,7 +320,9 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     // which cmd.exe can't parse, so route them through a POSIX shell when one exists.
     // Plain string commands are caller-authored and keep using cmd.exe.
     const posixShell =
-      isWindows && this.sandbox.isolation === 'none' && invocation !== undefined ? findWindowsPosixShell() : undefined;
+      isWindows && this.sandbox.isolation === 'none' && invocation !== undefined
+        ? findWindowsPosixShell(env.PATH)
+        : undefined;
     // Preserve the script as one argument instead of letting cmd.exe interpret its operators.
     const directShell =
       isWindows &&
@@ -331,7 +333,12 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       invocation.args.length >= 2;
     const wrapped = directShell
       ? {
-          command: path.win32.isAbsolute(invocation.command) ? invocation.command : (posixShell ?? invocation.command),
+          command:
+            path.win32.isAbsolute(invocation.command) ||
+            !posixShell ||
+            /^cmd(\.exe)?$/i.test(path.win32.basename(posixShell))
+              ? invocation.command
+              : posixShell,
           args: invocation.args,
         }
       : this.sandbox.wrapCommandForIsolation(command);
