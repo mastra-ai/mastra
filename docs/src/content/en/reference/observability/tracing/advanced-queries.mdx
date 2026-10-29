@@ -223,7 +223,7 @@ const slowModelCalls = {
 }
 ```
 
-`model` and `provider` read the span's stored `model` and `provider` values, never its `attributes`. Spans written before the store kept these values count as missing. Trace results don't include `model` or `provider`: a trace can match through one span while other spans used a different model.
+`model` and `provider` read the span's stored `model` and `provider` values, never its `attributes`, so spans written before the store kept these values count as missing. Trace results don't include `model` or `provider`, because a trace can match through one span while its other spans used a different model.
 
 ```typescript
 const selectedModel = {
