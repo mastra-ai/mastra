@@ -85,6 +85,41 @@ describe('Knowledge change events', () => {
     expect(summary()).toEqual(['page:create']);
   });
 
+  it('says where a moved or merged-away page was before', async () => {
+    const { call, events } = setup();
+    const billing = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Billing' });
+    const finance = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Finance' });
+    const orgScope = events.find(event => event.kind === 'scope')!.pageId;
+    events.length = 0;
+    await call('knowledge_page', { op: 'move', page: billing.page.id, scope: 'resource:u-1' });
+    await call('knowledge_page', { op: 'merge', page: billing.page.id, into: finance.page.id });
+    const [move, merge] = events.filter(event => event.kind === 'page');
+    expect(move).toMatchObject({ op: 'move', pageId: billing.page.id, fromScopeId: orgScope });
+    expect(move).not.toMatchObject({ scopeId: orgScope });
+    expect(merge).toMatchObject({
+      op: 'merge',
+      pageId: finance.page.id,
+      sourceId: billing.page.id,
+      scopeId: orgScope,
+      fromScopeId: (move as { scopeId: string }).scopeId,
+    });
+  });
+
+  it('never fails a committed write when the event cannot be described', async () => {
+    const { knowledge, events } = setup();
+    const error = vi.spyOn(ConsoleLogger.prototype, 'error').mockImplementation(() => {});
+    const store = await knowledge.getStorage();
+    const raw = Object.getPrototypeOf(store) as { updatePage: (...args: unknown[]) => Promise<unknown> };
+    const update = vi.spyOn(raw, 'updatePage').mockResolvedValue(undefined);
+    await expect(store.updatePage({ id: 'p', expectedVersion: 1, updatedBy: 'host' } as never)).resolves.toBe(
+      undefined,
+    );
+    expect(events).toEqual([]);
+    expect(error).toHaveBeenCalledWith('Knowledge change event failed after a committed write', expect.anything());
+    update.mockRestore();
+    error.mockRestore();
+  });
+
   it('stops after unsubscribe, and a throwing listener neither fails the write nor stops others', async () => {
     const { knowledge, call, events, unsubscribe } = setup();
     const error = vi.spyOn(ConsoleLogger.prototype, 'error').mockImplementation(() => {});

@@ -256,7 +256,12 @@ export class Knowledge extends MastraBase {
     if (!storage) {
       throw new Error('The configured storage provider does not provide a Knowledge storage domain.');
     }
-    return emitKnowledgeChanges(storage, change => this.#emit(change));
+    return emitKnowledgeChanges(
+      storage,
+      change => this.#emit(change),
+      () => this.#listeners.size > 0,
+      error => this.logger.error('Knowledge change event failed after a committed write', { error }),
+    );
   }
 
   #emit(change: Omit<KnowledgeChangeEvent, 'knowledgeId' | 'at'>) {
