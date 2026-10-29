@@ -3,7 +3,7 @@ import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
-import { knowledgeMemoryScopes } from '../declarations';
+import { KnowledgeDeclarationError, knowledgeMemoryScopes, knowledgeRoleAtLeast } from '../declarations';
 import type { KnowledgeScopeDeclarations } from '../declarations';
 import { buildKnowledgePageTools } from '../page-tools';
 import { KnowledgeScopeRuntime } from '../scope-runtime';
@@ -65,6 +65,7 @@ type Result = Record<string, any>;
 describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
   let store: KnowledgeStorage;
   let tools: ReturnType<typeof buildKnowledgePageTools>;
+  let runtime: KnowledgeScopeRuntime;
 
   /** Runs a tool as an agent holding `held` (raw run scopes). */
   const as = (agentId: string, held: string[]) => {
@@ -91,7 +92,7 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
   beforeEach(async () => {
     store = (await new InMemoryStore().getStore('knowledge'))!;
     await store.init();
-    const runtime = new KnowledgeScopeRuntime(
+    runtime = new KnowledgeScopeRuntime(
       scopes,
       async () => store,
       () => {},
@@ -270,5 +271,137 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     await admin().page({ op: 'write', scope: 'team:acme:support', name: 'Roadmap' });
     await expect(admin().read('Roadmap')).rejects.toThrow(/ambiguous; use one of these ids/);
     expect((await sales().read('Roadmap')).page.scope).toBe('org:acme');
+  });
+
+  describe('explainAccess', () => {
+    const actors: Record<string, string[]> = {
+      admin: ['org:acme', 'role:acme:admin', 'role:acme:policy-admin', 'resource:u-admin'],
+      support: ['org:acme', 'role:acme:support', 'team:acme:support', 'resource:u-42'],
+      sales: ['org:acme', 'role:acme:sales', 'resource:u-sales'],
+      eng: ['org:acme', 'team:acme:eng'],
+      manager: ['org:acme', 'role:acme:account-manager'],
+      alex: ['org:acme', 'agent:acme:alex'],
+      bot: ['audience:acme:public'],
+      globex: ['org:globex', 'role:globex:admin', 'resource:u-g'],
+    };
+    const homes: Array<[string, string]> = [
+      ['admin', 'policy:acme'],
+      ['admin', 'team:acme:support'],
+      ['eng', 'team-public:acme:eng'],
+      ['eng', 'feature:acme:a'],
+      ['manager', 'account:acme:x'],
+      ['manager', 'account:acme:x/internal'],
+      ['admin', 'kb-public:acme'],
+      ['admin', 'kb-internal:acme'],
+      ['alex', 'agent:acme:alex'],
+      ['support', 'resource:u-42'],
+      ['admin', 'org:acme'],
+      ['globex', 'org:globex'],
+    ];
+
+    it('agrees with what the tools let every §10 actor read and edit, on every page', async () => {
+      const pages: Array<{ id: string; scope: string }> = [];
+      for (const [creator, scope] of homes) {
+        const written = await as(creator, actors[creator]!).page({ op: 'write', scope, name: `Page in ${scope}` });
+        pages.push({ id: written.page.id, scope });
+      }
+
+      let checked = 0;
+      for (const [actor, held] of Object.entries(actors)) {
+        for (const page of pages) {
+          const explained = await runtime.explainAccess(held, { page: page.id });
+          const readable = await as(actor, held)
+            .read(page.id)
+            .then(() => true)
+            .catch(() => false);
+          expect({ actor, scope: page.scope, readable }).toEqual({
+            actor,
+            scope: page.scope,
+            readable: explained.role !== null,
+          });
+          expect(explained.page).toEqual({ id: page.id, scope: page.scope });
+          expect(explained.reason).toBe(explained.role ? undefined : 'hidden');
+
+          const editable = await as(actor, held)
+            .page({ op: 'write', page: page.id, body: `edited by ${actor}` })
+            .then(() => true)
+            .catch(() => false);
+          expect({ actor, scope: page.scope, editable }).toEqual({
+            actor,
+            scope: page.scope,
+            editable: knowledgeRoleAtLeast(explained.role, 'editor'),
+          });
+          checked++;
+        }
+      }
+      expect(checked).toBe(Object.keys(actors).length * homes.length);
+    });
+
+    it('names the rules behind a role, by page id or <scope>#<key> and by scope', async () => {
+      await as('eng', actors.eng!).page({ op: 'write', scope: 'feature:acme:a', key: 'spec', name: 'Feature A spec' });
+
+      const byKey = await runtime.explainAccess(actors.support!, { page: 'feature:acme:a#spec' });
+      expect(byKey.role).toBe('contributor');
+      expect(byKey.reasons).toEqual([
+        { principal: 'team:acme:support', role: 'contributor', rule: 'feature:acme:a', via: 'rule' },
+      ]);
+
+      const own = await runtime.explainAccess(['org:acme', 'agent:acme:alex'], { scope: 'agent:acme:alex' });
+      expect(own).toEqual({
+        role: 'owner',
+        reasons: [{ principal: 'agent:acme:alex', role: 'owner', rule: 'agent:$orgId:$agentId', via: 'self' }],
+      });
+
+      // Unmaterialized scopes are explained from their declarations alone.
+      const unseen = await runtime.explainAccess(actors.support!, { scope: 'account:acme:new' });
+      expect(unseen.role).toBe('viewer');
+      expect(await store.getScopesByAddress(['account:acme:new'])).toEqual([]);
+    });
+
+    it('tells a hidden page from a missing one, and a scope with no rule', async () => {
+      const internal = await as('manager', actors.manager!).page({
+        op: 'write',
+        scope: 'account:acme:x/internal',
+        key: 'notes',
+        name: 'Internal account notes',
+      });
+
+      expect(await runtime.explainAccess(actors.support!, { page: internal.page.id })).toEqual({
+        role: null,
+        reasons: [],
+        page: { id: internal.page.id, scope: 'account:acme:x/internal' },
+        reason: 'hidden',
+      });
+      expect(await runtime.explainAccess(actors.support!, { page: 'account:acme:x/internal#notes' })).toMatchObject({
+        reason: 'hidden',
+      });
+      expect(await runtime.explainAccess(actors.support!, { page: 'no-such-page' })).toEqual({
+        role: null,
+        reasons: [],
+        reason: 'missing',
+      });
+      expect(await runtime.explainAccess(actors.support!, { page: 'account:acme:x/internal#nope' })).toMatchObject({
+        reason: 'missing',
+      });
+      expect(await runtime.explainAccess(actors.sales!, { scope: 'kb-internal:acme' })).toMatchObject({
+        role: 'contributor',
+      });
+      expect(await runtime.explainAccess(actors.bot!, { scope: 'kb-internal:acme' })).toEqual({
+        role: null,
+        reasons: [],
+        reason: 'no-rule',
+      });
+    });
+
+    it("refuses a typo'd run scope the way a run does, and takes raw run scopes", async () => {
+      await expect(runtime.explainAccess(['org:acme', 'role:acme:suport'], { scope: 'org:acme' })).rejects.toThrow(
+        KnowledgeDeclarationError,
+      );
+      await expect(as('typo', ['org:acme', 'role:acme:suport']).read()).rejects.toThrow(/role:acme:suport/);
+
+      // A raw resource id with "/" is encoded exactly like run ingress encodes it.
+      const raw = await runtime.explainAccess(['resource:user/1'], { scope: 'resource:user%2F1' });
+      expect(raw.role).toBe('owner');
+    });
   });
 });

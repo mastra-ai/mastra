@@ -16,6 +16,7 @@ import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
 import type { KnowledgeRunContext } from './run';
 import { KnowledgeScopeRuntime } from './scope-runtime';
+import type { KnowledgeAccessExplanation } from './scope-runtime';
 
 function resolvePins(pins: KnowledgeConfig['pinnedContext']): false | PinBudget {
   if (!pins) return false;
@@ -104,6 +105,23 @@ export class Knowledge extends MastraBase {
    */
   readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
     return this.#runtime.readScopeFor(principals);
+  }
+
+  /**
+   * Why a run holding `runScopes` can or can't reach a scope or page: its role there and the rules
+   * that give it. `runScopes` are raw run scopes, as passed to an agent run; undeclared ones throw
+   * like they do at run start. `target` is a scope address, or a page id or `<scope>#<key>`.
+   *
+   * **Host-only.** It tells a missing page from a hidden one, which runs must never learn. Never
+   * expose it through an agent tool, or through a server route without admin-level auth.
+   *
+   * @experimental
+   */
+  explainAccess(
+    runScopes: readonly string[],
+    target: { scope: string } | { page: string },
+  ): Promise<KnowledgeAccessExplanation> {
+    return this.#runtime.explainAccess(runScopes, target);
   }
 
   #groups(override?: KnowledgeToolSelection): { read: boolean; write: boolean; pins: boolean } {
@@ -227,3 +245,5 @@ export type {
   KnowledgeAccessRule,
   KnowledgeRole,
 } from './declarations';
+export type { KnowledgeAccessExplanation } from './scope-runtime';
+export type { KnowledgeAccessGrant } from './access';

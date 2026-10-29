@@ -4,9 +4,27 @@ import type {
   KnowledgeReadScope,
   KnowledgeStorage,
 } from '../storage/domains/knowledge';
-import { knowledgeReadScopeFor, knowledgeRoleOn } from './access';
-import { compileKnowledgeScopes, KnowledgeDeclarationError } from './declarations';
+import { knowledgeAccessGrants, knowledgeReadScopeFor, knowledgeRoleOn } from './access';
+import type { KnowledgeAccessGrant } from './access';
+import {
+  compileKnowledgeScopes,
+  KnowledgeDeclarationError,
+  knowledgeRunScopes,
+  strongerKnowledgeRole,
+} from './declarations';
 import type { CompiledKnowledgeScopes, KnowledgeRole, KnowledgeScopeDeclarations } from './declarations';
+
+/** Why a run can or can't reach a scope or page. See {@link Knowledge.explainAccess}. @experimental */
+export interface KnowledgeAccessExplanation {
+  /** The run's strongest role on the target's scope; null when it can't read it. */
+  role: KnowledgeRole | null;
+  /** Every rule that gives one of the run's principals a role there. */
+  reasons: KnowledgeAccessGrant[];
+  /** The resolved page and its home scope address, for page targets that exist. */
+  page?: { id: string; scope: string };
+  /** `missing`: no such page. `hidden`: the page exists but the run can't read its scope. `no-rule`: a scope no rule gives the run. */
+  reason?: 'missing' | 'hidden' | 'no-rule';
+}
 
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
@@ -40,6 +58,53 @@ export class KnowledgeScopeRuntime {
     const storage = await this.getStorage();
     const parent = scope.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
     return knowledgeRoleOn(this.compiled, principals, { address: scope.address, parentAddress: parent?.address });
+  }
+
+  async explainAccess(
+    runScopes: readonly string[],
+    target: { scope: string } | { page: string },
+  ): Promise<KnowledgeAccessExplanation> {
+    const principals = knowledgeRunScopes(this.compiled, runScopes);
+    this.validatePrincipals(principals);
+    const storage = await this.getStorage();
+
+    let scope: KnowledgePage | undefined;
+    let page: KnowledgePage | null = null;
+    if ('scope' in target) {
+      if (!this.compiled.match(target.scope)) {
+        throw new KnowledgeDeclarationError(`Knowledge scope "${target.scope}" does not match a declared scope type.`);
+      }
+      [scope] = await storage.getScopesByAddress([target.scope]);
+    } else {
+      const hash = target.page.indexOf('#');
+      if (hash > 0) {
+        [scope] = await storage.getScopesByAddress([target.page.slice(0, hash)]);
+        page = scope
+          ? await storage.getPageByKey({ scopeId: scope.id, key: target.page.slice(hash + 1), read: 'all' })
+          : null;
+      } else {
+        page = await storage.getPage({ id: target.page, read: 'all' });
+        if (page?.deletedAt) page = null;
+        scope = page
+          ? page.isScope
+            ? page
+            : ((await storage.getPage({ id: page.scopeId, read: 'all' })) ?? undefined)
+          : undefined;
+      }
+      if (!page || !scope?.address) return { role: null, reasons: [], reason: 'missing' };
+    }
+
+    const address = scope?.address ?? (target as { scope: string }).scope;
+    const parent = scope?.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
+    const reasons = knowledgeAccessGrants(this.compiled, principals, { address, parentAddress: parent?.address });
+    let role: KnowledgeRole | null = null;
+    for (const reason of reasons) role = strongerKnowledgeRole(role, reason.role);
+    return {
+      role,
+      reasons,
+      ...(page ? { page: { id: page.id, scope: address } } : {}),
+      ...(role ? {} : { reason: page ? ('hidden' as const) : ('no-rule' as const) }),
+    };
   }
 
   async materializeScope(

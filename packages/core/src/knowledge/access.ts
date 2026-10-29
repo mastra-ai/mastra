@@ -99,6 +99,61 @@ export async function knowledgeReadScopeFor(
   return { addresses: [...addresses], prefixes: [...prefixes.values()], children };
 }
 
+/** One rule giving a held principal a role on a scope. @experimental */
+export interface KnowledgeAccessGrant {
+  /** The held principal the rule names (the scope itself for `self`). */
+  principal: string;
+  role: KnowledgeRole;
+  /** The declaration key, or the concrete address whose own rules gave it. */
+  rule: string;
+  /** How the rule binds: the scope itself, its params, or its `belongsTo` parent. */
+  via: 'self' | 'rule' | 'belongsTo';
+}
+
+/**
+ * Every rule that gives one of `principals` a role on one scope. `parentAddress` is the address of
+ * the scope page's tree parent, needed for rules that bind through `belongsTo`.
+ *
+ * @experimental
+ */
+export function knowledgeAccessGrants(
+  compiled: CompiledKnowledgeScopes,
+  principals: readonly string[],
+  scope: { address: string; parentAddress?: string | null },
+): KnowledgeAccessGrant[] {
+  const match = compiled.match(scope.address);
+  if (!match) return [];
+  const held = new Set(principals);
+  const belongsToParams =
+    match.compiled.belongsTo && scope.parentAddress
+      ? matchKnowledgePattern(match.compiled.belongsTo, scope.parentAddress)
+      : null;
+
+  const grants: KnowledgeAccessGrant[] = [];
+  const sources = [
+    { rules: match.compiled.rules, label: match.compiled.key },
+    { rules: match.concreteRules, label: scope.address },
+  ];
+  for (const { rules, label } of sources) {
+    for (const rule of rules) {
+      let principal: string | null;
+      let via: KnowledgeAccessGrant['via'];
+      if (rule.reach.kind === 'self') {
+        principal = scope.address;
+        via = 'self';
+      } else if (rule.reach.kind === 'belongsTo') {
+        principal = belongsToParams ? bindKnowledgePattern(rule.principal!, belongsToParams) : null;
+        via = 'belongsTo';
+      } else {
+        principal = bindKnowledgePattern(rule.principal!, match.params);
+        via = 'rule';
+      }
+      if (principal !== null && held.has(principal)) grants.push({ principal, role: rule.role, rule: label, via });
+    }
+  }
+  return grants;
+}
+
 /**
  * The strongest role `principals` give on one scope, or null. `parentAddress` is the address of the
  * scope page's tree parent, needed for rules that bind through `belongsTo`.
@@ -110,22 +165,8 @@ export function knowledgeRoleOn(
   principals: readonly string[],
   scope: { address: string; parentAddress?: string | null },
 ): KnowledgeRole | null {
-  const match = compiled.match(scope.address);
-  if (!match) return null;
-  const held = new Set(principals);
-  const belongsToParams =
-    match.compiled.belongsTo && scope.parentAddress
-      ? matchKnowledgePattern(match.compiled.belongsTo, scope.parentAddress)
-      : null;
-
   let role: KnowledgeRole | null = null;
-  for (const rule of [...match.compiled.rules, ...match.concreteRules]) {
-    let principal: string | null;
-    if (rule.reach.kind === 'self') principal = scope.address;
-    else if (rule.reach.kind === 'belongsTo') {
-      principal = belongsToParams ? bindKnowledgePattern(rule.principal!, belongsToParams) : null;
-    } else principal = bindKnowledgePattern(rule.principal!, match.params);
-    if (principal !== null && held.has(principal)) role = strongerKnowledgeRole(role, rule.role);
-  }
+  for (const grant of knowledgeAccessGrants(compiled, principals, scope))
+    role = strongerKnowledgeRole(role, grant.role);
   return role;
 }
