@@ -63,6 +63,7 @@ jobs:
         timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
+          persist-credentials: false
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
