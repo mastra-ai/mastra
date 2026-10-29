@@ -224,7 +224,6 @@ describe('processWorkflowEnd public-registry fallback on grandparent-descent mis
           stepResults: {},
           parentWorkflow: grandparent,
           stepId: 'inner_stage',
-          stepGraph: outer.stepGraph,
           activeStepsPath: {},
           resumeSteps: [],
           resumeData: undefined,
@@ -232,9 +231,6 @@ describe('processWorkflowEnd public-registry fallback on grandparent-descent mis
         },
       }),
     );
-    // The wire copy provably lost the loop condition — resolution must go live.
-    expect(args.parentWorkflow.stepGraph[0].type).toBe('loop');
-    expect(args.parentWorkflow.stepGraph[0].condition).toBeUndefined();
 
     try {
       await processor.callProcessWorkflowEnd(args);
@@ -249,7 +245,6 @@ describe('processWorkflowEnd public-registry fallback on grandparent-descent mis
     resume: false,
     stepResults: {},
     stepId: 'outer_loop',
-    stepGraph: [],
     activeStepsPath: {},
     resumeSteps: [],
     resumeData: undefined,

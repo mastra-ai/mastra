@@ -92,7 +92,6 @@ export type ParentWorkflow = {
   timeTravel?: TimeTravelExecutionParams;
   restart?: RestartExecutionParams;
   stepId: string;
-  stepGraph: StepFlowEntry[];
   activeStepsPath: Record<string, number[]>;
   resumeSteps: string[];
   resumeData: any;
@@ -957,14 +956,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     // handle nested workflow
     if (parentWorkflow) {
       // get the step from the parent workflow and process it if it's a loop.
-      // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
-      // Streams etc.) strips the loop `condition` function from its stepGraph
-      // copy, so resolve the live loop-owning workflow from the registry and
-      // only fall back to the payload copy if it can't be found (#23111).
+      // The descriptor carries no step graph: a serializing pubsub (Redis
+      // Streams etc.) would strip the loop `condition` function from any copy
+      // (#23111), so resolve the live loop-owning workflow from the registry.
       // When grandparent descent misses (either mode — see #resolveLiveWorkflow),
       // degrade to a public-registry lookup by the loop owner's id: the same
-      // resolution the 2-level case (no grandparent) already uses, and strictly
-      // better than the function-stripped payload copy of last resort.
+      // resolution the 2-level case (no grandparent) already uses. If both miss,
+      // the parent's next event fails dispatch on the same lookup anyway.
       let liveParentWorkflow: Workflow | null | undefined;
       try {
         liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
@@ -974,17 +972,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         liveParentWorkflow = undefined;
       }
       liveParentWorkflow ??= this.#tryResolveWorkflow(parentWorkflow.workflowId);
-      const step =
-        liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
-        parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
-      if (step?.type === 'loop') {
+      const step = liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!];
+      if (liveParentWorkflow && step?.type === 'loop') {
         // The nested run's final state replaces the parent's: the parent's
         // `__state` predates this iteration and would win over `state`.
         const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: finalState };
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
           {
-            workflow: parentWorkflow as unknown as Workflow,
+            workflow: liveParentWorkflow,
             workflowId: parentWorkflow.workflowId,
             prevResult,
             runId: parentWorkflow.runId,
@@ -1541,7 +1537,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     let requestContext = args.requestContext;
     const streamFormat = this.runFormats.get(runId);
     const currentState = resolveCurrentState({ stepResults, state });
-    const stepGraph: StepFlowEntry[] = workflow.stepGraph;
     // The leaf entry this run executes: top-level entries are already
     // SingleStepEntry-shaped; `loop` / `foreach` carry their body in `step.step`.
     // It stays a declarative entry - the step executor interprets it per kind.
@@ -1783,7 +1778,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: leafId,
               workflowId,
               runId,
-              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
@@ -1858,7 +1852,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: leafId,
               workflowId,
               runId,
-              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
@@ -1914,7 +1907,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: leafId,
               workflowId,
               runId,
-              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
@@ -1979,7 +1971,6 @@ export class WorkflowEventProcessor extends EventProcessor {
                 stepId: leafId,
                 workflowId,
                 runId,
-                stepGraph,
                 executionPath,
                 resumeSteps: [leafId, ...nestedResumeSteps],
                 stepResults,
@@ -2024,7 +2015,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: leafId,
               workflowId,
               runId,
-              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
@@ -2096,7 +2086,6 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow: {
               stepId: leafId,
               workflowId,
-              stepGraph,
               runId,
               executionPath,
               resumeSteps,

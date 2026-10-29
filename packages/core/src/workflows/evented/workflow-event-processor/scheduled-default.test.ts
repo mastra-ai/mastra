@@ -264,7 +264,6 @@ describe('WorkflowEventProcessor — scheduled default-engine fires (#18807)', (
           resume: false,
           stepResults: {},
           stepId: 'nightly',
-          stepGraph: parent.stepGraph,
           activeStepsPath: {},
           resumeSteps: [],
         },
