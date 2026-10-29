@@ -227,10 +227,10 @@ function ComboboxClearFooter({ label, onClear }: { label: string; onClear: () =>
   );
 }
 
-/** The option with the most characters: a close enough stand-in for the widest row, without measuring them all. */
+/** The option whose rendered label has the most characters: a close enough stand-in for the widest row, without measuring them all. */
 function longestOption(options: ComboboxOption[]) {
   return options.reduce<ComboboxOption | undefined>(
-    (longest, option) => (!longest || optionText(option).length > optionText(longest).length ? option : longest),
+    (longest, option) => (!longest || option.label.length > longest.label.length ? option : longest),
     undefined,
   );
 }
