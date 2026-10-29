@@ -663,8 +663,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     // Two workers on one store and one broker. A holds a single slot, so a
     // pinned task waits in A's local queue: the window in which a peer could
     // otherwise pick the pending row up and run it a second time.
-    async function pinnedOnBusyWorker(maxRetries: number) {
-      const pubsub = new EventEmitterPubSub();
+    async function pinnedOnBusyWorker(maxRetries: number, pubsub = new EventEmitterPubSub()) {
       const a = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 }, pubsub);
       const busy = gate();
       const { task: blocker } = await a.enqueue(
@@ -731,7 +730,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     }, 15_000);
 
     it('recovers a pinned row as a lost attempt once its owner dies, running it once on a peer', async () => {
-      const { pubsub, a, onA, task } = await pinnedOnBusyWorker(1);
+      const { pubsub, a, busy, onA, task } = await pinnedOnBusyWorker(1);
       await crash(a, pubsub);
       const { b, onB } = await peer(pubsub);
 
@@ -744,10 +743,11 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       expect(done!.ownerId).toBeUndefined();
       expect(onB).toHaveBeenCalledTimes(1);
       expect(onA).not.toHaveBeenCalled();
+      busy.release();
     }, 15_000);
 
     it('fails a pinned row with no retries once its owner dies, without running it on a peer', async () => {
-      const { pubsub, a, onA, task } = await pinnedOnBusyWorker(0);
+      const { pubsub, a, busy, onA, task } = await pinnedOnBusyWorker(0);
       await crash(a, pubsub);
       const { b, onB } = await peer(pubsub);
 
@@ -763,10 +763,101 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
       expect(onB).not.toHaveBeenCalled();
       expect(onA).not.toHaveBeenCalled();
+      busy.release();
     }, 15_000);
 
+    it('recovers a lapsed pin on a peer that was already running before the row was enqueued', async () => {
+      // B's startup recovery pass finds nothing, so only a later sweep can see A's pin lapse.
+      const pubsub = new EventEmitterPubSub();
+      const { b, onB } = await peer(pubsub);
+      const { a, busy, onA, task } = await pinnedOnBusyWorker(1, pubsub);
+      await crash(a, pubsub);
+
+      await vi.waitFor(async () => expect(await b.getTask(task.id)).toMatchObject({ status: 'completed' }), {
+        timeout: 10_000,
+        interval: 100,
+      });
+      expect(await b.getTask(task.id)).toMatchObject({ result: 'from-b', retryCount: 1 });
+      expect(onB).toHaveBeenCalledTimes(1);
+      expect(onA).not.toHaveBeenCalled();
+      busy.release();
+    }, 15_000);
+
+    it('reaches a lapsed pin behind a page of older pending rows on a later sweep', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const { b, onB } = await peer(pubsub);
+      const store = (await storage.getStore('backgroundTasks'))!;
+      const old = Date.now() - 60_000;
+      for (let i = 0; i < 100; i++) {
+        await store.createTask({
+          ...foreignRunningRow(`queued-${i}`),
+          status: 'pending',
+          createdAt: new Date(old + i),
+        });
+      }
+      await store.createTask({
+        ...foreignRunningRow('lapsed-pin'),
+        status: 'pending',
+        toolName: 'tool',
+        agentId: 'mcp-server:ops',
+        maxRetries: 1,
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 1_000),
+        createdAt: new Date(),
+      });
+
+      await vi.waitFor(async () => expect(await b.getTask('lapsed-pin')).toMatchObject({ status: 'completed' }), {
+        timeout: 12_000,
+        interval: 100,
+      });
+      expect(onB).toHaveBeenCalledTimes(1);
+    }, 15_000);
+
+    it('keeps a lapsed pin pinned until a slot is free, so its retry is not spent without a dispatch', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const b = await makeManager(
+        { globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000, recoverStaleTasksOnStart: true },
+        pubsub,
+      );
+      const onB = vi.fn(async () => 'from-b');
+      b.registerStaticExecutor('tool', { execute: onB });
+      const busy = gate();
+      const { task: blocker } = await b.enqueue(
+        payload('mcp-server:ops', 'blocker'),
+        ctx(async () => {
+          await busy.promise;
+          return 'blocker';
+        }),
+      );
+      await vi.waitFor(async () => expect((await b.getTask(blocker.id))?.status).toBe('running'));
+      const store = (await storage.getStore('backgroundTasks'))!;
+      await store.createTask({
+        ...foreignRunningRow('lapsed-pin'),
+        status: 'pending',
+        toolName: 'tool',
+        agentId: 'mcp-server:ops',
+        maxRetries: 1,
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 1_000),
+        createdAt: new Date(),
+      });
+
+      // Two sweeps run while B has no free slot.
+      await new Promise(resolve => setTimeout(resolve, 6_500));
+      expect(await b.getTask('lapsed-pin')).toMatchObject({ status: 'pending', ownerId: 'dead-worker', retryCount: 0 });
+
+      busy.release();
+      await vi.waitFor(async () => expect(await b.getTask('lapsed-pin')).toMatchObject({ status: 'completed' }), {
+        timeout: 5_000,
+        interval: 100,
+      });
+      expect(await b.getTask('lapsed-pin')).toMatchObject({ result: 'from-b', retryCount: 1 });
+    }, 20_000);
+
     it('hands a pinned row to peers as a lost attempt on graceful shutdown', async () => {
-      const { pubsub, a, onA, task } = await pinnedOnBusyWorker(0);
+      const { pubsub, a, busy, onA, task } = await pinnedOnBusyWorker(0);
+      // `shutdown()` stops dispatch synchronously, so the freed slot never runs the pinned row.
+      busy.release();
       await a.shutdown();
       const { b, onB } = await peer(pubsub);
 
