@@ -223,11 +223,10 @@ export class Scheduler extends MastraBase {
   async #nextDelay(): Promise<number | undefined> {
     const interval = this.#config.tickIntervalMs;
     const maxIdle = this.#config.maxIdleIntervalMs;
-    // A cap at or below the tick interval means "check every tick", never "sleep forever".
-    const idleCap = maxIdle !== undefined ? Math.min(Math.max(maxIdle, interval), MAX_TIMER_DELAY_MS) : undefined;
-    if (this.#lastTickBusy || idleCap === interval || (this.#config.enabled === true && idleCap === undefined)) {
-      return interval;
-    }
+    // A cap at or below the tick interval (or NaN) means "check every tick", never "sleep forever".
+    if (this.#lastTickBusy || (maxIdle !== undefined && !(maxIdle > interval))) return interval;
+    const idleCap = maxIdle !== undefined ? Math.min(maxIdle, MAX_TIMER_DELAY_MS) : undefined;
+    if (this.#config.enabled === true && idleCap === undefined) return interval;
     let next: Schedule[];
     try {
       // Every adapter returns due rows ordered by nextFireAt, so asking for one

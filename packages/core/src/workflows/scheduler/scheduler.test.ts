@@ -847,6 +847,24 @@ describe('Scheduler', () => {
       }
     });
 
+    it('treats a NaN cap as the tick interval instead of polling in a hot loop', async () => {
+      const { store } = makeStore();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: { tickIntervalMs: 50, maxIdleIntervalMs: Number.NaN },
+      });
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+
+      await scheduler.start();
+      try {
+        await wait(120);
+        expect(listDue.mock.calls.length).toBeLessThan(6);
+      } finally {
+        await scheduler.stop();
+      }
+    });
+
     it('clamps a cap beyond the largest timer delay instead of polling in a hot loop', async () => {
       const { store } = makeStore();
       const scheduler = new Scheduler({
