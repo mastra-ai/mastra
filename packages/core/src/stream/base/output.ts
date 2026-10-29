@@ -1334,6 +1334,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             }
             case 'tool-result':
+              // Partial provider results are streamed only; the final result follows.
+              if (chunk.payload.preliminary) break;
               self.#toolResults.push(chunk);
               self.#bufferedByStep.toolResults.push(chunk);
               break;

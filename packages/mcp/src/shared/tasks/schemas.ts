@@ -26,14 +26,11 @@ export const TaskInputRequestsSchema = z.record(z.string(), TaskInputRequestSche
 /** The bare result object answering the input request with the same key. */
 export const TaskInputResponsesSchema = z.record(z.string(), JsonObjectSchema);
 
-/** ISO 8601; the TTL is counted from it, so a value that doesn't parse is rejected. */
-const TimestampSchema = z.string().refine(value => !Number.isNaN(Date.parse(value)), 'Expected an ISO 8601 timestamp');
-
 const TaskShape = {
   taskId: z.string().min(1),
   status: TaskStatusSchema,
   statusMessage: z.string().optional(),
-  createdAt: TimestampSchema,
+  createdAt: z.string(),
   lastUpdatedAt: z.string(),
   ttlMs: z.number().int().nonnegative().nullable(),
   pollIntervalMs: z.number().int().nonnegative().optional(),

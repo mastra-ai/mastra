@@ -244,7 +244,7 @@ export function BoardContent({
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
-      !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+      !review && !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
     const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
