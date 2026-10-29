@@ -86,12 +86,29 @@ export interface MCPServerTasksOptions {
   store?: MCPTaskStore;
   /**
    * Most open (`working` or `input_required`) tasks one client may hold. Past it, a call that
-   * would start a task answers with `isError: true` instead. Default 100. A custom `store` that
-   * ignores `limits` in `create` enforces no cap.
+   * would start a task answers with `isError: true` instead. Default 100, or
+   * `maxRetainedTasksPerClient` when that is lower. A custom `store` that ignores `limits` in
+   * `create` enforces no cap.
    */
   maxOpenTasksPerClient?: number;
-  /** Most open tasks across all clients. Default 1000. Enforced the same way as `maxOpenTasksPerClient`. */
+  /**
+   * Most open tasks across all clients. Default 1000, or `maxRetainedTasks` when that is lower.
+   * Enforced the same way as `maxOpenTasksPerClient`.
+   */
   maxOpenTasks?: number;
+  /**
+   * Most tasks one client may have in the store, open or finished, until each is forgotten
+   * (`ttlMs` plus a short retention). The in-memory store keeps finished results until then, so
+   * this bounds its memory when a client runs many short tasks. Past it, a call that would start a
+   * task answers like at the open cap. Default 1000, or `maxOpenTasksPerClient` when that is
+   * higher; setting it below `maxOpenTasksPerClient` throws. Only the in-memory store enforces it.
+   */
+  maxRetainedTasksPerClient?: number;
+  /**
+   * Most tasks in the store across all clients, open or finished. Default 10000, or `maxOpenTasks`
+   * when that is higher. Enforced the same way as `maxRetainedTasksPerClient`.
+   */
+  maxRetainedTasks?: number;
   /**
    * Decides whether the caller may read, answer or cancel a task. Tasks are always bound to the
    * principal that created them; this narrows access further. A refusal answers as an unknown task.
@@ -122,6 +139,8 @@ const MODES: readonly MCPServerTaskMode[] = ['off', 'auto', 'always'];
 const DEFAULT_SYNC_WINDOW_MS = 2_000;
 const DEFAULT_MAX_OPEN_TASKS_PER_CLIENT = 100;
 const DEFAULT_MAX_OPEN_TASKS = 1_000;
+const DEFAULT_MAX_RETAINED_TASKS_PER_CLIENT = 1_000;
+const DEFAULT_MAX_RETAINED_TASKS = 10_000;
 
 function invalid(text: string): MastraError {
   return new MastraError({
@@ -151,10 +170,29 @@ function assertBoolean(owner: string, value: unknown): void {
   }
 }
 
-function positiveInteger(owner: string, value: number | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
+function positiveInteger(owner: string, value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
   if (!Number.isSafeInteger(value) || value < 1) throw invalid(`${owner} must be a positive integer, got ${value}.`);
   return value;
+}
+
+/**
+ * Resolves an open cap and the retained cap that contains it. Every open task is also retained, so
+ * an unset cap follows the one that was set, and setting both with retained below open is refused.
+ */
+function caps(
+  [openName, open, defaultOpen]: [string, number | undefined, number],
+  [retainedName, retained, defaultRetained]: [string, number | undefined, number],
+): [open: number, retained: number] {
+  const openCap = positiveInteger(openName, open);
+  const retainedCap = positiveInteger(retainedName, retained);
+  if (openCap !== undefined && retainedCap !== undefined && retainedCap < openCap) {
+    throw invalid(`${retainedName} (${retainedCap}) must be at least ${openName} (${openCap}).`);
+  }
+  return [
+    openCap ?? Math.min(defaultOpen, retainedCap ?? defaultOpen),
+    retainedCap ?? Math.max(defaultRetained, openCap ?? 0),
+  ];
 }
 
 /** Validates `tasks` against the configured tools. Throws on anything a server could not serve. */
@@ -174,14 +212,15 @@ export function resolveTasksConfig(
   const ttlMs = config.ttlMs === undefined ? DEFAULT_TASK_TTL_MS : config.ttlMs;
   assertBoolean('tasks.recover', config.recover);
   const recover = config.recover ?? false;
-  const limits: MCPTaskLimits = {
-    perPrincipal: positiveInteger(
-      'tasks.maxOpenTasksPerClient',
-      config.maxOpenTasksPerClient,
-      DEFAULT_MAX_OPEN_TASKS_PER_CLIENT,
-    ),
-    total: positiveInteger('tasks.maxOpenTasks', config.maxOpenTasks, DEFAULT_MAX_OPEN_TASKS),
-  };
+  const [perPrincipal, retainedPerPrincipal] = caps(
+    ['tasks.maxOpenTasksPerClient', config.maxOpenTasksPerClient, DEFAULT_MAX_OPEN_TASKS_PER_CLIENT],
+    ['tasks.maxRetainedTasksPerClient', config.maxRetainedTasksPerClient, DEFAULT_MAX_RETAINED_TASKS_PER_CLIENT],
+  );
+  const [total, retainedTotal] = caps(
+    ['tasks.maxOpenTasks', config.maxOpenTasks, DEFAULT_MAX_OPEN_TASKS],
+    ['tasks.maxRetainedTasks', config.maxRetainedTasks, DEFAULT_MAX_RETAINED_TASKS],
+  );
+  const limits: MCPTaskLimits = { perPrincipal, total, retainedPerPrincipal, retainedTotal };
 
   const known = new Set(toolNames);
   const perTool = new Map<string, ResolvedToolTaskMode>();
