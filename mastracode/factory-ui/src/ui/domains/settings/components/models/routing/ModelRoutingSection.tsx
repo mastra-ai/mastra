@@ -13,13 +13,15 @@ import { ModelRoutingChangeDialog } from './ModelRoutingChangeDialog';
 import { ModelRoutingMap } from './ModelRoutingMap';
 import { ModelRoutingSwitch } from './ModelRoutingSwitch';
 
+// Keyed by Factory so a pending request is dropped on a Factory switch and never saves or reopens elsewhere.
 export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
+  return <FactoryModelRouting key={factoryId} factoryId={factoryId} />;
+}
+
+function FactoryModelRouting({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setModelScope = useSetFactoryModelScopeMutation(factoryId);
-  // Keyed to its Factory and dropped on a Factory switch, so an abandoned request never saves or reopens.
-  const [request, setRequest] = useState<{ factoryId: string; scope: FactoryModelScope }>();
-  if (request && request.factoryId !== factoryId) setRequest(undefined);
-  const requestedScope = request?.scope;
+  const [requestedScope, setRequestedScope] = useState<FactoryModelScope>();
   const pendingScope = setModelScope.isPending ? setModelScope.variables : undefined;
   const savedScope = projectQuery.data && savedModelScope(projectQuery.data);
   const modelScope = pendingScope ?? savedScope;
@@ -27,11 +29,11 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
 
   const pickScope = (scope: FactoryModelScope) => {
     if (scope === modelScope || setModelScope.isPending) return;
-    setRequest({ factoryId, scope });
+    setRequestedScope(scope);
   };
 
   const confirmScope = (scope: FactoryModelScope) => {
-    setRequest(undefined);
+    setRequestedScope(undefined);
     setModelScope.mutate(scope);
   };
 
@@ -59,7 +61,7 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
             from={modelScope}
             to={requestedScope}
             onConfirm={confirmScope}
-            onCancel={() => setRequest(undefined)}
+            onCancel={() => setRequestedScope(undefined)}
           />
         )}
       </div>
