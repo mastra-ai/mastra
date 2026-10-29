@@ -22,7 +22,7 @@ export function MetricsCardHeadline({
 }) {
   return (
     <div className={cn('grid gap-1.5', className)}>
-      <span className="text-body-sm text-muted-foreground">{label}</span>
+      <h3 className="text-body-sm text-muted-foreground">{label}</h3>
       <span className="flex items-baseline gap-2">
         <span className="text-title text-foreground tabular-nums [text-box:trim-both_cap_alphabetic]">
           {isLoading ? <SkeletonText line="text-title" className="w-24" /> : value}

@@ -17,6 +17,11 @@
   z-index: 1;
 }
 
+/* The pointer wins over a chart that kept keyboard focus elsewhere on the page. */
+.chart-plot-box:hover {
+  z-index: 2;
+}
+
 .chart-plot-stretch {
   transform-origin: 0 0;
   transform: scale(tan(atan2(100cqw, var(--chart-drawn-w))), tan(atan2(100cqh, var(--chart-drawn-h))));

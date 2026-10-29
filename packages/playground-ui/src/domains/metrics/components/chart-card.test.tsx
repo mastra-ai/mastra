@@ -92,7 +92,7 @@ describe('ChartCard', () => {
           <div />
         </ChartCard>,
       );
-      expect(screen.getByText('Spend sum')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Spend sum' })).toBeTruthy();
       expect(screen.getByText('$138.92')).toBeTruthy();
       expect(screen.getByText('+71.4% vs previous')).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Bucket' })).toBeTruthy();
