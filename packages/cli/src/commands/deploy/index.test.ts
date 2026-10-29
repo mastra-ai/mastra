@@ -659,6 +659,48 @@ describe('deploy artifact', () => {
     expect(diagram).not.toContain(colors.yellow(boxTop));
   });
 
+  // The deploy note wraps any line wider than the terminal, which scrambled the boxes on narrow terminals.
+  it.each([
+    [200, '  │  ┌'],
+    [110, 'production (US West)\n'],
+    [74, '│ Turso · Connect… │'],
+    [56, '└─ ■ Observability  Mastra Platform'],
+  ])('fits the deployment overview into a %i-column note', (width, expectedLayout) => {
+    const diagram = renderDeploymentArchitecture(
+      {
+        projectName: 'teammate',
+        environment: { id: 'env_1', name: 'production', region: 'us-west' },
+        serverLabel: 'Server',
+        workersEnabled: false,
+        workersConfig: null,
+        databases: [
+          {
+            id: 'db_1',
+            platformProjectId: 'project_1',
+            organizationId: 'org_1',
+            environmentId: null,
+            kind: 'turso',
+            name: 'teammate-turso',
+            status: 'ready',
+            region: null,
+            providerResourceId: null,
+            error: null,
+            createdAt: '2026-08-26T16:30:00.000Z',
+            updatedAt: '2026-08-26T16:30:00.000Z',
+            deletedAt: null,
+          },
+        ],
+        observabilityEnabled: true,
+        renderedAt: new Date('2026-08-26T16:30:00.000Z'),
+        width,
+      },
+      pc.createColors(false),
+    );
+
+    expect(diagram).toContain(expectedLayout);
+    for (const line of diagram.split('\n')) expect(Array.from(line).length).toBeLessThanOrEqual(width);
+  });
+
   it.each([
     [null, 'United States', 'US West'],
     ['pdx', 'United States', 'US West'],
