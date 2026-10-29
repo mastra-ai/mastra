@@ -1542,6 +1542,62 @@ describe('BackgroundTaskManager', () => {
       }
     });
 
+    it('drains pending tasks after startup recovery hits the concurrency limit', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, globalConcurrency: 1, perAgentConcurrency: 2 },
+      });
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      for (const id of ['pending-first', 'pending-second']) {
+        await bgStore!.createTask({
+          id,
+          status: 'pending',
+          toolName: 't',
+          toolCallId: id,
+          args: {},
+          agentId: id,
+          runId: id,
+          retryCount: 0,
+          maxRetries: 0,
+          timeoutMs: 5000,
+          createdAt: new Date(id === 'pending-first' ? 1000 : 2000),
+        });
+      }
+
+      let releaseFirst!: () => void;
+      const firstGate = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      const first = vi.fn(async () => {
+        await firstGate;
+        return 'first done';
+      });
+      const second = vi.fn(async () => 'second done');
+      local.backgroundTaskManager!.registerTaskContext('pending-first', ctx(first));
+      local.backgroundTaskManager!.registerTaskContext('pending-second', ctx(second));
+
+      try {
+        await local.startWorkers();
+        const mgr = local.backgroundTaskManager!;
+        await vi.waitFor(() => expect(first).toHaveBeenCalledOnce());
+        expect((await mgr.getTask('pending-second'))?.status).toBe('pending');
+        expect(second).not.toHaveBeenCalled();
+
+        releaseFirst();
+        await vi.waitFor(async () => {
+          expect((await mgr.getTask('pending-first'))?.status).toBe('completed');
+          expect((await mgr.getTask('pending-second'))?.status).toBe('completed');
+        });
+        expect(second).toHaveBeenCalledOnce();
+      } finally {
+        releaseFirst();
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
     it('leaves suspended tasks alone on init recovery', async () => {
       // First mastra: enqueue a task that suspends.
       const seedStorage = new MockStore();

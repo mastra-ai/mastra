@@ -1968,8 +1968,8 @@ export class BackgroundTaskManager {
         }
 
         const isProcessAffine = this.taskContexts.has(taskId);
-        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
-        if (!canRun) continue;
+        if (!(await this.checkConcurrency(task.agentId))) continue;
+        if (isProcessAffine && !this.reserveLocalSlot(task)) continue;
 
         this.localPendingTaskIds.delete(taskId);
         try {
@@ -2053,10 +2053,9 @@ export class BackgroundTaskManager {
         orderDirection: 'asc',
       });
       for (const task of pendingTasks) {
-        if (await this.checkConcurrency(task.agentId)) {
-          await this.dispatch(task);
-        }
+        this.localPendingTaskIds.add(task.id);
       }
+      await this.drainPending();
 
       this.#scheduleStaleRecovery(nextSweepAt);
     } catch (error) {
