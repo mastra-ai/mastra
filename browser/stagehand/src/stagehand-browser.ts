@@ -276,7 +276,8 @@ export class StagehandBrowser extends MastraBrowser {
    * Tracks page targets via CDP `Target.targetCreated` / `Target.targetDestroyed`.
    * When all page targets are gone the `onDisconnect` callback fires. This is more
    * reliable than Playwright's `context.close` / `page.close` events which don't
-   * fire when Chrome is killed externally (SIGTERM/SIGKILL).
+   * fire when Chrome is killed externally (SIGTERM/SIGKILL). A CDP transport close
+   * that we did not cause is also treated as a disconnect.
    */
   private setupCloseListener(stagehand: Stagehand, onDisconnect: () => void, threadId?: string): void {
     // Only capture the PID for browsers we launched locally. A Browserbase
@@ -329,6 +330,20 @@ export class StagehandBrowser extends MastraBrowser {
           pageTargets.delete(params.targetId);
           if (pageTargets.size === 0) handleDisconnect();
         }
+      });
+
+      // When Chrome is killed outside Mastra the websocket dies before any
+      // target event arrives, so the transport close is the only signal.
+      // It also fires when we close Stagehand ourselves; skip that case.
+      // Stagehand's own reaction to a lost transport calls close({ force: true }).
+      let closingOnPurpose = false;
+      const close = stagehand.close.bind(stagehand);
+      stagehand.close = (opts?: { force?: boolean }) => {
+        if (!opts?.force) closingOnPurpose = true;
+        return close(opts);
+      };
+      conn.onTransportClosed?.(() => {
+        if (!closingOnPurpose) handleDisconnect();
       });
     } catch {
       // Ignore errors setting up close listener

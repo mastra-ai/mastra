@@ -11,6 +11,7 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConst
     send: vi.fn().mockResolvedValue({}),
     on: vi.fn(),
     off: vi.fn(),
+    onTransportClosed: vi.fn(),
   };
 
   const mockPage = {
@@ -307,6 +308,36 @@ describe('StagehandBrowser', () => {
       targetDestroyedHandler?.({ targetId: 'page-target-123' });
 
       expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
+    });
+
+    describe('when the CDP connection closes', () => {
+      const lastTransportClosedHandler = () =>
+        mockCdpSession.onTransportClosed.mock.calls.at(-1)?.[0] as (why: string) => void;
+
+      it('treats Chrome killed outside Mastra as a disconnect', async () => {
+        await browser.launch();
+        const disconnected = vi.spyOn(browser, 'handleBrowserDisconnected');
+
+        // Stagehand reacts to the lost socket first, with close({ force: true }).
+        void (browser as any).sharedManager.close({ force: true });
+        lastTransportClosedHandler()('socket-close code=1006');
+
+        expect(disconnected).toHaveBeenCalledTimes(1);
+        expect(browser.status).toBe('closed');
+        expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
+      });
+
+      it('does not treat its own close as an external disconnect', async () => {
+        await browser.launch();
+        const disconnected = vi.spyOn(browser, 'handleBrowserDisconnected');
+        mockStagehand.close.mockImplementationOnce(async () => {
+          lastTransportClosedHandler()('socket-close code=1000');
+        });
+
+        await browser.close();
+
+        expect(disconnected).not.toHaveBeenCalled();
+      });
     });
 
     it('should handle close when not launched', async () => {
