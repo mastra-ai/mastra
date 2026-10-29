@@ -285,13 +285,8 @@ describe('workflow run cancellation tracing', () => {
     }
   });
 
-  it.each(
-    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
-      workflowOutcomeModes.map(mode => ({ engine, mode })),
-    ),
-  )('$engine preserves nested $mode outcomes', async ({ engine, mode }) => {
-    const build = engine === 'default' ? createWorkflow : createEventedWorkflow;
-    const inner = build({
+  it.each(workflowOutcomeModes)('default preserves nested %s outcomes', async mode => {
+    const inner = createWorkflow({
       id: `nested-child-${mode}`,
       inputSchema: empty,
       outputSchema: empty,
@@ -299,7 +294,7 @@ describe('workflow run cancellation tracing', () => {
     })
       .then(createOutcomeStep(mode).step)
       .commit();
-    const workflow = build({ id: `nested-parent-${mode}`, inputSchema: empty, outputSchema: empty })
+    const workflow = createWorkflow({ id: `nested-parent-${mode}`, inputSchema: empty, outputSchema: empty })
       .then(inner)
       .commit();
     const host = new Mastra({
@@ -311,10 +306,8 @@ describe('workflow run cancellation tracing', () => {
       }),
     });
     try {
-      if (engine !== 'default') await host.startWorkers();
       const run = await workflow.createRun();
-      if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
-      else await run.start({ inputData: {} });
+      await run.start({ inputData: {} });
       await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(2);
       expectNestedWorkflowOutcome(endedSpans(), mode, inner.id);
       const nestedStarts = exporter
@@ -346,31 +339,25 @@ describe('workflow run cancellation tracing', () => {
   });
 
   it.each(
-    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
-      (['until', 'while', 'foreach', 'parallel', 'conditional'] as const)
-        .filter(kind => engine === 'default' || kind !== 'foreach')
-        .flatMap(kind =>
-          (kind === 'foreach' ? (['explicit', 'auto'] as const) : (['explicit'] as const)).map(resumeMode => ({
-            engine,
-            kind,
-            resumeMode,
-          })),
-        ),
+    (['until', 'while', 'foreach', 'parallel', 'conditional'] as const).flatMap(kind =>
+      (kind === 'foreach' ? (['explicit', 'auto'] as const) : (['explicit'] as const)).map(resumeMode => ({
+        kind,
+        resumeMode,
+      })),
     ),
   )(
-    '$engine resumes a nested workflow inside $kind ($resumeMode) with separate loop outcomes',
-    async ({ engine, kind, resumeMode }) => {
+    'default resumes a nested workflow inside $kind ($resumeMode) with separate loop outcomes',
+    async ({ kind, resumeMode }) => {
       const blockType =
         kind === 'parallel'
           ? SpanType.WORKFLOW_PARALLEL
           : kind === 'conditional'
             ? SpanType.WORKFLOW_CONDITIONAL
             : SpanType.WORKFLOW_LOOP;
-      const build = engine === 'default' ? createWorkflow : createEventedWorkflow;
-      const inner = build({ id: 'nested-loop-child', inputSchema: empty, outputSchema: empty })
+      const inner = createWorkflow({ id: 'nested-loop-child', inputSchema: empty, outputSchema: empty })
         .then(createOutcomeStep('suspend').step)
         .commit();
-      const workflow = build({
+      const workflow = createWorkflow({
         id: 'nested-loop-parent',
         inputSchema: empty,
         outputSchema: kind === 'foreach' ? z.array(empty) : empty,
@@ -389,10 +376,8 @@ describe('workflow run cancellation tracing', () => {
         }),
       });
       try {
-        if (engine !== 'default') await host.startWorkers();
         const run = await workflow.createRun();
-        if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
-        else await run.start({ inputData: {} });
+        await run.start({ inputData: {} });
         await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(2);
         const original = endedSpans();
         expect(original.filter(span => span.type === blockType)).toMatchObject([{ outcome: 'suspend' }]);
@@ -428,237 +413,217 @@ describe('workflow run cancellation tracing', () => {
     },
   );
 
-  it.each(
-    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
-      (['until', 'while', 'foreach', 'parallel', 'conditional', 'conditional-skipped'] as const).map(kind => ({
-        engine,
-        kind,
-      })),
-    ),
-  )('$engine preserves a completed $kind loop when a later step fails', async ({ engine, kind }) => {
-    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
-      id: 'loop-before-failure',
-      inputSchema: empty,
-      outputSchema: empty,
-      retryConfig: { attempts: 0, delay: 0 },
-    });
-    const blockType =
-      kind === 'parallel'
-        ? SpanType.WORKFLOW_PARALLEL
-        : kind.startsWith('conditional')
-          ? SpanType.WORKFLOW_CONDITIONAL
-          : SpanType.WORKFLOW_LOOP;
-    const body = createOutcomeStep('success', 'loop-body').step;
-    if (kind === 'parallel') workflow.parallel([body]);
-    else if (kind === 'conditional' || kind === 'conditional-skipped')
-      workflow.branch([[async () => kind === 'conditional', body]]);
-    else if (kind === 'foreach') workflow.then(createForeachSeed()).foreach(body, { concurrency: 2 });
-    else if (kind === 'until') workflow.dountil(body, async () => true);
-    else workflow.dowhile(body, async () => false);
-    workflow
-      .then(
-        createStep({
-          id: 'after-loop',
-          inputSchema: z.union([empty, z.array(empty)]),
-          outputSchema: empty,
-          execute: async () => {
-            throw new Error('Later step failed');
-          },
-        }),
-      )
-      .commit();
-    const host = new Mastra({
-      logger: false,
-      storage: new MockStore(),
-      workflows: { [workflow.id]: workflow },
-      observability: new Observability({
-        configs: { default: { serviceName: 'loop-before-failure', exporters: [exporter] } },
-      }),
-    });
-    try {
-      if (engine !== 'default') await host.startWorkers();
-      const run = await workflow.createRun();
-      if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
-      else await run.start({ inputData: {} });
-      await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
-      const root = endedSpans().find(span => span.type === SpanType.WORKFLOW_RUN)!;
-      expect(root).toMatchObject({ outcome: 'error', stopReason: 'runtime_error' });
-      const blocks = endedSpans().filter(span => span.type === blockType);
-      expect(blocks).toHaveLength(1);
-      expect(blocks[0]).toMatchObject({ outcome: 'success', stopReason: null });
-      expect(endedSpans().find(span => span.entityId === 'after-loop')).toMatchObject({
-        outcome: 'error',
-        parentSpanId: root.id,
+  it.each(['until', 'while', 'foreach', 'parallel', 'conditional', 'conditional-skipped'] as const)(
+    'default preserves a completed %s loop when a later step fails',
+    async kind => {
+      const workflow = createWorkflow({
+        id: 'loop-before-failure',
+        inputSchema: empty,
+        outputSchema: empty,
+        retryConfig: { attempts: 0, delay: 0 },
       });
-      if (kind === 'conditional-skipped') expect(endedSpans().some(span => span.entityId === 'loop-body')).toBe(false);
-      else
-        expect(endedSpans().find(span => span.entityId === 'loop-body')).toMatchObject({
-          outcome: 'success',
-          parentSpanId: blocks[0]!.id,
-        });
-      expectSingleEndPerSpan();
-      expectNoDanglingSpans();
-    } finally {
-      await host.shutdown();
-    }
-  });
-
-  it.each(
-    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
-      (['empty', 'complete', 'cancel'] as const).map(action => ({ engine, action })),
-    ),
-  )('$engine records foreach aggregate $action without changing completed items', async ({ engine, action }) => {
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => {
-      release = resolve;
-    });
-    const calls: number[] = [];
-    const finished: number[] = [];
-    const values = action === 'empty' ? [] : [0, 1, 2, 3];
-    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
-      id: 'foreach-aggregate',
-      inputSchema: empty,
-      outputSchema: z.array(z.number()),
-    })
-      .then(
-        createStep({
-          id: 'seed-aggregate',
-          inputSchema: empty,
-          outputSchema: z.array(z.number()),
-          execute: async () => values,
-        }),
-      )
-      .foreach(
-        createStep({
-          id: 'aggregate-item',
-          inputSchema: z.number(),
-          outputSchema: z.number(),
-          execute: async ({ inputData }) => {
-            calls.push(inputData);
-            if (inputData > 0) await gate;
-            finished.push(inputData);
-            return inputData;
-          },
-        }),
-        { concurrency: 2 },
-      )
-      .commit();
-    const host = new Mastra({
-      logger: false,
-      storage: new MockStore(),
-      workflows: { [workflow.id]: workflow },
-      observability: new Observability({
-        configs: { default: { serviceName: 'foreach-aggregate', exporters: [exporter] } },
-      }),
-    });
-    let started: Promise<unknown> | undefined;
-    let canceledCalls = 0;
-    try {
-      if (engine !== 'default') await host.startWorkers();
-      const run = await workflow.createRun();
-      if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
-      else started = run.start({ inputData: {} });
-      if (action !== 'empty') {
-        await expect.poll(() => calls.length >= 2).toBe(true);
-        await expect.poll(() => endedSpans().filter(span => span.entityId === 'aggregate-item').length).toBe(1);
-        expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP)).toHaveLength(0);
-        const starts = exporter
-          .getByEventType(TracingEventType.SPAN_STARTED)
-          .filter(event => event.exportedSpan.type === SpanType.WORKFLOW_LOOP);
-        expect(starts).toHaveLength(1);
-        expect(starts[0]!.exportedSpan).toMatchObject({ outcome: null });
-      }
-      if (action === 'cancel') {
-        await run.cancel();
-        canceledCalls = calls.length;
-      }
-      const beforeRelease = endedSpans();
-      release();
-      await started;
-      await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
-      if (action === 'cancel') {
-        await expect.poll(() => finished.length).toBe(canceledCalls);
-        await tick(30);
-        for (const span of beforeRelease) expect(endedSpans().filter(event => event.id === span.id)).toEqual([span]);
-      }
-      const blocks = endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP);
-      expect(blocks).toHaveLength(1);
-      expect(blocks[0]).toMatchObject({
-        outcome: action === 'cancel' ? 'interrupted' : 'success',
-        stopReason: action === 'cancel' ? 'caller_cancelled' : null,
-      });
-      if (action !== 'cancel') expect(blocks[0]!.output).toEqual(values);
-      const items = endedSpans().filter(span => span.entityId === 'aggregate-item');
-      expect(items).toHaveLength(action === 'empty' ? 0 : action === 'cancel' ? canceledCalls : 4);
-      for (const item of items) {
-        expect(item.parentSpanId).toBe(blocks[0]!.id);
-        expect(item.outcome).toBe(action === 'cancel' && item.output !== 0 ? 'interrupted' : 'success');
-      }
-      expect(calls).toHaveLength(action === 'cancel' ? canceledCalls : values.length);
-      expectSingleEndPerSpan();
-      expectNoDanglingSpans();
-    } finally {
-      release();
-      await host.shutdown({ drainTimeout: 0 });
-    }
-  });
-
-  it.each(['default'] as Array<'default' | 'evented' | 'evented-async'>)(
-    '%s cancels an active nested execution once',
-    async engine => {
-      const build = engine === 'default' ? createWorkflow : createEventedWorkflow;
-      const inner = build({ id: 'cancel-nested-child', inputSchema: empty, outputSchema: empty })
-        .then(quickStep)
-        .then(deafStep)
-        .commit();
-      const workflow = build({ id: 'cancel-nested-parent', inputSchema: empty, outputSchema: empty })
-        .then(inner)
+      const blockType =
+        kind === 'parallel'
+          ? SpanType.WORKFLOW_PARALLEL
+          : kind.startsWith('conditional')
+            ? SpanType.WORKFLOW_CONDITIONAL
+            : SpanType.WORKFLOW_LOOP;
+      const body = createOutcomeStep('success', 'loop-body').step;
+      if (kind === 'parallel') workflow.parallel([body]);
+      else if (kind === 'conditional' || kind === 'conditional-skipped')
+        workflow.branch([[async () => kind === 'conditional', body]]);
+      else if (kind === 'foreach') workflow.then(createForeachSeed()).foreach(body, { concurrency: 2 });
+      else if (kind === 'until') workflow.dountil(body, async () => true);
+      else workflow.dowhile(body, async () => false);
+      workflow
+        .then(
+          createStep({
+            id: 'after-loop',
+            inputSchema: z.union([empty, z.array(empty)]),
+            outputSchema: empty,
+            execute: async () => {
+              throw new Error('Later step failed');
+            },
+          }),
+        )
         .commit();
       const host = new Mastra({
         logger: false,
         storage: new MockStore(),
         workflows: { [workflow.id]: workflow },
         observability: new Observability({
-          configs: { default: { serviceName: 'nested-cancel', exporters: [exporter] } },
+          configs: { default: { serviceName: 'loop-before-failure', exporters: [exporter] } },
         }),
       });
       try {
-        if (engine !== 'default') await host.startWorkers();
         const run = await workflow.createRun();
-        if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
-        else void run.start({ inputData: {} }).catch(() => {});
-        await expect
-          .poll(() =>
-            exporter
-              .getByEventType(TracingEventType.SPAN_STARTED)
-              .some(event => event.exportedSpan.entityId === 'deaf'),
-          )
-          .toBe(true);
-        const completed = endedSpans().find(span => span.entityId === 'quick')!;
-        expect(completed).toMatchObject({ outcome: 'success' });
-        await run.cancel();
-        await expect.poll(() => exporter.getIncompleteSpans().length).toBe(0);
-        expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toHaveLength(2);
-        for (const span of endedSpans().filter(span => span.id !== completed.id))
-          expect(span).toMatchObject({
-            outcome: span.isRootSpan ? 'abort' : 'interrupted',
-            stopReason: 'caller_cancelled',
+        await run.start({ inputData: {} });
+        await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
+        const root = endedSpans().find(span => span.type === SpanType.WORKFLOW_RUN)!;
+        expect(root).toMatchObject({ outcome: 'error', stopReason: 'runtime_error' });
+        const blocks = endedSpans().filter(span => span.type === blockType);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({ outcome: 'success', stopReason: null });
+        expect(endedSpans().find(span => span.entityId === 'after-loop')).toMatchObject({
+          outcome: 'error',
+          parentSpanId: root.id,
+        });
+        if (kind === 'conditional-skipped')
+          expect(endedSpans().some(span => span.entityId === 'loop-body')).toBe(false);
+        else
+          expect(endedSpans().find(span => span.entityId === 'loop-body')).toMatchObject({
+            outcome: 'success',
+            parentSpanId: blocks[0]!.id,
           });
-        expect(endedSpans().filter(span => span.id === completed.id)).toEqual([completed]);
         expectSingleEndPerSpan();
-        expectParentsPresent();
+        expectNoDanglingSpans();
       } finally {
+        await host.shutdown();
+      }
+    },
+  );
+
+  it.each(['empty', 'complete', 'cancel'] as const)(
+    'default records foreach aggregate %s without changing completed items',
+    async action => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const calls: number[] = [];
+      const finished: number[] = [];
+      const values = action === 'empty' ? [] : [0, 1, 2, 3];
+      const workflow = createWorkflow({
+        id: 'foreach-aggregate',
+        inputSchema: empty,
+        outputSchema: z.array(z.number()),
+      })
+        .then(
+          createStep({
+            id: 'seed-aggregate',
+            inputSchema: empty,
+            outputSchema: z.array(z.number()),
+            execute: async () => values,
+          }),
+        )
+        .foreach(
+          createStep({
+            id: 'aggregate-item',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            execute: async ({ inputData }) => {
+              calls.push(inputData);
+              if (inputData > 0) await gate;
+              finished.push(inputData);
+              return inputData;
+            },
+          }),
+          { concurrency: 2 },
+        )
+        .commit();
+      const host = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        workflows: { [workflow.id]: workflow },
+        observability: new Observability({
+          configs: { default: { serviceName: 'foreach-aggregate', exporters: [exporter] } },
+        }),
+      });
+      let started: Promise<unknown> | undefined;
+      let canceledCalls = 0;
+      try {
+        const run = await workflow.createRun();
+        started = run.start({ inputData: {} });
+        if (action !== 'empty') {
+          await expect.poll(() => calls.length >= 2).toBe(true);
+          await expect.poll(() => endedSpans().filter(span => span.entityId === 'aggregate-item').length).toBe(1);
+          expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP)).toHaveLength(0);
+          const starts = exporter
+            .getByEventType(TracingEventType.SPAN_STARTED)
+            .filter(event => event.exportedSpan.type === SpanType.WORKFLOW_LOOP);
+          expect(starts).toHaveLength(1);
+          expect(starts[0]!.exportedSpan).toMatchObject({ outcome: null });
+        }
+        if (action === 'cancel') {
+          await run.cancel();
+          canceledCalls = calls.length;
+        }
+        const beforeRelease = endedSpans();
+        release();
+        await started;
+        await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
+        if (action === 'cancel') {
+          await expect.poll(() => finished.length).toBe(canceledCalls);
+          await tick(30);
+          for (const span of beforeRelease) expect(endedSpans().filter(event => event.id === span.id)).toEqual([span]);
+        }
+        const blocks = endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          outcome: action === 'cancel' ? 'interrupted' : 'success',
+          stopReason: action === 'cancel' ? 'caller_cancelled' : null,
+        });
+        if (action !== 'cancel') expect(blocks[0]!.output).toEqual(values);
+        const items = endedSpans().filter(span => span.entityId === 'aggregate-item');
+        expect(items).toHaveLength(action === 'empty' ? 0 : action === 'cancel' ? canceledCalls : 4);
+        for (const item of items) {
+          expect(item.parentSpanId).toBe(blocks[0]!.id);
+          expect(item.outcome).toBe(action === 'cancel' && item.output !== 0 ? 'interrupted' : 'success');
+        }
+        expect(calls).toHaveLength(action === 'cancel' ? canceledCalls : values.length);
+        expectSingleEndPerSpan();
+        expectNoDanglingSpans();
+      } finally {
+        release();
         await host.shutdown({ drainTimeout: 0 });
       }
     },
   );
 
-  it.each(
-    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
-      (['sleep', 'sleep-until'] as const).map(kind => ({ engine, kind })),
-    ),
-  )('$engine retains cancellation after the $kind timer expires', async ({ engine, kind }) => {
-    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
+  it('default cancels an active nested execution once', async () => {
+    const inner = createWorkflow({ id: 'cancel-nested-child', inputSchema: empty, outputSchema: empty })
+      .then(quickStep)
+      .then(deafStep)
+      .commit();
+    const workflow = createWorkflow({ id: 'cancel-nested-parent', inputSchema: empty, outputSchema: empty })
+      .then(inner)
+      .commit();
+    const host = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { [workflow.id]: workflow },
+      observability: new Observability({
+        configs: { default: { serviceName: 'nested-cancel', exporters: [exporter] } },
+      }),
+    });
+    try {
+      const run = await workflow.createRun();
+      void run.start({ inputData: {} }).catch(() => {});
+      await expect
+        .poll(() =>
+          exporter.getByEventType(TracingEventType.SPAN_STARTED).some(event => event.exportedSpan.entityId === 'deaf'),
+        )
+        .toBe(true);
+      const completed = endedSpans().find(span => span.entityId === 'quick')!;
+      expect(completed).toMatchObject({ outcome: 'success' });
+      await run.cancel();
+      await expect.poll(() => exporter.getIncompleteSpans().length).toBe(0);
+      expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toHaveLength(2);
+      for (const span of endedSpans().filter(span => span.id !== completed.id))
+        expect(span).toMatchObject({
+          outcome: span.isRootSpan ? 'abort' : 'interrupted',
+          stopReason: 'caller_cancelled',
+        });
+      expect(endedSpans().filter(span => span.id === completed.id)).toEqual([completed]);
+      expectSingleEndPerSpan();
+      expectParentsPresent();
+    } finally {
+      await host.shutdown({ drainTimeout: 0 });
+    }
+  });
+
+  it.each(['sleep', 'sleep-until'] as const)('default retains cancellation after the %s timer expires', async kind => {
+    const workflow = createWorkflow({
       id: `cancel-timer-${kind}`,
       inputSchema: empty,
       outputSchema: empty,
@@ -673,10 +638,8 @@ describe('workflow run cancellation tracing', () => {
       observability: new Observability({ configs: { default: { serviceName: 'wait-cancel', exporters: [exporter] } } }),
     });
     try {
-      if (engine !== 'default') await host.startWorkers();
       const run = await workflow.createRun();
-      if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
-      else void run.start({ inputData: {} }).catch(() => {});
+      void run.start({ inputData: {} }).catch(() => {});
       await expect
         .poll(() =>
           exporter
@@ -699,109 +662,104 @@ describe('workflow run cancellation tracing', () => {
     }
   });
 
-  it.each(
-    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
-      (['branch', 'until', 'while'] as const).map(kind => ({ engine, kind })),
-    ),
-  )('$engine preserves completed $kind predicates when a pending predicate is canceled', async ({ engine, kind }) => {
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => {
-      release = resolve;
-    });
-    let calls = 0;
-    const forbidden = createStep({
-      id: 'predicate-body',
-      inputSchema: empty,
-      outputSchema: empty,
-      execute: async () => {
-        calls++;
-        return {};
-      },
-    });
-    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
-      id: 'cancel-predicate',
-      inputSchema: empty,
-      outputSchema: empty,
-    }).then(quickStep);
-    if (kind === 'branch')
-      workflow
-        .branch([
-          [
-            async () => {
-              await gate;
-              return true;
-            },
-            forbidden,
-          ],
-          [async () => false, createOutcomeStep('error', 'unselected').step],
-        ])
-        .commit();
-    else {
-      const condition = async ({ iterationCount }: { iterationCount: number }) => {
-        if (iterationCount > 1) await gate;
-        return kind === 'while';
-      };
-      if (kind === 'until') workflow.dountil(forbidden, condition).commit();
-      else workflow.dowhile(forbidden, condition).commit();
-    }
-    const host = new Mastra({
-      logger: false,
-      storage: new MockStore(),
-      workflows: { [workflow.id]: workflow },
-      observability: new Observability({
-        configs: { default: { serviceName: 'predicate-cancel', exporters: [exporter] } },
-      }),
-    });
-    try {
-      if (engine !== 'default') await host.startWorkers();
-      const run = await workflow.createRun();
-      const started =
-        engine === 'evented-async' && 'startAsync' in run
-          ? run.startAsync({ inputData: {} })
-          : run.start({ inputData: {} });
-      const evaluations = () => endedSpans().filter(span => span.type === SpanType.WORKFLOW_CONDITIONAL_EVAL);
-      await expect.poll(() => evaluations().length).toBe(1);
-      const completed = evaluations()[0]!;
-      expect(completed).toMatchObject({ outcome: 'success', output: kind === 'while' });
-      await expect
-        .poll(
-          () =>
-            exporter
-              .getByEventType(TracingEventType.SPAN_STARTED)
-              .filter(event => event.exportedSpan.type === SpanType.WORKFLOW_CONDITIONAL_EVAL).length,
-        )
-        .toBe(2);
-      await run.cancel();
-      await expect.poll(() => evaluations().length).toBe(2);
-      expect(evaluations().find(span => span.id !== completed.id)).toMatchObject({
-        outcome: 'interrupted',
-        stopReason: 'caller_cancelled',
+  it.each(['branch', 'until', 'while'] as const)(
+    'default preserves completed %s predicates when a pending predicate is canceled',
+    async kind => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
       });
-      if (kind !== 'branch')
-        expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP)).toMatchObject([
-          { outcome: 'interrupted', stopReason: 'caller_cancelled' },
-        ]);
-      const terminal = endedSpans();
-      release();
-      await started;
-      await tick(30);
-      for (const span of terminal) expect(endedSpans().filter(event => event.id === span.id)).toEqual([span]);
-      // Default execution can record a rejected branch attempt after the
-      // predicate unwinds; its body must not run or report success.
-      const terminalIds = new Set(terminal.map(span => span.id));
-      for (const span of endedSpans().filter(span => !terminalIds.has(span.id)))
-        expect(span).toMatchObject({
-          outcome: span.isRootSpan ? 'abort' : 'interrupted',
+      let calls = 0;
+      const forbidden = createStep({
+        id: 'predicate-body',
+        inputSchema: empty,
+        outputSchema: empty,
+        execute: async () => {
+          calls++;
+          return {};
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'cancel-predicate',
+        inputSchema: empty,
+        outputSchema: empty,
+      }).then(quickStep);
+      if (kind === 'branch')
+        workflow
+          .branch([
+            [
+              async () => {
+                await gate;
+                return true;
+              },
+              forbidden,
+            ],
+            [async () => false, createOutcomeStep('error', 'unselected').step],
+          ])
+          .commit();
+      else {
+        const condition = async ({ iterationCount }: { iterationCount: number }) => {
+          if (iterationCount > 1) await gate;
+          return kind === 'while';
+        };
+        if (kind === 'until') workflow.dountil(forbidden, condition).commit();
+        else workflow.dowhile(forbidden, condition).commit();
+      }
+      const host = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        workflows: { [workflow.id]: workflow },
+        observability: new Observability({
+          configs: { default: { serviceName: 'predicate-cancel', exporters: [exporter] } },
+        }),
+      });
+      try {
+        const run = await workflow.createRun();
+        const started = run.start({ inputData: {} });
+        const evaluations = () => endedSpans().filter(span => span.type === SpanType.WORKFLOW_CONDITIONAL_EVAL);
+        await expect.poll(() => evaluations().length).toBe(1);
+        const completed = evaluations()[0]!;
+        expect(completed).toMatchObject({ outcome: 'success', output: kind === 'while' });
+        await expect
+          .poll(
+            () =>
+              exporter
+                .getByEventType(TracingEventType.SPAN_STARTED)
+                .filter(event => event.exportedSpan.type === SpanType.WORKFLOW_CONDITIONAL_EVAL).length,
+          )
+          .toBe(2);
+        await run.cancel();
+        await expect.poll(() => evaluations().length).toBe(2);
+        expect(evaluations().find(span => span.id !== completed.id)).toMatchObject({
+          outcome: 'interrupted',
           stopReason: 'caller_cancelled',
         });
-      expect(calls).toBe(kind === 'branch' ? 0 : 2);
-      expectNoDanglingSpans();
-      expectSingleEndPerSpan();
-    } finally {
-      release();
-      await host.shutdown({ drainTimeout: 0 });
-    }
-  });
+        if (kind !== 'branch')
+          expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP)).toMatchObject([
+            { outcome: 'interrupted', stopReason: 'caller_cancelled' },
+          ]);
+        const terminal = endedSpans();
+        release();
+        await started;
+        await tick(30);
+        for (const span of terminal) expect(endedSpans().filter(event => event.id === span.id)).toEqual([span]);
+        // Default execution can record a rejected branch attempt after the
+        // predicate unwinds; its body must not run or report success.
+        const terminalIds = new Set(terminal.map(span => span.id));
+        for (const span of endedSpans().filter(span => !terminalIds.has(span.id)))
+          expect(span).toMatchObject({
+            outcome: span.isRootSpan ? 'abort' : 'interrupted',
+            stopReason: 'caller_cancelled',
+          });
+        expect(calls).toBe(kind === 'branch' ? 0 : 2);
+        expectNoDanglingSpans();
+        expectSingleEndPerSpan();
+      } finally {
+        release();
+        await host.shutdown({ drainTimeout: 0 });
+      }
+    },
+  );
 
   it('reports an executor yielding the run as interrupted, not a user suspension', async () => {
     let notifyStarted!: () => void;
