@@ -93,7 +93,7 @@ export default function KnowledgePage() {
   return (
     <Shell>
       <KnowledgeDataSourceProvider value={dataSource}>
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {instances.data && instances.data.length > 1 ? (
               <Select value={knowledgeKey} onValueChange={value => setParam('instance', value)}>
@@ -142,6 +142,7 @@ export default function KnowledgePage() {
               <div className="relative min-h-0 min-w-0 flex-1" data-testid="knowledge-graph-container">
                 <KnowledgeGraph
                   payload={graph.data}
+                  showPinnedFilter={false}
                   focusedId={selectedNodeId}
                   onFocusChange={id => {
                     if (!id) setSelectedNodeId(null);

@@ -242,6 +242,8 @@ export interface KnowledgeGraphProps {
    * (structural scope lens) that carry no intra-scope edges.
    */
   labelAll?: boolean;
+  /** Show the Pinned filter chip. Hosts that never serve pins turn it off. */
+  showPinnedFilter?: boolean;
 }
 
 function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
@@ -310,6 +312,7 @@ function KnowledgeGraphInner({
   onNodeClick,
   onEdgeClick,
   labelAll,
+  showPinnedFilter = true,
 }: KnowledgeGraphProps) {
   const [filters, setFilters] = useState<KnowledgeGraphFilters>(NO_FILTERS);
   const [hover, setHover] = useState<HoverCard | null>(null);
@@ -468,6 +471,7 @@ function KnowledgeGraphInner({
       edges: renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true),
     };
     // dragVersion re-runs the layout after a drag pin.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- dragVersion is an intentional re-run trigger
   }, [payload, filters, focusedId, dragVersion, arrivals, labelAll]);
 
   // Arrival animation: newly-polled nodes/edges fade-scale in with a pulse.
@@ -532,13 +536,15 @@ function KnowledgeGraphInner({
               onClick={() => toggleRung(rung)}
             />
           ))}
-        <FilterChip
-          label="Pinned"
-          activeClassName="border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground"
-          icon={<Pin size={13} />}
-          active={filters.pinnedOnly}
-          onClick={() => setFilters(current => ({ ...current, pinnedOnly: !current.pinnedOnly }))}
-        />
+        {showPinnedFilter && (
+          <FilterChip
+            label="Pinned"
+            activeClassName="border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground"
+            icon={<Pin size={13} />}
+            active={filters.pinnedOnly}
+            onClick={() => setFilters(current => ({ ...current, pinnedOnly: !current.pinnedOnly }))}
+          />
+        )}
       </div>
 
       <ReactFlow<KnowledgeFlowNode, KnowledgeFlowEdge>
