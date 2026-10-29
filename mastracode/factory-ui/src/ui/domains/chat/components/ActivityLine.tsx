@@ -27,6 +27,9 @@ const LABELS: Record<RunActivity, string> = {
   error: 'Something went wrong',
 };
 
+/** What a live stretch line already says, so this line keeps only its glyph under one. */
+const SPOKEN_BY_STRETCH = new Set<RunActivity>(['thinking', 'searching', 'tool']);
+
 const STATUS: Record<RunActivity, ActivityStatus> = {
   memory: 'running',
   thinking: 'running',
@@ -114,7 +117,7 @@ function useLinger(on: boolean): boolean {
  * The agent's state for the whole run: what it is doing while it works, a held prompt while it
  * waits on the user, then done or error for a beat before the line fades out.
  */
-export function ActivityLine() {
+export function ActivityLine({ stretchLive }: { stretchLive: boolean }) {
   const { busy, transcript } = useChatTranscript();
   const runtime = useChatRuntime();
   const activity = runActivity(transcript.entries);
@@ -135,7 +138,7 @@ export function ActivityLine() {
             <ActivityIcon className="[&_svg]:size-4">
               <AgentIndicator state={state} />
             </ActivityIcon>
-            <ActivityLabel>{LABELS[state]}</ActivityLabel>
+            {!(stretchLive && SPOKEN_BY_STRETCH.has(state)) && <ActivityLabel>{LABELS[state]}</ActivityLabel>}
           </ActivityHeader>
         </Activity>
       </div>

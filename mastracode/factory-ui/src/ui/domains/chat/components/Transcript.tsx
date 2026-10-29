@@ -20,7 +20,7 @@ import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { ActivityDisclosureProvider } from '@mastra/playground-ui/domains/chat/activity';
 import { MessageBubble } from './MessageBubble';
-import { planTurnActivity, sameEntryActivity } from './activity/activity-plan';
+import { hasLiveStretch, planTurnActivity, sameEntryActivity } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { RunErrorNotice } from './RunErrorNotice';
 import { draws, messageText, renderableParts } from './transcript-parts';
@@ -31,7 +31,10 @@ import { isTurnDivider } from './TranscriptSignals';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
-export function Transcript({ tail }: { tail?: ReactNode }) {
+/** The live turn's last row, told whether a live stretch above it already names what the agent is doing. */
+export type TranscriptTail = (stretchLive: boolean) => ReactNode;
+
+export function Transcript({ tail }: { tail?: TranscriptTail }) {
   const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
@@ -100,7 +103,7 @@ export function TranscriptEntries({
   /** Whose personal credentials the thread runs on; names their replies for other viewers. */
   owner?: ThreadOwner;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
-  tail?: ReactNode;
+  tail?: TranscriptTail;
 }) {
   const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
   // Keyed by the prompts on screen, not by the array holding them: a delta hands this
@@ -181,11 +184,11 @@ export function TranscriptEntries({
                 />
               </TranscriptItem>
             ))}
-            {isLiveTurn && tail}
+            {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
           </ChatShell.Turn>
         );
       })}
-      {turnGroups.length === 0 && tail}
+      {turnGroups.length === 0 && tail?.(false)}
     </ActivityDisclosureProvider>
   );
 }

@@ -184,6 +184,10 @@ export function planTurnActivity(
   return plan;
 }
 
+export function hasLiveStretch(plan: ReadonlyMap<string, EntryActivity>): boolean {
+  return [...plan.values()].some(({ hosts }) => [...hosts.values()].some(stretch => stretch.live));
+}
+
 function sameMember(a: StretchMember, b: StretchMember): boolean {
   if (a.key !== b.key || a.part !== b.part) return false;
   if (a.kind === 'tool') return b.kind === 'tool' && a.runtime === b.runtime;

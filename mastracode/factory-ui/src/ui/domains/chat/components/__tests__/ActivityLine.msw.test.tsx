@@ -59,7 +59,7 @@ describe('ActivityLine', () => {
     expect(screen.getByText('Thinking')).toBeInTheDocument();
   });
 
-  it('says a tool is running while one runs', async () => {
+  it('leaves a running call to the stretch line that names it, keeping only its glyph', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
@@ -75,11 +75,12 @@ describe('ActivityLine', () => {
     });
 
     await screen.findByRole('group', { name: /^Reading/ }, { timeout: 3000 });
-    expect(await screen.findByText('Calling a tool')).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('[data-state="tool"]')).not.toBeNull());
+    expect(screen.queryByText('Calling a tool')).not.toBeInTheDocument();
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
-  it('names a web search while it runs', async () => {
+  it('says Thinking once between calls', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
@@ -93,8 +94,24 @@ describe('ActivityLine', () => {
       toolName: 'web_search',
       args: { query: 'oauth' },
     });
+    await screen.findByRole('group', { name: /oauth/ }, { timeout: 3000 });
+    await session.emit({ type: 'tool_end', toolCallId: 'call-web', result: 'ok', isError: false });
 
-    expect(await screen.findByText('Searching the web')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('Thinking')).toHaveLength(1));
+    expect(document.querySelector('[data-state="thinking"]')).not.toBeNull();
+  });
+
+  it('names a call no stretch speaks for', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+
+    await session.emit({ type: 'tool_start', toolCallId: 'call-skill', toolName: 'skill', args: { name: 'review' } });
+
+    expect(await screen.findByText('Calling a tool')).toBeInTheDocument();
   });
 
   it('says it is writing while the answer streams', async () => {

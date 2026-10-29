@@ -89,7 +89,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
@@ -109,7 +109,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
     expect(screen.getByTestId('tail').parentElement).toHaveAttribute('data-holds-room', 'true');
@@ -128,7 +128,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
@@ -137,7 +137,7 @@ describe('TranscriptEntries turn groups', () => {
         entries={entries}
         onApprove={() => {}}
         onRespond={() => {}}
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
@@ -194,7 +194,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="steering-tail" />}
+        tail={() => <div data-testid="steering-tail" />}
       />,
     );
     const room = screen.getByTestId('steering-tail').parentElement;
@@ -210,7 +210,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="steering-tail" />}
+        tail={() => <div data-testid="steering-tail" />}
       />,
     );
 
@@ -229,7 +229,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
@@ -267,7 +267,12 @@ describe('TranscriptEntries turn groups', () => {
 
   it('still shows the tail while the transcript is empty', () => {
     renderWithProviders(
-      <TranscriptEntries entries={[]} onApprove={() => {}} onRespond={() => {}} tail={<div data-testid="tail" />} />,
+      <TranscriptEntries
+        entries={[]}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        tail={() => <div data-testid="tail" />}
+      />,
     );
 
     expect(screen.getByTestId('tail')).toBeInTheDocument();
