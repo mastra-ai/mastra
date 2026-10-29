@@ -118,6 +118,16 @@
         "default": "./dist/frontmatter/index.cjs"
       }
     },
+    "./fs-routing": {
+      "import": {
+        "types": "./dist/fs-routing/index.d.ts",
+        "default": "./dist/fs-routing/index.js"
+      },
+      "require": {
+        "types": "./dist/fs-routing/index.d.cts",
+        "default": "./dist/fs-routing/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
