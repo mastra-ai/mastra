@@ -29,6 +29,10 @@ function isMissingMCPPackage(error: unknown): boolean {
     ) {
       return true;
     }
+    // Cloudflare Workers (workerd) throws a plain Error without a `code`.
+    if (/^No such module "@mastra\/mcp"/.test(current.message)) {
+      return true;
+    }
   }
   return false;
 }
@@ -41,6 +45,8 @@ function isMissingMCPPackage(error: unknown): boolean {
 async function loadBuiltinMCP(mastra: Mastra) {
   let mcp: typeof import('@mastra/mcp');
   try {
+    // Keep this import directly inside `try`: bundlers such as wrangler's esbuild only accept an unresolvable
+    // dynamic import there, so moving it out breaks builds of apps that don't install @mastra/mcp.
     mcp = await import('@mastra/mcp');
   } catch (error) {
     if (!isMissingMCPPackage(error)) throw error;

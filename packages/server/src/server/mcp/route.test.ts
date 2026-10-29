@@ -12,6 +12,8 @@ const notInstalled = {
     Object.assign(new Error("Cannot find module '@mastra/mcp'\nRequire stack:\n- /app/.mastra/output/index.cjs"), {
       code: 'MODULE_NOT_FOUND',
     }),
+  // Cloudflare Workers (workerd, captured with Miniflare): no `code`.
+  workerd: () => new Error('No such module "@mastra/mcp".'),
 };
 
 async function serveWithMCPImport(load: () => unknown) {
@@ -61,19 +63,25 @@ describe('built-in MCP route without @mastra/mcp installed', () => {
 
   it('rethrows other load failures, including a module missing inside @mastra/mcp', async () => {
     vi.stubEnv('MASTRA_DEV', 'true');
-    const broken = Object.assign(
-      new Error(
-        "Cannot find package '@modelcontextprotocol/server' imported from /app/node_modules/@mastra/mcp/dist/index.js",
+    const missingInside = [
+      Object.assign(
+        new Error(
+          "Cannot find package '@modelcontextprotocol/server' imported from /app/node_modules/@mastra/mcp/dist/index.js",
+        ),
+        { code: 'ERR_MODULE_NOT_FOUND' },
       ),
-      { code: 'ERR_MODULE_NOT_FOUND' },
-    );
-    const app = await serveWithMCPImport(() => {
-      throw broken;
-    });
-    const thrown = await app.request().catch(e => e);
-    expect(app.getCustomHTTPExceptionResponse(thrown)).toBeUndefined();
-    expect(String(thrown.cause ?? thrown)).toContain('@modelcontextprotocol/server');
-    expect(app.error).not.toHaveBeenCalled();
+      new Error('No such module "@mastra/mcp/dist/index.js".'),
+      new Error('No such module "@mastra/mcp-docs-server".'),
+    ];
+    for (const broken of missingInside) {
+      const app = await serveWithMCPImport(() => {
+        throw broken;
+      });
+      const thrown = await app.request().catch(e => e);
+      expect(app.getCustomHTTPExceptionResponse(thrown)).toBeUndefined();
+      expect(String(thrown.cause ?? thrown)).toContain(broken.message);
+      expect(app.error).not.toHaveBeenCalled();
+    }
   });
 
   it('serves normally when @mastra/mcp is installed', async () => {
