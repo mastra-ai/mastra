@@ -311,32 +311,39 @@ describe('StagehandBrowser', () => {
     });
 
     describe('when the CDP connection closes', () => {
-      const lastTransportClosedHandler = () =>
-        mockCdpSession.onTransportClosed.mock.calls.at(-1)?.[0] as (why: string) => void;
+      // Fires every transport-close handler the provider registered (none on a provider that never listened).
+      const closeTransport = (why: string) => {
+        for (const [handler] of mockCdpSession.onTransportClosed.mock.calls) handler(why);
+      };
 
       it('treats Chrome killed outside Mastra as a disconnect', async () => {
         await browser.launch();
-        const disconnected = vi.spyOn(browser, 'handleBrowserDisconnected');
+        const closed = vi.fn();
+        browser.onBrowserClosed(closed);
 
         // Stagehand reacts to the lost socket first, with close({ force: true }).
         void (browser as any).sharedManager.close({ force: true });
-        lastTransportClosedHandler()('socket-close code=1006');
+        closeTransport('socket-close code=1006');
 
-        expect(disconnected).toHaveBeenCalledTimes(1);
         expect(browser.status).toBe('closed');
-        expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
+        expect(browser.getLastBrowserState()?.closeReason).toBe('user');
+        expect(closed).toHaveBeenCalledTimes(1);
       });
 
       it('does not treat its own close as an external disconnect', async () => {
         await browser.launch();
-        const disconnected = vi.spyOn(browser, 'handleBrowserDisconnected');
+        const closed = vi.fn();
+        browser.onBrowserClosed(closed);
         mockStagehand.close.mockImplementationOnce(async () => {
-          lastTransportClosedHandler()('socket-close code=1000');
+          closeTransport('socket-close code=1000');
         });
+        browser.markBrowserCloseReason('agent');
 
         await browser.close();
 
-        expect(disconnected).not.toHaveBeenCalled();
+        expect(browser.status).toBe('closed');
+        expect(browser.getLastBrowserState()?.closeReason).toBe('agent');
+        expect(closed).toHaveBeenCalledTimes(1);
       });
     });
 
