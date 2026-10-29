@@ -22,7 +22,7 @@ describe('storeAccumulatedSteps', () => {
     const steps = [{ text: 'one' }, { text: 'two' }];
 
     const fields = await storeAccumulatedSteps(
-      { state: { messageListState: 'transcript', accumulatedSteps: [{ text: 'one' }] }, setState },
+      { getState: async () => ({ messageListState: 'transcript', accumulatedSteps: [{ text: 'one' }] }), setState },
       steps,
     );
 
@@ -34,7 +34,9 @@ describe('storeAccumulatedSteps', () => {
     const setState = vi.fn(async () => {});
     const steps = [{ text: 'one' }];
 
-    expect(await storeAccumulatedSteps({ state: { messageListState: 'transcript' }, setState }, steps)).toEqual({
+    expect(
+      await storeAccumulatedSteps({ getState: async () => ({ messageListState: 'transcript' }), setState }, steps),
+    ).toEqual({
       accumulatedSteps: steps,
     });
     expect(setState).not.toHaveBeenCalled();

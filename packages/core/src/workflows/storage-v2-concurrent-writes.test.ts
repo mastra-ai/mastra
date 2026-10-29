@@ -49,7 +49,8 @@ function branchStep(id: string, { check, mark }: { check?: boolean | number; mar
       : num,
     outputSchema: out,
     stateSchema: marks,
-    execute: async ({ inputData, state, setState }) => {
+    execute: async ({ inputData, getState, setState }) => {
+      const state = await getState();
       if (mark) await setState({ ...state, [id]: true });
       return { n: inputData.n + 1, by: id };
     },
@@ -65,7 +66,8 @@ function afterBlockStep(storage: Storage, workflowName: string, crashPoints: Map
     inputSchema: z.any(),
     outputSchema: z.any(),
     stateSchema: marks,
-    execute: async ({ inputData, runId, state }) => {
+    execute: async ({ inputData, runId, getState }) => {
+      const state = await getState();
       const stored = await storage.stores.workflows!.loadWorkflowRun({ workflowName, runId, successfulSteps: 'full' });
       crashPoints.set(runId, { stored, state: structuredClone(state) });
       return inputData;

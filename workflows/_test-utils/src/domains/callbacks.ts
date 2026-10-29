@@ -514,7 +514,8 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
   {
     mockRegistry.register('callback-state-workflow:receivedState', () => vi.fn());
     mockRegistry.register('callback-state-workflow:execute', () =>
-      vi.fn().mockImplementation(async ({ state, setState }: any) => {
+      vi.fn().mockImplementation(async ({ getState, setState }: any) => {
+        const state = await getState();
         await setState({ ...state, counter: (state?.counter || 0) + 1 });
         return { result: 'success' };
       }),

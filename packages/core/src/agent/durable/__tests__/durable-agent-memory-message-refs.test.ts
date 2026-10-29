@@ -182,7 +182,7 @@ async function startColdCacheRun(engine: Engine, failures: number | 'always') {
   const process = await startProcess(history(), {
     engine,
     onLookup: async () => {
-      process.transcripts.releaseMessageListState({ state: undefined, getInitData: () => ({ runId }) });
+      process.transcripts.releaseMessageListState({ getInitData: () => ({ runId }) });
       const memoryStore = (await process.storage.getStore('memory'))!;
       listMessagesById = vi.spyOn(memoryStore, 'listMessagesById');
       const outage = new Error('memory storage down');

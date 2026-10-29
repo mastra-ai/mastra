@@ -92,13 +92,16 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should follow conditional chains with state
   {
-    const step1Action = vi.fn().mockImplementation(({ state }) => {
+    const step1Action = vi.fn().mockImplementation(async ({ getState }) => {
+      const state = await getState();
       return Promise.resolve({ status: 'success', value: state.value });
     });
-    const step2Action = vi.fn().mockImplementation(({ state }) => {
+    const step2Action = vi.fn().mockImplementation(async ({ getState }) => {
+      const state = await getState();
       return Promise.resolve({ result: 'step2', value: state.value });
     });
-    const step3Action = vi.fn().mockImplementation(({ state }) => {
+    const step3Action = vi.fn().mockImplementation(async ({ getState }) => {
+      const state = await getState();
       return Promise.resolve({ result: 'step3', value: state.value });
     });
 
@@ -125,7 +128,8 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
     });
     const step4 = createStep({
       id: 'step4',
-      execute: async ({ inputData, state }) => {
+      execute: async ({ inputData, getState }) => {
+        const state = await getState();
         return { result: inputData.result, value: state.value };
       },
       inputSchema: z.object({ result: z.string() }),

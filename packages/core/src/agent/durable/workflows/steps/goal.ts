@@ -90,7 +90,7 @@ export function createDurableGoalStep() {
         return messageList;
       };
 
-      const lastStep = readAccumulatedSteps(params.state, state).at(-1);
+      const lastStep = readAccumulatedSteps(await params.getState(), state).at(-1);
       const outcome = await evaluateGoal({
         goal: goalConfig,
         stepReason: state.lastStepResult?.reason,

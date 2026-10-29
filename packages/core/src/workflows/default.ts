@@ -59,6 +59,7 @@ import type {
 // to build a runnable step from a declarative entry.
 import {
   abortableSleep,
+  applyStateDelta,
   getRestartStartIndex,
   getSingleStepEntryId,
   omitPriorCompletionFields,
@@ -741,6 +742,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ? rebaseNestedState(executionContext.state, mutableContext.stateBase, mutableContext.state)
         : mutableContext.state,
     );
+    if (mutableContext.stateDelta) applyStateDelta(executionContext.state, mutableContext.stateDelta);
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }

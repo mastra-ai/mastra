@@ -969,7 +969,7 @@ export class DurableAgent<
     // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
     // already loaded them, so this normally needs no storage read.
     return hydrateMessageListState(
-      { state: undefined, getInitData: () => loopSnapshot.context?.input, mastra: this.#mastra },
+      { getInitData: () => loopSnapshot.context?.input, mastra: this.#mastra },
       latest as Parameters<typeof hydrateMessageListState>[1],
     );
   }
@@ -1338,7 +1338,7 @@ export class DurableAgent<
       // The persisted input keeps messages memory already stores as refs.
       messageList.deserialize(
         await hydrateMessageListState(
-          { state: undefined, getInitData: () => workflowInput, mastra: this.#mastra },
+          { getInitData: () => workflowInput, mastra: this.#mastra },
           workflowInput.messageListState,
         ),
       );

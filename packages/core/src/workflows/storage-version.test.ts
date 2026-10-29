@@ -284,7 +284,8 @@ describe('storageVersion per run', () => {
             inputSchema: num,
             outputSchema: num,
             stateSchema: seen,
-            execute: async ({ inputData, state, setState }) => {
+            execute: async ({ inputData, getState, setState }) => {
+              const state = await getState();
               if (inputData.n === hang?.at) {
                 hang.reached();
                 await new Promise(() => {});
@@ -457,6 +458,148 @@ describe('storageVersion per run', () => {
     expect((result as any).error.message).toMatch(/Use `await getStepResultAsync\("a"\)` instead/);
   });
 
+  it('makes reading state throw inside v2 steps and conditions, but not spreading their params', async () => {
+    let conditionError: unknown;
+    const workflow = createWorkflow({
+      id: 'state-read',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(
+        createStep({
+          id: 'spreads',
+          inputSchema: z.object({}),
+          outputSchema: z.any(),
+          execute: async params => ({ spreadHasState: 'state' in { ...params } }),
+        }),
+      )
+      .branch([
+        [
+          async (params: { state: unknown }) => {
+            try {
+              return !!params.state;
+            } catch (error) {
+              conditionError = error;
+              return false;
+            }
+          },
+          createStep({ id: 'never', inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({}) }),
+        ],
+        [
+          async () => true,
+          createStep({
+            id: 'reads',
+            inputSchema: z.any(),
+            outputSchema: z.any(),
+            execute: async params => params.state,
+          }),
+        ],
+      ])
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: {}, initialState: { a: 1 } });
+    expect(result.steps.spreads).toMatchObject({ status: 'success', output: { spreadHasState: false } });
+    expect((conditionError as Error).message).toMatch(/Use `await getState\(\)` instead/);
+    expect(result.status).toBe('failed');
+    expect((result as any).error.message).toMatch(/Use `await getState\(\)` instead/);
+  });
+
+  it('merges setState into the v2 state, deleting keys set to undefined', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'merge-state',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(
+        createStep({
+          id: 'write',
+          inputSchema: z.object({}),
+          outputSchema: z.any(),
+          execute: async ({ getState, setState }) => {
+            await setState({ a: 10, b: undefined });
+            await setState({ d: 4 });
+            return { ...(await getState()) };
+          },
+        }),
+      )
+      .then(
+        createStep({
+          id: 'read',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ getState }) => ({ ...(await getState()) }),
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {},
+      initialState: { a: 1, b: 2, c: { x: 1 } },
+      outputOptions: { includeState: true },
+    });
+    const merged = { a: 10, c: { x: 1 }, d: 4 };
+    expect(result.status).toBe('success');
+    // toStrictEqual fails on a `b: undefined` left behind instead of deleted.
+    expect((result.steps.write as any).output).toStrictEqual(merged);
+    expect((result.steps.read as any).output).toStrictEqual(merged);
+    expect(result.state).toStrictEqual(merged);
+    const stored = await storage.stores.workflows!.loadWorkflowRun({
+      workflowName: 'merge-state',
+      runId: run.runId,
+      successfulSteps: 'full',
+    });
+    expect(stored!.state).toStrictEqual(merged);
+  });
+
+  it("validates the merged v2 state against the step's stateSchema", async () => {
+    const stateSchema = z.object({ a: z.number(), b: z.string() });
+    const runWith = async (update: Record<string, unknown>) => {
+      const workflow = createWorkflow({
+        id: 'validate-state',
+        inputSchema: z.object({}),
+        outputSchema: z.any(),
+        stateSchema,
+        options: { storageVersion: 2 },
+      })
+        .then(
+          createStep({
+            id: 'write',
+            inputSchema: z.object({}),
+            outputSchema: z.any(),
+            stateSchema,
+            execute: async ({ setState }) => {
+              await setState(update as any);
+              return {};
+            },
+          }),
+        )
+        .commit();
+      new Mastra({ logger: false, storage: new MockStore(), workflows: { workflow } });
+      return (await workflow.createRun()).start({
+        inputData: {},
+        initialState: { a: 1, b: 'x' },
+        outputOptions: { includeState: true },
+      });
+    };
+
+    // A partial update is valid once merged, though on its own it misses the required `b`.
+    const partial = await runWith({ a: 2 });
+    expect(partial.status).toBe('success');
+    expect(partial.state).toStrictEqual({ a: 2, b: 'x' });
+
+    for (const update of [{ b: undefined }, { a: 'not a number' }]) {
+      const result = await runWith(update);
+      expect(result.status).toBe('failed');
+      expect((result as any).error.message).toMatch(/Step state data validation failed/);
+    }
+  });
+
   it('finishes a v2 run resumed through a v1 definition in v2', async () => {
     const storage = new MockStore();
     const v2 = gateWorkflow(2);
@@ -616,7 +759,8 @@ function appendItem(id: string, { suspends = false, onRun }: { suspends?: boolea
     outputSchema: num,
     stateSchema: items,
     resumeSchema: z.boolean(),
-    execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+    execute: async ({ inputData, getState, setState, resumeData, suspend }) => {
+      const state = await getState();
       if (suspends && resumeData === undefined) return suspend({});
       await onRun?.();
       await setState({ items: [...state.items, `${id}:${inputData.n}`] });
@@ -663,7 +807,7 @@ function recordV2Writes(storage: InstanceType<typeof MockStore>) {
   const append = store.appendWorkflowRunEntries.bind(store);
   store.appendWorkflowRunEntries = async args => {
     writes.push({
-      status: args.header.status,
+      status: args.header?.status,
       changes: { stepIds: Object.keys(args.steps), state: args.state !== undefined || args.statePatch !== undefined },
     });
     return append(args);
@@ -760,7 +904,8 @@ describe('storage v2 write volume', () => {
         inputSchema: num,
         outputSchema: num,
         stateSchema: items,
-        execute: async ({ inputData, state, setState }) => {
+        execute: async ({ inputData, getState, setState }) => {
+          const state = await getState();
           await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
           return { n: inputData.n + 1 };
         },
@@ -805,7 +950,8 @@ describe('storage v2 write volume', () => {
       inputSchema: num,
       outputSchema: num,
       stateSchema: quarters,
-      execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+      execute: async ({ inputData, getState, setState, resumeData, suspend }) => {
+        const state = await getState();
         if (resumeData === undefined) return suspend({});
         await setState({ ...state, a: kb(inputData.n + 1) });
         return { n: inputData.n + 1 };
@@ -856,7 +1002,8 @@ describe('storage v2 write volume', () => {
             inputSchema: num,
             outputSchema: num,
             stateSchema: quarters,
-            execute: async ({ inputData, state, setState }) => {
+            execute: async ({ inputData, getState, setState }) => {
+              const state = await getState();
               if (inputData.n === hang?.at) {
                 hang.reached();
                 await new Promise(() => {});
@@ -1116,7 +1263,8 @@ const scenarios: Record<string, Scenario> = {
           inputSchema: z.any(),
           outputSchema: z.any(),
           stateSchema: items,
-          execute: async ({ state, resumeData, suspend }) => {
+          execute: async ({ getState, resumeData, suspend }) => {
+            const state = await getState();
             edit(state, resumeData !== undefined);
             if (suspends && resumeData === undefined) return suspend({});
             return {};
@@ -1201,7 +1349,7 @@ function recordStateSends(storage: InstanceType<typeof MockStore>) {
     args: {
       workflowName: string;
       runId: string;
-      header: { status: string };
+      header?: { status: string };
       state?: unknown;
       statePatch?: unknown;
     },
@@ -1210,7 +1358,7 @@ function recordStateSends(storage: InstanceType<typeof MockStore>) {
     sends.push({
       workflowName: args.workflowName,
       runId: args.runId,
-      status: args.header.status,
+      status: args.header?.status,
       checkpoint,
       state: args.state !== undefined ? 'full' : args.statePatch !== undefined ? 'patch' : 'none',
       bytes: sent === undefined ? 0 : JSON.stringify(sent).length,
@@ -1277,7 +1425,8 @@ describe('storage v2 nested runs', () => {
           inputSchema: num,
           outputSchema: num,
           stateSchema: items,
-          execute: async ({ inputData, state, setState }) => {
+          execute: async ({ inputData, getState, setState }) => {
+            const state = await getState();
             await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
             return { n: inputData.n + 1 };
           },
@@ -1346,7 +1495,8 @@ describe('storage v2 nested runs', () => {
               inputSchema: num,
               outputSchema: num,
               stateSchema: items,
-              execute: async ({ inputData, state, setState }) => {
+              execute: async ({ inputData, getState, setState }) => {
+                const state = await getState();
                 await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
                 return inputData;
               },
@@ -1641,7 +1791,8 @@ describe('storage v2 nested runs', () => {
           inputSchema: num,
           outputSchema: num,
           stateSchema: withExtra,
-          execute: async ({ inputData, state, setState }) => {
+          execute: async ({ inputData, getState, setState }) => {
+            const state = await getState();
             await setState({ ...state, extra: 'x' });
             return inputData;
           },

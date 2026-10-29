@@ -528,7 +528,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Processor retries are read from the step history: each rejected step is recorded with
       // finishReason 'retry' and the tripwire that rejected it. Only consecutive retries count.
       // API-error retries happen inside this step and add to the same count, as in Agent.
-      const previousSteps = readAccumulatedSteps(params.state, inputData);
+      const previousSteps = readAccumulatedSteps(await params.getState(), inputData);
       let processorRetryCount = 0;
       for (let i = previousSteps.length - 1; i >= 0 && previousSteps[i]?.finishReason === 'retry'; i--) {
         processorRetryCount++;

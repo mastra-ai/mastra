@@ -15,14 +15,16 @@ import { restoreRequestContext } from '../../utils/resolve-runtime';
 type MessageListStateCarrier = { messageListState?: SerializedMessageListState };
 type StoredMessageListStateCarrier = { messageListState?: DehydratedMessageListState };
 
-/** The parts of a durable step's (or the loop predicate's) params these helpers use. */
-type TranscriptParams = {
-  state: unknown;
+/** The run identity and services these helpers use. */
+type RunParams = {
   getInitData(): unknown;
   mastra?: Mastra;
   requestContext?: RequestContext<any>;
   abortSignal?: AbortSignal;
 };
+
+/** The parts of a durable step's (or the loop predicate's) params these helpers use. */
+type TranscriptParams = RunParams & { getState(): Promise<unknown> };
 
 type WritableTranscriptParams = TranscriptParams & { setState(state: unknown): Promise<void> };
 
@@ -48,7 +50,7 @@ export async function readMessageListState(
   // workflow state wins.
   // A payload read back from a persisted snapshot can hold refs too.
   const stored =
-    (params.state as StoredMessageListStateCarrier | undefined)?.messageListState ??
+    ((await params.getState()) as StoredMessageListStateCarrier | undefined)?.messageListState ??
     (stepPayload as StoredMessageListStateCarrier | undefined)?.messageListState;
   if (!stored?.messages?.some(isMemoryMessageRef)) return stored as SerializedMessageListState;
   return hydrateMidRun(runTranscriptRefs(params), stored, params.abortSignal);
@@ -63,7 +65,7 @@ export async function storeMessageListState(
   params: WritableTranscriptParams,
   messageListState: SerializedMessageListState,
 ): Promise<MessageListStateCarrier> {
-  const workflowState = params.state as StoredMessageListStateCarrier | undefined;
+  const workflowState = (await params.getState()) as StoredMessageListStateCarrier | undefined;
   if (workflowState?.messageListState === undefined) {
     return { messageListState };
   }
@@ -77,7 +79,10 @@ export async function seedMessageListState(
   params: WritableTranscriptParams,
   messageListState: SerializedMessageListState,
 ): Promise<void> {
-  await params.setState({ ...(params.state as object), messageListState: await dehydrate(params, messageListState) });
+  await params.setState({
+    ...((await params.getState()) as object),
+    messageListState: await dehydrate(params, messageListState),
+  });
 }
 
 /**
@@ -89,7 +94,7 @@ export async function openMessageListState(
   params: TranscriptParams,
   stepPayload: MessageListStateCarrier,
 ): Promise<{ read(): SerializedMessageListState; write(next: SerializedMessageListState): void }> {
-  const workflowState = params.state as StoredMessageListStateCarrier | undefined;
+  const workflowState = (await params.getState()) as StoredMessageListStateCarrier | undefined;
   if (workflowState?.messageListState === undefined) {
     stepPayload.messageListState = await readMessageListState(params, stepPayload);
     return {
@@ -155,7 +160,7 @@ async function hydrateMidRun(
   }
 }
 
-async function dehydrate(params: TranscriptParams, messageListState: SerializedMessageListState) {
+async function dehydrate(params: RunParams, messageListState: SerializedMessageListState) {
   // Function or inherited memory can resolve to another store on resume, where refs would not
   // resolve, so only fixed memory gets refs.
   const { state } = (params.getInitData() ?? {}) as RunIdentity;
@@ -172,7 +177,7 @@ async function dehydrate(params: TranscriptParams, messageListState: SerializedM
  * a memory storage failure leaves the run as it was; the steps then restore the
  * transcript from the rows loaded here.
  */
-export async function loadMessageListStateForResume(params: TranscriptParams): Promise<void> {
+export async function loadMessageListStateForResume(params: RunParams & { state: unknown }): Promise<void> {
   releaseMessageListState(params);
   const stored = (params.state as StoredMessageListStateCarrier | undefined)?.messageListState;
   if (stored === undefined) return;
@@ -182,7 +187,7 @@ export async function loadMessageListStateForResume(params: TranscriptParams): P
 
 /** Restores the refs in a transcript read straight from a persisted snapshot. */
 export async function hydrateMessageListState(
-  params: TranscriptParams,
+  params: RunParams,
   stored: DehydratedMessageListState,
 ): Promise<SerializedMessageListState> {
   const run = runTranscriptRefs(params);
@@ -229,12 +234,12 @@ export function dehydrateSnapshotTranscripts(snapshot: WorkflowRunState): Workfl
 }
 
 /** Loads stored messages of the run by id from the run's memory. */
-export function loadRunStoredMessages(params: TranscriptParams): StoredMessageLoader {
+export function loadRunStoredMessages(params: RunParams): StoredMessageLoader {
   return runTranscriptRefs(params).load;
 }
 
 /** Frees this process's verified rows once the run has read its transcript for the last time. */
-export function releaseMessageListState(params: TranscriptParams): void {
+export function releaseMessageListState(params: RunParams): void {
   const { runId } = (params.getInitData() ?? {}) as RunIdentity;
   releaseRunMessageRefs(runId);
 }
@@ -246,7 +251,7 @@ type RunIdentity = {
   state?: SerializableDurableState;
 };
 
-function runTranscriptRefs(params: TranscriptParams) {
+function runTranscriptRefs(params: RunParams) {
   // Both the outer loop's and the iteration workflow's init data carry the
   // run identity.
   const run = (params.getInitData() ?? {}) as RunIdentity;
@@ -258,7 +263,7 @@ function runTranscriptRefs(params: TranscriptParams) {
 }
 
 /** The run's memory: the live instance in this process, else re-resolved from the agent. */
-async function runMemory(params: TranscriptParams, run: RunIdentity): Promise<MastraMemory | undefined> {
+async function runMemory(params: RunParams, run: RunIdentity): Promise<MastraMemory | undefined> {
   const memory = run.runId ? getRunRegistryEntry(run.runId, params.mastra)?.memory : undefined;
   if (memory || !params.mastra || !run.agentId) return memory;
   const agent = params.mastra.getAgentById(run.agentId);

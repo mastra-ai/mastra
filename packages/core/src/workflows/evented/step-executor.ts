@@ -9,6 +9,7 @@ import type { Mastra } from '../../mastra';
 import type { TracingContext, TracingPolicy } from '../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
+import { pickStateKeys } from '../../storage/domains/workflows/journal';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
@@ -189,6 +190,7 @@ export class StepExecutor extends MastraBase {
               actor: params.actor,
               inputData,
               state: params.state,
+              getState: async (keys?: readonly string[]) => pickStateKeys(stateUpdate ?? params.state, keys),
               setState: async (newState: Record<string, any>) => {
                 // Capture state update - don't mutate params.state in place
                 // This matches default engine behavior where state changes
@@ -489,6 +491,7 @@ export class StepExecutor extends MastraBase {
           actor,
           inputData,
           state,
+          getState: async (keys?: readonly string[]) => pickStateKeys(state, keys),
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
@@ -564,6 +567,7 @@ export class StepExecutor extends MastraBase {
             actor: params.actor,
             inputData: params.input,
             state: currentState,
+            getState: async (keys?: readonly string[]) => pickStateKeys(currentState, keys),
             setState: async (newState: Record<string, any>) => {
               Object.assign(currentState, newState);
             },
@@ -650,6 +654,7 @@ export class StepExecutor extends MastraBase {
             actor: params.actor,
             inputData: params.input,
             state: currentState,
+            getState: async (keys?: readonly string[]) => pickStateKeys(currentState, keys),
             setState: async (newState: Record<string, any>) => {
               Object.assign(currentState, newState);
             },

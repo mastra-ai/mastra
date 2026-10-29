@@ -26,10 +26,10 @@ export function readAccumulatedSteps(workflowState: unknown, stepPayload: unknow
  * `{ accumulatedSteps }` when the run threads them through step payloads.
  */
 export async function storeAccumulatedSteps(
-  params: { state: unknown; setState(state: unknown): Promise<void> },
+  params: { getState(): Promise<unknown>; setState(state: unknown): Promise<void> },
   accumulatedSteps: AccumulatedSteps,
 ): Promise<StepsCarrier> {
-  const workflowState = params.state as StepsCarrier | undefined;
+  const workflowState = (await params.getState()) as StepsCarrier | undefined;
   if (workflowState?.accumulatedSteps === undefined) {
     return { accumulatedSteps };
   }

@@ -393,7 +393,7 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
           outputSchema: z.number(),
           stateSchema: z.object({ output: z.number() }),
           execute: async (ctx: any) => {
-            expect(ctx.state.output).toBe(2);
+            expect((await ctx.getState()).output).toBe(2);
             return ctx.inputData;
           },
         }),
@@ -413,7 +413,7 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
           outputSchema: z.number(),
           stateSchema: z.object({ output: z.number() }),
           execute: async (ctx: any) => {
-            ctx.setState({ ...ctx.state, output: 2 });
+            await ctx.setState({ ...(await ctx.getState()), output: 2 });
             return ctx.inputData;
           },
         }),
@@ -468,10 +468,11 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
           outputSchema: z.number(),
           stateSchema: z.object({ output: z.number() }),
           execute: async (ctx: any) => {
-            if (ctx.state.output > 1) {
+            const state = await ctx.getState();
+            if (state.output > 1) {
               return ctx.bail(bailResult);
             }
-            await ctx.setState({ ...ctx.state, output: ctx.inputData });
+            await ctx.setState({ ...state, output: ctx.inputData });
             return ctx.inputData;
           },
         }),

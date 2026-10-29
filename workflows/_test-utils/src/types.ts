@@ -458,6 +458,8 @@ export type SkippableTest =
   | 'getInitData'
   // Deprecated sync getStepResult (throws on storageVersion: 2 runs)
   | 'getStepResultSync'
+  // Reading the sync `state` field (throws on storageVersion: 2 runs)
+  | 'stateSync'
   // Error cause chain preservation (some engines have memoization issues with error cause chains)
   | 'errorCauseChain'
   // Variable resolution error handling (Inngest has race condition with snapshot persistence)

@@ -1426,6 +1426,11 @@ export type MutableContext = {
    * to. Applying it applies those changes to the state then, not `state` itself.
    */
   stateBase?: Record<string, unknown>;
+  /**
+   * @internal A storage v2 step's `setState` changes, applied on top of the state then. A key set
+   * to `undefined` is deleted.
+   */
+  stateDelta?: Record<string, unknown>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,
