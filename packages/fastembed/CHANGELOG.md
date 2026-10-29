@@ -1,5 +1,12 @@
 # @mastra/fastembed
 
+## 1.3.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28000](https://github.com/mastra-ai/mastra/pull/28000))
+  - Updated dependency [`onnxruntime-node@1.30.0` ↗︎](https://www.npmjs.com/package/onnxruntime-node/v/1.30.0) (from `1.26.0`, in `dependencies`)
+
 ## 1.3.5
 
 ### Patch Changes

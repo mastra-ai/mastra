@@ -1,4 +1,9 @@
-import type { GetObservabilityCapabilitiesResponse, MastraClient, QuerySpansResult } from '@mastra/client-js';
+import type {
+  AggregateSpansResponse,
+  GetObservabilityCapabilitiesResponse,
+  MastraClient,
+  QuerySpansResult,
+} from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
@@ -200,3 +205,27 @@ export function fullSpanHeadPage(limit: number, endedAfter: string): QuerySpansR
     page: { next: 'burst-cursor' },
   };
 }
+
+/** A store that answers `aggregateSpans()` next to the span query API. */
+export const spanAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanAggregate: true },
+};
+
+const HOUR = 60 * 60 * 1000;
+
+const hourBefore = (timeRange: { to: string }, hoursAgo: number) =>
+  new Date((Math.floor(Date.parse(timeRange.to) / HOUR) - hoursAgo) * HOUR).toISOString();
+
+/** Two hourly buckets near the end of the window: 12 spans (2 failed), then 9 spans (1 failed). */
+export function spanCountsAggregate(timeRange: { to: string }): AggregateSpansResponse {
+  return {
+    rows: [
+      { bucket: hourBefore(timeRange, 3), measures: { count: 12, errorCount: 2 } },
+      { bucket: hourBefore(timeRange, 2), measures: { count: 9, errorCount: 1 } },
+    ],
+    truncated: false,
+  };
+}
+
+export const spanAggregateError = { error: 'Span aggregation failed' };

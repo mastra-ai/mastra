@@ -5,7 +5,12 @@ export const threadQueryFeatures =
 
 export const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
+      ] as const)
     : ([] as const);
 
 export const spanAggregateFeatures =
@@ -17,7 +22,13 @@ export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRA
 /** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
 const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
 
-export const timeToFirstChunkFeatures = [
+/** Same rule for time to first token: returned and sorted only when core knows the field. */
+export const timeToFirstTokenSupported = 'timeToFirstTokenMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
+const timeToFirstTokenSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstTokenMs') === true;
+
+export const timingFeatures = [
   ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
   ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
+  ...(timeToFirstTokenSupported ? (['trace-query-time-to-first-token'] as const) : []),
+  ...(timeToFirstTokenSortSupported ? (['trace-query-time-to-first-token-sort'] as const) : []),
 ] as const;

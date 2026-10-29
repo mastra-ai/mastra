@@ -58,8 +58,8 @@ const stringDimension = (): TraceAggregateDimensionRule => ({ valueKind: 'string
  * The trace dimensions plus the span's own `name`/`spanType`, its `entityId`, and the parent and
  * root entity context. Not groupable: `metadata.<key>` (the span field policy has no metadata),
  * identity fields (`traceId`, `spanId`, `parentSpanId`, `runId`, `requestId`), and
- * `model`/`provider`, which live in span attributes and cost a full attribute read to group on
- * (OBS-693 tracks dedicated columns).
+ * `model`/`provider`, which are filterable through their dedicated columns but not yet groupable
+ * (OBS-693).
  */
 export const SPAN_AGGREGATE_DIMENSION_REGISTRY = {
   name: stringDimension(),
@@ -146,6 +146,12 @@ const spanAggregateRequestObjectSchema = z
     limit: z.number().int().min(1).max(TRACE_AGGREGATE_MAX_LIMIT).default(TRACE_AGGREGATE_DEFAULT_LIMIT),
   })
   .strict();
+
+/**
+ * A span aggregate request without its time range, for callers that store a query and supply the
+ * range at run time (dashboard widgets). Apply `findPredicateComplexityIssue` before parsing.
+ */
+export const spanAggregateQueryObjectSchema = spanAggregateRequestObjectSchema.omit({ timeRange: true });
 
 export const spanAggregateRequestSchema = z.preprocess((input, context) => {
   const issuePath = findPredicateComplexityIssue(input, [['where'], ['having']]);

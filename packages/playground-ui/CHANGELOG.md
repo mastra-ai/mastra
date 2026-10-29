@@ -1,5 +1,310 @@
 # @mastra/playground-ui
 
+## 66.1.0-alpha.2
+
+### Patch Changes
+
+- Improved the trace span views in Studio: ([#28867](https://github.com/mastra-ai/mastra/pull/28867))
+
+  - The timeline view now matches the span tree: same span icons and row size on a single line, with each span's duration printed right after its bar and gridlines on the time axis.
+  - The span search header is now a flat bar with compact tree/timeline toggle buttons.
+  - The span details panel is at least 384px wide and at most half of the trace panel; tab labels always show.
+
+- Updated dependencies [[`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990)]:
+  - @mastra/core@1.81.0-alpha.1
+  - @mastra/client-js@1.57.1-alpha.1
+  - @mastra/react@1.13.1-alpha.1
+
+## 66.1.0-alpha.1
+
+### Minor Changes
+
+- Added a full-width histogram of counts and errors over time to the Traces and Spans pages, between the filter bar and the list. It follows the list's filters and time range, and only appears when the server supports trace or span aggregates. ([#28816](https://github.com/mastra-ai/mastra/pull/28816))
+
+  Drag across the histogram to zoom in: the list and the chart switch to a custom time range covering the selected bars. `MetricsStackedBarChart` exposes this as an opt-in `onZoom({ start, end })` prop that reports the first and last selected column.
+
+  Other charts can reuse the same drag-to-select behavior from `@mastra/playground-ui/primitives/charts/drag-selection`. It works with bar and line charts (pass `layout="point"` to `DragSelectionBand` for line charts).
+
+  ```tsx
+  const selection = useDragSelection({ onSelect: ({ start, end }) => zoomTo(start, end) });
+
+  <ComposedChart
+    className={selection.className}
+    onMouseDown={selection.onMouseDown}
+    onMouseMove={selection.onMouseMove}
+    onClick={state => {
+      if (selection.consumeReleaseClick()) return;
+      // regular point click
+    }}
+  >
+    <DragSelectionBand selection={selection} count={data.length} />
+    {/* series */}
+  </ComposedChart>;
+  ```
+
+  When the Traces, Spans, or Threads time range differs from the default, the Time chip shows a × that resets it to the last 7 days. `TraceTimeRangeChip` exposes this as an opt-in `defaultPreset` prop.
+
+  Chart tooltips now render above the page, so a short chart (like the histogram above a list) or a clipping container no longer cuts them off.
+
+  The Columns picker is now an icon button with a "Columns" tooltip, placed before the filters.
+
+  ```tsx
+  <TracesExplorer.Body toolbar={toolbar} chart={<TracesExplorer.Histogram />}>
+    {content}
+  </TracesExplorer.Body>
+  ```
+
+- Added a shared `SkillSimpleForm` skill editor (name, description, and Markdown instructions, with an optional read-only mode) at `@mastra/playground-ui/domains/skills/skill-simple-form`, so apps other than Studio can show and edit skills with the same component. ([#28103](https://github.com/mastra-ai/mastra/pull/28103))
+
+  ```tsx
+  import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
+
+  <SkillSimpleForm
+    name={name}
+    onNameChange={setName}
+    description={description}
+    onDescriptionChange={setDescription}
+    instructions={instructions}
+    onInstructionsChange={setInstructions}
+  />;
+  ```
+
+- Hover highlights no longer glide between items. DropdownMenu, ContextMenu, Select, Combobox, Command, CommandPalette, FilterBar, PropertyFilter, Pagination and DataList rows each paint their own hover and keyboard highlight, and switch instantly. The current page in Pagination keeps its raised pill without sliding. ([#28757](https://github.com/mastra-ai/mastra/pull/28757))
+
+  **Removed**
+
+  - `@mastra/playground-ui/hooks/use-fluid-hover` (`useFluidHover`, `useRegisterFluidHoverItem`) and `@mastra/playground-ui/components/fluid-hover-highlight` (`FluidHoverHighlight`). Give each row its own hover style instead.
+  - The `highlightClassName` prop of `CommandList`. Style the row radius on `CommandItem` instead.
+
+  ```tsx
+  // Before
+  const hover = useFluidHover(listRef);
+  <div ref={listRef} className="relative" {...hover.handlers}>
+    <FluidHoverHighlight hover={hover} className="rounded-lg bg-fill" />
+    {items.map((item, i) => (
+      <Row key={item.id} ref={el => hover.registerItem(i, el)} />
+    ))}
+  </div>
+
+  // After
+  <div>
+    {items.map(item => (
+      <Row key={item.id} className="rounded-lg hover:bg-fill" />
+    ))}
+  </div>
+  ```
+
+  ```tsx
+  // Before
+  <CommandList highlightClassName="rounded-lg">{items}</CommandList>
+  // After
+  <CommandList>{items}</CommandList>
+  ```
+
+- Cleaned up the tables in metrics cards: one table for figures, and a share bar that is only a chart. ([#28762](https://github.com/mastra-ai/mastra/pull/28762))
+
+  **Replaced `MetricsShareList` with `ShareBar`**
+
+  `ShareBar` shows each row's share of a total: the bar, then the column headers, then a compact legend row per segment. Sorting, the no-bar mode and header placement options are gone; use `MetricsTable` for a sortable table of figures.
+
+  ```tsx
+  // Before
+  <MetricsShareList rows={rows} columns={columns} valueLabel="Spend" headerPlacement="below-strip" />
+
+  // After
+  <ShareBar rows={rows} columns={columns} valueLabel="Spend" />
+  ```
+
+  **`MetricsTable` is ready for full tables**
+
+  - `pageSize` adds pagination, and `isLoading` shows skeleton rows under the real header instead of the empty message.
+  - A column's `description` explains it in a tooltip on the header text, marked by a dotted underline.
+  - A third click on a sorted column turns sorting off, back to `defaultSort` or the given order.
+  - `isRowActive` highlights a row, for example the one a page is filtered to.
+  - Headers now line up with their columns, figure columns share spare width with the card, and every table uses the same 34.5px rows.
+
+  ```tsx
+  <MetricsTable
+    aria-label="Agent runs"
+    columns={[
+      { id: 'name', header: 'Agent', width: 'minmax(12rem,3fr)', cell: row => row.name },
+      {
+        id: 'runs',
+        header: 'Runs',
+        align: 'end',
+        description: 'Runs that started in this range.',
+        sortValue: row => row.runs,
+        cell: row => formatCount(row.runs),
+      },
+    ]}
+    rows={rows}
+    getRowKey={row => row.name}
+    defaultSort={{ column: 'runs', direction: 'desc' }}
+    pageSize={13}
+    isLoading={isLoading}
+    empty="No agent runs in this range."
+  />
+  ```
+
+  **New pieces for table rows**
+
+  - `SegmentedName` shows a name in parts, such as `openai › gpt-5`. The traces timeline uses it for span names.
+  - `SeriesMark` takes an optional `color`: without one it is a neutral tile, for tables without a chart. `ProviderMark` puts a provider logo in it.
+
+  The metrics Breakdown card now uses `MetricsTable`, with an icon before each agent, workflow, tool or model name, and each model's provider.
+
+### Patch Changes
+
+- Added an `inline` appearance to `Activity` and a `flush` option to `ActivityContent`, for activity lines that sit inside prose. An inline line drops the hover surface and inset, and its text brightens on hover instead. A flush body drops the rail and indent so it lines up with the surrounding text. The default `row` appearance is unchanged. ([#28709](https://github.com/mastra-ai/mastra/pull/28709))
+
+  ```tsx
+  <Activity appearance="inline">
+    <ActivityTrigger>
+      <ActivityHeadline icon={<FileText />} label="Read files" />
+    </ActivityTrigger>
+    <ActivityContent flush>{thoughts}</ActivityContent>
+  </Activity>
+  ```
+
+- Added `ActivityStretchLine` under `@mastra/playground-ui/domains/chat/activity`. It shows a stretch of tool calls and thoughts as one line. While live, the line reads the call that is running; once settled, it summarises what the calls did and how long they took. Opening it lists the calls and thoughts. The app supplies each call's row and body, so tools keep their own look. ([#28709](https://github.com/mastra-ai/mastra/pull/28709))
+
+  ```tsx
+  <ActivityDisclosureProvider>
+    <ActivityStretchLine
+      live={false}
+      elapsedMs={72_400}
+      members={[
+        { kind: 'thought', key: 'r1', content: { text: 'Checking the build first.' } },
+        {
+          kind: 'call',
+          key: 'c1',
+          toolName: 'execute_command',
+          args: { command: 'pnpm build' },
+          status: 'done',
+          row,
+          body,
+        },
+      ]}
+    />
+  </ActivityDisclosureProvider>
+  ```
+
+  `ActivityDisclosureProvider` remembers what the reader opened, and where they scrolled in a list of calls, so a line keeps both when it mounts again. `useActivityRow(key)` lets an app-drawn row join that state.
+
+  Also added a few building blocks the line uses:
+
+  - `toolPhrases(label)`: the live, done and summary wording for a tool kind.
+  - `ReasoningText` and `hasReasoningText`: reasoning prose with the redaction notice.
+  - `formatMoment`: "Today at 14:02"-style timestamps.
+  - `ActivityTimedTrigger`: a trigger that shows when the work began.
+
+- Improved metrics chart resizing. Charts now scale with their card while the page or sidebar resizes and redraw once the resize stops, so pages with many charts stay smooth and charts no longer spill out of their cards. ([#28700](https://github.com/mastra-ai/mastra/pull/28700))
+
+- Redesigned the Studio span details panel so the most useful information is easier to find, especially in narrow columns. ([#28856](https://github.com/mastra-ai/mastra/pull/28856))
+
+  - **Compact header**: the span type icon, title (model, entity, or span name), and duration share one row. A badge appears when the span failed or was retried.
+  - **Details, Input, Output, and Feedback tabs**: Input holds the payload and the tools the span was offered. Output holds errors, tripwire reasons, the payload, and tool calls. Details groups the model, token usage, timing, identifiers, metadata, and attributes.
+  - **The open tab stays open** when you select another span, and is kept in the URL (`tab=input`, `tab=output`).
+  - **Prompt changes as a diff**: processors that change the prompt show which messages they added or removed, next to the messages they kept.
+  - **Narrow panels**: tab labels collapse to icons below 380px, and long IDs are truncated with their copy button still visible.
+  - **Folded JSON**: Metadata and Attributes open folded.
+  - **Scrollable lists**: available tools sit in their own card, and tool and skill lists keep their scrollbar visible while they overflow.
+
+  `ScrollArea` accepts a new `alwaysShowScrollbar` prop that keeps the scrollbar visible whenever the content overflows.
+
+  `SpanDataPanelView` no longer accepts `isAnchor`. Trace-level IDs (session, request, user, organization, experiment) now show on every span that has them. `SpanTab` now also includes `'input'` and `'output'`; `SPAN_TABS` and `isSpanTab` are exported to validate it.
+
+  This release also fixes these span payload issues:
+
+  - LLM request processors now show the prompt they received as a readable message list instead of a collapsed JSON field.
+  - Processor payloads with no fields to format, such as `{ "shortCircuited": false }`, now show as a plain JSON block instead of a lone "Other fields" disclosure. The Preview/JSON toggle is hidden when both views would show the same content.
+  - Large JSON payloads (such as model span attributes with many tools) now fold every top-level value, and folds are kept when you switch to another span.
+
+- Shortened the pagination "Previous" label to "Prev" so it matches the length of "Next". ([#28825](https://github.com/mastra-ai/mastra/pull/28825))
+
+- Chart tooltips on Metrics, Traces and Spans no longer change width as you move between points. They start at a steady minimum width and only grow, never shrink, while you hover across a chart. ([#28833](https://github.com/mastra-ai/mastra/pull/28833))
+
+- Improved hover on metrics charts (`MetricsLineChart`, `MetricsStackedBarChart`): ([#28701](https://github.com/mastra-ai/mastra/pull/28701))
+
+  - The tooltip now appears next to the hovered point instead of sliding in from the chart's top-left corner, and moves with the pointer without lag. The hover line and bar dimming are instant too.
+  - The tooltip can extend past the chart and flips sides only at the window's edge, without jumping back and forth near it.
+  - Buckets with no readings (for example an hour with no agent runs on the Latency chart) now show a tooltip with dashes instead of none.
+
+- Removed unused internal chart code while preserving the public component API. ([#28737](https://github.com/mastra-ai/mastra/pull/28737))
+
+- Added `autoScrollStartFollowing` and `onAutoScrollFollowingChange` to `ScrollArea`. A live list that mounts again can now stay where the reader scrolled it, instead of jumping back to the end. ([#28709](https://github.com/mastra-ai/mastra/pull/28709))
+
+  ```tsx
+  <ScrollArea
+    autoScroll={live}
+    autoScrollStartFollowing={wasFollowing}
+    onAutoScrollFollowingChange={following => remember(following)}
+  >
+    {rows}
+  </ScrollArea>
+  ```
+
+- Fixed focus rings showing after mouse clicks. Removing a `FilterBar` filter with the mouse no longer outlines the neighbouring filter, and clicking a button inside an `InputGroup` no longer outlines the group. Keyboard focus still shows the ring. ([#28694](https://github.com/mastra-ai/mastra/pull/28694))
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`f3abb9c`](https://github.com/mastra-ai/mastra/commit/f3abb9c940dbd3f61d8dbc45aa479960bb1f5fca), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`d91fe23`](https://github.com/mastra-ai/mastra/commit/d91fe2386a1b40722599670faccf08b1f180fb55), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d)]:
+  - @mastra/core@1.81.0-alpha.0
+  - @mastra/react@1.13.1-alpha.0
+  - @mastra/memory@1.40.0-alpha.0
+  - @mastra/client-js@1.57.1-alpha.0
+  - @mastra/ai-sdk@1.11.2
+
+## 66.0.1-alpha.0
+
+### Patch Changes
+
+- Improved the span details panel in Studio traces so each span says what it did before showing its raw payloads. ([#28687](https://github.com/mastra-ai/mastra/pull/28687))
+
+  **Summary**
+
+  - Each nested span opens with a one-sentence summary naming the agent, model, tool or processor involved, for example "gpt-5-mini called weatherInfo, then wrote the answer" or "Moderation left the system prompt and the conversation unchanged". Its color matches the result.
+  - A failed span, root included, shows its error once, in that summary at the top of the panel.
+  - The root span skips the summary unless the run failed or was stopped, since its input and output already say what happened.
+
+  **Section order**
+
+  - Every span reads in the same order: what it changed, its input, its output, then its tools, metadata and attributes.
+  - Memory, workspace, skill and processor spans show what they changed inside the summary.
+
+  **Tool calls**
+
+  - A model span that called tools lists those calls in its summary. Each call opens on its input and result, like in the chat.
+  - The tools that were available stay listed next to the calls.
+
+  **Processor spans**
+
+  - Phase, executor, pipeline position, hook duration and tripwire (full reason, retry and metadata) appear as labelled values right under the summary, like the model facts of a model span.
+  - A processor that edits the system prompt shows exactly which system messages it added or removed.
+  - A processor that failed or tripped a tripwire still shows the changes it made before stopping.
+
+  **JSON views**
+
+  - Metadata and attributes are folded by default at the end of every span.
+  - JSON is no longer clipped behind an Expand button: it opens with each top-level value folded, so the keys are visible at a glance.
+  - An output with nothing to preview, like a model step that only called tools, goes straight to its JSON.
+  - The Preview, JSON and copy actions of a section appear when you hover or focus it.
+
+  **`SpanProcessorAttributes` changes**
+
+  `SpanProcessorAttributes` now renders only the processor's labelled values, with no section frame, and accepts a `className`. Message-list changes moved to the new `SpanProcessorMutations` component, so render it next to `SpanProcessorAttributes` if you showed those changes.
+
+  Before:
+
+  ```tsx
+  <SpanProcessorAttributes span={span} />
+  ```
+
+  After:
+
+  ```tsx
+  <SpanProcessorAttributes span={span} className="mb-4" />
+  <SpanProcessorMutations span={span} />
+  ```
+
 ## 66.0.0
 
 ### Minor Changes

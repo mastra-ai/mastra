@@ -6,15 +6,15 @@
     "    │   ├── processor_run: \"llm request processor: provider-history-compat\"",
     "    │   ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "    │   ├── model_inference: \"inference: 0\"",
-    "    │   │   ├── model_chunk: \"chunk: 'tool-call'\"",
-    "    │   │   └── model_chunk: \"chunk: 'tool-result'\"",
-    "    │   └── tool_call: \"tool: 'childSpanTool'\"",
-    "    │       └── generic: \"tool-child-operation\"",
+    "    │   ├── model_chunk: \"chunk: 'tool-call'\"",
+    "    │   ├── tool_call: \"tool: 'childSpanTool'\"",
+    "    │   │   └── generic: \"tool-child-operation\"",
+    "    │   └── model_chunk: \"chunk: 'tool-result'\"",
     "    └── model_step: \"step: 1\"",
     "        ├── processor_run: \"llm request processor: provider-history-compat\"",
     "        ├── processor_run: \"llm request processor: unsupported-file-handler\"",
-    "        └── model_inference: \"inference: 1\"",
-    "            └── model_chunk: \"chunk: 'text'\""
+    "        ├── model_inference: \"inference: 1\"",
+    "        └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -33,7 +33,8 @@
           "model": "mock-model-id",
           "provider": "mock-provider",
           "availableTools": ["childSpanTool"],
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -82,6 +83,7 @@
                 }
               ],
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -153,6 +155,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -341,7 +344,7 @@
                       },
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
-                      "responseModel": "mock-model-id"
+                      "timeToFirstTokenMs": "<ms>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -356,79 +359,41 @@
                         "role": "user",
                         "content": "Use child span tool to process test-data"
                       }
-                    ],
-                    "output": {
-                      "text": "",
-                      "toolCalls": [
-                        {
-                          "toolCallId": "call-child-span-1",
-                          "toolName": "childSpanTool",
-                          "args": {
-                            "input": "test-data"
-                          }
-                        }
-                      ]
-                    }
-                  },
-                  "children": [
-                    {
-                      "span": {
-                        "id": "<span-7>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'tool-call'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": false,
-                        "isRootSpan": false,
-                        "parentId": "<span-6>",
-                        "entityType": "agent",
-                        "entityId": "child-span-agent",
-                        "attributes": {
-                          "chunkType": "tool-call",
-                          "sequenceNumber": 0
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test"
-                        },
-                        "output": {
-                          "toolName": "childSpanTool",
-                          "toolCallId": "call-child-span-1",
-                          "toolInput": {
-                            "input": "test-data"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "span": {
-                        "id": "<span-8>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'tool-result'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": true,
-                        "isRootSpan": false,
-                        "parentId": "<span-6>",
-                        "entityType": "agent",
-                        "entityId": "child-span-agent",
-                        "attributes": {
-                          "chunkType": "tool-result",
-                          "sequenceNumber": 1
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test",
-                          "toolCallId": "call-child-span-1",
-                          "toolName": "childSpanTool"
-                        }
-                      }
-                    }
-                  ]
+                    ]
+                  }
                 },
                 {
                   "span": {
-                    "id": "<span-9>",
+                    "id": "<span-7>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-call'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "child-span-agent",
+                    "attributes": {
+                      "chunkType": "tool-call",
+                      "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "output": {
+                      "toolName": "childSpanTool",
+                      "toolCallId": "call-child-span-1",
+                      "toolInput": {
+                        "input": "test-data"
+                      }
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-8>",
                     "traceId": "<trace-1>",
                     "name": "tool: 'childSpanTool'",
                     "type": "tool_call",
@@ -458,14 +423,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-10>",
+                        "id": "<span-9>",
                         "traceId": "<trace-1>",
                         "name": "tool-child-operation",
                         "type": "generic",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-9>",
+                        "parentId": "<span-8>",
                         "entityType": "tool",
                         "entityId": "childSpanTool",
                         "metadata": {
@@ -480,6 +445,30 @@
                       }
                     }
                   ]
+                },
+                {
+                  "span": {
+                    "id": "<span-10>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-result'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": true,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "child-span-agent",
+                    "attributes": {
+                      "chunkType": "tool-result",
+                      "sequenceNumber": 1
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test",
+                      "toolCallId": "call-child-span-1",
+                      "toolName": "childSpanTool"
+                    }
+                  }
                 }
               ]
             },
@@ -501,6 +490,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -753,7 +743,7 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "responseModel": "mock-model-id"
+                      "timeToFirstTokenMs": "<ms>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -776,39 +766,33 @@
                         "role": "tool",
                         "content": "[tool-result: childSpanTool]"
                       }
-                    ],
+                    ]
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-15>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-11>",
+                    "entityType": "agent",
+                    "entityId": "child-span-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
                     "output": {
-                      "text": "Mock V2 stream response",
-                      "toolCalls": []
+                      "text": "Mock V2 stream response"
                     }
-                  },
-                  "children": [
-                    {
-                      "span": {
-                        "id": "<span-15>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'text'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": false,
-                        "isRootSpan": false,
-                        "parentId": "<span-14>",
-                        "entityType": "agent",
-                        "entityId": "child-span-agent",
-                        "attributes": {
-                          "chunkType": "text",
-                          "sequenceNumber": 0
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test"
-                        },
-                        "output": {
-                          "text": "Mock V2 stream response"
-                        }
-                      }
-                    }
-                  ]
+                  }
                 }
               ]
             }

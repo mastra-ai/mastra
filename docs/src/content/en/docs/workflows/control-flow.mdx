@@ -311,7 +311,7 @@ export const testWorkflow = createWorkflow({
 
 ### Route with a classifier
 
-A configured classifier can produce typed answers before `.branch()`. Route on the answer field that matches each question type: `choice`, `score`, or `probability`.
+A configured [classifier](/docs/classifier) can produce typed answers before `.branch()`. Route on the answer field that matches each question type: `choice`, `score`, or `probability`.
 
 ```typescript title="src/mastra/workflows/ticket-triage.ts"
 import { Classifier } from '@mastra/core/classifier'
