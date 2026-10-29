@@ -13,9 +13,11 @@
 //
 // Packages already on the registry at their current version are skipped, so
 // re-running after a partial failure publishes only what's left — the same
-// behavior `pnpm publish -r` has. A failed publish is retried; if a package
-// still fails, the packages that depend on it are not published and the
-// script exits 1.
+// behavior `pnpm publish -r` has. A failed publish is retried, and an attempt
+// that hangs is killed after PUBLISH_TIMEOUT_MS (default 10 minutes). If a
+// package still fails, the rest of its dependency level finishes, no later
+// level is attempted (even packages that don't depend on the failed one), and
+// the script exits 1; re-running publishes what is left.
 //
 // Usage:
 //   node publish-packages.mjs [--tag <dist-tag>] [--concurrency <n>] [--registry <url>]
@@ -31,6 +33,7 @@ const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const DEFAULT_CONCURRENCY = 8;
 const PUBLISH_ATTEMPTS = 3;
 const RETRY_DELAY_MS = Number(process.env.PUBLISH_RETRY_DELAY_MS ?? 15_000);
+const PUBLISH_TIMEOUT_MS = Number(process.env.PUBLISH_TIMEOUT_MS ?? 10 * 60_000);
 const FETCH_ATTEMPTS = 3;
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -140,12 +143,28 @@ function runPublish(pkg, options) {
   if (options.tag) args.push('--tag', options.tag);
   if (options.registry) args.push('--registry', options.registry);
   return new Promise(resolve => {
-    const child = spawn('pnpm', args, { cwd: pkg.directory, env: process.env });
+    // Its own process group, so a timeout kills pnpm and everything it started
+    // (lifecycle scripts, the upload) instead of leaving them running.
+    const child = spawn('pnpm', args, { cwd: pkg.directory, env: process.env, detached: true });
     let output = '';
+    const timer = setTimeout(() => {
+      output += `\nTimed out after ${PUBLISH_TIMEOUT_MS / 1000}s; killed.\n`;
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // Already exited between the timer firing and the kill.
+      }
+    }, PUBLISH_TIMEOUT_MS);
     child.stdout.setEncoding('utf8').on('data', chunk => (output += chunk));
     child.stderr.setEncoding('utf8').on('data', chunk => (output += chunk));
-    child.on('error', error => resolve({ code: 1, output: `${output}${error.message}\n` }));
-    child.on('close', code => resolve({ code: code ?? 1, output }));
+    child.on('error', error => {
+      clearTimeout(timer);
+      resolve({ code: 1, output: `${output}${error.message}\n` });
+    });
+    child.on('close', code => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 1, output });
+    });
   });
 }
 
