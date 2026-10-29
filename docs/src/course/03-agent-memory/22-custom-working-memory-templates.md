@@ -12,10 +12,10 @@ import { Memory } from '@mastra/memory'
 const memory = new Memory({
   storage: new LibSQLStore({
     id: 'learning-memory-storage',
-    url: process.env.MASTRA_DB_URL ?? 'file:./memory.db', // resolves against the working directory — set MASTRA_DB_URL to an absolute path
+    url: process.env.MASTRA_DB_URL!, // resolves against the working directory — set MASTRA_DB_URL to an absolute path
   }), // Storage for message history
   vector: new LibSQLVector({
-    url: process.env.MASTRA_VECTOR_DB_URL ?? 'file:./vector.db', // resolves against the working directory — set MASTRA_VECTOR_DB_URL to an absolute path
+    url: process.env.MASTRA_VECTOR_DB_URL!, // resolves against the working directory — set MASTRA_VECTOR_DB_URL to an absolute path
   }), // Vector database for semantic search
   embedder: 'openai/text-embedding-3-small', // Embedder for message embeddings
   options: {

@@ -3,9 +3,11 @@
 Now, let's update your MCP configuration in `src/mastra/agents/index.ts` to include the Filesystem server:
 
 ```typescript
+import { isAbsolute } from 'node:path'
+
 const notesDir = process.env.NOTES_DIR
 
-if (!notesDir) {
+if (!notesDir || !isAbsolute(notesDir)) {
   throw new Error('Set NOTES_DIR to the absolute path of your notes directory')
 }
 

@@ -15,6 +15,7 @@ Common issues include:
 If you're having trouble, try running the PNPX command manually in your terminal to see if it works:
 
 ```bash
+export NOTES_DIR="$(pwd)/notes"
 pnpx @modelcontextprotocol/server-filesystem "$NOTES_DIR"
 ```
 

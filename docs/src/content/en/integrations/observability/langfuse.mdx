@@ -234,7 +234,7 @@ Internal observer and reflector execution threads remain separate. Multi-thread 
 The exporter forwards provider-reported cost to Langfuse's `cost_details` field, but only when the generation's cost metadata meets every condition:
 
 - The span is a model generation span.
-- `costMetadata.source` is `'provider_reported'`.
+- `costContext.costMetadata.source` is `'provider_reported'`.
 - `costContext.costUnit` is `'USD'`.
 - `costContext.estimatedCost` is a finite, non-negative number.
 

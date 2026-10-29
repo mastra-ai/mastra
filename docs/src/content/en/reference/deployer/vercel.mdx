@@ -61,12 +61,12 @@ export const mastra = new Mastra({
 
 ## Request timeouts
 
-Two independent limits apply to a request on Vercel:
+Vercel's function execution time and Mastra's request timeout are enforced separately:
 
-- **Vercel function execution time** — set by the deployer's `maxDuration` option, in seconds.
-- **Mastra request timeout** — set by `server.timeout` in your `Mastra` config, in milliseconds. When unset it defaults to `180000` (180 seconds), and requests that exceed it are answered with `504 Gateway Timeout`.
+- **Vercel function execution time**: set by the deployer's `maxDuration` option, in seconds.
+- **Mastra request timeout**: set by `server.timeout` in your `Mastra` config, in milliseconds. When unset it defaults to `180000` (180 seconds), and requests that exceed it are answered with `504 Gateway Timeout`.
 
-`maxDuration` does not change `server.timeout`. A request that takes longer than 180 seconds fails even if `maxDuration` is higher, so raise both when you run long requests such as workflow runs or streaming agents:
+`maxDuration` doesn't change `server.timeout`. A request that takes longer than 180 seconds fails even if `maxDuration` is higher, so raise both when you run long requests such as workflow runs or streaming agents:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
