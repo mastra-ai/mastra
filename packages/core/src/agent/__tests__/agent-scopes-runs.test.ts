@@ -10,6 +10,7 @@ import { MastraServerBase } from '../../server/base';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { MASTRA_SCOPE_ACCESS_KEY } from '../scopes';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -199,6 +200,40 @@ describe('agent scopes on runs', () => {
       id: 'AGENT_SCOPES_INVALID',
       status: 400,
     });
+  });
+
+  it('refuses a scopes function that drops a resource: scope from defaultOptions', async () => {
+    const { agent } = setup({
+      scopes: () => ['org:acme', 'thread:t1'],
+      defaultOptions: { scopes: ['resource:u1'] },
+    });
+    await expect(conflictOf(agent.generate('x', { scopes: ['thread:t1'] }))).resolves.toEqual({
+      id: 'AGENT_SCOPES_INVALID',
+      status: 400,
+    });
+  });
+
+  it('keeps a read-only call or default scope read-only when the scopes function returns it writable', async () => {
+    const access: unknown[] = [];
+    const { agent } = setup({
+      scopes: ({ scopes }: { scopes: unknown[] }) => [
+        ...scopes.map(scope =>
+          typeof scope === 'string' ? scope : { scope: (scope as { scope: string }).scope, access: 'write' },
+        ),
+      ],
+      defaultOptions: { scopes: ['team:core'] },
+      inputProcessors: [
+        {
+          id: 'access-recorder',
+          processInput: async ({ messages, requestContext }) => {
+            access.push(requestContext?.get(MASTRA_SCOPE_ACCESS_KEY));
+            return messages;
+          },
+        } satisfies Processor,
+      ],
+    });
+    await agent.generate('x', { scopes: ['org:a', { scope: 'project:p', access: 'write' }] });
+    expect(access).toEqual([{ 'org:a': 'read', 'team:core': 'read' }]);
   });
 
   it('resolves resource and thread independently', async () => {

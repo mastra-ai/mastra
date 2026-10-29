@@ -81,6 +81,7 @@ export async function resolveScope(
     const { threadId, resourceId } = resolveAgentScopes({
       requestContext,
       agentScopes,
+      incomingScopes: incoming,
       callScopes,
       memory: mergedOptions?.memory,
     });
