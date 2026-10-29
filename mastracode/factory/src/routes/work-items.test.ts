@@ -531,8 +531,11 @@ describe('work item read wire', () => {
   });
 
   it('pages, filters, counts and finds cards without sending the whole board', async () => {
-    const seedCard = async (n: number, stage: string, title = `Card ${n}`) =>
-      (
+    // Each card gets its own second, so created-at order never falls back to the random-id tiebreak.
+    vi.useFakeTimers({ now: new Date('2026-10-29T12:00:00.000Z'), toFake: ['Date'] });
+    const seedCard = async (n: number, stage: string, title = `Card ${n}`) => {
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 29, 12, 0, n)));
+      return (
         await seed.workItems.upsert({
           orgId: 'org1',
           userId: 'u1',
@@ -551,6 +554,7 @@ describe('work item read wire', () => {
           },
         })
       ).item;
+    };
     const done = await seedCard(1, 'done');
     await seedCard(2, 'intake');
     await seedCard(3, 'intake', 'Login is broken');

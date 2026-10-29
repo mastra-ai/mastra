@@ -238,12 +238,12 @@ export function toSyncedWorkItem(item: WorkItemRow): WorkItemRow {
 }
 
 /**
- * How far behind `now` a sync cursor sits. Card writes stamp `updated_at` from each server's
- * clock and commit a moment later, so a cursor at `now` could step past a write that lands
- * just after it; the next sync re-sends the last few seconds of writes instead, which a board
- * replaces by id.
+ * How far behind `now` a sync cursor sits. Card writes stamp `changed_at` from each server's
+ * clock before their transaction commits, so a cursor at `now` could step past a write that
+ * becomes visible after it. Re-sending the last 30s of writes covers clock skew and slow
+ * commits; a board replaces re-sent cards by id, and also reloads periodically as a backstop.
  */
-export const WORK_ITEM_SYNC_OVERLAP_MS = 5_000;
+export const WORK_ITEM_SYNC_OVERLAP_MS = 30_000;
 
 export interface WorkItemSync {
   /** True when `items` replaces the board's cards rather than patching them. */

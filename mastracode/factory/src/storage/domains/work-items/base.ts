@@ -1338,13 +1338,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     since: Date;
   }): Promise<{ id: string; deletedAt: Date }[]> {
+    // A keyset cursor just below `since` makes storage read only the window, via the (scope, deleted_at) index.
     const rows = await this.#db.findMany<{ work_item_id: string; deleted_at: Date }>(
       FACTORY_WORK_ITEM_TOMBSTONES_SCHEMA.name,
       { org_id: orgId, factory_project_id: factoryProjectId },
+      {
+        orderBy: [
+          ['deleted_at', 'asc'],
+          ['id', 'asc'],
+        ],
+        cursor: { values: [since, '00000000-0000-0000-0000-000000000000'] },
+      },
     );
-    return rows
-      .filter(row => row.deleted_at >= since)
-      .map(row => ({ id: row.work_item_id, deletedAt: row.deleted_at }));
+    return rows.map(row => ({ id: row.work_item_id, deletedAt: row.deleted_at }));
   }
 
   /**

@@ -263,4 +263,28 @@ describe('board change signals', () => {
     });
     expect(deleted.map(entry => entry.id)).toEqual([card.id]);
   });
+
+  it('reads only the deletes inside a sync window, including one at its edge', async () => {
+    const seed = await createFactoryStorageForTests();
+    vi.useFakeTimers({ now: new Date('2026-10-29T12:00:00.000Z'), toFake: ['Date'] });
+    try {
+      const old = await seedCard(seed.workItems);
+      const edge = await seedCard(seed.workItems);
+      const late = await seedCard(seed.workItems);
+      await seed.workItems.delete({ orgId: ORG, id: old.id });
+      vi.setSystemTime(new Date('2026-10-29T12:01:00.000Z'));
+      await seed.workItems.delete({ orgId: ORG, id: edge.id });
+      vi.setSystemTime(new Date('2026-10-29T12:02:00.000Z'));
+      await seed.workItems.delete({ orgId: ORG, id: late.id });
+
+      const deleted = await seed.workItems.listDeletedSince({
+        orgId: ORG,
+        factoryProjectId: PROJECT,
+        since: new Date('2026-10-29T12:01:00.000Z'),
+      });
+      expect(deleted.map(entry => entry.id)).toEqual([edge.id, late.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
