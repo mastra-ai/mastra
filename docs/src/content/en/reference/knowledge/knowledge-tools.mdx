@@ -46,7 +46,7 @@ Knowledge page name "Chargeback Playbook" is ambiguous; use one of these ids: 9a
 
 ## `knowledge_search`
 
-Searches page names, descriptions, bodies and notes the run can read. Name matches rank first. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are blended.
+Searches page names, descriptions, bodies and notes the run can read. Keyword results list pages matching by name first, then pages matching by description or body, then notes, each newest first. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so that order no longer holds.
 
 <PropertiesTable
   content={[
@@ -161,7 +161,8 @@ Adds, restamps and removes notes. A note is one durable fact on a page. Link oth
   {
     name: 'when',
     type: 'string',
-    description: 'Add: an ISO date-time for when it was true or observed.',
+    description:
+      'Add: when it was true or observed, as a full ISO 8601 date-time (`2026-10-29T00:00:00Z`). The schema declares the `date-time` format.',
     isOptional: true,
   },
 ]}

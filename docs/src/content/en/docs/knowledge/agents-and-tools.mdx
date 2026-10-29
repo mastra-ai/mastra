@@ -48,7 +48,7 @@ A name that matches more than one readable page is refused, and the error lists 
 
 ## Search and read
 
-`knowledge_search` matches the query against page names, descriptions, bodies and notes the run can read. Name matches come first. With [semantic search](/docs/knowledge/setup#add-semantic-search) set up, results also match by meaning. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
+`knowledge_search` matches the query against page names, descriptions, bodies and notes the run can read. Pages whose name matches come first, then pages matching in their description or body, then notes, each newest first. With [semantic search](/docs/knowledge/setup#add-semantic-search) set up, results also match by meaning, and keyword and meaning results are merged by rank, so a close meaning match can come before a name match. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
 
 ```json
 { "query": "on-call", "scope": ["org:acme"] }
@@ -140,9 +140,9 @@ A note is a short attributed fact on a page, about 250 tokens at most. Contribut
 
 - `scope` lists the note's stamps and is required. A run can read the note when it can read the page and at least one stamp. Stamping a note on a shared page with a narrower scope keeps it private to that scope.
 - `[[Page Name]]` links another readable page. Reading `Billing Escalations` now lists this note under `mentionedIn`. Names that don't resolve stay plain text.
-- `when` records when the fact was true or observed, as an ISO date.
+- `when` records when the fact was true or observed, as a full ISO 8601 date-time such as `"2026-10-29T00:00:00Z"`. The tool's schema declares the `date-time` format, so a provider that enforces formats can refuse a date alone.
 
-Adding a note needs `contributor` on the page's scope and on every stamp. Each note records its author as `agent:<agentId>` and the thread it came from.
+Adding a note needs `contributor` on the page's scope and on every stamp. Each note records its author as `agent:<agentId>`, or `agent` when the run has no agent ID, and the thread it came from when there is one.
 
 `op: "restamp"` replaces a note's stamps, and `op: "remove"` removes it. Both take the note ID and need `editor` on the page's scope:
 

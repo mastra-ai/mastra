@@ -93,6 +93,6 @@ Scopes are set in process only. Remote callers, through the agent controller HTT
 
 ## Upgrading
 
-Mastra Code no longer includes the experimental Subconscious. The Subconscious activity view and the `ask_memory` tool are removed. `experimental_subconscious` and the Memory `knowledge` option are removed too, and setting either throws. Attach Knowledge to the agent instead. The `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` and `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` environment variables do nothing.
+Mastra Code no longer includes the experimental Subconscious. The Subconscious activity view and the `ask_memory` tool are removed. The Observational Memory `experimental_subconscious` option and the Memory `knowledge` option are removed too. Setting `experimental_subconscious`, or `knowledge` to anything but `false`, throws. Attach Knowledge to the agent instead. The `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` and `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` environment variables do nothing.
 
 Scopes are plain strings that say who the run is. The `{ scope, access }` and `{ tag, access }` forms are gone. Roles come from the Knowledge instance's scope declarations.

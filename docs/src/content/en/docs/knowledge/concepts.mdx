@@ -37,7 +37,7 @@ This run is Dana, in the Acme org, with the support role, on the support team. T
 Holding a scope grants nothing by itself. A run holding `team:acme:support` can only read or write there if a rule gives it a role. When Knowledge is attached, every run scope must match a declared scope type, or the tools fail with:
 
 ```text
-Knowledge run scope "project:x" does not match a declared scope type.
+Knowledge run scope "project:x" does not match a declared scope type. Declare it in Knowledge `scopes` (for Memory's resource:/thread: scopes, spread `...knowledgeMemoryScopes()`).
 ```
 
 ## Rules and roles

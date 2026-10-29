@@ -173,7 +173,7 @@ await knowledge.explainAccess(['org:acme', 'team:acme:sales'], { page: playbookI
 // { role: null, reasons: [], page: { id: '…', scope: 'team:acme:support' }, reason: 'hidden' }
 ```
 
-`reason` says why `role` is `null`: `missing` (no such page), `hidden` (the page exists, but the run can't read its scope), or `no-rule` (no rule gives the run that scope). `via` is `self` when the run holds that scope directly and `rule` when a rule on another scope reaches it.
+`reason` says why `role` is `null`: `missing` (no such page), `hidden` (the page exists, but the run can't read its scope), or `no-rule` (no rule gives the run that scope). `via` is `self` when the run holds that scope directly, `rule` when a rule naming one of the run's scopes reaches it, and `belongsTo` when the rule binds through the scope's `belongsTo` parent.
 
 :::warning
 
