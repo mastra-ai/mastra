@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LLMock } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect, vi } from 'vitest';
+import { it, expect, onTestFinished, vi } from 'vitest';
 import { Agent } from '../../../../agent';
 import { Mastra } from '../../../../mastra';
 import { InMemoryStore } from '../../../../storage';
@@ -23,6 +23,7 @@ describeForAllEngines('AIMock loop scenario: sandbox tool blocked by beforeToolC
 
   it('sends the block reason to the model as the execute_command tool result', async () => {
     const execute = vi.spyOn(executeCommandTool, 'execute');
+    onTestFinished(() => execute.mockRestore());
     const llm = getMock();
 
     const { requests } = await runLoopScenario({
@@ -56,7 +57,6 @@ describeForAllEngines('AIMock loop scenario: sandbox tool blocked by beforeToolC
       .filter(message => message.role === 'tool' && message.tool_call_id === 'call_rm')
       .at(0);
     expect(toolMessage?.content).toBe('Blocked by test hook');
-    execute.mockRestore();
   });
 });
 
