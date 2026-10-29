@@ -142,6 +142,10 @@ export function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | n
     };
   }
 
+  if (path.startsWith('/knowledge/:instanceKey')) {
+    return { resourceType: 'knowledge', resourceIdParam: 'instanceKey', permission };
+  }
+
   if (path === '/v1/responses') {
     return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
   }

@@ -7,6 +7,7 @@ import {
   Processor,
   Workflow,
   Vector,
+  Knowledge,
   BaseResource,
   A2A,
   A2AV1,
@@ -27,6 +28,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
+import type { ListKnowledgeResponse } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
@@ -2084,6 +2086,21 @@ export class MastraClient extends BaseResource {
    */
   public listVectors(): Promise<ListVectorsResponse> {
     return this.request('/vectors');
+  }
+
+  /**
+   * Lists the Knowledge instances registered on the Mastra instance
+   */
+  public listKnowledge(): Promise<ListKnowledgeResponse> {
+    return this.request('/knowledge');
+  }
+
+  /**
+   * Gets read-only access to a registered Knowledge instance
+   * @param knowledgeKey - Key the instance is registered under
+   */
+  public getKnowledge(knowledgeKey: string) {
+    return new Knowledge(this.options, knowledgeKey);
   }
 
   /**

@@ -2503,6 +2503,12 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.5
         version: 3.14.13(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@xyflow/react':
+        specifier: ^12.10.1
+        version: 12.10.2(@types/react@19.2.17)(immer@11.1.9)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      d3-force:
+        specifier: ^3.0.0
+        version: 3.0.0
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
@@ -2540,6 +2546,9 @@ importers:
       '@testing-library/user-event':
         specifier: ^14.5.2
         version: 14.6.8(@testing-library/dom@10.4.2)
+      '@types/d3-force':
+        specifier: ^3.0.10
+        version: 3.0.10
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -30009,7 +30018,7 @@ packages:
 
   serialize-error-cjs@0.1.4:
     resolution: {integrity: sha512-6a6dNqipzbCPlTFgztfNP2oG+IGcflMe/01zSzGrQcxGMKbIjOemBBD85pH92klWaJavAUWxAh9Z0aU28zxW6A==}
-    deprecated: Rolling release, please update to 0.3.0
+    deprecated: Rolling release, please update to 0.2.0
 
   serialize-error@12.0.0:
     resolution: {integrity: sha512-ZYkZLAvKTKQXWuh5XpBw7CdbSzagarX39WyZ2H07CDLC5/KfsRGlIXV8d4+tfqX1M7916mRqR1QfNHSij+c9Pw==}

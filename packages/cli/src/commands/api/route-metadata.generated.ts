@@ -1710,6 +1710,101 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /knowledge": {
+    "method": "GET",
+    "path": "/knowledge",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "instances"
+    }
+  },
+  "GET /knowledge/:instanceKey/scopes": {
+    "method": "GET",
+    "path": "/knowledge/:instanceKey/scopes",
+    "pathParams": [
+      "instanceKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "scopes"
+    }
+  },
+  "GET /knowledge/:instanceKey/graph": {
+    "method": "GET",
+    "path": "/knowledge/:instanceKey/graph",
+    "pathParams": [
+      "instanceKey"
+    ],
+    "queryParams": [
+      "scopeNodeId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /knowledge/:instanceKey/nodes/:nodeId": {
+    "method": "GET",
+    "path": "/knowledge/:instanceKey/nodes/:nodeId",
+    "pathParams": [
+      "instanceKey",
+      "nodeId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "records"
+    }
+  },
+  "GET /knowledge/:instanceKey/search": {
+    "method": "GET",
+    "path": "/knowledge/:instanceKey/search",
+    "pathParams": [
+      "instanceKey"
+    ],
+    "queryParams": [
+      "q"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "results"
+    }
+  },
+  "GET /knowledge/:instanceKey/activity": {
+    "method": "GET",
+    "path": "/knowledge/:instanceKey/activity",
+    "pathParams": [
+      "instanceKey"
+    ],
+    "queryParams": [
+      "cursor",
+      "scopeNodeId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "events"
+    }
+  },
   "GET /scores/scorers": {
     "method": "GET",
     "path": "/scores/scorers",

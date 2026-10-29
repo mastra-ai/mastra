@@ -24,7 +24,7 @@ type InputShared_Auxiliary_116 = {
   parentWorkflow?: InputShared_Auxiliary_116 | undefined;
 };
 
-type InputShared_Auxiliary_210 =
+type InputShared_Auxiliary_215 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -73,41 +73,41 @@ type InputShared_Auxiliary_210 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_210[];
+      args: InputShared_Auxiliary_215[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_210;
+      arg: InputShared_Auxiliary_215;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_233;
+            some: InputShared_Auxiliary_238;
           }
         | {
-            none: InputShared_Auxiliary_233;
+            none: InputShared_Auxiliary_238;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_233;
+            some: InputShared_Auxiliary_238;
           }
         | {
-            none: InputShared_Auxiliary_233;
+            none: InputShared_Auxiliary_238;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_233;
+            some: InputShared_Auxiliary_238;
           }
         | {
-            none: InputShared_Auxiliary_233;
+            none: InputShared_Auxiliary_238;
           };
     };
 
-type InputShared_Auxiliary_233 =
+type InputShared_Auxiliary_238 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -156,33 +156,33 @@ type InputShared_Auxiliary_233 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_233[];
+      args: InputShared_Auxiliary_238[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_233;
+      arg: InputShared_Auxiliary_238;
     };
 
-type InputShared_Auxiliary_280 =
+type InputShared_Auxiliary_285 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_280[];
+      args: InputShared_Auxiliary_285[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_280;
+      arg: InputShared_Auxiliary_285;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_210;
+            some: InputShared_Auxiliary_215;
           }
         | {
-            none: InputShared_Auxiliary_210;
+            none: InputShared_Auxiliary_215;
           };
     };
 
-type InputShared_Auxiliary_712 =
+type InputShared_Auxiliary_717 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_712 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_712[];
+      args: InputShared_Auxiliary_717[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_712;
+      arg: InputShared_Auxiliary_717;
     };
 
-type InputShared_Auxiliary_786 = {
+type InputShared_Auxiliary_791 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_786[] | undefined;
+  children?: InputShared_Auxiliary_791[] | undefined;
 };
 
-type Shared_Auxiliary_778 = {
+type Shared_Auxiliary_796 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_778[] | undefined;
+  children?: Shared_Auxiliary_796[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1833,7 +1833,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_712[];
+  predicates: InputShared_Auxiliary_717[];
 };
 
 type InputShared_Type_90 = {
@@ -1847,7 +1847,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_712;
+  predicate: InputShared_Auxiliary_717;
 };
 
 type InputShared_Type_91 =
@@ -4299,7 +4299,7 @@ type Shared_Type_84 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_778[] | undefined;
+  files?: Shared_Auxiliary_796[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9834,6 +9834,285 @@ export interface PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContrac
 }
 
 // ============================================================================
+// Route: GET /knowledge
+// ============================================================================
+export type GetKnowledge_Response = {
+  instances: {
+    key: string;
+    id: string;
+  }[];
+};
+
+export type GetKnowledge_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledge_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetKnowledge_Request;
+  response: GetKnowledge_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:instanceKey/scopes
+// ============================================================================
+export type GetKnowledgeInstanceKeyScopes_PathParams = {
+  instanceKey: string;
+};
+
+export type GetKnowledgeInstanceKeyScopes_Response = {
+  scopes: {
+    id: string;
+    address: string;
+    name: string;
+    kind?: string | undefined;
+    description?: string | undefined;
+    parentIds: string[];
+    memberCount: number;
+    memberCountTruncated: boolean;
+    contentNodeCount: number;
+    childScopeCount: number;
+  }[];
+  truncated: boolean;
+};
+
+export type GetKnowledgeInstanceKeyScopes_Request = Simplify<
+  (GetKnowledgeInstanceKeyScopes_PathParams extends never ? {} : { params: GetKnowledgeInstanceKeyScopes_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeInstanceKeyScopes_RouteContract {
+  pathParams: GetKnowledgeInstanceKeyScopes_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetKnowledgeInstanceKeyScopes_Request;
+  response: GetKnowledgeInstanceKeyScopes_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:instanceKey/graph
+// ============================================================================
+export type GetKnowledgeInstanceKeyGraph_PathParams = GetKnowledgeInstanceKeyScopes_PathParams;
+
+export type GetKnowledgeInstanceKeyGraph_QueryParams = {
+  scopeNodeId?: string | undefined;
+};
+
+export type GetKnowledgeInstanceKeyGraph_Response = {
+  view: 'project';
+  nodes: {
+    id: string;
+    name: string;
+    kind: string;
+    description?: string | undefined;
+    scope: string[];
+    rung: 'org';
+    isScope?: boolean | undefined;
+    pinned: boolean;
+    recordCount: number;
+    childScopeCount?: number | undefined;
+    contentNodeCount?: number | undefined;
+    memberCount?: number | undefined;
+    createdAt?: string | undefined;
+    updatedAt?: string | undefined;
+  }[];
+  edges: {
+    id: string;
+    source: string;
+    target: string;
+    type: 'contains' | 'wikilink';
+  }[];
+  records: {
+    id: string;
+    nodeIds: string[];
+    pinned: boolean;
+    text: string;
+  }[];
+  truncated: boolean;
+  outOfWindow: string[];
+  unresolvedCapped: {
+    count: number;
+    names: string[];
+  };
+  pinCensus: {
+    resource: number;
+    thread: number | null;
+  };
+  version: string | null;
+};
+
+export type GetKnowledgeInstanceKeyGraph_Request = Simplify<
+  (GetKnowledgeInstanceKeyGraph_PathParams extends never ? {} : { params: GetKnowledgeInstanceKeyGraph_PathParams }) &
+    (GetKnowledgeInstanceKeyGraph_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeInstanceKeyGraph_QueryParams
+        ? { query?: GetKnowledgeInstanceKeyGraph_QueryParams }
+        : { query: GetKnowledgeInstanceKeyGraph_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeInstanceKeyGraph_RouteContract {
+  pathParams: GetKnowledgeInstanceKeyGraph_PathParams;
+  queryParams: GetKnowledgeInstanceKeyGraph_QueryParams;
+  body: never;
+  request: GetKnowledgeInstanceKeyGraph_Request;
+  response: GetKnowledgeInstanceKeyGraph_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:instanceKey/nodes/:nodeId
+// ============================================================================
+export type GetKnowledgeInstanceKeyNodesNodeId_PathParams = {
+  instanceKey: string;
+  nodeId: string;
+};
+
+export type GetKnowledgeInstanceKeyNodesNodeId_Response = {
+  node: {
+    id: string;
+    name: string;
+    kind: string;
+    content: string;
+    description?: string | undefined;
+    scope: string[];
+    rung: 'org';
+    createdAt: string;
+    updatedAt: string;
+  };
+  records: {
+    id: string;
+    node: string;
+    relation: 'owned' | 'mentions';
+    text: string;
+    scope: string[];
+    rung: 'org';
+    sourceThreadId: string;
+    capturedAt: string;
+    when?: string | undefined;
+    pinned: boolean;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+  }[];
+};
+
+export type GetKnowledgeInstanceKeyNodesNodeId_Request = Simplify<
+  (GetKnowledgeInstanceKeyNodesNodeId_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeInstanceKeyNodesNodeId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeInstanceKeyNodesNodeId_RouteContract {
+  pathParams: GetKnowledgeInstanceKeyNodesNodeId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetKnowledgeInstanceKeyNodesNodeId_Request;
+  response: GetKnowledgeInstanceKeyNodesNodeId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:instanceKey/search
+// ============================================================================
+export type GetKnowledgeInstanceKeySearch_PathParams = GetKnowledgeInstanceKeyScopes_PathParams;
+
+export type GetKnowledgeInstanceKeySearch_QueryParams = {
+  q?: string | undefined;
+};
+
+export type GetKnowledgeInstanceKeySearch_Response = {
+  results: {
+    id: string;
+    name: string;
+    kind: string;
+    type: 'scope' | 'node';
+    rung: 'org';
+    address?: string | undefined;
+    description?: string | undefined;
+  }[];
+  truncated: boolean;
+};
+
+export type GetKnowledgeInstanceKeySearch_Request = Simplify<
+  (GetKnowledgeInstanceKeySearch_PathParams extends never ? {} : { params: GetKnowledgeInstanceKeySearch_PathParams }) &
+    (GetKnowledgeInstanceKeySearch_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeInstanceKeySearch_QueryParams
+        ? { query?: GetKnowledgeInstanceKeySearch_QueryParams }
+        : { query: GetKnowledgeInstanceKeySearch_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeInstanceKeySearch_RouteContract {
+  pathParams: GetKnowledgeInstanceKeySearch_PathParams;
+  queryParams: GetKnowledgeInstanceKeySearch_QueryParams;
+  body: never;
+  request: GetKnowledgeInstanceKeySearch_Request;
+  response: GetKnowledgeInstanceKeySearch_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:instanceKey/activity
+// ============================================================================
+export type GetKnowledgeInstanceKeyActivity_PathParams = GetKnowledgeInstanceKeyScopes_PathParams;
+
+export type GetKnowledgeInstanceKeyActivity_QueryParams = {
+  scopeNodeId?: string | undefined;
+  cursor?: string | undefined;
+};
+
+export type GetKnowledgeInstanceKeyActivity_Response = {
+  events: {
+    id: string;
+    action: string;
+    recordType: 'node' | 'record';
+    recordId?: string | undefined;
+    scope: string[];
+    node: {
+      id: string;
+      name: string;
+      rung: 'org';
+    };
+    createdAt: string;
+  }[];
+  nextCursor?: string | undefined;
+};
+
+export type GetKnowledgeInstanceKeyActivity_Request = Simplify<
+  (GetKnowledgeInstanceKeyActivity_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeInstanceKeyActivity_PathParams }) &
+    (GetKnowledgeInstanceKeyActivity_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeInstanceKeyActivity_QueryParams
+        ? { query?: GetKnowledgeInstanceKeyActivity_QueryParams }
+        : { query: GetKnowledgeInstanceKeyActivity_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeInstanceKeyActivity_RouteContract {
+  pathParams: GetKnowledgeInstanceKeyActivity_PathParams;
+  queryParams: GetKnowledgeInstanceKeyActivity_QueryParams;
+  body: never;
+  request: GetKnowledgeInstanceKeyActivity_Request;
+  response: GetKnowledgeInstanceKeyActivity_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /scores/scorers
 // ============================================================================
 export type GetScoresScorers_Response = {
@@ -10626,7 +10905,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_210 | undefined;
+  where?: InputShared_Auxiliary_215 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10716,11 +10995,11 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_210 | undefined;
+  where?: InputShared_Auxiliary_215 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_233 | undefined;
+  having?: InputShared_Auxiliary_238 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10801,11 +11080,11 @@ export type PostObservabilitySpansAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_233 | undefined;
+  where?: InputShared_Auxiliary_238 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_233 | undefined;
+  having?: InputShared_Auxiliary_238 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10853,7 +11132,7 @@ export type PostObservabilityThreadsQuery_Body =
               field: 'startedAt' | 'endedAt';
             };
           };
-      where?: InputShared_Auxiliary_233 | undefined;
+      where?: InputShared_Auxiliary_238 | undefined;
       orderBy?: {
         field: 'startedAt' | 'endedAt';
         direction: 'asc' | 'desc';
@@ -10869,9 +11148,9 @@ export type PostObservabilityThreadsQuery_Body =
           from: string;
           to: string;
         };
-        where?: InputShared_Auxiliary_210 | undefined;
+        where?: InputShared_Auxiliary_215 | undefined;
       };
-      where?: InputShared_Auxiliary_280 | undefined;
+      where?: InputShared_Auxiliary_285 | undefined;
       page?: {
         limit?: number;
         after?: (string | null) | undefined;
@@ -10949,7 +11228,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_233 | undefined;
+  where?: InputShared_Auxiliary_238 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
     direction: 'asc' | 'desc';
@@ -19059,7 +19338,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_786[] | undefined;
+  files?: InputShared_Auxiliary_791[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19117,7 +19396,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_786[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_791[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -24761,6 +25040,12 @@ export interface RouteTypes {
   'DELETE /memory/network/threads/:threadId': DeleteMemoryNetworkThreadsThreadId_RouteContract;
   'POST /memory/network/messages/delete': PostMemoryNetworkMessagesDelete_RouteContract;
   'POST /knowledge/:instanceKey/importers/:importerId/webhook': PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
+  'GET /knowledge': GetKnowledge_RouteContract;
+  'GET /knowledge/:instanceKey/scopes': GetKnowledgeInstanceKeyScopes_RouteContract;
+  'GET /knowledge/:instanceKey/graph': GetKnowledgeInstanceKeyGraph_RouteContract;
+  'GET /knowledge/:instanceKey/nodes/:nodeId': GetKnowledgeInstanceKeyNodesNodeId_RouteContract;
+  'GET /knowledge/:instanceKey/search': GetKnowledgeInstanceKeySearch_RouteContract;
+  'GET /knowledge/:instanceKey/activity': GetKnowledgeInstanceKeyActivity_RouteContract;
   'GET /scores/scorers': GetScoresScorers_RouteContract;
   'GET /scores/scorers/:scorerId': GetScoresScorersScorerId_RouteContract;
   'GET /scores/run/:runId': GetScoresRunRunId_RouteContract;
@@ -25549,8 +25834,26 @@ export interface Client {
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
   };
+  '/knowledge': {
+    GET: GetKnowledge_RouteContract;
+  };
+  '/knowledge/:instanceKey/activity': {
+    GET: GetKnowledgeInstanceKeyActivity_RouteContract;
+  };
+  '/knowledge/:instanceKey/graph': {
+    GET: GetKnowledgeInstanceKeyGraph_RouteContract;
+  };
   '/knowledge/:instanceKey/importers/:importerId/webhook': {
     POST: PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
+  };
+  '/knowledge/:instanceKey/nodes/:nodeId': {
+    GET: GetKnowledgeInstanceKeyNodesNodeId_RouteContract;
+  };
+  '/knowledge/:instanceKey/scopes': {
+    GET: GetKnowledgeInstanceKeyScopes_RouteContract;
+  };
+  '/knowledge/:instanceKey/search': {
+    GET: GetKnowledgeInstanceKeySearch_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

@@ -206,6 +206,8 @@ export const PERMISSION_PATTERNS = {
   'experiments:read': 'experiments:read',
   /** View infrastructure */
   'infrastructure:read': 'infrastructure:read',
+  /** View knowledge */
+  'knowledge:read': 'knowledge:read',
   /** Create and modify knowledge */
   'knowledge:write': 'knowledge:write',
   /** View logs */
@@ -386,6 +388,7 @@ export const PERMISSIONS = [
   'experiments:delete',
   'experiments:read',
   'infrastructure:read',
+  'knowledge:read',
   'knowledge:write',
   'logs:read',
   'mcp:execute',
@@ -512,6 +515,8 @@ export const MastraFGAPermissions = {
   EXPERIMENTS_READ: 'experiments:read',
   /** View infrastructure */
   INFRASTRUCTURE_READ: 'infrastructure:read',
+  /** View knowledge */
+  KNOWLEDGE_READ: 'knowledge:read',
   /** Create and modify knowledge */
   KNOWLEDGE_WRITE: 'knowledge:write',
   /** View logs */

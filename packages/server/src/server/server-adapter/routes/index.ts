@@ -18,6 +18,7 @@ import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { DYNAMIC_WORKFLOWS_ROUTES } from './dynamic-workflows';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
+import { KNOWLEDGE_ROUTES } from './knowledge';
 import { KNOWLEDGE_IMPORT_ROUTES } from './knowledge-imports';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -173,6 +174,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...CONVERSATIONS_ROUTES,
   ...MEMORY_ROUTES,
   ...KNOWLEDGE_IMPORT_ROUTES,
+  ...KNOWLEDGE_ROUTES,
   ...SCORES_ROUTES,
   ...OBSERVABILITY_ROUTES,
   ...LOGS_ROUTES,
@@ -214,6 +216,7 @@ export type ServerRoutes = readonly [
   ...typeof CONVERSATIONS_ROUTES,
   ...typeof MEMORY_ROUTES,
   ...typeof KNOWLEDGE_IMPORT_ROUTES,
+  ...typeof KNOWLEDGE_ROUTES,
   ...typeof SCORES_ROUTES,
   ...typeof OBSERVABILITY_ROUTES,
   ...typeof LOGS_ROUTES,
