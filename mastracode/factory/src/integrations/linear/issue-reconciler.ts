@@ -52,13 +52,13 @@ export function attachLinearIssueReconciler(
     storage: context.runtime.workItems,
     isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
     issueId: item => {
-      const issueId = item.metadata?.linearIssueId;
+      const issueId = item.workItem.metadata?.linearIssueId;
       return typeof issueId === 'string' && issueId.length > 0 ? issueId : undefined;
     },
     metadata: (_item, issue) => ({
       linearIssueId: issue.id,
       // Persist explicit removal too; omitting the key would retain stale membership.
-      linearProjectId: issue.projectId,
+      linearProjectId: issue.projectId ?? null,
       identifier: issue.identifier,
       linearState: issue.state,
       linearStateType: issue.stateType,

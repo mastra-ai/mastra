@@ -8,6 +8,7 @@ import type { PgFactoryStorage } from '@mastra/pg';
 import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
+import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { AuditStorage } from './domains/audit/base.js';
 import { StoredBoardsStorage } from './domains/boards/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
@@ -22,6 +23,30 @@ import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
+import type { ExternalWorkItemSource } from './domains/work-items/base.js';
+import type { WorkItemRow } from './domains/work-items/work-item-schema.js';
+
+export function createProviderWorkItemForTests(input: {
+  id: string;
+  title: string;
+  source: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}): WorkItemRow {
+  return {
+    ...workItemProviderAdapter(input.source).toWorkItem(input.source, input.metadata, {
+      title: input.title,
+      boardItemId: input.id,
+    }),
+    id: `work-${input.id}`,
+    orgId: 'org-1',
+    factoryProjectId: 'project-1',
+    parentWorkItemId: null,
+    revision: 1,
+    syncedAt: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+}
 
 /** Keep migration tests from clearing tables another Postgres test is using. */
 export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {

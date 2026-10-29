@@ -9,6 +9,8 @@ import type {
   Card,
   WorkItemSubscription,
 } from '../storage/domains/work-items/base.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { splitCardMetadata, workItemProviderAdapter } from '../work-items/providers/index.js';
 import { MAX_ERROR, MAX_TEXT, createFactoryReadTools } from './read-tools.js';
 import type { FactoryReadToolDependencies } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
@@ -28,11 +30,11 @@ let clock = Date.parse('2026-10-01T00:00:00Z');
 
 function item(overrides: Partial<Card> & { id: string }): Card {
   clock += 60_000;
-  return {
+  const card = {
     orgId: 'org-1',
     factoryProjectId: 'project-1',
     board: null,
-    externalSource: null,
+    externalSource: { integrationId: 'github', type: 'issue', externalId: overrides.id },
     claimKey: null,
     parentWorkItemId: null,
     title: `Item ${overrides.id}`,
@@ -51,7 +53,20 @@ function item(overrides: Partial<Card> & { id: string }): Card {
     createdAt: new Date(clock),
     updatedAt: new Date(clock),
     ...overrides,
-  } as Card;
+  };
+  const workItem = createProviderWorkItemForTests({
+    id: card.id,
+    title: card.title,
+    source: card.externalSource,
+    metadata: card.metadata,
+  });
+  return {
+    ...card,
+    workItemId: workItem.id,
+    parentBoardItemId: card.parentWorkItemId,
+    metadata: splitCardMetadata(card.metadata, workItemProviderAdapter(card.externalSource).providerMetadataKeys).board,
+    workItem,
+  };
 }
 
 function binding(workItemId: string, role: string, status: 'active' | 'revoked' = 'active'): FactoryRunBindingRecord {

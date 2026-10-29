@@ -22,8 +22,8 @@ export async function reconcileGithubAcceptanceLabels(
 ): Promise<void> {
   const { item } = input;
   if (item.externalSource?.integrationId !== 'github' || item.externalSource.type !== 'issue') return;
-  const repositoryId = item.metadata?.githubRepositoryId;
-  const issueNumber = item.metadata?.githubIssueNumber;
+  const repositoryId = item.workItem.metadata?.githubRepositoryId;
+  const issueNumber = item.workItem.metadata?.githubIssueNumber;
   if (typeof repositoryId !== 'number' || typeof issueNumber !== 'number' || issueNumber < 1) return;
 
   try {

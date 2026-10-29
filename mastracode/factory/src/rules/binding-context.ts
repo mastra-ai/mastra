@@ -186,7 +186,7 @@ async function healRecoveredSessionState(options: {
     const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';
     if (untrusted) {
       updates.untrustedCheckout = true;
-      const metadataBaseBranch = item?.metadata?.baseBranch;
+      const metadataBaseBranch = item?.workItem.metadata?.baseBranch;
       const baseRef =
         sourceSession?.baseBranch ||
         (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);

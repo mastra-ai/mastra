@@ -93,7 +93,10 @@ function issueOpened(context: FactoryGithubRuleContext) {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
       ...(context.issue.createdAt ? { sourceCreatedAt: context.issue.createdAt } : {}),
-      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      ...(context.issue.author || githubActorLogin(context)
+        ? { author: context.issue.author ?? githubActorLogin(context) }
+        : {}),
+      state: context.issue.state ?? 'open',
       authorTrusted: trustedGithubActor(context),
       autoStartCandidate:
         trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt),
