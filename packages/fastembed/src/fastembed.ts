@@ -242,10 +242,20 @@ function getRequiredOutput(outputs: Record<string, ort.Tensor>, outputName: stri
   return tensor;
 }
 
-// Pooling indexes token-level [batch, sequence, features] output; other ranks would silently yield empty vectors.
-function getOutputDimensions(outputName: string, tensor: ort.Tensor): [number, number, number] {
+// Pooling indexes token-level [batch, sequence, features] output with one row per input text; other ranks would
+// silently yield empty vectors, and other batch sizes would yield the wrong number of vectors or read missing masks.
+function getOutputDimensions(
+  outputName: string,
+  tensor: ort.Tensor,
+  expectedBatchSize: number,
+): [number, number, number] {
   if (tensor.dims.length !== 3) {
     throw new Error(`Expected model output "${outputName}" to have 3 dimensions, received [${tensor.dims.join(', ')}]`);
+  }
+  if (tensor.dims[0] !== expectedBatchSize) {
+    throw new Error(
+      `Expected model output "${outputName}" to have batch size ${expectedBatchSize}, received ${tensor.dims[0]}`,
+    );
   }
   return tensor.dims as [number, number, number];
 }
@@ -422,7 +432,7 @@ export class FlagEmbedding extends Embedding {
       const lastHiddenState = getRequiredOutput(output, 'last_hidden_state');
       const embeddings = getEmbeddings(
         lastHiddenState.data as unknown[] as number[],
-        getOutputDimensions('last_hidden_state', lastHiddenState),
+        getOutputDimensions('last_hidden_state', lastHiddenState, batchTexts.length),
         this.model === EmbeddingModel.AllMiniLML6V2 || this.model === EmbeddingModel.MLE5Large ? maskArray : undefined,
       );
 
@@ -611,7 +621,11 @@ export class SparseTextEmbedding extends SparseEmbedding {
       const outputTensor = getRequiredOutput(output, 'output');
       // @ts-expect-error cpuData exists at runtime on onnxruntime Tensor
       const logits = outputTensor.cpuData as Float32Array;
-      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions('output', outputTensor);
+      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions(
+        'output',
+        outputTensor,
+        batchTexts.length,
+      );
 
       const sparseVectors: SparseVector[] = [];
 
