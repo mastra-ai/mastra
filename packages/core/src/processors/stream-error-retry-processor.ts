@@ -115,11 +115,14 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
  * Recommended with `maxRetries: 1` since a 400 could also be genuinely invalid.
  * Credential and quota refusals are never matched: OpenAI stream error frames such as
  * `invalid_api_key` can surface with a derived `statusCode: 400`, and Anthropic reports
- * an exhausted credit balance or usage cap as a 400.
+ * an exhausted credit balance or usage cap as a 400. A rejected model or parameter
+ * (`model_not_found`, unsupported model) is never matched either: the identical
+ * request fails the same way on retry.
  */
 export function isBadRequestError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   if (isAccountRefusal(error)) return false;
+  if (classifyProviderError(error) === 'model_rejected') return false;
 
   if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
 
