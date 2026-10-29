@@ -249,6 +249,17 @@ export class KnowledgePageDepthError extends Error {
 }
 
 /** @experimental */
+export class KnowledgePageKeyConflictError extends Error {
+  constructor(
+    readonly key: string,
+    readonly scopeId: string,
+  ) {
+    super(`Knowledge page key "${key}" already exists in scope ${scopeId}. Rename or remove one of the keys first.`);
+    this.name = 'KnowledgePageKeyConflictError';
+  }
+}
+
+/** @experimental */
 export class KnowledgePageHasChildrenError extends Error {
   constructor(pageId: string) {
     super(`Page ${pageId} has child pages. Move or delete them first.`);
@@ -503,13 +514,19 @@ export interface KnowledgePageStore {
   }): Promise<KnowledgePageListOutput>;
   createPage(input: CreateKnowledgePageInput): Promise<KnowledgePage>;
   updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage>;
-  /** Moves the page and its subtree in one transaction; refuses scope pages, cycles, depth and size. */
+  /**
+   * Moves the page and its subtree in one transaction; refuses scope pages, cycles, depth and size,
+   * and refuses with {@link KnowledgePageKeyConflictError}, before changing anything, when a live
+   * carried page's key already exists in the destination scope. Size and depth count live pages only;
+   * soft-deleted descendants move with their parents without counting.
+   */
   movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage>;
   /**
    * Moves the source's notes, child pages and pin audience to the target, retargets mentions of the
    * source, and soft-deletes the source with `mergedInto`. Notes keep their stamps and text. Refuses
    * scope pages on either side, a target inside the source's subtree (or the source itself), and
-   * merges past the depth limit or {@link MAX_KNOWLEDGE_MOVE_PAGES} carried pages, like `movePage`.
+   * merges past the depth limit or {@link MAX_KNOWLEDGE_MOVE_PAGES} carried pages, and key clashes
+   * in the target's scope, like `movePage` (the source itself is deleted, so its key never clashes).
    */
   mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage>;
   /** Soft-deletes an ordinary page with no live children and drops its pin; refuses scope pages. */

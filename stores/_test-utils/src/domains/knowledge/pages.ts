@@ -309,6 +309,52 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect((await store.getPage({ id: root.id, read: 'all' }))!.scopeId).toBe(acme.id);
       });
 
+      it('refuses a move that would duplicate a key in the destination scope, changing nothing', async () => {
+        const a = await scope('org:a', ORG);
+        const b = await scope('org:b', ORG);
+        const aPolicy = await page(a.id, 'A policy', { key: 'policy' });
+        await page(a.id, 'A handbook', { key: 'handbook' });
+        const bPolicy = await page(b.id, 'B policy', { key: 'policy' });
+        const bParent = await page(b.id, 'B parent');
+        const bChild = await page(bParent.id, 'B child', { key: 'handbook' });
+
+        await rejectsNamed(
+          store.movePage({ id: bPolicy.id, expectedVersion: 1, parentId: aPolicy.id, provenance: host }),
+          'KnowledgePageKeyConflictError',
+        );
+        await rejectsNamed(
+          store.movePage({ id: bParent.id, expectedVersion: 1, parentId: a.id, provenance: host }),
+          'KnowledgePageKeyConflictError',
+        );
+        expect(await store.getPage({ id: bPolicy.id, read: 'all' })).toMatchObject({ scopeId: b.id, version: 1 });
+        expect(await store.getPage({ id: bParent.id, read: 'all' })).toMatchObject({ scopeId: b.id, parentId: b.id });
+        expect(await store.getPage({ id: bChild.id, read: 'all' })).toMatchObject({ scopeId: b.id });
+        expect(await store.getPageByKey({ scopeId: a.id, key: 'policy', read: 'all' })).toMatchObject({
+          id: aPolicy.id,
+        });
+
+        // Within one scope a key can't clash with itself.
+        await expect(
+          store.movePage({ id: bChild.id, expectedVersion: 1, parentId: b.id, provenance: host }),
+        ).resolves.toMatchObject({ parentId: b.id, key: 'handbook' });
+      });
+
+      it('counts only live pages toward move depth and carries deleted descendants along', async () => {
+        const acme = await scope('org:acme', ORG);
+        const globex = await scope('org:globex', ORG);
+        const parent = await page(acme.id, 'parent');
+        const child = await page(parent.id, 'child');
+        const grandchild = await page(child.id, 'grandchild');
+        await store.deletePage({ id: grandchild.id, expectedVersion: 1, deletedBy: 'agent:alex' });
+
+        let deep = globex.id;
+        for (let depth = 1; depth <= MAX_KNOWLEDGE_PAGE_DEPTH - 2; depth++) deep = (await page(deep, `d${depth}`)).id;
+        // Live parent+child land at depths 9 and 10; the deleted grandchild would be 11 and doesn't count.
+        await store.movePage({ id: parent.id, expectedVersion: 1, parentId: deep, provenance: host });
+        expect(await store.getPage({ id: child.id, read: 'all' })).toMatchObject({ scopeId: globex.id });
+        expect(await store.getPage({ id: grandchild.id, read: 'all' })).toMatchObject({ scopeId: globex.id });
+      });
+
       it('merges notes, child pages, pins and mentions into the target', async () => {
         const acme = await scope('org:acme', ORG);
         const source = await page(acme.id, 'Source');
@@ -368,6 +414,63 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           store.mergePages({ sourceId: source.id, sourceVersion: 1, targetId: source.id, provenance: host }),
           /subtree/,
         );
+      });
+
+      it("refuses a merge whose carried pages' keys clash in the target scope; the source's own key never does", async () => {
+        const a = await scope('org:a', ORG);
+        const b = await scope('org:b', ORG);
+        const aPolicy = await page(a.id, 'A policy', { key: 'policy' });
+        const target = await page(a.id, 'Target');
+        const source = await page(b.id, 'Source');
+        const sourceChild = await page(source.id, 'Source child', { key: 'policy' });
+
+        await rejectsNamed(
+          store.mergePages({ sourceId: source.id, sourceVersion: 1, targetId: target.id, provenance: host }),
+          'KnowledgePageKeyConflictError',
+        );
+        expect(await store.getPage({ id: source.id, read: 'all' })).toMatchObject({ version: 1, scopeId: b.id });
+        expect((await store.getPage({ id: source.id, read: 'all' }))!.deletedAt).toBeUndefined();
+        expect(await store.getPage({ id: sourceChild.id, read: 'all' })).toMatchObject({
+          parentId: source.id,
+          scopeId: b.id,
+        });
+        expect(await store.getPageByKey({ scopeId: a.id, key: 'policy', read: 'all' })).toMatchObject({
+          id: aPolicy.id,
+        });
+
+        const keyedSource = await page(b.id, 'Keyed source', { key: 'policy-b' });
+        await page(a.id, 'A policy-b', { key: 'policy-b' });
+        await expect(
+          store.mergePages({ sourceId: keyedSource.id, sourceVersion: 1, targetId: target.id, provenance: host }),
+        ).resolves.toMatchObject({ id: target.id });
+      });
+
+      it('refuses a merge past the depth cap or carrying too many pages, changing nothing', async () => {
+        const acme = await scope('org:acme', ORG);
+        const globex = await scope('org:globex', ORG);
+        const source = await page(acme.id, 'Source');
+        const c1 = await page(source.id, 'c1');
+        await page(c1.id, 'c2');
+        let deep = globex.id;
+        for (let depth = 1; depth < MAX_KNOWLEDGE_PAGE_DEPTH; depth++) deep = (await page(deep, `d${depth}`)).id;
+        // The target sits at depth 9: c1 would land at 10, c2 at 11.
+        await rejectsNamed(
+          store.mergePages({ sourceId: source.id, sourceVersion: 1, targetId: deep, provenance: host }),
+          'KnowledgePageDepthError',
+        );
+        expect(await store.getPage({ id: c1.id, read: 'all' })).toMatchObject({
+          parentId: source.id,
+          scopeId: acme.id,
+        });
+
+        const big = await page(acme.id, 'Big');
+        const shallow = await page(globex.id, 'Shallow');
+        for (let i = 0; i < MAX_KNOWLEDGE_MOVE_PAGES + 1; i++) await page(big.id, `b${i}`);
+        await rejectsNamed(
+          store.mergePages({ sourceId: big.id, sourceVersion: 1, targetId: shallow.id, provenance: host }),
+          'KnowledgeMoveTooLargeError',
+        );
+        expect((await store.getPage({ id: big.id, read: 'all' }))!.deletedAt).toBeUndefined();
       });
 
       it('deletes only a page without live children, dropping its pin; scope pages never', async () => {
