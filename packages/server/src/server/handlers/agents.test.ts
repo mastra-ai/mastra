@@ -1584,6 +1584,53 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  // https://github.com/mastra-ai/mastra/issues/28760
+  describe('requestContextSchema validation failure', () => {
+    function createSchemaAgents() {
+      const schemaAgent = new Agent({
+        id: 'schema-agent',
+        name: 'schema-agent',
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+        requestContextSchema: z.object({ userId: z.string() }),
+      });
+      const durableSchemaAgent = createDurableAgent({
+        agent: schemaAgent,
+        id: 'durable-schema-agent',
+        name: 'durable-schema-agent',
+      });
+      const schemaMastra = new Mastra({
+        agents: { 'schema-agent': schemaAgent, 'durable-schema-agent': durableSchemaAgent },
+        storage,
+        logger: false,
+      });
+      return schemaMastra;
+    }
+
+    for (const agentId of ['schema-agent', 'durable-schema-agent']) {
+      for (const [name, route] of [
+        ['generate', GENERATE_AGENT_ROUTE],
+        ['stream', STREAM_GENERATE_ROUTE],
+      ] as const) {
+        it(`${name} on ${agentId} responds 400 with the validation message`, async () => {
+          const schemaMastra = createSchemaAgents();
+          const error = await (route.handler as any)({
+            mastra: schemaMastra,
+            agentId,
+            requestContext: new RequestContext(),
+            abortSignal: new AbortController().signal,
+            messages: [{ role: 'user', content: 'hi' }],
+          }).catch((e: unknown) => e);
+
+          expect(error).toBeInstanceOf(HTTPException);
+          expect((error as HTTPException).status).toBe(400);
+          expect((error as HTTPException).message).toContain('Request context validation failed');
+          expect((error as HTTPException).message).toContain('userId');
+        });
+      }
+    }
+  });
+
   describe('RESUME_STREAM_ROUTE', () => {
     async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
       const workflowsStore = await storage.getStore('workflows');
