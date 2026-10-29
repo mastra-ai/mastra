@@ -477,5 +477,34 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     if (match.compiled.key === address) continue;
     entry.rules = compileRules(address, entry.declaration.access, Object.keys(match.params), undefined, true);
   }
+
+  const checkPins = (owner: string, pins: string[] | undefined, params: string[]) => {
+    for (const ref of pins ?? []) {
+      const hash = ref.indexOf('#');
+      if (hash <= 0 || hash === ref.length - 1) {
+        throw new KnowledgeDeclarationError(
+          `Knowledge config pin "${ref}" on "${owner}" must be "<scope>#<key>" naming a keyed page, e.g. "policy:$orgId#refund-policy".`,
+        );
+      }
+      const pattern = typedPattern(ref.slice(0, hash), `Knowledge config pin scope on "${owner}"`);
+      if (!compiledScopes.match(sampleAddress(pattern))) {
+        throw new KnowledgeDeclarationError(
+          `Knowledge config pin "${ref}" on "${owner}" points at an undeclared scope type; declare it or fix the typo.`,
+        );
+      }
+      const unbound = pattern.params.filter(param => !params.includes(param));
+      if (unbound.length) {
+        throw new KnowledgeDeclarationError(
+          `Knowledge config pin "${ref}" on "${owner}" uses ${unbound.map(p => `$${p}`).join(', ')}, which "${owner}" can't bind; pin params come from the holding scope's address.`,
+        );
+      }
+    }
+  };
+  for (const compiled of all.values()) {
+    if (!compiled.child) checkPins(compiled.key, compiled.declaration.pins, compiled.pattern.params);
+  }
+  for (const [address, entry] of concrete) {
+    checkPins(address, entry.declaration.pins, Object.keys(compiledScopes.match(address)!.params));
+  }
   return compiledScopes;
 }

@@ -27,6 +27,9 @@ function resolvePins(pins: KnowledgeConfig['pinnedContext']): false | PinBudget 
   return { maxPins: options.maxPins ?? DEFAULT_MAX_PINS, maxTokens };
 }
 
+/** Below this share of the pin budget each, config pins are too cut down to be useful. */
+const MIN_TOKENS_PER_CONFIG_PIN = 50;
+
 /** Overrides which tool groups `createTools` and `getInstructions` cover. */
 type KnowledgeToolSelection = { read?: boolean; write?: boolean; pinnedContext?: boolean };
 
@@ -44,6 +47,26 @@ export class Knowledge extends MastraBase {
   #tools: { read: boolean; write: boolean };
   #pins: false | PinBudget;
   #instructions?: KnowledgeInstructionsOption;
+
+  /** Config pins are never dropped, so a scope with more of them than the budget holds is a setup mistake. */
+  #warnOnPinOvercommit(budget: PinBudget) {
+    const { declarations, concrete } = this.#runtime.compiled;
+    const entries: Array<[string, string[] | undefined]> = [
+      ...[...declarations.values()].map(
+        compiled => [compiled.key, compiled.declaration.pins] as [string, string[] | undefined],
+      ),
+      ...[...concrete].map(([address, entry]) => [address, entry.declaration.pins] as [string, string[] | undefined]),
+    ];
+    for (const [key, pins] of entries) {
+      const count = pins?.length ?? 0;
+      if (count === 0) continue;
+      if (count > budget.maxPins || budget.maxTokens / count < MIN_TOKENS_PER_CONFIG_PIN) {
+        this.logger.warn(
+          `Knowledge scope "${key}" has ${count} config pins for a budget of ${budget.maxPins} pins / ${budget.maxTokens} tokens; config pins are never dropped, so each will be cut to about ${Math.floor(budget.maxTokens / count)} tokens and stored pins won't fit. Pin fewer pages or raise pinnedContext.maxTokens.`,
+        );
+      }
+    }
+  }
 
   constructor(config: KnowledgeConfig) {
     super({ component: 'STORAGE', name: config?.name ?? config?.id ?? 'Knowledge' });
@@ -66,6 +89,7 @@ export class Knowledge extends MastraBase {
       () => this.getStorage(),
       message => this.logger.warn(message),
     );
+    if (this.#pins) this.#warnOnPinOvercommit(this.#pins);
     this.hasOwnStorage = config.storage !== undefined;
     if (config.storage) {
       this.#storageSource = getStorageSource(config.storage);

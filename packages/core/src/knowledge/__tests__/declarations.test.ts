@@ -298,3 +298,45 @@ describe('knowledgeMemoryScopes', () => {
     expect(noOrg['resource:$resourceId']!.belongsTo).toBeUndefined();
   });
 });
+
+describe('compileKnowledgeScopes: config pins', () => {
+  const policy = {
+    'org:$orgId': {},
+    'policy:$orgId': { access: [{ principal: 'org:$orgId', role: 'viewer' as const }] },
+    'team:$orgId:$teamId': {},
+  };
+
+  it('accepts a keyed pin whose params the holding scope binds, on patterns and concrete addresses', () => {
+    expect(() =>
+      compileKnowledgeScopes({
+        ...policy,
+        'role:$orgId:$role': { pins: ['policy:$orgId#refund-policy'] },
+        'role:acme:support': { pins: ['policy:acme#refund-policy', 'policy:$orgId#returns'] },
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses a pin with a param the holding scope cannot bind', () => {
+    expect(() =>
+      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['team:$orgId:$teamId#refund'] } }),
+    ).toThrow(/uses \$teamId, which "role:\$orgId:\$role" can't bind/);
+    expect(() =>
+      compileKnowledgeScopes({
+        ...policy,
+        'role:$orgId:$role': {},
+        'role:acme:support': { pins: ['team:$orgId:$teamId#refund'] },
+      }),
+    ).toThrow(/uses \$teamId/);
+  });
+
+  it('refuses a pin that is a name or has no key, and one on an undeclared type', () => {
+    for (const ref of ['Refund Policy', 'policy:$orgId#', '#refund']) {
+      expect(() => compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: [ref] } })).toThrow(
+        /must be "<scope>#<key>"/,
+      );
+    }
+    expect(() =>
+      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['handbook:$orgId#intro'] } }),
+    ).toThrow(/undeclared scope type/);
+  });
+});
