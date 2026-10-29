@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type { TraceAggregateMeasure } from '../observability/trace-aggregate';
+import type { FilterNode } from '../saved-views/filter-node';
 import type {
   DashboardDefinition,
   DashboardDefinitionEnvelope,
@@ -8,7 +9,6 @@ import type {
   migrateDashboardDefinition,
   NormalizedDashboardQuery,
 } from './dashboard';
-import type { DashboardFilterNode } from './dashboard-filters';
 
 describe('DashboardQuery type', () => {
   it('narrows on source and request', () => {
@@ -57,9 +57,7 @@ describe('DashboardQuery type', () => {
 
 describe('DashboardDefinition type', () => {
   it('uses the filter node shape for defaults', () => {
-    expectTypeOf<NonNullable<NonNullable<DashboardDefinition['defaults']>['filters']>>().toEqualTypeOf<
-      DashboardFilterNode[]
-    >();
+    expectTypeOf<NonNullable<NonNullable<DashboardDefinition['defaults']>['filters']>>().toEqualTypeOf<FilterNode[]>();
   });
 
   it('accepts any string kind', () => {

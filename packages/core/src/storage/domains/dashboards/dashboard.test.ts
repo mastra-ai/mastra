@@ -406,6 +406,24 @@ describe('dashboardDefinitionSchema', () => {
       expect(dashboardDefinitionSchema.safeParse(input).success).toBe(false);
     }
   });
+
+  it('follows the shared filter node schema: unknown filter fields are dropped, unknown dashboard fields rejected', () => {
+    const filters = [
+      { fieldId: 'status', value: 'error', extra: true },
+      { id: 'g', logic: 'or', extra: true, nodes: [{ fieldId: 'env', value: ['prod'], extra: true }] },
+    ];
+    const result = dashboardDefinitionSchema.safeParse({ ...definition([[widget('w')]]), defaults: { filters } });
+    expect(result.data?.defaults?.filters).toEqual([
+      { fieldId: 'status', value: 'error' },
+      { id: 'g', logic: 'or', nodes: [{ fieldId: 'env', value: ['prod'] }] },
+    ]);
+
+    const strict = dashboardDefinitionSchema.safeParse({
+      ...definition([[widget('w')]]),
+      defaults: { filters: [], extra: true },
+    });
+    expect(strict.success).toBe(false);
+  });
 });
 
 describe('dashboardDefinitionEnvelopeSchema', () => {

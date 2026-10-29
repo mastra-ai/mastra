@@ -15,7 +15,7 @@ import { z } from 'zod/v4';
 import { spanAggregateQueryObjectSchema } from '../observability/span-aggregate';
 import { traceAggregateQueryObjectSchema } from '../observability/trace-aggregate';
 import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from '../observability/trace-query';
-import { dashboardFilterNodeSchema } from './dashboard-filters';
+import { filterNodeSchema } from '../saved-views/filter-node';
 
 /**
  * Stored definition of a custom dashboard: rows of widgets on a 12-column grid, each widget
@@ -265,7 +265,7 @@ export const dashboardDrilldownTargetSchema = z
   .object({
     page: z.enum(DASHBOARD_DRILLDOWN_PAGES),
     /** Added to the page's range (and, for `click`, the clicked row's dimensions) when the drilldown opens. */
-    filters: z.array(dashboardFilterNodeSchema).optional(),
+    filters: z.array(filterNodeSchema).optional(),
   })
   .strict();
 
@@ -320,7 +320,7 @@ export const dashboardRowSchema = z.object({ widgets: z.array(dashboardWidgetSch
 export const dashboardDefaultsSchema = z
   .object({
     datePreset: z.string().min(1).optional(),
-    filters: z.array(dashboardFilterNodeSchema).optional(),
+    filters: z.array(filterNodeSchema).optional(),
   })
   .strict();
 
