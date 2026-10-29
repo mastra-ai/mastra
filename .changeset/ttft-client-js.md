@@ -7,7 +7,7 @@
 ```ts
 const { capabilities } = await mastraClient.getObservabilityCapabilities();
 
-if (capabilities.traceQueryTimeToFirstTokenSort) {
+if (capabilities.traceQuery && capabilities.traceQueryTimeToFirstTokenSort) {
   const { traces } = await mastraClient.queryTraces({
     timeRange,
     orderBy: [{ field: 'timeToFirstTokenMs', direction: 'desc' }],
