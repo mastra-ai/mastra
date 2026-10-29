@@ -77,6 +77,11 @@ export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Ro
    * the scrollbar only appears while actively scrolling. Defaults to `true`.
    */
   revealScrollbarOnHover?: boolean;
+  /**
+   * Keep the scrollbar visible whenever the content overflows, so readers can tell there is more
+   * to scroll to. Overrides `revealScrollbarOnHover`. Defaults to `false`.
+   */
+  alwaysShowScrollbar?: boolean;
 };
 
 type ResolvedMask = Record<'top' | 'bottom' | 'left' | 'right', MaskFadeDepth | false>;
@@ -309,6 +314,7 @@ function ScrollArea({
   scrollButtons,
   mask,
   revealScrollbarOnHover = true,
+  alwaysShowScrollbar = false,
   ...props
 }: ScrollAreaProps) {
   const areaRef = React.useRef<HTMLDivElement>(null);
@@ -357,10 +363,14 @@ function ScrollArea({
       </ScrollAreaViewportContext>
       {scrollButtons && orientation !== 'vertical' && <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />}
       {(orientation === 'vertical' || orientation === 'both') && (
-        <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} />
+        <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} alwaysVisible={alwaysShowScrollbar} />
       )}
       {(orientation === 'horizontal' || orientation === 'both') && (
-        <ScrollBar orientation="horizontal" revealOnHover={revealScrollbarOnHover} />
+        <ScrollBar
+          orientation="horizontal"
+          revealOnHover={revealScrollbarOnHover}
+          alwaysVisible={alwaysShowScrollbar}
+        />
       )}
       {orientation === 'both' && <ScrollAreaPrimitive.Corner />}
     </ScrollAreaPrimitive.Root>
@@ -371,16 +381,17 @@ function ScrollBar({
   className,
   orientation = 'vertical',
   revealOnHover = true,
+  alwaysVisible = false,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean; alwaysVisible?: boolean }) {
   return (
     <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
         'flex touch-none transition-opacity duration-normal ease-out-custom select-none',
-        'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
-        revealOnHover && 'data-[hovering]:opacity-100',
+        alwaysVisible ? 'opacity-100' : 'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
+        revealOnHover && !alwaysVisible && 'data-[hovering]:opacity-100',
         // Base UI pins the bar to both ends of the area (top/bottom or left/right), so it spans it
         // without a size class. `--scroll-area-scrollbar-inset` pulls its ends in, so a rounded
         // container (a popup) doesn't clip them; 0 by default.

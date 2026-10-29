@@ -31,6 +31,18 @@ afterAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
 });
 
+/** A span row in the tree, not the open span panel's header that repeats its title. */
+const treeRow = (title: string) => {
+  const row = screen.getAllByText(title).find(element => !element.closest('[data-slot="span-data-panel"]'));
+  if (!row) throw new Error(`No tree row titled ${title}`);
+  return row;
+};
+
+/** The open span panel, once its header shows the given span title. */
+const spanPanelTitled = async (title: string) => {
+  return screen.findByRole('region', { name: title });
+};
+
 const onSpanDetailRequest = vi.fn<(spanId: string) => void>();
 
 const threadTraceList = (count: number) => ({
@@ -284,7 +296,7 @@ describe('TraceSpanPanel', () => {
     expect(screen.getByText('First tool call')).not.toBeNull();
     expect(screen.getByText('Second tool call')).not.toBeNull();
     // No span selected → no span detail panel.
-    expect(screen.queryByRole('heading', { name: /^Span / })).toBeNull();
+    expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
@@ -296,7 +308,7 @@ describe('TraceSpanPanel', () => {
     fireEvent.click(await screen.findByText('First tool call'));
 
     expect(onSpanSelect).toHaveBeenCalledWith('child1');
-    expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
+    expect(await spanPanelTitled('First tool call')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(onSpanDetailRequest).toHaveBeenCalledWith('child1');
   });
@@ -305,13 +317,13 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel({ initialSpanId: 'child1' });
 
-    expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
+    expect(await spanPanelTitled('First tool call')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(screen.queryByLabelText('Go to next span')).toBeNull();
     expect(screen.queryByLabelText('Go to previous span')).toBeNull();
 
-    fireEvent.click(screen.getByText('Second tool call'));
-    expect(await screen.findByRole('heading', { name: /child2/ })).not.toBeNull();
+    fireEvent.click(treeRow('Second tool call'));
+    expect(await spanPanelTitled('Second tool call')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
@@ -324,6 +336,7 @@ describe('TraceSpanPanel', () => {
     );
     const { queryClient } = renderPanel({ initialSpanId: 'root01' });
 
+    fireEvent.click(await screen.findByRole('tab', { name: /^Input/ }));
     const skill = await screen.findByLabelText('Skill: weather-check');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
@@ -361,14 +374,14 @@ describe('TraceSpanPanel', () => {
     const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
     const { queryClient } = renderPanel({ initialSpanId: 'child1', onSpanSelect });
 
-    expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
+    expect(await spanPanelTitled('First tool call')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // The span column has no close button: clicking the selected span row again toggles it off.
-    fireEvent.click(screen.getByText('First tool call'));
+    fireEvent.click(treeRow('First tool call'));
 
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
-    await waitFor(() => expect(screen.queryByRole('heading', { name: /child1/ })).toBeNull());
+    await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
   });
 
   it('when the trace panel is closed, then onClose is called', async () => {
@@ -438,15 +451,16 @@ describe('TraceSpanPanel', () => {
     expect(screen.queryByRole('link', { name: /Daily report/ })).toBeNull();
   });
 
-  it('given anchorSpanId (branches mode), then the selected anchor span shows trace-level metadata', async () => {
+  it('given a span with a parent, then its Details tab still lists the trace-level ids it carries', async () => {
     installHandlers();
     const { queryClient } = renderPanel({ anchorSpanId: 'child1', initialSpanId: 'child1' });
 
-    expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
+    expect(await spanPanelTitled('First tool call')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    // Anchor spans render the trace-context fields (session/request/user…) even though they have a parent.
-    expect(screen.getByText('Session Id')).not.toBeNull();
-    expect(screen.getByText('session-42')).not.toBeNull();
+    const details = screen.getByRole('tabpanel', { name: 'Details' });
+    expect(within(details).getByText('Session')).not.toBeNull();
+    expect(within(details).getByText('session-42')).not.toBeNull();
+    expect(within(details).getByRole('button', { name: 'Copy Session id' })).not.toBeNull();
   });
 
   describe('resizable columns', () => {
