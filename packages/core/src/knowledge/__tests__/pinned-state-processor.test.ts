@@ -4,7 +4,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
-import { PinnedStateProcessor } from '../pinned-state-processor';
+import { applyPinOps, PinnedStateProcessor } from '../pinned-state-processor';
 
 describe('PinnedStateProcessor', () => {
   function harness() {
@@ -60,16 +60,19 @@ describe('PinnedStateProcessor', () => {
       undefined,
     );
 
-    // Pins follow the page: an edit shows up as remove + add of the same id.
+    // Pins follow the page: an edit shows up as one change of the same id, not a remove and an add.
     await call('knowledge_page', { op: 'write', page: 'policy:acme#tone', body: 'Answer in German.' });
     const delta = await processor.computeStateSignal(
       args({ contextWindow: { hasSnapshot: true }, lastSnapshot: base }),
     );
     expect(delta).toMatchObject({ mode: 'delta' });
     const ops = (delta as any).delta.ops;
-    expect(ops.map((op: any) => op.op)).toEqual(['remove', 'add']);
-    expect(ops[1].pin.id).toBe(first[0].id);
-    expect(ops[1].pin.text).toContain('Answer in German.');
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ op: 'change', pin: { id: first[0].id } });
+    expect(ops[0].pin.text).toContain('Answer in German.');
+    expect(delta!.contents).toContain(`~ changed {id: ${first[0].id}}`);
+    expect(delta!.contents).not.toContain('removed');
+    expect(applyPinOps(first, ops)).toEqual([ops[0].pin]);
 
     await call('knowledge_pin', { op: 'unpin', page: 'policy:acme#tone', audience: ['org:acme'] });
     const clear = await processor.computeStateSignal(

@@ -9,8 +9,8 @@
  * the cached prompt prefix stays stable.
  *
  * Each entry is a pinned page keyed by its page id, rendered from the page's
- * current body, so a delta can say exactly which pin appeared or left. An
- * edited page arrives as a `remove` and an `add` of the same id with new text.
+ * current body, so a delta can say exactly which pin appeared, changed or left.
+ * An edited page arrives as a `change` of the same id with its new text.
  */
 import type {
   ComputeStateSignalArgs,
@@ -26,7 +26,7 @@ import type { KnowledgeRunContext } from './run';
 
 export type { PinEntry } from './pinned';
 
-export type PinDeltaOp = { op: 'add'; pin: PinEntry } | { op: 'remove'; id: string };
+export type PinDeltaOp = { op: 'add'; pin: PinEntry } | { op: 'change'; pin: PinEntry } | { op: 'remove'; id: string };
 
 // Length-prefix each field so a pin text containing the `:` / `|` delimiters
 // cannot shift a boundary and collide with a different pin set.
@@ -82,13 +82,14 @@ export function effectivePriorPins(args: ComputeStateSignalArgs): PinEntry[] {
 export function diffPins(prior: PinEntry[], current: PinEntry[]): PinDeltaOp[] {
   const ops: PinDeltaOp[] = [];
   const priorText = new Map(prior.map(pin => [pin.id, pin.text]));
-  const currentText = new Map(current.map(pin => [pin.id, pin.text]));
-  // An edited page keeps its id; it goes out as a remove and comes back as an add with the new text.
+  const currentIds = new Set(current.map(pin => pin.id));
   for (const pin of prior) {
-    if (currentText.get(pin.id) !== pin.text) ops.push({ op: 'remove', id: pin.id });
+    if (!currentIds.has(pin.id)) ops.push({ op: 'remove', id: pin.id });
   }
   for (const pin of current) {
-    if (priorText.get(pin.id) !== pin.text) ops.push({ op: 'add', pin });
+    const before = priorText.get(pin.id);
+    if (before === undefined) ops.push({ op: 'add', pin });
+    else if (before !== pin.text) ops.push({ op: 'change', pin });
   }
   return ops;
 }
@@ -99,9 +100,11 @@ function renderPins(pins: PinEntry[]): string {
 }
 
 function renderDelta(ops: PinDeltaOp[]): string {
-  const lines = ops.map(op =>
-    op.op === 'remove' ? `  - removed {id: ${op.id}}` : `  + {id: ${op.pin.id}} ${op.pin.text}`,
-  );
+  const lines = ops.map(op => {
+    if (op.op === 'remove') return `  - removed {id: ${op.id}}`;
+    if (op.op === 'change') return `  ~ changed {id: ${op.pin.id}} ${op.pin.text}`;
+    return `  + {id: ${op.pin.id}} ${op.pin.text}`;
+  });
   return `\n${lines.join('\n')}\n`;
 }
 
