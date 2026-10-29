@@ -177,7 +177,11 @@ describe('InMemoryMCPTaskStore', () => {
     const waiting = handle.requireInput({ a: elicit('?') });
 
     finish(handle);
-    await expect(waiting).rejects.toThrow(new RegExp(status));
+    const error: Error = await waiting.catch(e => e);
+    expect(error.message).toMatch(new RegExp(status));
+    // Task ids are bearer tokens: the message names the task by its key.
+    expect(error.message).not.toContain(taskId);
+    expect(error.message).toContain(taskKeyOf(taskId));
     expect(handle.signal.aborted).toBe(false);
     expect((await store.get(taskId, alice))?.status).toBe(status);
   });
