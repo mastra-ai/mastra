@@ -106,20 +106,50 @@ afterAll(async () => {
 }, 120000);
 
 describe('init snapshot under stress', () => {
-  /**
-   * Scoped to warm concurrent init on purpose. Cold concurrent init — several
-   * processes racing to build an empty schema — is broken independently of the
-   * snapshot: `CREATE INDEX IF NOT EXISTS` and `CREATE TABLE IF NOT EXISTS`
-   * are not atomic against a concurrent backend, so the losers get a duplicate
-   * `pg_class` key or a deadlock. Measured on this test database, 5 rounds of
-   * 2 racing cold inits: 10/10 failed before the snapshot work, 5/10 after.
-   * That is a pre-existing bug and is not this change's to fix; asserting a
-   * cold race here would be asserting someone else's fix.
-   *
-   * Warm concurrent init is the case this change is about — every process
-   * after the first, which is the serverless shape — and it is clean: 0/20
-   * failures on both revisions.
-   */
+  it('converges across twenty two-store cold starts and a four-store cold start', async () => {
+    const baseline = uniqueSchema('stress_cold');
+    const seed = newStore(baseline);
+    await seed.init();
+    const expectedColumns = await columnsOf(baseline);
+    const indexes = async (schema: string) => {
+      const { rows } = await adminPool.query(
+        `SELECT c.relname, i.indisvalid, pg_get_indexdef(i.indexrelid) AS definition
+           FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1`,
+        [schema],
+      );
+      // Names contain schema-dependent truncation/hashes; compare the complete
+      // definition after its index name, preserving table, uniqueness and keys.
+      return rows
+        .map(row =>
+          JSON.stringify({
+            valid: row.indisvalid,
+            definition: row.definition
+              .replace(/^CREATE (UNIQUE )?INDEX \S+ ON /, 'CREATE $1INDEX ON ')
+              .replaceAll(schema, 'SCHEMA'),
+          }),
+        )
+        .sort();
+    };
+    const expectedIndexes = await indexes(baseline);
+    await seed.close();
+    for (let round = 0; round <= 20; round++) {
+      const schema = uniqueSchema('stress_cold');
+      const stores = Array.from({ length: round === 20 ? 4 : 2 }, () => newStore(schema));
+      try {
+        const results = await Promise.allSettled(stores.map(store => store.init()));
+        expect(
+          results.filter(result => result.status === 'rejected'),
+          `cold round ${round}`,
+        ).toEqual([]);
+        expect(await columnsOf(schema)).toEqual(expectedColumns);
+        expect(await indexes(schema)).toEqual(expectedIndexes);
+      } finally {
+        await Promise.all(stores.map(store => store.close()));
+      }
+    }
+  }, 900000);
+
   it('converges correctly when several stores init a converged schema at once', async () => {
     const schema = uniqueSchema('stress_race');
     await adminPool.query(`CREATE SCHEMA "${schema}"`);

@@ -102,6 +102,8 @@ import {
   assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSortSupported,
+  assertObservabilityTraceQueryTimeToFirstTokenSupported,
+  assertObservabilityTraceQueryTimeToFirstTokenSortSupported,
   isTraceQueryContextIdField,
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
@@ -116,6 +118,7 @@ import {
   supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
   supportsObservabilityTraceQueryTimeToFirstChunk,
+  supportsObservabilityTraceQueryTimeToFirstToken,
   supportsObservabilityTraceAggregate,
   supportsSpanQueryCore,
   supportsTraceAggregateCore,
@@ -367,8 +370,10 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
+      assertObservabilityTraceQueryTimeToFirstTokenSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
         throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
@@ -506,6 +511,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
@@ -630,8 +636,10 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
     try {
       observabilityStore = await getObservabilityStore(mastra);
-      // `span-aggregate` covers every span query field, so no per-field gates apply.
+      // `span-aggregate` covers every span query field that shipped before it, time to first
+      // chunk included, so only time to first token needs a gate.
       assertObservabilitySpanAggregateSupported(observabilityStore);
+      assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
@@ -743,7 +751,9 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
+      assertObservabilityTraceQueryTimeToFirstTokenSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -852,6 +862,10 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
         .filter(
           field =>
             field.path !== 'timeToFirstChunkMs' || supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore),
+        )
+        .filter(
+          field =>
+            field.path !== 'timeToFirstTokenMs' || supportsObservabilityTraceQueryTimeToFirstToken(observabilityStore),
         )
         .filter(
           field =>
@@ -1014,13 +1028,17 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
             message: 'Thread rows require an updated observability storage adapter. Please upgrade.',
           });
         }
+        // Thread rows shipped with time to first chunk, so only time to first token needs a gate.
+        assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       } else {
         assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.traces.where);
+        assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
+        assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan.traces);
         assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       }
