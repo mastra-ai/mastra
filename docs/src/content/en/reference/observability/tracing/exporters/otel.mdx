@@ -99,7 +99,7 @@ const exporter = new OtelExporter({
 
 A span with metadata `{ userId: 'user-123', tenantId: 'acme' }` exports both `user.id` and `tenant.id`, alongside the existing `mastra.metadata.userId` and `mastra.metadata.tenantId` attributes. Mappings apply to every span that contains the selected metadata keys, including child spans.
 
-Mapped values are strings. Objects and arrays are JSON-encoded. Missing keys, `null`, `undefined`, and empty strings are omitted; `0` and `false` become `"0"` and `"false"`. Keys are matched literally, so a key containing a dot doesn't select a nested property. Empty destination names are ignored.
+Mapped values are strings. Objects and arrays are JSON-encoded. Missing keys, `null`, `undefined`, and empty strings are omitted. `0` and `false` become `"0"` and `"false"`. Keys are matched literally, so a key containing a dot doesn't select a nested property. Empty destination names are ignored.
 
 Explicit mappings overwrite existing attributes with the same destination name. If multiple metadata keys map to the same name, the last mapping with a non-empty value wins. Mapping doesn't affect log records or resource attributes.
 
@@ -323,7 +323,7 @@ const exporter = new OtelExporter({
 })
 ```
 
-Supply at least one signal endpoint. Omit `logs` for trace-only export or `traces` for log-only export. The `signals` toggles can still disable a configured signal. Protocol and headers apply to both endpoints; the selected protocol must support the signal. A custom `exporter` instance overrides trace transport as before.
+Supply at least one signal endpoint. Omit `logs` for trace-only export or `traces` for log-only export. The `signals` toggles can still disable a configured signal. Protocol and headers apply to both endpoints. The selected protocol must support the signal. A custom `exporter` instance overrides trace transport as before.
 
 The singular `endpoint` option retains its existing behavior for compatibility: OTLP signal paths are derived from the collector URL, and Zipkin uses the configured URL directly. For custom paths, use `endpoints` instead.
 
