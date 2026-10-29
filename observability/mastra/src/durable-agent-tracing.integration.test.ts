@@ -526,6 +526,28 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     },
   );
 
+  it('Agent error-processor retry on one model: the attempt that streamed owns the value', async () => {
+    const failAfterMs = 200;
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: [{ model: failOnceThenTextModel('Hello', failAfterMs) as any, maxRetries: 0 }],
+      errorProcessors: [{ id: 'retry-once', name: 'Retry once', processAPIError: async () => ({ retry: true }) }],
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'plain');
+    await (await wrapped.stream('hi')).consumeStream();
+    await settle(testExporter);
+
+    const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+    expect(inferences.map(span => span.attributes?.finishReason)).toEqual(['retry', 'stop']);
+    const [failed, streamed] = inferences;
+    expect(failed.timeToFirstTokenMs).toBeUndefined();
+    expect(streamed.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+    const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;
+    expect(agentRun.timeToFirstTokenMs).toBe(streamed.timeToFirstTokenMs);
+  });
+
   it('DurableAgent output processor abort: the ended generation and AGENT_RUN keep both timings', async () => {
     const agent = new Agent({
       id: 'a',

@@ -674,7 +674,7 @@ export class ModelSpanTracker {
   startInference(payload?: StepStartPayload): void {
     if (payload?.modelId && payload.provider) {
       this.#currentStepSpan?.update({ attributes: { model: payload.modelId, provider: payload.provider } });
-      this.#endOpenInference('error');
+      this.failInference(new Error('Model call ended without a result before the next attempt started'));
     }
     this.#openInference(payload);
   }
@@ -716,22 +716,21 @@ export class ModelSpanTracker {
    * End the open MODEL_INFERENCE span as interrupted while keeping MODEL_STEP open,
    * so a replacement request for the same step gets its own inference span.
    */
+  /** End the open inference span, if any, as interrupted, with what it streamed. */
   interruptInference(): void {
-    this.#endOpenInference('interrupted');
+    this.#endChunkSpan();
+    if (!this.#currentInferenceSpan) return;
+    this.#currentInferenceSpan.end({
+      attributes: { finishReason: 'interrupted', ...this.#inferenceStreamAttributes() },
+    });
+    this.#currentInferenceSpan = undefined;
   }
 
+  /** End the open inference span, if any, with `error` and what it streamed. */
   failInference(error: Error): void {
     this.#endChunkSpan();
     if (!this.#currentInferenceSpan) return;
     this.#currentInferenceSpan.error({ error, endSpan: true, attributes: this.#inferenceStreamAttributes() });
-    this.#currentInferenceSpan = undefined;
-  }
-
-  /** End the open inference span, if any, with what it streamed before `finishReason`. */
-  #endOpenInference(finishReason: 'interrupted' | 'error'): void {
-    this.#endChunkSpan();
-    if (!this.#currentInferenceSpan) return;
-    this.#currentInferenceSpan.end({ attributes: { finishReason, ...this.#inferenceStreamAttributes() } });
     this.#currentInferenceSpan = undefined;
   }
 

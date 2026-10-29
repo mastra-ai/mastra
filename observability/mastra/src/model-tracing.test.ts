@@ -2958,9 +2958,9 @@ describe('ModelSpanTracker', () => {
         agentSpan.end();
 
         const inferences = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
-        expect(inferences.map(span => [span.attributes?.model, span.attributes?.finishReason])).toEqual([
-          ['acme-large', 'error'],
-          ['globex-mini', 'stop'],
+        expect(inferences.map(span => [span.attributes?.model, span.errorInfo?.message])).toEqual([
+          ['acme-large', 'Model call ended without a result before the next attempt started'],
+          ['globex-mini', undefined],
         ]);
       });
     });
