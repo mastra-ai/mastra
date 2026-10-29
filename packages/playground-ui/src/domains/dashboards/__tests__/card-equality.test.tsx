@@ -278,6 +278,39 @@ function serveBreakdown() {
   );
 }
 
+/** Thirty tools, capped by the server; half were called last window, at other counts. */
+function serveManyTools() {
+  const tool = (i: number, count: number) => ({
+    dimensions: { entityName: `tool-${String(i).padStart(2, '0')}` },
+    measures: { count, errorCount: i % 4, errorRate: (i % 4) / count, 'duration.p95': 100 * ((i * 7) % 13) },
+  });
+  server.use(
+    http.post(`${API}/spans/aggregate`, async ({ request }) => {
+      const body = record(await request.clone().json());
+      if (!JSON.stringify(body.where).includes('tool_call')) return undefined;
+      if (endsNow(record(body.timeRange).to)) {
+        return HttpResponse.json({
+          rows: Array.from({ length: 30 }, (_, i) => tool(i, 10 + ((i * 11) % 29))),
+          truncated: true,
+        });
+      }
+      return HttpResponse.json({ rows: Array.from({ length: 15 }, (_, i) => tool(i * 2, 5 + i)), truncated: false });
+    }),
+  );
+}
+
+/** Clicks the same control in both; neither may send a request. */
+async function clickBoth(card: Rendered, widget: Rendered, role: 'button', name: string | RegExp) {
+  for (const side of [card, widget]) {
+    const recorder = recordRequests();
+    fireEvent.click(within(side.root).getByRole(role, { name }));
+    await settle(recorder);
+    recorder.stop();
+    expect(recorder.sent).toEqual([]);
+  }
+  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+}
+
 const BREAKDOWN_TABS = {
   project: ['Workflows', 'Tools', 'Models', 'Threads', 'Environments', 'Agents'],
   org: ['Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments', 'Projects'],
@@ -370,14 +403,31 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
     for (const tab of ['Agents', 'Tools', 'Models', 'Threads', 'Environments', ...(scope ? ['Projects'] : [])]) {
       await expectSameTab(card, widget, tab);
       for (const side of [card, widget]) {
-        const [first] = within(side.root).getAllByRole('listitem');
-        const label = first?.querySelector('[title]');
-        if (!label) throw new Error(`No rows on ${tab}`);
-        fireEvent.click(label);
+        // The first row under the header.
+        const first = within(side.root).getAllByRole('row')[1];
+        if (!first) throw new Error(`No rows on ${tab}`);
+        fireEvent.click(first);
       }
       expect(onDrilldown).toHaveBeenLastCalledWith('traces', onRowClick.mock.lastCall?.[0]);
     }
     expect(onRowClick).toHaveBeenCalledTimes(scope ? 6 : 5);
+  });
+
+  it('Breakdown sorting, paging and a capped list', async () => {
+    serveBreakdown();
+    serveManyTools();
+    const card = await renderCard(<BreakdownCard onRowClick={noop} />, scope);
+    const widget = await renderWidget(breakdownWidget, scope);
+    await expectSameTab(card, widget, 'Tools');
+    expect(within(card.root).getByText('Showing the 500 busiest; sorting covers only these.')).toBeDefined();
+    expect(within(card.root).getByRole('button', { name: 'Next' })).toBeDefined();
+    // Each header cycles first direction, the other, then back to the default; % Change follows
+    // the column sorted last.
+    for (const header of ['Errors', 'Errors', 'Errors', '% Change', 'P95 latency', '% Change', 'Spans', 'Spans']) {
+      await clickBoth(card, widget, 'button', header);
+    }
+    await clickBoth(card, widget, 'button', 'Next');
+    await clickBoth(card, widget, 'button', '% Change');
   });
 
   it('Scores', async () => {
@@ -413,6 +463,73 @@ async function switchWhileLoading(card: Rendered, widget: Rendered, tab: string)
     side.sent = recorder.sent;
   }
 }
+
+/** The tooltip shown while hovering the middle of each chart, one after the other. */
+async function tooltipsOf(root: HTMLElement) {
+  const tips: string[] = [];
+  for (const wrapper of root.querySelectorAll('.recharts-wrapper')) {
+    fireEvent.mouseMove(wrapper, { clientX: 400, clientY: 100 });
+    await act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+    const portals = document.body.querySelectorAll('[data-slot="chart-tooltip-portal"]');
+    tips.push(normalise([...portals].map(p => p.innerHTML).join('')));
+    fireEvent.mouseLeave(wrapper);
+    await act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+  }
+  return tips;
+}
+
+/** Same markup at real size, and the same tooltip on hovering each chart. */
+async function expectSameDrawn(card: Rendered, widget: Rendered) {
+  expect(card.root.querySelector('.recharts-surface')).not.toBeNull();
+  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  const tips = await tooltipsOf(card.root);
+  expect(tips.length).toBeGreaterThan(0);
+  expect(tips.every(t => t.length > 0)).toBe(true);
+  expect(await tooltipsOf(widget.root)).toEqual(tips);
+}
+
+describe('Charts drawn at real size', () => {
+  useFixedChartSize(800, 300);
+
+  beforeEach(() => {
+    seedMetrics();
+  });
+
+  it('Token usage (both tabs), Agent runs and Failure rate', async () => {
+    const cards = await renderCards(
+      {
+        'token-usage': <TokenUsageCard onViewTraces={noop} onTimeRangeClick={noop} />,
+        'agent-runs': <AgentRunsCard onTimeRangeClick={noop} />,
+        'failure-rate': <FailureRateCard onViewErrors={noop} onTimeRangeClick={noop} />,
+      },
+      undefined,
+    );
+    const widgets = await renderWidgets([tokenUsageWidget, agentRunsWidget, failureRateWidget], undefined);
+    for (const id of ['token-usage', 'agent-runs', 'failure-rate']) {
+      await expectSameDrawn(rootOf(cards, id), rootOf(widgets, id));
+    }
+    const card = rootOf(cards, 'token-usage');
+    const widget = rootOf(widgets, 'token-usage');
+    await expectSameTab(card, widget, 'Cost');
+    await expectSameDrawn(card, widget);
+  });
+
+  it('Latency, Resources and threads, and Scores', async () => {
+    await expectSameDrawn(
+      await renderCard(<LatencyCard onViewTraces={noop} onTimeRangeClick={noop} />, undefined),
+      await renderWidget(latencyWidget, undefined),
+    );
+    await expectSameDrawn(await renderCard(<ScoresCard />, undefined), await renderWidget(scoresWidget, undefined));
+    serveCapabilities(traceAggregateCapabilities);
+    serveTraceAggregate(request =>
+      request.interval ? distinctIdsSeriesFixture(request.timeRange) : distinctIdsTotalsFixture,
+    );
+    await expectSameDrawn(
+      await renderCard(<DistinctIdsCard onTimeRangeClick={noop} />, undefined),
+      await renderWidget(distinctIdsWidget, undefined),
+    );
+  });
+});
 
 describe('Latency drawn at real size', () => {
   useFixedChartSize(800, 300);

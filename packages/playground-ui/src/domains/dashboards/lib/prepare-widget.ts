@@ -22,7 +22,7 @@ export type PreparedWidget =
   /** Nothing at the page's scope. */
   | { ok: 'hidden' };
 
-/** Checks one widget against core's schema and its kind's options, keeping the views at `scope`. */
+/** Checks one widget against core's schema and its kind's options, keeping the views and columns at `scope`. */
 export function prepareWidget(
   stored: StoredWidget,
   registry: ReadonlyMap<string, AnyWidgetKind>,
@@ -44,7 +44,9 @@ export function prepareWidget(
       const issue = options.error.issues[0] ?? { path: [], message: 'Invalid options' };
       return { ok: false, message: describeIssue({ ...issue, path: ['views', index, 'options', ...issue.path] }) };
     }
-    const resolved = { ...view, options: options.data };
+    // Columns at the other scope are left out before the kind sees them.
+    const columns = view.columns?.filter(c => inScope(c, scope));
+    const resolved = { ...view, ...(columns ? { columns } : {}), options: options.data };
     const issue = kind.issues?.(resolved)[0];
     if (issue) return { ok: false, message: `views.${index}: ${issue}` };
     views.push(resolved);

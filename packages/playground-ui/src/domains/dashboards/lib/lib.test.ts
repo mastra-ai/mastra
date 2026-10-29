@@ -1,11 +1,20 @@
 import type { DashboardQuery, MastraClient } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
-import { buildTableRows, listedRows, previousTableFigures, rowDrilldown, breakdownIssues } from './breakdown';
-import type { BreakdownColumn, BreakdownOptions, BreakdownResponse } from './breakdown';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
 import { buildPreviousRequest, buildRequest, sendRequest } from './requests';
 import type { DashboardPageContext } from './requests';
+import {
+  buildTableRows,
+  formatChange,
+  listedRows,
+  parseColumns,
+  previousTableValues,
+  rowDrilldown,
+  tableIssues,
+  valueChange,
+} from './table';
+import type { TableColumn, TableOptions, TableResponse, ValueColumn } from './table';
 import { answersById, evaluate, matchesGroups, unknownQueryIssues, valueExprSchema } from './values';
 import type { ValueExpr, ValueRef } from './values';
 
@@ -225,23 +234,69 @@ describe('definition helpers', () => {
   });
 });
 
-describe('breakdown rows', () => {
-  const options: BreakdownOptions = { groupBy: ['projectId', 'entityName'], emptyMessage: 'None.' };
-  const columns: BreakdownColumn[] = [
-    { id: 'project', options: {} },
-    { id: 'errorRate', options: { query: 'figures', measure: 'errorRate' } },
-    { id: 'p95', options: { query: 'figures', measure: 'duration.p95' } },
-    { id: 'tokens', options: { query: 'usage', field: 'value' } },
-    { id: 'cost', options: { query: 'usage', field: 'estimatedCost' } },
-    { id: 'count', options: { query: 'figures', measure: 'countDistinct.traceId' } },
+describe('table rows', () => {
+  const options: TableOptions = {
+    groupBy: ['projectId', 'entityName'],
+    defaultSort: { column: 'count', direction: 'desc' },
+    emptyMessage: 'None.',
+  };
+  const columns: TableColumn[] = [
+    { id: 'name', label: 'Agent', options: { type: 'name' } },
+    { id: 'project', label: 'Project', options: { type: 'dimension', dimension: 'projectId' } },
+    {
+      id: 'errorRate',
+      label: 'Errors',
+      options: { type: 'value', value: { query: 'figures', measure: 'errorRate' }, format: 'percent' },
+    },
+    {
+      id: 'tokens',
+      label: 'Tokens',
+      options: {
+        type: 'value',
+        value: { query: 'usage', field: 'value' },
+        format: 'count',
+        missing: 0,
+        additive: true,
+      },
+    },
+    {
+      id: 'cost',
+      label: 'Cost',
+      options: { type: 'value', value: { query: 'usage', field: 'estimatedCost' }, format: 'usd', additive: true },
+    },
+    {
+      id: 'count',
+      label: 'Traces',
+      options: {
+        type: 'value',
+        value: { query: 'figures', measure: 'countDistinct.traceId' },
+        format: 'count',
+        missing: 0,
+        additive: true,
+      },
+    },
   ];
-  const answers = (figures: BreakdownResponse, usage: BreakdownResponse) =>
+  const queries: DashboardQuery[] = [
+    { id: 'figures', source: 'spanAggregate', measures: ['count'] },
+    { id: 'usage', source: 'metrics', request: 'breakdown', name: ['tokens'], groupBy: ['entityName'] },
+  ];
+  const valueColumn = (id: string): ValueColumn => {
+    const column = columns.find(c => c.id === id);
+    if (column?.options.type !== 'value') throw new Error(`no value column ${id}`);
+    return { ...column, options: column.options };
+  };
+  const firstRow = (figures: TableResponse) => {
+    const [row] = buildTableRows(options, columns, queries, answers(figures, { groups: [] }));
+    if (!row) throw new Error('no row');
+    return row;
+  };
+  const answers = (figures: TableResponse, usage: TableResponse) =>
     answersById([{ id: 'figures' }, { id: 'usage' }], [figures, usage]);
   const aggregate = {
     rows: [
       {
         dimensions: { projectId: 'p1', entityName: 'Code Agent' },
-        measures: { 'countDistinct.traceId': 4, errorRate: 0.25, 'duration.p95': 900 },
+        measures: { 'countDistinct.traceId': 4, errorRate: 0.25 },
       },
     ],
   };
@@ -252,27 +307,23 @@ describe('breakdown rows', () => {
     ],
   };
 
-  it('joins every query on groupBy, keeping a group that only has usage', () => {
-    expect(buildTableRows(options, columns, answers(aggregate, usage))).toEqual([
+  it('joins the queries value columns read on groupBy, in query order, keeping a group with only usage', () => {
+    expect(buildTableRows(options, columns, queries, answers(aggregate, usage))).toEqual([
       {
         key: '["p1","Code Agent"]',
-        projectId: 'p1',
+        dimensions: { projectId: 'p1', entityName: 'Code Agent' },
         name: 'Code Agent',
-        count: 4,
-        tokens: 1200,
-        errorRate: 0.25,
-        p95: 900,
-        cost: 0.5,
-        costUnit: 'usd',
+        values: { errorRate: 0.25, tokens: 1200, cost: 0.5, count: 4 },
+        units: { cost: 'usd' },
+        lookups: {},
       },
       {
         key: '["p2","Idle Agent"]',
-        projectId: 'p2',
+        dimensions: { projectId: 'p2', entityName: 'Idle Agent' },
         name: 'Idle Agent',
-        count: 0,
-        tokens: 50,
-        cost: undefined,
-        costUnit: undefined,
+        values: { errorRate: undefined, tokens: 50, cost: undefined, count: 0 },
+        units: {},
+        lookups: {},
       },
     ]);
   });
@@ -281,82 +332,127 @@ describe('breakdown rows', () => {
     const piped = {
       rows: [{ dimensions: { projectId: 'p1', entityName: 'a|b' }, measures: { 'countDistinct.traceId': 1 } }],
     };
-    const [row] = buildTableRows(options, columns, answers(piped, { groups: [] }));
-    expect(row).toMatchObject({ projectId: 'p1', name: 'a|b' });
-    const previous = previousTableFigures(
+    const [row] = buildTableRows(options, columns, queries, answers(piped, { groups: [] }));
+    expect(row).toMatchObject({ dimensions: { projectId: 'p1' }, name: 'a|b' });
+    const previous = previousTableValues(
       options,
       columns,
+      queries,
       answers(
         { rows: [{ dimensions: { projectId: 'p|2', entityName: 'x' }, measures: { 'countDistinct.traceId': 2 } }] },
-        {
-          groups: [],
-        },
-      ),
-    );
-    const dropped = listedRows(options, [], previous, false, true);
-    expect(dropped).toMatchObject([{ projectId: 'p|2', name: 'x', count: 0 }]);
-  });
-
-  it('names resources through a lookup query', () => {
-    const threads: BreakdownOptions = { groupBy: ['threadId'], emptyMessage: 'None.' };
-    const rows = buildTableRows(
-      threads,
-      [
-        { id: 'count', options: { query: 'figures', measure: 'count' } },
-        { id: 'resource', options: { query: 'usage', dimension: 'resourceId', joinOn: 'threadId' } },
-      ],
-      answers(
-        { rows: [{ dimensions: { threadId: 't1' }, measures: { count: 3 } }] },
-        { rows: [{ dimensions: { resourceId: 'user-1', threadId: 't1' }, measures: { count: 3 } }] },
-      ),
-    );
-    expect(rows[0]?.resource).toBe('user-1');
-  });
-
-  it('adds dropped groups unless the view turns them off or the list is cut short', () => {
-    const previous = previousTableFigures(
-      options,
-      columns,
-      answers(
-        {
-          rows: [{ dimensions: { projectId: 'p1', entityName: 'Retired' }, measures: { 'countDistinct.traceId': 2 } }],
-        },
         { groups: [] },
       ),
     );
-    const built = buildTableRows(options, columns, answers(aggregate, { groups: [] }));
-    expect(listedRows(options, built, previous, false, true).map(r => r.name)).toEqual(['Code Agent', 'Retired']);
-    expect(listedRows(options, built, previous, true, true)).toHaveLength(1);
-    expect(listedRows({ ...options, dropped: false }, built, previous, false, true)).toHaveLength(1);
+    expect(listedRows(options, columns, [], previous, false)).toMatchObject([
+      { dimensions: { projectId: 'p|2' }, name: 'x', values: { count: 0 } },
+    ]);
   });
 
-  it('drills into a row by its project and its spans or name', () => {
-    const row = { key: '["p1","Code Agent"]', projectId: 'p1', name: 'Code Agent', count: 1 };
-    expect(rowDrilldown({ ...options, rowScope: { spanTypes: ['agent_run'] } }, row)).toEqual({
+  it('names resources through a lookup query that never makes rows', () => {
+    const threads: TableOptions = { ...options, groupBy: ['threadId'] };
+    const rows = buildTableRows(
+      threads,
+      [
+        {
+          id: 'count',
+          label: 'Traces',
+          options: { type: 'value', value: { query: 'figures', measure: 'count' }, format: 'count' },
+        },
+        {
+          id: 'resource',
+          label: 'Resource',
+          options: { type: 'dimension', dimension: 'resourceId', query: 'usage', joinOn: 'threadId' },
+        },
+      ],
+      queries,
+      answers(
+        { rows: [{ dimensions: { threadId: 't1' }, measures: { count: 3 } }] },
+        {
+          rows: [
+            { dimensions: { resourceId: 'user-1', threadId: 't1' }, measures: { count: 3 } },
+            { dimensions: { resourceId: 'user-2', threadId: 't2' }, measures: { count: 1 } },
+          ],
+        },
+      ),
+    );
+    expect(rows.map(r => [r.name, r.lookups.resource])).toEqual([['t1', 'user-1']]);
+  });
+
+  it('adds a dropped group at zero when a total had a value before, unless turned off or cut short', () => {
+    const previous = previousTableValues(
+      options,
+      columns,
+      queries,
+      answers(
+        {
+          rows: [{ dimensions: { projectId: 'p1', entityName: 'Retired' }, measures: { 'countDistinct.traceId': 0 } }],
+        },
+        { groups: [{ dimensions: { projectId: 'p1', entityName: 'Retired' }, value: 0, estimatedCost: 2 }] },
+      ),
+    );
+    const built = buildTableRows(options, columns, queries, answers(aggregate, { groups: [] }));
+    const listed = listedRows(options, columns, built, previous, false);
+    // Cost alone was above 0; it drops to 0, and a total without a value before shows its `missing`.
+    expect(listed.map(r => [r.name, r.values])).toEqual([
+      ['Code Agent', { errorRate: 0.25, tokens: 0, cost: undefined, count: 4 }],
+      ['Retired', { errorRate: undefined, tokens: 0, cost: 0, count: 0 }],
+    ]);
+    expect(listedRows(options, columns, built, previous, true)).toHaveLength(1);
+    expect(listedRows({ ...options, dropped: false }, columns, built, previous, false)).toHaveLength(1);
+    expect(
+      listedRows({ ...options, hideUnnamed: true }, columns, [{ ...firstRow(aggregate), name: '' }], undefined, false),
+    ).toEqual([]);
+  });
+
+  it('compares totals as New and percents in points', () => {
+    const count = valueColumn('count');
+    const errors = valueColumn('errorRate');
+    expect(formatChange(valueChange(count, 5, undefined), count)).toBe('New');
+    expect(formatChange(valueChange(count, 0, 4), count)).toBe('−100.0%');
+    expect(formatChange(valueChange(errors, 0.3, undefined), errors)).toBe('—');
+    expect(formatChange(valueChange(errors, 0.3, 0.1), errors)).toBe('+20.0 pt');
+    expect(formatChange(valueChange(errors, 0.1, 0.1), errors)).toBe('0 pt');
+  });
+
+  it('drills into a row by its dimensions, an entity as a span filter', () => {
+    const row = firstRow(aggregate);
+    const fields = { projectId: 'projectId', entityName: 'entityName' } as const;
+    expect(rowDrilldown({ ...options, rowDrilldown: { fields, spanTypes: ['agent_run'] } }, row)).toEqual({
       projectId: 'p1',
       span: { spanTypes: ['agent_run'], entityName: 'Code Agent' },
     });
-    expect(rowDrilldown({ ...options, rowScope: { field: 'model' } }, { ...row, name: '' })).toEqual({
+    const unnamed = { ...row, name: '', dimensions: { projectId: 'p1', entityName: '' } };
+    expect(rowDrilldown({ ...options, rowDrilldown: { fields } }, unnamed)).toEqual({ projectId: 'p1' });
+    expect(rowDrilldown({ ...options, rowDrilldown: { fields, keepEmpty: true } }, unnamed)).toEqual({
       projectId: 'p1',
+      entityName: '',
     });
   });
 
-  it('reports columns the view cannot fill', () => {
+  it('checks column options, widths and what columns name', () => {
     expect(
-      breakdownIssues(
+      parseColumns([
+        { id: 'name', options: { type: 'name', width: 'minmax(12rem, 3fr)' } },
+        { id: 'a', options: { type: 'name', width: 'calc(100% - 1px)' } },
+      ]).issues,
+    ).toEqual(['columns.1.options.width: Expected auto, max-content, Nrem, Nfr or minmax(a, b) of those']);
+    expect(
+      tableIssues(
         [
-          { id: 'errorRate', options: { query: 'figures', measure: 'errorRate' } },
-          { id: 'sparkline', options: {} },
-          { id: 'tokens', options: { query: 'missing', field: 'value' } },
+          { id: 'name', options: { type: 'name' } },
+          { id: 'resource', options: { type: 'dimension', dimension: 'resourceId', query: 'lookup' } },
+          { id: 'cost', options: { type: 'value', value: { query: 'missing' }, format: 'usd', unpricedWhen: 'name' } },
         ],
-        [{ id: 'figures', source: 'traceAggregate', measures: ['count'] }],
+        options,
+        queries,
       ),
     ).toEqual([
-      "columns.1: unknown column 'sparkline'",
-      "columns: a breakdown needs a 'count' column",
-      "columns: 'errorRate' and 'p95' come together",
-      "columns: 'tokens' and 'cost' come together",
-      "columns: 'tokens' reads query 'missing', which the view doesn't have",
+      "options.defaultSort: no column 'count'",
+      "columns: 'resource' needs both 'query' and 'joinOn', or neither",
+      "columns: 'resource' reads 'resourceId', which rows aren't keyed on",
+      "columns: 'cost' is unpriced by 'name', which isn't a value column",
+      "columns: reads query 'lookup', which the view doesn't have",
+      "columns: reads query 'missing', which the view doesn't have",
     ]);
   });
 });

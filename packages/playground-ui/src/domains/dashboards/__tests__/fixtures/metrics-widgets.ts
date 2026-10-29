@@ -372,34 +372,114 @@ const usageTotals = (groupBy: string[], filters?: Record<string, string>): Dashb
   compare: 'previousWindow',
 });
 
-/** Count, errors and P95 from the `figures` query; tokens and cost from `usage`. */
-const figureColumns = (count: { label: string; measure: string; unit: 'traces' | 'spans' }, usage: boolean) => [
-  { id: 'errorRate', options: { query: 'figures', measure: 'errorRate' } },
-  { id: 'p95', options: { query: 'figures', measure: 'duration.p95' } },
-  ...(usage
-    ? [
-        { id: 'tokens', options: { query: 'usage', field: 'value' } },
-        { id: 'cost', options: { query: 'usage', field: 'estimatedCost' } },
-      ]
-    : []),
-  { id: 'count', label: count.label, options: { query: 'figures', measure: count.measure, unit: count.unit } },
-];
+const TRACE_DESCRIPTION = 'A trace is one end-to-end request, with every step it took.';
+const SPAN_DESCRIPTION =
+  'A span is one step inside a trace, such as a tool call or a model call. One trace can have many.';
 
-const project = { id: 'project', scope: 'org' } as const;
+const nameColumn = (label: string, options: Record<string, unknown> = {}) => ({
+  id: 'name',
+  label,
+  options: { type: 'name', width: 'minmax(12rem,3fr)', ...options },
+});
+const projectColumn = {
+  id: 'project',
+  label: 'Project',
+  scope: 'org',
+  options: { type: 'dimension', dimension: 'projectId', as: 'project', width: 'minmax(8rem,2fr)' },
+} as const;
+const errorColumns = [
+  {
+    id: 'errorRate',
+    label: 'Errors',
+    options: { type: 'value', value: { query: 'figures', measure: 'errorRate' }, format: 'percent', better: 'lower' },
+  },
+  {
+    id: 'p95',
+    label: 'P95 latency',
+    options: {
+      type: 'value',
+      value: { query: 'figures', measure: 'duration.p95' },
+      format: 'duration',
+      better: 'lower',
+    },
+  },
+];
+const usageColumns = [
+  {
+    id: 'tokens',
+    label: 'Tokens',
+    options: {
+      type: 'value',
+      value: { query: 'usage', field: 'value' },
+      format: 'count',
+      missing: 0,
+      additive: true,
+      better: 'lower',
+    },
+  },
+  {
+    id: 'cost',
+    label: 'Cost',
+    options: {
+      type: 'value',
+      value: { query: 'usage', field: 'estimatedCost' },
+      format: 'usd',
+      additive: true,
+      better: 'lower',
+      unpricedWhen: 'tokens',
+    },
+  },
+];
+const countColumn = (count: { label: string; value: Record<string, unknown>; spans: boolean }) => ({
+  id: 'count',
+  label: count.label,
+  options: {
+    type: 'value',
+    value: count.value,
+    format: 'count',
+    emphasis: true,
+    missing: 0,
+    additive: true,
+    better: 'higher',
+    description: count.spans ? SPAN_DESCRIPTION : TRACE_DESCRIPTION,
+  },
+});
+const changeColumn = { id: 'change', label: '% Change', options: { type: 'change' } };
+const TRACES = { label: 'Traces', value: { query: 'figures', measure: 'count' }, spans: false };
+
+const tableOptions = (groupBy: string[], name: string, emptyMessage: string, extra: Record<string, unknown> = {}) => ({
+  groupBy,
+  defaultSort: { column: 'count', direction: 'desc' },
+  pageSize: 13,
+  emptyMessage,
+  ariaLabel: `${name} breakdown`,
+  ...extra,
+});
+
+/** Row clicks open traces in the row's project, plus the row's own name as `field`. */
+const drill = (scope: 'org' | 'project', name: string, field: string, extra: Record<string, unknown> = {}) => ({
+  rowDrilldown: { fields: { ...(scope === 'org' ? { projectId: 'projectId' } : {}), [name]: field }, ...extra },
+});
+
 const scoped = (scope: 'org' | 'project', dimension: string) =>
   scope === 'org' ? ['projectId', dimension] : [dimension];
 
+const ENTITIES = {
+  Agents: { name: 'Agent', icon: 'agent', spanTypes: ['agent_run'] },
+  Workflows: { name: 'Workflow', icon: 'workflow', spanTypes: ['workflow_run'] },
+  Tools: { name: 'Tool', icon: 'tool', spanTypes: ['tool_call', 'mcp_tool_call'] },
+} as const;
+
 const entityView = (
   scope: 'org' | 'project',
-  label: string,
-  spanTypes: string[],
+  label: keyof typeof ENTITIES,
   description: string,
   emptyMessage: string,
 ) => {
+  const { name, icon, spanTypes } = ENTITIES[label];
   const groupBy = scoped(scope, 'entityName');
-  const agents = label === 'Agents';
-  const usage = agents;
-  const traces = agents || label === 'Workflows';
+  const usage = label === 'Agents';
+  const traces = label !== 'Tools';
   return {
     label,
     scope,
@@ -420,21 +500,34 @@ const entityView = (
       ...(usage ? [usageTotals(groupBy, { entityType: 'agent' })] : []),
     ],
     columns: [
-      ...(scope === 'org' ? [project] : []),
-      ...figureColumns(
+      nameColumn(name, { mark: { icon } }),
+      projectColumn,
+      ...errorColumns,
+      ...(usage ? usageColumns : []),
+      countColumn(
         traces
-          ? { label: 'Traces', measure: 'countDistinct.traceId', unit: 'traces' }
-          : { label: 'Spans', measure: 'count', unit: 'spans' },
-        usage,
+          ? { label: 'Traces', value: { query: 'figures', measure: 'countDistinct.traceId' }, spans: false }
+          : { label: 'Spans', value: { query: 'figures', measure: 'count' }, spans: true },
       ),
+      changeColumn,
     ],
-    options: { groupBy, rowScope: { spanTypes }, emptyMessage },
+    options: tableOptions(
+      groupBy,
+      name,
+      emptyMessage,
+      drill(scope, 'entityName', 'entityName', { spanTypes, keepEmpty: true }),
+    ),
   };
 };
 
-const traceColumns = (scope: 'org' | 'project') => [
-  ...(scope === 'org' ? [project] : []),
-  ...figureColumns({ label: 'Traces', measure: 'count', unit: 'traces' }, true),
+const traceColumns = (name: string, options: Record<string, unknown> = {}, extra: unknown[] = []) => [
+  nameColumn(name, options),
+  projectColumn,
+  ...extra,
+  ...errorColumns,
+  ...usageColumns,
+  countColumn(TRACES),
+  changeColumn,
 ];
 
 const environmentsView = (scope: 'org' | 'project') => {
@@ -454,13 +547,13 @@ const environmentsView = (scope: 'org' | 'project') => {
       },
       usageTotals(groupBy),
     ],
-    columns: traceColumns(scope),
-    options: {
+    columns: traceColumns('Environment', { unnamed: 'No environment' }),
+    options: tableOptions(
       groupBy,
-      unnamed: 'No environment',
-      rowScope: { field: 'environment' },
-      emptyMessage: 'No traces in this range.',
-    },
+      'Environment',
+      'No traces in this range.',
+      drill(scope, 'environment', 'environment'),
+    ),
   };
 };
 
@@ -484,36 +577,38 @@ const threadsView = (scope: 'org' | 'project') => {
     measures: ['count'],
     limit: TRACE_LIMIT,
   };
+  const resourceColumn = {
+    id: 'resource',
+    label: 'Resource',
+    options: {
+      type: 'dimension',
+      dimension: 'resourceId',
+      query: scope === 'org' ? 'resources' : 'figures',
+      joinOn: 'threadId',
+      width: 'minmax(6rem,1fr)',
+    },
+  };
   return {
     label: 'Threads',
     scope,
     description: 'Traces, errors, latency and spend per thread.',
     queries: [threads, usageTotals(groupBy), ...(scope === 'org' ? [resources] : [])],
-    columns: [
-      ...traceColumns(scope),
-      {
-        id: 'resource',
-        options: { query: scope === 'org' ? 'resources' : 'figures', dimension: 'resourceId', joinOn: 'threadId' },
-      },
-    ],
-    options: {
-      groupBy,
+    columns: traceColumns('Thread', {}, [resourceColumn]),
+    options: tableOptions(groupBy, 'Thread', 'No traces with a thread in this range.', {
       hideUnnamed: true,
       dropped: false,
-      rowScope: { field: 'threadId', keepEmpty: true },
-      emptyMessage: 'No traces with a thread in this range.',
-    },
+      ...drill(scope, 'threadId', 'threadId', { keepEmpty: true }),
+    }),
   };
 };
 
 const modelsView = (scope: 'org' | 'project') => {
-  const groupBy = scoped(scope, 'model');
+  const groupBy = scoped(scope, 'provider').concat('model');
   return {
     label: 'Models',
     scope,
     description: 'Model calls, tokens and spend per model.',
     queries: [
-      usageTotals(groupBy),
       {
         id: 'calls',
         source: 'metrics',
@@ -525,19 +620,16 @@ const modelsView = (scope: 'org' | 'project') => {
         limit: 1000,
         compare: 'previousWindow',
       },
+      usageTotals(groupBy),
     ],
     columns: [
-      ...(scope === 'org' ? [project] : []),
-      { id: 'tokens', options: { query: 'usage', field: 'value' } },
-      { id: 'cost', options: { query: 'usage', field: 'estimatedCost' } },
-      { id: 'count', label: 'Spans', options: { query: 'calls', field: 'value', unit: 'spans' } },
+      nameColumn('Model', { unnamed: 'Unknown model', mark: { providerDimension: 'provider' } }),
+      projectColumn,
+      ...usageColumns,
+      countColumn({ label: 'Spans', value: { query: 'calls', field: 'value' }, spans: true }),
+      changeColumn,
     ],
-    options: {
-      groupBy,
-      unnamed: 'Unknown model',
-      rowScope: { field: 'model' },
-      emptyMessage: 'No model usage in this range.',
-    },
+    options: tableOptions(groupBy, 'Model', 'No model usage in this range.', drill(scope, 'model', 'model')),
   };
 };
 
@@ -545,21 +637,18 @@ const scopedViews = (scope: 'org' | 'project') => [
   entityView(
     scope,
     'Agents',
-    ['agent_run'],
     'Traces each agent ran in, nested runs included, with errors, latency and spend.',
     'No agent runs in this range.',
   ),
   entityView(
     scope,
     'Workflows',
-    ['workflow_run'],
     'Traces each workflow ran in, nested runs included, with errors and latency.',
     'No workflow runs in this range.',
   ),
   entityView(
     scope,
     'Tools',
-    ['tool_call', 'mcp_tool_call'],
     'Every tool call, MCP tools included, with errors and latency.',
     'No tool calls in this range.',
   ),
@@ -571,7 +660,7 @@ const scopedViews = (scope: 'org' | 'project') => [
 export const breakdownWidget = {
   id: 'breakdown',
   span: 12,
-  kind: 'breakdown',
+  kind: 'table',
   title: 'Breakdown',
   drilldown: { click: { page: 'traces' } },
   views: [
@@ -590,13 +679,17 @@ export const breakdownWidget = {
         },
         usageTotals(['projectId']),
       ],
-      columns: figureColumns({ label: 'Traces', measure: 'count', unit: 'traces' }, true),
-      options: {
-        groupBy: ['projectId'],
-        rowLabel: 'project',
-        emptyMessage: 'No traces in this range.',
-        openWhen: 'twoOrMoreRows',
-      },
+      columns: [
+        nameColumn('Project', { as: 'project' }),
+        ...errorColumns,
+        ...usageColumns,
+        countColumn(TRACES),
+        changeColumn,
+      ],
+      options: tableOptions(['projectId'], 'Project', 'No traces in this range.', {
+        openWhen: { minRows: 2 },
+        rowDrilldown: { fields: { projectId: 'projectId' } },
+      }),
     },
     ...scopedViews('org'),
     ...scopedViews('project'),
