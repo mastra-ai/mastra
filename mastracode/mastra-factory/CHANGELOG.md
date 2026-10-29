@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.4.1-alpha.1
+
+### Patch Changes
+
+- The region prompt now defaults to `us` instead of `eu`. Pass `--region eu` or pick `eu` in the prompt to keep using the EU region. ([#28748](https://github.com/mastra-ai/mastra/pull/28748))
+
+- Updated dependencies [[`ad0a796`](https://github.com/mastra-ai/mastra/commit/ad0a79694c714fd378d2ba7254571e8fc6371996), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff)]:
+  - mastra@1.37.0-alpha.1
+
 ## 0.4.1-alpha.0
 
 ### Patch Changes
