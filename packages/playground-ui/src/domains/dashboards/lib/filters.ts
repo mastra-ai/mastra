@@ -1,5 +1,3 @@
-type Filters = Record<string, unknown>;
-
 /** Array filters where a row must carry every value, so ANDing two lists needs all of both. */
 const ALL_OF = new Set(['tags']);
 /** Object filters matched exactly per key (`labels`, `metadata`). */
@@ -8,18 +6,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const CLASH = Symbol('clash');
 
+/** Two values of one field ANDed: always built from that field's own values, so it keeps their type. */
 function both(field: string, a: unknown, b: unknown): unknown {
   if (Array.isArray(a) || Array.isArray(b)) {
-    const left = Array.isArray(a) ? a : [a];
-    const right = Array.isArray(b) ? b : [b];
+    const left: unknown[] = Array.isArray(a) ? a : [a];
+    const right: unknown[] = Array.isArray(b) ? b : [b];
     if (ALL_OF.has(field)) return [...new Set([...left, ...right])];
     const shared = left.filter(v => right.includes(v));
     return shared.length ? shared : CLASH;
   }
-  if (isRecord(a) && isRecord(b)) {
-    const merged = intersectFilters(a, b);
-    return merged ?? CLASH;
-  }
+  if (isRecord(a) && isRecord(b)) return intersectFilters(a, b) ?? CLASH;
   return a === b ? a : CLASH;
 }
 
@@ -28,17 +24,20 @@ function both(field: string, a: unknown, b: unknown): unknown {
  * both, lists of alternatives intersect (`tags`, which must all match, combine), per-key maps merge, and
  * single values must be equal. `undefined` when the two contradict, so nothing can match.
  */
-export function intersectFilters(page: Filters | undefined, widget: Filters | undefined): Filters | undefined {
-  const merged: Filters = { ...page };
-  for (const [field, value] of Object.entries(widget ?? {})) {
+export function intersectFilters<F extends object>(
+  page: F | undefined,
+  widget: Partial<F> | undefined,
+): Partial<F> | undefined {
+  if (!page) return widget;
+  if (!widget) return page;
+  let merged: Partial<F> = page;
+  for (const field in widget) {
+    const value = widget[field];
     if (value === undefined) continue;
-    if (merged[field] === undefined) {
-      merged[field] = value;
-      continue;
-    }
-    const combined = both(field, merged[field], value);
+    const current = merged[field];
+    const combined = current === undefined ? value : both(field, current, value);
     if (combined === CLASH) return undefined;
-    merged[field] = combined;
+    merged = { ...merged, [field]: combined };
   }
   return merged;
 }

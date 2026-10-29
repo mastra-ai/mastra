@@ -1,4 +1,10 @@
-import type { DashboardQuery, DashboardWidget } from '@mastra/client-js';
+import type {
+  DashboardColumn,
+  DashboardDrilldownTarget,
+  DashboardQuery,
+  DashboardWidget,
+  DashboardWidgetView,
+} from '@mastra/client-js';
 
 /**
  * Widgets describing today's Metrics cards, one per card. The request- and DOM-equality tests render
@@ -31,7 +37,10 @@ const agentRunsByStatus: DashboardQuery = {
 const FAILED = ['error', 'failed'];
 const completedRuns = { query: 'runs', notGroups: FAILED };
 const failedRuns = { query: 'runs', groups: FAILED };
-const agentRunsTraces = { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: 'agent' }] } as const;
+const agentRunsTraces: DashboardDrilldownTarget = {
+  page: 'traces',
+  filters: [{ fieldId: 'rootEntityType', value: 'agent' }],
+};
 
 export const kpisWidget: DashboardWidget = {
   id: 'kpis',
@@ -247,7 +256,7 @@ export const failureRateWidget: DashboardWidget = {
   ],
 };
 
-const latencyView = (label: string, metric: string, rootEntityType: string, noun: string) => ({
+const latencyView = (label: string, metric: string, rootEntityType: string, noun: string): DashboardWidgetView => ({
   label,
   queries: [
     {
@@ -258,7 +267,7 @@ const latencyView = (label: string, metric: string, rootEntityType: string, noun
       percentiles: [0.5, 0.95, 0.99],
     } satisfies DashboardQuery,
   ],
-  drilldown: { action: { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: rootEntityType }] } } as const,
+  drilldown: { action: { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: rootEntityType }] } },
   options: {
     chart: 'line',
     format: 'duration',
@@ -356,7 +365,10 @@ export const scoresWidget: DashboardWidget = {
 const USAGE = [INPUT, OUTPUT];
 const TRACE_LIMIT = 1000;
 const SPAN_LIMIT = 500;
-const ERRORS = ['count', 'errorRate', 'duration.p95'] as const;
+type TraceMeasure = NonNullable<Extract<DashboardQuery, { source: 'traceAggregate' }>['measures']>[number];
+type SpanMeasure = NonNullable<Extract<DashboardQuery, { source: 'spanAggregate' }>['measures']>[number];
+const ERRORS: TraceMeasure[] = ['count', 'errorRate', 'duration.p95'];
+/** Traces with a thread. */
 const hasThread = { op: 'exists', path: 'threadId' } as const;
 
 const usageTotals = (groupBy: string[], filters?: Record<string, string>): DashboardQuery => ({
@@ -376,18 +388,18 @@ const TRACE_DESCRIPTION = 'A trace is one end-to-end request, with every step it
 const SPAN_DESCRIPTION =
   'A span is one step inside a trace, such as a tool call or a model call. One trace can have many.';
 
-const nameColumn = (label: string, options: Record<string, unknown> = {}) => ({
+const nameColumn = (label: string, options: Record<string, unknown> = {}): DashboardColumn => ({
   id: 'name',
   label,
   options: { type: 'name', width: 'minmax(12rem,3fr)', ...options },
 });
-const projectColumn = {
+const projectColumn: DashboardColumn = {
   id: 'project',
   label: 'Project',
   scope: 'org',
   options: { type: 'dimension', dimension: 'projectId', as: 'project', width: 'minmax(8rem,2fr)' },
-} as const;
-const errorColumns = [
+};
+const errorColumns: DashboardColumn[] = [
   {
     id: 'errorRate',
     label: 'Errors',
@@ -404,7 +416,7 @@ const errorColumns = [
     },
   },
 ];
-const usageColumns = [
+const usageColumns: DashboardColumn[] = [
   {
     id: 'tokens',
     label: 'Tokens',
@@ -430,7 +442,7 @@ const usageColumns = [
     },
   },
 ];
-const countColumn = (count: { label: string; value: Record<string, unknown>; spans: boolean }) => ({
+const countColumn = (count: { label: string; value: Record<string, unknown>; spans: boolean }): DashboardColumn => ({
   id: 'count',
   label: count.label,
   options: {
@@ -444,7 +456,7 @@ const countColumn = (count: { label: string; value: Record<string, unknown>; spa
     description: count.spans ? SPAN_DESCRIPTION : TRACE_DESCRIPTION,
   },
 });
-const changeColumn = { id: 'change', label: '% Change', options: { type: 'change' } };
+const changeColumn: DashboardColumn = { id: 'change', label: '% Change', options: { type: 'change' } };
 const TRACES = { label: 'Traces', value: { query: 'figures', measure: 'count' }, spans: false };
 
 const tableOptions = (groupBy: string[], name: string, emptyMessage: string, extra: Record<string, unknown> = {}) => ({
@@ -470,12 +482,21 @@ const ENTITIES = {
   Tools: { name: 'Tool', icon: 'tool', spanTypes: ['tool_call', 'mcp_tool_call'] },
 } as const;
 
+/** An entity's figures; agents and workflows count the traces they ran in, tools every call. */
+const spanMeasures = (traces: boolean): SpanMeasure[] => [
+  'count',
+  ...(traces ? (['countDistinct.traceId'] as const) : []),
+  'errorCount',
+  'errorRate',
+  'duration.p95',
+];
+
 const entityView = (
   scope: 'org' | 'project',
   label: keyof typeof ENTITIES,
   description: string,
   emptyMessage: string,
-) => {
+): DashboardWidgetView => {
   const { name, icon, spanTypes } = ENTITIES[label];
   const groupBy = scoped(scope, 'entityName');
   const usage = label === 'Agents';
@@ -491,9 +512,9 @@ const entityView = (
         where:
           spanTypes.length === 1
             ? { op: 'eq', left: { path: 'spanType' }, right: { literal: spanTypes[0] } }
-            : { op: 'in', value: { path: 'spanType' }, set: spanTypes },
+            : { op: 'in', value: { path: 'spanType' }, set: [...spanTypes] },
         groupBy,
-        measures: ['count', ...(traces ? ['countDistinct.traceId'] : []), 'errorCount', 'errorRate', 'duration.p95'],
+        measures: spanMeasures(traces),
         limit: SPAN_LIMIT,
         compare: 'previousWindow',
       },
@@ -520,7 +541,11 @@ const entityView = (
   };
 };
 
-const traceColumns = (name: string, options: Record<string, unknown> = {}, extra: unknown[] = []) => [
+const traceColumns = (
+  name: string,
+  options: Record<string, unknown> = {},
+  extra: DashboardColumn[] = [],
+): DashboardColumn[] => [
   nameColumn(name, options),
   projectColumn,
   ...extra,
@@ -530,7 +555,7 @@ const traceColumns = (name: string, options: Record<string, unknown> = {}, extra
   changeColumn,
 ];
 
-const environmentsView = (scope: 'org' | 'project') => {
+const environmentsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'environment');
   return {
     label: 'Environments',
@@ -557,9 +582,9 @@ const environmentsView = (scope: 'org' | 'project') => {
   };
 };
 
-const threadsView = (scope: 'org' | 'project') => {
+const threadsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'threadId');
-  const threads = {
+  const threads: DashboardQuery = {
     id: 'figures',
     source: 'traceAggregate',
     where: hasThread,
@@ -569,7 +594,7 @@ const threadsView = (scope: 'org' | 'project') => {
     compare: 'previousWindow',
   };
   // Org-wide the second dimension is the project, so a third request names each thread's resource.
-  const resources = {
+  const resources: DashboardQuery = {
     id: 'resources',
     source: 'traceAggregate',
     where: hasThread,
@@ -577,7 +602,7 @@ const threadsView = (scope: 'org' | 'project') => {
     measures: ['count'],
     limit: TRACE_LIMIT,
   };
-  const resourceColumn = {
+  const resourceColumn: DashboardColumn = {
     id: 'resource',
     label: 'Resource',
     options: {
@@ -602,7 +627,7 @@ const threadsView = (scope: 'org' | 'project') => {
   };
 };
 
-const modelsView = (scope: 'org' | 'project') => {
+const modelsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'provider').concat('model');
   return {
     label: 'Models',
@@ -633,7 +658,7 @@ const modelsView = (scope: 'org' | 'project') => {
   };
 };
 
-const scopedViews = (scope: 'org' | 'project') => [
+const scopedViews = (scope: 'org' | 'project'): DashboardWidgetView[] => [
   entityView(
     scope,
     'Agents',
@@ -657,7 +682,7 @@ const scopedViews = (scope: 'org' | 'project') => [
   environmentsView(scope),
 ];
 
-export const breakdownWidget = {
+export const breakdownWidget: DashboardWidget = {
   id: 'breakdown',
   span: 12,
   kind: 'table',
@@ -694,4 +719,7 @@ export const breakdownWidget = {
     ...scopedViews('org'),
     ...scopedViews('project'),
   ],
-} as DashboardWidget;
+};
+
+/** Breakdown's Models tab alone: a table that reads metrics only, so it waits on no capability gate. */
+export const modelsWidget: DashboardWidget = { ...breakdownWidget, id: 'models', views: [modelsView('project')] };

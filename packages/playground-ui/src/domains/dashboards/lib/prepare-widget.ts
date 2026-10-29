@@ -3,6 +3,7 @@ import { dashboardWidgetSchema } from '@mastra/core/storage/dashboards';
 import type { AnyWidgetKind, ResolvedView } from '../widget-kind';
 import { inScope } from './definition';
 import type { DashboardScope } from './definition';
+import { tabValue } from './tabs';
 
 type Issue = { path: PropertyKey[]; message: string };
 export const describeIssue = (issue: Issue | undefined) =>
@@ -22,6 +23,13 @@ export type PreparedWidget =
   /** Nothing at the page's scope. */
   | { ok: 'hidden' };
 
+/**
+ * Whether `stored` is a widget core accepts (`z.input` of its schema). Kinds read it as written, not as
+ * parsed, so schema defaults never reach a request.
+ */
+const isDashboardWidget = (stored: StoredWidget): stored is StoredWidget & DashboardWidget =>
+  dashboardWidgetSchema.safeParse(stored).success;
+
 /** Checks one widget against core's schema and its kind's options, keeping the views and columns at `scope`. */
 export function prepareWidget(
   stored: StoredWidget,
@@ -30,13 +38,14 @@ export function prepareWidget(
 ): PreparedWidget {
   const kind = registry.get(stored.kind);
   if (!kind) return { ok: false, message: 'This widget needs a newer version.' };
-  const parsed = dashboardWidgetSchema.safeParse(stored);
-  if (!parsed.success) return { ok: false, message: describeIssue(parsed.error.issues[0]) };
-  // Kinds read the widget as written, not as parsed, so schema defaults never reach a request.
-  const widget = stored as DashboardWidget;
+  if (!isDashboardWidget(stored)) {
+    return { ok: false, message: describeIssue(dashboardWidgetSchema.safeParse(stored).error?.issues[0]) };
+  }
+  const widget: DashboardWidget = stored;
   if (!inScope(widget, scope)) return { ok: 'hidden' };
 
   const views: ResolvedView<unknown>[] = [];
+  const tabs = new Set<string>();
   for (const [index, view] of widget.views.entries()) {
     if (!inScope(view, scope)) continue;
     const options = kind.optionsSchema.safeParse(view.options ?? {});
@@ -45,10 +54,14 @@ export function prepareWidget(
       return { ok: false, message: describeIssue({ ...issue, path: ['views', index, 'options', ...issue.path] }) };
     }
     // Columns at the other scope are left out before the kind sees them.
-    const columns = view.columns?.filter(c => inScope(c, scope));
-    const resolved = { ...view, ...(columns ? { columns } : {}), options: options.data };
+    const resolved = { ...view, columns: view.columns?.filter(c => inScope(c, scope)), options: options.data };
     const issue = kind.issues?.(resolved)[0];
     if (issue) return { ok: false, message: `views.${index}: ${issue}` };
+    // Each view at the scope is a tab, chosen by its value; two with one value would leave one unreachable.
+    const tab = tabValue(view.label, views.length);
+    if (tabs.has(tab))
+      return { ok: false, message: `views.${index}: another view is already labelled '${view.label ?? tab}'` };
+    tabs.add(tab);
     views.push(resolved);
   }
   const [first, ...rest] = views;

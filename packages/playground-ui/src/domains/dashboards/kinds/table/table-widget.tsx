@@ -6,27 +6,28 @@ import { BreakdownFigure } from '../../../metrics/components/breakdown/breakdown
 import { ChartArea } from '../../../metrics/components/chart-area';
 import { ChartCard } from '../../../metrics/components/chart-card';
 import { ChartCardError } from '../../../metrics/components/chart-card-error';
-import { useMetricsFilters } from '../../../metrics/hooks/use-metrics-filters';
-import { useSpanAggregateGate } from '../../../metrics/hooks/use-metrics-span-aggregate';
-import { useTraceAggregateGate } from '../../../metrics/hooks/use-metrics-trace-aggregate';
 import { formatCount } from '../../../metrics/lib/chart-format';
-import { useDrilldown, useViewTabs } from '../../components/widget-hooks';
+import { ViewGate } from '../../components/view-gate';
+import type { BlockedFields } from '../../components/view-gate';
+import { ViewTabs } from '../../components/widget-controls';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
-import type { DashboardQueryResult } from '../../hooks/use-dashboard-requests';
+import { useDrilldown, useViewTabs } from '../../hooks/use-widget-views';
+import { rowsOf } from '../../lib/answers';
 import { unsupportedMessage, viewHeading } from '../../lib/chrome';
 import { aggregateSource, buildPreviousRequest, buildRequest } from '../../lib/requests';
-import type { DashboardPageContext } from '../../lib/requests';
+import type { DashboardAnswer, DashboardPageContext } from '../../lib/requests';
 import {
   buildTableRows,
   isValueColumn,
   listedRows,
+  openingView,
   parseColumns,
   previousTableValues,
   rowDrilldown,
   rowQueries,
   valueChange,
 } from '../../lib/table';
-import type { TableColumn, TableOptions, TableResponse, TableRow, ValueColumn } from '../../lib/table';
+import type { TableColumn, TableOptions, TableRow, ValueColumn } from '../../lib/table';
 import { answersById, exprRefs } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { TableChangeCell, TableDimensionCell, TableNameCell, TableValueCell } from './table-cells';
@@ -37,8 +38,7 @@ import { Txt } from '@/ds/components/Txt';
 
 type Props = WidgetKindProps<TableOptions>;
 type View = ResolvedView<TableOptions>;
-type TraceGate = ReturnType<typeof useTraceAggregateGate>;
-type SpanGate = ReturnType<typeof useSpanAggregateGate>;
+type TabProps = Props & { view: View; index: number; onChoose: (index: number) => void };
 
 /** Filters an aggregate can't apply, named as the filter bar names them. */
 const FILTER_NAMES: Record<string, string> = {
@@ -59,103 +59,91 @@ const viewColumns = (view: View) => parseColumns(view.columns).columns;
  * don't come and go; a tab whose gate can't apply the page's filters says so.
  */
 export function TableWidget(props: Props) {
-  const queries = props.views.flatMap(v => v.queries);
-  const needs = new Set(queries.map(aggregateSource));
-  const traceGate = useTraceAggregateGate();
-  const spanGate = useSpanAggregateGate();
-  const gates = [...(needs.has('trace') ? [traceGate] : []), ...(needs.has('span') ? [spanGate] : [])];
-
-  if (gates.some(g => g.status === 'unavailable')) return null;
-  if (gates.some(g => g.status === 'loading')) {
-    return (
-      <ChartCard title={props.widget.title ?? ''} bodyHeight="fit">
-        <MetricsCard.Loading />
-      </ChartCard>
-    );
-  }
-  return <TableTabs {...props} traceGate={traceGate} spanGate={spanGate} />;
+  return (
+    <ViewGate
+      queries={props.views.flatMap(v => v.queries)}
+      partial
+      pending={() => (
+        <ChartCard title={props.widget.title ?? ''} bodyHeight="fit">
+          <MetricsCard.Loading />
+        </ChartCard>
+      )}
+    >
+      {(page, blocked) => <TableTabs {...props} page={page} blocked={blocked} />}
+    </ViewGate>
+  );
 }
 
-function TableTabs({ traceGate, spanGate, ...props }: Props & { traceGate: TraceGate; spanGate: SpanGate }) {
-  const { filters, timestamp } = useMetricsFilters();
-  const page: DashboardPageContext = {
-    window: timestamp,
-    filters,
-    ...(traceGate.status === 'ready' && traceGate.scope.where ? { traceWhere: traceGate.scope.where } : {}),
-    ...(spanGate.status === 'ready' && spanGate.scope.where ? { spanWhere: spanGate.scope.where } : {}),
-  };
-  const unsupported = (view: View) => {
-    const sources = new Set(view.queries.map(aggregateSource));
-    const blocked = [...(sources.has('trace') ? [traceGate] : []), ...(sources.has('span') ? [spanGate] : [])];
-    const fields = blocked.flatMap(g => (g.status === 'unsupported-filter' ? g.unsupportedFields : []));
-    return fields.length ? [...new Set(fields)] : undefined;
-  };
+/** The opener view's sorted column and the query it reads, when the opener can count its rows. */
+function openerSource(views: Props['views'], blocked: BlockedFields) {
+  const opener = views.find(v => v.options.openWhen);
+  if (!opener || blocked(opener.queries)) return undefined;
+  const column = viewColumns(opener)
+    .filter(isValueColumn)
+    .find(c => c.id === opener.options.defaultSort.column);
+  const ref = column && exprRefs(column.options.value)[0];
+  const query = opener.queries.find(q => q.id !== undefined && q.id === ref?.query);
+  return column && query ? { view: opener, column, query } : undefined;
+}
 
+function TableTabs({ page, blocked, ...props }: Props & { page: DashboardPageContext; blocked: BlockedFields }) {
   // A view that opens only with enough rows counts them from its sorted column's own request, so
-  // opening on it costs nothing more. While that loads it stays open, so the tabs don't jump.
-  const openerIndex = props.views.findIndex(v => v.options.openWhen);
-  const opener = props.views[openerIndex];
-  const openerColumn =
-    opener && !unsupported(opener)
-      ? viewColumns(opener)
-          .filter(isValueColumn)
-          .find(c => c.id === opener.options.defaultSort.column)
-      : undefined;
-  const openerRef = openerColumn && exprRefs(openerColumn.options.value)[0];
-  const openerQuery = opener?.queries.find(q => q.id !== undefined && q.id === openerRef?.query);
-  const [openerResult] = useDashboardRequests([openerQuery ? buildRequest(openerQuery, page, {}) : undefined]);
-  const withData =
-    opener && openerQuery && openerColumn ? countRows(opener, openerQuery, openerResult, openerColumn) : undefined;
-  const minRows = opener?.options.openWhen?.minRows ?? 0;
-  const opening =
-    openerIndex < 0
-      ? 0
-      : openerQuery && (withData === undefined || withData >= minRows)
-        ? openerIndex
-        : openerIndex + 1;
+  // opening on it costs nothing more.
+  const opener = openerSource(props.views, blocked);
+  const [openerResult] = useDashboardRequests([opener && buildRequest(opener.query, page, {})]);
+  const rows = opener ? countRows(opener, openerResult?.data) : null;
+  const { view, index, choose } = useViewTabs(props.views, openingView(props.views, rows));
 
-  const { view, index, tabs } = useViewTabs(props.views, opening);
-  const blocked = unsupported(view);
-  if (blocked) {
+  const unsupported = blocked(view.queries);
+  if (unsupported) {
     return (
-      <TableFrame {...props} view={view} tabs={tabs}>
-        <MetricsCard.NoData message={unsupportedMessage(blocked, FILTER_NAMES)} />
+      <TableFrame {...props} view={view} index={index} onChoose={choose}>
+        <MetricsCard.NoData message={unsupportedMessage(unsupported, FILTER_NAMES)} />
       </TableFrame>
     );
   }
-  return <TableView key={index} {...props} view={view} tabs={tabs} page={page} />;
+  return <TableView key={index} {...props} view={view} index={index} onChoose={choose} page={page} />;
 }
 
 /** Groups whose value in the opener's sorted column is above zero, once its request answers. */
-function countRows(view: View, query: DashboardQuery, result: DashboardQueryResult | undefined, column: ValueColumn) {
-  if (!result?.data || query.id === undefined) return undefined;
-  const answers = new Map([[query.id, result.data as TableResponse]]);
+function countRows(
+  { view, query, column }: { view: View; query: DashboardQuery; column: ValueColumn },
+  answer: DashboardAnswer | undefined,
+) {
+  if (!answer || query.id === undefined) return undefined;
+  const answers = new Map([[query.id, answer]]);
   return buildTableRows(view.options, [column], [query], answers).filter(r => (r.values[column.id] ?? 0) > 0).length;
 }
 
 function TableFrame({
   widget,
+  views,
   view,
-  tabs,
+  index,
+  onChoose,
   isUpdating,
   children,
-}: Props & { view: View; tabs: ReactNode; isUpdating?: boolean; children: ReactNode }) {
+}: TabProps & { isUpdating?: boolean; children: ReactNode }) {
   return (
     <ChartCard
       {...viewHeading(widget, view)}
       isUpdating={isUpdating}
       bodyHeight="fit"
-      toolbar={<MetricsCard.Toolbar>{tabs}</MetricsCard.Toolbar>}
+      toolbar={
+        <MetricsCard.Toolbar>
+          <ViewTabs views={views} index={index} onChoose={onChoose} />
+        </MetricsCard.Toolbar>
+      }
     >
       {children}
     </ChartCard>
   );
 }
 
-function TableView(props: Props & { view: View; tabs: ReactNode; page: DashboardPageContext }) {
+function TableView(props: TabProps & { page: DashboardPageContext }) {
   const { view, page, widget, onDrilldown } = props;
   const { options, queries } = view;
-  const { onClick } = useDrilldown(widget, view, onDrilldown);
+  const onClick = useDrilldown(widget, view, onDrilldown);
   const columns = viewColumns(view);
   const values = columns.filter(isValueColumn);
   const [sort, setSort] = useState<MetricsTableSort>(options.defaultSort);
@@ -177,7 +165,7 @@ function TableView(props: Props & { view: View; tabs: ReactNode; page: Dashboard
   // The previous window never holds the table up: until it answers, or if it fails, Change shows a dash.
   const previous = useDashboardRequests(queries.map(q => buildPreviousRequest(q, page, {})));
 
-  const waited = current.filter((r, i): r is DashboardQueryResult => r !== undefined && isRowQuery(i));
+  const waited = current.filter((r, i) => r !== undefined && isRowQuery(i)).filter(r => r !== undefined);
   if (waited.some(r => r.isError)) {
     return (
       <TableFrame {...props}>
@@ -189,12 +177,12 @@ function TableView(props: Props & { view: View; tabs: ReactNode; page: Dashboard
   const isLoading = waited.some(r => r.isLoading);
   const answers = answersById(
     queries,
-    current.map(r => r?.data as TableResponse | undefined),
+    current.map(r => r?.data),
   );
   // Only aggregates cap their groups; the first that did names its cap.
-  const capped = queries.findIndex((q, i) => isRowQuery(i) && isAggregate(q) && hasTruncated(current[i]));
-  const limit = capped < 0 ? undefined : (queries[capped] as { limit?: number }).limit;
-  const truncated = capped >= 0;
+  const capped = queries.find((q, i) => isRowQuery(i) && rowsOf(current[i]?.data)?.truncated === true);
+  const limit = capped && 'limit' in capped ? capped.limit : undefined;
+  const truncated = capped !== undefined;
   const built = isLoading ? [] : buildTableRows(options, columns, queries, answers);
   const previousSettled = previous.every((r, i) => !r || !isRowQuery(i) || (!r.isLoading && !r.isError));
   const before =
@@ -205,7 +193,7 @@ function TableView(props: Props & { view: View; tabs: ReactNode; page: Dashboard
           queries,
           answersById(
             queries,
-            previous.map(r => r?.data as TableResponse | undefined),
+            previous.map(r => r?.data),
           ),
         )
       : undefined;
@@ -244,9 +232,6 @@ function TableView(props: Props & { view: View; tabs: ReactNode; page: Dashboard
   );
 }
 
-const hasTruncated = (result: DashboardQueryResult | undefined) =>
-  (result?.data as { truncated?: boolean } | undefined)?.truncated === true;
-
 function tableColumn(
   column: TableColumn,
   window: { start: Date; end: Date },
@@ -254,35 +239,33 @@ function tableColumn(
   changeOf: (row: TableRow) => ReturnType<typeof valueChange> | undefined,
 ): MetricsTableColumn<TableRow> {
   const o = column.options;
-  const base = { id: column.id, header: column.label, ...(o.description ? { description: o.description } : {}) };
+  const base = { id: column.id, header: column.label, description: o.description };
   switch (o.type) {
     case 'name':
       return {
         ...base,
-        ...(o.width ? { width: o.width } : {}),
-        ...(o.sortable ? { sortValue: (row: TableRow) => row.name, firstDirection: 'asc' as const } : {}),
+        width: o.width,
+        sortValue: o.sortable ? (row: TableRow) => row.name : undefined,
+        firstDirection: 'asc',
         cell: row => <TableNameCell options={o} row={row} />,
       };
     case 'dimension':
       return {
         ...base,
-        ...(o.width ? { width: o.width } : {}),
-        ...(o.sortable
-          ? {
-              sortValue: (row: TableRow) =>
-                o.query === undefined ? row.dimensions[o.dimension] : row.lookups[column.id],
-              firstDirection: 'asc' as const,
-            }
-          : {}),
+        width: o.width,
+        sortValue: o.sortable
+          ? (row: TableRow) => (o.query === undefined ? row.dimensions[o.dimension] : row.lookups[column.id])
+          : undefined,
+        firstDirection: 'asc',
         cell: row => <TableDimensionCell id={column.id} options={o} row={row} />,
       };
     case 'value': {
-      const value = column as ValueColumn;
+      const value: ValueColumn = { id: column.id, label: column.label, options: o };
       return {
         ...base,
         align: 'end',
-        ...(o.width ? { width: o.width } : {}),
-        ...(o.sortable === false ? {} : { sortValue: (row: TableRow) => row.values[column.id] }),
+        width: o.width,
+        sortValue: o.sortable === false ? undefined : (row: TableRow) => row.values[column.id],
         cell: row => <TableValueCell column={value} row={row} />,
       };
     }

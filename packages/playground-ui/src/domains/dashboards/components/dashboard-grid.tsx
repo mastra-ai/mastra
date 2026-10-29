@@ -1,7 +1,8 @@
+import type { DASHBOARD_WIDGET_SPANS } from '@mastra/core/storage/dashboards';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-export type DashboardSpan = 1 | 2 | 3 | 4 | 6 | 12;
+export type DashboardSpan = (typeof DASHBOARD_WIDGET_SPANS)[number];
 
 /**
  * Twelve columns on wide containers. Below `@3xl` every widget takes the row, as in `MetricsGrid`;

@@ -2,6 +2,8 @@ import type { DashboardColumn, DashboardQuery } from '@mastra/client-js';
 import { z } from 'zod/v4';
 import type { DrilldownScope } from '../../metrics/drilldown';
 import { formatCount, formatDuration, formatPercent, formatUsd } from '../../metrics/lib/chart-format';
+import { groupsOf, measureOf, rowsOf } from './answers';
+import type { DashboardAnswer } from './requests';
 import { evaluate, exprRefs, queryRefSchema, unknownQueryIssues, valueExprSchema } from './values';
 import type { ValueRef } from './values';
 
@@ -86,8 +88,25 @@ export const tableColumnOptionsSchema = z.discriminatedUnion('type', [
 ]);
 
 export type TableColumnOptions = z.infer<typeof tableColumnOptionsSchema>;
-export type TableColumn = { id: string; label: string; options: TableColumnOptions };
-export type ValueColumn = TableColumn & { options: z.infer<typeof valueColumnSchema> };
+type ColumnOf<O extends TableColumnOptions> = { id: string; label: string; options: O };
+/** A column, told apart by `options.type`. */
+export type TableColumn = {
+  [T in TableColumnOptions['type']]: ColumnOf<Extract<TableColumnOptions, { type: T }>>;
+}[TableColumnOptions['type']];
+export type ValueColumn = Extract<TableColumn, { options: { type: 'value' } }>;
+
+function columnOf(id: string, label: string, options: TableColumnOptions): TableColumn {
+  switch (options.type) {
+    case 'name':
+      return { id, label, options };
+    case 'dimension':
+      return { id, label, options };
+    case 'value':
+      return { id, label, options };
+    case 'change':
+      return { id, label, options };
+  }
+}
 
 export const DRILLDOWN_FIELDS = [
   'projectId',
@@ -146,7 +165,7 @@ export function parseColumns(columns: readonly DashboardColumn[] | undefined): {
       issues.push(`columns.${i}.options${path}: ${issue?.message ?? 'invalid'}`);
       continue;
     }
-    parsed.push({ id: column.id, label: column.label ?? '', options: options.data });
+    parsed.push(columnOf(column.id, column.label ?? '', options.data));
   }
   return { columns: parsed, issues };
 }
@@ -187,16 +206,6 @@ export function tableIssues(
   return issues;
 }
 
-type AggregateRow = { dimensions?: Record<string, unknown> | null; measures: Record<string, unknown> };
-type Group = {
-  dimensions: Record<string, unknown>;
-  value: number;
-  estimatedCost?: number | null;
-  costUnit?: string | null;
-};
-/** A trace or span aggregate's answer, or a metrics breakdown's. */
-export type TableResponse = { rows: AggregateRow[]; truncated?: boolean } | { groups: Group[] };
-
 type Entry = {
   key: string;
   dimensions: Record<string, unknown>;
@@ -208,22 +217,25 @@ const text = (value: unknown) => (value == null ? '' : String(value));
 const finite = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
 /** A row's key: its `groupBy` values, kept apart however they're spelled. */
 const rowKey = (values: string[]) => JSON.stringify(values);
-const keyValues = (key: string) => JSON.parse(key) as string[];
+const keyValues = (key: string): string[] => {
+  const parsed: unknown = JSON.parse(key);
+  return Array.isArray(parsed) ? parsed.map(text) : [];
+};
 
-function entries(response: TableResponse | undefined, groupBy: readonly string[]): Entry[] {
-  if (!response) return [];
-  if ('groups' in response) {
-    return response.groups.map(g => ({
+function entries(answer: DashboardAnswer | undefined, groupBy: readonly string[]): Entry[] {
+  const groups = groupsOf(answer);
+  if (groups) {
+    return groups.map(g => ({
       key: rowKey(groupBy.map(d => text(g.dimensions[d]))),
       dimensions: g.dimensions,
       read: ref => (ref.field === 'estimatedCost' ? (g.estimatedCost ?? undefined) : g.value),
       costUnit: g.costUnit ?? undefined,
     }));
   }
-  return response.rows.map(r => ({
+  return (rowsOf(answer)?.rows ?? []).map(r => ({
     key: rowKey(groupBy.map(d => text(r.dimensions?.[d]))),
     dimensions: r.dimensions ?? {},
-    read: ref => (ref.measure ? finite(r.measures[ref.measure]) : undefined),
+    read: ref => (ref.measure ? finite(measureOf(r.measures, ref.measure)) : undefined),
   }));
 }
 
@@ -241,7 +253,7 @@ export type TableRow = {
   lookups: Record<string, string | undefined>;
 };
 
-type Answers = ReadonlyMap<string, TableResponse | undefined>;
+type Answers = ReadonlyMap<string, DashboardAnswer | undefined>;
 
 /** The queries rows come from, in the view's order: those a value column reads. */
 export function rowQueries(columns: TableColumn[], queries: readonly DashboardQuery[]) {
@@ -430,4 +442,21 @@ export function rowDrilldown(options: TableOptions, row: TableRow): DrilldownSco
     else scope[field] = value;
   }
   return scope;
+}
+
+/**
+ * The view a table opens on. Without an `openWhen` view, the first. The `openWhen` view opens while
+ * its rows load, so the tabs don't jump, and once it has `minRows` of them; it's passed over when it
+ * can't count them (`rows` is `null`: a page filter blocks it, or its sort column reads no query) or
+ * has too few.
+ */
+export function openingView(views: readonly { options: TableOptions }[], rows: number | null | undefined): number {
+  const opener = views.findIndex(v => v.options.openWhen);
+  if (opener < 0) return 0;
+  // Passed over, it opens on the view after it, or the first when it's last.
+  const next = (opener + 1) % views.length;
+  if (rows === null) return next;
+  if (rows === undefined) return opener;
+  const minRows = views[opener]?.options.openWhen?.minRows ?? 0;
+  return rows >= minRows ? opener : next;
 }

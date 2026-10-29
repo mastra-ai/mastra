@@ -4,6 +4,8 @@ import { bucketGrid, bucketPlan, gridIndex, intervalHours } from '../../metrics/
 import type { ApiInterval } from '../../metrics/lib/metrics-buckets';
 import { bucketTraceAggregateRows } from '../../metrics/lib/trace-aggregate';
 import type { TraceAggregateRow } from '../../metrics/lib/trace-aggregate';
+import { measureOf, rowsOf, seriesOf, valueOf } from './answers';
+import type { DashboardAnswer } from './requests';
 import {
   colorSchema,
   evaluate,
@@ -71,11 +73,6 @@ export const timeseriesOptionsSchema = z
 export type TimeseriesOptions = z.infer<typeof timeseriesOptionsSchema>;
 export type TimeseriesSeries = z.infer<typeof timeseriesSeriesSchema>;
 
-type Point = { timestamp: string | Date; value: number; estimatedCost?: number | null };
-type MetricsSeriesResponse = { series: { name?: string; percentile?: number; points: Point[] }[] };
-type AggregateResponse = { rows: TraceAggregateRow[] };
-type ValueResponse = { value?: number | null; estimatedCost?: number | null };
-
 type Window = { start: Date; end: Date };
 
 export type ChartBucket = BucketLabels & Record<string, number | string | undefined>;
@@ -93,25 +90,20 @@ export type ShapedTimeseries = {
   empty: boolean;
 };
 
-const isTraceRows = (response: unknown): response is AggregateResponse =>
-  typeof response === 'object' && response !== null && 'rows' in response;
-const isSeries = (response: unknown): response is MetricsSeriesResponse =>
-  typeof response === 'object' && response !== null && 'series' in response;
-
 /** A ref's value in one trace aggregate row set (ungrouped: one row). */
 function fromRows(rows: TraceAggregateRow[], ref: ValueRef) {
-  if (!ref.measure) return undefined;
-  const values = rows.map(r => r.measures[ref.measure as keyof typeof r.measures]).filter(v => typeof v === 'number');
+  const { measure } = ref;
+  if (!measure) return undefined;
+  const values = rows.flatMap(r => measureOf(r.measures, measure) ?? []);
   return values.length ? values.reduce((a, b) => a + b, 0) : undefined;
 }
 
 /** A ref's value over the whole range, from a totals query or the sum of its buckets. */
-function rangeValue(response: unknown, ref: ValueRef, perBucket: (number | undefined)[] | undefined) {
-  if (isTraceRows(response) && !response.rows.some(r => r.bucket)) return fromRows(response.rows, ref) ?? 0;
-  if (response && typeof response === 'object' && 'value' in response) {
-    const r = response as ValueResponse;
-    return (ref.field === 'estimatedCost' ? r.estimatedCost : r.value) ?? undefined;
-  }
+function rangeValue(answer: DashboardAnswer | undefined, ref: ValueRef, perBucket: (number | undefined)[] | undefined) {
+  const aggregate = rowsOf(answer);
+  if (aggregate && !aggregate.rows.some(r => r.bucket)) return fromRows(aggregate.rows, ref) ?? 0;
+  const value = valueOf(answer);
+  if (value) return (ref.field === 'estimatedCost' ? value.estimatedCost : value.value) ?? undefined;
   return perBucket?.reduce<number>((sum, v) => sum + (v ?? 0), 0);
 }
 
@@ -127,7 +119,7 @@ export function shapeTimeseries({
 }: {
   options: TimeseriesOptions;
   /** Each query's answer, by query id. */
-  responses: ReadonlyMap<string, unknown>;
+  responses: ReadonlyMap<string, DashboardAnswer | undefined>;
   window: Window;
   hasTraceQueries: boolean;
 }): ShapedTimeseries {
@@ -144,21 +136,21 @@ export function shapeTimeseries({
     const hit = cache.get(key);
     if (hit) return hit;
     const values: (number | undefined)[] = grid.map(() => (merged ? 0 : undefined));
-    const response = responses.get(ref.query);
-    if (isTraceRows(response)) {
-      bucketTraceAggregateRows(response.rows, window).forEach((b, i) => {
+    const answer = responses.get(ref.query);
+    const aggregate = rowsOf(answer);
+    if (aggregate) {
+      bucketTraceAggregateRows(aggregate.rows, window).forEach((b, i) => {
         values[i] = fromRows(b.rows, ref) ?? 0;
       });
-    } else if (isSeries(response)) {
-      for (const s of response.series) {
-        if (ref.percentile !== undefined && s.percentile !== ref.percentile) continue;
-        if (!matchesGroups(ref, s.name ?? '')) continue;
-        for (const p of s.points) {
-          const i = indexOf(p);
-          if (i === undefined) continue;
-          const v = ref.field === 'estimatedCost' ? (p.estimatedCost ?? 0) : p.value;
-          values[i] = merged ? (values[i] ?? 0) + v : v;
-        }
+    }
+    for (const s of seriesOf(answer) ?? []) {
+      if (ref.percentile !== undefined && s.percentile !== ref.percentile) continue;
+      if (!matchesGroups(ref, s.name ?? '')) continue;
+      for (const p of s.points) {
+        const i = indexOf(p);
+        if (i === undefined) continue;
+        const v = ref.field === 'estimatedCost' ? (p.estimatedCost ?? 0) : p.value;
+        values[i] = merged ? (values[i] ?? 0) + v : v;
       }
     }
     cache.set(key, values);

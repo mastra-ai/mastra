@@ -1,5 +1,6 @@
 import type { AggregateSpansArgs, AggregateTracesArgs, DashboardQuery, MastraClient } from '@mastra/client-js';
 import type { MetricsQueryFilters } from '@mastra/react/hooks/metrics';
+import { bucketPlan } from '../../metrics/lib/metrics-buckets';
 import { AGGREGATE_PRIORITY } from '../../metrics/lib/request-limiter';
 import type { AggregatePriority } from '../../metrics/lib/request-limiter';
 import { previousWindow } from '../../metrics/lib/time-window';
@@ -7,6 +8,7 @@ import { toTraceAggregateTimeRange } from '../../metrics/lib/trace-aggregate';
 import { intersectFilters } from './filters';
 
 type Window = { start: Date; end: Date };
+type Interval = '1h' | '1d';
 type Args<M extends keyof MastraClient> = MastraClient[M] extends (args: infer A, ...rest: never[]) => unknown
   ? A
   : never;
@@ -31,6 +33,13 @@ export type DashboardRequest = Call & {
 
 export type DashboardRequestMethod = DashboardRequest['method'];
 
+type Answers = { [M in DashboardRequestMethod]: Awaited<ReturnType<MastraClient[M]>> };
+
+/** A request's answer, tagged with the method that produced it so a widget narrows it by `method`. */
+export type DashboardAnswer = {
+  [M in DashboardRequestMethod]: { method: M; data: Answers[M] };
+}[DashboardRequestMethod];
+
 type TraceWhere = NonNullable<AggregateTracesArgs['where']>;
 type SpanWhere = NonNullable<AggregateSpansArgs['where']>;
 
@@ -47,36 +56,48 @@ export type DashboardPageContext = {
 /** How the widget kind sends a query. */
 export type DashboardRequestOptions = {
   /** The bucket size, for a query that doesn't set its own. Unset sends the query as written. */
-  interval?: '1h' | '1d';
+  interval?: Interval;
 };
 
 /** The widget's predicate and the page's, both required; the widget's comes first. */
-function and<P extends object>(widget: P | undefined, page: P | undefined): P | undefined {
-  if (widget && page) return { op: 'and', args: [widget, page] } as unknown as P;
-  return widget ?? page;
+function andTrace(widget: TraceWhere | undefined, page: TraceWhere | undefined): TraceWhere | undefined {
+  return widget && page ? { op: 'and', args: [widget, page] } : (widget ?? page);
 }
 
-const METRICS_METHOD = {
-  aggregate: 'getMetricAggregate',
-  breakdown: 'getMetricBreakdown',
-  timeSeries: 'getMetricTimeSeries',
-  percentiles: 'getMetricPercentiles',
-} as const;
+function andSpan(widget: SpanWhere | undefined, page: SpanWhere | undefined): SpanWhere | undefined {
+  return widget && page ? { op: 'and', args: [widget, page] } : (widget ?? page);
+}
 
-const SCORES_METHOD = {
-  aggregate: 'getScoreAggregate',
-  breakdown: 'getScoreBreakdown',
-  timeSeries: 'getScoreTimeSeries',
-  percentiles: 'getScorePercentiles',
-} as const;
+type ValuesQuery = Extract<DashboardQuery, { source: 'metrics' | 'scores' }>;
 
-const BUCKETED_REQUESTS = new Set(['timeSeries', 'percentiles']);
+/**
+ * A metrics or scores query's args, the page's filters intersected with its own, over `window`;
+ * `unsatisfiable` when they contradict.
+ */
+function valuesArgs<Q extends ValuesQuery>(query: Q, page: DashboardPageContext, window: Window) {
+  const { source: _source, id: _id, request, compare, filters, ...rest } = query;
+  const combined = intersectFilters(page.filters, filters);
+  return {
+    unsatisfiable: combined === undefined ? (true as const) : undefined,
+    args: {
+      ...rest,
+      filters: { ...(combined ?? page.filters), timestamp: window },
+      // An aggregate compares in the same request; anything else sends a second one over `window`.
+      comparePeriod: request === 'aggregate' && compare === 'previousWindow' ? ('previous_period' as const) : undefined,
+    },
+  };
+}
+
+/** A bucketed request's interval: its own, else the kind's, else the bar charts' for `window`. */
+function bucketOf<I extends string>(own: I | undefined, interval: Interval | undefined, window: Window) {
+  return own ?? interval ?? bucketPlan(window.start, window.end).interval;
+}
 
 /**
  * The request a query sends over `window`, the page's filters ANDed with the widget's: trace and span
  * predicates are joined with `and`; metrics and scores filters intersect (`intersectFilters`), and a
- * contradiction marks the request unsatisfiable. Scores queries without a scorer are expanded by the
- * `scores` kind before they get here.
+ * contradiction marks the request unsatisfiable. A scores query without a scorer sends nothing: the
+ * `scores` kind expands it per scorer first.
  */
 export function buildRequest(
   query: DashboardQuery,
@@ -84,41 +105,77 @@ export function buildRequest(
   { interval }: DashboardRequestOptions,
   window: Window = page.window,
   priority?: AggregatePriority,
-): DashboardRequest {
-  if (query.source === 'traceAggregate' || query.source === 'spanAggregate') {
-    const { source, id: _id, compare: _compare, where, interval: own, ...rest } = query;
-    const bucket = own ?? interval;
-    const shared = { timeRange: toTraceAggregateTimeRange(window), ...rest, ...(bucket ? { interval: bucket } : {}) };
-    if (source === 'traceAggregate') {
-      const combined = and(where as TraceWhere | undefined, page.traceWhere);
-      return {
-        method: 'aggregateTraces',
-        args: { ...shared, ...(combined ? { where: combined } : {}) } as AggregateTracesArgs,
-        ...(priority === undefined ? {} : { priority }),
-      };
-    }
-    const combined = and(where as SpanWhere | undefined, page.spanWhere);
+): DashboardRequest | undefined {
+  if (query.source === 'traceAggregate') {
+    const { source: _source, id: _id, compare: _compare, where, interval: own, ...rest } = query;
     return {
-      method: 'aggregateSpans',
-      args: { ...shared, ...(combined ? { where: combined } : {}) } as AggregateSpansArgs,
-      ...(priority === undefined ? {} : { priority }),
+      method: 'aggregateTraces',
+      args: {
+        timeRange: toTraceAggregateTimeRange(window),
+        ...rest,
+        interval: own ?? interval,
+        where: andTrace(where, page.traceWhere),
+      },
+      priority,
     };
   }
-
-  const { source, id: _id, request, compare, filters, ...rest } = query;
-  const own = 'interval' in rest ? rest.interval : undefined;
-  const bucket = own ?? (BUCKETED_REQUESTS.has(request) ? interval : undefined);
-  // An aggregate compares in the same request; anything else sends a second one over `window`.
-  const comparePeriod = request === 'aggregate' && compare === 'previousWindow' ? 'previous_period' : undefined;
-  const combined = intersectFilters(page.filters, filters);
-  const args = {
-    ...rest,
-    ...(bucket ? { interval: bucket } : {}),
-    filters: { ...(combined ?? page.filters), timestamp: window },
-    ...(comparePeriod ? { comparePeriod } : {}),
-  };
-  const method = source === 'metrics' ? METRICS_METHOD[request] : SCORES_METHOD[request];
-  return { method, args, ...(combined ? {} : { unsatisfiable: true }) } as DashboardRequest;
+  if (query.source === 'spanAggregate') {
+    const { source: _source, id: _id, compare: _compare, where, interval: own, ...rest } = query;
+    return {
+      method: 'aggregateSpans',
+      args: {
+        timeRange: toTraceAggregateTimeRange(window),
+        ...rest,
+        interval: own ?? interval,
+        where: andSpan(where, page.spanWhere),
+      },
+      priority,
+    };
+  }
+  if (query.source === 'metrics') {
+    switch (query.request) {
+      case 'aggregate': {
+        const { args, unsatisfiable } = valuesArgs(query, page, window);
+        return { method: 'getMetricAggregate', args, unsatisfiable };
+      }
+      case 'breakdown': {
+        const { args, unsatisfiable } = valuesArgs(query, page, window);
+        return { method: 'getMetricBreakdown', args, unsatisfiable };
+      }
+      case 'timeSeries': {
+        const { args, unsatisfiable } = valuesArgs(query, page, window);
+        const bucketed = { ...args, interval: bucketOf(query.interval, interval, window) };
+        return { method: 'getMetricTimeSeries', args: bucketed, unsatisfiable };
+      }
+      case 'percentiles': {
+        const { args, unsatisfiable } = valuesArgs(query, page, window);
+        const bucketed = { ...args, interval: bucketOf(query.interval, interval, window) };
+        return { method: 'getMetricPercentiles', args: bucketed, unsatisfiable };
+      }
+    }
+  }
+  const { scorerId } = query;
+  if (scorerId === undefined) return undefined;
+  switch (query.request) {
+    case 'aggregate': {
+      const { args, unsatisfiable } = valuesArgs(query, page, window);
+      return { method: 'getScoreAggregate', args: { ...args, scorerId }, unsatisfiable };
+    }
+    case 'breakdown': {
+      const { args, unsatisfiable } = valuesArgs(query, page, window);
+      return { method: 'getScoreBreakdown', args: { ...args, scorerId }, unsatisfiable };
+    }
+    case 'timeSeries': {
+      const { args, unsatisfiable } = valuesArgs(query, page, window);
+      const bucketed = { ...args, scorerId, interval: bucketOf(query.interval, interval, window) };
+      return { method: 'getScoreTimeSeries', args: bucketed, unsatisfiable };
+    }
+    case 'percentiles': {
+      const { args, unsatisfiable } = valuesArgs(query, page, window);
+      const bucketed = { ...args, scorerId, interval: bucketOf(query.interval, interval, window) };
+      return { method: 'getScorePercentiles', args: bucketed, unsatisfiable };
+    }
+  }
 }
 
 /** Whether a query asks for the previous window as a request of its own. */
@@ -137,50 +194,58 @@ export function buildPreviousRequest(
   return buildRequest(query, page, options, previousWindow(page.window), AGGREGATE_PRIORITY.last);
 }
 
-const EMPTY_ANSWER: Record<DashboardRequestMethod, unknown> = {
-  aggregateTraces: { rows: [] },
-  aggregateSpans: { rows: [] },
-  getMetricAggregate: { value: null },
-  getMetricBreakdown: { groups: [] },
-  getMetricTimeSeries: { series: [] },
-  getMetricPercentiles: { series: [] },
-  getScoreAggregate: { value: null },
-  getScoreBreakdown: { groups: [] },
-  getScoreTimeSeries: { series: [] },
-  getScorePercentiles: { series: [] },
-};
-
-/** Runs a request on the client; an unsatisfiable one answers empty without a call. */
-export function sendRequest(client: MastraClient, request: DashboardRequest): Promise<unknown> {
-  if (request.unsatisfiable) return Promise.resolve(EMPTY_ANSWER[request.method]);
-  switch (request.method) {
+/** What an unsatisfiable request answers: nothing matched. */
+function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
+  switch (method) {
     case 'aggregateTraces':
-      return client.aggregateTraces(request.args);
     case 'aggregateSpans':
-      return client.aggregateSpans(request.args);
+      return { method, data: { rows: [], truncated: false } };
     case 'getMetricAggregate':
-      return client.getMetricAggregate(request.args);
-    case 'getMetricBreakdown':
-      return client.getMetricBreakdown(request.args);
-    case 'getMetricTimeSeries':
-      return client.getMetricTimeSeries(request.args);
-    case 'getMetricPercentiles':
-      return client.getMetricPercentiles(request.args);
     case 'getScoreAggregate':
-      return client.getScoreAggregate(request.args);
+      return { method, data: { value: null } };
+    case 'getMetricBreakdown':
     case 'getScoreBreakdown':
-      return client.getScoreBreakdown(request.args);
+      return { method, data: { groups: [] } };
+    case 'getMetricTimeSeries':
+    case 'getMetricPercentiles':
     case 'getScoreTimeSeries':
-      return client.getScoreTimeSeries(request.args);
     case 'getScorePercentiles':
-      return client.getScorePercentiles(request.args);
+      return { method, data: { series: [] } };
   }
 }
 
-/** The React Query key: trace and span aggregates share `useTraceAggregate`'s, so other cards reuse them. */
+/** Runs a request on the client; an unsatisfiable one answers empty without a call. */
+export async function sendRequest(client: MastraClient, request: DashboardRequest): Promise<DashboardAnswer> {
+  if (request.unsatisfiable) return emptyAnswer(request.method);
+  switch (request.method) {
+    case 'aggregateTraces':
+      return { method: request.method, data: await client.aggregateTraces(request.args) };
+    case 'aggregateSpans':
+      return { method: request.method, data: await client.aggregateSpans(request.args) };
+    case 'getMetricAggregate':
+      return { method: request.method, data: await client.getMetricAggregate(request.args) };
+    case 'getMetricBreakdown':
+      return { method: request.method, data: await client.getMetricBreakdown(request.args) };
+    case 'getMetricTimeSeries':
+      return { method: request.method, data: await client.getMetricTimeSeries(request.args) };
+    case 'getMetricPercentiles':
+      return { method: request.method, data: await client.getMetricPercentiles(request.args) };
+    case 'getScoreAggregate':
+      return { method: request.method, data: await client.getScoreAggregate(request.args) };
+    case 'getScoreBreakdown':
+      return { method: request.method, data: await client.getScoreBreakdown(request.args) };
+    case 'getScoreTimeSeries':
+      return { method: request.method, data: await client.getScoreTimeSeries(request.args) };
+    case 'getScorePercentiles':
+      return { method: request.method, data: await client.getScorePercentiles(request.args) };
+  }
+}
+
+/**
+ * The React Query key. Answers are cached tagged with their method, so they live under the dashboards'
+ * own keys rather than `useTraceAggregate`'s, whose entries hold the bare response.
+ */
 export function requestKey(request: DashboardRequest): readonly unknown[] {
-  if (request.method === 'aggregateTraces') return ['trace-aggregate', request.args];
-  if (request.method === 'aggregateSpans') return ['span-aggregate', request.args];
   if (request.unsatisfiable) return ['dashboards', 'unsatisfiable', request.method];
   return ['dashboards', request.method, request.args];
 }

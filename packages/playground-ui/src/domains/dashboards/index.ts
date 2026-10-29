@@ -6,8 +6,9 @@ export { DashboardGrid, DashboardGridCell, DashboardGridRow } from './components
 export type { DashboardSpan } from './components/dashboard-grid';
 export { ViewGate } from './components/view-gate';
 export { WidgetError } from './components/widget-error';
-export { useDrilldown, useViewTabs } from './components/widget-hooks';
+export { DrilldownAction, ViewTabs } from './components/widget-controls';
 export { useDashboardRequests } from './hooks/use-dashboard-requests';
+export { hasDrilldownAction, useDrilldown, useViewTabs } from './hooks/use-widget-views';
 export * from './kinds';
 export { dashboardDefaults } from './lib/definition';
 export type { DashboardScope, OnDashboardDrilldown } from './lib/definition';

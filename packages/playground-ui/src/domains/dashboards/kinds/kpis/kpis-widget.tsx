@@ -5,12 +5,13 @@ import { formatCount, formatUsd } from '../../../metrics/lib/chart-format';
 import { ViewGate } from '../../components/view-gate';
 import type { DashboardQueryResult } from '../../hooks/use-dashboard-requests';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
+import { valueOf } from '../../lib/answers';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { answersById, exprRefs } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { kpiFigures } from './options';
-import type { Aggregate, KpisOptions } from './options';
+import type { KpisOptions } from './options';
 import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
 
 const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: MessagesSquareIcon } as const;
@@ -31,7 +32,7 @@ function KpisView({ view, page }: { view: ResolvedView<KpisOptions>; page: Dashb
   const { comparisonLabel } = useMetrics();
   const results = useDashboardRequests(view.queries.map(q => buildRequest(q, page, {})));
   const byId = answersById(view.queries, results);
-  const answers = new Map([...byId].map(([id, r]) => [id, r?.data as Aggregate | undefined]));
+  const answers = new Map([...byId].map(([id, r]) => [id, valueOf(r?.data)]));
   return (
     <MetricsCardGroup>
       {view.options.items.map((item, i) => {
@@ -47,7 +48,7 @@ function KpisView({ view, page }: { view: ResolvedView<KpisOptions>; page: Dashb
             icon={ICONS[item.icon]}
             value={figures.value == null ? '—' : format(figures.value)}
             change={change(figures.change)}
-            {...(item.lowerIsBetter ? { lowerIsBetter: true } : {})}
+            lowerIsBetter={item.lowerIsBetter}
             detail={item.detail}
             previous={figures.previous == null ? undefined : format(figures.previous)}
             comparison={comparisonLabel}

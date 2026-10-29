@@ -44,7 +44,7 @@ import { ScoresCard } from '../../metrics/components/scores-card';
 import { TokenUsageCard } from '../../metrics/components/token-usage-card';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
-import type { OnDashboardDrilldown } from '../lib/definition';
+import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import {
   agentRunsWidget,
   breakdownWidget,
@@ -68,6 +68,9 @@ const SCOPES: Record<'project' | 'org', MetricsScope | undefined> = {
   project: undefined,
   org: { projectLabel: (id: string) => `Project ${id}` },
 };
+
+/** The dashboard scope matching a test's page: an org page is the one that labels projects. */
+const dashboardScope = (scope: MetricsScope | undefined): DashboardScope => (scope ? 'org' : 'project');
 
 /** Sorts object keys so two bodies with the same fields compare equal. */
 function canonical(value: unknown): unknown {
@@ -114,6 +117,11 @@ function recordRequests() {
   };
 }
 
+/**
+ * MIGRATION SCAFFOLD. Comparing `innerHTML` with today's cards pins class names and markup: it proves
+ * the widgets reproduce the cards while both exist, and loses its meaning once the cards are deleted.
+ * Delete these comparisons with the cards; the behaviour assertions beside them are what stays.
+ */
 /** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
 const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
 
@@ -161,7 +169,11 @@ async function renderWidget(
 ): Promise<Rendered> {
   const recorder = recordRequests();
   const { container } = renderInMetrics(
-    <DashboardRenderer definition={{ schemaVersion: 1, rows: [{ widgets: [widget] }] }} onDrilldown={onDrilldown} />,
+    <DashboardRenderer
+      definition={{ schemaVersion: 1, rows: [{ widgets: [widget] }] }}
+      scope={dashboardScope(scope)}
+      onDrilldown={onDrilldown}
+    />,
     { scope },
   );
   await settle(recorder);
@@ -197,7 +209,11 @@ async function renderCards(
 async function renderWidgets(widgets: DashboardWidget[], scope: MetricsScope | undefined): Promise<RenderedPage> {
   const recorder = recordRequests();
   const { container } = renderInMetrics(
-    <DashboardRenderer definition={{ schemaVersion: 1, rows: [{ widgets }] }} onDrilldown={() => {}} />,
+    <DashboardRenderer
+      definition={{ schemaVersion: 1, rows: [{ widgets }] }}
+      scope={dashboardScope(scope)}
+      onDrilldown={() => {}}
+    />,
     { scope },
   );
   await settle(recorder);
@@ -233,9 +249,17 @@ const API = `${TEST_BASE_URL}/api/observability`;
 const now = new Date('2026-10-28T12:00:00Z').getTime();
 /** Whether a window ends now (the page's) rather than a window earlier (the previous one). */
 const endsNow = (end: unknown) => Math.abs(now - new Date(String(end)).getTime()) < 3_600_000;
-const record = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-const noRows: AggregateTracesResponse = { rows: [] };
+const noRows: AggregateTracesResponse = { rows: [], truncated: false };
+
+/** The parts of an aggregate request body these handlers route on. */
+type AggregateBody = { groupBy?: string[]; measures?: string[]; where?: unknown; timeRange: { to: string } };
+/** The parts of a metrics request body these handlers route on. */
+type MetricsBody = {
+  name?: string | string[];
+  groupBy?: string[];
+  aggregation?: string;
+  filters?: { timestamp?: { end?: string } };
+};
 
 /**
  * Breakdown's answers, by what a request groups on and which window it covers. Neither card nor
@@ -244,29 +268,29 @@ const noRows: AggregateTracesResponse = { rows: [] };
 function serveBreakdown() {
   serveCapabilities(aggregateCapabilities);
   server.use(
-    http.post(`${API}/traces/aggregate`, async ({ request }) => {
-      const body = record(await request.json());
-      const by = (body.groupBy as string[]).join();
+    http.post<never, AggregateBody>(`${API}/traces/aggregate`, async ({ request }) => {
+      const body = await request.json();
+      const by = (body.groupBy ?? []).join();
       if (by === 'projectId') return HttpResponse.json(tracesByProject(['p1', 'p2']));
       if (by.endsWith('environment')) return HttpResponse.json(tracesByEnvironment);
       if (by === 'resourceId,threadId')
-        return HttpResponse.json((body.measures as string[]).length === 1 ? threadResourcesFixture : tracesByThread);
+        return HttpResponse.json(body.measures?.length === 1 ? threadResourcesFixture : tracesByThread);
       if (by === 'projectId,threadId') return HttpResponse.json(tracesByProjectAndThread);
       return HttpResponse.json(noRows);
     }),
-    http.post(`${API}/spans/aggregate`, async ({ request }) => {
-      const body = record(await request.json());
-      const current = endsNow(record(body.timeRange).to);
+    http.post<never, AggregateBody>(`${API}/spans/aggregate`, async ({ request }) => {
+      const body = await request.json();
+      const current = endsNow(body.timeRange.to);
       if (JSON.stringify(body.where).includes('tool_call'))
         return HttpResponse.json(current ? toolCallsByName : noRows);
       if (!JSON.stringify(body.where).includes('agent_run')) return HttpResponse.json(noRows);
-      if ((body.groupBy as string[])[0] === 'projectId') return HttpResponse.json(agentRunsByProjectAndName);
+      if (body.groupBy?.[0] === 'projectId') return HttpResponse.json(agentRunsByProjectAndName);
       return HttpResponse.json(current ? agentRunsByName : previousWithRetiredAgent);
     }),
-    http.post(`${API}/metrics/breakdown`, async ({ request }) => {
-      const body = record(await request.json());
-      const current = endsNow(record(record(body.filters).timestamp).end);
-      const by = (body.groupBy as string[]).at(-1);
+    http.post<never, MetricsBody>(`${API}/metrics/breakdown`, async ({ request }) => {
+      const body = await request.json();
+      const current = endsNow(body.filters?.timestamp?.end);
+      const by = body.groupBy?.at(-1);
       if (body.aggregation === 'count')
         return HttpResponse.json(by === 'model' ? modelSpansByModel : emptyBreakdownFixture);
       if (by === 'entityName') return HttpResponse.json(current ? agentTokensByName : previousAgentUsage);
@@ -285,10 +309,10 @@ function serveManyTools() {
     measures: { count, errorCount: i % 4, errorRate: (i % 4) / count, 'duration.p95': 100 * ((i * 7) % 13) },
   });
   server.use(
-    http.post(`${API}/spans/aggregate`, async ({ request }) => {
-      const body = record(await request.clone().json());
+    http.post<never, AggregateBody>(`${API}/spans/aggregate`, async ({ request }) => {
+      const body = await request.clone().json();
       if (!JSON.stringify(body.where).includes('tool_call')) return undefined;
-      if (endsNow(record(body.timeRange).to)) {
+      if (endsNow(body.timeRange.to)) {
         return HttpResponse.json({
           rows: Array.from({ length: 30 }, (_, i) => tool(i, 10 + ((i * 11) % 29))),
           truncated: true,
@@ -330,111 +354,240 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
     seedMetrics();
   });
 
-  it('KPIs', async () => {
-    const card = await renderCard(<MetricsKpis />, scope);
-    const widget = await renderWidget(kpisWidget, scope);
-    expect(within(card.root).getByText('693')).toBeDefined();
-    expectSame(card, widget);
+  describe('KPIs', () => {
+    const both = async () => ({
+      card: await renderCard(<MetricsKpis />, scope),
+      widget: await renderWidget(kpisWidget, scope),
+    });
+
+    it('matches the card', async () => {
+      const { card, widget } = await both();
+      expectSame(card, widget);
+    });
+
+    it('shows the run count', async () => {
+      const widget = await renderWidget(kpisWidget, scope);
+      expect(within(widget.root).getByText('693')).toBeDefined();
+    });
   });
 
   // Token usage, Agent runs and Failure rate share one set of requests (`useMetricsActivity`), so a
   // card alone sends all four; compare them as the page shows them, together.
-  it('Token usage (both tabs), Agent runs and Failure rate', async () => {
-    const cards = await renderCards(
-      {
-        'token-usage': <TokenUsageCard onViewTraces={noop} onTimeRangeClick={noop} />,
-        'agent-runs': <AgentRunsCard onTimeRangeClick={noop} />,
-        'failure-rate': <FailureRateCard onViewErrors={noop} onTimeRangeClick={noop} />,
-      },
-      scope,
-    );
-    const widgets = await renderWidgets([tokenUsageWidget, agentRunsWidget, failureRateWidget], scope);
-    expect(cards.sent).toHaveLength(4);
-    expect(widgets.sent.toSorted()).toEqual(cards.sent.toSorted());
-    for (const id of ['token-usage', 'agent-runs', 'failure-rate']) {
-      expectSame({ ...cards.roots[id], sent: [] }, { ...widgets.roots[id], sent: [] });
-    }
-    expect(within(cards.roots['token-usage'].root).getByText('1.30K')).toBeDefined();
-    await expectSameTab(cards.roots['token-usage'], widgets.roots['token-usage'], 'Cost');
-    expect(within(widgets.roots['token-usage'].root).getByText('$0.75')).toBeDefined();
+  describe('Token usage, Agent runs and Failure rate', () => {
+    const ACTIVITY = ['token-usage', 'agent-runs', 'failure-rate'];
+    const cardsPage = () =>
+      renderCards(
+        {
+          'token-usage': <TokenUsageCard onViewTraces={noop} onTimeRangeClick={noop} />,
+          'agent-runs': <AgentRunsCard onTimeRangeClick={noop} />,
+          'failure-rate': <FailureRateCard onViewErrors={noop} onTimeRangeClick={noop} />,
+        },
+        scope,
+      );
+    const widgetsPage = () => renderWidgets([tokenUsageWidget, agentRunsWidget, failureRateWidget], scope);
+
+    it('sends the cards’ four requests between them', async () => {
+      const cards = await cardsPage();
+      const widgets = await widgetsPage();
+      expect(widgets.sent).toHaveLength(4);
+      expect(widgets.sent.toSorted()).toEqual(cards.sent.toSorted());
+    });
+
+    it.each(ACTIVITY)('matches the %s card', async id => {
+      const cards = await cardsPage();
+      const widgets = await widgetsPage();
+      expectSame(rootOf(cards, id), rootOf(widgets, id));
+    });
+
+    it('matches the Token usage card on the Cost tab', async () => {
+      const cards = await cardsPage();
+      const widgets = await widgetsPage();
+      await expectSameTab(rootOf(cards, 'token-usage'), rootOf(widgets, 'token-usage'), 'Cost');
+    });
+
+    it('totals tokens on the Tokens tab', async () => {
+      const widgets = await widgetsPage();
+      expect(within(rootOf(widgets, 'token-usage').root).getByText('1.30K')).toBeDefined();
+    });
+
+    it('totals spend on the Cost tab', async () => {
+      const widgets = await widgetsPage();
+      const tokens = rootOf(widgets, 'token-usage');
+      fireEvent.click(within(tokens.root).getByRole('tab', { name: 'Cost' }));
+      expect(await within(tokens.root).findByText('$0.75')).toBeDefined();
+    });
   });
 
-  it('Latency, every tab', async () => {
-    const card = await renderCard(<LatencyCard onViewTraces={noop} onTimeRangeClick={noop} />, scope);
-    const widget = await renderWidget(latencyWidget, scope);
-    expectSame(card, widget);
-    expect(within(card.root).getByText('P95')).toBeDefined();
-    await expectSameTab(card, widget, 'Workflows');
-    expect(within(widget.root).getByText('No workflow runs in this range.')).toBeDefined();
-    expect(widget.sent).toHaveLength(1);
-    await expectSameTab(card, widget, 'Tools');
-    expect(within(widget.root).getByText('No tool calls in this range.')).toBeDefined();
+  describe('Latency', () => {
+    const both = async () => ({
+      card: await renderCard(<LatencyCard onViewTraces={noop} onTimeRangeClick={noop} />, scope),
+      widget: await renderWidget(latencyWidget, scope),
+    });
+
+    it('matches the card', async () => {
+      const { card, widget } = await both();
+      expectSame(card, widget);
+    });
+
+    it.each(['Workflows', 'Tools'])('matches the card on the %s tab', async tab => {
+      const { card, widget } = await both();
+      await expectSameTab(card, widget, tab);
+    });
+
+    it('labels the P95 line', async () => {
+      const widget = await renderWidget(latencyWidget, scope);
+      expect(within(widget.root).getByText('P95')).toBeDefined();
+    });
+
+    it('sends one request for a tab and says when it has no runs', async () => {
+      const widget = await renderWidget(latencyWidget, scope);
+      const recorder = recordRequests();
+      fireEvent.click(within(widget.root).getByRole('tab', { name: 'Workflows' }));
+      expect(await within(widget.root).findByText('No workflow runs in this range.')).toBeDefined();
+      await settle(recorder);
+      recorder.stop();
+      expect(recorder.sent).toHaveLength(1);
+    });
   });
 
-  it('Resources and threads', async () => {
-    serveCapabilities(traceAggregateCapabilities);
-    serveTraceAggregate(request =>
-      request.interval ? distinctIdsSeriesFixture(request.timeRange) : distinctIdsTotalsFixture,
-    );
-    const card = await renderCard(<DistinctIdsCard onTimeRangeClick={noop} />, scope);
-    const widget = await renderWidget(distinctIdsWidget, scope);
-    expect(within(card.root).getByText('Resources')).toBeDefined();
-    expectSame(card, widget);
+  describe('Resources and threads', () => {
+    beforeEach(() => {
+      serveCapabilities(traceAggregateCapabilities);
+      serveTraceAggregate(request =>
+        request.interval ? distinctIdsSeriesFixture(request.timeRange) : distinctIdsTotalsFixture,
+      );
+    });
+
+    it('matches the card', async () => {
+      const card = await renderCard(<DistinctIdsCard onTimeRangeClick={noop} />, scope);
+      expectSame(card, await renderWidget(distinctIdsWidget, scope));
+    });
+
+    it('names the resources line', async () => {
+      const widget = await renderWidget(distinctIdsWidget, scope);
+      expect(within(widget.root).getByText('Resources')).toBeDefined();
+    });
   });
 
-  it('Breakdown, every tab', async () => {
-    serveBreakdown();
-    const card = await renderCard(<BreakdownCard onRowClick={noop} />, scope);
-    const widget = await renderWidget(breakdownWidget, scope);
+  describe('Breakdown', () => {
+    beforeEach(() => {
+      serveBreakdown();
+    });
+    const both = async (onRowClick = noop, onDrilldown: OnDashboardDrilldown = noop) => ({
+      card: await renderCard(<BreakdownCard onRowClick={onRowClick} />, scope),
+      widget: await renderWidget(breakdownWidget, scope, onDrilldown),
+    });
+
+    it('matches the card on the tab it opens on', async () => {
+      const { card, widget } = await both();
+      expectSame(card, widget);
+    });
+
     // Org-wide it opens on Projects, with two to compare; a project opens on Agents.
-    expect(within(card.root).getByRole('tab', { selected: true }).textContent).toBe(scope ? 'Projects' : 'Agents');
-    expectSame(card, widget);
-    for (const tab of BREAKDOWN_TABS[scope ? 'org' : 'project']) {
+    it(`opens on ${scope ? 'Projects' : 'Agents'}`, async () => {
+      const widget = await renderWidget(breakdownWidget, scope);
+      expect(within(widget.root).getByRole('tab', { selected: true }).textContent).toBe(scope ? 'Projects' : 'Agents');
+    });
+
+    it.each(BREAKDOWN_TABS[scope ? 'org' : 'project'])('matches the card on the %s tab', async tab => {
+      const { card, widget } = await both();
       await expectSameTab(card, widget, tab);
-    }
+    });
+
+    it.each(['Agents', 'Tools', 'Models', 'Threads', 'Environments', ...(scope ? ['Projects'] : [])])(
+      'drills into the clicked %s row as the card does',
+      async tab => {
+        const onRowClick = vi.fn();
+        const onDrilldown = vi.fn();
+        const { card, widget } = await both(onRowClick, onDrilldown);
+        for (const side of [card, widget]) {
+          const recorder = recordRequests();
+          fireEvent.click(within(side.root).getByRole('tab', { name: tab }));
+          await settle(recorder);
+          recorder.stop();
+          // The first row under the header.
+          const first = within(side.root).getAllByRole('row')[1];
+          if (!first) throw new Error(`No rows on ${tab}`);
+          fireEvent.click(first);
+        }
+        expect(onRowClick).toHaveBeenCalledTimes(1);
+        expect(onDrilldown).toHaveBeenCalledExactlyOnceWith('traces', onRowClick.mock.lastCall?.[0]);
+      },
+    );
+
+    it.skipIf(scope)('opens the busiest agent’s traces from its row', async () => {
+      const onDrilldown = vi.fn();
+      const widget = await renderWidget(breakdownWidget, scope, onDrilldown);
+      const first = within(widget.root).getAllByRole('row')[1];
+      if (!first) throw new Error('No agent rows');
+      fireEvent.click(first);
+      expect(onDrilldown).toHaveBeenCalledWith(
+        'traces',
+        expect.objectContaining({ span: expect.objectContaining({ entityName: 'Explore Subagent' }) }),
+      );
+    });
+
+    describe('with more tools than a page and a capped list', () => {
+      beforeEach(() => {
+        serveManyTools();
+      });
+      const toolsTab = async () => {
+        const { card, widget } = await both();
+        await expectSameTab(card, widget, 'Tools');
+        return { card, widget };
+      };
+
+      it('matches the card', async () => {
+        await toolsTab();
+      });
+
+      it('says sorting covers only the busiest', async () => {
+        const { widget } = await toolsTab();
+        expect(within(widget.root).getByText('Showing the 500 busiest; sorting covers only these.')).toBeDefined();
+      });
+
+      it('pages the rows', async () => {
+        const { widget } = await toolsTab();
+        expect(within(widget.root).getAllByRole('row')).toHaveLength(14);
+        expect(within(widget.root).getByRole('button', { name: 'Next' })).toBeDefined();
+      });
+
+      // Each header cycles first direction, the other, then back to the default; % Change follows
+      // the column sorted last.
+      it('sorts as the card does', async () => {
+        const { card, widget } = await toolsTab();
+        for (const header of ['Errors', 'Errors', 'Errors', '% Change', 'P95 latency', '% Change', 'Spans', 'Spans']) {
+          await clickBoth(card, widget, 'button', header);
+        }
+      });
+
+      it('pages as the card does', async () => {
+        const { card, widget } = await toolsTab();
+        await clickBoth(card, widget, 'button', 'Next');
+        await clickBoth(card, widget, 'button', '% Change');
+      });
+
+      it('sorts by a column on the first click, the other way on the second', async () => {
+        const { widget } = await toolsTab();
+        const errors = within(widget.root).getByRole('button', { name: 'Errors' });
+        fireEvent.click(errors);
+        expect(errors.closest('[aria-sort]')?.getAttribute('aria-sort')).toBe('descending');
+        fireEvent.click(errors);
+        expect(errors.closest('[aria-sort]')?.getAttribute('aria-sort')).toBe('ascending');
+      });
+    });
   });
 
-  it('Breakdown row clicks', async () => {
-    serveBreakdown();
-    const onRowClick = vi.fn();
-    const onDrilldown = vi.fn();
-    const card = await renderCard(<BreakdownCard onRowClick={onRowClick} />, scope);
-    const widget = await renderWidget(breakdownWidget, scope, onDrilldown);
-    for (const tab of ['Agents', 'Tools', 'Models', 'Threads', 'Environments', ...(scope ? ['Projects'] : [])]) {
-      await expectSameTab(card, widget, tab);
-      for (const side of [card, widget]) {
-        // The first row under the header.
-        const first = within(side.root).getAllByRole('row')[1];
-        if (!first) throw new Error(`No rows on ${tab}`);
-        fireEvent.click(first);
-      }
-      expect(onDrilldown).toHaveBeenLastCalledWith('traces', onRowClick.mock.lastCall?.[0]);
-    }
-    expect(onRowClick).toHaveBeenCalledTimes(scope ? 6 : 5);
-  });
+  describe('Scores', () => {
+    it('matches the card', async () => {
+      const card = await renderCard(<ScoresCard />, scope);
+      expectSame(card, await renderWidget(scoresWidget, scope));
+    });
 
-  it('Breakdown sorting, paging and a capped list', async () => {
-    serveBreakdown();
-    serveManyTools();
-    const card = await renderCard(<BreakdownCard onRowClick={noop} />, scope);
-    const widget = await renderWidget(breakdownWidget, scope);
-    await expectSameTab(card, widget, 'Tools');
-    expect(within(card.root).getByText('Showing the 500 busiest; sorting covers only these.')).toBeDefined();
-    expect(within(card.root).getByRole('button', { name: 'Next' })).toBeDefined();
-    // Each header cycles first direction, the other, then back to the default; % Change follows
-    // the column sorted last.
-    for (const header of ['Errors', 'Errors', 'Errors', '% Change', 'P95 latency', '% Change', 'Spans', 'Spans']) {
-      await clickBoth(card, widget, 'button', header);
-    }
-    await clickBoth(card, widget, 'button', 'Next');
-    await clickBoth(card, widget, 'button', '% Change');
-  });
-
-  it('Scores', async () => {
-    const card = await renderCard(<ScoresCard />, scope);
-    const widget = await renderWidget(scoresWidget, scope);
-    expect(within(card.root).getByText('Answer relevancy')).toBeDefined();
-    expectSame(card, widget);
+    it('names each scorer', async () => {
+      const widget = await renderWidget(scoresWidget, scope);
+      expect(within(widget.root).getByText('Answer relevancy')).toBeDefined();
+    });
   });
 });
 
@@ -443,8 +596,8 @@ function holdPercentiles(metric: string) {
   let release = () => {};
   const held = new Promise<void>(resolve => (release = resolve));
   server.use(
-    http.post(`${API}/metrics/percentiles`, async ({ request }) => {
-      const body = record(await request.clone().json());
+    http.post<never, MetricsBody>(`${API}/metrics/percentiles`, async ({ request }) => {
+      const body = await request.clone().json();
       if (body.name !== metric) return undefined;
       await held;
       return HttpResponse.json(agentLatencyFixture());
@@ -495,31 +648,45 @@ describe('Charts drawn at real size', () => {
     seedMetrics();
   });
 
-  it('Token usage (both tabs), Agent runs and Failure rate', async () => {
-    const cards = await renderCards(
-      {
-        'token-usage': <TokenUsageCard onViewTraces={noop} onTimeRangeClick={noop} />,
-        'agent-runs': <AgentRunsCard onTimeRangeClick={noop} />,
-        'failure-rate': <FailureRateCard onViewErrors={noop} onTimeRangeClick={noop} />,
-      },
-      undefined,
-    );
-    const widgets = await renderWidgets([tokenUsageWidget, agentRunsWidget, failureRateWidget], undefined);
-    for (const id of ['token-usage', 'agent-runs', 'failure-rate']) {
+  describe('Token usage, Agent runs and Failure rate', () => {
+    const pages = async () => ({
+      cards: await renderCards(
+        {
+          'token-usage': <TokenUsageCard onViewTraces={noop} onTimeRangeClick={noop} />,
+          'agent-runs': <AgentRunsCard onTimeRangeClick={noop} />,
+          'failure-rate': <FailureRateCard onViewErrors={noop} onTimeRangeClick={noop} />,
+        },
+        undefined,
+      ),
+      widgets: await renderWidgets([tokenUsageWidget, agentRunsWidget, failureRateWidget], undefined),
+    });
+
+    it.each(['token-usage', 'agent-runs', 'failure-rate'])('draws %s as the card does', async id => {
+      const { cards, widgets } = await pages();
       await expectSameDrawn(rootOf(cards, id), rootOf(widgets, id));
-    }
-    const card = rootOf(cards, 'token-usage');
-    const widget = rootOf(widgets, 'token-usage');
-    await expectSameTab(card, widget, 'Cost');
-    await expectSameDrawn(card, widget);
+    });
+
+    it('draws the Token usage Cost tab as the card does', async () => {
+      const { cards, widgets } = await pages();
+      const card = rootOf(cards, 'token-usage');
+      const widget = rootOf(widgets, 'token-usage');
+      await expectSameTab(card, widget, 'Cost');
+      await expectSameDrawn(card, widget);
+    });
   });
 
-  it('Latency, Resources and threads, and Scores', async () => {
+  it('draws Latency as the card does', async () => {
     await expectSameDrawn(
       await renderCard(<LatencyCard onViewTraces={noop} onTimeRangeClick={noop} />, undefined),
       await renderWidget(latencyWidget, undefined),
     );
+  });
+
+  it('draws Scores as the card does', async () => {
     await expectSameDrawn(await renderCard(<ScoresCard />, undefined), await renderWidget(scoresWidget, undefined));
+  });
+
+  it('draws Resources and threads as the card does', async () => {
     serveCapabilities(traceAggregateCapabilities);
     serveTraceAggregate(request =>
       request.interval ? distinctIdsSeriesFixture(request.timeRange) : distinctIdsTotalsFixture,
@@ -529,33 +696,47 @@ describe('Charts drawn at real size', () => {
       await renderWidget(distinctIdsWidget, undefined),
     );
   });
+
+  it('shows a tooltip on hovering a chart', async () => {
+    const widget = await renderWidget(latencyWidget, undefined);
+    const [tip] = await tooltipsOf(widget.root);
+    expect(tip).toContain('P95');
+  });
 });
 
-describe('Latency drawn at real size', () => {
+describe('Latency switching tabs, drawn at real size', () => {
   useFixedChartSize(800, 300);
 
   beforeEach(() => {
     seedMetrics();
   });
 
-  it('keeps the last tab dimmed while the next loads, and refetches a tab opened again', async () => {
-    const release = holdPercentiles('mastra_workflow_duration_ms');
-    const card = await renderCard(<LatencyCard onViewTraces={noop} onTimeRangeClick={noop} />, undefined);
-    const widget = await renderWidget(latencyWidget, undefined);
-    expect(card.root.querySelector('.recharts-area-curve')).not.toBeNull();
-    expectSame(card, widget);
+  const both = async () => ({
+    card: await renderCard(<LatencyCard onViewTraces={noop} onTimeRangeClick={noop} />, undefined),
+    widget: await renderWidget(latencyWidget, undefined),
+  });
 
+  it('keeps the last tab’s chart, dimmed, while the next loads, as the card does', async () => {
+    holdPercentiles('mastra_workflow_duration_ms');
+    const { card, widget } = await both();
     await switchWhileLoading(card, widget, 'Workflows');
-    // The card keeps the agents' chart, dimmed, rather than a skeleton.
-    expect(card.root.querySelector('.recharts-area-curve')).not.toBeNull();
+    expect(widget.root.querySelector('.recharts-area-curve')).not.toBeNull();
     expectSame(card, widget);
+  });
 
+  it('shows the next tab once it loads, as the card does', async () => {
+    const release = holdPercentiles('mastra_workflow_duration_ms');
+    const { card, widget } = await both();
+    await switchWhileLoading(card, widget, 'Workflows');
     release();
     await act(() => new Promise(resolve => setTimeout(resolve, 50)));
-    expectSame(card, widget);
+    expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  });
 
-    // Going back to Agents, the card refetches; so must the widget.
+  it('refetches a tab opened again, as the card does', async () => {
+    const { card, widget } = await both();
+    await expectSameTab(card, widget, 'Workflows');
     await expectSameTab(card, widget, 'Agents');
-    expect(card.sent).toHaveLength(1);
+    expect(widget.sent).toHaveLength(1);
   });
 });

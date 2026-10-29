@@ -7,9 +7,10 @@ import { ChartCardError } from '../../../metrics/components/chart-card-error';
 import { BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { CHART_COLORS } from '../../../metrics/lib/chart-colors';
 import { bucketGrid, bucketPlan, gridIndex, intervalHours } from '../../../metrics/lib/metrics-buckets';
-import type { BucketLabels, Point } from '../../../metrics/lib/metrics-buckets';
+import type { BucketLabels } from '../../../metrics/lib/metrics-buckets';
 import { ViewGate } from '../../components/view-gate';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
+import { seriesOf, valueOf } from '../../lib/answers';
 import { viewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
 import { buildRequest } from '../../lib/requests';
@@ -58,8 +59,9 @@ function useScorers(view: ResolvedView<ScoresOptions>, page: DashboardPageContex
   return { recent: discover ? recent : undefined, scorers };
 }
 
-const withScorer = (query: DashboardQuery, scorerId: string): DashboardQuery =>
-  needsScorer(query) ? ({ ...query, scorerId } as DashboardQuery) : query;
+/** The query for one scorer: its own scorer if it names one, else `scorerId`. */
+const withScorer = (query: DashboardQuery | undefined, scorerId: string): DashboardQuery | undefined =>
+  query?.source === 'scores' && query.scorerId === undefined ? { ...query, scorerId } : query;
 
 export function ScoresWidget({ widget, views }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
@@ -83,17 +85,17 @@ function ScoresView({
   const { interval } = bucketPlan(page.window.start, page.window.end);
   const stepHours = intervalHours(interval);
   const { recent, scorers } = useScorers(view, page);
-  // `issues` has checked both ids name scores queries.
-  const average = view.queries.find(q => q.id === options.average) as DashboardQuery;
-  const series = view.queries.find(q => q.id === options.series) as DashboardQuery;
-  const results = useDashboardRequests(
-    scorers.flatMap(({ scorerId }) => [
-      buildRequest(withScorer(average, scorerId), page, {}),
-      buildRequest(withScorer(series, scorerId), page, { interval }),
-    ]),
-  );
+  const average = view.queries.find(q => q.id === options.average);
+  const series = view.queries.find(q => q.id === options.series);
+  const send = (query: DashboardQuery | undefined, scorerId: string, bucket?: typeof interval) => {
+    const own = withScorer(query, scorerId);
+    return own && buildRequest(own, page, { interval: bucket });
+  };
+  // One answer per scorer in each list, in `scorers`' order.
+  const means = useDashboardRequests(scorers.map(({ scorerId }) => send(average, scorerId)));
+  const points = useDashboardRequests(scorers.map(({ scorerId }) => send(series, scorerId, interval)));
 
-  const all = [...(recent ? [recent] : []), ...results.filter(r => r !== undefined)];
+  const all = [recent, ...means, ...points].filter(r => r !== undefined);
   if (all.some(r => r.isError)) {
     return (
       <ChartCard {...heading}>
@@ -111,9 +113,8 @@ function ScoresView({
   );
   const indexOf = gridIndex(buckets, stepHours);
   const lines: MetricsLineChartSeries[] = shown.map(({ scorerId, name }, i) => {
-    const mean = (results[i * 2]?.data as { value?: number | null } | undefined)?.value ?? 0;
-    const points = (results[i * 2 + 1]?.data as { series: { points: Point[] }[] } | undefined)?.series ?? [];
-    for (const s of points) {
+    const mean = valueOf(means[i]?.data)?.value ?? 0;
+    for (const s of seriesOf(points[i]?.data) ?? []) {
       for (const p of s.points) {
         const bucket = buckets[indexOf(p) ?? -1];
         if (bucket) bucket[scorerId] = p.value;

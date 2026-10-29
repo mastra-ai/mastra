@@ -1,20 +1,23 @@
-import type { DashboardQuery, MastraClient } from '@mastra/client-js';
-import { describe, expect, it } from 'vitest';
+import { MastraClient } from '@mastra/client-js';
+import type { DashboardQuery } from '@mastra/client-js';
+import { EntityType } from '@mastra/core/observability';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
 import { buildPreviousRequest, buildRequest, sendRequest } from './requests';
-import type { DashboardPageContext } from './requests';
+import type { DashboardAnswer, DashboardPageContext, DashboardRequestOptions } from './requests';
 import {
   buildTableRows,
   formatChange,
   listedRows,
+  openingView,
   parseColumns,
   previousTableValues,
   rowDrilldown,
   tableIssues,
   valueChange,
 } from './table';
-import type { TableColumn, TableOptions, TableResponse, ValueColumn } from './table';
+import type { TableColumn, TableOptions, ValueColumn } from './table';
 import { answersById, evaluate, matchesGroups, unknownQueryIssues, valueExprSchema } from './values';
 import type { ValueExpr, ValueRef } from './values';
 
@@ -24,6 +27,28 @@ const page: DashboardPageContext = {
   filters: { timestamp: window, environment: 'production' },
   traceWhere: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
 };
+type AnswerOf<M extends DashboardAnswer['method']> = Extract<DashboardAnswer, { method: M }>;
+/** A span aggregate's answer with these rows. */
+const spans = (rows: AnswerOf<'aggregateSpans'>['data']['rows'], truncated = false): DashboardAnswer => ({
+  method: 'aggregateSpans',
+  data: { rows, truncated },
+});
+/** A metrics breakdown's answer with these groups. */
+const groups = (list: AnswerOf<'getMetricBreakdown'>['data']['groups']): DashboardAnswer => ({
+  method: 'getMetricBreakdown',
+  data: { groups: list },
+});
+
+/** `buildRequest` for a query it always builds a request for. */
+const built = (query: DashboardQuery, options: DashboardRequestOptions) => {
+  const request = buildRequest(query, page, options);
+  if (!request) throw new Error('no request');
+  return request;
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('value expressions', () => {
   const values: Record<string, number | undefined> = { runs: 100, failed: 30, missing: undefined };
@@ -88,7 +113,7 @@ describe('buildRequest', () => {
       groupBy: ['threadId'],
       measures: ['count'],
     };
-    const request = buildRequest(query, page, {});
+    const request = built(query, {});
     expect(request.method).toBe('aggregateTraces');
     expect(request.args).toMatchObject({
       where: { op: 'and', args: [{ op: 'exists', path: 'threadId' }, page.traceWhere] },
@@ -102,10 +127,10 @@ describe('buildRequest', () => {
       request: 'aggregate',
       name: ['mastra_agent_duration_ms'],
       aggregation: 'count',
-      filters: { entityType: 'agent', environment: 'production' },
+      filters: { entityType: EntityType.AGENT, environment: 'production' },
       compare: 'previousWindow',
     };
-    const request = buildRequest(query, page, {});
+    const request = built(query, {});
     expect(request.unsatisfiable).toBeUndefined();
     expect(request.args).toEqual({
       name: ['mastra_agent_duration_ms'],
@@ -124,14 +149,15 @@ describe('buildRequest', () => {
       aggregation: 'count',
       filters: { environment: 'staging' },
     };
-    const request = buildRequest(query, page, {});
+    const request = built(query, {});
     expect(request.unsatisfiable).toBe(true);
-    const client = new Proxy({} as MastraClient, {
-      get: () => {
-        throw new Error('sent');
-      },
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+    await expect(sendRequest(client, request)).resolves.toEqual({
+      method: 'getMetricTimeSeries',
+      data: { series: [] },
     });
-    await expect(sendRequest(client, request)).resolves.toEqual({ series: [] });
+    expect(fetch).not.toHaveBeenCalled();
   });
   it('sends anything else over the previous window as a request of its own, last', () => {
     const query: DashboardQuery = {
@@ -146,42 +172,47 @@ describe('buildRequest', () => {
       interval: '1h',
       filters: { timestamp: { start: new Date('2026-10-26T12:00:00Z'), end: window.start } },
     });
-    expect(previous?.priority).toBeUndefined();
+    expect(previous).not.toHaveProperty('priority');
   });
 
   it('sends a previous-window aggregate after everything else', () => {
     const query: DashboardQuery = { source: 'spanAggregate', measures: ['count'], compare: 'previousWindow' };
     const previous = buildPreviousRequest(query, page, {});
-    expect(previous?.priority).toBe(2);
+    expect(previous).toMatchObject({ priority: 2 });
     expect(previous?.args).toMatchObject({ timeRange: { to: window.start.toISOString() } });
   });
 });
 
+/** Any filters object: these cases are about how fields combine, not which fields exist. */
+type Filters = Record<string, unknown>;
+
 describe('intersectFilters', () => {
   it('keeps fields set on one side and equal values set on both', () => {
-    expect(intersectFilters({ environment: 'prod' }, { entityType: 'agent', environment: 'prod' })).toEqual({
+    expect(intersectFilters<Filters>({ environment: 'prod' }, { entityType: 'agent', environment: 'prod' })).toEqual({
       environment: 'prod',
       entityType: 'agent',
     });
   });
 
   it('intersects lists of alternatives, and contradicts when nothing is shared', () => {
-    expect(intersectFilters({ name: ['a', 'b'] }, { name: ['b', 'c'] })).toEqual({ name: ['b'] });
-    expect(intersectFilters({ scorerId: 'a' }, { scorerId: ['a', 'b'] })).toEqual({ scorerId: ['a'] });
-    expect(intersectFilters({ name: ['a'] }, { name: ['c'] })).toBeUndefined();
+    expect(intersectFilters<Filters>({ name: ['a', 'b'] }, { name: ['b', 'c'] })).toEqual({ name: ['b'] });
+    expect(intersectFilters<Filters>({ scorerId: 'a' }, { scorerId: ['a', 'b'] })).toEqual({ scorerId: ['a'] });
+    expect(intersectFilters<Filters>({ name: ['a'] }, { name: ['c'] })).toBeUndefined();
   });
 
   it('requires every tag from both, since tags must all match', () => {
-    expect(intersectFilters({ tags: ['x'] }, { tags: ['y', 'x'] })).toEqual({ tags: ['x', 'y'] });
+    expect(intersectFilters<Filters>({ tags: ['x'] }, { tags: ['y', 'x'] })).toEqual({ tags: ['x', 'y'] });
   });
 
   it('merges per-key maps, contradicting on a key set differently', () => {
-    expect(intersectFilters({ labels: { a: '1' } }, { labels: { b: '2' } })).toEqual({ labels: { a: '1', b: '2' } });
-    expect(intersectFilters({ labels: { a: '1' } }, { labels: { a: '2' } })).toBeUndefined();
+    expect(intersectFilters<Filters>({ labels: { a: '1' } }, { labels: { b: '2' } })).toEqual({
+      labels: { a: '1', b: '2' },
+    });
+    expect(intersectFilters<Filters>({ labels: { a: '1' } }, { labels: { a: '2' } })).toBeUndefined();
   });
 
   it('contradicts on different single values', () => {
-    expect(intersectFilters({ environment: 'prod' }, { environment: 'dev' })).toBeUndefined();
+    expect(intersectFilters<Filters>({ environment: 'prod' }, { environment: 'dev' })).toBeUndefined();
   });
 });
 
@@ -278,34 +309,37 @@ describe('table rows', () => {
   ];
   const queries: DashboardQuery[] = [
     { id: 'figures', source: 'spanAggregate', measures: ['count'] },
-    { id: 'usage', source: 'metrics', request: 'breakdown', name: ['tokens'], groupBy: ['entityName'] },
+    {
+      id: 'usage',
+      source: 'metrics',
+      request: 'breakdown',
+      name: ['tokens'],
+      aggregation: 'sum',
+      groupBy: ['entityName'],
+    },
   ];
   const valueColumn = (id: string): ValueColumn => {
     const column = columns.find(c => c.id === id);
     if (column?.options.type !== 'value') throw new Error(`no value column ${id}`);
     return { ...column, options: column.options };
   };
-  const firstRow = (figures: TableResponse) => {
-    const [row] = buildTableRows(options, columns, queries, answers(figures, { groups: [] }));
+  const firstRow = (figures: DashboardAnswer) => {
+    const [row] = buildTableRows(options, columns, queries, answers(figures, groups([])));
     if (!row) throw new Error('no row');
     return row;
   };
-  const answers = (figures: TableResponse, usage: TableResponse) =>
+  const answers = (figures: DashboardAnswer, usage: DashboardAnswer) =>
     answersById([{ id: 'figures' }, { id: 'usage' }], [figures, usage]);
-  const aggregate = {
-    rows: [
-      {
-        dimensions: { projectId: 'p1', entityName: 'Code Agent' },
-        measures: { 'countDistinct.traceId': 4, errorRate: 0.25 },
-      },
-    ],
-  };
-  const usage = {
-    groups: [
-      { dimensions: { projectId: 'p1', entityName: 'Code Agent' }, value: 1200, estimatedCost: 0.5, costUnit: 'usd' },
-      { dimensions: { projectId: 'p2', entityName: 'Idle Agent' }, value: 50, estimatedCost: null, costUnit: null },
-    ],
-  };
+  const aggregate = spans([
+    {
+      dimensions: { projectId: 'p1', entityName: 'Code Agent' },
+      measures: { 'countDistinct.traceId': 4, errorRate: 0.25 },
+    },
+  ]);
+  const usage = groups([
+    { dimensions: { projectId: 'p1', entityName: 'Code Agent' }, value: 1200, estimatedCost: 0.5, costUnit: 'usd' },
+    { dimensions: { projectId: 'p2', entityName: 'Idle Agent' }, value: 50, estimatedCost: null, costUnit: null },
+  ]);
 
   it('joins the queries value columns read on groupBy, in query order, keeping a group with only usage', () => {
     expect(buildTableRows(options, columns, queries, answers(aggregate, usage))).toEqual([
@@ -329,18 +363,18 @@ describe('table rows', () => {
   });
 
   it("keeps a dimension value containing '|' whole", () => {
-    const piped = {
-      rows: [{ dimensions: { projectId: 'p1', entityName: 'a|b' }, measures: { 'countDistinct.traceId': 1 } }],
-    };
-    const [row] = buildTableRows(options, columns, queries, answers(piped, { groups: [] }));
+    const piped = spans([
+      { dimensions: { projectId: 'p1', entityName: 'a|b' }, measures: { 'countDistinct.traceId': 1 } },
+    ]);
+    const [row] = buildTableRows(options, columns, queries, answers(piped, groups([])));
     expect(row).toMatchObject({ dimensions: { projectId: 'p1' }, name: 'a|b' });
     const previous = previousTableValues(
       options,
       columns,
       queries,
       answers(
-        { rows: [{ dimensions: { projectId: 'p|2', entityName: 'x' }, measures: { 'countDistinct.traceId': 2 } }] },
-        { groups: [] },
+        spans([{ dimensions: { projectId: 'p|2', entityName: 'x' }, measures: { 'countDistinct.traceId': 2 } }]),
+        groups([]),
       ),
     );
     expect(listedRows(options, columns, [], previous, false)).toMatchObject([
@@ -366,13 +400,11 @@ describe('table rows', () => {
       ],
       queries,
       answers(
-        { rows: [{ dimensions: { threadId: 't1' }, measures: { count: 3 } }] },
-        {
-          rows: [
-            { dimensions: { resourceId: 'user-1', threadId: 't1' }, measures: { count: 3 } },
-            { dimensions: { resourceId: 'user-2', threadId: 't2' }, measures: { count: 1 } },
-          ],
-        },
+        spans([{ dimensions: { threadId: 't1' }, measures: { count: 3 } }]),
+        spans([
+          { dimensions: { resourceId: 'user-1', threadId: 't1' }, measures: { count: 3 } },
+          { dimensions: { resourceId: 'user-2', threadId: 't2' }, measures: { count: 1 } },
+        ]),
       ),
     );
     expect(rows.map(r => [r.name, r.lookups.resource])).toEqual([['t1', 'user-1']]);
@@ -384,13 +416,11 @@ describe('table rows', () => {
       columns,
       queries,
       answers(
-        {
-          rows: [{ dimensions: { projectId: 'p1', entityName: 'Retired' }, measures: { 'countDistinct.traceId': 0 } }],
-        },
-        { groups: [{ dimensions: { projectId: 'p1', entityName: 'Retired' }, value: 0, estimatedCost: 2 }] },
+        spans([{ dimensions: { projectId: 'p1', entityName: 'Retired' }, measures: { 'countDistinct.traceId': 0 } }]),
+        groups([{ dimensions: { projectId: 'p1', entityName: 'Retired' }, value: 0, estimatedCost: 2 }]),
       ),
     );
-    const built = buildTableRows(options, columns, queries, answers(aggregate, { groups: [] }));
+    const built = buildTableRows(options, columns, queries, answers(aggregate, groups([])));
     const listed = listedRows(options, columns, built, previous, false);
     // Cost alone was above 0; it drops to 0, and a total without a value before shows its `missing`.
     expect(listed.map(r => [r.name, r.values])).toEqual([
@@ -454,5 +484,41 @@ describe('table rows', () => {
       "columns: reads query 'lookup', which the view doesn't have",
       "columns: reads query 'missing', which the view doesn't have",
     ]);
+  });
+});
+
+describe('openingView', () => {
+  const view = (openWhen?: TableOptions['openWhen']): { options: TableOptions } => ({
+    options: {
+      groupBy: ['entityName'],
+      defaultSort: { column: 'count', direction: 'desc' },
+      emptyMessage: 'Nothing here.',
+      openWhen,
+    },
+  });
+  const views = [view({ minRows: 2 }), view(), view()];
+
+  it('opens on the first view when none has openWhen', () => {
+    expect(openingView([view(), view()], 5)).toBe(0);
+  });
+
+  it('opens on the openWhen view while its rows load', () => {
+    expect(openingView(views, undefined)).toBe(0);
+  });
+
+  it('opens on the openWhen view once it has minRows rows', () => {
+    expect(openingView(views, 2)).toBe(0);
+  });
+
+  it('passes over the openWhen view with fewer than minRows rows', () => {
+    expect(openingView(views, 1)).toBe(1);
+  });
+
+  it("passes over the openWhen view when it can't count its rows", () => {
+    expect(openingView(views, null)).toBe(1);
+  });
+
+  it('opens on the first view when a passed-over openWhen view is last', () => {
+    expect(openingView([view(), view({ minRows: 2 })], 0)).toBe(0);
   });
 });

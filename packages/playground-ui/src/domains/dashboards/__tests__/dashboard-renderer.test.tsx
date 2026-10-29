@@ -1,21 +1,29 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { traceAggregateCapabilities } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
+import { modelSpansByModel, usageByModel } from '../../metrics/components/__tests__/fixtures/breakdown';
+import {
+  distinctIdsSeriesFixture,
+  distinctIdsTotalsFixture,
+  traceAggregateCapabilities,
+} from '../../metrics/components/__tests__/fixtures/trace-aggregate';
 import { seedMetrics, serveCapabilities, serveTraceAggregate } from '../../metrics/components/__tests__/metrics-msw';
 import type { TraceAggregateRequest } from '../../metrics/components/__tests__/metrics-msw';
-import { MetricsProvider } from '../../metrics/hooks/use-metrics';
+import { MetricsProvider, useMetrics } from '../../metrics/hooks/use-metrics';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
+import type { DashboardScope } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
 import type { AnyWidgetKind } from '../widget-kind';
-import { agentRunsWidget, distinctIdsWidget, kpisWidget } from './fixtures/metrics-widgets';
+import { agentRunsWidget, distinctIdsWidget, kpisWidget, modelsWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+
+const LOAD_ERROR = "Couldn't load this data. Try again in a moment.";
 
 /** A kind defined entirely outside the renderer: one line of text per view. */
 const noteKind = defineWidgetKind({
@@ -32,6 +40,16 @@ const brokenKind = defineWidgetKind({
   optionsSchema: z.object({}),
   component: () => {
     throw new Error('Render failed.');
+  },
+});
+
+/** A kind that throws while rendering on an unfiltered page. */
+const unfilteredFailsKind = defineWidgetKind({
+  kind: 'unfilteredFails',
+  optionsSchema: z.object({}),
+  component: function UnfilteredFails({ widget }) {
+    if (useMetrics().filterTokens.length === 0) throw new Error('Needs a filter.');
+    return <p data-testid={`filtered-${widget.id}`}>Filtered</p>;
   },
 });
 
@@ -52,20 +70,28 @@ function renderDashboard(
     kinds = [noteKind, brokenKind],
     scope,
     environment,
-  }: { kinds?: AnyWidgetKind[]; scope?: MetricsScope; environment?: string } = {},
+    filterTokens = environment ? [{ fieldId: 'environment', value: environment }] : [],
+  }: {
+    kinds?: AnyWidgetKind[];
+    scope?: { metrics: MetricsScope; dashboard: DashboardScope };
+    environment?: string;
+    filterTokens?: { fieldId: string; value: string }[];
+  } = {},
 ) {
   const wrap = (ui: ReactNode) => (
     <MetricsProvider
       preset="24h"
-      filterTokens={environment ? [{ fieldId: 'environment', value: environment }] : []}
+      filterTokens={filterTokens}
       onPresetChange={() => {}}
       onFilterTokensChange={() => {}}
-      scope={scope}
+      scope={scope?.metrics}
     >
       {ui}
     </MetricsProvider>
   );
-  return renderWithProviders(wrap(<DashboardRenderer definition={definition} kinds={kinds} />));
+  return renderWithProviders(
+    wrap(<DashboardRenderer definition={definition} kinds={kinds} scope={scope?.dashboard ?? 'project'} />),
+  );
 }
 
 const cell = (container: HTMLElement, id: string) => {
@@ -118,8 +144,9 @@ describe('DashboardRenderer', () => {
         definition(
           {
             ...note('a', 'x'),
-            views: [{ queries: [{ source: 'nowhere' }], options: { text: 'x' } }],
-          } as DashboardWidget,
+            // Ids start with a letter; storage takes the widget, core's widget schema doesn't.
+            views: [{ queries: [{ id: '1st', source: 'spanAggregate', measures: ['count'] }], options: { text: 'x' } }],
+          },
           note('b', 'Still here'),
         ),
       );
@@ -150,8 +177,104 @@ describe('DashboardRenderer', () => {
       expect(await within(cell(container, 'agent-runs')).findByText('runs')).toBeDefined();
     });
 
+    it('loads a trace chart after Retry once its requests succeed', async () => {
+      serveCapabilities(traceAggregateCapabilities);
+      let failing = true;
+      serveTraceAggregate(request => {
+        if (failing) return HttpResponse.json({ error: 'boom' }, { status: 500 });
+        return request.interval ? distinctIdsSeriesFixture(request.timeRange) : distinctIdsTotalsFixture;
+      });
+      const { container } = renderDashboard(definition(distinctIdsWidget));
+      const widget = cell(container, 'distinct-ids');
+      // The client retries an aggregate itself before the widget sees the error.
+      expect(await within(widget).findByText(LOAD_ERROR, undefined, { timeout: 5000 })).toBeDefined();
+      failing = false;
+      fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
+      expect(await within(widget).findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
+    }, 15_000);
+
+    it('loads a table after Retry once its requests succeed', async () => {
+      let failing = true;
+      server.use(
+        http.post<never, { aggregation?: string }>(
+          `${TEST_BASE_URL}/api/observability/metrics/breakdown`,
+          async ({ request }) => {
+            if (failing) return HttpResponse.json({ error: 'boom' }, { status: 500 });
+            const body = await request.json();
+            return HttpResponse.json(body.aggregation === 'count' ? modelSpansByModel : usageByModel);
+          },
+        ),
+      );
+      const { container } = renderDashboard(definition(modelsWidget));
+      const widget = cell(container, 'models');
+      expect(await within(widget).findByText(LOAD_ERROR)).toBeDefined();
+      failing = false;
+      fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
+      // The header row, then one per model.
+      await waitFor(() => expect(within(widget).getAllByRole('row')).toHaveLength(3));
+    });
+
+    it('renders a widget that threw again once the page filters change', () => {
+      const page = (environment?: string) => (
+        <MetricsProvider
+          preset="24h"
+          filterTokens={environment ? [{ fieldId: 'environment', value: environment }] : []}
+          onPresetChange={() => {}}
+          onFilterTokensChange={() => {}}
+        >
+          <DashboardRenderer
+            definition={definition({
+              ...note('a', ''),
+              kind: 'unfilteredFails',
+              views: [{ queries: [unused], options: {} }],
+            })}
+            kinds={[unfilteredFailsKind]}
+            scope="project"
+          />
+        </MetricsProvider>
+      );
+      const { container, rerender } = renderWithProviders(page());
+      expect(within(cell(container, 'a')).getByText('Needs a filter.')).toBeDefined();
+      rerender(page('production'));
+      expect(screen.getByTestId('filtered-a')).toBeDefined();
+    });
+
+    it('shows a widget whose views share a label as its own error', () => {
+      const { container } = renderDashboard(
+        definition(
+          {
+            ...note('a', ''),
+            views: [
+              { label: 'Same', queries: [unused], options: { text: 'one' } },
+              { label: 'Same', queries: [unused], options: { text: 'two' } },
+            ],
+          },
+          note('b', 'Still here'),
+        ),
+      );
+      expect(within(cell(container, 'a')).getByText("views.1: another view is already labelled 'Same'")).toBeDefined();
+      expect(screen.getByTestId('note-b').textContent).toBe('Still here');
+    });
+
+    it("says a trace widget can't apply a page filter it has no equivalent for, and sends nothing", async () => {
+      serveCapabilities(traceAggregateCapabilities);
+      const traces: TraceAggregateRequest[] = [];
+      serveTraceAggregate(request => {
+        traces.push(request);
+        return { rows: [], truncated: false };
+      });
+      const { container } = renderDashboard(definition(distinctIdsWidget), {
+        filterTokens: [{ fieldId: 'serviceName', value: 'checkout' }],
+      });
+      expect(
+        await within(cell(container, 'distinct-ids')).findByText('Not available with a service filter.'),
+      ).toBeDefined();
+      expect(traces).toHaveLength(0);
+    });
+
     it('says why a dashboard that storage would reject cannot be shown', () => {
-      renderDashboard({ schemaVersion: 2 } as unknown as DashboardDefinition);
+      // Two widgets with one id: storage rejects the whole definition.
+      renderDashboard(definition(note('a', 'Hello'), note('a', 'World')));
       expect(screen.getByText(/^This dashboard can't be shown\./)).toBeDefined();
     });
   });
@@ -177,7 +300,9 @@ describe('DashboardRenderer', () => {
     });
 
     it('hides project widgets on an org page', () => {
-      const { container } = renderDashboard(scoped, { scope: { projectLabel: id => id } });
+      const { container } = renderDashboard(scoped, {
+        scope: { metrics: { projectLabel: id => id }, dashboard: 'org' },
+      });
       expect(container.querySelector('[data-widget-id="project"]')).toBeNull();
       expect(screen.getByTestId('note-org')).toBeDefined();
       expect(screen.getByTestId('note-tabs').textContent).toBe('projects / agents');
@@ -204,7 +329,7 @@ describe('DashboardRenderer', () => {
     const traces: TraceAggregateRequest[] = [];
     serveTraceAggregate(request => {
       traces.push(request);
-      return { rows: [] };
+      return { rows: [], truncated: false };
     });
     const metrics: unknown[] = [];
     server.events.on('request:start', ({ request }) => {
@@ -226,10 +351,11 @@ describe('DashboardRenderer', () => {
     const sent: string[] = [];
     server.events.on('request:start', ({ request }) => sent.push(new URL(request.url).pathname));
     const [view] = agentRunsWidget.views;
-    const [runs] = view.queries;
+    const runs = view?.queries[0];
+    if (!view || runs?.source !== 'metrics') throw new Error('agent runs reads metrics');
     const staging: DashboardWidget = {
       ...agentRunsWidget,
-      views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } } as DashboardQuery] }],
+      views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } }] }],
     };
     const { container } = renderDashboard(definition(staging), { environment: 'production' });
     expect(await within(cell(container, 'agent-runs')).findByText('No agent runs in this range.')).toBeDefined();
