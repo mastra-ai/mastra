@@ -412,7 +412,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     this.#transition(record, status);
     const pending = record.pendingInput;
     record.pendingInput = undefined;
-    pending?.reject(reason ?? new Error(`MCP task "${record.taskId}" ${status} while waiting for input`));
+    pending?.reject(reason ?? new Error(`MCP task "${taskKeyOf(record.taskId)}" ${status} while waiting for input`));
     if (reason) record.abort.abort(reason);
   }
 
