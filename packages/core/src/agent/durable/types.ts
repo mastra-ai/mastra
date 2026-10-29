@@ -312,6 +312,12 @@ export interface SerializableDurableOptions {
     timeout?: number;
     parallel?: boolean;
     suppressFeedback?: boolean;
+    /**
+     * Whether the scorers came from the agent's `defaultOptions` or from the
+     * call. Recovery in a fresh process can only rebind `'defaults'`; runs
+     * persisted without this field are treated as defaults when names match.
+     */
+    source?: 'defaults' | 'call';
   };
 }
 

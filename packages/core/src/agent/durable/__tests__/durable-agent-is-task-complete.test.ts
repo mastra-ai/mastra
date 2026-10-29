@@ -135,10 +135,53 @@ describe('DurableAgent isTaskComplete', () => {
       timeout: 2000,
       parallel: true,
       suppressFeedback: true,
+      source: 'call',
     });
     // No closures leaked.
     expect(serialized.scorers).toBeUndefined();
     expect(serialized.onComplete).toBeUndefined();
+  });
+
+  // Recovery in a fresh process can only rebind scorers from the agent
+  // defaults, so the shadow records where they came from.
+  it('marks a policy from defaultOptions with source "defaults"', async () => {
+    const scorer = passingScorer();
+    const baseAgent = new Agent({
+      id: 'task-complete-defaults-agent',
+      name: 'Task Complete Defaults Agent',
+      instructions: 'noop',
+      model: createTextModel('done') as LanguageModelV2,
+      defaultOptions: { isTaskComplete: { scorers: [scorer as any], strategy: 'all' } },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { workflowInput, registryEntry } = await durableAgent.prepare('hello', {
+      isTaskComplete: { strategy: 'any' },
+    } as any);
+
+    expect(registryEntry.isTaskComplete?.scorers?.[0]).toBe(scorer);
+    expect((workflowInput.options as any).isTaskComplete).toMatchObject({
+      scorerNames: ['Durable Task Scorer'],
+      strategy: 'any',
+      source: 'defaults',
+    });
+  });
+
+  it('marks call-supplied scorers with source "call" even when the agent has defaults', async () => {
+    const baseAgent = new Agent({
+      id: 'task-complete-call-agent',
+      name: 'Task Complete Call Agent',
+      instructions: 'noop',
+      model: createTextModel('done') as LanguageModelV2,
+      defaultOptions: { isTaskComplete: { scorers: [passingScorer() as any] } },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { workflowInput } = await durableAgent.prepare('hello', {
+      isTaskComplete: { scorers: [passingScorer() as any] },
+    } as any);
+
+    expect((workflowInput.options as any).isTaskComplete.source).toBe('call');
   });
 
   it('omits isTaskComplete from workflowInput when no policy is configured', async () => {

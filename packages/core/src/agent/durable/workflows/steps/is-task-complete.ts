@@ -16,9 +16,10 @@ import { readMessageListState, storeMessageListState } from '../shared/message-l
  * IterationState.
  *
  * The scorer instances + `onComplete` closure come from the in-process run
- * registry. They can't survive the wire, so cross-process engines (Inngest
- * after a worker restart) simply skip this step and fall back to
- * `maxSteps` + `stopWhen`.
+ * registry. They can't survive the wire: `DurableAgent.recover()` rebinds the
+ * agent's `defaultOptions.isTaskComplete` and warns when a per-call policy
+ * can't be restored. Other cross-process engines (Inngest after a worker
+ * restart) skip this step and fall back to `maxSteps` + `stopWhen`.
  */
 export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = DurableAgentDefaults.MAX_STEPS) {
   // The step is a pass-through over the IterationState — we update

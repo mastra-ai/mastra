@@ -129,6 +129,8 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 }
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+/** Records on resolved options whether `isTaskComplete` scorers came from the call or the agent defaults. */
+const IS_TASK_COMPLETE_SOURCE = Symbol('mastra.durable.isTaskCompleteSource');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Recoveries in progress in this process, keyed by agent and run. */
@@ -1464,6 +1466,57 @@ export class DurableAgent<
     return Promise.race([operation, lost]);
   }
 
+  /**
+   * Restores the run's `isTaskComplete` policy after a restart. Scorer instances
+   * and `onComplete` never reach storage, only their names, so the policy can be
+   * rebuilt only from the agent's own `defaultOptions.isTaskComplete`, and only
+   * when the persisted scorer names match it. A per-call policy cannot be
+   * restored; the run then finishes without the check and says so in a warning.
+   */
+  async #restoreRecoveredIsTaskComplete(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+    requestContext: RequestContext,
+  ): Promise<AgentExecutionOptions['isTaskComplete']> {
+    const persisted = workflowInput.options?.isTaskComplete;
+    if (!persisted) return undefined;
+
+    let defaults: AgentExecutionOptions['isTaskComplete'];
+    // Runs persisted before `source` existed have no provenance; fall back to
+    // matching names against the defaults.
+    if (persisted.source !== 'call') {
+      try {
+        defaults = (await this.getDefaultOptions({ requestContext }))?.isTaskComplete;
+      } catch (error) {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn?.(`[DurableAgent] Failed to resolve default options for recovered run ${runId}: ${error}`);
+      }
+    }
+    const persistedNames = persisted.scorerNames ?? [];
+    const defaultNames = defaults?.scorers?.map(s => s.name) ?? [];
+    const matches =
+      defaultNames.length > 0 &&
+      defaultNames.length === persistedNames.length &&
+      defaultNames.every((name, i) => name === persistedNames[i]);
+    if (!defaults || !matches) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(
+          `[DurableAgent] Recovered run ${runId} had an isTaskComplete check (scorers: ${persistedNames.join(', ') || 'unnamed'}) that cannot be restored after a restart, so it will finish without it. Only the agent's defaultOptions.isTaskComplete can be restored; per-call scorers are not persisted.`,
+        );
+      return undefined;
+    }
+
+    // The persisted primitives are what the run actually started with, so they
+    // win over the defaults (a per-call override of e.g. `strategy`).
+    const restored = { ...defaults };
+    for (const key of ['strategy', 'timeout', 'parallel', 'suppressFeedback'] as const) {
+      if (persisted[key] !== undefined) (restored as Record<string, unknown>)[key] = persisted[key];
+    }
+    return restored;
+  }
+
   /** Rebuilds process-local recovery state from the persisted durable workflow input. */
   async #rehydrateRecoveryState({
     runId,
@@ -1726,6 +1779,7 @@ export class DurableAgent<
       // Restore the run-level execution budget from the persisted snapshot so
       // a recovered session is bounded like the original one (#21724).
       timeoutTotalMs: workflowInput.options?.modelSettings?.timeout?.totalMs,
+      isTaskComplete: await this.#restoreRecoveredIsTaskComplete(runId, workflowInput, requestContext),
       // Rebuild the live structured output config from the persisted JSON Schema
       // so the recovered stream still emits `object-result` chunks.
       structuredOutput: workflowInput.options?.structuredOutput?.schema
@@ -1982,8 +2036,14 @@ export class DurableAgent<
       defaultScopes: defaultOptions?.scopes,
       snapshot,
     });
-    // Preserve the marker when the until-idle wrapper spreads these options.
+    // Preserve the markers when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    // Recovery can only rebind scorers that came from the agent defaults, so
+    // remember the origin before the merge hides it.
+    Object.defineProperty(scopedOptions, IS_TASK_COMPLETE_SOURCE, {
+      value: options?.isTaskComplete?.scorers || options?.isTaskComplete?.onComplete ? 'call' : 'defaults',
+      enumerable: true,
+    });
     return scopedOptions;
   }
 
@@ -3116,6 +3176,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        isTaskCompleteSource: (options as any)?.[IS_TASK_COMPLETE_SOURCE],
         scopesResolved: true,
         mastra: this.#mastra,
         durableAgentId: this.id,
@@ -4742,6 +4803,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        isTaskCompleteSource: (options as any)?.[IS_TASK_COMPLETE_SOURCE],
         scopesResolved: true,
         mastra: this.#mastra,
         methodType: 'generate',

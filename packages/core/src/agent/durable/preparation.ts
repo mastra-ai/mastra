@@ -277,6 +277,12 @@ export interface PreparationOptions<OUTPUT = undefined> {
    * Falls back to `agent.name` if not provided.
    */
   durableAgentName?: string;
+  /**
+   * Where the run's `isTaskComplete` scorers came from. Required to tell them
+   * apart when `options` already include the agent defaults; otherwise derived
+   * from `options`. Recovery only rebinds scorers that came from the defaults.
+   */
+  isTaskCompleteSource?: 'defaults' | 'call';
 }
 
 /**
@@ -310,6 +316,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     methodType = 'stream',
     durableAgentId,
     durableAgentName,
+    isTaskCompleteSource: providedIsTaskCompleteSource,
   } = options;
 
   // Public-facing identity: use the durable wrapper's ID/name for all
@@ -368,6 +375,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         (await loadDefaultOptions()) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
+
+  const isTaskCompleteSource =
+    providedIsTaskCompleteSource ??
+    (optionsAreResolved
+      ? undefined
+      : rawExecOptions?.isTaskComplete?.scorers || rawExecOptions?.isTaskComplete?.onComplete
+        ? 'call'
+        : 'defaults');
 
   // An explicit `callScopes`, even undefined, means `options` already carry the Agent defaults.
   const callScopes = 'callScopes' in options ? options.callScopes : rawExecOptions?.scopes;
@@ -911,6 +926,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
             timeout: execOptions.isTaskComplete.timeout,
             parallel: execOptions.isTaskComplete.parallel,
             suppressFeedback: execOptions.isTaskComplete.suppressFeedback,
+            source: isTaskCompleteSource,
           }
         : undefined,
     },
