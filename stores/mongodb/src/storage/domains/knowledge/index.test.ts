@@ -1,4 +1,4 @@
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { resolveMongoDBConfig } from '../../db';
@@ -12,7 +12,7 @@ const connector = resolveMongoDBConfig({
 });
 
 const createStore = () => new KnowledgeMongoDB({ connector });
-createKnowledgeStorageTests(createStore);
+createKnowledgePageStoreTests(createStore);
 
 describe('MongoDB knowledge legacy documents', () => {
   it('reads documents written without the description field as undefined', async () => {
