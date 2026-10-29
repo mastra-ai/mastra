@@ -416,31 +416,45 @@ describe('getProvidersHandler', () => {
     expect(customProvider?.name).toBe('Custom LLM');
   });
 
-  it('lists the Mastra gateway as disconnected when MASTRA_GATEWAY_API_KEY is not set', async () => {
-    delete process.env.MASTRA_GATEWAY_API_KEY;
+  describe('Mastra gateway listing', () => {
+    beforeEach(() => {
+      // The default Netlify gateway fetches its catalog over the network; keep these tests offline.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ providers: {} })),
+      );
+    });
 
-    const mastra = new Mastra({});
-    const requestContext = new RequestContext();
-    const abortSignal = new AbortController().signal;
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
 
-    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+    it('lists the Mastra gateway as disconnected when MASTRA_GATEWAY_API_KEY is not set', async () => {
+      delete process.env.MASTRA_GATEWAY_API_KEY;
 
-    const gateway = result.providers.find(p => p.id === 'mastra');
-    expect(gateway).toBeDefined();
-    expect(gateway?.envVar).toBe('MASTRA_GATEWAY_API_KEY');
-    expect(gateway?.connected).toBe(false);
-  });
+      const mastra = new Mastra({});
+      const requestContext = new RequestContext();
+      const abortSignal = new AbortController().signal;
 
-  it('lists the Mastra gateway as connected when MASTRA_GATEWAY_API_KEY is set', async () => {
-    process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+      const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
 
-    const mastra = new Mastra({});
-    const requestContext = new RequestContext();
-    const abortSignal = new AbortController().signal;
+      const gateway = result.providers.find(p => p.id === 'mastra');
+      expect(gateway).toBeDefined();
+      expect(gateway?.envVar).toBe('MASTRA_GATEWAY_API_KEY');
+      expect(gateway?.connected).toBe(false);
+    });
 
-    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+    it('lists the Mastra gateway as connected when MASTRA_GATEWAY_API_KEY is set', async () => {
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
 
-    expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
+      const mastra = new Mastra({});
+      const requestContext = new RequestContext();
+      const abortSignal = new AbortController().signal;
+
+      const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+      expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
+    });
   });
 
   it('should return no providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set and no custom gateway is registered', async () => {
