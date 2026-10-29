@@ -597,8 +597,8 @@ describe('Span', () => {
       const instance = tracing();
       const fields = {
         resumedFromSpanId: 'a1b2c3d4e5f60718',
-        outcome: 'success',
-        stopReason: 'max_steps',
+        outcome: 'limit' as const,
+        stopReason: 'max_steps' as const,
         stopReasonContext: { maxSteps: 10 },
       };
       const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
@@ -611,15 +611,23 @@ describe('Span', () => {
       }
     });
 
-    it('cleans stopReasonContext like metadata so an Error or BigInt inside it serializes', () => {
+    it('preserves custom producer values through update, end and rebuild', () => {
       const instance = tracing();
-      const context = { error: new Error('limit hit'), steps: 10n };
-      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'run', stopReasonContext: context });
-      const exported = span.exportSpan();
-
-      expect(() => JSON.stringify(exported.stopReasonContext)).not.toThrow();
-      expect(exported.stopReasonContext).toMatchObject({ error: { name: 'Error', message: 'limit hit' } });
-      expect(exported.stopReasonContext).toMatchObject({ steps: '10n' });
+      const fields = {
+        outcome: 'custom_result',
+        stopReason: 'custom_policy',
+        stopReasonContext: { ticket: 'SUP-123', details: { retry: true } },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'custom', ...fields });
+      expect(span.exportSpan()).toMatchObject(fields);
+      const rebuilt = instance.rebuildSpan(span.snapshot());
+      expect(rebuilt.exportSpan()).toMatchObject(fields);
+      rebuilt.update({ stopReasonContext: { custom: 'updated' } });
+      rebuilt.end();
+      expect(rebuilt.exportSpan()).toMatchObject({ ...fields, stopReasonContext: { custom: 'updated' } });
+      const knownReason = instance.startSpan({ type: SpanType.GENERIC, name: 'custom guardrail' });
+      knownReason.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { custom: 'retained' } });
+      expect(knownReason.exportSpan().stopReasonContext).toEqual({ custom: 'retained' });
     });
   });
 

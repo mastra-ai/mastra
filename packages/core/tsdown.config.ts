@@ -121,6 +121,7 @@ export default defineConfig({
       '@internal/ai-v7',
       '@internal/auth',
       '@internal/core',
+      '@internal/deployer',
       '@internal/voice',
       '@sindresorhus/slugify',
       'tokenx',
@@ -141,6 +142,7 @@ export default defineConfig({
         '@internal/core',
         '@internal/voice',
         '@internal/auth',
+        '@internal/deployer',
         '@sindresorhus/slugify',
       ]),
       {

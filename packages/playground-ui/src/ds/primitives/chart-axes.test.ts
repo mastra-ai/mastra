@@ -134,6 +134,23 @@ describe('pickTimeTicks edge cases', () => {
     }
   });
 
+  it('labels the first bucket after each round time when none start on it', () => {
+    // 2h buckets on odd hours, like UTC-aligned buckets seen from Paris in winter.
+    const odd = series(84, 2 * HOUR, new Date(2026, 5, 1, 1).getTime());
+    const picked = [...pickTimeTicks(odd, odd.map(clock), 1100)].map(i => clock(odd[i] ?? 0));
+
+    expect(picked.length).toBeGreaterThanOrEqual(3);
+    for (const label of picked) expect(label).toBe('1:00');
+  });
+
+  it('labels half-hour buckets after each round time, like UTC buckets seen from Kolkata', () => {
+    const half = series(84, 2 * HOUR, new Date(2026, 5, 1, 1, 30).getTime());
+    const picked = [...pickTimeTicks(half, half.map(clock), 1100)].map(i => clock(half[i] ?? 0));
+
+    expect(picked.length).toBeGreaterThanOrEqual(3);
+    for (const label of picked) expect(label).toBe('1:30');
+  });
+
   it('ignores non-finite timestamps and falls back to even spacing', () => {
     const broken = [...ts.slice(0, 10), Number.NaN, ...ts.slice(11)];
     const picked = [...pickTimeTicks(broken, labels, 800)];

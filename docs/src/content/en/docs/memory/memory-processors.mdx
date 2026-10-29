@@ -327,6 +327,52 @@ const agent = new Agent({
 
 Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
 
+## Aborted runs and saved messages
+
+Cancelling a run and blocking it with a processor `abort()` both stop generation, but they save different things:
+
+| What stops the run | Memory processors | What's persisted |
+| - | - | - |
+| `abortSignal` from the caller | Still run | The user message and the assistant text the user already saw |
+| `abort()` inside a processor | Skipped | Nothing; the tripwire blocks the save |
+
+A caller cancellation goes through output processors like any other run, so the built-in `MessageHistory` processor saves the thread. The partial answer is stored as an ordinary assistant message with no error part, which means the next turn starts from what the user actually read.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({ options: { lastMessages: 20 } })
+const agent = new Agent({
+  id: 'writer',
+  name: 'writer',
+  instructions: 'You write step-by-step migration guides.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory,
+})
+
+const controller = new AbortController()
+const stream = await agent.stream('Write the migration guide.', {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+  abortSignal: controller.signal,
+  onAbort: ({ steps, text }) => {
+    console.log(`Aborted after ${steps.length} steps with ${text?.length ?? 0} characters streamed`)
+  },
+})
+
+let streamed = ''
+for await (const chunk of stream.fullStream) {
+  if (chunk.type !== 'text-delta') continue
+  streamed += chunk.payload.text
+  if (streamed.length > 200) controller.abort()
+}
+
+// The partial answer is already in the thread
+const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1' })
+```
+
+`onAbort` receives the steps that completed before the cancellation and the assistant text streamed for the in-flight step. For the abort lifecycle itself, including durable runs aborted by `runId`, see the [`stream()` reference](/reference/streaming/agents/stream#aborting-a-run).
+
 ## Handling large attachments
 
 Some storage providers enforce record size limits that base64-encoded file attachments can exceed:

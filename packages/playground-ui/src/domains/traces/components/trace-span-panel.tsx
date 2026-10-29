@@ -81,8 +81,8 @@ export interface TraceSpanPanelProps {
   onSpanViewChange?: TraceDataPanelViewProps['onSpanViewChange'];
 
   // Span-panel pass-through.
-  spanActiveTab?: string;
-  onSpanTabChange?: (tab: string) => void;
+  spanActiveTab?: SpanDataPanelViewProps['activeTab'];
+  onSpanTabChange?: SpanDataPanelViewProps['onTabChange'];
   spanFeedbackTabBadge?: ReactNode;
   spanFeedbackTabSlot?: SpanDataPanelViewProps['feedbackTabSlot'];
 }
@@ -211,7 +211,6 @@ export function TraceSpanPanel({
               traceId={traceId}
               spanId={selectedSpanId}
               span={spanDetailData?.span}
-              isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
               isLoading={isLoadingSpanDetail}
               onClose={() => onSpanSelect(undefined)}
               activeTab={spanActiveTab}

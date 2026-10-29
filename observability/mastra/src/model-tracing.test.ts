@@ -91,6 +91,69 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  it.each(['total', 'step', 'firstChunk'] as const)('preserves the timeout scope on an open step (%s)', timeoutType => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation', outcome: null });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep();
+    tracker.startInference();
+    tracker.endGeneration({ outcome: 'limit', stopReason: 'timeout', stopReasonContext: { timeoutType } });
+    expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toMatchObject([
+      { outcome: timeoutType === 'total' ? 'interrupted' : 'limit', stopReason: 'timeout' },
+    ]);
+  });
+
+  it('applies a derived generation failure to the generation and its open children', () => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation', outcome: null });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep();
+    tracker.startInference();
+    tracker.recordChunk({
+      type: 'text-delta',
+      runId: 'run',
+      from: 'AGENT',
+      payload: { id: 'partial', text: 'partial reply' },
+    } as any);
+    tracker.reportGenerationError({ error: new Error('provider failed') });
+    const [chunk] = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+    const [step] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+    expect(chunk?.output).toEqual({ text: 'partial reply' });
+    expect(chunk?.endTime!.getTime()).toBeLessThanOrEqual(step!.endTime!.getTime());
+    for (const type of [SpanType.MODEL_GENERATION, SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
+      expect(testExporter.getSpansByType(type)).toMatchObject([
+        { outcome: 'error', stopReason: 'runtime_error', errorInfo: { message: 'provider failed' } },
+      ]);
+    }
+  });
+
+  it('provider lifecycle chunks leave the logical step to the downstream tracker', async () => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation' });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep({ messageId: 'owner-message' });
+    const chunks = [
+      { type: 'step-start', payload: { messageId: 'provider-message' } },
+      { type: 'tripwire', payload: { reason: 'Provider extension', processorId: 'provider' } },
+    ];
+    expect(await consumeStream(tracker.wrapInferenceStream(createMockStream(chunks)))).toEqual(chunks);
+    expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(0);
+    expect(tracker.exportCurrentStep()?.attributes?.messageId).toBe('owner-message');
+    await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+    expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(1);
+  });
+
+  it('forwards every chunk when tracing bookkeeping throws', async () => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation' });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep();
+    vi.spyOn(tracker, 'updateStep').mockImplementation(() => {
+      throw new Error('exporter failed');
+    });
+    const chunks = [
+      { type: 'step-start', payload: { messageId: 'message' } },
+      { type: 'text-delta', payload: { id: 'text', text: 'Still delivered' } },
+    ];
+    expect(await consumeStream(tracker.wrapStream(createMockStream(chunks)))).toEqual(chunks);
+  });
+
   describe('gateway routing', () => {
     it('exports which provider served each step when the model ran through Vercel AI Gateway', async () => {
       const modelSpan = tracing.startSpan({
@@ -1861,7 +1924,7 @@ describe('ModelSpanTracker', () => {
       coreFeatures.add('model-inference-span');
     });
 
-    it('creates a MODEL_INFERENCE span as a child of MODEL_STEP, with chunks parented under it', async () => {
+    it('creates a MODEL_INFERENCE span as a child of MODEL_STEP, with processed chunks parented under the step', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1904,7 +1967,7 @@ describe('ModelSpanTracker', () => {
 
       expect(chunkSpans.length).toBeGreaterThan(0);
       for (const chunk of chunkSpans) {
-        expect(chunk.parentSpanId).toBe(inferenceSpan!.id);
+        expect(chunk.parentSpanId).toBe(testExporter.getSpansByType(SpanType.MODEL_STEP)[0]!.id);
       }
     });
 
@@ -2243,7 +2306,7 @@ describe('ModelSpanTracker', () => {
 
       tracker.startStep();
       // Caller forgets startInference() — chunk handlers should auto-create it
-      // so chunks still parent under MODEL_INFERENCE rather than MODEL_STEP.
+      // while processed chunks remain children of MODEL_STEP.
       await consumeStream(
         tracker.wrapStream(
           createMockStream([
@@ -2262,7 +2325,7 @@ describe('ModelSpanTracker', () => {
       expect(inferenceSpan).toBeDefined();
       expect(chunkSpans.length).toBeGreaterThan(0);
       for (const chunk of chunkSpans) {
-        expect(chunk.parentSpanId).toBe(inferenceSpan!.id);
+        expect(chunk.parentSpanId).toBe(testExporter.getSpansByType(SpanType.MODEL_STEP)[0]!.id);
       }
     });
 
@@ -2934,6 +2997,8 @@ describe('ModelSpanTracker', () => {
           ['acme-large', 'acme-large is unavailable', undefined],
           ['globex-mini', undefined, 200],
         ]);
+        expect(inferences[0]).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
+        expect(inferences[1]).toMatchObject({ outcome: 'success' });
         for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
           expect(ttftOf(type)).toEqual([200]);
         }

@@ -1096,6 +1096,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/frameworks/agents/:path*",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/tools",
       "permanent": true

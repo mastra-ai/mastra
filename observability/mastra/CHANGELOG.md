@@ -1,5 +1,40 @@
 # @mastra/observability
 
+## 1.23.0-alpha.0
+
+### Minor Changes
+
+- Added execution outcomes and stop-reason details to span lifecycle methods and both Mastra exporters. Mastra-generated stop-reason context contains compact facts and span references; custom context is copied and safely serialized before export. ([#28703](https://github.com/mastra-ai/mastra/pull/28703))
+
+  Custom producers retain support for arbitrary outcome strings and context objects, including when spans are rebuilt. Framework-generated context omits raw signals, tripwire payloads, and other unbounded diagnostic data. Model chunk content remains downstream of output processors.
+
+  Custom spans can record how they ended:
+
+  ```ts
+  span.end({ outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps: 5 } });
+  ```
+
+  To end a different span and its open descendants after cancellation:
+
+  ```ts
+  runSpan.end({ endTree: true, outcome: 'abort', stopReason: 'caller_cancelled' });
+  ```
+
+  Processed `MODEL_CHUNK` spans are now children of `MODEL_STEP`, independent of output-processor buffering. Agent-stream `MODEL_INFERENCE` spans retain provider timing and usage but no longer record response output; use processed chunks or `MODEL_GENERATION` output instead. Public native outcome fields also allow `null`, which exporter consumers must handle.
+
+  Ended spans ignore subsequent `end()`, `error()`, and outcome updates, preserving the exported result. A `null` or absent outcome means no outcome was recorded; use `endTime` to determine completion.
+
+- Model and agent spans now report `timeToFirstTokenMs`: the milliseconds from the start of the model call to its first streamed chunk. Unlike `timeToFirstChunkMs`, it leaves out the work Mastra does before calling the model, such as input processors. ([#28699](https://github.com/mastra-ai/mastra/pull/28699))
+
+  The value is measured once on the model inference span that streamed the chunk, and model step, model generation and agent run spans carry the value of the nearest such inference below them, as a `timeToFirstTokenMs` attribute. Spans that never streamed a chunk have no value. A fallback model attempt now opens its own model inference span, named after the model it calls, so its value and label are its own, and the failed attempt's span ends with the error. When an in-process agent retries a failed model call, the retry happens inside one inference span, so the value includes the failed attempt and the retry wait.
+
+### Patch Changes
+
+- Update bundled model pricing with the latest prices from models.dev ([`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74))
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d)]:
+  - @mastra/core@1.81.0-alpha.0
+
 ## 1.22.0
 
 ### Minor Changes

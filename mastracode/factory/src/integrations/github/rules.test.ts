@@ -3506,25 +3506,29 @@ describe('GithubRules label routes', () => {
     });
   });
 
-  it('leaves a card a run owns where it is but still records the labels', async () => {
-    const { service, workItems, project } = await setupRoutes('release');
-    const item = await createLinkedIssue(workItems, project.id);
-    await workItems.update({
-      orgId: 'org-1',
-      id: item.id,
-      userId: 'user-1',
-      patch: {
-        // Sessions are keyed by the phase's role (`plan`), not the phase id (`planning`).
-        sessions: { plan: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
-      },
-    });
-    await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
-    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
-      board: item.board,
-      stages: ['planning'],
-      metadata: { labels: ['release'] },
-    });
-  });
+  it.each(['work', 'plan'])(
+    'leaves a card a run owns (session %s) where it is but still records the labels',
+    async role => {
+      const { service, workItems, project } = await setupRoutes('release');
+      const item = await createLinkedIssue(workItems, project.id);
+      await workItems.update({
+        orgId: 'org-1',
+        id: item.id,
+        userId: 'user-1',
+        patch: {
+          // Sessions are keyed by the phase's context (`work`), not the phase id (`planning`);
+          // cards planned before Planning shared `work` keep the planner under `plan`.
+          sessions: { [role]: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
+        },
+      });
+      await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
+      expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        board: item.board,
+        stages: ['planning'],
+        metadata: { labels: ['release'] },
+      });
+    },
+  );
 
   it('ignores label changes for issues without a card and label events on pull requests', async () => {
     const { service } = await setupRoutes('release');

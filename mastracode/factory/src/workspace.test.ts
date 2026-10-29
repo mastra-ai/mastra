@@ -3353,6 +3353,23 @@ describe('FactorySkillSource layering', () => {
     // No local root anywhere.
     expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src'))).toBeUndefined();
   });
+
+  it('resolveLocalFactorySkillsPath finds src/mastra/factory-skills ahead of the public folder', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-mastra-dir-skills-'));
+    const skillsDir = path.join(tmpDir, 'src', 'mastra', 'factory-skills');
+    const publicSkillsDir = path.join(tmpDir, 'src', 'mastra', 'public', 'factory-skills');
+    await fs.mkdir(skillsDir, { recursive: true });
+    await fs.mkdir(publicSkillsDir, { recursive: true });
+
+    // cwd = repo root
+    expect(resolveLocalFactorySkillsPath(tmpDir)).toBe(skillsDir);
+    // cwd = src/mastra/public (mastra dev)
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(skillsDir);
+    // Without the new folder, the public folder still works.
+    await fs.rm(skillsDir, { recursive: true });
+    expect(resolveLocalFactorySkillsPath(tmpDir)).toBe(publicSkillsDir);
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(publicSkillsDir);
+  });
 });
 
 describe('factory environment sandbox context', () => {
