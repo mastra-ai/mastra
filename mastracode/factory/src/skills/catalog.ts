@@ -32,6 +32,8 @@ export interface FactorySkillInfo {
   description: string;
   /** SKILL.md body with the frontmatter block removed. */
   content: string;
+  /** Frontmatter fields besides `name` and `description` (license, user-invocable, …), so an editor can keep them. */
+  frontmatter?: Record<string, unknown>;
   origin: FactorySkillOrigin;
   /** True for the skills Factory ships, including when the app overrides one. */
   builtIn: boolean;
@@ -54,14 +56,21 @@ export function hashSkillContent(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
-function parseSkillMarkdown(name: string, raw: string): Pick<FactorySkillInfo, 'description' | 'content' | 'error'> {
+function parseSkillMarkdown(
+  name: string,
+  raw: string,
+): Pick<FactorySkillInfo, 'description' | 'content' | 'frontmatter' | 'error'> {
   // Use the same parser and validation the runtime applies when loading skills,
   // so the catalog never shows a skill as healthy that the agent will drop.
   const result = validateSkillContent({ content: raw, directoryName: name });
   const description = typeof result.metadata?.description === 'string' ? result.metadata.description : '';
   const content = result.instructions ?? stripFrontmatter(raw);
-  if (!result.valid) return { description, content, error: result.errors.join('\n') };
-  return { description, content };
+  const extra = Object.entries(result.metadata ?? {}).filter(
+    ([key, value]) => key !== 'name' && key !== 'description' && value !== undefined,
+  );
+  const frontmatter = extra.length > 0 ? { frontmatter: Object.fromEntries(extra) } : {};
+  if (!result.valid) return { description, content, ...frontmatter, error: result.errors.join('\n') };
+  return { description, content, ...frontmatter };
 }
 
 /** Best-effort body extraction when the frontmatter cannot be parsed, so users can still read the file they need to fix. */

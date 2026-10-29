@@ -584,6 +584,18 @@ describe('factory skills catalog route', () => {
       expect(plan.content).toBe('# Local Plan');
     });
 
+    it('lists frontmatter fields besides name and description so editors can keep them', async () => {
+      writeLocalSkill(
+        'release-notes',
+        '---\nname: release-notes\ndescription: Draft notes\nlicense: MIT\nuser-invocable: false\n---\n\n# Notes\n',
+      );
+      const skills = await listSkills();
+      expect(skills.find(s => s.name === 'release-notes')).toMatchObject({
+        frontmatter: { license: 'MIT', 'user-invocable': false },
+      });
+      expect(skills.find(s => s.name === 'factory-plan')).not.toHaveProperty('frontmatter');
+    });
+
     it('parses quoted and block-scalar descriptions the way the runtime does', async () => {
       writeLocalSkill(
         'factory-triage',
@@ -705,6 +717,18 @@ describe('project skill edit routes', () => {
     expect(await auditActions()).toEqual([
       { action: 'factory.skill.updated', project: projectA.id, targets: [{ type: 'skill', id: 'factory-plan' }] },
     ]);
+  });
+
+  it('accepts the SKILL.md the settings editor writes, JSON-quoted values included', async () => {
+    const { projectA, save, skill } = await setup();
+    const content =
+      '---\nname: factory-plan\ndescription: "Plan: find the cause # first"\nlicense: "MIT"\nuser-invocable: false\n---\n\n# Our Plan\n';
+    expect((await save(ADMIN, projectA.id, 'factory-plan', content)).status).toBe(200);
+    expect(await skill(ADMIN, projectA.id, 'factory-plan')).toMatchObject({
+      description: 'Plan: find the cause # first',
+      content: '# Our Plan',
+      frontmatter: { license: 'MIT', 'user-invocable': false },
+    });
   });
 
   it('lets an admin edit a review skill', async () => {
