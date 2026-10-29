@@ -58,8 +58,8 @@ const stringDimension = (): TraceAggregateDimensionRule => ({ valueKind: 'string
  * The trace dimensions plus the span's own `name`/`spanType`, its `entityId`, and the parent and
  * root entity context. Not groupable: `metadata.<key>` (the span field policy has no metadata),
  * identity fields (`traceId`, `spanId`, `parentSpanId`, `runId`, `requestId`), and
- * `model`/`provider`, which live in span attributes and cost a full attribute read to group on
- * (OBS-693 tracks dedicated columns).
+ * `model`/`provider`, which are filterable through their dedicated columns but not yet groupable
+ * (OBS-693).
  */
 export const SPAN_AGGREGATE_DIMENSION_REGISTRY = {
   name: stringDimension(),
