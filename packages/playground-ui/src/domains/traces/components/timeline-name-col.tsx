@@ -28,13 +28,6 @@ type TimelineNameColProps = {
   meta?: ReactNode;
 };
 
-/** `agent run: 'chef-agent'` → `['agent run', 'chef-agent']`; names without a `kind: ` prefix stay whole. */
-function splitSpanName(name: string): [kind: string | null, value: string] {
-  const index = name.indexOf(': ');
-  if (index < 0) return [null, name];
-  return [name.slice(0, index), name.slice(index + 2).replace(/^'(.*)'$/, '$1')];
-}
-
 export function TimelineNameCol({
   span,
   spanUI,

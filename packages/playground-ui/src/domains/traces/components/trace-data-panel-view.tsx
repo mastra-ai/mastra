@@ -769,7 +769,13 @@ function TracePanelColumns({
         {spanPanelSlot && (
           <>
             <PanelSeparator variant="pill" />
-            <Panel id="trace-span" minSize={320} defaultSize={spanWidth()} groupResizeBehavior="preserve-pixel-size">
+            <Panel
+              id="trace-span"
+              minSize={384}
+              maxSize="50%"
+              defaultSize={spanWidth()}
+              groupResizeBehavior="preserve-pixel-size"
+            >
               <div
                 ref={scrollToMatchRef}
                 data-highlight
