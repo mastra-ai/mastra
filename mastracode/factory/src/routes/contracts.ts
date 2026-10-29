@@ -69,7 +69,23 @@ const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema }
 
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
-const workItemResponseSchema = z.object({ workItem: entitySchema });
+const cardSchema = z
+  .object({
+    workItem: z
+      .object({
+        provider: z.string(),
+        kind: z.enum(['issue', 'pull_request', 'merge_request', 'thread', 'incident', 'follow_up']),
+        key: z.string().nullable(),
+        url: z.string().nullable(),
+        title: z.string(),
+        state: z.string().nullable(),
+        labels: z.array(z.string()),
+        author: z.string().nullable(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
 export const createProjectBodySchema = z.object({
@@ -693,7 +709,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
     responseSchema: z.object({
-      workItems: z.array(entitySchema),
+      workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
     }),
