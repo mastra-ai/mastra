@@ -28,9 +28,14 @@ import { useViewMenu } from '../hooks/use-widget-views';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
 import type { AnyWidgetKind } from '../widget-kind';
-import { agentRunsWidget, distinctIdsWidget, kpisWidget, modelsWidget } from './fixtures/metrics-widgets';
+import { metricsWidget, modelsWidget as models } from './equality-harness';
+import { kpisWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+
+const agentRunsWidget = metricsWidget('agent-runs');
+const distinctIdsWidget = metricsWidget('distinct-ids');
+const modelsWidget = models();
 
 const LOAD_ERROR = "Couldn't load this data. Try again in a moment.";
 

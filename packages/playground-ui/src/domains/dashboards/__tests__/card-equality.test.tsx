@@ -43,18 +43,18 @@ import { TokenUsageCard } from '../../metrics/components/token-usage-card';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
-import {
-  agentRunsWidget,
-  breakdownWidget,
-  distinctIdsWidget,
-  kpisWidget,
-  latencyWidget,
-  scoresWidget,
-  tokenUsageWidget,
-} from './fixtures/metrics-widgets';
+import { metricsWidget } from './equality-harness';
+import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
+
+/** The page's widgets come from `METRICS_DASHBOARD`; the rest aren't on the page. */
+const agentRunsWidget = metricsWidget('agent-runs');
+const breakdownWidget = metricsWidget('breakdown');
+const distinctIdsWidget = metricsWidget('distinct-ids');
+const latencyWidget = metricsWidget('latency');
+const tokenUsageWidget = metricsWidget('token-usage');
 
 /**
  * Each of today's Metrics cards next to the widget describing it: both must send the same requests
