@@ -223,7 +223,7 @@ export class Scheduler extends MastraBase {
   async #nextDelay(): Promise<number | undefined> {
     const interval = this.#config.tickIntervalMs;
     const maxIdle = this.#config.maxIdleIntervalMs;
-    const idleCap = maxIdle !== undefined && maxIdle > interval ? maxIdle : undefined;
+    const idleCap = maxIdle !== undefined && maxIdle > interval ? Math.min(maxIdle, MAX_TIMER_DELAY_MS) : undefined;
     if (this.#lastTickBusy || (this.#config.enabled === true && idleCap === undefined)) return interval;
     let next: Schedule[];
     try {

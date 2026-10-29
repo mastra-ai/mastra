@@ -823,6 +823,24 @@ describe('Scheduler', () => {
 
       await scheduler.stop();
     });
+
+    it('clamps a cap beyond the largest timer delay instead of polling in a hot loop', async () => {
+      const { store } = makeStore();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        // Node fires a setTimeout longer than 2^31-1 ms after 1 ms.
+        config: { enabled: true, tickIntervalMs: 20, maxIdleIntervalMs: 2 ** 31 },
+      });
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+
+      await scheduler.start();
+      await wait(250);
+      // Warm-up tick plus one earliest-fire lookup, then asleep.
+      expect(listDue).toHaveBeenCalledTimes(2);
+
+      await scheduler.stop();
+    });
   });
 
   it('skips firing when the target workflow is not registered', async () => {
