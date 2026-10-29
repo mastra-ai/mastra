@@ -15,7 +15,7 @@ export type ClearFiltersButtonProps = {
  */
 export function ClearFiltersButton({ onClick, label = 'Clear filters', disabled }: ClearFiltersButtonProps) {
   return (
-    <Button size="icon-sm" aria-label={label} tooltip={label} onClick={onClick} disabled={disabled}>
+    <Button type="button" size="icon-sm" aria-label={label} tooltip={label} onClick={onClick} disabled={disabled}>
       <RotateCcwIcon />
     </Button>
   );

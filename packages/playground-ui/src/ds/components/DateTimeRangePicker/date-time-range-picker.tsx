@@ -124,6 +124,7 @@ export function DateTimeRangePicker({
   const reset =
     defaultPreset !== undefined && shownPreset === 'custom' ? (
       <Button
+        type="button"
         size={`icon-${size}` as const}
         tooltip="Reset time range"
         disabled={disabled}
