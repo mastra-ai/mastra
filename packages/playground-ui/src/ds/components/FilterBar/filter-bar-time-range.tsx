@@ -4,8 +4,8 @@ import type { KeyboardEvent } from 'react';
 import { FilterBarChip, editableSegmentClass } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarItem } from './types';
-import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker';
-import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker';
+import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
+import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
 import { cn } from '@/lib/utils';
 
 export const FILTER_BAR_TIME_RANGE_FIELD_ID = 'timeRange';
