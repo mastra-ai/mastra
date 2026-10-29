@@ -142,6 +142,76 @@ describe('TenantCredentialStore', () => {
     await expect(store.getApiKey('anthropic')).resolves.toBeUndefined();
   });
 
+  it('forceRefreshActiveAccount refreshes an unexpired token the provider rejected and persists it', async () => {
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+    refreshToken.mockResolvedValue({ refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 });
+
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await expect(store.getApiKey('anthropic')).resolves.toBe('a-1');
+
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBe('a-2');
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(refreshToken).toHaveBeenCalledWith(expect.objectContaining({ refresh: 'r-1' }));
+    expect(await seed.credentials.getCredential(USER_TENANT, 'anthropic')).toEqual(
+      expect.objectContaining({ access: 'a-2', refresh: 'r-2' }),
+    );
+    expect(store.get('anthropic')).toEqual(expect.objectContaining({ access: 'a-2' }));
+    await expect(store.getApiKey('anthropic')).resolves.toBe('a-2');
+  });
+
+  it('forceRefreshActiveAccount reuses a token another replica already refreshed', async () => {
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await expect(store.getApiKey('anthropic')).resolves.toBe('a-1');
+
+    // Another replica refreshed the rejected token after this store served it.
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', {
+      type: 'oauth',
+      refresh: 'r-other',
+      access: 'a-other',
+      expires: Date.now() + 3_600_000,
+    });
+
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBe('a-other');
+    expect(refreshToken).not.toHaveBeenCalled();
+  });
+
+  it('forceRefreshActiveAccount returns undefined and records the failure when refresh fails', async () => {
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+    refreshToken.mockRejectedValue(new Error('invalid_grant'));
+
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await store.ensureFresh();
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBeUndefined();
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(await seed.credentials.getCredential(USER_TENANT, 'anthropic')).toEqual(
+      expect.objectContaining({ access: 'a-1' }),
+    );
+    const [record] = await seed.credentials.listCredentials(ORG, USER);
+    expect(record?.refreshFailedAt).toBeInstanceOf(Date);
+  });
+
+  it('forceRefreshActiveAccount does nothing for API keys or missing credentials', async () => {
+    await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+
+    await expect(store.forceRefreshActiveAccount('openai')).resolves.toBeUndefined();
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBeUndefined();
+    expect(refreshToken).not.toHaveBeenCalled();
+  });
+
+  it('forceRefreshActiveAccount refreshes org rows for factory stores', async () => {
+    await seed.credentials.setCredential(ORG_TENANT, 'anthropic', FRESH_OAUTH);
+    refreshToken.mockResolvedValue({ refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 });
+
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'factory');
+    await store.ensureFresh();
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBe('a-2');
+    expect(await seed.credentials.getCredential(ORG_TENANT, 'anthropic')).toEqual(
+      expect.objectContaining({ access: 'a-2' }),
+    );
+  });
+
   it('getApiKey returns undefined for OAuth credentials of providers without a registered flow', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'unknown-provider', FRESH_OAUTH);
     const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');

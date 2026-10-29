@@ -119,6 +119,52 @@ describe('ModelCredentialsStorage', () => {
     expect(await store.getCredential(tenant, 'anthropic')).toMatchObject({ access: 'at-new-1' });
   });
 
+  it('refreshes an unexpired credential when needsRefresh says so', async () => {
+    const store = await makeStore();
+    const tenant = { orgId: 'org1', userId: 'alice' };
+    await store.setCredential(tenant, 'anthropic', oauth('rejected', Date.now() + 60_000));
+
+    const refreshFn = vi.fn(async () => oauth('forced', Date.now() + 60_000));
+    const refreshed = await store.refreshOAuth(tenant, 'anthropic', refreshFn, c => c.access === 'at-rejected');
+
+    expect(refreshFn).toHaveBeenCalledTimes(1);
+    expect(refreshed).toMatchObject({ access: 'at-forced' });
+    expect(await store.getCredential(tenant, 'anthropic')).toMatchObject({ access: 'at-forced' });
+  });
+
+  it('skips the refresh when needsRefresh reports the row was already replaced', async () => {
+    const store = await makeStore();
+    const tenant = { orgId: 'org1', userId: 'alice' };
+    await store.setCredential(tenant, 'anthropic', oauth('newer', Date.now() + 60_000));
+
+    const refreshFn = vi.fn(async () => oauth('forced', Date.now() + 60_000));
+    const result = await store.refreshOAuth(tenant, 'anthropic', refreshFn, c => c.access === 'at-rejected');
+
+    expect(refreshFn).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ access: 'at-newer' });
+  });
+
+  it('records a failed forced refresh on the row and rethrows', async () => {
+    const store = await makeStore();
+    const tenant = { orgId: 'org1', userId: 'alice' };
+    await store.setCredential(tenant, 'anthropic', oauth('rejected', Date.now() + 60_000));
+
+    await expect(
+      store.refreshOAuth(
+        tenant,
+        'anthropic',
+        async () => {
+          throw new Error('invalid_grant');
+        },
+        () => true,
+      ),
+    ).rejects.toThrow('invalid_grant');
+
+    const [record] = await store.listCredentials('org1', 'alice');
+    expect(record?.refreshFailedAt).toBeInstanceOf(Date);
+    expect(record?.credential).toMatchObject({ access: 'at-rejected' });
+  });
+
   it('expires login sessions on read and honors touch updates', async () => {
     const store = await makeStore();
     await store.createLoginSession({

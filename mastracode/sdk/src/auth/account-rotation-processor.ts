@@ -633,8 +633,15 @@ export class AccountRotationProcessor implements Processor {
     // `ProviderAuthRequiredError` from an empty registry) a refresh can never
     // succeed, so skip it and fall through to the retry:false surface below,
     // which rethrows the original auth error instead of a generic pool
-    // exhaustion message.
-    if (classification.kind === 'rotate' && classification.reason === 'auth-failed' && active) {
+    // exhaustion message. Stores without an account registry (deployed
+    // per-tenant stores serve one credential per provider) have no active
+    // account to name, so the forced refresh targets that single credential.
+    const hasAccountRegistry = typeof store.listAccounts === 'function';
+    if (
+      classification.kind === 'rotate' &&
+      classification.reason === 'auth-failed' &&
+      (active || !hasAccountRegistry)
+    ) {
       const forced = getForcedRefreshInstances(state);
       const refreshKey = `${providerId}:${active?.id ?? 'active'}`;
       if (!forced.has(refreshKey) && typeof store.forceRefreshActiveAccount === 'function') {
