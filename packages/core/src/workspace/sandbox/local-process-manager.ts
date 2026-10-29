@@ -314,15 +314,23 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
         cwd = isAlreadyWorkspacePath ? normalizedOptionsCwd : path.resolve(this.sandbox.workingDirectory, options.cwd);
       }
     }
-    const env = this.sandbox.buildEnv(options.env);
+    let env = this.sandbox.buildEnv(options.env);
     const invocation = options.originalInvocation;
     // Argv invocations are joined with POSIX quoting (see MastraSandbox.executeCommand),
     // which cmd.exe can't parse, so route them through a POSIX shell when one exists.
-    // Plain string commands are caller-authored and keep using cmd.exe.
+    // Plain string commands are caller-authored and keep using cmd.exe, as do argv
+    // calls to Windows command interpreters, whose `/c`-style switches need cmd.exe.
     const posixShell =
-      isWindows && this.sandbox.isolation === 'none' && invocation !== undefined
+      isWindows &&
+      this.sandbox.isolation === 'none' &&
+      invocation !== undefined &&
+      !/^(cmd|powershell|pwsh)(\.exe)?$/i.test(path.win32.basename(invocation.command))
         ? findWindowsPosixShell(env.PATH)
         : undefined;
+    if (posixShell && !/^cmd(\.exe)?$/i.test(path.win32.basename(posixShell))) {
+      // Stop Git Bash/MSYS2 from rewriting `/F`-style switches and paths passed to native tools.
+      env = { MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*', ...env };
+    }
     // Preserve the script as one argument instead of letting cmd.exe interpret its operators.
     const directShell =
       isWindows &&

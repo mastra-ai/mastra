@@ -208,6 +208,28 @@ describe('LocalProcessManager Windows POSIX shell for argv commands', () => {
 
     expect(execa).toHaveBeenCalledWith('dir /b', [], expect.objectContaining({ shell: true }));
   });
+
+  it('keeps cmd.exe for argv calls to Windows command interpreters', async () => {
+    const sandbox = await setup([gitBash]);
+
+    await sandbox.executeCommand!('cmd.exe', ['/c', 'echo', 'hello']);
+    await sandbox.executeCommand!('powershell', ['-Command', 'Get-Date']);
+
+    expect(execa.mock.calls[0]?.[2]).toMatchObject({ shell: true });
+    expect(execa.mock.calls[1]?.[2]).toMatchObject({ shell: true });
+  });
+
+  it('turns off MSYS path conversion so /F-style switches reach native tools unchanged', async () => {
+    const sandbox = await setup([gitBash]);
+
+    await sandbox.executeCommand!('taskkill', ['/F', '/PID', '123']);
+    await sandbox.executeCommand!('sh', ['-c', 'taskkill /F /PID 123']);
+
+    for (const call of execa.mock.calls) {
+      expect(call[2].env).toMatchObject({ MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*' });
+    }
+    expect(execa.mock.calls[0]?.[2]).toMatchObject({ shell: gitBash });
+  });
 });
 
 describe('LocalProcessManager stdin wiring', () => {
