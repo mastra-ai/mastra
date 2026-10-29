@@ -260,11 +260,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     current: KnowledgeInspectorNodeSummary[],
     next: KnowledgeInspectorNodeSummary[],
   ): KnowledgeInspectorNodeSummary[] {
-    return [
-      ...new Map(
-        [...current, ...next].map(node => [`${node.type}:${node.name}:${node.scope.level}:${node.scope.id}`, node]),
-      ).values(),
-    ];
+    return [...new Map([...current, ...next].map(node => [node.id, node])).values()];
   }
 
   private async loadMoreRecords(kind: 'about' | 'mentioning'): Promise<void> {

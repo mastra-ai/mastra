@@ -28,6 +28,7 @@ function record(
 ): KnowledgeInspectorNodeSummary {
   return {
     handle: `node:${name}`,
+    id: `page-${name}`,
     type: 'node',
     name,
     scope: { level: scope, id: `${scope}-id` },
@@ -412,6 +413,31 @@ describe('KnowledgeBrowserComponent', () => {
     });
     expect(text(browser).match(/Alpha dependency/g)).toHaveLength(1);
     expect(text(browser)).toContain('Beta dependency');
+  });
+
+  it('keeps distinct same-named pages apart while loading more knowledge', async () => {
+    const atlas = record('Atlas');
+    const policyA = { ...record('Policy'), handle: 'node:Policy-a', id: 'page-policy-a' };
+    const policyB = { ...record('Policy'), handle: 'node:Policy-b', id: 'page-policy-b' };
+    const first = { ...nodeDetail(atlas, [policyA]), recordsNextCursor: 'items-page-2' };
+    const second = nodeDetail(atlas, [{ ...policyA, handle: 'node:Policy-a-again' }, policyB]);
+    const inspector = createInspector({
+      getNode: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
+    });
+    const { browser } = createBrowser(inspector);
+    await settle();
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+    expect(text(browser).match(/→ Policy/g)).toHaveLength(1);
+    browser.handleInput('\r');
+    await settle();
+
+    expect(inspector.getNode).toHaveBeenLastCalledWith(expect.objectContaining({ recordsCursor: 'items-page-2' }));
+    expect(text(browser).match(/→ Policy/g)).toHaveLength(2);
   });
 
   it('resets to the resource scope when session identity changes', async () => {

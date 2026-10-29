@@ -178,6 +178,19 @@ describe('KnowledgeInspector', () => {
     expect(JSON.stringify(detail)).not.toContain('Foreign secret');
   });
 
+  it('gives each page a stable id, so same-named pages stay distinct and repeats match', async () => {
+    const handbook = await harness.seed.page('resource:project-1', 'Handbook');
+    const guide = await harness.seed.page('resource:project-1', 'Guide');
+    const first = await harness.store.createPage({ parentId: handbook.id, name: 'Policy', provenance: host });
+    const second = await harness.store.createPage({ parentId: guide.id, name: 'Policy', provenance: host });
+
+    const listed = (await harness.inspector.listNodes({ level: 'resource' })).nodes.filter(n => n.name === 'Policy');
+    expect(listed.map(node => node.id).sort()).toEqual([first.id, second.id].sort());
+    const again = (await harness.inspector.listNodes({ level: 'resource' })).nodes.filter(n => n.name === 'Policy');
+    expect(again.map(node => node.id).sort()).toEqual(listed.map(node => node.id).sort());
+    expect(again.map(node => node.handle)).not.toEqual(listed.map(node => node.handle));
+  });
+
   it('pages notes through opaque cursors', async () => {
     const page = await harness.seed.page('resource:project-1', 'Checkpoints');
     for (let index = 0; index < 5; index++) await harness.seed.note(page, `Checkpoint ${index + 1} is complete.`);

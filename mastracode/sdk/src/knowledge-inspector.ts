@@ -49,7 +49,10 @@ export interface KnowledgeInspectorRelationshipCounts {
 
 /** A page. */
 export interface KnowledgeInspectorNodeSummary {
+  /** Opaque, freshly minted per result and bound to the session; use it to open the page. */
   handle: string;
+  /** The page's stable id: the same page always has the same id, and two pages never share one. */
+  id: string;
   type: KnowledgeInspectorRecordType;
   name: string;
   scope: KnowledgeInspectorScopeBadge;
@@ -517,6 +520,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async #summary(page: KnowledgePage, binding: Binding, view: LevelView): Promise<KnowledgeInspectorNodeSummary> {
     return {
       handle: this.#mintHandle(binding, view.level, 'node', page.id),
+      id: page.id,
       type: 'node',
       name: page.name,
       scope: badgeOf(await this.#scopeAddress(page.scopeId)),
