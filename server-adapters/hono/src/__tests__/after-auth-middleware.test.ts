@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core';
 import type { Middleware } from '@mastra/core/server';
+import { MASTRA_USER_KEY } from '@mastra/server/auth';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
@@ -51,7 +52,7 @@ describe("server.middleware phase: 'afterAuth'", () => {
         path: '*',
         phase: 'afterAuth',
         handler: async (c, next) => {
-          const user = c.get('requestContext').get('user') as { name: string } | undefined;
+          const user = c.get('requestContext').get(MASTRA_USER_KEY) as { name: string } | undefined;
           c.get('requestContext').set('seen', user?.name ?? 'no-user');
           await next();
         },
@@ -182,5 +183,64 @@ describe("server.middleware phase: 'afterAuth'", () => {
 
     await app.request('http://localhost/private', authed);
     expect(ran).toBe(1);
+  });
+
+  describe('when core did not authenticate anyone', () => {
+    async function spoofApp(auth: Record<string, unknown> | undefined) {
+      const mastra = new Mastra({
+        logger: false,
+        server: {
+          middleware: [
+            {
+              path: '/custom/*',
+              phase: 'afterAuth',
+              handler: async (c, next) => {
+                const requestContext = c.get('requestContext');
+                const user = requestContext.get(MASTRA_USER_KEY) as { id: string } | undefined;
+                requestContext.set('seen', user?.id ?? null);
+                await next();
+              },
+            },
+          ],
+          apiRoutes: [
+            {
+              method: 'POST',
+              path: '/custom/open',
+              handler: c => c.json({ seen: c.get('requestContext').get('seen') ?? null }),
+            },
+          ],
+        },
+      });
+      const originalGetServer = mastra.getServer.bind(mastra);
+      mastra.getServer = () => ({ ...originalGetServer(), ...(auth && { auth }) }) as any;
+      const app = new Hono();
+      await new MastraServer({ app, mastra }).init();
+      return app;
+    }
+
+    const spoofed = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestContext: { user: { id: 'victim' }, [MASTRA_USER_KEY]: { id: 'victim' } } }),
+    };
+
+    it('exposes no user under MASTRA_USER_KEY on an auth.public path, even if the body sends one', async () => {
+      const app = await spoofApp({
+        public: ['/custom/open'],
+        authenticateToken: async () => ({ id: 'real' }),
+      });
+
+      const response = await app.request('http://localhost/custom/open', spoofed);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ seen: null });
+    });
+
+    it('exposes no user under MASTRA_USER_KEY without an auth provider, even if the body sends one', async () => {
+      const app = await spoofApp(undefined);
+
+      const response = await app.request('http://localhost/custom/open', spoofed);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ seen: null });
+    });
   });
 });

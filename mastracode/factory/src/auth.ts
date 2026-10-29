@@ -148,7 +148,9 @@ function resolvedRequestUser(requestContext: { get: (key: string) => unknown }):
   const resolved = resolvedUsers.get(requestContext);
   if (!resolved || !selfAuthenticated.has(requestContext)) return resolved;
   const coreUser = requestContext.get(CORE_AUTH_USER_KEY);
-  if (coreUser !== undefined && toFactoryAuthUser(coreUser)?.id !== resolved.id) return undefined;
+  if (coreUser !== undefined && getFactoryAuthUserId(toFactoryAuthUser(coreUser)) !== getFactoryAuthUserId(resolved)) {
+    return undefined;
+  }
   return resolved;
 }
 

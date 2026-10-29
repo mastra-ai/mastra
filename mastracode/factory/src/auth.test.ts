@@ -370,7 +370,20 @@ describe('Factory auth on a deployer without afterAuth support', () => {
     const res = await app.request('/web/whoami', { headers: bearer });
     expect(mockAuthenticate).toHaveBeenCalledTimes(2);
     expect(res.status).toBe(200);
-    expect((await res.json()).tenant).toEqual({ orgId: 'org_b', userId: 'user_b' });
+    const body = await res.json();
+    expect(body.tenant).toEqual({ orgId: 'org_b', userId: 'user_b' });
+    expect(body.userId).toBe('user_b');
+  });
+
+  it('uses the user core route auth authorized when two workosId-only users disagree', async () => {
+    mockAuthenticate
+      .mockResolvedValueOnce({ workosId: 'user_a', organizationId: 'org_a' })
+      .mockResolvedValueOnce({ workosId: 'user_b', organizationId: 'org_b' });
+    const { app } = await buildApp({ legacyDeployer: true });
+
+    const body = await (await app.request('/web/whoami', { headers: bearer })).json();
+    expect(body.userId).toBe('user_b');
+    expect(body.tenant).toEqual({ orgId: 'org_b', userId: 'user_b' });
   });
 
   it('leaves unauthenticated requests to core route auth', async () => {
