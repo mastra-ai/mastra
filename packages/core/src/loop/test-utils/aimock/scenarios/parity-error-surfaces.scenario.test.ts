@@ -590,6 +590,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
 
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        // No timeout notice either: the hidden entry also hides the run from the notice save.
         expect(messages.map(message => message.role)).toEqual(['user']);
         expect(JSON.stringify(messages).includes('remote courier result')).toBe(false);
       } finally {
@@ -652,7 +653,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await Promise.all(heldSaves);
 
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-        expect(messages.map(message => message.role)).toEqual(['user']);
+        // The user message and the timeout notice, never the held step's content.
+        expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+        expect(messages[1]!.content.parts.map(part => part.type)).toEqual(['error']);
         expect(JSON.stringify(messages).includes('quick courier result')).toBe(false);
       } finally {
         saveSpy.mockRestore();

@@ -2068,8 +2068,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         idleTimeoutMs: observeOptions?.idleTimeoutMs,
         isAlive: observeOptions?.isAlive,
         structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
-          | StructuredOutputOptions<TOutput>
-          | undefined,
+          StructuredOutputOptions<TOutput> | undefined,
         onChunk: observeOptions?.onChunk,
         onStepFinish: observeOptions?.onStepFinish,
         onFinish: observeOptions?.onFinish,
