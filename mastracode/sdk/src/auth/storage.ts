@@ -7,6 +7,19 @@ import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
+import {
+  backfillPriorities,
+  defaultAccountLabel,
+  findSameSubscription,
+  isSameSubscription,
+  mintAccountId,
+  nextPriority,
+  planActivation,
+  planRemoval,
+  renameAccount,
+  reorderAccounts,
+  sortByPriority,
+} from './account-registry.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 import { kimiCodingOAuthProvider } from './providers/kimi-coding.js';
@@ -63,20 +76,6 @@ export function getOAuthProviders(): OAuthProviderInterface[] {
 }
 
 /**
- * Mint an account instance id: `${providerId}:${randomUUID()}`.
- *
- * Assigned once, when the account is created, and never derived from
- * credentials. Deriving it from the refresh token (the pre-A13 scheme) looked
- * stable but was not: `persistRefreshedCredential` keeps an entry's key while
- * writing rotated tokens onto it, so every refresh left the id describing a
- * credential the account no longer had — and re-adding that same subscription
- * then failed to match its own entry and registered a second one for it.
- */
-function mintAccountId(providerId: string): string {
-  return `${providerId}:${globalThis.crypto.randomUUID()}`;
-}
-
-/**
  * The pre-A13 id scheme: `${providerId}:${sha256(refresh).slice(0,8)}`.
  *
  * No longer used to assign ids, but still needed to recognize registries
@@ -128,6 +127,7 @@ function credentialFieldsOf(record: OAuthAccountRecord): OAuthCredentials {
     addedAt: _addedAt,
     active: _active,
     identity: _identity,
+    priority: _priority,
     ...creds
   } = record;
   return creds;
@@ -176,9 +176,29 @@ export class AuthStorage {
    *    the slot, so `isLoggedIn()`/`getOAuthCredential()` keep agreeing with
    *    `listAccounts()`. `remove()`/`logout()` clear the registry with the
    *    slot, so they never leave the shape this heals.
+   * 5. Entries without a subscription identity get it backfilled.
+   *
+   * Before any of that, entries without a switch priority (written before
+   * priorities existed, or by an older build) get one past the pool's
+   * highest, in insertion order — so existing pools keep rotating in the
+   * order they always did.
    */
   private migrate(): void {
     let changed = false;
+
+    const registeredProviders = new Set<string>();
+    for (const key of Object.keys(this.data)) {
+      if (!key.startsWith('accounts:')) continue;
+      const providerId = key.slice('accounts:'.length).split(':')[0];
+      if (providerId) registeredProviders.add(providerId);
+    }
+    for (const providerId of registeredProviders) {
+      for (const entry of backfillPriorities(this.registryEntriesInInsertionOrder(providerId))) {
+        this.data[this.accountKeyFor(entry.id)] = entry;
+        changed = true;
+      }
+    }
+
     for (const key of Object.keys(this.data)) {
       const slot = this.data[key];
       if (!slot || slot.type !== 'oauth') continue;
@@ -221,12 +241,6 @@ export class AuthStorage {
 
     // Case 4: registry entries without a legacy slot (the slot loop above
     // only ever sees providers that still have one).
-    const registeredProviders = new Set<string>();
-    for (const key of Object.keys(this.data)) {
-      if (!key.startsWith('accounts:')) continue;
-      const providerId = key.slice('accounts:'.length).split(':')[0];
-      if (providerId) registeredProviders.add(providerId);
-    }
     for (const providerId of registeredProviders) {
       if (this.data[providerId]?.type === 'oauth') continue;
       const entries = this.accountEntries(providerId);
@@ -427,8 +441,13 @@ export class AuthStorage {
     return `accounts:${id}`;
   }
 
-  /** Registry entries for a provider in JSON insertion order (malformed values skipped). */
+  /** Registry entries for a provider in switch order: priority, then insertion order. */
   private accountEntries(providerId: string): OAuthAccountRecord[] {
+    return sortByPriority(this.registryEntriesInInsertionOrder(providerId));
+  }
+
+  /** Registry entries for a provider in JSON insertion order (malformed values skipped). */
+  private registryEntriesInInsertionOrder(providerId: string): OAuthAccountRecord[] {
     const prefix = this.accountPrefixFor(providerId);
     const out: OAuthAccountRecord[] = [];
     for (const [key, value] of Object.entries(this.data)) {
@@ -447,9 +466,10 @@ export class AuthStorage {
       type: 'oauth-account',
       id,
       ...(identity ? { identity } : {}),
-      label: `${provider?.name ?? providerId} account 1`,
+      label: defaultAccountLabel(provider?.name ?? providerId, 1),
       addedAt: new Date().toISOString(),
       active: true,
+      priority: nextPriority(this.accountEntries(providerId)),
     };
     this.data[this.accountKeyFor(id)] = record;
     return record;
@@ -522,9 +542,11 @@ export class AuthStorage {
       const collided = entries.find(
         entry =>
           entry.id !== target.id &&
-          ((identity !== undefined && entry.identity === identity) ||
-            entry.id === legacyId ||
-            entry.refresh === creds.refresh),
+          isSameSubscription(entry, {
+            identity,
+            legacyId,
+            sameCredential: candidate => candidate.refresh === creds.refresh,
+          }),
       );
       // Credential metadata (device id, enterprise URL, …) follows the tokens:
       // when the fresh response omits a field, the collided entry's value is the
@@ -601,10 +623,11 @@ export class AuthStorage {
     // treating that miss as "new account" is exactly how re-adding a
     // subscription used to create a duplicate entry for it.
     const legacyId = legacyAccountIdFor(providerId, creds.refresh);
-    const existing =
-      (identity ? freshEntries.find(entry => entry.identity === identity) : undefined) ??
-      freshEntries.find(entry => entry.id === legacyId) ??
-      freshEntries.find(entry => entry.refresh === creds.refresh);
+    const existing = findSameSubscription(freshEntries, {
+      identity,
+      legacyId,
+      sameCredential: entry => entry.refresh === creds.refresh,
+    });
     const id = existing?.id ?? mintAccountId(providerId);
     if (existing) {
       this.data[this.accountKeyFor(id)] = {
@@ -616,7 +639,7 @@ export class AuthStorage {
         active: existing.active,
       };
     } else {
-      const resolvedLabel = label ?? `${provider?.name ?? providerId} account ${freshEntries.length + 1}`;
+      const resolvedLabel = label ?? defaultAccountLabel(provider?.name ?? providerId, freshEntries.length + 1);
       this.data[this.accountKeyFor(id)] = {
         type: 'oauth-account',
         id,
@@ -624,6 +647,7 @@ export class AuthStorage {
         label: resolvedLabel,
         addedAt: new Date().toISOString(),
         active: false,
+        priority: nextPriority(freshEntries),
         ...creds,
       };
     }
@@ -650,7 +674,7 @@ export class AuthStorage {
    * Activate an account: move the active tokens out of the legacy slot back
    * into the previously active entry, and the target's tokens into the slot
    * (never copy — one home per token set). With no `instanceId`, rotate to
-   * the next entry in insertion order, wrapping once to the front; returns
+   * the next entry in switch order, wrapping once to the front; returns
    * undefined when there is no other entry to rotate to.
    */
   activateAccount(providerId: string, instanceId?: string): OAuthAccountRecord | undefined {
@@ -669,24 +693,11 @@ export class AuthStorage {
    * other entry to rotate to.
    */
   private activateInMemory(providerId: string, instanceId?: string): OAuthAccountRecord | undefined {
-    const entries = this.accountEntries(providerId);
-    if (entries.length === 0) return undefined;
-
-    let target: OAuthAccountRecord | undefined;
-    if (instanceId !== undefined) {
-      target = entries.find(entry => entry.id === instanceId);
-      if (!target) return undefined;
-    } else {
-      if (entries.length <= 1) return undefined;
-      const currentIdx = entries.findIndex(entry => entry.active);
-      const candidates =
-        currentIdx >= 0 ? [...entries.slice(currentIdx + 1), ...entries.slice(0, currentIdx)] : [...entries];
-      target = candidates[0]!;
-    }
-    if (!target) return undefined;
+    const plan = planActivation(this.accountEntries(providerId), instanceId);
+    if (!plan) return undefined;
+    const { target, previous: current, alsoActive } = plan;
 
     const slot = this.data[providerId];
-    const current = entries.find(entry => entry.active && entry.id !== target.id);
 
     // Move the slot's tokens back onto the previously active entry. Skipped
     // when the target is already active — its (possibly re-authenticated)
@@ -705,11 +716,8 @@ export class AuthStorage {
 
     // Exactly the target stays active (self-heals multi-active states).
     this.data[this.accountKeyFor(target.id)] = { ...target, active: true };
-    for (const entry of entries) {
-      if (entry.id === target.id || entry.id === current?.id) continue;
-      if (entry.active) {
-        this.data[this.accountKeyFor(entry.id)] = { ...entry, active: false };
-      }
+    for (const entry of alsoActive) {
+      this.data[this.accountKeyFor(entry.id)] = { ...entry, active: false };
     }
 
     return { ...target, active: true };
@@ -717,36 +725,42 @@ export class AuthStorage {
 
   /**
    * Remove an account from the registry. If it was active, the next entry in
-   * insertion order is activated; when it was the last one, the legacy slot
+   * switch order is activated; when it was the last one, the legacy slot
    * is removed too (full sign-out for that provider).
    */
   removeAccount(providerId: string, instanceId: string): void {
     this.reload();
-    const entries = this.accountEntries(providerId);
-    const target = entries.find(entry => entry.id === instanceId);
-    if (!target) return;
+    const plan = planRemoval(this.accountEntries(providerId), instanceId);
+    if (!plan) return;
+    const { removed, next, alsoActive } = plan;
 
-    const wasActive = target.active;
     delete this.data[this.accountKeyFor(instanceId)];
 
-    if (wasActive) {
-      const idx = entries.indexOf(target);
-      const next = entries[idx + 1] ?? entries.find(entry => entry.id !== instanceId);
-      if (next) {
-        // The removed account's tokens die with it — only move tokens in.
-        this.data[providerId] = { type: 'oauth', ...credentialFieldsOf(next) };
-        this.data[this.accountKeyFor(next.id)] = { ...next, active: true };
-        for (const entry of entries) {
-          if (entry.id === next.id || entry.id === instanceId) continue;
-          if (entry.active) {
-            this.data[this.accountKeyFor(entry.id)] = { ...entry, active: false };
-          }
-        }
-      } else {
-        delete this.data[providerId];
+    if (next) {
+      // The removed account's tokens die with it — only move tokens in.
+      this.data[providerId] = { type: 'oauth', ...credentialFieldsOf(next) };
+      this.data[this.accountKeyFor(next.id)] = { ...next, active: true };
+      for (const entry of alsoActive) {
+        this.data[this.accountKeyFor(entry.id)] = { ...entry, active: false };
       }
+    } else if (removed.active) {
+      delete this.data[providerId];
     }
 
+    this.save();
+  }
+
+  /**
+   * Set the provider's switch order: `orderedIds` first, in that order, then
+   * any accounts left out, in their current order. Does nothing when
+   * `orderedIds` names an unknown account or names one twice. Which account
+   * is active is unchanged.
+   */
+  reorderAccounts(providerId: string, orderedIds: readonly string[]): void {
+    this.reload();
+    const changed = reorderAccounts(this.accountEntries(providerId), orderedIds);
+    if (!changed) return;
+    for (const entry of changed) this.data[this.accountKeyFor(entry.id)] = entry;
     this.save();
   }
 
@@ -755,10 +769,9 @@ export class AuthStorage {
    */
   renameAccount(providerId: string, instanceId: string, label: string): void {
     this.reload();
-    const key = this.accountKeyFor(instanceId);
-    const entry = this.data[key];
-    if (!isOAuthAccountRecord(entry)) return;
-    this.data[key] = { ...entry, label };
+    const renamed = renameAccount(this.accountEntries(providerId), instanceId, label);
+    if (!renamed) return;
+    this.data[this.accountKeyFor(instanceId)] = renamed;
     this.save();
   }
 

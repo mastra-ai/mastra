@@ -30,39 +30,37 @@ import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import { getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
+import { orderAccountsFromActive } from './account-registry.js';
 import {
   getRequestAccountSelection,
   isRequestAccountRoutingExhausted,
   markRequestAccountRoutingExhausted,
   setRequestAccountSelection,
 } from './account-routing-context.js';
+import {
+  ACCOUNT_SWITCH_PART_TYPE,
+  accountSwitchNoticeText,
+  MODEL_FALLBACK_PART_TYPE,
+  MODEL_FALLBACK_STATE_KEY,
+  modelFallbackNoticeText,
+} from './account-switch.js';
+import type { AccountSwitchPartData, ModelFallbackPartData, PendingModelFallback } from './account-switch.js';
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
 import type { CredentialStore, OAuthAccountRecord } from './types.js';
 
-export const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
-
-/** Labels and instance ids only — never token material (do-not list). */
-export interface AccountSwitchPartData {
-  provider: string;
-  from: { id: string; label: string } | null;
-  to: { id: string; label: string } | null;
-  reason:
-    | 'rate-limit'
-    | 'quota-exhausted'
-    | 'auth-failed'
-    | 'pool-exhausted'
-    | 'persistent-outage'
-    | 'preferred-routing';
-  at: string;
-  /**
-   * Set on a `to: null` part when a route pinned to a single account reported
-   * that account unusable. The provider's other subscriptions were never
-   * consulted (A12), so "all accounts unavailable" would misreport what
-   * happened.
-   */
-  exclusive?: boolean;
-}
+// Re-exported so existing importers of the processor module keep working.
+export {
+  ACCOUNT_SWITCH_PART_TYPE,
+  accountSwitchNoticeText,
+  isAccountSwitchReason,
+  isModelFallbackReason,
+  MODEL_FALLBACK_PART_TYPE,
+  MODEL_FALLBACK_STATE_KEY,
+  modelFallbackNoticeText,
+  PROVIDER_DISPLAY_NAMES,
+} from './account-switch.js';
+export type { AccountSwitchPartData, ModelFallbackPartData, PendingModelFallback } from './account-switch.js';
 
 /** The store surface rotation needs; `AuthStorage` satisfies it structurally. */
 export type RotationCredentialStore = CredentialStore & {
@@ -105,30 +103,6 @@ const NETWORK_MESSAGE_PATTERN =
   /fetch failed|network error|socket hang up|getaddrinfo|econnrefused|enotfound|etimedout|connection (?:refused|reset|closed|timed out)|other side closed|write epipe/i;
 
 const MAX_CAUSE_DEPTH = 4;
-
-/** Persisted data-part type for a model-route hop. */
-export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
-
-/** Non-secret transcript payload for a model-route hop. */
-export interface ModelFallbackPartData {
-  from: { entryId: string; label: string };
-  to: { entryId: string; label: string };
-  reason: 'pool-exhausted' | 'persistent-outage';
-  at: string;
-}
-
-/** Session-state key set when account rotation advances the model route. */
-export const MODEL_FALLBACK_STATE_KEY = 'mastracodePendingModelFallback' as const;
-
-/** Payload written to session state under MODEL_FALLBACK_STATE_KEY. */
-export interface PendingModelFallback {
-  fromEntryId: string;
-  toEntryId: string;
-  toModelId: string;
-  threadId?: string;
-  reason: 'pool-exhausted' | 'persistent-outage';
-  at: string;
-}
 
 export type RotationClassification =
   | { kind: 'rotate'; reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed' }
@@ -300,70 +274,6 @@ function getForcedRefreshInstances(state: Record<string, unknown>): Set<string> 
   return created;
 }
 
-/** Friendly names for the part/notice copy (display only — never auth data). */
-export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  anthropic: 'Anthropic',
-  'kimi-for-coding': 'Kimi',
-  'openai-codex': 'Codex',
-  'github-copilot': 'GitHub Copilot',
-  xai: 'xAI',
-};
-
-const REASON_TEXT: Record<AccountSwitchPartData['reason'], string> = {
-  'rate-limit': 'rate limit',
-  'quota-exhausted': 'quota exhausted',
-  'auth-failed': 'auth failed',
-  'pool-exhausted': 'pool exhausted',
-  'persistent-outage': 'persistent outage',
-  'preferred-routing': 'subscription routing',
-};
-
-/** Validates untrusted `reason` values (e.g. persisted message parts). */
-export function isAccountSwitchReason(value: unknown): value is AccountSwitchPartData['reason'] {
-  // Own-property check: `in` would accept prototype names like 'toString',
-  // which would then interpolate the inherited function into the notice text.
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(REASON_TEXT, value);
-}
-
-/**
- * One-line transcript copy for a switch part. Shared by the live `info`
- * controller event (the TUI shows controller `info` events as transcript
- * lines, and no message event carries data parts mid-run) and by the TUI's
- * history rendering of the persisted part — one formatter, identical text.
- */
-export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
-  const provider = PROVIDER_DISPLAY_NAMES[data.provider] ?? data.provider;
-  const reason = REASON_TEXT[data.reason];
-  if (data.to === null) {
-    // A12: a targeted route reports *its* account, not the pool — the other
-    // subscriptions were never tried, so "all accounts unavailable" would be
-    // wrong and would read as if the pool had been walked.
-    if (data.exclusive) {
-      return `Pinned ${provider} account unavailable (${reason})`;
-    }
-    return `All ${provider} accounts unavailable (${reason})`;
-  }
-  const from = data.from?.label ?? 'unknown';
-  return `Switched ${provider} account: ${from} → ${data.to.label} (${reason})`;
-}
-
-/** Transcript line for a model-route hop; shared by the live info event and the TUI's history render. */
-export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
-  const reason = REASON_TEXT[data.reason] ?? data.reason;
-  return `Switched model route: ${data.from.label} → ${data.to.label} (${reason})`;
-}
-
-/**
- * Whether a persisted model-fallback reason is one this build understands.
- * `REASON_TEXT` also covers the account-switch reasons, so the notice text
- * alone would happily render a foreign value such as `rate-limit` as a
- * model-fallback reason; history parsed from another build's part must be
- * rejected instead.
- */
-export function isModelFallbackReason(value: unknown): value is ModelFallbackPartData['reason'] {
-  return value === 'pool-exhausted' || value === 'persistent-outage';
-}
-
 async function emitAccountSwitchPart(
   args: Pick<ProcessAPIErrorArgs, 'writer' | 'requestContext'> | Pick<ProcessInputArgs, 'writer' | 'requestContext'>,
   data: AccountSwitchPartData,
@@ -487,20 +397,6 @@ function resolveAccountRoute(
   };
 }
 
-/**
- * A14: `Automatic` rotation starts *at* the persisted active account and walks
- * insertion order from there, wrapping once. The active account is the cursor
- * rotation last left at, so a turn that starts at index 0 regardless would
- * re-activate and re-try an account the previous turn already moved past —
- * which is the whole job the removed sticky-exclusion set was doing badly.
- * With no persisted active account the order is plain insertion order.
- */
-function orderAccountsFromActive(accounts: OAuthAccountRecord[], activeId: string | undefined) {
-  const index = activeId === undefined ? -1 : accounts.findIndex(account => account.id === activeId);
-  if (index <= 0) return accounts;
-  return [...accounts.slice(index), ...accounts.slice(0, index)];
-}
-
 async function applyPreferredAccountRoute(
   args: RoutingProcessorArgs,
   store: CredentialStore,
@@ -514,7 +410,7 @@ async function applyPreferredAccountRoute(
   const unavailable = new Set(accounts.filter(account => tried.has(account.id)).map(account => account.id));
   const active = getRequestActiveAccount(args, store, route.providerId) ?? store.getActiveAccount?.(route.providerId);
   const selected = // A12: a targeted route may use only the account it names. `Automatic`
-    // keeps insertion order with full pool rotation (A10), starting from the
+    // keeps switch order (priority, then insertion) with full pool rotation (A10), starting from the
     // account the cursor already points at (A14).
     (
       preferredId
