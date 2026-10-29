@@ -1,4 +1,10 @@
 import {
+  inspectKnowledgePagesSchema,
+  KNOWLEDGE_PAGES_SCHEMA_VERSION,
+  KNOWLEDGE_RESETTABLE_TABLE_NAMES,
+  TABLE_KNOWLEDGE_PAGES_STATE,
+} from '@internal/core/knowledge-compat';
+import {
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
@@ -22,13 +28,6 @@ import {
   TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
-import { KNOWLEDGE_PAGE_DDL, MySQLKnowledgePages } from './pages';
-import {
-  inspectKnowledgePagesSchema,
-  KNOWLEDGE_PAGES_SCHEMA_VERSION,
-  KNOWLEDGE_RESETTABLE_TABLE_NAMES,
-  TABLE_KNOWLEDGE_PAGES_STATE,
-} from '@internal/core/knowledge-compat';
 import type {
   AppendKnowledgeInput,
   KnowledgePageStore,
@@ -52,9 +51,10 @@ import type {
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
-
 import { generateTableSQL } from '../operations';
+
 import type { StoreOperationsMySQL } from '../operations';
+import { KNOWLEDGE_PAGE_DDL, MySQLKnowledgePages } from './pages';
 
 // #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
 // installed core fails feature-detection instead of breaking module load.
