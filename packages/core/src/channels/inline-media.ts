@@ -57,6 +57,49 @@ export function matchesDomain(url: string, pattern: string): boolean {
   }
 }
 
+/**
+ * Byte cap for text-like attachments delivered as text parts. Larger files are
+ * cut at this many bytes and a truncation note is appended. @internal
+ */
+export const MAX_INLINE_TEXT_BYTES = 100_000;
+
+const TEXT_LIKE_APPLICATION_TYPES = new Set([
+  'application/json',
+  'application/ld+json',
+  'application/xml',
+  'application/yaml',
+  'application/x-yaml',
+  'application/toml',
+  'application/javascript',
+  'application/typescript',
+  'application/x-ndjson',
+  'application/sql',
+]);
+
+/**
+ * Whether an attachment of this mime type can be shown to the agent as text
+ * when it is not an `inlineMedia` type. Parameters (`; charset=...`) are ignored. @internal
+ */
+export function isTextLikeMimeType(mimeType: string): boolean {
+  const base = mimeType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (base.startsWith('text/')) return true;
+  if (TEXT_LIKE_APPLICATION_TYPES.has(base)) return true;
+  return base.startsWith('application/') && (base.endsWith('+json') || base.endsWith('+xml'));
+}
+
+/**
+ * Decode fetched attachment bytes as UTF-8 text, capped at `MAX_INLINE_TEXT_BYTES`.
+ * Returns `undefined` when the bytes look binary (contain NUL). @internal
+ */
+export function decodeTextAttachment(bytes: Uint8Array): string | undefined {
+  const truncated = bytes.byteLength > MAX_INLINE_TEXT_BYTES;
+  const slice = truncated ? bytes.subarray(0, MAX_INLINE_TEXT_BYTES) : bytes;
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(slice);
+  if (text.includes('\u0000')) return undefined;
+  if (!truncated) return text;
+  return `${text}\n[… truncated, ${bytes.byteLength - MAX_INLINE_TEXT_BYTES} more bytes]`;
+}
+
 /** Find the first matching inline-link rule for a URL. */
 export function findInlineLinkRule(url: string, rules: InlineLinkRule[]): InlineLinkRule | undefined {
   return rules.find(rule => matchesDomain(url, rule.match));

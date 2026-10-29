@@ -708,7 +708,7 @@ The `ResolveThreadIdContext` passed to the function:
 
 ## Inline media
 
-Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
+Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are never sent as file parts, so models that reject unsupported types don't crash. They are still delivered to the agent: text-like files (`text/*`, JSON, YAML, XML, and similar) arrive as text (capped at 100 KB), and binary files are described by name and type.
 
 The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 
@@ -721,7 +721,7 @@ Supported glob patterns:
 | `*` or `*/*` | All types |
 | `application/pdf` | Exact type match |
 
-For platforms with private CDNs (e.g. Slack), attachments are fetched with authenticated credentials from the Chat SDK. For platforms with public CDNs (e.g. Discord), the URL is passed directly to the model.
+For platforms with private CDNs (e.g. Slack), attachments are always fetched with authenticated credentials from the Chat SDK, whether or not their type is in `inlineMedia`. For platforms with public CDNs (e.g. Discord), inline types are passed to the model by URL and other types are described with their URL.
 
 ## Inline links
 

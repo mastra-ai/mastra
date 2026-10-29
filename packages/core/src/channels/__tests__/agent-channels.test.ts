@@ -18,7 +18,7 @@ import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
-import { matchesDomain, extractUrls } from '../inline-media';
+import { matchesDomain, extractUrls, isTextLikeMimeType, MAX_INLINE_TEXT_BYTES } from '../inline-media';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -3297,6 +3297,28 @@ describe('matchesDomain', () => {
   });
 });
 
+describe('isTextLikeMimeType', () => {
+  it('accepts text/* and ignores charset parameters', () => {
+    expect(isTextLikeMimeType('text/plain')).toBe(true);
+    expect(isTextLikeMimeType('text/csv; charset=utf-8')).toBe(true);
+    expect(isTextLikeMimeType('text/markdown')).toBe(true);
+  });
+
+  it('accepts structured application types', () => {
+    expect(isTextLikeMimeType('application/json')).toBe(true);
+    expect(isTextLikeMimeType('application/yaml')).toBe(true);
+    expect(isTextLikeMimeType('application/vnd.api+json')).toBe(true);
+    expect(isTextLikeMimeType('application/atom+xml')).toBe(true);
+  });
+
+  it('rejects binary types', () => {
+    expect(isTextLikeMimeType('application/zip')).toBe(false);
+    expect(isTextLikeMimeType('application/pdf')).toBe(false);
+    expect(isTextLikeMimeType('image/png')).toBe(false);
+    expect(isTextLikeMimeType('application/octet-stream')).toBe(false);
+  });
+});
+
 describe('extractUrls', () => {
   it('extracts http and https URLs', () => {
     const text = 'Check out https://example.com and http://other.org/page';
@@ -3727,6 +3749,97 @@ describe('thread history', () => {
       { type: 'text', text: '[Attached file: bundle.zip (application/zip) — https://files.example/bundle.zip]' },
     ]);
     expect(withGone.contents).toEqual(expect.stringContaining('[Attachment unavailable: gone.jpg'));
+  });
+
+  // Slack-style adapters supply an authenticated `fetchData` for every file and a
+  // private `url` that returns a login page without a token. Non-inline types must
+  // still be fetched rather than falling back to that dead URL (#28854).
+  it('fetches non-inline text attachments through fetchData and delivers them as text', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const txt = {
+      type: 'file',
+      mimeType: 'text/plain',
+      name: 'notes.txt',
+      url: 'https://files.slack.com/files-pri/T1-F1/notes.txt',
+      fetchData: vi.fn().mockResolvedValue(Buffer.from('hello from slack')),
+    };
+    const json = {
+      type: 'file',
+      mimeType: 'application/json',
+      name: 'config.json',
+      url: 'https://files.slack.com/files-pri/T1-F2/config.json',
+      fetchData: vi.fn().mockResolvedValue(new TextEncoder().encode('{"a":1}')),
+    };
+    await t.run(
+      makeChatThread([historyMessage(0, { attachments: [txt] }), historyMessage(1, { attachments: [json] })]),
+    );
+    const [withTxt, withJson] = t.signals();
+
+    expect(txt.fetchData).toHaveBeenCalledTimes(1);
+    expect(withTxt.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      { type: 'text', text: '[Attached file: notes.txt (text/plain)]\nhello from slack' },
+    ]);
+    expect(JSON.stringify(withTxt.contents)).not.toContain('files.slack.com');
+
+    expect(json.fetchData).toHaveBeenCalledTimes(1);
+    expect(withJson.contents).toEqual([
+      { type: 'text', text: 'message 1' },
+      { type: 'text', text: '[Attached file: config.json (application/json)]\n{"a":1}' },
+    ]);
+  });
+
+  it('describes non-inline binary attachments with fetchData without exposing the private URL', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const zip = {
+      type: 'file',
+      mimeType: 'application/zip',
+      name: 'bundle.zip',
+      url: 'https://files.slack.com/files-pri/T1-F3/bundle.zip',
+      fetchData: vi.fn().mockResolvedValue(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
+    };
+    await t.run(makeChatThread([historyMessage(0, { attachments: [zip] })]));
+    const [withZip] = t.signals();
+
+    expect(zip.fetchData).toHaveBeenCalledTimes(1);
+    expect(withZip.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      { type: 'text', text: '[Attached file: bundle.zip (application/zip) — binary attachment, contents not shown]' },
+    ]);
+    expect(JSON.stringify(withZip.contents)).not.toContain('files.slack.com');
+  });
+
+  it('truncates oversized text attachments and reports fetch failures for non-inline types', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const bigBytes = MAX_INLINE_TEXT_BYTES + 500;
+    const big = {
+      type: 'file',
+      mimeType: 'text/csv',
+      name: 'big.csv',
+      url: 'https://files.slack.com/files-pri/T1-F4/big.csv',
+      fetchData: vi.fn().mockResolvedValue(new Uint8Array(bigBytes).fill(0x61)),
+    };
+    const gone = {
+      type: 'file',
+      mimeType: 'text/plain',
+      name: 'gone.txt',
+      url: 'https://files.slack.com/files-pri/T1-F5/gone.txt',
+      fetchData: vi.fn().mockRejectedValue(new Error('404')),
+    };
+    await t.run(
+      makeChatThread([historyMessage(0, { attachments: [big] }), historyMessage(1, { attachments: [gone] })]),
+    );
+    const [withBig, withGone] = t.signals();
+
+    const bigPart = (withBig.contents as Array<{ type: string; text?: string }>)[1]!;
+    expect(bigPart.text).toMatch(/^\[Attached file: big\.csv \(text\/csv\)\]\na+\n\[… truncated, 500 more bytes\]$/);
+    expect(bigPart.text!.length).toBeLessThan(MAX_INLINE_TEXT_BYTES + 200);
+
+    expect(withGone.contents).toEqual([
+      { type: 'text', text: 'message 1' },
+      { type: 'text', text: expect.stringContaining('[Attachment unavailable: gone.txt (text/plain)') },
+    ]);
+    expect(JSON.stringify(withGone.contents)).not.toContain('files.slack.com');
   });
 
   it('skips the history walk for subscribed threads, DMs and maxMessages: 0', async () => {

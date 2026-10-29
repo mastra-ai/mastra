@@ -343,7 +343,7 @@ With this configuration:
 - A user pastes a YouTube link and the agent watches and discusses the video.
 - A user pastes an imgur link and the agent sees the image directly.
 
-By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupported types are described as text summaries so the agent knows about the file without failing on models that reject them. See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced MIME types.
+By default, only images and PDFs are sent inline (`inlineMedia: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`). Other types are never sent as file parts, so models that reject them don't fail; text-like files (`.txt`, CSV, JSON, YAML, …) are delivered to the agent as text and binary files are described by name and type. See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced MIME types.
 
 ## Serverless deployment
 

@@ -31,9 +31,11 @@ import { ChannelSessionRejectedError } from './errors';
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
   buildInlineMediaCheck,
+  decodeTextAttachment,
   extractUrls,
   findInlineLinkRule,
   headContentType,
+  isTextLikeMimeType,
   normalizeInlineLinks,
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
@@ -1684,9 +1686,12 @@ export class AgentChannels {
   /**
    * Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
    * Inline types are sent as file parts (the LLM adapter converts image/* to
-   * image content automatically). Non-inline types are described as text
-   * metadata so the agent is aware of them without crashing models that
-   * reject unsupported media (e.g. OpenAI rejects video/mp4).
+   * image content automatically). Other types are never sent as file parts,
+   * since models reject unsupported media (e.g. OpenAI rejects video/mp4) —
+   * but when the adapter supplies an authenticated `fetchData` the bytes are
+   * still downloaded: text-like files (text/*, JSON, YAML, …) are delivered as
+   * text, and binary files are described without their URL. The raw URL is
+   * only surfaced when there is no `fetchData`, i.e. the URL is public.
    */
   private async attachmentsToParts(attachments: Attachment[]): Promise<Exclude<AgentSignalContents, string>> {
     const parts: Exclude<AgentSignalContents, string> = [];
@@ -1697,45 +1702,62 @@ export class AgentChannels {
 
       const inline = this.shouldInline(mimeType);
       const filename = att.name || att.url?.split('/').pop() || 'file';
-      if (inline) {
-        let data: string | undefined;
-        let fetchFailed = false;
-        if (att.fetchData) {
-          // Prefer authenticated fetch (e.g. Slack CDN requires auth)
-          try {
-            const buf = await att.fetchData();
-            const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
-            const base64 = Buffer.from(bytes).toString('base64');
-            data = `data:${mimeType};base64,${base64}`;
-          } catch (err) {
-            this.log('warn', 'Attachment fetchData failed', { mimeType, error: err });
-            fetchFailed = true;
-          }
-        } else {
-          // Public URL (e.g. Discord CDN) — let the provider fetch directly
-          data = att.url;
+      const describe = `[Attached file: ${filename} (${mimeType})`;
+
+      if (att.fetchData) {
+        // Prefer authenticated fetch (e.g. Slack CDN requires auth)
+        let bytes: Uint8Array;
+        try {
+          const buf = await att.fetchData();
+          bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+        } catch (err) {
+          this.log('warn', 'Attachment fetchData failed', { mimeType, error: err });
+          parts.push({
+            type: 'text',
+            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
+          });
+          continue;
         }
-        if (data) {
+
+        if (inline) {
+          const base64 = Buffer.from(bytes).toString('base64');
           parts.push({
             type: 'text',
             text: `[Attached ${mimeType} file${att.name ? `: ${att.name}` : ''}]`,
           });
           parts.push({
             type: 'file',
-            data,
+            data: `data:${mimeType};base64,${base64}`,
             mediaType: mimeType,
             ...(att.name ? { filename: att.name } : {}),
           });
-        } else if (fetchFailed) {
-          parts.push({
-            type: 'text',
-            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
-          });
+          continue;
         }
+
+        const text = isTextLikeMimeType(mimeType) ? decodeTextAttachment(bytes) : undefined;
+        parts.push({
+          type: 'text',
+          text: text !== undefined ? `${describe}]\n${text}` : `${describe} — binary attachment, contents not shown]`,
+        });
+        continue;
+      }
+
+      if (inline) {
+        // Public URL (e.g. Discord CDN) — let the provider fetch directly
+        parts.push({
+          type: 'text',
+          text: `[Attached ${mimeType} file${att.name ? `: ${att.name}` : ''}]`,
+        });
+        parts.push({
+          type: 'file',
+          data: att.url!,
+          mediaType: mimeType,
+          ...(att.name ? { filename: att.name } : {}),
+        });
       } else {
         parts.push({
           type: 'text',
-          text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
+          text: `${describe}${att.url ? ` — ${att.url}` : ''}]`,
         });
       }
     }
