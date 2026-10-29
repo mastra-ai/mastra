@@ -37,7 +37,11 @@ describe('work board triage dispatch', () => {
     const context = executeContext('incidentio-follow-up');
     const decision = await workBoard.rules.triage?.incidentioFollowUp?.onEnter?.({
       ...context,
-      item: { ...context.item, sourceKey: 'incidentio:follow-up:01HFOLLOWUP', metadata: { identifier: 'ENG-42' } },
+      item: {
+        ...context.item,
+        sourceKey: 'incidentio:issue:incidentio:follow-up:01HFOLLOWUP',
+        metadata: { identifier: 'ENG-42' },
+      },
       source: 'incidentioFollowUp',
       stage: 'triage',
       fromStage: 'intake',

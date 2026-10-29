@@ -6,6 +6,8 @@ import type { BoardPhaseDefinition } from './define-board.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
+const INCIDENTIO_SOURCE_KEY_PREFIX = 'incidentio:issue:';
+
 function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
   const identifier = item.metadata?.identifier;
   return typeof identifier === 'string' ? identifier : undefined;
@@ -34,8 +36,12 @@ function sourceRef(item: FactoryRuleItemContext): string {
     const label = identifier
       ? `incident.io follow-up ${identifier}${link}`
       : `incident.io follow-up ${item.title}${link}`;
-    // incidentio_get_issue only resolves the prefixed source key, not the display identifier.
-    return item.sourceKey ? `${label}, reference ${item.sourceKey}` : label;
+    // The item source key is `incidentio:issue:<externalId>`; incidentio_get_issue resolves only the
+    // external id (`incidentio:follow-up:<id>`), not the display identifier.
+    const reference = item.sourceKey?.startsWith(INCIDENTIO_SOURCE_KEY_PREFIX)
+      ? item.sourceKey.slice(INCIDENTIO_SOURCE_KEY_PREFIX.length)
+      : undefined;
+    return reference ? `${label}, reference ${reference}` : label;
   }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
