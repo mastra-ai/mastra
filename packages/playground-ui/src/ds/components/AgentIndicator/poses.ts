@@ -74,8 +74,6 @@ const agent = once(() =>
   ]),
 );
 
-const idle: Pose = t => agent().map(v => v * (1 + 0.02 * Math.sin(1.2 * t)));
-
 const memory: Pose = t => {
   const c = t / 2.4;
   const turn = Math.floor(c) + sstep(0, 0.6, c - Math.floor(c));
@@ -199,10 +197,13 @@ const NUT: Inside = ([x, y]) => {
   return Math.hypot(x, y) < (7.4 * Math.cos(side / 2)) / Math.cos(a - side / 2);
 };
 
+const nut = (turn: number) => withTrail(kit(placed(NUT, (Math.PI / 3) * turn), [0, 0], { hole: inCirc(0, 0, 2.8) }));
+const restingNut = once(() => nut(0));
+
 const tool: Pose = t => {
   const c = t / 1.1;
-  const turn = Math.floor(c) + sstep(0.55, 0.85, c - Math.floor(c));
-  return withTrail(kit(placed(NUT, (Math.PI / 3) * turn), [0, 0], { hole: inCirc(0, 0, 2.8) }));
+  const turn = sstep(0.55, 0.85, c - Math.floor(c));
+  return Number.isInteger(turn) ? restingNut() : nut(turn);
 };
 
 const HOME: Point = [-7.8, -5.4];
@@ -271,10 +272,7 @@ const twoStrokes = (first: (u: number) => Point, second: (u: number) => Point, w
     [first, second].flatMap(stroke => range(32).map((i): TrailPoint => [...stroke(i / 31), i < 31 ? width : 0, 0])),
   );
 
-const waiting: Pose = t => {
-  const h = 3.1 + 0.6 * (0.5 + 0.5 * Math.sin((TAU * t) / 2.4));
-  return twoStrokes(line([-2.7, -h], [-2.7, h]), line([2.7, -h], [2.7, h]), 2.2);
-};
+const waiting = once(() => twoStrokes(line([-2.7, -3.4], [-2.7, 3.4]), line([2.7, -3.4], [2.7, 3.4]), 2.2));
 
 const CHECK: [Point, Point, Point] = [
   [-6.2, 0.4],
@@ -307,8 +305,17 @@ const grown =
   (t, s) =>
     pose(t, s).map(v => v * GROW);
 
+const RINGING_SECONDS = MORPH_SECONDS + 2;
+
+export const restsAfterSeconds: Partial<Record<AgentIndicatorState, number>> = {
+  idle: 0,
+  waiting: 0,
+  done: RINGING_SECONDS,
+  error: RINGING_SECONDS,
+};
+
 export const poses: Record<AgentIndicatorState, Pose> = {
-  idle: grown(idle),
+  idle: grown(agent),
   memory: grown(memory),
   thinking: grown(thinking),
   searching: grown(searching),

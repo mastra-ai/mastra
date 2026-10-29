@@ -21,6 +21,46 @@ const preferReducedMotion = () =>
     value: (query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' }),
   });
 
+const watchViewport = () => {
+  const watchers: [IntersectionObserverCallback, IntersectionObserver, Element[]][] = [];
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class Watcher implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = '';
+      readonly thresholds: ReadonlyArray<number> = [];
+      readonly targets: Element[] = [];
+
+      constructor(callback: IntersectionObserverCallback) {
+        watchers.push([callback, this, this.targets]);
+      }
+
+      observe = (target: Element) => {
+        this.targets.push(target);
+      };
+      unobserve = () => {};
+      disconnect = () => {};
+      takeRecords = (): IntersectionObserverEntry[] => [];
+    },
+  );
+  return (isIntersecting: boolean) => {
+    for (const [callback, observer, targets] of watchers) {
+      const entries = targets.map(
+        (target): IntersectionObserverEntry => ({
+          target,
+          isIntersecting,
+          boundingClientRect: target.getBoundingClientRect(),
+          intersectionRect: target.getBoundingClientRect(),
+          intersectionRatio: isIntersecting ? 1 : 0,
+          rootBounds: null,
+          time: performance.now(),
+        }),
+      );
+      callback(entries, observer);
+    }
+  };
+};
+
 describe('AgentIndicator', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
@@ -29,6 +69,7 @@ describe('AgentIndicator', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     Reflect.deleteProperty(window, 'matchMedia');
   });
 
@@ -68,6 +109,39 @@ describe('AgentIndicator', () => {
 
     expect(firstStroke(container)).toEqual({ x: -5.52, y: -5.52 });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('stops redrawing once its state comes to rest, and wakes for the next one', () => {
+    const { rerender } = render(<AgentIndicator state="done" />);
+    vi.advanceTimersByTime(3000);
+    expect(vi.getTimerCount()).toBe(0);
+
+    rerender(<AgentIndicator state="thinking" />);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('pauses while scrolled out of view', () => {
+    const scrollIntoView = watchViewport();
+    render(<AgentIndicator state="thinking" />);
+
+    scrollIntoView(false);
+    expect(vi.getTimerCount()).toBe(0);
+
+    scrollIntoView(true);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('writes nothing while the drawing holds still', () => {
+    const { container } = render(<AgentIndicator state="tool" />);
+    vi.advanceTimersByTime(1100);
+    const writes: MutationRecord[] = [];
+    const observer = new MutationObserver(records => writes.push(...records));
+    observer.observe(container, { attributes: true, subtree: true });
+
+    vi.advanceTimersByTime(300);
+    writes.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(writes).toHaveLength(0);
   });
 
   it('stops animating once unmounted', () => {

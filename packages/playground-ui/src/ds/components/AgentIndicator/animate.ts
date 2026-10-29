@@ -1,6 +1,6 @@
 import { painter } from './paint';
-import { MORPH_SECONDS, poses } from './poses';
-import type { AgentIndicatorState, Pose } from './poses';
+import { MORPH_SECONDS, poses, restsAfterSeconds } from './poses';
+import type { AgentIndicatorState } from './poses';
 import { clamp01, cubicBezier, lerpFrame } from './shapes';
 import type { Frame } from './shapes';
 
@@ -13,16 +13,17 @@ export function animate(svg: SVGSVGElement) {
   const paint = painter(svg);
   const still = prefersReducedMotion();
   let clock = 0;
-  let pose: Pose | undefined;
+  let state: AgentIndicatorState | undefined;
   let enteredAt = 0;
   let leaving: ((t: number) => Frame) | undefined;
   let morph = 1;
+  let onScreen = true;
   let frame = 0;
-  let last = performance.now();
+  let last = 0;
 
   const draw = () => {
-    if (!pose) return;
-    let f = pose(clock, clock - enteredAt);
+    if (!state) return;
+    let f = poses[state](clock, clock - enteredAt);
     if (leaving) {
       morph = clamp01((clock - enteredAt) / MORPH_SECONDS);
       if (morph >= 1) leaving = undefined;
@@ -31,20 +32,38 @@ export function animate(svg: SVGSVGElement) {
     paint(f);
   };
 
+  const resting = () => !leaving && state !== undefined && clock - enteredAt >= (restsAfterSeconds[state] ?? Infinity);
+
   const tick = (now: number) => {
     clock += Math.min(MAX_STEP_SECONDS, (now - last) / 1000);
     last = now;
     draw();
-    frame = requestAnimationFrame(tick);
+    frame = resting() ? 0 : requestAnimationFrame(tick);
   };
-  if (!still) frame = requestAnimationFrame(tick);
+
+  const wake = () => {
+    const running = onScreen && !still && !resting();
+    if (running && !frame) {
+      last = performance.now();
+      frame = requestAnimationFrame(tick);
+    }
+    if (!running && frame) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+  };
+
+  const viewport = new IntersectionObserver(entries => {
+    onScreen = entries.at(-1)?.isIntersecting ?? onScreen;
+    wake();
+  });
+  viewport.observe(svg);
 
   return {
-    show(state: AgentIndicatorState) {
-      const next = poses[state];
-      if (next === pose) return;
-      if (pose && !still) {
-        const outgoing = pose;
+    show(next: AgentIndicatorState) {
+      if (next === state) return;
+      if (state && !still) {
+        const outgoing = poses[state];
         const outgoingAt = enteredAt;
         const current = (t: number) => outgoing(t, t - outgoingAt);
         const interrupted = leaving;
@@ -52,12 +71,14 @@ export function animate(svg: SVGSVGElement) {
         leaving = interrupted ? t => lerpFrame(interrupted(t), current(t), blend) : current;
         morph = 0;
       }
-      pose = next;
+      state = next;
       enteredAt = clock;
       draw();
+      wake();
     },
     stop() {
       cancelAnimationFrame(frame);
+      viewport.disconnect();
     },
   };
 }

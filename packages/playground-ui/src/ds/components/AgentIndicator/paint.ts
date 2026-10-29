@@ -14,9 +14,15 @@ function outline(cx: number, cy: number, radii: number[]) {
   return `M${mid(first, points.at(-1))}${curves}Z`;
 }
 
+const attribute = (element: Element, name: string, value: string) => {
+  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+};
+
 function stroke(path: SVGPathElement, x1: number, y1: number, x2: number, y2: number, width: number) {
-  path.setAttribute('d', `M${x1.toFixed(3)} ${y1.toFixed(3)}L${(x2 + 0.001).toFixed(3)} ${y2.toFixed(3)}`);
-  path.setAttribute('stroke-width', Math.max(0, width).toFixed(3));
+  const strokeWidth = Math.max(0, width).toFixed(3);
+  attribute(path, 'stroke-width', strokeWidth);
+  if (Number(strokeWidth) === 0) return;
+  attribute(path, 'd', `M${x1.toFixed(3)} ${y1.toFixed(3)}L${(x2 + 0.001).toFixed(3)} ${y2.toFixed(3)}`);
 }
 
 export function painter(svg: SVGSVGElement) {
@@ -34,13 +40,13 @@ export function painter(svg: SVGSVGElement) {
   return (f: Frame) => {
     const at = (i: number) => f[i] ?? 0;
     const hole = f.slice(holeAt + 2, holeAt + 2 + RAYS);
-    const holePath = Math.max(...hole) > 0.05 ? outline(at(holeAt), at(holeAt + 1), hole) : '';
-    body.setAttribute('d', outline(at(0), at(1), f.slice(2, holeAt)) + holePath);
+    const holePath = hole.some(r => r > 0.05) ? outline(at(holeAt), at(holeAt + 1), hole) : '';
+    attribute(body, 'd', outline(at(0), at(1), f.slice(2, holeAt)) + holePath);
     balls.forEach((ball, i) => {
       const k = BODY + 3 * i;
-      ball.setAttribute('cx', at(k).toFixed(2));
-      ball.setAttribute('cy', at(k + 1).toFixed(2));
-      ball.setAttribute('r', Math.max(0, at(k + 2)).toFixed(2));
+      attribute(ball, 'cx', at(k).toFixed(2));
+      attribute(ball, 'cy', at(k + 1).toFixed(2));
+      attribute(ball, 'r', Math.max(0, at(k + 2)).toFixed(2));
     });
     cuts.forEach((path, i) => {
       const k = linesAt + 5 * i;

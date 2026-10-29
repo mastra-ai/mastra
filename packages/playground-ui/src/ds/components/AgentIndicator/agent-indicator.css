@@ -1,0 +1,33 @@
+/* Idle and waiting move here, not in poses.ts: a resting drawing lets the frame loop stop.
+ * The 0.52s delay is MORPH_SECONDS, so the shape being left never stretches. */
+@keyframes agent-indicator-breathe {
+  25% {
+    scale: 1.02;
+  }
+  75% {
+    scale: 0.98;
+  }
+}
+
+@keyframes agent-indicator-pulse {
+  25% {
+    scale: 1 1.088;
+  }
+  75% {
+    scale: 1 0.912;
+  }
+}
+
+.agent-indicator[data-state='idle'] {
+  animation: agent-indicator-breathe 5.236s ease-in-out 0.52s infinite;
+}
+
+.agent-indicator[data-state='waiting'] {
+  animation: agent-indicator-pulse 2.4s ease-in-out 0.52s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-indicator {
+    animation: none;
+  }
+}
