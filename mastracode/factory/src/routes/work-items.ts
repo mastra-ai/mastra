@@ -51,6 +51,7 @@ import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
+import { countWorkItems, pageWorkItems, workItemSources } from './work-item-page.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -375,16 +376,89 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
+          const context = loose(c);
+          const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
+            board: context.req.query('board'),
+            stage: context.req.query('stage'),
+            q: context.req.query('q'),
+            sort: context.req.query('sort'),
+            limit: context.req.query('limit'),
+            cursor: context.req.query('cursor'),
+          });
+          if (!query.success) {
+            const field = query.error.issues[0]?.path[0];
+            return c.json({ error: field === 'cursor' ? 'invalid_cursor' : 'invalid_work_item_query' }, 400);
+          }
           await workItems.ensureReady();
-          const items = await workItems.listShared({
+          const all = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
+          const { board, stage, q, sort, limit, cursor } = query.data;
+          const filtered = board || stage || q || limit !== undefined || cursor;
+          const page = filtered
+            ? pageWorkItems(all, { boards: board, stages: stage, q, sort, userId: resolved.userId, limit, cursor })
+            : { items: all };
+          const items = page.items;
           return c.json({
             workItems: items.map(toWireWorkItem),
             runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
             parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+            ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
           });
+        },
+      }),
+      // ── Cards per board and column, without the cards ────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemCounts.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemCounts.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json(countWorkItems(all));
+        },
+      }),
+      // ── Every card's external source, for intake de-duplication ────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSources.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSources.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({ sources: workItemSources(all) });
+        },
+      }),
+      // ── One card, for deep links to cards outside the loaded pages ───────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemGet.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.workItemGet.pathSchema.safeParse({
+            id: context.req.param('id'),
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          await workItems.ensureReady();
+          const [item] = await workItems.listByIds({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            ids: [parsedPath.data.workItemId],
+          });
+          if (!item) return c.json({ error: 'Work item not found' }, 404);
+          return c.json({ workItem: toWireWorkItem(item) });
         },
       }),
 
