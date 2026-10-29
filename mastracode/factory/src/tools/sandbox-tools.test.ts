@@ -79,10 +79,10 @@ function portUrlTool(sandbox: object | undefined, found = true, browser?: object
 }
 
 describe('factory_sandbox_port_url', () => {
-  const cookie = { name: '__mastra_preview', value: 'secret', domain: 'sbx-1.preview.test', path: '/' };
+  const cookie = { name: '__mastra_preview', value: 'secret', domain: '3000-sbx-1.preview.test', path: '/' };
   const links = {
-    url: 'https://3000.sbx-1.preview.test/',
-    signInUrl: 'https://3000.sbx-1.preview.test/__mastra/grant?g=abc',
+    url: 'https://3000-sbx-1.preview.test/',
+    signInUrl: 'https://3000-sbx-1.preview.test/__mastra/grant?g=abc',
     cookie,
   };
 
