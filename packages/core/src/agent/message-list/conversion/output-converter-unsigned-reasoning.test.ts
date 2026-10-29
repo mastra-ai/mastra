@@ -150,4 +150,27 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
       }),
     ]);
   });
+
+  it('keeps signed reasoning that carries no visible text (#1919)', () => {
+    // Anthropic can sign a thinking block whose text is empty; the signature is the
+    // only part worth replaying, and losing it here breaks prompt caching.
+    const prompt = buildList({
+      type: 'reasoning' as const,
+      reasoning: '',
+      createdAt: 1_700_000_000_000,
+      providerMetadata: { anthropic: { signature: 'sig-empty' } },
+    }).get.all.aiV5.prompt();
+
+    const signed = prompt.flatMap(m =>
+      Array.isArray(m.content)
+        ? m.content.filter(p => p.type === 'reasoning' && (p as { providerOptions?: unknown }).providerOptions)
+        : [],
+    );
+    expect(signed).toContainEqual(
+      expect.objectContaining({
+        type: 'reasoning',
+        providerOptions: expect.objectContaining({ anthropic: expect.objectContaining({ signature: 'sig-empty' }) }),
+      }),
+    );
+  });
 });
