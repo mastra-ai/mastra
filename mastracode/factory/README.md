@@ -73,7 +73,7 @@ Each project's boards live in the database. The runtime reads boards from there:
 | edited       | unchanged       | Nothing; the edit stands.                                                                                                                     |
 | edited       | changed         | The edit is kept. The catalog reports `Code definition changed since this board was edited. Reset to adopt it.` and Factory logs one warning. |
 
-Resetting a board (`POST …/boards/:boardKey/reset`) writes the current code definition and clears the edited and drift state. A board taken out of code keeps its stored row and becomes an ordinary stored board. `includeDefaultBoards: false` stops seeding Work and Review; boards already stored stay. Replicas booting together seed safely: inserts meet a unique index and overwrites compare and set the board's revision.
+Resetting a board (`POST …/boards/:boardKey/reset`) writes the current code definition and clears the edited and drift state. A board taken out of code keeps its stored row and becomes an ordinary stored board. `includeDefaultBoards: false` stops seeding Work and Review; boards already stored stay. Replicas booting together seed safely: inserts meet a unique index and overwrites compare and set the board's revision. Pass each board exactly as `defineBoard()` returned it: a copy (`{ ...board }`) loses the definition Factory seeds from and is refused at startup.
 
 **Code behaviors.** Functions cannot be stored. A board's code behaviors — `transitionPolicy`, `sourceClosed`, `tools` and `events` rules, and each phase's `onEnter`, `onExit` and `outcomes` — stay in code and attach to the stored board by board key and phase key. The stored data wins: a phase removed from a stored Work board drops its handlers, and a phase added to it runs only its stored `runner` (its `runner.skill` starts on entry). An edit that would break a behavior, such as removing the terminal phase Work's `sourceClosed` names or a phase an `outcomes` entry leads to, is refused. A board created through the API has no code behaviors.
 
@@ -86,7 +86,7 @@ Resetting a board (`POST …/boards/:boardKey/reset`) writes the current code de
 - Deleting a board seeded from your app keeps a tombstone, so the next startup does not write it back. Reset restores it.
 - A runner skill that does not exist is refused (`422 unknown_skill`). A review skill outside the `review` context is saved with a warning in `problems`. A skill that disappears later never stops a board from loading; it shows in the catalog's `problems`.
 
-**Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
+**Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project. During a rolling deploy, a replica still running older code can write its older definition of a board nobody edited; replicas on newer code write theirs back the next time they recheck that project, so such a board can switch between the two versions until the old replicas are gone.
 
 **Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations still read the code boards: they evaluate code behaviors and place new cards in a code board's initial phase, which a stored board keeps first. They keep using a board your app passes even after someone deletes it in a project; such cards show as unsupported items there. Every card move they make goes through the transition service, which checks it against the stored board, so a move into a phase someone removed is refused. Intake bindings and label routes can target only boards defined in code.
 
@@ -131,12 +131,7 @@ jq '.board | { name, description, phases: (.phases | map(if .key == "execute" th
 
 Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools can move off code: create it in each project with `POST /web/factory/projects/:id/boards`, or keep passing it until every project has it, then stop passing it; the stored board stays. Keep passing a board while integrations file cards onto it or intake bindings and label routes target it: those still need the code definition, and are refused once the board leaves code. Boards with handlers, policies or rules also keep needing their code definition for now.
 
-Removing `defineBoard()` later takes:
-
-1. Turning code behaviors into named presets a stored board references (for example `behaviors: 'factory/work'`, or a phase's `onEnter: 'factory/plan-work-item'`), registered through a behavior registry rather than board definitions.
-2. Moving integrations and reconcilers to each project's stored boards.
-3. Replacing `includeDefaultBoards` and built-in seeding with installing the built-in boards once per project, plus an action to restore them.
-4. Removing `defineBoard`, the board definition input types and `MastraFactory({ boards })` in a major release.
+What has to exist before `defineBoard()` can be removed is tracked in [mastra-ai/mastra#28920](https://github.com/mastra-ai/mastra/issues/28920).
 
 ### Board lifecycle rules
 
