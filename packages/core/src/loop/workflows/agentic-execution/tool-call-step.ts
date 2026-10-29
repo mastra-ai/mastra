@@ -615,7 +615,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             // Publish only after the approval state is persisted: a consumer that reacts
             // to this chunk (approve/decline, or abort) must find the parked tool call
-            // in memory instead of racing the flush still in flight (#1932). When the
+            // in memory instead of racing the flush still in flight. When the
             // flush failed, publishing would send that consumer after a call the store
             // never received, so the run suspends without announcing it.
             if (flushed) {
@@ -683,7 +683,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           // Publish only after the parked tool call is persisted: a consumer that reacts
           // to this chunk (abort, resume) must find the suspended invocation in memory
-          // instead of racing the flush still in flight (#1932). If the flush failed, the
+          // instead of racing the flush still in flight. If the flush failed, the
           // run still suspends but stays silent, so no consumer acts on a missing call.
           if (flushed) {
             safeEnqueue(controller, suspensionChunk);
@@ -773,7 +773,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // Flush messages before suspension to ensure they are persisted
             const flushed = await flushMessagesBeforeSuspension();
 
-            // Publish only after the approval state is persisted (#1932). A failed flush
+            // Publish only after the approval state is persisted. A failed flush
             // means the parked call never reached the store, so the run suspends quietly
             // rather than inviting an approval that cannot be resolved.
             if (flushed) {
