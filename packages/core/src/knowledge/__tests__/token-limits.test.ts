@@ -1,6 +1,7 @@
 import { estimateTokenCount } from 'tokenx';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
+import { ConsoleLogger } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
@@ -57,5 +58,37 @@ describe('Knowledge limits are counted in tokens', () => {
   it('accepts a pin budget up to 2000 tokens and refuses one over', () => {
     expect(() => new Knowledge({ scopes, pinnedContext: { maxTokens: 2_000 } })).not.toThrow();
     expect(() => new Knowledge({ scopes, pinnedContext: { maxTokens: 2_001 } })).toThrow(/at most 2000/);
+  });
+});
+
+describe('config pin overcommit', () => {
+  it('warns at startup when a scope has more config pins than the budget holds', () => {
+    const declare = (pins: string[], maxPins?: number) => {
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'overcommit' }),
+        pinnedContext: { maxPins, maxTokens: 500 },
+        scopes: {
+          ...knowledgeMemoryScopes(),
+          'policy:$orgId': {},
+          'role:$orgId:$role': { pins },
+        },
+      });
+      return knowledge;
+    };
+    const warnings: string[] = [];
+    const spy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation((message: string) => {
+      if (message.includes('config pins')) warnings.push(message);
+    });
+    try {
+      declare(['policy:$orgId#a', 'policy:$orgId#b']);
+      expect(warnings).toEqual([]);
+      declare(['policy:$orgId#a', 'policy:$orgId#b', 'policy:$orgId#c'], 2);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('"role:$orgId:$role" has 3 config pins');
+      declare(Array.from({ length: 11 }, (_, i) => `policy:$orgId#p${i}`));
+      expect(warnings).toHaveLength(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
