@@ -3,6 +3,8 @@ import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
+import { standardSchemaToJSONSchema } from '../../schema';
+import { validateToolInput } from '../../tools/validation';
 import { KnowledgeDeclarationError, knowledgeMemoryScopes, knowledgeRoleAtLeast } from '../declarations';
 import type { KnowledgeScopeDeclarations } from '../declarations';
 import { buildKnowledgePageTools } from '../page-tools';
@@ -184,6 +186,39 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     await expect(
       bea.note({ op: 'add', page: 'Billing Service', scope: ['agent:acme:alex'], text: 'Spoof.' }),
     ).rejects.toThrow(/not found/);
+  });
+
+  it('a note accepts a plain date or a date-time for when', async () => {
+    const schema = tools.knowledge_note!.inputSchema as Parameters<typeof validateToolInput>[0];
+    const modelSchema = standardSchemaToJSONSchema(schema!, { io: 'input' }) as {
+      properties: { when: Record<string, unknown> };
+    };
+    expect(modelSchema.properties.when).toEqual({ type: 'string', description: expect.stringContaining('2026-10-29') });
+    for (const when of ['2026-10-29', '2026-10-29T14:00:00Z']) {
+      const input = { op: 'add', page: 'Launch', scope: ['org:acme'], text: 'Shipped.', when };
+      expect(validateToolInput(schema, input, 'knowledge_note')).toEqual({ data: input });
+    }
+    const alex = as('alex', ['org:acme']);
+    await alex.page({ op: 'write', scope: 'org:acme', name: 'Launch' });
+    const dated = await alex.note({
+      op: 'add',
+      page: 'Launch',
+      scope: ['org:acme'],
+      text: 'Shipped.',
+      when: '2026-10-29',
+    });
+    const timed = await alex.note({
+      op: 'add',
+      page: 'Launch',
+      scope: ['org:acme'],
+      text: 'Announced.',
+      when: '2026-10-29T14:00:00Z',
+    });
+    expect(dated.note.when).toBe('2026-10-29T00:00:00.000Z');
+    expect(timed.note.when).toBe('2026-10-29T14:00:00.000Z');
+    await expect(
+      alex.note({ op: 'add', page: 'Launch', scope: ['org:acme'], text: 'Bad.', when: 'next week' }),
+    ).rejects.toThrow(/Invalid when/);
   });
 
   it('7 and 8: thread scratch is promoted by restamping and by moving across scopes the run owns', async () => {

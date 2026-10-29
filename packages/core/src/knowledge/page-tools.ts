@@ -450,7 +450,11 @@ function noteTool(host: KnowledgePageToolHost) {
         note: { type: 'string', minLength: 1, description: 'Restamp or remove: the note id.' },
         scope: { ...scopeListSchema, description: 'Add or restamp: the stamp scopes (addresses).' },
         text: { type: 'string', minLength: 1, description: 'Add: the note, about 250 tokens at most.' },
-        when: { type: 'string', format: 'date-time', description: 'Add: when it was true or observed.' },
+        when: {
+          type: 'string',
+          description:
+            'Add: when it was true or observed, as an ISO 8601 date (2026-10-29) or date-time (2026-10-29T14:00:00Z).',
+        },
       },
       required: ['op'],
       additionalProperties: false,
