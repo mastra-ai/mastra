@@ -8,5 +8,5 @@ Span queries and span aggregates now accept `model` and `provider` filters. Stor
 const { spans } = await mastraClient.querySpans({
   timeRange,
   where: { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
-})
+});
 ```

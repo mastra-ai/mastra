@@ -10,5 +10,5 @@ Trace query `spans.some` and `spans.none` filters on `model` and `provider` now 
 const { traces } = await mastraClient.queryTraces({
   timeRange,
   where: { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5.6' } } } },
-})
+});
 ```
