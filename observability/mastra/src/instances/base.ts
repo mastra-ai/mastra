@@ -223,7 +223,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         return new NoOpSpan<TType>({ ...rest, metadata }, this);
       }
       // Parent is valid (sampled), so child will also be sampled - continue to create actual span
-    } else if (!this.shouldSample(customSamplerOptions)) {
+    } else if (!(options.samplingDecision ?? this.shouldSample(customSamplerOptions))) {
       // Root span: perform sampling check
 
       return new NoOpSpan<TType>({ ...rest, metadata }, this);
@@ -237,7 +237,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = options.parent.traceState;
     } else {
       // Root span: compute new TraceState
-      traceState = this.computeTraceState(tracingOptions);
+      traceState = options.traceState ?? this.computeTraceState(tracingOptions);
     }
 
     // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root
@@ -345,6 +345,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * @returns A span that can have lifecycle methods called on it
    */
   rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType> {
+    // Durable snapshots of unsampled spans must stay unsampled when rebuilt.
+    if (cached.id === 'no-op' && cached.traceId === 'no-op-trace') {
+      return new NoOpSpan<TType>({ name: cached.name, type: cached.type, traceState: cached.traceState }, this);
+    }
     // Create span with existing IDs from cached data
     const span = this.createSpan<TType>({
       name: cached.name,

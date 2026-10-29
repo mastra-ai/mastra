@@ -2,7 +2,7 @@
 '@mastra/observability': minor
 ---
 
-Added execution outcomes and stop-reason details to span lifecycle methods and both Mastra exporters. Stop-reason context contains compact facts and references to related spans, without copying signal contents or tripwire metadata.
+Added execution outcomes and stop-reason details to span lifecycle methods and both Mastra exporters. Stop-reason context contains compact facts and span references; resumed durable agents preserve sampling and privacy settings.
 
 Custom spans can record how they ended:
 

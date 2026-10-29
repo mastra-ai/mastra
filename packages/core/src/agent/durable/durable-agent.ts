@@ -3937,7 +3937,9 @@ export class DurableAgent<
           },
           ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId },
+          tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
+          traceState: entry.agentSpan?.traceState,
+          samplingDecision: entry.agentSpan?.isValid,
           requestContext: resolvedOptions.requestContext,
           mastra: this.#mastra,
         });
@@ -4493,6 +4495,8 @@ export class DurableAgent<
             // execute-scorers unchanged: the same payload the lost FINISH carried.
             const { output: finalOutput, stepResult } = result.result;
             // map-final-output, which ends the recovered spans, did not re-run.
+            // Workflow success alone cannot distinguish an agent success from a limit/block.
+            // Keep unknown until the authoritative termination is recovered (OBS-754).
             recoverModelSpan?.end();
             recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
             await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });

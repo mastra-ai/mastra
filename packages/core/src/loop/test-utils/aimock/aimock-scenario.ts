@@ -682,6 +682,7 @@ export async function runApprovalScenario({
   requireToolApproval = true,
   engine,
   observability,
+  tracingOptions,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
@@ -697,6 +698,7 @@ export async function runApprovalScenario({
   const outputOf = (run: RunHandle) => (run.output ?? run) as MastraModelOutput<unknown>;
 
   let run = (await agent.stream(prompt, {
+    tracingOptions,
     ...(requireToolApproval !== false ? { requireToolApproval } : {}),
     ...(stopWhen ? { stopWhen } : {}),
     // Durable needs maxSteps as a fallback when stopWhen is the only bound.

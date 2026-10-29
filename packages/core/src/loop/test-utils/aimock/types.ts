@@ -2,7 +2,7 @@ import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
-import type { ObservabilityEntrypoint } from '../../../observability';
+import type { ObservabilityEntrypoint, TracingOptions } from '../../../observability';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
@@ -468,6 +468,7 @@ export interface RunApprovalScenarioOptions extends Pick<
   | 'engine'
   | 'observability'
 > {
+  tracingOptions?: TracingOptions;
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based

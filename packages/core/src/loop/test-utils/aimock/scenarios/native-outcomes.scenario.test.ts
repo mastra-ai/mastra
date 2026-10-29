@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { SCENARIO_MODEL_ID } from '../types';
-import { SpanType, TracingEventType } from '../../../../observability';
+import { SamplingStrategyType, SpanType, TracingEventType } from '../../../../observability';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runApprovalScenario, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { captureOutcomeEvents as capture } from '../outcome-test-utils';
@@ -385,6 +385,77 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       expect(inference).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
     }
   });
+
+  // Durable resume creates fresh spans from an earlier execution's tracing state.
+  if (engine === 'durable' || engine === 'evented' || engine === 'inngest') {
+    it.each([true, false])('preserves durable resume sampling=%s and privacy after approval', async sampled => {
+      let resumed = false;
+      let resumeSamples = 0;
+      const { observability, ended } = capture({
+        type: SamplingStrategyType.CUSTOM,
+        sampler: options => {
+          // Workflow-level traces make their own sampling decisions. This assertion
+          // targets the agent's fresh resume segment, identified by its run metadata.
+          if (resumed && options?.metadata?.resumed && !Object.hasOwn(options.metadata, 'resourceId')) {
+            resumeSamples++;
+            throw new Error('The existing agent trace must not be sampled again');
+          }
+          return sampled;
+        },
+      });
+      const { output } = await runApprovalScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        tracingOptions: { hideInput: true, hideOutput: true },
+        prompt: 'private order question',
+        decision: () => {
+          resumed = true;
+          return true;
+        },
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up an order',
+            inputSchema: z.object({}),
+            execute: async () => ({ shipped: true }),
+          }),
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'private shipment details' });
+        },
+      });
+      expect(await output.text).toBe('private shipment details');
+      expect(resumeSamples).toBe(0);
+      if (sampled) {
+        await expect.poll(() => ended().length).toBe(2);
+        for (const type of [
+          SpanType.AGENT_RUN,
+          SpanType.MODEL_GENERATION,
+          SpanType.MODEL_INFERENCE,
+          SpanType.TOOL_CALL,
+        ]) {
+          for (const span of ended(type)) {
+            expect(span.input).toBeUndefined();
+            expect(span.output).toBeUndefined();
+          }
+        }
+        const generations = ended(SpanType.MODEL_GENERATION);
+        expect(generations).toHaveLength(2);
+        expect(generations[1]?.attributes).toMatchObject({
+          model: generations[0]!.attributes!.model,
+          provider: generations[0]!.attributes!.provider,
+          streaming: true,
+        });
+      } else {
+        expect(ended()).toEqual([]);
+      }
+    });
+  }
 
   it('preserves suspension when approval creates a new successful execution', async () => {
     const { observability, ended } = capture();

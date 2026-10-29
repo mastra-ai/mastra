@@ -1985,6 +1985,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
  * Options for starting new spans
  */
 export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOptions<TType> {
+  /** @internal Reuse the sampling decision when starting a resumed execution in an existing trace. */
+  samplingDecision?: boolean;
   /**
    * Options passed when using a custom sampler strategy
    */
@@ -2062,6 +2064,9 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */
 export interface GetOrCreateSpanOptions<TType extends SpanType> extends SpanOutcomeFields {
+  /** @internal Original trace state and sampling decision for a resumed execution. */
+  traceState?: TraceState;
+  samplingDecision?: boolean;
   type: TType;
   name: string;
   entityType?: EntityType;

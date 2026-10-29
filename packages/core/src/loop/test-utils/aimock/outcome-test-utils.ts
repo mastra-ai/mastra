@@ -1,13 +1,15 @@
 import { Observability } from '../../../../../../observability/mastra/src/default';
+import type { SamplingStrategy } from '../../../../../../observability/mastra/src/config';
 import type { TracingEvent } from '../../../observability';
 import { SpanType, TracingEventType } from '../../../observability';
 
-export function captureOutcomeEvents() {
+export function captureOutcomeEvents(sampling?: SamplingStrategy) {
   const events: TracingEvent[] = [];
   const observability = new Observability({
     configs: {
       default: {
         serviceName: 'outcomes',
+        sampling,
         exporters: [
           {
             name: 'capture',

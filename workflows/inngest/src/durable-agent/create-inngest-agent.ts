@@ -75,6 +75,7 @@ import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
+import type { Span, AIModelGenerationSpan } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
 import type {
@@ -1680,32 +1681,60 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const originalAgentSpan =
         existingEntry.resumeAgentSpan ?? existingEntry.agentSpan ?? suspendedSnapshot?.context?.input?.agentSpanData;
       if (originalAgentSpan?.traceId && mastra) {
-        const resumeAgentSpan = getOrCreateSpan({
-          type: SpanType.AGENT_RUN,
-          outcome: null,
-          name: `agent run: '${agentId}' (resumed)`,
-          entityType: EntityType.AGENT,
-          entityId: agentId,
-          entityName: agentName,
-          metadata: { runId, resumed: true, resumedFromSpanId: originalAgentSpan.id },
-          resumedFromSpanId: originalAgentSpan.id,
-          tracingPolicy: agent.getTracingPolicy(),
-          tracingOptions: { traceId: originalAgentSpan.traceId },
-          requestContext: callbackOptions.requestContext,
-          mastra,
-        });
-        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
-          type: SpanType.MODEL_GENERATION,
-          outcome: null,
-          name: 'llm (resumed)',
-          metadata: { runId, resumed: true },
-          requestContext: callbackOptions.requestContext,
-        });
-        existingEntry.resumeAgentSpan = resumeAgentSpan;
-        existingEntry.resumeModelSpan = resumeModelSpan;
-        existingEntry.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
-        existingEntry.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
-        existingEntry.resumeCompletionStartTime = undefined;
+        let resumeAgentSpan: Span<SpanType.AGENT_RUN> | undefined;
+        let resumeModelSpan: AIModelGenerationSpan | undefined;
+        try {
+          const originalModelSpan =
+            existingEntry.resumeModelSpan ??
+            existingEntry.modelSpan ??
+            suspendedSnapshot?.context?.input?.modelSpanData;
+          const traceState = originalAgentSpan.traceState;
+          resumeAgentSpan = getOrCreateSpan({
+            type: SpanType.AGENT_RUN,
+            outcome: null,
+            name: `agent run: '${agentId}' (resumed)`,
+            entityType: EntityType.AGENT,
+            entityId: agentId,
+            entityName: agentName,
+            metadata: { runId, resumed: true, resumedFromSpanId: originalAgentSpan.id },
+            resumedFromSpanId: originalAgentSpan.id,
+            tracingPolicy: agent.getTracingPolicy(),
+            tracingOptions: { traceId: originalAgentSpan.traceId, ...traceState },
+            traceState,
+            // Snapshots of real spans retain a hexadecimal ID; NoOpSpan uses "no-op".
+            samplingDecision: originalAgentSpan.isValid ?? /^[a-f0-9]{1,16}$/i.test(originalAgentSpan.id),
+            requestContext: callbackOptions.requestContext,
+            mastra,
+          });
+          resumeModelSpan = resumeAgentSpan?.createChildSpan({
+            type: SpanType.MODEL_GENERATION,
+            outcome: null,
+            name: 'llm (resumed)',
+            attributes: {
+              model: originalModelSpan?.attributes?.model ?? existingEntry.model?.modelId,
+              provider: originalModelSpan?.attributes?.provider ?? existingEntry.model?.provider,
+              streaming: originalModelSpan?.attributes?.streaming ?? true,
+            },
+            metadata: { runId, resumed: true },
+            requestContext: callbackOptions.requestContext,
+          });
+          const agentData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
+          const modelData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
+          existingEntry.resumeAgentSpan = resumeAgentSpan;
+          existingEntry.resumeModelSpan = resumeModelSpan;
+          existingEntry.resumeAgentSpanData = agentData;
+          existingEntry.resumeModelSpanData = modelData;
+          existingEntry.resumeCompletionStartTime = undefined;
+        } catch {
+          // Optional tracing must not prevent dispatch or leave partially created spans open.
+          for (const span of [resumeModelSpan, resumeAgentSpan]) {
+            try {
+              span?.end({ outcome: 'unknown', endTree: true });
+            } catch {
+              /* Keep resume independent of custom tracing failures. */
+            }
+          }
+        }
       }
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
