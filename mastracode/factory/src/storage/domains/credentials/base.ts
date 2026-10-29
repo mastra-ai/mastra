@@ -21,8 +21,9 @@
  * deprecated: it is only read at boot to copy its rows into one-account pools.
  *
  * Secrets posture: credentials are stored server-side only and never returned
- * to the client (same as `linear_connections.access_token`). Encryption at
- * rest is out of scope, matching the existing posture.
+ * to the client (same as `linear_connections.access_token`). When
+ * `secretEncryption` is configured, `init()` encrypts both the account rows
+ * and the deprecated rows at rest.
  *
  * The domain also owns `oauth_login_sessions`: pending web login flows
  * (paste-code PKCE verifiers, device-code poll state) persisted server-side so
@@ -753,6 +754,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     const updated = await this.#db.updateMany('model_provider_accounts', accountWhere(tenant, accountId), {
       status,
       cooldown_until: status === 'cooldown' && until !== undefined ? new Date(until) : null,
+      updated_at: new Date(),
     });
     return updated > 0;
   }

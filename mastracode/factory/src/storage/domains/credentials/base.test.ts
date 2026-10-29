@@ -657,6 +657,8 @@ describe('ModelCredentialsStorage legacy migration', () => {
       const { backend, store } = await bootFile(url);
       const [personal] = await store.listAccounts({ orgId: 'org1', userId: 'alice' });
       expect(await store.removeAccount({ orgId: 'org1', userId: 'alice' }, personal!.id)).toBe(true);
+      // The deprecated source row goes too, so resetting `migrated_at` could not bring it back.
+      expect(await backend.ops.findMany('model_provider_credentials', { user_id: 'alice' })).toEqual([]);
       // An older replica (still on the single-row table) rotates the org OAuth token after the copy.
       await backend.ops.updateMany(
         'model_provider_credentials',
