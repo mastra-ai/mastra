@@ -581,10 +581,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * The resume context of the run's current span, so a suspend's persisted snapshot can
-   * stitch the resumed AGENT_RUN/WORKFLOW_RUN span back to the original trace. Mirrors
-   * `default.ts`'s `persistTracingContext`; the evented engine holds the live span on
-   * Mastra (since it can't ride pubsub events), so we resolve it via runId here.
+   * The evented engine holds the live span on Mastra (since it can't ride pubsub
+   * events), so we resolve it via runId here.
    */
   private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
     return getResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);

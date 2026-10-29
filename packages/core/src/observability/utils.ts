@@ -142,31 +142,22 @@ const NO_OP_TRACE_ID = 'no-op-trace';
 export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefined): ResumeTracingContext | undefined {
   if (!span) return undefined;
   const live = 'exportSpan' in span;
-  // The values exporters see, with the instance's own internal-span setting.
-  // An unsampled span exports nothing, so it anchors nothing.
-  const exported = live
-    ? span.isValid
-      ? span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans)
-      : undefined
-    : span;
+  const exported = live ? exportedAsConfigured(span) : span;
   return {
     traceId: span.traceId,
     spanId: live ? resolveExportedSpanId(span) : span.id,
     parentSpanId: exported?.parentSpanId,
-    // The span's own id, never an exported ancestor's: an internal run is not its outer run's origin.
     resumedFromSpanId: exported && (exported.resumedFromSpanId ?? exported.id),
     externalParentSpanId: exported?.externalParentSpanId,
   };
 }
 
-/**
- * A resume continues the saved run only in the saved trace, so `resumedFromSpanId`
- * always names a span in the resumed span's own trace. A resume into another trace
- * starts a new run. The caller's `tracingOptions.parentSpanId` is an external parent,
- * so on its own it keeps the resume in the saved trace.
- */
-function continuedRun(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {
-  // An unsampled run saves the no-op span's placeholder trace, which no exported span belongs to.
+function exportedAsConfigured(span: AnySpan) {
+  if (!span.isValid) return undefined;
+  return span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans);
+}
+
+function resumeInSavedTrace(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {
   if (!saved?.traceId || saved.traceId === NO_OP_TRACE_ID) return undefined;
   if ((targetTraceId ?? saved.traceId) !== saved.traceId) return undefined;
   return {
@@ -196,9 +187,9 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     ...(rest.metadata ?? {}),
     ...Object.fromEntries(Object.entries(tracingOptions?.metadata ?? {}).filter(([, value]) => value !== undefined)),
   };
-  const resumed = continuedRun(resumeFrom, tracingContext?.currentSpan?.traceId ?? tracingOptions?.traceId);
+  const resumed = resumeInSavedTrace(resumeFrom, tracingContext?.currentSpan?.traceId ?? tracingOptions?.traceId);
 
-  // If we have a current span, create a child span. It never takes an external parent.
+  // If we have a current span, create a child span
   if (tracingContext?.currentSpan) {
     return tracingContext.currentSpan.createChildSpan({
       type,

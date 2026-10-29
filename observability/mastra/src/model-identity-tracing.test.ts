@@ -85,7 +85,6 @@ const askWeather = { toolName: 'get_weather', input: { city: 'Paris' } };
 
 const exporters: TestExporter[] = [];
 
-// Every span of every run, chunk, tool and workflow spans included, exports its own pair natively or neither field.
 afterEach(() => {
   for (const span of exporters.splice(0).flatMap(exporter => exporter.getAllSpans())) identity(span);
 });
@@ -133,7 +132,6 @@ async function settle(exporter: TestExporter, maxMs = 2000) {
 const byStart = <T extends AnyExportedSpan>(spans: T[]) =>
   [...spans].sort((a, b) => +new Date(a.startTime) - +new Date(b.startTime));
 const spansOf = (exporter: TestExporter, type: SpanType) => byStart(exporter.getSpansByType(type) as AnyExportedSpan[]);
-/** The span's attribute pair, after checking it exported the same pair natively, or neither field without one. */
 const identity = (span: AnyExportedSpan | undefined) => {
   const attributes = span?.attributes as { model?: string; provider?: string } | undefined;
   const pair = { model: attributes?.model, provider: attributes?.provider };

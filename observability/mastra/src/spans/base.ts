@@ -75,7 +75,6 @@ function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   return lineage;
 }
 
-/** The span's own model and provider attributes, only when both are non-empty strings */
 function modelPair(attributes: unknown): { model?: string; provider?: string } {
   const { model, provider } = (attributes ?? {}) as { model?: unknown; provider?: unknown };
   return typeof model === 'string' && model && typeof provider === 'string' && provider ? { model, provider } : {};
@@ -768,7 +767,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
     return {
-      // As exporters see it, so a rebuilt span exports the same parent and external parent.
       ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
       ...(this.traceState ? { traceState: this.traceState } : {}),

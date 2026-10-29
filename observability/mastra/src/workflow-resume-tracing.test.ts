@@ -43,7 +43,6 @@ const makeWorkflow = (engine: 'default' | 'evented' = 'default', options?: Workf
     outputSchema: z.object({ approved: z.boolean() }),
     suspendSchema: empty,
     resumeSchema: z.object({ approved: z.boolean() }),
-    // A rejected approval asks again.
     execute: async ({ resumeData, suspend }) => {
       if (!resumeData?.approved) {
         await suspend({});

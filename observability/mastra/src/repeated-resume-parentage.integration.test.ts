@@ -16,11 +16,9 @@ import { z } from 'zod';
 import { Observability } from './default';
 import { MastraStorageExporter, TestExporter } from './exporters';
 
-/** Span ids of the caller's own tracing system, passed as `tracingOptions.parentSpanId`. */
 const EXTERNAL_AT_START = 'aaaaaaaaaaaaaaaa';
 const EXTERNAL_AT_RESUME = 'bbbbbbbbbbbbbbbb';
 
-/** Two distinct tool calls (approval requests by default), then an answer on the third invocation. */
 function twoApprovalsModel(toolNames = ['confirm', 'confirm']) {
   let calls = 0;
   const next = () => {
@@ -212,7 +210,6 @@ const siblingsUnderInitial = [
 ];
 
 it('an explicit trace override saves the new agent run as the parent for subsequent resumes', async () => {
-  // The override starts a new lineage: its run is the next resume's origin, never a run in another trace.
   expect(await resumeParents('normal', { recreateAgent: true, overrideTrace: true })).toEqual({
     parents: [null, null, { parentType: SpanType.AGENT_RUN, parentInvocation: 1 }],
     resumedFrom: [null, null, 1],
@@ -360,7 +357,6 @@ it.each(['normal', 'durable'] as const)(
           expect(resumed.resumedFromSpanId).toBe(family[0]!.id);
         }
       }
-      // The outer run's external parent belongs to the outer family only.
       expect(outerRuns.map(span => span.externalParentSpanId)).toEqual(Array(3).fill(EXTERNAL_AT_START));
       expect(innerRuns.map(span => span.externalParentSpanId ?? null)).toEqual([null, null, null]);
       // The inner initial invocation belongs to the outer tool, not the trace root.
@@ -383,13 +379,11 @@ it.each(['normal', 'durable'] as const)(
   30_000,
 );
 
-/** Crash a durable run mid-tool, recover it in a fresh process, then resume its approval. */
 async function recoverThenResume({
   sampleCrashedRun,
   underInternalSpan,
 }: {
   sampleCrashedRun: boolean;
-  /** Start the run under an internal span that has the external parent, exported with this setting. */
   underInternalSpan?: { includeInternalSpans: boolean };
 }) {
   const exporter = new TestExporter();
@@ -469,7 +463,6 @@ async function recoverThenResume({
     });
     await crashReached;
     internalParent?.end();
-    // The first process stops responding mid-tool; this one knows nothing of its execution.
     started.cleanup();
     globalRunRegistry.clear();
     __resetExecutionFencesForTests();
@@ -692,7 +685,6 @@ it.each([
 
       const runs = exporter.getSpansByType(SpanType.AGENT_RUN);
       expect(runs[1]!.resumedFromSpanId).toBe(runs[0]!.id);
-      // With the internal workflow hidden, the agent run is exported under its external parent; shown, it is not.
       expect(runs.map(span => span.externalParentSpanId ?? null)).toEqual(expected);
     } finally {
       await host.shutdown();

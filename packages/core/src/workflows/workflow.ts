@@ -5306,6 +5306,7 @@ export class Run<
     });
 
     const persistedTracingContext = snapshot?.tracingContext;
+    const isAgentLoop = Boolean(this.executionEngine.options.resumeTracingContext);
 
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
@@ -5327,8 +5328,7 @@ export class Run<
       tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
-      // An agent loop saves its agent's context, not its own: the resumed agent run carries the lineage.
-      resumeFrom: this.executionEngine.options.resumeTracingContext ? undefined : persistedTracingContext,
+      resumeFrom: isAgentLoop ? undefined : persistedTracingContext,
     });
 
     this.workflowRunSpan = workflowSpan;
