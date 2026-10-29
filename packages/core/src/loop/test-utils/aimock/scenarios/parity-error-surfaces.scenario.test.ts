@@ -454,6 +454,67 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS * 3,
   );
 
+  // Step and first-chunk timeouts already store a MastraTimeoutError part on the failed turn. The next
+  // prompt renders it as an interrupted reply instead of dropping it, so the request is not left unanswered.
+  it(
+    'the next turn after a step timeout sees the stored timeout as an interrupted reply',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `step-timeout-retry-${engine}`;
+      const llm = getMock();
+      const stepError = 'Model call timed out after 300ms (modelSettings.timeout.stepMs)';
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'STEP_FIRST',
+        fixtures: mock => {
+          mock.onMessage('STEP_FIRST', { content: 'Too slow.' }, { latency: 1_800 });
+          mock.onMessage('STEP_SECOND', { content: 'Second reply.' });
+        },
+        modelSettings: { maxRetries: 0, timeout: { stepMs: 300 } },
+        collectChunks: true,
+      });
+      const errors = first.chunks!.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError', message: stepError });
+
+      await expect
+        .poll(async () => (await memory.recall({ threadId, resourceId: RESOURCE })).messages.map(m => m.role), {
+          timeout: TEST_TIMEOUT_MS,
+        })
+        .toEqual(['user', 'assistant']);
+      const [, failedTurn] = (await memory.recall({ threadId, resourceId: RESOURCE })).messages;
+      expect(failedTurn!.content.parts).toEqual([
+        expect.objectContaining({
+          type: 'error',
+          error: expect.objectContaining({ name: 'MastraTimeoutError', message: stepError }),
+        }),
+      ]);
+
+      const second = await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'STEP_SECOND',
+        fixtures: () => {},
+      });
+      expect(await second.output.text).toBe('Second reply.');
+
+      const prompt = (llm.getRequests().at(-1)!.body?.messages ?? []) as Array<{ role: string; content: unknown }>;
+      expect(prompt.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'user']);
+      expect(JSON.stringify(prompt[1]!.content)).toContain('STEP_FIRST');
+      expect(JSON.stringify(prompt[2]!.content)).toContain(`[Reply interrupted: ${stepError}]`);
+      expect(JSON.stringify(prompt[3]!.content)).toContain('STEP_SECOND');
+    },
+    TEST_TIMEOUT_MS * 3,
+  );
+
   // Durable engines save the input before the run starts, so the deadline can fire before or during
   // that save, before anything has called the model. The other engines save the input when the run finishes.
   it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest').each([
@@ -537,9 +598,11 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         },
       );
       llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+      const memory = new MockMemory();
+      const threadId = `deadline-${method}-${engine}`;
       const shared = await createSharedAgent(llm, {
         engine,
-        memory: new MockMemory(),
+        memory,
         tools: {
           hanging: createTool({
             id: 'hanging',
@@ -558,14 +621,15 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           }),
         },
       });
-      const options = { modelSettings: { timeout: { totalMs: DEADLINE_MS } }, onError };
+      const memoryOptions = { memory: { thread: threadId, resource: RESOURCE } };
+      const options = { ...memoryOptions, modelSettings: { timeout: { totalMs: DEADLINE_MS } }, onError };
       try {
         if (method === 'generate') {
           await expect(shared.agent.generate('Call the hanging tool.', options)).rejects.toMatchObject({
             name: 'MastraTimeoutError',
           });
         } else {
-          const suspended = await shared.agent.generate('Call the hanging tool.');
+          const suspended = await shared.agent.generate('Call the hanging tool.', memoryOptions);
           expect(suspended.finishReason).toBe('suspended');
           const resumeOptions = { ...options, runId: suspended.runId };
           if (method === 'resumeGenerate') {
@@ -586,6 +650,25 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         expect(toolStarted).toBe(true);
         await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
         expect(llm.getRequests()).toHaveLength(1);
+        if (method !== 'generate') {
+          // A resumed run that hits the deadline saves the notice next to the request it was resuming.
+          const recallMessages = async () => (await memory.recall({ threadId, resourceId: RESOURCE })).messages;
+          await expect
+            .poll(async () => (await recallMessages()).map(message => message.role), { timeout: TEST_TIMEOUT_MS })
+            .toEqual(['user', 'assistant', 'assistant']);
+          const [, suspendedTurn, notice] = await recallMessages();
+          expect(suspendedTurn!.content.parts.some(part => part.type === 'tool-invocation')).toBe(true);
+          expect(notice!.content.parts).toEqual([
+            {
+              type: 'error',
+              error: {
+                name: 'MastraTimeoutError',
+                message: `Agent execution timed out after ${DEADLINE_MS}ms (modelSettings.timeout.totalMs)`,
+              },
+              createdAt: expect.any(Number),
+            },
+          ]);
+        }
       } finally {
         releaseTool();
       }
