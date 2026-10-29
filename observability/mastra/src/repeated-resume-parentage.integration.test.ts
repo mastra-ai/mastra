@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import {
   __resetExecutionFencesForTests,
   createDurableAgent,
+  createEventedAgent,
   DurableAgent,
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
@@ -57,7 +58,7 @@ function twoApprovalsModel(toolNames = ['confirm', 'confirm']) {
 }
 
 async function resumeParents(
-  engine: 'normal' | 'durable',
+  engine: 'normal' | 'durable' | 'evented',
   {
     recreateAgent = false,
     overrideTrace = false,
@@ -84,8 +85,14 @@ async function resumeParents(
         }),
       },
     });
+  const wrap = (agent: Agent) =>
+    engine === 'durable'
+      ? createDurableAgent({ agent })
+      : engine === 'evented'
+        ? createEventedAgent({ agent })
+        : undefined;
   let agent = makeAgent();
-  const durable = engine === 'durable' ? createDurableAgent({ agent }) : undefined;
+  let durable = wrap(agent);
   const storage = new InMemoryStore();
   const makeHost = () =>
     new Mastra({
@@ -134,6 +141,7 @@ async function resumeParents(
     const resume = (toolCallId: string) => {
       if (recreateAgent) {
         agent = makeAgent();
+        durable = wrap(agent);
         hosts.push(makeHost());
       }
       return durable
@@ -221,16 +229,32 @@ it('normal and durable resumes are siblings under the initial agent after two su
   const expected = { parents: siblingsUnderInitial, resumedFrom: [null, 0, 0], external: [null, null, null] };
   expect(await resumeParents('normal'), 'normal resume parentage').toEqual(expected);
   expect(await resumeParents('durable'), 'durable resume parentage').toEqual(expected);
+  expect(await resumeParents('evented'), 'evented resume parentage').toEqual(expected);
   expect(
     await resumeParents('normal', { recreateAgent: true }),
     'fresh agents must recover the initial parent from storage',
   ).toEqual(expected);
 }, 30_000);
 
+it.each(['durable', 'evented'] as const)(
+  '%s resumes from a fresh Mastra stay on the initial agent trace',
+  async engine => {
+    expect(await resumeParents(engine, { recreateAgent: true })).toEqual({
+      parents: siblingsUnderInitial,
+      resumedFrom: [null, 0, 0],
+      external: [null, null, null],
+    });
+  },
+  30_000,
+);
+
 it.each([
   ['normal', false],
   ['durable', false],
+  ['evented', false],
   ['normal', true],
+  ['durable', true],
+  ['evented', true],
 ] as const)(
   '%s resumes (recreated host: %s) keep the external parent the initial run started under',
   async (engine, recreateAgent) => {

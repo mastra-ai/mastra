@@ -138,11 +138,13 @@ const NO_OP_TRACE_ID = 'no-op-trace';
 /**
  * The context a suspending run saves so that its resume continues it (see `resumeFrom`).
  * Takes the run's live span, or its exported span when another process persisted it.
+ * An unsampled run saves nothing: its no-op span has no real trace for a resume to join.
  */
 export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefined): ResumeTracingContext | undefined {
   if (!span) return undefined;
   const live = 'exportSpan' in span;
-  const exported = live ? exportedAsConfigured(span) : span;
+  if (live && !span.isValid) return undefined;
+  const exported = live ? span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans) : span;
   return {
     traceId: span.traceId,
     spanId: live ? resolveExportedSpanId(span) : span.id,
@@ -150,11 +152,6 @@ export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefi
     resumedFromSpanId: exported && (exported.resumedFromSpanId ?? exported.id),
     externalParentSpanId: exported?.externalParentSpanId,
   };
-}
-
-function exportedAsConfigured(span: AnySpan) {
-  if (!span.isValid) return undefined;
-  return span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans);
 }
 
 function resumeInSavedTrace(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {
