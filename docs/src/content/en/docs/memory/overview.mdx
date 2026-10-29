@@ -1,6 +1,6 @@
 ---
 title: "Memory"
-description: "Add memory to Mastra agents with message history, semantic recall, working memory, and observational memory across threads and multi-agent delegation."
+description: "Add memory to Mastra agents with message history, observational memory, and working memory across threads and multi-agent delegation."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -18,8 +18,7 @@ Memory gives your agent access to earlier messages and tool results. The agent c
 Mastra agents can be configured to store [message history](/docs/memory/message-history). Additionally, you can enable:
 
 - [Observational Memory](../memory/observational-memory) (Recommended): Uses background agents to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
-- [Working memory](../memory/working-memory): Stores persistent, structured user data such as names, preferences, and goals.
-- [Semantic recall](../memory/semantic-recall): Retrieves relevant past messages based on semantic meaning rather than exact keywords.
+- [Working memory](../memory/working-memory): Stores persistent, structured information about the user, the application, or the task, such as names, preferences, and goals.
 - [Multi-user threads](../memory/multi-user-threads): Share one thread between multiple users.
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
@@ -180,6 +179,8 @@ Tools, processors, and subagents receive the run's other scopes, but not its `re
 
 Long conversations can fill the context window with raw message history and reduce agent performance. [Observational Memory](../memory/observational-memory) uses background agents to compress older messages into observations. This reduces the context used by message history while retaining information for later turns.
 
+Compression loses exact wording, so the agent can also get a `recall` tool that goes back to the original messages. By default it lists and browses earlier messages, including other threads for the same resource when the scope allows. With `retrieval: { vector: true }`, it can also search them by meaning. See [retrieval mode](../memory/observational-memory#retrieval-mode).
+
 <Inject>
   **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
 </Inject>
@@ -305,3 +306,16 @@ Visit [Request Context](/docs/server/request-context) for more information.
 - [Tracing](/docs/observability/tracing/overview)
 - [Request Context](/docs/server/request-context)
 - [Mastra Code](https://code.mastra.ai/): A coding agent using Mastra's memory system
+
+<Inject>
+  **For AI agents:** Observational Memory has a few failure modes that cause real problems.
+
+  - Thread scope requires a valid, loadable `threadId`. Without one, Observational Memory throws.
+  - On an existing thread, the first turn loads every stored message until the first observation completes. A large thread pays a one-time context cost.
+  - `lastMessages` does nothing under Observational Memory. It replaces raw history itself, so the MessageHistory processor is skipped.
+  - Leave `observation.observeOnContextOverflow` at its default `true`. With it off, an overflowing Observer run fails, and the default `failurePolicy` is `abort`.
+  - Invalid option combinations throw when `Memory` is constructed, for example `shareTokenBudget: true` with async buffering enabled. Read the error instead of retrying.
+  - With async buffering, work continues in the background. Call `await memory.settled()` before closing storage or shutting down, or that work is lost.
+  - The observation mutex only works inside one process. Process each thread in a single process, or external locking is needed to avoid duplicate work.
+  - Debug with `OM_DEBUG=1`, which writes `om-debug.log`, plus `getStatus()` and the `onDebugEvent` callback.
+</Inject>
