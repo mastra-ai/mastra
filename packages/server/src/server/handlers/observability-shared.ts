@@ -46,6 +46,8 @@ const SPAN_QUERY_CONTEXT_FIELDS = new Set([
   'rootEntityId',
   'rootEntityName',
 ]);
+const OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE = 'span-query-model-fields';
+const SPAN_QUERY_MODEL_FIELDS = new Set(['model', 'provider']);
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
 const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
@@ -214,6 +216,23 @@ export function assertObservabilitySpanQueryFieldsSupported(
       },
     ]);
   }
+}
+
+/** `model` and `provider` span predicates need a store that filters on their dedicated columns. */
+export function assertObservabilitySpanQueryModelFieldsSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryScalarPredicate | undefined,
+) {
+  if (
+    !usesField(predicate, SPAN_QUERY_MODEL_FIELDS) ||
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Model and provider span predicates are not supported by the configured observability store',
+  });
 }
 
 function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
@@ -529,6 +548,7 @@ export type ObservabilityStorageCapabilities = {
   threadQueryRows: boolean;
   spanQuery: boolean;
   spanQueryContextFields: boolean;
+  spanQueryModelFields: boolean;
   spanAggregate: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
@@ -564,6 +584,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   spanQuery: false,
   spanAggregate: false,
   spanQueryContextFields: false,
+  spanQueryModelFields: false,
   feedback: false,
 };
 
@@ -661,6 +682,7 @@ export function getObservabilityStorageCapabilities(
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
+    spanQueryModelFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE),
     spanAggregate: newApiCore && supportsSpanAggregateCore() && declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };

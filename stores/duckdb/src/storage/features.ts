@@ -5,7 +5,12 @@ export const threadQueryFeatures =
 
 export const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
+      ] as const)
     : ([] as const);
 
 export const spanAggregateFeatures =

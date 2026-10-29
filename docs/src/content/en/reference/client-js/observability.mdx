@@ -101,14 +101,17 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 | `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
 | Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
 | `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
+| `model`, `provider` | Same string operators |
 | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | Comparisons, membership and presence |
 | `error` | `exists`, `notExists` |
 
 Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
 
-Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
+Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews.
 
 Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
+
+Check `capabilities.spanQueryModelFields` before filtering on `model` or `provider`. These filters read the span's stored `model` and `provider` values. Spans written before the store kept those values still return `model` and `provider` from their attributes, but filters don't match them. With an older adapter, requests using these filters return `501`.
 
 DuckDB returns `null` for parent/root entity type, ID and name on spans written before `@mastra/duckdb` stored them. Equality filters on these fields don't match those spans.
 

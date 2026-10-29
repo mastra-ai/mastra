@@ -860,7 +860,7 @@ Send the same body to `POST /api/observability/spans/aggregate` to use HTTP dire
 Aggregation selects the spans that [`querySpans()`](/reference/client-js/observability#querying-spans) would return for the same `timeRange` and `where`:
 
 - `timeRange` bounds each span's `startedAt`, and can span up to 365 days.
-- `where` accepts the `querySpans()` fields and operators, such as `spanType`, `name`, `status`, `durationMs`, entity and parent/root entity fields, and context identifiers.
+- `where` accepts the `querySpans()` fields and operators, such as `spanType`, `name`, `status`, `durationMs`, `model`, `provider`, entity and parent/root entity fields, and context identifiers.
 - Only completed spans count. When a span was exported more than once, only its latest copy counts.
 
 `count` equals the number of spans `querySpans()` pages through for the same request. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.

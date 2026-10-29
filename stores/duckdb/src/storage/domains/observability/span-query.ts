@@ -109,12 +109,8 @@ export function compileDuckDBSpanSelection(plan: Pick<TrustedSpanQueryPlan, 'tim
   values.push(plan.timeRange.from, plan.timeRange.to, ...predicate.values);
   const join = identityFields.map(field => `e.${field} IS NOT DISTINCT FROM c.${field}`).join(' AND ');
   const partition = identityFields.map(field => `e.${field}`).join(', ');
-  // Preserve predicates accepted by older core without adding JSON work to the new contract.
-  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
-    ? ''
-    : `CASE WHEN json_type(e.attributes, '$.model') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.model') END AS model,
-       CASE WHEN json_type(e.attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.provider') END AS provider,`;
   // Start timestamps select identities; all events for those identities participate in reconstruction.
+  // `model` and `provider` filters read only their dedicated columns, never span attributes.
   const ctes = [
     `candidates AS MATERIALIZED (
     SELECT ${identities} FROM span_events
@@ -125,7 +121,7 @@ export function compileDuckDBSpanSelection(plan: Pick<TrustedSpanQueryPlan, 'tim
     `span_versions AS (
     SELECT ${fields.map(columnSql).join(', ')},
       min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}) AS startedAt, e.endedAt, e.cursorId,
-      ${legacyModelFields}
+      e.model, e.provider,
       date_diff('millisecond', min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}), e.endedAt) AS durationMs,
       CASE WHEN e.error IS NULL THEN 'success' ELSE 'error' END AS status,
       CASE WHEN e.error IS NULL THEN NULL ELSE 'error' END AS error,
@@ -205,13 +201,15 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     })
     .join(' OR ');
   // Stored previews of the selected event row. A row written before previews were stored has NULL
-  // previews, so its payload is read instead (only for that row) and previewed the same way.
+  // previews, so its payload is read instead (only for that row) and previewed the same way. Model
+  // and provider fall back to span attributes for rows written before their columns existed; that
+  // fallback is returned, never filtered on.
   const previewRows = await query<
     SpanQueryIdentity & Record<(typeof previewPayloads)[number][0] | 'model' | 'provider', string | null>
   >(
     `SELECT DISTINCT ${identities},
-    CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END AS model,
-    CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END AS provider,
+    COALESCE(model, CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END) AS model,
+    COALESCE(provider, CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END) AS provider,
     ${previewPayloads
       .map(
         ([preview, payload]) =>

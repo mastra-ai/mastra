@@ -87,6 +87,12 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable.',
     ),
+  spanQueryModelFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable.',
+    ),
   traceRetentionDays: z
     .number()
     .int()
