@@ -879,8 +879,11 @@ On ClickHouse, a request whose `where` limits `spanType` to agent, workflow, pro
 | `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName` | The calling entity and the trace's root entity, such as the agent that made a model call. |
 | `environment`, `serviceName`, `executionSource` | Deployment attributes recorded on the span. |
 | `threadId`, `resourceId`, `userId`, `sessionId`, `organizationId`, `experimentId` | Context identifiers recorded on the span. |
+| `model`, `provider` | The model and provider recorded on the span's `model` and `provider` columns, such as `claude-sonnet-5-5` and `anthropic`. Requires the `spanAggregateModelDimensions` capability. |
 
-`countDistinct.<field>` accepts these dimensions and `traceId`, so `countDistinct.traceId` counts the traces the selected spans belong to. Span aggregation can't group by `metadata.<key>`, identity fields such as `traceId`, `spanId`, or `runId`, or by model and provider.
+`countDistinct.<field>` accepts these dimensions and `traceId`, so `countDistinct.traceId` counts the traces the selected spans belong to. Span aggregation can't group by `metadata.<key>` or identity fields such as `traceId`, `spanId`, or `runId`.
+
+Like the `model` and `provider` filters, the `model` and `provider` dimensions read only the span's columns, not its attributes. Spans exported before `@mastra/observability` filled the columns group under `null`, and `countDistinct.model` doesn't count them. Existing spans aren't backfilled. With an adapter that doesn't declare the capability, requests that group by or count distinct `model` or `provider` return `501`.
 
 ### Span tokens and cost
 
@@ -899,6 +902,25 @@ const tokensByAgent = await mastraClient.aggregateSpans({
   measures: ['tokens.total.sum', 'cost.sum'],
   orderBy: { field: 'cost.sum', direction: 'desc' },
 })
+```
+
+To compare models instead, group the same spans by `model`:
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanAggregateModelDimensions) {
+  const { rows } = await mastraClient.aggregateSpans({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+    groupBy: ['provider', 'model'],
+    measures: ['count', 'tokens.total.sum', 'cost.sum'],
+  })
+  // rows[0]: { dimensions: { provider: 'anthropic', model: 'claude-sonnet-5-5' }, measures: { ... } }
+}
 ```
 
 ### List the spans behind a group

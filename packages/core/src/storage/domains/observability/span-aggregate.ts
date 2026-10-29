@@ -55,11 +55,11 @@ const stringDimension = (): TraceAggregateDimensionRule => ({ valueKind: 'string
 /**
  * Span-scope groupable dimensions for `aggregateSpans()`, in discovery order.
  *
- * The trace dimensions plus the span's own `name`/`spanType`, its `entityId`, and the parent and
- * root entity context. Not groupable: `metadata.<key>` (the span field policy has no metadata),
- * identity fields (`traceId`, `spanId`, `parentSpanId`, `runId`, `requestId`), and
- * `model`/`provider`, which are filterable through their dedicated columns but not yet groupable
- * (OBS-693).
+ * The trace dimensions plus the span's own `name`/`spanType`, its `entityId`, the parent and root
+ * entity context, and `model`/`provider`. `model` and `provider` read only their dedicated columns,
+ * like their filters, so spans exported before the columns were filled group under `null`. Not
+ * groupable: `metadata.<key>` (the span field policy has no metadata) and identity fields
+ * (`traceId`, `spanId`, `parentSpanId`, `runId`, `requestId`).
  */
 export const SPAN_AGGREGATE_DIMENSION_REGISTRY = {
   name: stringDimension(),
@@ -81,6 +81,8 @@ export const SPAN_AGGREGATE_DIMENSION_REGISTRY = {
   sessionId: stringDimension(),
   organizationId: stringDimension(),
   experimentId: stringDimension(),
+  model: stringDimension(),
+  provider: stringDimension(),
 } as const satisfies Record<string, TraceAggregateDimensionRule>;
 
 export type SpanAggregateDimension = keyof typeof SPAN_AGGREGATE_DIMENSION_REGISTRY;

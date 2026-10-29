@@ -48,6 +48,7 @@ const SPAN_QUERY_CONTEXT_FIELDS = new Set([
 ]);
 const OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE = 'span-query-model-fields';
 const SPAN_QUERY_MODEL_FIELDS = new Set(['model', 'provider']);
+const OBSERVABILITY_SPAN_AGGREGATE_MODEL_DIMENSIONS_STORAGE_FEATURE = 'span-aggregate-model-dimensions';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
 const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
@@ -232,6 +233,27 @@ export function assertObservabilitySpanQueryModelFieldsSupported(
 
   throw new HTTPException(501, {
     message: 'Model and provider span predicates are not supported by the configured observability store',
+  });
+}
+
+/** Grouping or counting distinct span `model`/`provider` values needs a store that compiles them as dimensions. */
+export function assertObservabilitySpanAggregateModelDimensionsSupported(
+  observabilityStore: ObservabilityStorage,
+  plan: Pick<coreStorage.TrustedSpanAggregatePlan, 'dimensions' | 'measures'>,
+) {
+  const fields: readonly string[] = [
+    ...plan.dimensions,
+    ...plan.measures.flatMap(measure => (measure.type === 'countDistinct' ? [measure.field] : [])),
+  ];
+  if (
+    !fields.some(field => SPAN_QUERY_MODEL_FIELDS.has(field)) ||
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_SPAN_AGGREGATE_MODEL_DIMENSIONS_STORAGE_FEATURE)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Grouping spans by model or provider is not supported by the configured observability store',
   });
 }
 
@@ -550,6 +572,7 @@ export type ObservabilityStorageCapabilities = {
   spanQueryContextFields: boolean;
   spanQueryModelFields: boolean;
   spanAggregate: boolean;
+  spanAggregateModelDimensions: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -585,6 +608,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   spanAggregate: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
+  spanAggregateModelDimensions: false,
   feedback: false,
 };
 
@@ -684,6 +708,11 @@ export function getObservabilityStorageCapabilities(
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     spanQueryModelFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE),
     spanAggregate: newApiCore && supportsSpanAggregateCore() && declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE),
+    spanAggregateModelDimensions:
+      newApiCore &&
+      supportsSpanAggregateCore() &&
+      declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE) &&
+      declares(OBSERVABILITY_SPAN_AGGREGATE_MODEL_DIMENSIONS_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }

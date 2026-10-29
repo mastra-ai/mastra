@@ -3829,6 +3829,8 @@ type Shared_Type_67 = {
   spanQueryContextFields: boolean;
   /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
   spanQueryModelFields: boolean;
+  /** `model` and `provider` in span aggregate `groupBy` and `countDistinct`. Treat a missing value as unavailable. */
+  spanAggregateModelDimensions: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */

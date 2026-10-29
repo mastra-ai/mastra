@@ -91,6 +91,7 @@ import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
   assertObservabilitySpanQueryFieldsSupported,
+  assertObservabilitySpanAggregateModelDimensionsSupported,
   assertObservabilitySpanQueryModelFieldsSupported,
   assertObservabilityThreadQuerySupported,
   assertObservabilityTraceAggregateSupported,
@@ -638,10 +639,12 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       // `span-aggregate` covers every span query field that shipped before it, time to first
-      // chunk included, so only time to first token and model/provider need a gate.
+      // chunk included, so only time to first token and model/provider (as predicates, and as
+      // dimensions or countDistinct fields) need a gate.
       assertObservabilitySpanAggregateSupported(observabilityStore);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
+      assertObservabilitySpanAggregateModelDimensionsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {

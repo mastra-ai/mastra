@@ -69,6 +69,8 @@ const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
     'sessionId',
     'organizationId',
     'experimentId',
+    'model',
+    'provider',
   ].map(field => [field, `r."${field}"`]),
 );
 

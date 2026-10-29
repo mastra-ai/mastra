@@ -14,7 +14,15 @@ export const spanQueryFeatures =
     : ([] as const);
 
 export const spanAggregateFeatures =
-  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
+  typeof coreStorage.planSpanAggregate === 'function'
+    ? ([
+        'span-aggregate',
+        // Core before the dimensions rejects `model`/`provider` in `groupBy`, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_AGGREGATE_DIMENSION_REGISTRY ?? {})
+          ? (['span-aggregate-model-dimensions'] as const)
+          : []),
+      ] as const)
+    : ([] as const);
 
 /** Core versions without the field reject it in trace query results, so it is only returned when core knows it. */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
