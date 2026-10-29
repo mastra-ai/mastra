@@ -502,6 +502,14 @@ export class PgKnowledgePages implements KnowledgePageStore {
           at: now,
         });
         created = true;
+      } else if (input.parentId && scope.parentId === null) {
+        // Late link: the first non-null parent wins; the advisory lock above makes it atomic.
+        await this.#requireLivePage(tx, input.parentId, false);
+        const rows = await this.#rows(tx, `UPDATE ${this.#pages} SET "parentId" = $2 WHERE "id" = $1 AND "parentId" IS NULL RETURNING *`, [
+          scope.id,
+          input.parentId,
+        ]);
+        scope = toPage(rows[0]!);
       } else if (input.parentId !== undefined && (input.parentId ?? null) !== scope.parentId) {
         parentConflict = { existingParentId: scope.parentId, requestedParentId: input.parentId ?? null };
       }
@@ -938,8 +946,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
       }
 
       await tx.query(
-        `UPDATE ${this.#pages} SET "deletedAt" = $2, "deletedBy" = $3, "mergedInto" = $4, "version" = "version" + 1, "updatedAt" = $2, "updatedBy" = $5::jsonb WHERE "id" = $1`,
-        [source.id, iso(now), input.provenance.author, target.id, JSON.stringify(input.provenance)],
+        `UPDATE ${this.#pages} SET "deletedAt" = $2, "deletedBy" = $3, "mergedInto" = $4, "scopeId" = $6, "version" = "version" + 1, "updatedAt" = $2, "updatedBy" = $5::jsonb WHERE "id" = $1`,
+        [source.id, iso(now), input.provenance.author, target.id, JSON.stringify(input.provenance), target.scopeId],
       );
       const rows = await this.#rows(tx, `SELECT * FROM ${this.#pages} WHERE "id" = $1`, [target.id]);
       await this.#logActivity(tx, {
