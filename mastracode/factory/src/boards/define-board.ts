@@ -518,6 +518,31 @@ export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
+  return compileBoardDefinition(config);
+}
+
+/** What a board declared, before `compileBoardDefinition()` resolved it. */
+export type BoardDeclaration = Readonly<{
+  id: string;
+  initialPhase: string;
+  phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
+}>;
+
+const boardDeclarations = new WeakMap<object, BoardDeclaration>();
+
+/**
+ * The declaration a compiled board came from, so its code behaviors can be attached again as
+ * declared (before runner skills and instructions were merged into its handlers).
+ */
+export function boardDeclaration(board: object): BoardDeclaration | undefined {
+  return boardDeclarations.get(board);
+}
+
+/** Validates and resolves a board declaration. Factory's own boards use this directly. */
+export function compileBoardDefinition<
+  const BoardId extends string,
+  const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
+>(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
   validateBoardIdentifier(config.id, 'Board id');
   const boardName = resolveName(config.name, config.title, `Board "${config.id}"`);
@@ -649,7 +674,7 @@ export function defineBoard<
     if (!phaseByRole.has(phase.runner.context)) phaseByRole.set(phase.runner.context, phaseId);
   }
 
-  return Object.freeze({
+  const board = Object.freeze({
     id: config.id,
     name: boardName,
     ...(boardDescription !== undefined ? { description: boardDescription } : {}),
@@ -676,4 +701,6 @@ export function defineBoard<
       return facts !== undefined && evaluateRuleGroup(definition.autoStartWhen, facts);
     },
   });
+  boardDeclarations.set(board, config);
+  return board;
 }

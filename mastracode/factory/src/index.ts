@@ -1,14 +1,17 @@
 export {
   BoardDefinitionError,
+  compileStoredBoard,
   createBoardRegistry,
   DEFAULT_PHASE_CONTEXT,
   defaultBoards,
   defineBoard,
   FACTORY_AGENT_ID,
   reviewBoard,
+  storedBoardInputSchema,
   workBoard,
 } from './boards/index.js';
 export type {
+  BoardBehaviors,
   BoardDefinition,
   BoardEventIntegration,
   BoardEventRules,
@@ -48,6 +51,20 @@ export type {
   ChannelAccountLinkKey,
   ChannelAccountLinkNames,
 } from './storage/domains/channel-identity/base.js';
+export { StoredBoardError, StoredBoardsStorage } from './storage/domains/boards/base.js';
+export type {
+  StoredBoardErrorCode,
+  StoredBoardInput,
+  StoredBoardRecord,
+  StoredBoardScope,
+  StoredBoardSeed,
+  StoredBoardSeedSource,
+  StoredPhaseExitTool,
+  StoredPhaseInput,
+  StoredPhaseKind,
+  StoredPhaseRecord,
+  StoredPhaseRunner,
+} from './storage/domains/boards/base.js';
 export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 export type { FactoryProject } from './storage/domains/projects/base.js';
 export { WorkItemsStorage } from './storage/domains/work-items/base.js';

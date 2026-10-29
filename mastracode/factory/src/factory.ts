@@ -131,6 +131,7 @@ import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
+import { StoredBoardsStorage } from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
@@ -630,6 +631,7 @@ export class MastraFactory {
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
+    storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the

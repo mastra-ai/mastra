@@ -1,7 +1,7 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
 import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
-import { defineBoard } from './define-board.js';
+import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
@@ -264,7 +264,7 @@ export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'rev
 /** Every Work phase: a card may move from any phase to any other. */
 const ALL_PHASES: readonly WorkBoardPhase[] = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
 
-export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
+export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
   name: 'Work',
   initialPhase: 'intake',

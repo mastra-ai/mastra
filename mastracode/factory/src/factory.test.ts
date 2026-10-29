@@ -922,6 +922,7 @@ describe('MastraFactory.prepare', () => {
       'model-credentials',
       'model-defaults',
       'memory-settings',
+      'boards',
       'custom-providers',
       'queue-health',
       'integrations',
