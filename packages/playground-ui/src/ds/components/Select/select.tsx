@@ -8,7 +8,6 @@ import type { TextButtonSize } from '../Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
 import {
   menuItemCheckClass,
@@ -224,7 +223,6 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
@@ -247,9 +245,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
           <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, menuScrollPopupClass, className)} {...props}>
             {/* The viewport is Select's list, so Select scrolls it to line the selected item up with the
                 trigger. `role` is restated because the viewport's own `presentation` role would win. */}
-            <MenuScrollArea menu={menu} viewportRender={<SelectPrimitive.List role="listbox" />}>
-              {children}
-            </MenuScrollArea>
+            <MenuScrollArea viewportRender={<SelectPrimitive.List role="listbox" />}>{children}</MenuScrollArea>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
       </SelectPrimitive.Portal>
@@ -263,7 +259,7 @@ export type SelectItemProps = Omit<SelectPrimitive.Item.Props, 'className'> & {
 };
 
 const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
+  <SelectPrimitive.Item ref={ref} className={cn(menuItemClass, className)} {...props}>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     <SelectPrimitive.ItemIndicator className={menuItemCheckClass}>
       <Check />
