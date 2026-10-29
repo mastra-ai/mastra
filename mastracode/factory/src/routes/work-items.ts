@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { isTerminalWorkItem } from '../boards/semantics.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -44,6 +45,7 @@ import {
   WorkItemRelationError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
+import { WORK_ITEM_TOMBSTONE_TTL_MS } from '../storage/domains/work-items/board-version.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
@@ -51,7 +53,9 @@ import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
-import { countWorkItems, pageWorkItems, workItemSources } from './work-item-page.js';
+import { encodeWorkItemSyncCursor } from './work-item-cursor.js';
+import type { WorkItemFilters } from './work-item-page.js';
+import { countWorkItems, pageWorkItems, syncWorkItems, toSyncedWorkItem, workItemSources } from './work-item-page.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -95,6 +99,69 @@ function sessionIdsWhere(items: readonly WorkItemRow[], predicate: (sessionId: s
     }
   }
   return [...picked];
+}
+
+const FILTER_QUERY_PARAMS = [
+  'board',
+  'stage',
+  'q',
+  'source',
+  'linearProject',
+  'label',
+  'teammate',
+  'author',
+  'assignee',
+  'reviewer',
+  'worked',
+] as const;
+
+function filterQuery(context: Context): Record<(typeof FILTER_QUERY_PARAMS)[number], string | undefined> {
+  return Object.fromEntries(FILTER_QUERY_PARAMS.map(name => [name, context.req.query(name)])) as Record<
+    (typeof FILTER_QUERY_PARAMS)[number],
+    string | undefined
+  >;
+}
+
+function workItemFilters(query: {
+  board?: string[];
+  stage?: string[];
+  q?: string;
+  source?: string[];
+  linearProject?: string[];
+  label?: string[];
+  teammate?: string[];
+  author?: string[];
+  assignee?: string[];
+  reviewer?: string[];
+  worked?: string[];
+}): WorkItemFilters {
+  return {
+    boards: query.board,
+    stages: query.stage,
+    q: query.q,
+    sources: query.source,
+    linearProjects: query.linearProject,
+    labels: query.label,
+    people: {
+      teammate: query.teammate,
+      author: query.author,
+      assignee: query.assignee,
+      reviewer: query.reviewer,
+      worked: query.worked,
+    },
+  };
+}
+
+function hasFilters(filters: WorkItemFilters): boolean {
+  return Boolean(
+    filters.boards?.length ||
+    filters.stages?.length ||
+    filters.q ||
+    filters.sources?.length ||
+    filters.linearProjects?.length ||
+    filters.labels?.length ||
+    Object.values(filters.people ?? {}).some(ids => ids?.length),
+  );
 }
 
 function loose(c: unknown): Context {
@@ -378,9 +445,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if ('response' in resolved) return resolved.response;
           const context = loose(c);
           const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
-            board: context.req.query('board'),
-            stage: context.req.query('stage'),
-            q: context.req.query('q'),
+            ...filterQuery(context),
             sort: context.req.query('sort'),
             limit: context.req.query('limit'),
             cursor: context.req.query('cursor'),
@@ -394,14 +459,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          const { board, stage, q, sort, limit, cursor } = query.data;
-          const filtered = board || stage || q || limit !== undefined || cursor;
-          const page = filtered
-            ? pageWorkItems(all, { boards: board, stages: stage, q, sort, userId: resolved.userId, limit, cursor })
+          const { sort, limit, cursor } = query.data;
+          const filters = workItemFilters(query.data);
+          const paged = hasFilters(filters) || limit !== undefined || cursor !== undefined;
+          const page = paged
+            ? pageWorkItems(all, { ...filters, sort, userId: resolved.userId, limit, cursor })
             : { items: all };
           const items = page.items;
           return c.json({
-            workItems: items.map(toWireWorkItem),
+            // A paged read is a board read, so it gets the board's card shape; the full list keeps the old one.
+            workItems: paged ? items.map(item => toWireWorkItem(toSyncedWorkItem(item))) : items.map(toWireWorkItem),
             runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
             parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
             ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
@@ -415,12 +482,54 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemCounts.querySchema.safeParse(filterQuery(loose(c)));
+          if (!query.success) return c.json({ error: 'invalid_work_item_query' }, 400);
           await workItems.ensureReady();
           const all = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json(countWorkItems(all));
+          return c.json(countWorkItems(all, workItemFilters(query.data)));
+        },
+      }),
+      // ── Keep an open board current: open cards first, then what changed ──
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSync.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSync.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemSync.querySchema.safeParse({
+            cursor: loose(c).req.query('cursor'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_cursor' }, 400);
+          await workItems.ensureReady();
+          const scope = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          const now = new Date();
+          const oldestDelta = new Date(now.getTime() - WORK_ITEM_TOMBSTONE_TTL_MS);
+          const since = query.data.cursor;
+          const [all, deleted] = await Promise.all([
+            workItems.listShared(scope),
+            since && since >= oldestDelta ? workItems.listDeletedSince({ ...scope, since }) : [],
+          ]);
+          const boards = this.#boards;
+          const sync = syncWorkItems(all, {
+            since,
+            now,
+            deleted,
+            isTerminal: item => isTerminalWorkItem(boards, item),
+            oldestDelta,
+          });
+          return c.json({
+            cursor: encodeWorkItemSyncCursor(sync.at),
+            reset: sync.reset,
+            workItems: sync.items.map(item => toWireWorkItem(toSyncedWorkItem(item))),
+            deletedIds: sync.deletedIds,
+            counts: countWorkItems(all),
+            // Whether a session is running is not a card write, so every sync carries all of them.
+            runningSessionIds: sessionIdsWhere(all, sessionId => liveSessions.isRunning(sessionId)),
+            parkedSessionIds: sessionIdsWhere(all, sessionId => liveSessions.parked(sessionId) !== undefined),
+          });
         },
       }),
       // ── Every card's external source, for intake de-duplication ────────────

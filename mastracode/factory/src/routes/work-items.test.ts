@@ -596,6 +596,104 @@ describe('work item read wire', () => {
     expect((await json('GET', `${base}/00000000-0000-4000-8000-000000000000`)).status).toBe(404);
   });
 
+  it('filters and counts by source, label and person the way the board does', async () => {
+    const seedCard = (title: string, stage: string, externalSource: Record<string, unknown> | null, metadata = {}) =>
+      seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        input: { externalSource, title, stages: [stage], sessions: {}, metadata },
+      });
+    const issue = (n: number) => ({
+      integrationId: 'github',
+      type: 'issue',
+      externalId: String(n),
+      url: `https://github.com/acme/app/issues/${n}`,
+    });
+    await seedCard('Ada bug', 'intake', issue(1), { author: 'Ada', assignees: ['grace'], labels: ['Bug'] });
+    await seedCard('Grace chore', 'execute', issue(2), { author: 'grace', labels: ['chore'] });
+    await seedCard('Ada done', 'done', issue(3), { author: 'ada', labels: ['bug'] });
+    await seedCard(
+      'Linear thing',
+      'intake',
+      { integrationId: 'linear', type: 'issue', externalId: 'FACT-1' },
+      {
+        creator: 'Ada',
+        linearProjectId: 'p1',
+      },
+    );
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (query: string) =>
+      (await (await json('GET', `${base}?${query}`)).json()).workItems
+        .map((item: { title: string }) => item.title)
+        .sort();
+
+    expect(await titles('author=github:ada')).toEqual(['Ada bug', 'Ada done']);
+    expect(await titles('teammate=github:grace')).toEqual(['Ada bug', 'Grace chore']);
+    expect(await titles('assignee=github:grace')).toEqual(['Ada bug']);
+    expect(await titles('author=linear:ada')).toEqual(['Linear thing']);
+    expect(await titles('source=linear')).toEqual(['Linear thing']);
+    expect(await titles('linearProject=p1')).toEqual(['Linear thing']);
+    expect(await titles('label=BUG')).toEqual(['Ada bug', 'Ada done']);
+    expect(await titles('label=bug&stage=intake')).toEqual(['Ada bug']);
+    expect(await titles('author=github:ada&assignee=github:grace')).toEqual(['Ada bug']);
+
+    expect(await (await json('GET', `${base}/counts?author=github:ada&stage=intake`)).json()).toEqual({
+      total: 2,
+      boards: { work: { intake: 1, done: 1 } },
+    });
+  });
+
+  it('starts a board from its open cards and then sends only what changed', async () => {
+    const t0 = new Date('2026-10-29T12:00:00.000Z');
+    vi.useFakeTimers({ now: t0, toFake: ['Date'] });
+    try {
+      const seedCard = async (title: string, stage: string, metadata: Record<string, unknown> = {}) =>
+        (
+          await seed.workItems.upsert({
+            orgId: 'org1',
+            userId: 'u1',
+            factoryProjectId: PROJECT_ID,
+            input: { externalSource: null, title, stages: [stage], sessions: {}, metadata },
+          })
+        ).item;
+      const open = await seedCard('Open', 'intake', { selfReviewFindings: ['long review text'], labels: ['bug'] });
+      const doomed = await seedCard('Doomed', 'intake');
+      await seedCard('Finished', 'done');
+      const base = `/web/factory/projects/${PROJECT_ID}/work-items/sync`;
+      const sync = async (cursor?: string) => (await json('GET', cursor ? `${base}?cursor=${cursor}` : base)).json();
+
+      const start = await sync();
+      expect(start.reset).toBe(true);
+      expect(start.workItems.map((item: { title: string }) => item.title).sort()).toEqual(['Doomed', 'Open']);
+      expect(start.workItems.find((item: { id: string }) => item.id === open.id).metadata).toEqual({ labels: ['bug'] });
+      expect(start.counts).toEqual({ total: 3, boards: { work: { intake: 2, done: 1 } } });
+      expect(start.deletedIds).toEqual([]);
+
+      vi.setSystemTime(new Date(t0.getTime() + 60_000));
+      // The first delta re-sends writes from just before the cursor; after that a quiet board gets nothing.
+      const caughtUp = await sync(start.cursor);
+      expect(caughtUp.reset).toBe(false);
+      expect(caughtUp.workItems).toHaveLength(3);
+      const quiet = await sync(caughtUp.cursor);
+      expect(quiet).toMatchObject({ reset: false, workItems: [], deletedIds: [] });
+
+      expect((await json('PATCH', `/web/factory/work-items/${open.id}`, { title: 'Renamed' })).status).toBe(200);
+      expect((await json('DELETE', `/web/factory/work-items/${doomed.id}`)).status).toBe(200);
+      const changed = await sync(quiet.cursor);
+      expect(changed.reset).toBe(false);
+      expect(changed.workItems.map((item: { title: string }) => item.title)).toEqual(['Renamed']);
+      expect(changed.deletedIds).toEqual([doomed.id]);
+      expect(changed.counts.total).toBe(2);
+
+      vi.setSystemTime(new Date(t0.getTime() + 8 * 24 * 60 * 60 * 1000));
+      expect((await sync(changed.cursor)).reset).toBe(true);
+      expect((await json('GET', `${base}?cursor=nope`)).status).toBe(400);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('drops internal tokens from browser writes', async () => {
     const created = await json(
       'POST',

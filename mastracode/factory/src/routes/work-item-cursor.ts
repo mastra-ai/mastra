@@ -23,3 +23,21 @@ export function decodeWorkItemCursor(value: string): WorkItemPageCursor | undefi
     return undefined;
   }
 }
+
+/** Where a board's sync left off: the newest card write or delete it has seen. */
+export function encodeWorkItemSyncCursor(at: Date): string {
+  return Buffer.from(JSON.stringify({ at: at.toISOString() }), 'utf8').toString('base64url');
+}
+
+export function decodeWorkItemSyncCursor(value: string): Date | undefined {
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    if (!decoded || typeof decoded !== 'object' || !('at' in decoded) || typeof decoded.at !== 'string') {
+      return undefined;
+    }
+    const at = new Date(decoded.at);
+    return Number.isNaN(at.getTime()) ? undefined : at;
+  } catch {
+    return undefined;
+  }
+}
