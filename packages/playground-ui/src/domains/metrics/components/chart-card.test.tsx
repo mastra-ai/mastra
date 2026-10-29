@@ -83,7 +83,7 @@ describe('ChartCard', () => {
     expect(container.querySelectorAll('[aria-hidden="true"].min-h-6')).toHaveLength(0);
   });
 
-  it('keeps the legend row while a chart has no legend yet, so its plot lines up with its neighbours', () => {
+  it('keeps an empty legend row when the toolbar is false (nothing to show yet)', () => {
     const { container } = render(
       <ChartCard title="Resources and threads" toolbar={false}>
         <div data-testid="body" />
