@@ -2,9 +2,10 @@ import type {
   DashboardDefinition,
   DashboardDrilldown,
   DashboardDrilldownTarget,
-  DashboardFilterNode,
   DashboardWidget,
   DashboardWidgetView,
+  FilterNode,
+  FilterToken,
 } from '@mastra/client-js';
 import type { DrilldownScope } from '../../metrics/drilldown';
 import { isValidPreset } from '../../metrics/hooks/use-metrics';
@@ -55,8 +56,7 @@ export function targetScope(target: DashboardDrilldownTarget): DrilldownScope {
   return scope;
 }
 
-const isToken = (node: DashboardFilterNode): node is Extract<DashboardFilterNode, { fieldId: string }> =>
-  'fieldId' in node;
+const isToken = (node: FilterNode): node is FilterToken => 'fieldId' in node;
 
 /**
  * The range and filters a page applies when its URL sets neither. The Metrics filter bar holds
