@@ -401,7 +401,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async endStepSpan(params: {
     span: any;
     operationId: string;
-    endOptions: {
+    endOptions: SpanOutcomeFields & {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -420,7 +420,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async errorStepSpan(params: {
     span: any;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };
@@ -507,7 +507,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async errorChildSpan(params: {
     span: any;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };

@@ -1962,6 +1962,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       } catch (error) {
         // A run that was never resumed must not keep its registry entry or stream
         // subscription, otherwise a later resume of the same runId is blocked.
+        for (const span of [existingEntry.resumeModelSpan, existingEntry.resumeAgentSpan]) {
+          try {
+            span?.error({
+              error: error instanceof Error ? error : new Error(String(error)),
+              outcome: 'error',
+              stopReason: 'runtime_error',
+              endTree: true,
+            });
+          } catch {
+            // Keep the original dispatch failure visible even if tracing fails.
+          }
+        }
         streamCleanup();
         finalizeResumeRegistry();
         throw error;

@@ -467,6 +467,7 @@ export interface RunApprovalScenarioOptions extends Pick<
   | 'requireToolApproval'
   | 'engine'
   | 'observability'
+  | 'afterStream'
 > {
   tracingOptions?: TracingOptions;
   /**

@@ -683,6 +683,7 @@ export async function runApprovalScenario({
   engine,
   observability,
   tracingOptions,
+  afterStream,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
@@ -732,6 +733,8 @@ export async function runApprovalScenario({
       ? agent.approveToolCall({ runId, toolCallId })
       : agent.declineToolCall({ runId, toolCallId }))) as unknown as RunHandle;
   }
+
+  await afterStream?.();
 
   return {
     output: outputOf(run),

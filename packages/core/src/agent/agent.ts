@@ -54,13 +54,13 @@ import { recordDelegationFailure } from '../loop/shared/delegation-outcome';
 import { executionFailureTermination } from '../loop/shared/execution-outcome';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 import type { AgentLoopResumeClaim } from '../loop/types';
-import type { Mastra } from '../mastra';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
 // from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
 // `await import('../mastra')` fallback for the standalone-agent case where the
 // Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
+import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
@@ -193,6 +193,8 @@ import type { DelegationRefInput, DelegationRefRegistry } from './delegation-ref
 // with no imports, so it cannot create the runtime cycle `agent →
 // agent/durable → agent`.
 import { DurableStepIds } from './durable/constants';
+// Type-only imports from the durable module: erased at build time so they
+// don't create the runtime cycle `agent → agent/durable → agent`.
 import type {
   DurableAgentListActiveRunsOptions,
   DurableAgentListActiveRunsResult,
@@ -202,8 +204,6 @@ import type {
   DurableAgentStreamOptions,
   DurableAgentStreamResult,
 } from './durable/durable-agent';
-// Type-only imports from the durable module: erased at build time so they
-// don't create the runtime cycle `agent → agent/durable → agent`.
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
@@ -6617,8 +6617,10 @@ export class Agent<
                   // If bailed, add a marker to the result and signal via requestContext
                   if (bailed) {
                     requestContext.set('__mastra_delegationBailed', true);
+                    // A finish reason establishes failure, but not its cause. Thrown
+                    // errors take the catch path below, which classifies the actual error.
                     if (result.finishReason === 'error')
-                      recordDelegationFailure(requestContext, { outcome: 'error', stopReason: 'model_error' });
+                      recordDelegationFailure(requestContext, { outcome: 'error', stopReason: null });
                   }
 
                   // Apply an in-run replacement for the text the parent model sees,
