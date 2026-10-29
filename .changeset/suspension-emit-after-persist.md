@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Tool suspensions and approval requests are now published to the stream only after the parked tool call is saved to memory. A client that reacts to the suspension event — resuming it, or aborting the run — now always finds the tool call already persisted instead of racing the save still in flight. If that save fails, the suspension event is withheld and the run suspends silently, so no client is sent looking for a tool call that memory never received.
+Publish tool suspension and approval events only after the parked tool call is saved to memory, so a client that reacts to the event — resuming it, or aborting the run — finds the tool call already persisted instead of racing the save still in flight. When memory is writable and that save fails, the event is withheld and the run suspends quietly instead of announcing a parked call the store never received; read-only memory, and runs without a save queue or thread, behave as before.

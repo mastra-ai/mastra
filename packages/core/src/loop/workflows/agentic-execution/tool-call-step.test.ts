@@ -217,6 +217,9 @@ describe('createToolCallStep delegated run identity provenance', () => {
     );
 
     expect(flushMessages).toHaveBeenCalled();
+    // The default queue flush swallows storage errors; only this strict form rejects
+    // and lets the guard withhold the chunk.
+    expect(flushMessages).toHaveBeenCalledWith(expect.anything(), 'thread-1', undefined, { throwOnError: true });
     expect(suspend).toHaveBeenCalled();
     expect(enqueue.mock.calls.map(([chunk]: [any]) => chunk.type)).not.toContain('tool-call-suspended');
   });

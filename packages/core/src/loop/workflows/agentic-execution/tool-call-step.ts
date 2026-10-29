@@ -401,8 +401,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             writeScoped(scopeCtx, THREAD_EXISTS_KEY, 'threadExists', true);
           }
 
-          // Flush all pending messages immediately
-          await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+          // Flush all pending messages immediately. `throwOnError` is required here: by
+          // default the save queue logs a storage failure and resolves, which would look
+          // like a successful flush and let the suspension chunk announce an unsaved call.
+          await saveQueueManager.flushMessages(messageList, threadId, memoryConfig, { throwOnError: true });
           return true;
         } catch (error) {
           logger?.error('Error flushing messages before suspension:', error);
