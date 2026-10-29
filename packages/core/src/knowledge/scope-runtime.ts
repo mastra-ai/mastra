@@ -4,6 +4,7 @@ import type {
   KnowledgeReadScope,
   KnowledgeStorage,
 } from '../storage/domains/knowledge';
+import { parseKnowledgePageRef } from '../storage/domains/knowledge';
 import { knowledgeAccessGrants, knowledgeReadScopeFor, knowledgeRoleOn } from './access';
 import type { KnowledgeAccessGrant } from './access';
 import {
@@ -76,12 +77,11 @@ export class KnowledgeScopeRuntime {
       }
       [scope] = await storage.getScopesByAddress([target.scope]);
     } else {
-      const hash = target.page.indexOf('#');
-      if (hash > 0) {
-        [scope] = await storage.getScopesByAddress([target.page.slice(0, hash)]);
-        page = scope
-          ? await storage.getPageByKey({ scopeId: scope.id, key: target.page.slice(hash + 1), read: 'all' })
-          : null;
+      if (target.page.indexOf('#') > 0) {
+        const parsed = parseKnowledgePageRef(target.page);
+        if (parsed) [scope] = await storage.getScopesByAddress([parsed.scope]);
+        page =
+          parsed && scope ? await storage.getPageByPath({ scopeId: scope.id, path: parsed.path, read: 'all' }) : null;
       } else {
         page = await storage.getPage({ id: target.page, read: 'all' });
         if (page?.deletedAt) page = null;

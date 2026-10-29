@@ -14,6 +14,7 @@
  * @experimental Knowledge APIs are experimental and may change without notice.
  */
 
+import { knowledgePageKeyProblem } from '@internal/core/knowledge-compat';
 import { estimateTokenCount } from 'tokenx';
 
 /**
@@ -99,7 +100,10 @@ export interface KnowledgePage {
   address?: string;
   /** Declaration key the scope page was materialized from; scope pages only. */
   declaration?: string;
-  /** Stable key within the home scope (`org:acme#support-policy`); ordinary pages only, optional. */
+  /**
+   * Stable key, unique among its live siblings (the pages sharing its parent); ordinary pages only,
+   * optional. Addressed by key path within the home scope: `org:acme#policies/refund`.
+   */
   key?: string;
   /** Fractional ordering key among siblings; compare as code-unit strings. */
   position: string;
@@ -248,13 +252,29 @@ export class KnowledgePageDepthError extends Error {
   }
 }
 
+/**
+ * Splits a page reference `<scope>#<key>[/<key>…]` into the scope address and the key path, or
+ * returns null when it isn't one (no scope, an empty or invalid key segment, a second `#`).
+ * @experimental
+ */
+export function parseKnowledgePageRef(ref: string): { scope: string; path: string[] } | null {
+  const hash = ref.indexOf('#');
+  if (hash <= 0) return null;
+  const path = ref.slice(hash + 1).split('/');
+  if (path.some(key => knowledgePageKeyProblem(key))) return null;
+  return { scope: ref.slice(0, hash), path };
+}
+
 /** @experimental */
 export class KnowledgePageKeyConflictError extends Error {
   constructor(
     readonly key: string,
-    readonly scopeId: string,
+    /** The parent page (or scope page) that already has a live child with this key. */
+    readonly parentId: string,
   ) {
-    super(`Knowledge page key "${key}" already exists in scope ${scopeId}. Rename or remove one of the keys first.`);
+    super(
+      `Knowledge page key "${key}" already exists under page ${parentId}. Keys are unique among siblings; pick another key or move one of the pages.`,
+    );
     this.name = 'KnowledgePageKeyConflictError';
   }
 }
@@ -325,6 +345,17 @@ export function knowledgePositionBetween(before?: string, after?: string): strin
 }
 
 /**
+ * A keyed page a declaration creates with its scope, optionally with keyed child pages (same scope).
+ * @experimental
+ */
+export interface KnowledgePageTemplateInput {
+  key: string;
+  name: string;
+  description?: string;
+  pages?: KnowledgePageTemplateInput[];
+}
+
+/**
  * A scope to materialize, with the child scopes and keyed pages its declaration creates with it.
  *
  * @experimental
@@ -341,7 +372,7 @@ export interface MaterializeKnowledgeScopeInput {
    */
   parentId?: string | null;
   children?: Array<{ address: string; declaration: string; name: string; description?: string }>;
-  pages?: Array<{ key: string; name: string; description?: string }>;
+  pages?: KnowledgePageTemplateInput[];
   provenance: KnowledgeProvenance;
 }
 
@@ -371,6 +402,10 @@ export interface CreateKnowledgePageInput {
   id?: string;
   /** The tree parent: a scope page for a top-level page, or any page in the same scope. */
   parentId: string;
+  /**
+   * Unique among the parent's live children ({@link KnowledgePageKeyConflictError} otherwise); must
+   * not contain `/`, `#` or `%`.
+   */
   key?: string;
   name: string;
   description?: string;
@@ -490,7 +525,12 @@ export interface KnowledgePageStore {
 
   // Pages
   getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null>;
-  getPageByKey(input: { scopeId: string; key: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null>;
+  /**
+   * Walks the scope's page tree key by key: `path[0]` is a live child of the scope page with that key,
+   * `path[1]` a live child of that page, and so on. Returns the last page, or null when any step is
+   * missing, deleted, or unreadable under `read`. An empty path returns null.
+   */
+  getPageByPath(input: { scopeId: string; path: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage | null>;
   /** Exact canonical-name matches among readable live pages, newest first. */
   findPagesByName(input: {
     name: string;
@@ -517,8 +557,9 @@ export interface KnowledgePageStore {
   updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage>;
   /**
    * Moves the page and its subtree in one transaction; refuses scope pages, cycles, depth and size,
-   * and refuses with {@link KnowledgePageKeyConflictError}, before changing anything, when a live
-   * carried page's key already exists in the destination scope. Size and depth count live pages only;
+   * and refuses with {@link KnowledgePageKeyConflictError}, before changing anything, when the moved
+   * page's key is already used by a live child of the new parent (descendants keep their parents, so
+   * they never clash). Old key paths stop resolving; there are no redirects. Size and depth count live pages only;
    * soft-deleted descendants move with their parents without counting.
    */
   movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage>;
@@ -526,8 +567,9 @@ export interface KnowledgePageStore {
    * Moves the source's notes, child pages and pin audience to the target, retargets mentions of the
    * source, and soft-deletes the source with `mergedInto`. Notes keep their stamps and text. Refuses
    * scope pages on either side, a target inside the source's subtree (or the source itself), and
-   * merges past the depth limit or {@link MAX_KNOWLEDGE_MOVE_PAGES} carried pages, and key clashes
-   * in the target's scope, like `movePage` (the source itself is deleted, so its key never clashes).
+   * merges past the depth limit or {@link MAX_KNOWLEDGE_MOVE_PAGES} carried pages, and, with
+   * {@link KnowledgePageKeyConflictError}, a live child of the source whose key a live child of the
+   * target already uses (the source itself is deleted, so its own key never clashes).
    */
   mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage>;
   /** Soft-deletes an ordinary page with no live children and drops its pin; refuses scope pages. */

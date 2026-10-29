@@ -71,7 +71,7 @@ describe('Knowledge scope materialization', () => {
     const child = await runtime.materializeScope('project:p1/internal', ['project:p1/internal'], provenance);
     const [parent] = await store.getScopesByAddress(['project:p1']);
     expect(child.parentId).toBe(parent!.id);
-    expect(await store.getPageByKey({ scopeId: parent!.id, key: 'overview', read: 'all' })).not.toBeNull();
+    expect(await store.getPageByPath({ scopeId: parent!.id, path: ['overview'], read: 'all' })).not.toBeNull();
     expect(await store.getPage({ id: child.id, read: await runtime.readScopeFor(['project:p1']) })).toBeNull();
     expect(await runtime.roleOn(['project:p1/internal'], child)).toBe('owner');
   });

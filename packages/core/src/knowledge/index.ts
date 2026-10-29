@@ -261,6 +261,7 @@ export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './i
 export type { KnowledgeConfig } from './config';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export type {
+  KnowledgePageTemplate,
   KnowledgeScopeDeclaration,
   KnowledgeScopeDeclarations,
   KnowledgeAccessRule,

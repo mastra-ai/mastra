@@ -86,7 +86,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(internal).toMatchObject({ parentId: first.scope.id, declaration: ACCOUNT_INTERNAL, isScope: true });
         const children = await store.listChildScopes({ parentId: first.scope.id });
         expect(ids(children.pages)).toEqual([internal!.id]);
-        const overview = await store.getPageByKey({ scopeId: first.scope.id, key: 'overview', read: 'all' });
+        const overview = await store.getPageByPath({ scopeId: first.scope.id, path: ['overview'], read: 'all' });
         expect(overview).toMatchObject({ name: 'Overview', isScope: false, scopeId: first.scope.id });
       });
 
@@ -127,7 +127,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           provenance: host,
         });
         expect(await store.getScopesByAddress(['account:acme:1/internal'])).toHaveLength(1);
-        expect(await store.getPageByKey({ scopeId: account.id, key: 'overview', read: 'all' })).not.toBeNull();
+        expect(await store.getPageByPath({ scopeId: account.id, path: ['overview'], read: 'all' })).not.toBeNull();
       });
 
       it('keeps the first belongsTo parent and reports a later conflict', async () => {
@@ -159,6 +159,103 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
       });
     });
 
+    describe('key paths', () => {
+      it('keeps keys unique among live siblings only', async () => {
+        const acme = await scope('org:acme', ORG);
+        const policies = await page(acme.id, 'Policies', { key: 'policies' });
+        const handbook = await page(acme.id, 'Handbook', { key: 'handbook' });
+        const refund = await page(policies.id, 'Refund policy', { key: 'refund' });
+        const handbookRefund = await page(handbook.id, 'Refund section', { key: 'refund' });
+        expect(handbookRefund.key).toBe('refund');
+
+        await rejectsNamed(page(policies.id, 'Another refund', { key: 'refund' }), 'KnowledgePageKeyConflictError');
+        await expect(page(policies.id, 'Another refund', { key: 'refund' })).rejects.toMatchObject({
+          key: 'refund',
+          parentId: policies.id,
+        });
+
+        await store.deletePage({ id: refund.id, expectedVersion: 1, deletedBy: 'alex' });
+        await expect(page(policies.id, 'Refund policy v2', { key: 'refund' })).resolves.toMatchObject({
+          key: 'refund',
+        });
+      });
+
+      it('refuses keys that are empty or contain "/", "#" or "%"', async () => {
+        const acme = await scope('org:acme', ORG);
+        for (const key of ['', 'a/b', 'a#b', 'a%2Fb']) {
+          await expect(page(acme.id, `Bad ${key}`, { key })).rejects.toThrow(/Knowledge page key/);
+        }
+        expect((await store.listPages({ read: 'all' })).pages).toEqual([]);
+      });
+
+      it('resolves a key path by walking the tree, and an old path stops resolving after a move', async () => {
+        const acme = await scope('org:acme', ORG);
+        const globex = await scope('org:globex', ORG);
+        const policies = await page(acme.id, 'Policies', { key: 'policies' });
+        const refund = await page(policies.id, 'Refund policy', { key: 'refund' });
+        const archive = await page(acme.id, 'Archive', { key: 'archive' });
+        const at = (scopeId: string, path: string[], r: KnowledgeReadScope = 'all') =>
+          store.getPageByPath({ scopeId, path, read: r }).then(found => found?.id ?? null);
+
+        expect(await at(acme.id, ['policies', 'refund'])).toBe(refund.id);
+        expect(await at(acme.id, ['policies'])).toBe(policies.id);
+        expect(await at(acme.id, ['refund'])).toBeNull();
+        expect(await at(acme.id, ['policies', 'missing'])).toBeNull();
+        expect(await at(acme.id, [])).toBeNull();
+        expect(await at(globex.id, ['policies', 'refund'])).toBeNull();
+        expect(await at(acme.id, ['policies', 'refund'], read(['org:globex']))).toBeNull();
+        expect(await at(acme.id, ['policies', 'refund'], read(['org:acme']))).toBe(refund.id);
+
+        await store.movePage({ id: refund.id, expectedVersion: 1, parentId: archive.id, provenance: host });
+        expect(await at(acme.id, ['policies', 'refund'])).toBeNull();
+        expect(await at(acme.id, ['archive', 'refund'])).toBe(refund.id);
+
+        await store.movePage({ id: refund.id, expectedVersion: 2, parentId: policies.id, provenance: host });
+        await store.movePage({ id: policies.id, expectedVersion: 1, parentId: archive.id, provenance: host });
+        expect(await at(acme.id, ['policies', 'refund'])).toBeNull();
+        expect(await at(acme.id, ['archive', 'policies', 'refund'])).toBe(refund.id);
+      });
+
+      it('stops a path at a deleted page', async () => {
+        const acme = await scope('org:acme', ORG);
+        const policies = await page(acme.id, 'Policies', { key: 'policies' });
+        await store.deletePage({ id: policies.id, expectedVersion: 1, deletedBy: 'alex' });
+        expect(await store.getPageByPath({ scopeId: acme.id, path: ['policies'], read: 'all' })).toBeNull();
+      });
+
+      it('materializes nested page templates once, adding nested templates declared later', async () => {
+        const template = { key: 'policies', name: 'Policies', pages: [{ key: 'refund', name: 'Refund policy' }] };
+        const { scope: acme } = await store.materializeScope({
+          address: 'org:acme',
+          declaration: ORG,
+          name: 'Acme',
+          pages: [template, { key: 'handbook', name: 'Handbook', pages: [{ key: 'refund', name: 'Refund section' }] }],
+          provenance: host,
+        });
+        const policies = await store.getPageByPath({ scopeId: acme.id, path: ['policies'], read: 'all' });
+        const refund = await store.getPageByPath({ scopeId: acme.id, path: ['policies', 'refund'], read: 'all' });
+        expect(refund).toMatchObject({ parentId: policies!.id, scopeId: acme.id, name: 'Refund policy' });
+        expect(
+          await store.getPageByPath({ scopeId: acme.id, path: ['handbook', 'refund'], read: 'all' }),
+        ).toMatchObject({
+          name: 'Refund section',
+        });
+
+        await store.materializeScope({
+          address: 'org:acme',
+          declaration: ORG,
+          name: 'Acme',
+          pages: [{ ...template, pages: [...template.pages, { key: 'returns', name: 'Returns' }] }],
+          provenance: host,
+        });
+        expect(ids((await store.listChildPages({ parentId: policies!.id, read: 'all' })).pages)).toEqual([
+          refund!.id,
+          (await store.getPageByPath({ scopeId: acme.id, path: ['policies', 'returns'], read: 'all' }))!.id,
+        ]);
+        expect((await store.listPages({ read: 'all' })).pages).toHaveLength(5);
+      });
+    });
+
     describe('read scope filtering', () => {
       it('treats a page in an unreadable scope exactly like a missing one', async () => {
         const acme = await scope('org:acme', ORG);
@@ -170,7 +267,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(await store.getPage({ id: hidden.id, read: r })).toBeNull();
         expect(await store.getPage({ id: 'missing', read: r })).toBeNull();
         expect(await store.getPage({ id: visible.id, read: r })).toMatchObject({ id: visible.id });
-        expect(await store.getPageByKey({ scopeId: globex.id, key: 'refunds', read: r })).toBeNull();
+        expect(await store.getPageByPath({ scopeId: globex.id, path: ['refunds'], read: r })).toBeNull();
         expect(ids(await store.findPagesByName({ name: '  refund   POLICY ', read: r }))).toEqual([visible.id]);
         expect(ids((await store.listPages({ read: r })).pages)).toEqual([visible.id]);
         expect(ids((await store.listChildPages({ parentId: globex.id, read: r })).pages)).toEqual([]);
@@ -335,34 +432,43 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect((await store.getPage({ id: root.id, read: 'all' }))!.scopeId).toBe(acme.id);
       });
 
-      it('refuses a move that would duplicate a key in the destination scope, changing nothing', async () => {
+      it("refuses a move that would duplicate a key among the new parent's children, changing nothing", async () => {
         const a = await scope('org:a', ORG);
         const b = await scope('org:b', ORG);
         const aPolicy = await page(a.id, 'A policy', { key: 'policy' });
-        await page(a.id, 'A handbook', { key: 'handbook' });
         const bPolicy = await page(b.id, 'B policy', { key: 'policy' });
         const bParent = await page(b.id, 'B parent');
-        const bChild = await page(bParent.id, 'B child', { key: 'handbook' });
+        const bChild = await page(bParent.id, 'B child', { key: 'policy' });
 
         await rejectsNamed(
-          store.movePage({ id: bPolicy.id, expectedVersion: 1, parentId: aPolicy.id, provenance: host }),
+          store.movePage({ id: bPolicy.id, expectedVersion: 1, parentId: a.id, provenance: host }),
           'KnowledgePageKeyConflictError',
         );
         await rejectsNamed(
-          store.movePage({ id: bParent.id, expectedVersion: 1, parentId: a.id, provenance: host }),
+          store.movePage({ id: bChild.id, expectedVersion: 1, parentId: b.id, provenance: host }),
           'KnowledgePageKeyConflictError',
         );
         expect(await store.getPage({ id: bPolicy.id, read: 'all' })).toMatchObject({ scopeId: b.id, version: 1 });
-        expect(await store.getPage({ id: bParent.id, read: 'all' })).toMatchObject({ scopeId: b.id, parentId: b.id });
-        expect(await store.getPage({ id: bChild.id, read: 'all' })).toMatchObject({ scopeId: b.id });
-        expect(await store.getPageByKey({ scopeId: a.id, key: 'policy', read: 'all' })).toMatchObject({
+        expect(await store.getPage({ id: bChild.id, read: 'all' })).toMatchObject({ parentId: bParent.id, version: 1 });
+        expect(await store.getPageByPath({ scopeId: a.id, path: ['policy'], read: 'all' })).toMatchObject({
           id: aPolicy.id,
         });
 
-        // Within one scope a key can't clash with itself.
+        // Descendants keep their parent, so a carried child's key never clashes; a page under another
+        // parent may reuse a key; and a page never clashes with itself when reordered.
         await expect(
-          store.movePage({ id: bChild.id, expectedVersion: 1, parentId: b.id, provenance: host }),
-        ).resolves.toMatchObject({ parentId: b.id, key: 'handbook' });
+          store.movePage({ id: bParent.id, expectedVersion: 1, parentId: a.id, provenance: host }),
+        ).resolves.toMatchObject({ parentId: a.id, scopeId: a.id });
+        expect(await store.getPage({ id: bChild.id, read: 'all' })).toMatchObject({
+          parentId: bParent.id,
+          scopeId: a.id,
+        });
+        await expect(
+          store.movePage({ id: bPolicy.id, expectedVersion: 1, parentId: aPolicy.id, provenance: host }),
+        ).resolves.toMatchObject({ parentId: aPolicy.id, key: 'policy' });
+        await expect(
+          store.movePage({ id: aPolicy.id, expectedVersion: 1, parentId: a.id, provenance: host }),
+        ).resolves.toMatchObject({ parentId: a.id, key: 'policy' });
       });
 
       it('counts only live pages toward move depth and carries deleted descendants along', async () => {
@@ -442,13 +548,13 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         );
       });
 
-      it("refuses a merge whose carried pages' keys clash in the target scope; the source's own key never does", async () => {
+      it("refuses a merge whose source children's keys clash with the target's children; the source's own key never does", async () => {
         const a = await scope('org:a', ORG);
         const b = await scope('org:b', ORG);
-        const aPolicy = await page(a.id, 'A policy', { key: 'policy' });
         const target = await page(a.id, 'Target');
+        const targetChild = await page(target.id, 'Target policy', { key: 'policy' });
         const source = await page(b.id, 'Source');
-        const sourceChild = await page(source.id, 'Source child', { key: 'policy' });
+        const sourceChild = await page(source.id, 'Source policy', { key: 'policy' });
 
         await rejectsNamed(
           store.mergePages({ sourceId: source.id, sourceVersion: 1, targetId: target.id, provenance: host }),
@@ -460,15 +566,16 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           parentId: source.id,
           scopeId: b.id,
         });
-        expect(await store.getPageByKey({ scopeId: a.id, key: 'policy', read: 'all' })).toMatchObject({
-          id: aPolicy.id,
-        });
 
-        const keyedSource = await page(b.id, 'Keyed source', { key: 'policy-b' });
+        // A key used elsewhere in the target's scope (not among its children) doesn't clash, nor does
+        // the source's own key.
         await page(a.id, 'A policy-b', { key: 'policy-b' });
+        const keyedSource = await page(b.id, 'Keyed source', { key: 'policy-b' });
+        await page(keyedSource.id, 'Grandchild', { key: 'other' });
         await expect(
           store.mergePages({ sourceId: keyedSource.id, sourceVersion: 1, targetId: target.id, provenance: host }),
         ).resolves.toMatchObject({ id: target.id });
+        expect(await store.getPage({ id: targetChild.id, read: 'all' })).toMatchObject({ parentId: target.id });
       });
 
       it('refuses a merge past the depth cap or carrying too many pages, changing nothing', async () => {

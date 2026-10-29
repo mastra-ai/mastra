@@ -232,7 +232,7 @@ export interface KnowledgePagesCore {
   KnowledgeMoveTooLargeError: new (pageId: string, pages: number) => Error;
   KnowledgePageDepthError: new (pageId: string) => Error;
   KnowledgePageHasChildrenError: new (pageId: string) => Error;
-  KnowledgePageKeyConflictError: new (key: string, scopeId: string) => Error;
+  KnowledgePageKeyConflictError: new (key: string, parentId: string) => Error;
 }
 
 const KNOWLEDGE_PAGES_CORE_FUNCTIONS = [
@@ -296,4 +296,14 @@ export function createKnowledgePagesCoreLoader(
  */
 export function knowledgeSearchWords(query: string): string[] {
   return [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
+}
+
+/**
+ * Why `key` can't be a Knowledge page key, or undefined when it can. Keys are one path segment:
+ * non-empty, with no `/` (path separator), `#` (scope/path separator) or `%` (escape character).
+ */
+export function knowledgePageKeyProblem(key: string): string | undefined {
+  if (!key) return 'Knowledge page key must not be empty';
+  if (/[/#%]/.test(key)) return `Knowledge page key "${key}" must not contain "/", "#" or "%"`;
+  return undefined;
 }

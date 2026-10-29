@@ -5,7 +5,7 @@ import type {
   KnowledgeReadScope,
   KnowledgeStorage,
 } from '../storage/domains/knowledge';
-import { knowledgeScopeReadable } from '../storage/domains/knowledge';
+import { knowledgeScopeReadable, parseKnowledgePageRef } from '../storage/domains/knowledge';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast, knowledgeRunScopes } from './declarations';
 import type { KnowledgeRole } from './declarations';
@@ -103,19 +103,18 @@ export class KnowledgeRun {
 
   /**
    * Resolves a page reference through the run's read view: a page id, a scope address,
-   * `<scope>#<key>`, or an exact name (ambiguous names are refused with candidate ids).
+   * `<scope>#<key>[/<key>…]` (walked key by key), or an exact name (ambiguous names are refused with candidate ids).
    */
   async page(ref: string): Promise<KnowledgePage> {
     const byId = await this.storage.getPage({ id: ref, read: this.read });
     if (byId && !byId.deletedAt) return byId;
 
-    const hash = ref.indexOf('#');
-    if (hash > 0) {
-      const scope = await this.#readableScope(ref.slice(0, hash));
-      const key = ref.slice(hash + 1);
+    if (ref.indexOf('#') > 0) {
+      const parsed = parseKnowledgePageRef(ref);
+      const scope = parsed ? await this.#readableScope(parsed.scope) : undefined;
       const page =
-        scope && key && !key.includes('#')
-          ? await this.storage.getPageByKey({ scopeId: scope.id, key, read: this.read })
+        parsed && scope
+          ? await this.storage.getPageByPath({ scopeId: scope.id, path: parsed.path, read: this.read })
           : null;
       if (!page) throw new KnowledgeNotFoundError(ref);
       return page;

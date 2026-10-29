@@ -316,6 +316,12 @@ describe('compileKnowledgeScopes: config pins', () => {
     ).not.toThrow();
   });
 
+  it('accepts a nested key path pin', () => {
+    expect(() =>
+      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['policy:$orgId#policies/refund'] } }),
+    ).not.toThrow();
+  });
+
   it('refuses a pin with a param the holding scope cannot bind', () => {
     expect(() =>
       compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['team:$orgId:$teamId#refund'] } }),
@@ -330,13 +336,70 @@ describe('compileKnowledgeScopes: config pins', () => {
   });
 
   it('refuses a pin that is a name or has no key, and one on an undeclared type', () => {
-    for (const ref of ['Refund Policy', 'policy:$orgId#', '#refund']) {
+    for (const ref of ['Refund Policy', 'policy:$orgId#', '#refund', 'policy:$orgId#a#b', 'policy:$orgId#a//b']) {
       expect(() => compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: [ref] } })).toThrow(
-        /must be "<scope>#<key>"/,
+        /must be "<scope>#<key>\[\/<key>…\]"/,
       );
     }
     expect(() =>
       compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['handbook:$orgId#intro'] } }),
     ).toThrow(/undeclared scope type/);
+  });
+});
+
+describe('compileKnowledgeScopes: page templates', () => {
+  it('accepts nested templates whose keys repeat only under different parents', () => {
+    expect(() =>
+      compileKnowledgeScopes({
+        'org:$orgId': {
+          pages: [
+            { key: 'policies', name: 'Policies', pages: [{ key: 'refund', name: 'Refund policy' }] },
+            { key: 'handbook', name: 'Handbook', pages: [{ key: 'refund', name: 'Refund section' }] },
+          ],
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses a template key containing "/", "#" or "%", at any depth', () => {
+    for (const key of ['policies/refund', 'a#b', '50%', '']) {
+      expect(() => compileKnowledgeScopes({ 'org:$orgId': { pages: [{ key, name: 'Bad' }] } })).toThrow(
+        KnowledgeDeclarationError,
+      );
+      expect(() =>
+        compileKnowledgeScopes({
+          'org:$orgId': { pages: [{ key: 'policies', name: 'Policies', pages: [{ key, name: 'Bad' }] }] },
+        }),
+      ).toThrow(/Knowledge page key/);
+    }
+  });
+
+  it('refuses the same template key twice under one parent', () => {
+    expect(() =>
+      compileKnowledgeScopes({
+        'org:$orgId': {
+          pages: [
+            { key: 'refund', name: 'A' },
+            { key: 'refund', name: 'B' },
+          ],
+        },
+      }),
+    ).toThrow(/"refund" on "org:\$orgId" is declared twice under the scope/);
+    expect(() =>
+      compileKnowledgeScopes({
+        'org:$orgId': {
+          pages: [
+            {
+              key: 'policies',
+              name: 'P',
+              pages: [
+                { key: 'refund', name: 'A' },
+                { key: 'refund', name: 'B' },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toThrow(/declared twice under "policies"/);
   });
 });

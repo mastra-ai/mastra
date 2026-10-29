@@ -190,7 +190,7 @@ async function readAtlas(knowledge: Knowledge) {
   const store = await knowledge.getStorage();
   const read = await knowledge.readScopeFor(['org:acme', 'resource:workspace']);
   const [scope] = await store.getScopesByAddress(['resource:workspace']);
-  const page = scope ? await store.getPageByKey({ scopeId: scope.id, key: 'atlas', read }) : null;
+  const page = scope ? await store.getPageByPath({ scopeId: scope.id, path: ['atlas'], read }) : null;
   const notes = page ? (await store.listNotes({ pageId: page.id, read })).notes : [];
   const pins = (await store.listPins({ audience: ['resource:workspace'], read })).pins;
   return { scope, page, notes, pins };

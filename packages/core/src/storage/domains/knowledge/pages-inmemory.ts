@@ -1,4 +1,4 @@
-import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import { knowledgePageKeyProblem, knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { KnowledgeConflictError, KnowledgeNotFoundError } from './base';
 import {
   assertKnowledgeNoteTextWithinBound,
@@ -216,11 +216,39 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     return undefined;
   }
 
-  #pageByKey(scopeId: string, key: string): KnowledgePage | undefined {
+  #childByKey(parentId: string, key: string, except?: string): KnowledgePage | undefined {
     for (const page of this.#pages.values()) {
-      if (page.scopeId === scopeId && !page.isScope && page.key === key && !page.deletedAt) return page;
+      if (page.parentId === parentId && !page.isScope && page.key === key && !page.deletedAt && page.id !== except) {
+        return page;
+      }
     }
     return undefined;
+  }
+
+  #materializeTemplates(
+    scopeId: string,
+    parentId: string,
+    templates: NonNullable<Parameters<Store['materializeScope']>[0]['pages']>,
+    provenance: KnowledgeProvenance,
+  ): void {
+    for (const template of templates) {
+      const problem = knowledgePageKeyProblem(template.key);
+      if (problem) throw new Error(problem);
+      let page = this.#childByKey(parentId, template.key);
+      if (!page) {
+        page = this.#newPage({
+          scopeId,
+          parentId,
+          isScope: false,
+          key: template.key,
+          name: template.name,
+          description: template.description,
+          provenance,
+        });
+        this.#log('page-created', page, provenance);
+      }
+      if (template.pages?.length) this.#materializeTemplates(scopeId, page.id, template.pages, provenance);
+    }
   }
 
   // Scopes
@@ -274,19 +302,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       });
       this.#log('scope-created', page, input.provenance);
     }
-    for (const keyed of input.pages ?? []) {
-      if (this.#pageByKey(scope.id, keyed.key)) continue;
-      const page = this.#newPage({
-        scopeId: scope.id,
-        parentId: scope.id,
-        isScope: false,
-        key: keyed.key,
-        name: keyed.name,
-        description: keyed.description,
-        provenance: input.provenance,
-      });
-      this.#log('page-created', page, input.provenance);
-    }
+    this.#materializeTemplates(scope.id, scope.id, input.pages ?? [], input.provenance);
     return { scope: clone(scope), created, ...(parentConflict ? { parentConflict } : {}) };
   }
 
@@ -313,8 +329,14 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     return page && this.#pageReadable(page, input.read) ? clone(page) : null;
   }
 
-  async getPageByKey(input: Parameters<Store['getPageByKey']>[0]) {
-    const page = this.#pageByKey(input.scopeId, input.key);
+  async getPageByPath(input: Parameters<Store['getPageByPath']>[0]) {
+    let page: KnowledgePage | undefined;
+    let parentId = input.scopeId;
+    for (const key of input.path) {
+      page = this.#childByKey(parentId, key);
+      if (!page || !this.#pageReadable(page, input.read)) return null;
+      parentId = page.id;
+    }
     return page && this.#pageReadable(page, input.read) ? clone(page) : null;
   }
 
@@ -362,8 +384,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const scopeId = parent.isScope ? parent.id : parent.scopeId;
     const id = input.id ?? crypto.randomUUID();
     if (this.#depth(parent) + 1 > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(id);
-    if (input.key !== undefined && this.#pageByKey(scopeId, input.key)) {
-      throw new KnowledgePageKeyConflictError(input.key, scopeId);
+    if (input.key !== undefined) {
+      const problem = knowledgePageKeyProblem(input.key);
+      if (problem) throw new Error(problem);
+      if (this.#childByKey(parent.id, input.key)) throw new KnowledgePageKeyConflictError(input.key, parent.id);
     }
     const page = this.#newPage({ ...input, id, scopeId, isScope: false });
     this.#log('page-created', page, input.provenance);
@@ -389,8 +413,9 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   }
 
   /**
-   * Checks moving `subtree` under `parent`: cycles, depth, size and key clashes in the destination
-   * scope. Only live pages count; `rootCounts` is false for a merge, whose root (the source) is deleted.
+   * Checks moving `subtree` under `parent`: cycles, depth, size and sibling-key clashes under `parent`
+   * (the moved root for a move, the source's live children for a merge). Only live pages count;
+   * `rootCounts` is false for a merge, whose root (the source) is deleted.
    */
   #checkCarry(pageId: string, subtree: Subtree, parent: KnowledgePage, rootCounts: boolean): void {
     if (subtree.some(entry => entry.page.id === parent.id)) {
@@ -401,10 +426,11 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const height = Math.max(0, ...live.map(entry => entry.relativeDepth));
     const deepest = this.#depth(parent) + (rootCounts ? height + 1 : height);
     if (deepest > MAX_KNOWLEDGE_PAGE_DEPTH) throw new KnowledgePageDepthError(pageId);
-    const scopeId = parent.isScope ? parent.id : parent.scopeId;
-    for (const { page } of live) {
-      if (page.key === undefined || page.scopeId === scopeId) continue;
-      if (this.#pageByKey(scopeId, page.key)) throw new KnowledgePageKeyConflictError(page.key, scopeId);
+    const arriving = rootCounts ? [subtree[0]!.page] : live.filter(entry => entry.relativeDepth === 1).map(e => e.page);
+    for (const page of arriving) {
+      if (page.key !== undefined && this.#childByKey(parent.id, page.key, page.id)) {
+        throw new KnowledgePageKeyConflictError(page.key, parent.id);
+      }
     }
   }
 

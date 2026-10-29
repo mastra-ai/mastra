@@ -25,10 +25,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pageStore.getPage(input);
   }
-  override getPageByKey(
-    input: Parameters<KnowledgePageStore['getPageByKey']>[0],
-  ): ReturnType<KnowledgePageStore['getPageByKey']> {
-    return this.#pageStore.getPageByKey(input);
+  override getPageByPath(
+    input: Parameters<KnowledgePageStore['getPageByPath']>[0],
+  ): ReturnType<KnowledgePageStore['getPageByPath']> {
+    return this.#pageStore.getPageByPath(input);
   }
   override findPagesByName(
     input: Parameters<KnowledgePageStore['findPagesByName']>[0],

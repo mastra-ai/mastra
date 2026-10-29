@@ -7,6 +7,8 @@
  * @experimental Knowledge APIs are experimental and may change without notice.
  */
 
+import { knowledgePageKeyProblem } from '@internal/core/knowledge-compat';
+import { parseKnowledgePageRef } from '../storage/domains/knowledge/pages';
 import { decodeKnowledgeScopeValue, encodeKnowledgeScopeValue } from './scope-address';
 
 /** @experimental */
@@ -45,12 +47,24 @@ export interface KnowledgeScopeDeclaration {
   belongsTo?: string;
   /** Child scopes created with this scope, at `<address>/<name>`. */
   children?: Array<{ name: string; description?: string; access?: KnowledgeAccessRule[] }>;
-  /** Keyed pages created with this scope. */
-  pages?: Array<{ key: string; name: string; description?: string }>;
+  /** Keyed pages created with this scope; they may nest (`pages` inside a page, same scope). */
+  pages?: KnowledgePageTemplate[];
   /** Config pins (page refs) delivered to runs holding this scope. */
   pins?: string[];
   /** Ordering of stored pins delivered through this scope; higher first. Default 0. */
   pinPriority?: number;
+}
+
+/**
+ * A keyed page created with its scope. `key` is unique among its siblings and can't contain `/`, `#`
+ * or `%`; nested `pages` sit under it, addressed `<scope>#<key>/<child key>`.
+ * @experimental
+ */
+export interface KnowledgePageTemplate {
+  key: string;
+  name: string;
+  description?: string;
+  pages?: KnowledgePageTemplate[];
 }
 
 /** @experimental */
@@ -346,6 +360,22 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     concrete.set(address, { declaration, rules: [] });
   }
 
+  const checkTemplates = (owner: string, templates: KnowledgePageTemplate[] | undefined, under: string) => {
+    const keys = new Set<string>();
+    for (const template of templates ?? []) {
+      const problem = knowledgePageKeyProblem(template.key);
+      if (problem) throw new KnowledgeDeclarationError(`${problem} (page template on "${owner}").`);
+      if (keys.has(template.key)) {
+        throw new KnowledgeDeclarationError(
+          `Knowledge page template key "${template.key}" on "${owner}" is declared twice under ${under}; keys are unique among siblings.`,
+        );
+      }
+      keys.add(template.key);
+      checkTemplates(owner, template.pages, `"${template.key}"`);
+    }
+  };
+  for (const compiled of all.values()) checkTemplates(compiled.key, compiled.declaration.pages, 'the scope');
+
   for (const compiled of [...all.values()]) {
     const names = new Set<string>();
     for (const child of compiled.declaration.children ?? []) {
@@ -480,13 +510,13 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
 
   const checkPins = (owner: string, pins: string[] | undefined, params: string[]) => {
     for (const ref of pins ?? []) {
-      const hash = ref.indexOf('#');
-      if (hash <= 0 || hash === ref.length - 1) {
+      const parsed = parseKnowledgePageRef(ref);
+      if (!parsed) {
         throw new KnowledgeDeclarationError(
-          `Knowledge config pin "${ref}" on "${owner}" must be "<scope>#<key>" naming a keyed page, e.g. "policy:$orgId#refund-policy".`,
+          `Knowledge config pin "${ref}" on "${owner}" must be "<scope>#<key>[/<key>…]" naming a keyed page, e.g. "policy:$orgId#refund-policy" or "org:$orgId#policies/refund"; keys can't be empty or contain "/", "#" or "%".`,
         );
       }
-      const pattern = typedPattern(ref.slice(0, hash), `Knowledge config pin scope on "${owner}"`);
+      const pattern = typedPattern(parsed.scope, `Knowledge config pin scope on "${owner}"`);
       if (!compiledScopes.match(sampleAddress(pattern))) {
         throw new KnowledgeDeclarationError(
           `Knowledge config pin "${ref}" on "${owner}" points at an undeclared scope type; declare it or fix the typo.`,

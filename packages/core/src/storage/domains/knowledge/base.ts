@@ -205,10 +205,10 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   getPage(_input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('getPage'));
   }
-  getPageByKey(
-    _input: Parameters<KnowledgePageStore['getPageByKey']>[0],
-  ): ReturnType<KnowledgePageStore['getPageByKey']> {
-    return Promise.reject(new KnowledgeUnsupportedCapabilityError('getPageByKey'));
+  getPageByPath(
+    _input: Parameters<KnowledgePageStore['getPageByPath']>[0],
+  ): ReturnType<KnowledgePageStore['getPageByPath']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('getPageByPath'));
   }
   findPagesByName(
     _input: Parameters<KnowledgePageStore['findPagesByName']>[0],

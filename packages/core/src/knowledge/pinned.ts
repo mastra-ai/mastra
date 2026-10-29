@@ -1,4 +1,5 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
+import { parseKnowledgePageRef } from '../storage/domains/knowledge';
 import type { KnowledgePage, KnowledgePin } from '../storage/domains/knowledge';
 import { knowledgeScopeAddress } from './declarations';
 import type { CompiledKnowledgeScopes } from './declarations';
@@ -28,12 +29,12 @@ export interface PinBudget {
   maxTokens: number;
 }
 
-/** A config pin ref with `$params` bound from the held principal, split into scope address and key. */
-function bindConfigPin(ref: string, params: Record<string, string>): { address: string; key: string } | null {
-  const hash = ref.indexOf('#');
-  if (hash <= 0) return null;
+/** A config pin ref with `$params` bound from the held principal, split into scope address and key path. */
+function bindConfigPin(ref: string, params: Record<string, string>): { address: string; path: string[] } | null {
+  const parsed = parseKnowledgePageRef(ref);
+  if (!parsed) return null;
   try {
-    return { address: knowledgeScopeAddress(ref.slice(0, hash), params), key: ref.slice(hash + 1) };
+    return { address: knowledgeScopeAddress(parsed.scope, params), path: parsed.path };
   } catch {
     return null;
   }
@@ -67,7 +68,8 @@ async function configPinPages(run: KnowledgeRun): Promise<KnowledgePage[]> {
       if (!bound) continue;
       const [scope] = await run.storage.getScopesByAddress([bound.address]);
       if (!scope) continue;
-      const page = await run.storage.getPageByKey({ scopeId: scope.id, key: bound.key, read: run.read });
+      // Resolved by path every run: a path with no page (not created yet, moved, deleted) delivers nothing.
+      const page = await run.storage.getPageByPath({ scopeId: scope.id, path: bound.path, read: run.read });
       if (page && !page.deletedAt) pages.set(page.id, page);
     }
   }
