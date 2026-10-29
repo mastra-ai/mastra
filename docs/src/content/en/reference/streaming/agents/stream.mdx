@@ -568,56 +568,6 @@ const stream = await agent.stream('message for agent')
             description:
               'Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output',
           },
-          {
-            name: 'telemetry',
-            type: 'TelemetrySettings',
-            isOptional: true,
-            description: 'Settings for OTLP telemetry collection during streaming (not Tracing).',
-            properties: [
-              {
-                parameters: [
-                  {
-                    name: 'isEnabled',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Enable or disable telemetry. Disabled by default while experimental.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordInputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description:
-                      'Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordOutputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description:
-                      'Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'functionId',
-                    type: 'string',
-                    isOptional: true,
-                    description: 'Identifier for this function. Used to group telemetry data by function.',
-                  },
-                ],
-              },
-            ],
-          },
           MODEL_SETTINGS_OBJECT,
           {
             name: 'toolChoice',
