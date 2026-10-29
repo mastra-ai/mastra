@@ -288,7 +288,7 @@ function ThreadRailItem({
         onMouseEnter={event => onHoverChange(index, event.currentTarget)}
         onFocus={event => onHoverChange(index, event.currentTarget)}
         className={cn(
-          'relative block h-px cursor-pointer rounded-full',
+          'relative block h-px cursor-pointer rounded-full transition-[width,background-color] duration-normal ease-out',
           "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']",
           focusRing,
           size,

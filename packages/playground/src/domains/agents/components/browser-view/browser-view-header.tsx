@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
@@ -50,7 +51,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onTuck}
-            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover)}
+            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title="Minimize to pill"
           >
             <Minus className="h-4 w-4" />
@@ -61,7 +62,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover)}
+            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -72,7 +73,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onClose}
-            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover)}
+            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title="Close browser session"
           >
             <X className="h-4 w-4" />

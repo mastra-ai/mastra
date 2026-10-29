@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Too
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
 import { controlHeight } from '@/ds/primitives/control-size';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const tabListVariants = cva('relative flex items-center text-body', {
@@ -221,7 +222,10 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         tabIndex={tabs?.value === tab.value ? 0 : -1}
                         data-slot="tab-close"
                         onClick={tab.onClose}
-                        className="rounded p-0.5 hover:bg-fill-hover hover:text-destructive-foreground"
+                        className={cn(
+                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-foreground',
+                          transitions.colors,
+                        )}
                       />
                     }
                   >

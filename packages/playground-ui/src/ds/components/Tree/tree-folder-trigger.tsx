@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useTreeContext, useTreeDepth, useTreeFolderContext } from './tree-context';
 import { CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface TreeFolderTriggerProps {
@@ -32,6 +33,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         data-tree-folder-row="true"
         className={cn(
           'group flex h-7 w-full min-w-0 items-center rounded-sm hover:bg-fill-subtle',
+          transitions.colors,
           folderCtx?.isFocused && 'bg-fill-hover text-foreground',
           className,
         )}

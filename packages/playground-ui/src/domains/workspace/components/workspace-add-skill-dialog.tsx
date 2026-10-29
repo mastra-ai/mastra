@@ -28,6 +28,7 @@ import { Txt } from '@/ds/components/Txt';
 import { GithubIcon } from '@/ds/icons/GithubIcon';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -324,7 +325,7 @@ export function WorkspaceAddSkillDialog({
                             href={`https://github.com/${parsedSource.owner}/${parsedSource.repo}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={quietTextHover}
+                            className={cn(quietTextHover, controlStateColorTransition)}
                             title="View on GitHub"
                           >
                             <ExternalLink className="size-4" />

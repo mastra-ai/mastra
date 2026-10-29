@@ -3,6 +3,7 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { CSSProperties, ReactNode } from 'react';
@@ -72,7 +73,7 @@ export const FilterableList = ({
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-select-all`}
-          className={cn(quietTextHover, 'disabled:cursor-not-allowed disabled:opacity-60')}
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           <Txt as="span" variant="meta" className="block">
             Select all
@@ -86,7 +87,7 @@ export const FilterableList = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-clear-all`}
-          className={cn(quietTextHover, 'disabled:cursor-not-allowed disabled:opacity-60')}
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           <Txt as="span" variant="meta" className="block">
             Clear all

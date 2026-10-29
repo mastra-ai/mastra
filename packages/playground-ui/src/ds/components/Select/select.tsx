@@ -18,6 +18,7 @@ import {
 } from '@/ds/primitives/menu-item';
 import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 /**
@@ -170,7 +171,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className="size-4 text-muted-foreground" />
+              <ChevronDown className={cn('size-4 text-muted-foreground', transitions.colors)} />
             </span>
           }
         />

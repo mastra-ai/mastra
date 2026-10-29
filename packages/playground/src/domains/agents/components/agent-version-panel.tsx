@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
@@ -61,6 +62,7 @@ export function AgentVersionPanel({
                     className={cn(
                       'text-foreground',
                       'w-full border-l-2 px-3 py-2.5 text-left',
+                      controlStateColorTransition,
                       isSelected
                         ? 'border-border-strong bg-fill-hover'
                         : `border-transparent hover:bg-fill-subtle ${quietTextHover}`,

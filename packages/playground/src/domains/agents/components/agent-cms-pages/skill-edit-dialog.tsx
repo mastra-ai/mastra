@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -369,7 +370,7 @@ export function SkillEditDialog({
               <div className="border-t border-border pt-4">
                 <button
                   onClick={() => setShowForm(false)}
-                  className={cn('mb-3 flex items-center gap-1.5', quietTextHover)}
+                  className={cn('mb-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                 >
                   <ChevronDown className="h-3 w-3" />
                   <Txt as="span" variant="caption" className="block">
@@ -415,7 +416,7 @@ export function SkillEditDialog({
                           }
                           setMode('advanced');
                         }}
-                        className={cn('mt-3 flex items-center gap-1.5', quietTextHover)}
+                        className={cn('mt-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                       >
                         <Settings2 className="h-3.5 w-3.5" />
                         <Txt as="span" variant="caption" className="block">
@@ -437,7 +438,7 @@ export function SkillEditDialog({
                           }
                           setMode('simple');
                         }}
-                        className={cn('mb-3 flex items-center gap-1.5', quietTextHover)}
+                        className={cn('mb-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         <Txt as="span" variant="caption" className="block">
@@ -459,7 +460,10 @@ export function SkillEditDialog({
               </div>
             ) : (
               <div className="border-t border-border pt-3">
-                <button onClick={() => setShowForm(true)} className={cn('flex items-center gap-1.5', quietTextHover)}>
+                <button
+                  onClick={() => setShowForm(true)}
+                  className={cn('flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
+                >
                   <ChevronRight className="h-3 w-3" />
                   <Txt as="span" variant="caption" className="block">
                     {hasFields ? 'Show skill details' : 'or fill in manually'}

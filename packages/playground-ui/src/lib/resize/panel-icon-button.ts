@@ -1,3 +1,4 @@
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -7,5 +8,6 @@ export const panelIconButtonClass = cn(
   'flex size-8 cursor-pointer items-center justify-center rounded-full',
   'border border-transparent bg-transparent hover:bg-fill active:bg-fill-hover',
   quietTextHover,
+  controlStateColorTransition,
   'focus-visible:border-border-focus focus-visible:outline-hidden',
 );

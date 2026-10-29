@@ -30,6 +30,7 @@ import {
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
@@ -331,7 +332,12 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               </Button>
             )}
             <CollapsibleTrigger
-              className={cn('underline-offset-2 hover:underline', quietTextHover, 'text-body')}
+              className={cn(
+                'underline-offset-2 hover:underline',
+                quietTextHover,
+                controlStateColorTransition,
+                'text-body',
+              )}
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details

@@ -1,6 +1,7 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
+import { controlStateColorTransition, transitions } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +41,7 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
         // with the heading and the trace ID on the same header row.
         'inline-flex min-w-0 items-center gap-1.5 overflow-hidden rounded-full px-2',
         controlSizeClasses.sm,
+        controlStateColorTransition,
         isInteractive
           ? cn(quietTextHover, 'cursor-pointer hover:bg-fill-subtle active:bg-fill')
           : cn('text-muted-foreground', hasTooltip && 'cursor-help'),
@@ -48,7 +50,7 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
       {...props}
     >
       {icon && (
-        <Icon size="xs" className="shrink-0 opacity-50 group-hover:opacity-100">
+        <Icon size="xs" className={cn('shrink-0 opacity-50 group-hover:opacity-100', transitions.opacity)}>
           {icon}
         </Icon>
       )}

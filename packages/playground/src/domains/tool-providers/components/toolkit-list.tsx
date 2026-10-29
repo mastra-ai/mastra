@@ -1,6 +1,7 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useToolkits } from '@mastra/react/hooks/tool-providers';
@@ -37,6 +38,7 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           className={cn(
             'text-foreground',
             'rounded-md px-3 py-2 text-left',
+            controlStateColorTransition,
             selectedToolkit === undefined ? 'bg-fill-hover' : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
@@ -51,6 +53,7 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           className={cn(
             'text-foreground',
             'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left',
+            controlStateColorTransition,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
               ? 'bg-fill-hover'
               : cn(quietTextHover, 'hover:bg-fill-subtle'),
@@ -79,6 +82,7 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             className={cn(
               'text-foreground',
               'truncate rounded-md px-3 py-2 text-left',
+              controlStateColorTransition,
               selectedToolkit === toolkit.slug ? 'bg-fill-hover' : cn(quietTextHover, 'hover:bg-fill-subtle'),
             )}
           >

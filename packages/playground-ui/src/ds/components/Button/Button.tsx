@@ -12,7 +12,7 @@ import {
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
-import { focusRing, focusRingOffset } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Text-mode buttons are pills. Each size sets `--button-px`, the label's side padding. The
@@ -56,6 +56,7 @@ const NEUTRAL_ICON_STATE = cn(
 export const buttonVariants = cva(
   cn(
     'inline-flex cursor-pointer items-center justify-center',
+    controlStateColorTransition,
     sharedFormElementDisabledStyle,
     'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground',
     controlFocusBorderVisible,
