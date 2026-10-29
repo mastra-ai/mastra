@@ -24,10 +24,8 @@ export interface CardMove {
 }
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
-export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
-  Partial<Pick<WorkItem, 'board' | 'stages'>> & {
-    workItem?: { labels: string[] };
-  };
+export type MovableCard = Pick<WorkItem, 'source' | 'metadata' | 'workItem'> &
+  Partial<Pick<WorkItem, 'board' | 'stages'>>;
 
 const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
 const PLAN: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };
