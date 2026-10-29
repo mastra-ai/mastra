@@ -303,6 +303,15 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     this.#transaction = config.transaction;
   }
 
+  /** Deletes every row from the page tables (scopes, pages, notes, pins, activity). */
+  async clearAll(): Promise<void> {
+    await this.#transaction(async tx => {
+      for (const table of [T.activity, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
+        await tx.execute({ sql: `DELETE FROM ${table}`, args: [] });
+      }
+    });
+  }
+
   async #query(executor: PageExecutor, sql: string, args: InValue[] = []): Promise<Row[]> {
     const result = await executor.execute({ sql, args });
     return result.rows as unknown as Row[];
@@ -576,7 +585,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         `SELECT id FROM "${T.pages}" WHERE scopeId = ? AND key = ? AND deletedAt IS NULL`,
         [scopeId, input.key],
       );
-      if (clash.length > 0) throw new KnowledgeConflictError(`${scopeId}#${input.key}`);
+      if (clash.length > 0) throw new Error(`A page with key '${input.key}' already exists in scope ${scopeId}`);
     }
     const position = input.position ?? knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
     const now = new Date().toISOString();
@@ -693,12 +702,12 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage> {
     return this.#transaction(async tx => {
       const row = await this.#livePage(tx, input.id);
-      if (Number(row.isScope) === 1) throw new Error(`Scope page ${input.id} cannot be moved`);
+      if (Number(row.isScope) === 1) throw new Error(`Cannot move ${input.id}: it is a scope page`);
       if (Number(row.version) !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
       const parent = await this.#livePage(tx, input.parentId);
       const path = String(row.path);
       if (String(parent.id) === input.id || String(parent.path).startsWith(path)) {
-        throw new Error(`Page ${input.id} cannot move into its own subtree`);
+        throw new Error(`Cannot move ${input.id} into its own subtree`);
       }
       const now = new Date().toISOString();
       const { scopeId } = await this.#rehome(tx, row, parent, {
@@ -719,12 +728,14 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       const source = await this.#livePage(tx, input.sourceId);
       const target = await this.#livePage(tx, input.targetId);
       if (Number(source.isScope) === 1 || Number(target.isScope) === 1) {
-        throw new Error('Scope pages cannot be merged');
+        throw new Error('Cannot merge a scope page: merging applies to non-scope pages only');
       }
       if (Number(source.version) !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
       const sourcePath = String(source.path);
       if (input.sourceId === input.targetId || String(target.path).startsWith(sourcePath)) {
-        throw new Error(`Page ${input.targetId} is inside page ${input.sourceId}; it cannot be the merge target`);
+        throw new Error(
+          `Page ${input.targetId} is inside page ${input.sourceId}; it cannot be the merge target (subtree)`,
+        );
       }
       const carried = await this.#query(
         tx,
@@ -785,14 +796,14 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         { scopeId: String(target.scopeId), pageId: input.sourceId, provenance: input.provenance },
         now,
       );
-      return toPage((await this.#pageRow(tx, input.sourceId))!);
+      return toPage((await this.#pageRow(tx, input.targetId))!);
     });
   }
 
   deletePage(input: { id: string; expectedVersion: number; deletedBy: string }): Promise<KnowledgePage> {
     return this.#transaction(async tx => {
       const row = await this.#livePage(tx, input.id);
-      if (Number(row.isScope) === 1) throw new Error(`Scope page ${input.id} cannot be deleted`);
+      if (Number(row.isScope) === 1) throw new Error(`Cannot delete ${input.id}: it is a scope page`);
       if (Number(row.version) !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
       const children = await this.#query(
         tx,
@@ -927,7 +938,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     );
     const known = new Set(found.map(row => String(row.id)));
     const missing = ids.find(id => !known.has(id));
-    if (missing) throw new KnowledgeNotFoundError('scope', missing);
+    if (missing) throw new Error(`Note stamp ${missing} is not a scope page`);
   }
 
   async addNote(input: AddKnowledgeNoteInput): Promise<KnowledgeNote> {

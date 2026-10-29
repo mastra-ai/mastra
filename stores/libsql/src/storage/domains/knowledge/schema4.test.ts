@@ -1,6 +1,13 @@
+import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { describe, expect, it } from 'vitest';
 import { KnowledgeLibSQL } from './index';
+
+createKnowledgePageStoreTests(async () => {
+  const store = new KnowledgeLibSQL({ client: createClient({ url: ':memory:' }) });
+  await store.init();
+  return store;
+});
 
 const who = { author: 'host' };
 

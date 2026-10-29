@@ -1,3 +1,4 @@
+import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { createPool } from 'mysql2/promise';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { StoreOperationsMySQL } from '../operations';
@@ -16,6 +17,12 @@ const pool = createPool({
 });
 afterAll(() => pool.end());
 const createStore = () => new KnowledgeMySQL({ pool, operations: new StoreOperationsMySQL({ pool, database }) });
+createKnowledgePageStoreTests(async () => {
+  const store = createStore();
+  await store.dangerouslyReset();
+  return store;
+});
+
 const who = { author: 'host' };
 
 describe('KnowledgeMySQL schema 4 wiring', () => {
