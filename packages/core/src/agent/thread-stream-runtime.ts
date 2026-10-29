@@ -4938,14 +4938,15 @@ export class AgentThreadStreamRuntime {
           // events, so only discard this runtime's local pre-run copies.
           state.preRunSignalsByThread.delete(key);
           if (owns.owner && !isRetakeLeaseOwner(owns.owner)) {
+            const ownerRunId = threadLeaseRunId(owns.owner);
             // Forwarding is a handoff: the signal is no longer locally cancellable.
             // Echoes of the original enqueue stay suppressed, but the forwarded event must be
             // queued if this runtime later takes over the owner run.
             const ids = state.locallyQueuedSignalIdsByThread.get(key);
-            if (ids?.has(signal.id)) ids.set(signal.id, owns.owner);
+            if (ids?.has(signal.id)) ids.set(signal.id, ownerRunId);
             await this.#publishAndWait(pubsub, key, {
               type: 'signal-enqueued',
-              runId: owns.owner,
+              runId: ownerRunId,
               signal: this.#serializeSignal(signal),
               sourceId: this.#getSourceId(),
             }).catch(() => {});
@@ -5309,7 +5310,7 @@ export class AgentThreadStreamRuntime {
       if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
-          runId: owns.owner,
+          runId: threadLeaseRunId(owns.owner),
           signal: this.#serializeSignal(pendingIdle.signal),
           sourceId: this.#getSourceId(),
         }).catch(() => {});

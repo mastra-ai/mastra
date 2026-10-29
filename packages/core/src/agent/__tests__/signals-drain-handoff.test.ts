@@ -459,53 +459,59 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(restored[1]).toMatchObject({ contents: 'second steer' });
   });
 
-  it('queues a retained signal it queued locally but forwarded during drain when it later owns the run', async () => {
-    const runtime = new AgentThreadStreamRuntime();
-    const pubsub = new ControlledLeasePubSub();
-    const streamMock = vi.fn();
-    const agent = { id: 'drain-forward-agent', stream: streamMock } as unknown as Agent<any, any, any, any>;
-    const threadId = 'drain-forward-thread';
-    const resourceId = 'drain-forward-user';
-    const options = { memory: { thread: threadId, resource: resourceId } } as any;
-    let finishRun!: () => void;
-    const finished = new Promise<void>(resolve => {
-      finishRun = resolve;
-    });
+  it.each(['bare', 'generation', 'execution', 'lookalike'] as const)(
+    'queues a retained signal forwarded to a %s owner during drain when it later owns the run',
+    async kind => {
+      const ownerRunId = kind === 'lookalike' ? 'mastra:thread-lease:["literal","generation",2]' : 'other-owner-run';
+      const owner =
+        kind === 'bare'
+          ? ownerRunId
+          : `mastra:thread-lease:${JSON.stringify([ownerRunId, kind === 'lookalike' ? 'run' : kind, kind === 'generation' ? 2 : kind === 'execution' ? 'successor' : null])}`;
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new ControlledLeasePubSub();
+      const streamMock = vi.fn();
+      const agent = { id: 'drain-forward-agent', stream: streamMock } as unknown as Agent<any, any, any, any>;
+      const threadId = 'drain-forward-thread';
+      const resourceId = 'drain-forward-user';
+      const options = { memory: { thread: threadId, resource: resourceId } } as any;
+      let finishRun!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finishRun = resolve;
+      });
 
-    runtime.registerRun(agent, createFakeThreadRun('drain-forward-run', finished), options, pubsub);
-    const queued = runtime.sendMessage(agent, 'drained notification', { resourceId, threadId }, pubsub);
-    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'drain-forward-run' });
-    const enqueued = pubsub.publishedData.find(data => data.type === 'signal-enqueued');
-    expect(enqueued).toBeDefined();
+      runtime.registerRun(agent, createFakeThreadRun('drain-forward-run', finished), options, pubsub);
+      const queued = runtime.sendMessage(agent, 'drained notification', { resourceId, threadId }, pubsub);
+      await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'drain-forward-run' });
+      const enqueued = pubsub.publishedData.find(data => data.type === 'signal-enqueued');
+      expect(enqueued).toBeDefined();
 
-    // Another runtime wins the lease at handoff, so the drain forwards the signal instead of running it.
-    vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(async key => {
-      pubsub.owners.set(key, 'other-owner-run');
-      return false;
-    });
-    finishRun();
-    await waitForCondition(() =>
-      pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run'),
-    );
-    expect(streamMock).not.toHaveBeenCalled();
-    const forwarded = pubsub.publishedData.find(
-      data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run',
-    );
+      // Another runtime wins the lease at handoff, so the drain forwards the signal instead of running it.
+      vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(async key => {
+        pubsub.owners.set(key, owner);
+        return false;
+      });
+      finishRun();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === ownerRunId),
+      );
+      expect(streamMock).not.toHaveBeenCalled();
+      const forwarded = pubsub.publishedData.find(data => data.type === 'signal-enqueued' && data.runId === ownerRunId);
 
-    // The other owner dies before consuming it; this runtime takes over its run and retained events replay.
-    pubsub.owners.clear();
-    runtime.registerRun(agent, createFakeThreadRun('other-owner-run', new Promise<void>(() => {})), options, pubsub);
-    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
-    // The original local enqueue is still a self-echo and must not be queued again.
-    await pubsub.publish(topic, { type: 'signal-enqueued', data: enqueued });
-    await pubsub.publish(topic, { type: 'signal-enqueued', data: forwarded });
-    await pubsub.flush();
-    await nextTick();
+      // The other owner dies before consuming it; this runtime takes over its run and retained events replay.
+      pubsub.owners.clear();
+      runtime.registerRun(agent, createFakeThreadRun(ownerRunId, new Promise<void>(() => {})), options, pubsub);
+      const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+      // The original local enqueue is still a self-echo and must not be queued again.
+      await pubsub.publish(topic, { type: 'signal-enqueued', data: enqueued });
+      await pubsub.publish(topic, { type: 'signal-enqueued', data: forwarded });
+      await pubsub.flush();
+      await nextTick();
 
-    const restored = runtime.drainPendingSignals('other-owner-run', pubsub);
-    expect(restored).toHaveLength(1);
-    expect(restored[0]).toMatchObject({ contents: 'drained notification' });
-  });
+      const restored = runtime.drainPendingSignals(ownerRunId, pubsub);
+      expect(restored).toHaveLength(1);
+      expect(restored[0]).toMatchObject({ contents: 'drained notification' });
+    },
+  );
 
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {
     const runtime = new AgentThreadStreamRuntime();
@@ -1322,64 +1328,73 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(queued.signal.id).toBeDefined();
   });
 
-  it('removes observed messages when a lease loss forwards them or execution fails', async () => {
-    const resourceId = 'queue-terminal-resource';
-    const threadId = 'queue-terminal-thread';
-    const queueOwnerId = 'queue-terminal-owner';
+  it.each(['bare', 'generation', 'execution', 'lookalike'] as const)(
+    'removes observed messages when a lease loss forwards them to a %s owner or execution fails',
+    async kind => {
+      const ownerRunId = kind === 'lookalike' ? 'mastra:thread-lease:["literal","execution","id"]' : 'remote-winner';
+      const owner =
+        kind === 'bare'
+          ? ownerRunId
+          : `mastra:thread-lease:${JSON.stringify([ownerRunId, kind === 'lookalike' ? 'run' : kind, kind === 'generation' ? 2 : kind === 'execution' ? 'successor' : null])}`;
+      const resourceId = 'queue-terminal-resource';
+      const threadId = 'queue-terminal-thread';
+      const queueOwnerId = 'queue-terminal-owner';
 
-    for (const outcome of ['forward', 'fail'] as const) {
-      const runtime = new AgentThreadStreamRuntime();
-      const pubsub = new ControlledLeasePubSub();
-      const activeRunId = `queue-terminal-active-${outcome}`;
-      let finishActiveRun!: () => void;
-      const activeRunFinished = new Promise<void>(resolve => {
-        finishActiveRun = resolve;
-      });
-      const stream = vi.fn().mockRejectedValue(new Error('queued stream failure'));
-      const agent = { id: `queue-terminal-agent-${outcome}`, stream } as unknown as Agent<any, any, any, any>;
-      const counts: number[] = [];
-      pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
-      if (outcome === 'forward') {
-        pubsub.transferLeaseWait = new Promise<void>(resolve => {
-          pubsub.onTransferLease = () => {
-            pubsub.owners.set(`${resourceId}\u0000${threadId}`, 'remote-winner');
-            resolve();
-          };
+      for (const outcome of ['forward', 'fail'] as const) {
+        const runtime = new AgentThreadStreamRuntime();
+        const pubsub = new ControlledLeasePubSub();
+        const activeRunId = `queue-terminal-active-${outcome}`;
+        let finishActiveRun!: () => void;
+        const activeRunFinished = new Promise<void>(resolve => {
+          finishActiveRun = resolve;
         });
-      }
+        const stream = vi.fn().mockRejectedValue(new Error('queued stream failure'));
+        const agent = { id: `queue-terminal-agent-${outcome}`, stream } as unknown as Agent<any, any, any, any>;
+        const counts: number[] = [];
+        pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
+        if (outcome === 'forward') {
+          pubsub.transferLeaseWait = new Promise<void>(resolve => {
+            pubsub.onTransferLease = () => {
+              pubsub.owners.set(`${resourceId}\u0000${threadId}`, owner);
+              resolve();
+            };
+          });
+        }
 
-      runtime.registerRun(
-        agent,
-        createFakeThreadRun(activeRunId, activeRunFinished),
-        { memory: { resource: resourceId, thread: threadId } } as any,
-        pubsub,
-      );
-      runtime.subscribeThreadEvents(
-        agent,
-        { resourceId, threadId, queueOwnerId },
-        event => {
-          if (event.type === 'queue-count-changed') counts.push(event.count);
-        },
-        pubsub,
-      );
-      const queued = runtime.queueMessage(agent, `queued ${outcome}`, { resourceId, threadId, queueOwnerId }, pubsub);
-      finishActiveRun();
-
-      await waitForCondition(() => counts.at(-1) === 0);
-      expect(counts).toEqual([0, 1, 0]);
-      if (outcome === 'forward') {
-        expect(stream).not.toHaveBeenCalled();
-        expect(pubsub.publishedData).toContainEqual(
-          expect.objectContaining({
-            type: 'signal-enqueued',
-            signal: expect.objectContaining({ id: queued.signal.id }),
-          }),
+        runtime.registerRun(
+          agent,
+          createFakeThreadRun(activeRunId, activeRunFinished),
+          { memory: { resource: resourceId, thread: threadId } } as any,
+          pubsub,
         );
-      } else {
-        expect(stream).toHaveBeenCalledTimes(1);
+        runtime.subscribeThreadEvents(
+          agent,
+          { resourceId, threadId, queueOwnerId },
+          event => {
+            if (event.type === 'queue-count-changed') counts.push(event.count);
+          },
+          pubsub,
+        );
+        const queued = runtime.queueMessage(agent, `queued ${outcome}`, { resourceId, threadId, queueOwnerId }, pubsub);
+        finishActiveRun();
+
+        await waitForCondition(() => counts.at(-1) === 0);
+        expect(counts).toEqual([0, 1, 0]);
+        if (outcome === 'forward') {
+          expect(stream).not.toHaveBeenCalled();
+          expect(pubsub.publishedData).toContainEqual(
+            expect.objectContaining({
+              type: 'signal-enqueued',
+              runId: ownerRunId,
+              signal: expect.objectContaining({ id: queued.signal.id }),
+            }),
+          );
+        } else {
+          expect(stream).toHaveBeenCalledTimes(1);
+        }
       }
-    }
-  });
+    },
+  );
 
   it('removes observed messages after lease acquisition failure', async () => {
     const runtime = new AgentThreadStreamRuntime();
