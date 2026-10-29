@@ -296,6 +296,27 @@ describe('MastraBrowser launch with a locked profile', () => {
     expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'treats a live local holder that starts listening shortly after locking as holding the profile',
+    async () => {
+      // Chrome creates SingletonLock before it listens on SingletonSocket.
+      await lockProfile(`${hostname()}-${process.pid}`, { listening: false });
+      const socketPath = join(socketDir, 'SingletonSocket');
+      const startListening = setTimeout(() => {
+        server = createServer(socket => socket.destroy());
+        server.listen(socketPath);
+      }, 300);
+      const browser = new FakeBrowser({ profile: profileDir });
+
+      const error = await browser.launch().catch(e => e);
+      clearTimeout(startListening);
+
+      expect(error).toBeInstanceOf(BrowserProfileInUseError);
+      expect(browser.doLaunch).not.toHaveBeenCalled();
+      expect(readlinkSync(join(profileDir, 'SingletonLock'))).toBe(`${hostname()}-${process.pid}`);
+    },
+  );
+
   it.skipIf(process.platform === 'win32')('removes a stale lock left under a different hostname', async () => {
     await lockProfile('old-hostname.local-4242', { listening: false });
     const browser = new FakeBrowser({ profile: profileDir });

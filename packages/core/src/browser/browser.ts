@@ -140,6 +140,19 @@ function isSocketAccepting(socketPath: string, timeoutMs = 1000): Promise<boolea
   });
 }
 
+/** How long to wait for a live local lock holder to start listening on its socket. */
+const STARTING_HOLDER_GRACE_MS = 3000;
+
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 /** Read a symlink's target, or undefined if `path` is missing or not a symlink. */
 function readLinkTarget(path: string): string | undefined {
   try {
@@ -190,8 +203,23 @@ export async function releaseStaleProfileLock(
   // link target, like Chrome does: the profile path can exceed the Unix
   // socket path limit.
   const socketLink = join(profilePath, 'SingletonSocket');
-  const socketTarget = readLinkTarget(socketLink);
-  if (await isSocketAccepting(socketTarget ? resolve(profilePath, socketTarget) : socketLink)) {
+  const probeSocket = () => {
+    const socketTarget = readLinkTarget(socketLink);
+    return isSocketAccepting(socketTarget ? resolve(profilePath, socketTarget) : socketLink);
+  };
+  let accepting = await probeSocket();
+  // Chrome creates SingletonLock before it starts listening on SingletonSocket.
+  // While the local holder is still alive, give a starting Chrome time to
+  // listen before calling its lock stale. A reused PID stops being waited on
+  // once the window ends.
+  if (!accepting && holderHost === hostname() && holderPid !== undefined && isProcessAlive(holderPid)) {
+    const deadline = Date.now() + STARTING_HOLDER_GRACE_MS;
+    while (!accepting && Date.now() < deadline && isProcessAlive(holderPid)) {
+      await new Promise(r => setTimeout(r, 100));
+      accepting = await probeSocket();
+    }
+  }
+  if (accepting) {
     throw new BrowserProfileInUseError(profilePath, holderPid, holderHost);
   }
 
