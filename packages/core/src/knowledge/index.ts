@@ -5,8 +5,11 @@ import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeReadScope, KnowledgeStorage } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
+import { emitKnowledgeChanges } from './changes';
+import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
 import { KnowledgeDeclarationError } from './declarations';
+import type { KnowledgeScopeDeclarationInfo } from './declarations';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { buildKnowledgePageTools } from './page-tools';
@@ -49,6 +52,7 @@ export class Knowledge extends MastraBase {
   #pins: false | PinBudget;
   #instructions?: KnowledgeInstructionsOption;
   #semantic?: KnowledgeSemanticIndex;
+  #listeners = new Set<KnowledgeChangeListener>();
 
   /** Config pins are never dropped, so a scope with more of them than the budget holds is a setup mistake. */
   #warnOnPinOvercommit(budget: PinBudget) {
@@ -252,7 +256,55 @@ export class Knowledge extends MastraBase {
     if (!storage) {
       throw new Error('The configured storage provider does not provide a Knowledge storage domain.');
     }
-    return storage;
+    return emitKnowledgeChanges(storage, change => this.#emit(change));
+  }
+
+  #emit(change: Omit<KnowledgeChangeEvent, 'knowledgeId' | 'at'>) {
+    if (this.#listeners.size === 0) return;
+    const event = { ...change, knowledgeId: this.id, at: new Date() } as KnowledgeChangeEvent;
+    for (const listener of this.#listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.logger.error('Knowledge change listener threw', { error });
+      }
+    }
+  }
+
+  /**
+   * Calls `listener` after each committed write made through this instance's store
+   * (`getStorage()`): tool writes, host writes and scope creation. Writes made on a store obtained
+   * some other way aren't seen. Events carry ids, not content and not access: anything that relays
+   * them to people must re-read each page under that person's read scope. Returns an unsubscribe.
+   */
+  onChange(listener: KnowledgeChangeListener): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+
+  /**
+   * The declaration a scope page was created from, by its `declaration` key (template children
+   * included, e.g. `account:$orgId:$accountId/internal`), for display. Access rules are left out;
+   * use `explainAccess` for those. `undefined` for an unknown key.
+   */
+  scopeDeclaration(key: string): KnowledgeScopeDeclarationInfo | undefined {
+    const compiled = this.#runtime.compiled.declarations.get(key);
+    if (!compiled) return undefined;
+    const { description, displayLabel, belongsTo } = compiled.declaration;
+    return {
+      key,
+      ...(description !== undefined && { description }),
+      ...(displayLabel !== undefined && { displayLabel }),
+      ...(belongsTo !== undefined && { belongsTo }),
+      children: compiled.children.map(child => ({
+        key: child.key,
+        name: child.child!.name,
+        ...(child.declaration.description !== undefined && { description: child.declaration.description }),
+        ...(child.declaration.displayLabel !== undefined && { displayLabel: child.declaration.displayLabel }),
+      })),
+    };
   }
 }
 
@@ -263,6 +315,7 @@ export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError
 export type {
   KnowledgePageTemplate,
   KnowledgeScopeDeclaration,
+  KnowledgeScopeDeclarationInfo,
   KnowledgeScopeDeclarations,
   KnowledgeAccessRule,
   KnowledgeRole,
@@ -270,3 +323,4 @@ export type {
 import { KnowledgeSemanticIndex } from './semantic';
 export type { KnowledgeAccessExplanation } from './scope-runtime';
 export type { KnowledgeAccessGrant } from './access';
+export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';

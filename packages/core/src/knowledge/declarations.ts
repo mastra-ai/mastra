@@ -42,17 +42,31 @@ export interface KnowledgeAccessRule {
 export interface KnowledgeScopeDeclaration {
   /** Shown to the model and in UIs. */
   description?: string;
+  /** A short name for the scope type in UIs, e.g. `Organization`. Not shown to the model. */
+  displayLabel?: string;
   access?: KnowledgeAccessRule[];
   /** Tree placement only; grants nothing. A scope pattern, e.g. `org:$orgId`. */
   belongsTo?: string;
   /** Child scopes created with this scope, at `<address>/<name>`. */
-  children?: Array<{ name: string; description?: string; access?: KnowledgeAccessRule[] }>;
+  children?: Array<{ name: string; description?: string; displayLabel?: string; access?: KnowledgeAccessRule[] }>;
   /** Keyed pages created with this scope; they may nest (`pages` inside a page, same scope). */
   pages?: KnowledgePageTemplate[];
   /** Config pins (page refs) delivered to runs holding this scope. */
   pins?: string[];
   /** Ordering of stored pins delivered through this scope; higher first. Default 0. */
   pinPriority?: number;
+}
+
+/**
+ * What `knowledge.scopeDeclaration(key)` returns: a declaration's display fields, without access rules.
+ * @experimental
+ */
+export interface KnowledgeScopeDeclarationInfo {
+  key: string;
+  description?: string;
+  displayLabel?: string;
+  belongsTo?: string;
+  children: Array<{ key: string; name: string; description?: string; displayLabel?: string }>;
 }
 
 /**
@@ -394,7 +408,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
       const childCompiled: CompiledKnowledgeDeclaration = {
         key,
         pattern: compiled.pattern,
-        declaration: { description: child.description, access: child.access },
+        declaration: { description: child.description, displayLabel: child.displayLabel, access: child.access },
         rules: [],
         child: { parent: compiled, name: child.name },
         children: [],
