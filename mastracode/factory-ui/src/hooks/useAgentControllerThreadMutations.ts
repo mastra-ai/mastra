@@ -8,20 +8,20 @@ import {
 
 interface AgentControllerThreadMutationArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   baseUrl?: string;
   enabled?: boolean;
 }
 
-function useThreadMutationInvalidation({ agentControllerId, resourceId, scope }: AgentControllerThreadMutationArgs) {
+function useThreadMutationInvalidation({ agentControllerId, sessionId }: AgentControllerThreadMutationArgs) {
   const queryClient = useQueryClient();
   return () =>
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, scope),
-      exact: true,
-    });
+    // Prefix match: the session's thread lists are keyed further by their tag filter.
+    queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerThreads(agentControllerId, sessionId) });
 }
+
+export const switchThreadMutationKey = (agentControllerId: string, sessionId: string) =>
+  ['agent-controller', agentControllerId, sessionId, 'switch-thread'] as const;
 
 export function useCreateAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
   const { session } = createAgentControllerClient(args);
@@ -34,18 +34,19 @@ export function useCreateAgentControllerThreadMutation(args: AgentControllerThre
 }
 
 export function useSwitchAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { agentControllerId, resourceId, scope } = args;
+  const { agentControllerId, sessionId } = args;
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
+    mutationKey: switchThreadMutationKey(agentControllerId, sessionId),
     mutationFn: async (threadId: string) => {
       await requireAgentControllerSession(session).switchThread(threadId);
       return requireAgentControllerSession(session).state({ threadId });
     },
     onSuccess: state => {
       queryClient.setQueryData(
-        queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, state.threadId),
+        queryKeys.agentControllerConnectionState(agentControllerId, sessionId, state.threadId),
         state,
       );
     },

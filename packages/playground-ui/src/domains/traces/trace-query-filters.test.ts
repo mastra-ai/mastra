@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTraceQueryRequest,
-  clampTraceDiscoveryTimeRange,
+  resolveTraceQueryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from './trace-query-filters';
 
@@ -803,22 +803,21 @@ describe('buildTraceQueryRequest with groups', () => {
   });
 });
 
-describe('clampTraceDiscoveryTimeRange', () => {
-  const to = '2026-09-15T12:00:00.000Z';
-
-  it('keeps ranges of 31 days or less untouched', () => {
-    const range = { from: '2026-09-01T00:00:00.000Z', to };
-    expect(clampTraceDiscoveryTimeRange(range)).toBe(range);
-  });
-
-  it('clamps wider ranges to the 31 days ending at to', () => {
-    expect(clampTraceDiscoveryTimeRange({ from: '2026-01-01T00:00:00.000Z', to })).toEqual({
-      from: '2026-08-15T12:00:00.000Z',
-      to,
+describe('resolveTraceQueryTimeRange', () => {
+  describe('when the window has no ends', () => {
+    it('covers the last seven days up to now', () => {
+      expect(resolveTraceQueryTimeRange(undefined, undefined, now)).toEqual({
+        from: '2026-09-08T12:00:00.000Z',
+        to: now.toISOString(),
+      });
     });
   });
 
-  it('falls back to the 31-day window when from is not before to', () => {
-    expect(clampTraceDiscoveryTimeRange({ from: to, to })).toEqual({ from: '2026-08-15T12:00:00.000Z', to });
+  describe('when the window has both ends', () => {
+    it('uses them', () => {
+      const from = new Date('2026-01-01T00:00:00.000Z');
+      const to = new Date('2026-01-02T00:00:00.000Z');
+      expect(resolveTraceQueryTimeRange(from, to, now)).toEqual({ from: from.toISOString(), to: to.toISOString() });
+    });
   });
 });

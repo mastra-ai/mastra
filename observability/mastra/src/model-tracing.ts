@@ -19,6 +19,7 @@ import type {
   EndGenerationOptions,
   ErrorSpanOptions,
   ModelInferenceContext,
+  ModelSpanTrackerOptions,
   ModelStepInput,
   Span,
   TracingContext,
@@ -354,6 +355,27 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
 }
 
 /**
+ * Chunks that come from the model provider. The first one marks the response's
+ * first chunk, matching OTel's `gen_ai.response.time_to_first_chunk`. Everything
+ * else, such as lifecycle markers or `data-*` parts a processor writes before the
+ * model call, is Mastra's own and does not count.
+ */
+const MODEL_RESPONSE_CHUNK_TYPES = new Set<string>([
+  'response-metadata',
+  'raw',
+  'text-start',
+  'text-delta',
+  'reasoning-start',
+  'reasoning-delta',
+  'reasoning-file',
+  'tool-call-input-streaming-start',
+  'tool-call-delta',
+  'tool-call',
+  'source',
+  'file',
+]);
+
+/**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
  *
  * Should be instantiated once per MODEL_GENERATION span and shared across
@@ -369,7 +391,18 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  #timeToFirstTokenMs?: number;
   #inferenceCompletionStartTime?: Date;
+  #inferenceTimeToFirstTokenMs?: number;
+  /**
+   * True between a step's `step-start` and `step-finish` chunks, the window in which
+   * the provider responds. Chunks outside it, such as a `tool-call` replayed for a
+   * finished background task on resume, are Mastra's own and never start the clock.
+   * Durable runs wrap one step's provider stream at a time, so every chunk there counts.
+   */
+  #inModelResponse = false;
+  /** Set only by the agent's main loop; receives the first chunk's completionStartTime. */
+  #agentRunSpan?: Span<SpanType.AGENT_RUN>;
   #currentStepInputIsFinal: boolean = false;
   /** When true, step-finish chunks don't auto-close the step span (for durable execution) */
   #deferStepClose: boolean = false;
@@ -378,8 +411,9 @@ export class ModelSpanTracker {
   /** Static request-side context applied to every MODEL_INFERENCE span */
   #inferenceContext?: ModelInferenceContext;
 
-  constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
+  constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>, options?: ModelSpanTrackerOptions) {
     this.#modelSpan = modelSpan;
+    this.#agentRunSpan = options?.agentRunSpan;
   }
 
   /**
@@ -391,12 +425,45 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Capture the completion start time (time to first token) when the first content chunk arrives.
+   * Record when the provider's first chunk arrived. Time to first token is measured
+   * once here, from the start of the inference that streamed the chunk; the inference
+   * reports it when it ends, and the number is copied up the agent's own chain
+   * (step → generation → agent run) with the chunk's clock, first write wins at each
+   * level. Time to first chunk is `completionStartTime - startTime` on whichever span
+   * is being read.
    */
   #captureCompletionStartTime(): void {
+    this.#ensureStepAndInference();
+    if (this.#inferenceCompletionStartTime) return;
     const now = new Date();
+    const inference = this.#currentInferenceSpan;
+    const timeToFirstTokenMs = inference ? now.getTime() - inference.startTime.getTime() : undefined;
+    this.#inferenceCompletionStartTime = now;
+    this.#inferenceTimeToFirstTokenMs = timeToFirstTokenMs;
     this.#completionStartTime ??= now;
-    this.#inferenceCompletionStartTime ??= now;
+    this.#timeToFirstTokenMs ??= timeToFirstTokenMs;
+    // The two values always come from the same chunk: a span that already has a clock
+    // (a rebuilt span carrying an earlier step's, or one saved before the number existed)
+    // never takes a later step's number.
+    for (const span of [this.#currentStepSpan, this.#modelSpan, this.#agentRunSpan]) {
+      if (!span || span.attributes?.completionStartTime) continue;
+      span.update({
+        attributes: {
+          completionStartTime: now,
+          ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
+        },
+      });
+    }
+  }
+
+  /** What the current inference streamed so far, for whichever way it ends. */
+  #inferenceStreamAttributes(): { completionStartTime?: Date; timeToFirstTokenMs?: number } {
+    return {
+      ...(this.#inferenceCompletionStartTime ? { completionStartTime: this.#inferenceCompletionStartTime } : {}),
+      ...(this.#inferenceTimeToFirstTokenMs !== undefined
+        ? { timeToFirstTokenMs: this.#inferenceTimeToFirstTokenMs }
+        : {}),
+    };
   }
 
   /**
@@ -416,7 +483,11 @@ export class ModelSpanTracker {
    */
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
     if (this.#currentInferenceSpan) {
-      this.#currentInferenceSpan.error({ error: options.error, endSpan: true });
+      this.#currentInferenceSpan.error({
+        error: options.error,
+        endSpan: true,
+        attributes: this.#inferenceStreamAttributes(),
+      });
       this.#currentInferenceSpan = undefined;
     }
     if (this.#currentStepSpan) {
@@ -443,7 +514,12 @@ export class ModelSpanTracker {
     }
 
     if (spanOptions.attributes) {
-      spanOptions.attributes.completionStartTime = this.#completionStartTime;
+      // Durable execution ends the generation from a fresh tracker and passes the
+      // clock it carried through the loop state.
+      if (this.#completionStartTime) {
+        spanOptions.attributes.completionStartTime = this.#completionStartTime;
+        spanOptions.attributes.timeToFirstTokenMs = this.#timeToFirstTokenMs;
+      }
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
       spanOptions.attributes.costContext = providerCostContext ?? spanOptions.attributes.costContext;
       if (!spanOptions.attributes.costContext) {
@@ -452,6 +528,14 @@ export class ModelSpanTracker {
     }
 
     this.#modelSpan?.end(spanOptions);
+  }
+
+  getCompletionStartTime(): Date | undefined {
+    return this.#completionStartTime;
+  }
+
+  getTimeToFirstTokenMs(): number | undefined {
+    return this.#timeToFirstTokenMs;
   }
 
   /**
@@ -474,8 +558,8 @@ export class ModelSpanTracker {
    * Export the current step span for later rebuilding (durable execution).
    * Returns undefined if no step span is active.
    */
-  exportCurrentStep(): ReturnType<Span<SpanType.MODEL_STEP>['exportSpan']> | undefined {
-    return this.#currentStepSpan?.exportSpan();
+  exportCurrentStep(): ReturnType<Span<SpanType.MODEL_STEP>['snapshot']> | undefined {
+    return this.#currentStepSpan?.snapshot();
   }
 
   /**
@@ -530,8 +614,10 @@ export class ModelSpanTracker {
       tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
     this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
-    // Reset chunk sequence for new step
+    // Reset chunk sequence and first-chunk clock for new step
     this.#chunkSequence = 0;
+    this.#inferenceCompletionStartTime = undefined;
+    this.#inferenceTimeToFirstTokenMs = undefined;
   }
 
   /**
@@ -555,7 +641,7 @@ export class ModelSpanTracker {
         usage,
         finishReason: payload.stepResult.reason,
         warnings: payload.stepResult.warnings,
-        completionStartTime: this.#inferenceCompletionStartTime,
+        ...this.#inferenceStreamAttributes(),
         ...(responseModel?.trim() ? { responseModel } : {}),
       },
     });
@@ -576,8 +662,24 @@ export class ModelSpanTracker {
    * feature flag, or when called without an active step span. Auto-invoked from
    * chunk handlers as a safety net; explicit callers get the most accurate
    * start time.
+   *
+   * `payload.modelId` / `payload.provider` name the model the caller is about
+   * to invoke and are recorded on MODEL_STEP and the inference. A named call
+   * while an inference is still open is the next attempt of the same step (a
+   * fallback model after a failure): that inference ends as failed and the
+   * attempt gets its own, so its timing and model are its own. The safety net
+   * never records them: a replayed step-start chunk names the model of the
+   * original call.
    */
   startInference(payload?: StepStartPayload): void {
+    if (payload?.modelId && payload.provider) {
+      this.#currentStepSpan?.update({ attributes: { model: payload.modelId, provider: payload.provider } });
+      this.failInference(new Error('Model call ended without a result before the next attempt started'));
+    }
+    this.#openInference(payload);
+  }
+
+  #openInference(payload?: StepStartPayload): void {
     if (!supportsModelInference()) {
       return;
     }
@@ -586,6 +688,7 @@ export class ModelSpanTracker {
     }
 
     this.#inferenceCompletionStartTime = undefined;
+    this.#inferenceTimeToFirstTokenMs = undefined;
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
     const ctx = this.#inferenceContext;
@@ -594,8 +697,8 @@ export class ModelSpanTracker {
       type: SpanType.MODEL_INFERENCE,
       attributes: {
         stepIndex: this.#stepIndex,
-        model: generationAttrs?.model,
-        provider: generationAttrs?.provider,
+        model: payload?.modelId ?? generationAttrs?.model,
+        provider: payload?.provider ?? generationAttrs?.provider,
         streaming: generationAttrs?.streaming,
         ...(ctx?.parameters !== undefined ? { parameters: ctx.parameters } : {}),
         ...(ctx?.providerOptions !== undefined ? { providerOptions: ctx.providerOptions } : {}),
@@ -613,10 +716,21 @@ export class ModelSpanTracker {
    * End the open MODEL_INFERENCE span as interrupted while keeping MODEL_STEP open,
    * so a replacement request for the same step gets its own inference span.
    */
+  /** End the open inference span, if any, as interrupted, with what it streamed. */
   interruptInference(): void {
     this.#endChunkSpan();
     if (!this.#currentInferenceSpan) return;
-    this.#currentInferenceSpan.end({ attributes: { finishReason: 'interrupted' } });
+    this.#currentInferenceSpan.end({
+      attributes: { finishReason: 'interrupted', ...this.#inferenceStreamAttributes() },
+    });
+    this.#currentInferenceSpan = undefined;
+  }
+
+  /** End the open inference span, if any, with `error` and what it streamed. */
+  failInference(error: Error): void {
+    this.#endChunkSpan();
+    if (!this.#currentInferenceSpan) return;
+    this.#currentInferenceSpan.error({ error, endSpan: true, attributes: this.#inferenceStreamAttributes() });
     this.#currentInferenceSpan = undefined;
   }
 
@@ -701,6 +815,24 @@ export class ModelSpanTracker {
   }
 
   /**
+   * A suspended step emits no step-finish; its suspension chunk carries the
+   * step usage instead. Close MODEL_INFERENCE and MODEL_STEP with that usage so
+   * the suspended call is not reported without tokens.
+   */
+  #endSuspendedStep<OUTPUT>(chunk: ChunkType<OUTPUT>) {
+    if (chunk.type !== 'tool-call-suspended' && chunk.type !== 'tool-call-approval') return;
+    const usage = chunk.payload.usage;
+    if (!usage) return;
+
+    this.#inModelResponse = false;
+    this.#endStepSpan({
+      output: { usage },
+      stepResult: { reason: 'suspended', isContinued: false, warnings: [] },
+      metadata: {},
+    } as unknown as StepFinishPayload<any, OUTPUT>);
+  }
+
+  /**
    * Returns the parent span for chunks. Chunks parent under MODEL_INFERENCE
    * (the provider call) when available, falling back to MODEL_STEP only if
    * startStep() was bypassed.
@@ -721,7 +853,7 @@ export class ModelSpanTracker {
       this.startStep();
     }
     if (!this.#currentInferenceSpan) {
-      this.startInference();
+      this.#openInference();
     }
   }
 
@@ -934,11 +1066,17 @@ export class ModelSpanTracker {
     if (chunk.type !== 'tool-call-approval') return;
     const payload = chunk.payload;
 
-    this.#ensureStepAndInference();
+    // Only the first approval request of a step carries its usage. A later one (surfaced after
+    // that step was closed, e.g. in the leg resumed by the first approval) belongs to no model
+    // call, so record it under the generation instead of opening empty step spans.
+    if (payload.usage || this.#currentStepSpan) {
+      this.#ensureStepAndInference();
+    }
+    const parent = this.#chunkParent() ?? this.#modelSpan;
 
     // Create an event span for the approval request
     // Using createEventSpan since approvals are point-in-time events (not time ranges)
-    const span = this.#chunkParent()?.createEventSpan({
+    const span = parent?.createEventSpan({
       name: `chunk: 'tool-call-approval'`,
       type: SpanType.MODEL_CHUNK,
       attributes: {
@@ -963,13 +1101,17 @@ export class ModelSpanTracker {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          // Capture completion start time on first actual content (for time-to-first-token)
-          switch (chunk.type) {
-            case 'text-delta':
-            case 'tool-call-delta':
-            case 'reasoning-delta':
-              this.#captureCompletionStartTime();
-              break;
+          if ((this.#inModelResponse || this.#deferStepClose) && MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) {
+            this.#captureCompletionStartTime();
+          }
+
+          // Close the suspended step before forwarding: downstream handling of
+          // the suspension finishes the run and ends the span tree.
+          if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+            if (chunk.type === 'tool-call-approval') {
+              this.#handleToolApprovalChunk(chunk);
+            }
+            this.#endSuspendedStep(chunk);
           }
 
           controller.enqueue(chunk);
@@ -1001,6 +1143,7 @@ export class ModelSpanTracker {
               break;
 
             case 'step-start':
+              this.#inModelResponse = true;
               // If step already started (via startStep()), just update with payload data
               // Otherwise start a new step (for backwards compatibility)
               if (this.#currentStepSpan) {
@@ -1013,11 +1156,12 @@ export class ModelSpanTracker {
               // explicitly call startInference() before invoking the model —
               // chunks that follow will parent under MODEL_INFERENCE.
               if (!this.#currentInferenceSpan) {
-                this.startInference(chunk.payload);
+                this.#openInference(chunk.payload);
               }
               break;
 
             case 'step-finish':
+              this.#inModelResponse = false;
               if (this.#deferStepClose) {
                 // Durable mode: save payload for later, don't close the step.
                 // Close MODEL_INFERENCE eagerly though - the provider stream is
@@ -1045,15 +1189,14 @@ export class ModelSpanTracker {
             case 'tripwire': // Processor rejection
             case 'watch': // Internal watch event
             case 'tool-error': // Tool error handling
-            case 'tool-call-suspended': // Suspension (not content)
             case 'reasoning-signature': // Signature metadata
             case 'redacted-reasoning': // Redacted content metadata
             case 'step-output': // Step output wrapper (content is nested)
               // Don't create spans for these chunks
               break;
 
-            case 'tool-call-approval': // Approval request - create span for debugging
-              this.#handleToolApprovalChunk(chunk);
+            case 'tool-call-suspended': // Suspension (handled before enqueue)
+            case 'tool-call-approval': // Approval request (handled before enqueue)
               break;
 
             case 'tool-output':

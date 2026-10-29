@@ -26,7 +26,11 @@
         "entityType": "agent",
         "entityId": "test-agent",
         "attributes": {
-          "instructions": "Return a simple response"
+          "instructions": "Return a simple response",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -59,10 +63,11 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -121,7 +126,11 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -287,6 +296,7 @@
                         }
                       },
                       "finishReason": "stop",
+                      "timeToFirstTokenMs": "<ms>",
                       "completionStartTime": "<date>",
                       "responseModel": "mock-model-id"
                     },
@@ -294,6 +304,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "Return a simple response"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Return a list of items separated by commas"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": [],

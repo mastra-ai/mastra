@@ -13,13 +13,15 @@ import type {
   OutputProcessorOrWorkflow,
 } from '../../../processors';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
+import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
+import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
+import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
 import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
 import type {
@@ -278,6 +280,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
+  let rebuiltAgent: Agent<any, any, any, any> | undefined;
 
   // If the registry entry is a real (non-placeholder) in-process entry we
   // trust it wholesale (in-process / same-process resume). Otherwise fall
@@ -287,6 +290,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   } else if (mastra) {
     try {
       const agent = mastra.getAgentById(agentId);
+      rebuiltAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
 
       // Restore the caller's request context from the JSON-safe snapshot on
       // the workflow input (mirrors durable-agent.ts resume handling), so
@@ -383,6 +387,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       outputProcessors,
       errorProcessors,
       processorStates,
+      agent: rebuiltAgent,
     };
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);
@@ -493,6 +498,7 @@ export async function rebuildRunToolsFromMastra(options: {
   try {
     const agent = mastra.getAgentById(agentId);
     agentResolved = true;
+    const processorAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
@@ -544,6 +550,7 @@ export async function rebuildRunToolsFromMastra(options: {
       workspace,
       memory,
       saveQueueManager,
+      agent: processorAgent,
       ...rebuiltProcessors,
       ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext } : {}),
     };
@@ -572,6 +579,7 @@ export async function rebuildRunToolsFromMastra(options: {
       existing.outputProcessors ??= rebuiltProcessors.outputProcessors;
       existing.errorProcessors ??= rebuiltProcessors.errorProcessors;
       existing.processorStates ??= rebuiltProcessors.processorStates;
+      existing.agent ??= processorAgent;
     } else {
       existing = patch as RunRegistryEntry;
       setRunRegistryEntry(runId, existing, mastra as Mastra | undefined);
@@ -687,7 +695,8 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
  *  - Function-form global `requireToolApproval` is evaluated per call with
  *    `(toolName, args, ...)`. Throwing defaults to "require approval" (safe).
  *  - Boolean global / tool-level `requireApproval` seed the decision.
- *  - A per-tool `needsApprovalFn` (e.g. skill tools) is authoritative when
+ *  - Approval-exempt tools (skill tools) never require approval.
+ *  - A per-tool `needsApprovalFn` is authoritative when
  *    present and overrides the seed. It receives `{ requestContext, workspace }`
  *    as its second argument, exactly like the non-durable loop.
  *
@@ -700,6 +709,8 @@ export async function toolRequiresApproval(
   args?: Record<string, unknown>,
   approvalContext?: Partial<ToolApprovalContext> & { toolName: string },
 ): Promise<boolean> {
+  if (isApprovalExempt(tool)) return false;
+
   let globalRequires: boolean;
   if (typeof globalRequireApproval === 'function') {
     try {
@@ -719,7 +730,7 @@ export async function toolRequiresApproval(
 
   let requires = globalRequires || !!(tool as any).requireApproval;
 
-  // needsApprovalFn overrides all other flags (e.g., skill tools return false)
+  // needsApprovalFn overrides all other flags
   const needsApprovalFn = getNeedsApprovalFn(tool);
   if (needsApprovalFn) {
     try {

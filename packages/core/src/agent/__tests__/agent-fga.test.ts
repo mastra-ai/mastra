@@ -438,7 +438,16 @@ describe('DurableAgent FGA checks', () => {
       requestContext,
       actor: initialActor,
     });
-    const resumeWorkflow = vi.fn().mockResolvedValue({ status: 'suspended' });
+    // Like a real suspension, persist the suspended row so the next resume finds it.
+    const resumeWorkflow = vi.fn(async (_params: any) => {
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        snapshot: { runId, status: 'suspended', context: {} } as any,
+      });
+      return { status: 'suspended' };
+    });
     vi.spyOn(durableAgent, 'getWorkflow').mockReturnValue({
       createRun: vi.fn().mockResolvedValue({ resume: resumeWorkflow }),
     } as any);
@@ -620,12 +629,42 @@ describe('DurableAgent FGA checks', () => {
     try {
       await (durableAgent as any)[method]({ runId: 'run-1', toolCallId: 'tool-call-1' });
       expect(resumeGenerate).toHaveBeenCalledWith(
-        'run-1',
         { approved },
-        expect.objectContaining({ toolCallId: 'tool-call-1' }),
+        expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-call-1' }),
       );
     } finally {
       await pubsub.close();
     }
+  });
+});
+
+describe('Agent FGA with a real Mastra instance', () => {
+  // The agentic loop runs as internal workflows. Its nested iteration workflow
+  // used to be FGA-checked as `workflow:executionWorkflow`, so a user granted
+  // only `agents:execute` on the agent was denied on every call.
+  it('lets a user with only agents:execute on the agent generate a response', async () => {
+    const grants = new Set(['user-1:agent:test-agent:agents:execute']);
+    const fgaProvider: IFGAProvider = {
+      check: vi.fn(),
+      require: vi.fn(async (user: any, { resource, permission }: any) => {
+        if (!grants.has(`${user?.id}:${resource.type}:${resource.id}:${permission}`)) {
+          throw new FGADeniedError(user, resource, permission);
+        }
+      }),
+      filterAccessible: vi.fn(),
+    };
+    const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: createMockModel() });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      agents: { agent },
+      server: { fga: fgaProvider },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+    const result = await mastra.getAgent('agent').generate('hi', { requestContext });
+
+    expect(result.text).toBe('ok');
   });
 });

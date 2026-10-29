@@ -1,3 +1,4 @@
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,7 +7,8 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
-import { CommittedInput, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
 /** The JSON Schema subset the settings renderer reads; anything else renders as unsupported. */
 interface SettingSchema {
@@ -17,6 +19,21 @@ interface SettingSchema {
   minimum?: number;
   maximum?: number;
   enum?: unknown[];
+  oneOf?: Array<{ const?: unknown; title?: string }>;
+}
+
+interface Choice {
+  value: unknown;
+  label: string;
+}
+
+/** Select options from `enum`, or from a `oneOf` of `const` members whose `title` is the label. */
+function schemaChoices(schema: SettingSchema): Choice[] | undefined {
+  if (schema.enum) return schema.enum.map(value => ({ value, label: String(value) }));
+  if (schema.oneOf?.length && schema.oneOf.every(member => 'const' in member)) {
+    return schema.oneOf.map(member => ({ value: member.const, label: member.title ?? String(member.const) }));
+  }
+  return undefined;
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -55,7 +72,13 @@ export function SandboxBlock({
   onSave: SaveEnvironment;
 }) {
   const saveSetting = (key: string, value: unknown | null) => onSave({ settings: { [key]: value } });
-  return schemaProperties(environment.sandbox.settingsSchema).map(([key, schema]) => (
+  const properties = schemaProperties(environment.sandbox.settingsSchema);
+  const effective = (key: string) =>
+    environment.settings[key] ?? properties.find(([name]) => name === key)?.[1].default;
+  const memoryMb = effective('memoryMb');
+  const dockerLowMemory =
+    effective('docker') === true && typeof memoryMb === 'number' && memoryMb < DOCKER_MIN_MEMORY_MB;
+  const rows = properties.map(([key, schema]) => (
     <SettingRow
       key={key}
       name={key}
@@ -65,7 +88,21 @@ export function SandboxBlock({
       onCommit={value => saveSetting(key, value)}
     />
   ));
+  return (
+    <>
+      {rows}
+      {dockerLowMemory && (
+        <Notice variant="warning">
+          Docker is on with {memoryMb} MB of memory. We recommend at least 2 GB for Docker; with less, containers may
+          run out of memory.
+        </Notice>
+      )}
+    </>
+  );
 }
+
+/** Recommended minimum memory for sandboxes that run Docker. */
+const DOCKER_MIN_MEMORY_MB = 2048;
 
 function SettingRow({
   name,
@@ -83,26 +120,36 @@ function SettingRow({
   const label = schema.title ?? name;
   const type = Array.isArray(schema.type) ? schema.type.find(t => t !== 'null') : schema.type;
   const placeholder = schema.default === undefined ? undefined : String(schema.default);
+  const choices = schemaChoices(schema);
   let control: React.ReactNode;
-  if (schema.enum) {
-    const options = schema.enum.map(String);
-    const current = value === undefined ? UNSET : String(value);
+  if (choices) {
+    // A default that is one of the choices is marked on that choice, and picking it clears the setting;
+    // otherwise a separate "Default" item does.
+    const defaultIsChoice = choices.some(choice => String(choice.value) === placeholder);
+    const unsetKey = defaultIsChoice ? placeholder! : UNSET;
+    const labelOf = (key: string) => {
+      const choiceLabel = choices.find(choice => String(choice.value) === key)?.label ?? key;
+      return defaultIsChoice && key === placeholder ? `${choiceLabel} (default)` : choiceLabel;
+    };
+    const current = value === undefined ? unsetKey : String(value);
     control = (
       <Select
         value={current}
         disabled={disabled}
-        onValueChange={next => void onCommit(next === UNSET ? null : coerceEnum(schema.enum!, next))}
+        onValueChange={next => void onCommit(next === unsetKey ? null : coerceChoice(choices, next))}
       >
         <SelectTrigger size="sm" aria-label={label} className="w-auto">
           <Txt as="span" variant="caption">
-            {current === UNSET ? (placeholder ? `Default (${placeholder})` : 'Default') : current}
+            {current === UNSET ? (placeholder ? `Default (${placeholder})` : 'Default') : labelOf(current)}
           </Txt>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={UNSET}>{placeholder ? `Default (${placeholder})` : 'Default'}</SelectItem>
-          {options.map(option => (
-            <SelectItem key={option} value={option}>
-              {option}
+          {!defaultIsChoice && (
+            <SelectItem value={UNSET}>{placeholder ? `Default (${placeholder})` : 'Default'}</SelectItem>
+          )}
+          {choices.map(choice => (
+            <SelectItem key={String(choice.value)} value={String(choice.value)}>
+              {labelOf(String(choice.value))}
             </SelectItem>
           ))}
         </SelectContent>
@@ -189,7 +236,7 @@ function numberInRange(raw: string, schema: SettingSchema, integer: boolean): nu
   return undefined;
 }
 
-/** The enum member whose string form the select handed back, keeping its original type. */
-function coerceEnum(members: unknown[], picked: string): unknown {
-  return members.find(member => String(member) === picked) ?? picked;
+/** The choice whose string form the select handed back, keeping its original type. */
+function coerceChoice(choices: Choice[], picked: string): unknown {
+  return choices.find(choice => String(choice.value) === picked)?.value ?? picked;
 }

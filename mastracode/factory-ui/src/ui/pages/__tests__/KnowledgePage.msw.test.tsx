@@ -748,7 +748,7 @@ describe('KnowledgePage', () => {
           pinned: false,
           recordCount: 0,
         },
-        graphFixture.nodes[0]!,
+        graphFixture.nodes[0],
         {
           id: '22222222-2222-4222-8222-222222222222',
           name: 'features',
@@ -897,25 +897,11 @@ describe('KnowledgePage', () => {
       http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${FACTORY_ID}/permissions`, () =>
         HttpResponse.json({ categories: {}, tools: {} }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/supervisor/health`, () =>
-        HttpResponse.json({
-          checkedAt: '2026-09-03T00:00:00.000Z',
-          findings: [],
-          counts: {
-            'decision-stuck': 0,
-            'start-stalled': 0,
-            'seat-orphaned': 0,
-            'seat-missing': 0,
-            'held-waiting': 0,
-            'label-drift': 0,
-          },
-        }),
-      ),
     );
 
     const { router } = renderRoute();
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/overview`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
   });
 
   it('renders graph nodes from the endpoint payload', async () => {
@@ -1090,7 +1076,7 @@ describe('KnowledgePage', () => {
       },
       {
         ...nodeFixture,
-        records: [{ ...nodeFixture.records[0]!, text: 'See [[Elsewhere]] for the related decision.' }],
+        records: [{ ...nodeFixture.records[0], text: 'See [[Elsewhere]] for the related decision.' }],
       },
     );
     const detailRequests: string[] = [];
@@ -1101,7 +1087,7 @@ describe('KnowledgePage', () => {
         return HttpResponse.json({
           ...nodeFixture,
           node: { ...nodeFixture.node, id: nodeId, name: nodeId === 'ent-x' ? 'Elsewhere' : nodeFixture.node.name },
-          records: [{ ...nodeFixture.records[0]!, text: 'See [[Elsewhere]] for the related decision.' }],
+          records: [{ ...nodeFixture.records[0], text: 'See [[Elsewhere]] for the related decision.' }],
         });
       }),
     );
@@ -1147,16 +1133,14 @@ describe('KnowledgePage', () => {
     expect(screen.getByRole('navigation', { name: 'Knowledge scope' })).toHaveTextContent('Payments Service');
   });
 
-  it('shows the sidebar Knowledge entry (brain icon) under Audit log', async () => {
+  it('shows the sidebar Knowledge entry (brain icon) under Boards', async () => {
     stubKnowledgeRoute();
     renderRoute();
 
     const knowledgeLink = await screen.findByRole('link', { name: 'Knowledge' });
     expect(knowledgeLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/knowledge`);
-    const auditLink = screen.getByRole('link', { name: 'Audit log' });
-    expect(auditLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/audit`);
-    // Directly under Audit log in the sidebar nav order.
-    expect(auditLink.compareDocumentPosition(knowledgeLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const boards = screen.getByRole('region', { name: 'Boards' });
+    expect(boards.compareDocumentPosition(knowledgeLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('shows the empty state when no knowledge exists yet', async () => {
@@ -1285,7 +1269,7 @@ describe('KnowledgePage', () => {
     });
     stubKnowledgeRoute({
       ...graphFixture,
-      nodes: [scopeNode(featuresId, 'features'), scopeNode(memoryId, 'memory'), graphFixture.nodes[0]!],
+      nodes: [scopeNode(featuresId, 'features'), scopeNode(memoryId, 'memory'), graphFixture.nodes[0]],
       edges: [],
       records: [],
     });
@@ -1351,9 +1335,9 @@ describe('KnowledgePage', () => {
 
     // Tapping the already-selected node is the explicit open gesture.
     const [node] = await screen.findAllByTestId('knowledge-node');
-    fireEvent.click(node!);
+    fireEvent.click(node);
     expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
-    fireEvent.click(node!);
+    fireEvent.click(node);
     expect(await screen.findByTestId('knowledge-flyout')).toBeInTheDocument();
   });
 
@@ -1395,7 +1379,7 @@ describe('KnowledgePage', () => {
     expect(contentHeading.compareDocumentPosition(metadataHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // A10: the pinned knowledge record card carries the amber standout marker.
     const knowledgeRecords = screen.getAllByTestId('knowledge-record');
-    expect(within(knowledgeRecords[0]!).getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();
+    expect(within(knowledgeRecords[0]).getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();
     expect(knowledgeRecords.some(card => card.getAttribute('data-pinned') === 'true')).toBe(true);
     // Drill into the pinned knowledge record → provenance + reasoning.
     await user.click(screen.getByText(/for charging flows/));
@@ -1516,7 +1500,7 @@ describe('KnowledgePage', () => {
     fireEvent.click(nodes[0]);
     await openDetails();
     // Hop to the referenced node via the knowledge record's wikilink.
-    const recordCard = (await screen.findAllByTestId('knowledge-record'))[0]!;
+    const recordCard = (await screen.findAllByTestId('knowledge-record'))[0];
     await user.click(within(recordCard).getByRole('button', { name: 'Deploy Runbook' }));
 
     // Trail: ... project › Payments Service › Deploy Runbook (last crumb inert).

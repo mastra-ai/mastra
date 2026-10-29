@@ -3,10 +3,10 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { ProviderInfo } from '../../../../api/types';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { useState } from 'react';
 import { useProviderModels } from '../hooks/useProviderModels';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
@@ -30,11 +30,29 @@ export function FactoryDefaultModelForm({
   onPreviewModel,
   submitLabel = 'Continue',
 }: FactoryDefaultModelFormProps) {
-  const choice = useProviderModels(provider.provider);
+  const choice = useProviderModels(provider.provider, scope);
   const [selectedModelId, setModelId] = useState(initialModelId);
-  const modelId = choice.models.find(model => model.id === selectedModelId)?.id ?? choice.suggestedModelId ?? '';
+  const modelId = selectedModelId
+    ? (choice.models.find(model => model.id === selectedModelId)?.id ?? '')
+    : (choice.suggestedModelId ?? '');
 
-  if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
+  if (choice.isPending)
+    return (
+      <div role="status" aria-label="Loading models">
+        <div aria-hidden className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-2">
+            <SkeletonText line="text-body" className="w-32 motion-reduce:before:animate-none" />
+            <Skeleton className="h-control-md w-28 rounded-full motion-reduce:before:animate-none" />
+          </div>
+          <Field>
+            <FieldLabel>{scope === 'user' ? 'Your default model' : 'Factory default model'}</FieldLabel>
+            <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
+          </Field>
+          <SkeletonText line="text-meta" className="w-3/4 motion-reduce:before:animate-none" />
+          <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
+        </div>
+      </div>
+    );
   if (choice.catalogError || choice.models.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3">
@@ -72,6 +90,16 @@ export function FactoryDefaultModelForm({
           placeholder="Select a default model…"
         />
       </Field>
+      {selectedModelId && !modelId && (
+        <Txt variant="caption" role="alert">
+          Your previous model is no longer available. Choose another model.
+        </Txt>
+      )}
+      {scope === 'user' && (
+        <Txt variant="meta" tone="muted">
+          Creating this Factory also updates your personal default model.
+        </Txt>
+      )}
       {scope === 'org' && <SharedCredentialNotice modelId={modelId || undefined} />}
       <Button variant="primary" className="w-full" disabled={!modelId} onClick={() => onContinue(modelId)}>
         {submitLabel}

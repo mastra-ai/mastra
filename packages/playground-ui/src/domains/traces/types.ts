@@ -34,6 +34,8 @@ export type UISpan = {
    * timeline paints such a row differently since the term is nowhere on it.
    */
   matchedInPayloadOnly?: boolean;
+  /** What started an agent run when a signal (a skill, a reminder…) did, e.g. `Skill factory-triage`. */
+  signalLabel?: string;
 };
 
 export type UISpanStyle = {

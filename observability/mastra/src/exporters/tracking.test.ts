@@ -132,11 +132,10 @@ class TestTrackingExporter extends TrackingExporter<
         if (!parent && parentId !== this.rootSpanId) {
           return undefined;
         }
-      } else {
+      } else if (!args.traceData.hasRoot() && !args.traceData.isRootProcessed()) {
         // No parentId means direct child of root, check root exists
-        if (!args.traceData.hasRoot() && !args.traceData.isRootProcessed()) {
-          return undefined;
-        }
+
+        return undefined;
       }
     }
 

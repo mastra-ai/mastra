@@ -15,7 +15,6 @@ const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 function requestContext(
   overrides: Partial<{
     threadId: string;
-    scope: string;
     authenticated: boolean;
     modelId: string;
     thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -28,7 +27,7 @@ function requestContext(
   context.set('controller', {
     resourceId: 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    scope: overrides.scope ?? '/worktree',
+    sessionId: 'resource-1',
     state: { factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' },
     getState: () => ({ factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' }),
     session: { modelId: overrides.modelId ?? 'openai/gpt-5.6-sol', modeId: 'review' },
@@ -189,7 +188,7 @@ describe('FactoryPhaseStateProcessor', () => {
     context.set('controller', {
       resourceId: 'resource-2',
       threadId: 'thread-2',
-      scope: '/worktree',
+      sessionId: 'resource-2',
       state: { thinkingLevel: 'high' },
       getState: () => ({ thinkingLevel: 'high' }),
       session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
@@ -217,7 +216,7 @@ describe('FactoryPhaseStateProcessor', () => {
     context.set('controller', {
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      scope: '/worktree',
+      sessionId: 'resource-1',
       state: {},
       getState: () => ({}),
       session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
@@ -271,7 +270,7 @@ describe('FactoryPhaseStateProcessor', () => {
     context.set('controller', {
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      scope: '/worktree',
+      sessionId: 'resource-1',
       state: {},
       getState: () => ({}),
       session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
@@ -490,31 +489,6 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(onResult).toHaveBeenCalledTimes(1);
   });
 
-  it('moves an approved plan to Building before emitting the next phase signal', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepare(storage, 'plan');
-    const boards = createBoardRegistry();
-    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
-
-    await processor.processInputStep(
-      inputArgs(requestContext(), [
-        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
-      ]),
-    );
-
-    await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
-      revision: 2,
-      stages: ['execute'],
-    });
-    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
-    expect(signal).toMatchObject({
-      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
-    });
-    expect(signal?.contents).toContain('Factory work phase: Building (execute)');
-    expect(signal?.contents).toContain('Config: rules-v1');
-  });
-
   describe('board-owned tool-result rules', () => {
     const approved = () => toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } });
     const stageOf = async (storage: WorkItemsStorage, id: string) =>
@@ -619,6 +593,31 @@ describe('FactoryPhaseStateProcessor', () => {
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
       expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
     });
+  });
+
+  it('moves an approved plan to Building before emitting the next phase signal', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage, 'plan');
+    const boards = createBoardRegistry();
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+
+    await processor.processInputStep(
+      inputArgs(requestContext(), [
+        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
+      ]),
+    );
+
+    await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
+      revision: 2,
+      stages: ['execute'],
+    });
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(signal).toMatchObject({
+      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
+    });
+    expect(signal?.contents).toContain('Factory work phase: Building (execute)');
+    expect(signal?.contents).toContain('Config: rules-v1');
   });
 
   it('emits the persisted custom board and phase in the state signal', async () => {
@@ -826,6 +825,32 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(onResult).toHaveBeenCalledTimes(1);
     await expect(storage.listDeferredDecisions('org-1', PROJECT_ID)).resolves.toEqual([
       expect.objectContaining({ idempotencyKey: 'notify-plan-failure', status: 'pending' }),
+    ]);
+  });
+
+  it('pre-approves a skill run queued by the bound agent’s own tool result', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const boards = createToolRuleTestRegistry({
+      submit_plan: {
+        onResult: () => ({
+          type: 'invokeSkill' as const,
+          idempotencyKey: 'open-change-request',
+          role: 'work',
+          prompt: 'Open the pull request.',
+        }),
+      },
+    });
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
+
+    await processor.processInputStep(inputArgs(requestContext(), [toolMessage()]));
+
+    await expect(storage.listDeferredDecisions('org-1', PROJECT_ID)).resolves.toEqual([
+      expect.objectContaining({
+        idempotencyKey: 'open-change-request',
+        approvedBy: `agent:${prepared.binding.id}`,
+        approvedAt: expect.any(Date),
+      }),
     ]);
   });
 

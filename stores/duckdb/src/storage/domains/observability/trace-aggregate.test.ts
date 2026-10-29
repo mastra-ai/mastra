@@ -124,7 +124,7 @@ describe('DuckDB trace aggregate compiler', () => {
   it('fails closed on unmapped dimensions and measures', () => {
     const base = plan();
     expect(() => compileDuckDBTraceAggregate({ ...base, dimensions: ['traceId' as never] })).toThrow(
-      'Unsupported trusted trace-aggregate field',
+      'Unsupported trusted aggregate field',
     );
     expect(() =>
       compileDuckDBTraceAggregate({ ...base, measures: [{ type: 'canonical', name: 'tokens.total' as never }] }),

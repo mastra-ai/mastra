@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SetURLSearchParamsLike } from '../../traces/hooks/use-trace-url-state';
 import {
   clearSavedLogsFilters,
   hasAnyLogsFilterParams,
   loadLogsFiltersFromStorage,
   saveLogsFiltersToStorage,
 } from '../log-filters';
+import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 import { toast } from '@/lib/toast';
 
 const DEFAULT_SAVED_MESSAGE = 'Filters setting for Logs saved';
@@ -30,8 +30,7 @@ export interface UseLogsFilterPersistenceResult {
 }
 
 /**
- * Owns the localStorage save/restore lifecycle for logs filters. Mirrors
- * `useTraceFilterPersistence` — same pattern, different storage key default.
+ * Owns the localStorage save/restore lifecycle for logs filters.
  */
 export function useLogsFilterPersistence(
   searchParams: URLSearchParams,

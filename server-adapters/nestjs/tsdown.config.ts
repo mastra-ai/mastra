@@ -10,16 +10,8 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
-  esbuildOptions(options) {
-    // Disable auto tsconfig detection so we can use tsconfigRaw
-    options.tsconfig = undefined;
-    options.tsconfigRaw = JSON.stringify({
-      compilerOptions: {
-        experimentalDecorators: true,
-        emitDecoratorMetadata: true,
-      },
-    });
-  },
+  // Decorator transforms (experimentalDecorators, emitDecoratorMetadata) come from tsconfig.json.
+  tsconfig: 'tsconfig.json',
   onSuccess: async () => {
     await generateTypes(process.cwd(), new Set(['rxjs']));
   },

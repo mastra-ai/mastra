@@ -1,5 +1,5 @@
 import { XAxis, YAxis } from 'recharts';
-import { chartYTickCount, pickTimeTicks } from './chart-axes';
+import { chartYTickCount, niceYTicks, pickTimeTicks } from './chart-axes';
 import type { ChartSize, ChartXLabels } from './chart-axes';
 import { CHART_AXIS_FONT_SIZE, X_AXIS_HEIGHT } from './chart-layout';
 import { ChartTimeTick } from './chart-time-tick';
@@ -61,15 +61,27 @@ export function valueYAxis({
   size,
   formatter,
   domain,
+  max,
+  integer = false,
   right = false,
 }: {
   id?: string | number;
   show: boolean;
   size: ChartSize;
   formatter: (value: number) => string;
+  /** Fixed range; Recharts spaces the ticks in it. */
   domain?: [number, number];
+  /** Largest value plotted on this axis (a stack's total for stacked bars); the ticks round up from it. */
+  max?: number;
+  /** Whole-number data (counts): ticks on whole numbers. */
+  integer?: boolean;
   right?: boolean;
 }) {
+  const tickCount = chartYTickCount(size.height);
+  // Recharts rounds its step up to fit the tick count, so a $4.40 peak got an $8 axis.
+  const ticks = domain || max === undefined ? undefined : niceYTicks(max, tickCount, integer);
+  // A fixed `domain` gets Recharts' own in-between ticks, which only it knows; it measures those.
+  const labels = ticks?.map(formatter);
   return (
     <YAxis
       yAxisId={id}
@@ -78,11 +90,69 @@ export function valueYAxis({
       tick={CHART_TICK}
       tickLine={false}
       axisLine={false}
-      width="auto"
+      width={yAxisWidth(show, labels)}
       tickMargin={4}
       tickFormatter={formatter}
-      domain={domain}
-      tickCount={chartYTickCount(size.height)}
+      domain={ticks ? [0, ticks.at(-1) ?? 0] : domain}
+      ticks={ticks}
+      tickCount={tickCount}
     />
+  );
+}
+
+/**
+ * The y-axis width for its tick labels, from canvas text metrics. Recharts' `width="auto"` reads
+ * each label's box from the DOM on every redraw, which forces a page layout per chart. A hidden
+ * axis takes no room; with no known labels, Recharts measures.
+ */
+function yAxisWidth(show: boolean, labels: string[] | undefined) {
+  if (!show) return 0;
+  if (!labels) return 'auto';
+  const widest = Math.max(0, ...labels.map(textWidth));
+  // Plus the tick margin (4) and Recharts' default tick size (6), which it counts with hidden tick lines.
+  return Math.ceil(widest + 4 + 6);
+}
+
+let measureContext: CanvasRenderingContext2D | undefined;
+let measureContextTried = false;
+
+function textWidth(text: string) {
+  if (!measureContextTried) {
+    measureContextTried = true;
+    measureContext = createMeasureContext();
+  }
+  return measureContext ? measureContext.measureText(text).width : text.length * CHART_AXIS_FONT_SIZE * 0.6;
+}
+
+function createMeasureContext() {
+  if (typeof document === 'undefined') return undefined;
+  const context = document.createElement('canvas').getContext('2d') ?? undefined;
+  if (context) context.font = `${CHART_AXIS_FONT_SIZE}px ${getComputedStyle(document.body).fontFamily}`;
+  return context;
+}
+
+/** The largest number under `keys` in any row; with `stacked`, the largest row total. */
+export function dataMax(data: Record<string, unknown>[], keys: string[], stacked = false) {
+  let max = 0;
+  for (const row of data) {
+    let total = 0;
+    for (const key of keys) {
+      const v = row[key];
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      if (stacked) total += v;
+      else max = Math.max(max, v);
+    }
+    if (stacked) max = Math.max(max, total);
+  }
+  return max;
+}
+
+/** Whether every number under `keys` is whole (counts), so the axis keeps to whole ticks. */
+export function isWholeData(data: Record<string, unknown>[], keys: string[]) {
+  return data.every(row =>
+    keys.every(key => {
+      const v = row[key];
+      return typeof v !== 'number' || Number.isInteger(v);
+    }),
   );
 }

@@ -11,6 +11,11 @@ function card(panel: Locator, inline = false) {
  * On desktop the experiment result docks inline in the route side panel (a
  * named region); narrower screens keep the drawer dialog.
  */
+/** On desktop the dataset item docks inline in the route side panel. */
+function datasetItem(page: Page, itemId: string) {
+  return page.getByRole('region', { name: `Dataset item ${itemId}` });
+}
+
 function experimentResult(page: Page) {
   return page.getByRole('region', { name: 'Experiment item item-1' });
 }
@@ -36,8 +41,8 @@ async function scrollCardContent(page: Page, panel: Locator, inline = false) {
 }
 
 /**
- * Item details open as a modal drawer, except the experiment result on desktop,
- * which sits inline in the route side panel. Fixtures cross only the network
+ * Item details open as a modal drawer, except dataset items and experiment
+ * results on desktop, which sit inline in the route side panel. Fixtures cross only the network
  * boundary; deep links persist the selection without any data mutation.
  */
 test.describe('Item and review panel layout', () => {
@@ -51,7 +56,12 @@ test.describe('Item and review panel layout', () => {
     { device: 'desktop', viewport: { width: 1440, height: 900 } },
   ]) {
     for (const { surface, url, label, inline = false } of [
-      { surface: 'dataset item', url: '/datasets/ds-1/items/item-a', label: 'Dataset item item-a' },
+      {
+        surface: 'dataset item',
+        url: '/datasets/ds-1/items/item-a',
+        label: 'Dataset item item-a',
+        inline: device === 'desktop',
+      },
       {
         surface: 'experiment result',
         url: '/experiments/exp-1/items/item-1',
@@ -70,7 +80,7 @@ test.describe('Item and review panel layout', () => {
         test(`opens ${inline ? 'an inline panel' : 'a drawer'} that can be closed`, async ({ page }, testInfo) => {
           await page.goto(url);
           const panel = page.getByRole(inline ? 'region' : 'dialog', { name: label });
-          const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
+          const close = panel.getByRole('button', { name: 'Close panel', exact: true });
           await expect(close).toBeVisible();
           const screenshot = testInfo.outputPath(`${surface.replaceAll(' ', '-')}-${device}.png`);
           await page.screenshot({ path: screenshot });
@@ -83,11 +93,11 @@ test.describe('Item and review panel layout', () => {
   }
 
   test.describe('when deletion is requested from an open dataset item', () => {
-    test('allows cancelling deletion above the item drawer', async ({ page }) => {
+    test('allows cancelling deletion above the item panel', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
-      const panel = page.getByRole('dialog', { name: 'Dataset item item-a' });
+      const panel = datasetItem(page, 'item-a');
       await panel.getByRole('button', { name: 'Open actions menu' }).click();
-      await page.getByRole('menuitem', { name: 'Delete Item' }).click();
+      await page.getByRole('menuitem', { name: 'Delete item' }).click();
       const confirmation = page.getByRole('alertdialog', { name: 'Delete Item' });
       await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(confirmation).toBeHidden();
@@ -96,18 +106,18 @@ test.describe('Item and review panel layout', () => {
     });
   });
 
-  test.describe('when another item is selected after closing the drawer', () => {
+  test.describe('when another item is selected after closing the panel', () => {
     test('restores the previous selection with browser back', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
-      const first = page.getByRole('dialog', { name: 'Dataset item item-a' });
+      const first = datasetItem(page, 'item-a');
       await expect(first).toBeVisible();
-      await first.getByRole('button', { name: 'Close Panel', exact: true }).click();
+      await first.getByRole('button', { name: 'Close panel', exact: true }).click();
       await expect(first).toBeHidden();
       await page.getByText('item-b', { exact: true }).click();
-      await expect(page.getByRole('dialog', { name: 'Dataset item item-b' })).toBeVisible();
+      await expect(datasetItem(page, 'item-b')).toBeVisible();
       await page.goBack();
       await page.goBack();
-      await expect(page.getByRole('dialog', { name: 'Dataset item item-a' })).toBeVisible();
+      await expect(datasetItem(page, 'item-a')).toBeVisible();
       await expect(page).toHaveURL(/\/datasets\/ds-1\/items\/item-a$/);
     });
   });
@@ -119,13 +129,15 @@ test.describe('Item and review panel layout', () => {
 
     test('scrolls inside the card and keeps navigating', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
-      const panel = page.getByRole('dialog', { name: 'Dataset item item-a' });
-      await expect(panel.getByRole('button', { name: 'Close Panel', exact: true })).toBeVisible();
-      const contentScrollTop = await scrollCardContent(page, panel);
+      const panel = datasetItem(page, 'item-a');
+      await expect(panel.getByRole('button', { name: 'Close panel', exact: true })).toBeVisible();
+      // Payloads are clipped until expanded, so open one to overflow the card.
+      await panel.getByRole('region', { name: 'Input' }).getByRole('button', { name: 'Expand' }).click();
+      const contentScrollTop = await scrollCardContent(page, panel, true);
       await expect.poll(contentScrollTop).toBeGreaterThan(0);
       expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
       await panel.getByRole('button', { name: 'Go to next item', exact: true }).click();
-      await expect(page.getByRole('dialog', { name: 'Dataset item item-b' })).toBeVisible();
+      await expect(datasetItem(page, 'item-b')).toBeVisible();
     });
   });
 
@@ -153,7 +165,7 @@ test.describe('Item and review panel layout', () => {
       test('scrolls inside the card and still closes', async ({ page }) => {
         await page.goto(url);
         const panel = page.getByRole(inline ? 'region' : 'dialog', { name: label });
-        const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
+        const close = panel.getByRole('button', { name: 'Close panel', exact: true });
         await expect(close).toBeVisible();
         // Payloads are clipped until expanded, so open one to overflow the card.
         await panel.getByRole('region', { name: 'Input' }).getByRole('button', { name: 'Expand' }).click();
@@ -175,10 +187,10 @@ test.describe('Item and review panel layout', () => {
       const trace = page.getByRole('dialog', { name: /^Trace / });
       await expect(trace).toBeVisible();
       await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeVisible();
+      await expect(trace.getByRole('heading', { name: /child1/ })).toBeVisible();
       // The span column has no close button: clicking the selected span again toggles it off.
       await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeHidden();
+      await expect(trace.getByRole('heading', { name: /child1/ })).toBeHidden();
       await trace.getByRole('button', { name: 'Close trace', exact: true }).click();
       await expect(trace).toBeHidden();
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
@@ -189,7 +201,7 @@ test.describe('Item and review panel layout', () => {
     test('closes from the close control', async ({ page }) => {
       await page.goto('/experiments/review-queue?experiment=exp-1&review=res-3');
       const panel = page.getByRole('dialog', { name: 'Review item res-3' });
-      const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
+      const close = panel.getByRole('button', { name: 'Close panel', exact: true });
       await expect(close).toBeVisible();
       await close.click({ timeout: 3000 });
       await expect(panel).toBeHidden();

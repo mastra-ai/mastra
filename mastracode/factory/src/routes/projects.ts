@@ -163,7 +163,7 @@ interface ModelApplySession {
 }
 
 interface ModelApplyController {
-  getSessionByResource: (resourceId: string) => Promise<ModelApplySession | undefined>;
+  getSession: (sessionId: string) => Promise<ModelApplySession | undefined>;
 }
 
 export interface ProjectRoutesDeps extends RouteDependencies {
@@ -236,7 +236,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
    * validate the result through the sandbox's schema. Returns the issues when
    * the merged document is rejected.
    *
-   * A stored key the current schema does not declare is left over from another
+   * A stored key the current schema does not declare, or whose stored value it
+   * now rejects (a tightened range or choice list), is left over from another
    * provider or an older schema. When the merged document fails validation, the
    * merge retries without those keys so one stale value cannot lock every later
    * update; keys the patch itself sets are never pruned.
@@ -257,8 +258,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     if (!result.issues) return { merged: Object.keys(merged).length > 0 ? merged : null };
 
     const declared = this.#describeSandbox().settingsSchema.properties ?? {};
+    const rejected = new Set(
+      result.issues.map(issue => {
+        const segment = issue.path?.[0];
+        return typeof segment === 'object' && segment !== null ? segment.key : segment;
+      }),
+    );
     const pruned = Object.fromEntries(
-      Object.entries(merged).filter(([key]) => key in patch || Object.hasOwn(declared, key)),
+      Object.entries(merged).filter(([key]) => key in patch || (Object.hasOwn(declared, key) && !rejected.has(key))),
     );
     if (Object.keys(pruned).length === Object.keys(merged).length) return { issues: result.issues };
     const retried = await this.#settingsSchema['~standard'].validate(pruned);
@@ -561,6 +568,29 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
+          // Scope decides whose credentials every session bills against, so only
+          // admins may switch a shared Factory onto owners' personal keys. The
+          // thinking default sets the reasoning spend of every run that has not
+          // picked its own, so it is admin-only too.
+          const adminField =
+            parsedBody.data.modelScope !== undefined
+              ? 'model scope'
+              : parsedBody.data.defaultThinkingLevel !== undefined
+                ? 'thinking default'
+                : undefined;
+          if (
+            adminField &&
+            this.deps.auth.enabled() &&
+            !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))
+          ) {
+            return context.json(
+              {
+                error: 'forbidden',
+                message: `Organization administrator access is required to change the ${adminField}.`,
+              },
+              403,
+            );
+          }
           const project = await (
             await this.#projects()
           ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });
@@ -629,7 +659,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
               continue;
             }
-            const session = await controller.getSessionByResource(binding.resourceId);
+            const session = await controller.getSession(binding.sessionId);
             if (!session) {
               skipped.push({ threadId: binding.threadId, reason: 'not-running' });
               continue;

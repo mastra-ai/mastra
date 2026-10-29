@@ -7,7 +7,9 @@
     "mimo/mimo-v2.5",
     "mistral/voxtral-small-latest",
     "muse-glimmer-30b-tr",
+    "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-397b-a17b",
+    "qwen/qwen3.5-plus",
     "qwen/qwen3.6-flash",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-plus",
@@ -76,6 +78,12 @@
         "type": "toggle"
       }
     ],
+    "sakana/fugu-ultra": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh"]
+      }
+    ],
     "thinkingmachines/inkling-small": [
       {
         "type": "effort",
@@ -88,37 +96,7 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "meta/muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "upstage/solar-pro4": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "upstage/solar-pro3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "upstage/solar-pro2": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "sakana/fugu-ultra": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh"]
-      }
-    ],
-    "qwen/qwen-flash": [
+    "qwen/qwen3.6-plus": [
       {
         "type": "toggle"
       },
@@ -134,7 +112,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-plus": [
+    "qwen/qwen3.7-plus": [
       {
         "type": "toggle"
       },
@@ -158,14 +136,6 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
@@ -174,7 +144,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-plus": [
+    "qwen/qwen3.5-plus": [
       {
         "type": "toggle"
       },
@@ -182,12 +152,44 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.7-plus": [
+    "qwen/qwen3.6-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "upstage/solar-pro4": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "upstage/solar-pro2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "upstage/solar-pro3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "meta/muse-spark-1.2-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

@@ -410,6 +410,52 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
       );
     });
 
+    it('serves 2025-era clients statelessly when the server opts in', async () => {
+      const lenient = new MCPServer({ name: 'Lenient', version: '1.0.0', tools: makeTools(), legacy: 'stateless' });
+      const lenientServed = await serveHTTP(lenient);
+      try {
+        const client = new Client(
+          { name: 'legacy-client', version: '1.0.0' },
+          { versionNegotiation: { mode: 'legacy' as const } },
+        );
+        await client.connect(new StreamableHTTPClientTransport(lenientServed.url));
+        try {
+          expect(client.getServerVersion()?.name).toBe('Lenient');
+          const { tools } = await client.listTools();
+          expect(tools.map(tool => tool.name)).toContain('echoTool');
+          const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });
+          expect(textOf(result)).toBe('echo: hi');
+
+          // 2025-era structuredContent must be an object, so non-object results come back wrapped.
+          const nullResult = await client.callTool({ name: 'nullTool', arguments: {} });
+          expect(nullResult.isError).not.toBe(true);
+          expect(nullResult.structuredContent).toEqual({ result: null });
+          const tupleResult = await client.callTool({ name: 'tupleTool', arguments: {} });
+          expect(tupleResult.isError).not.toBe(true);
+          expect(tupleResult.structuredContent).toEqual({ result: ['pair', 2] });
+        } finally {
+          await client.close();
+        }
+
+        const initialize = await rawRequest(lenientServed.url, {
+          envelope: false,
+          method: 'initialize',
+          params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'old', version: '1' } },
+        });
+        expect(initialize.status).toBe(200);
+        expect(initialize.headers.has('mcp-session-id')).toBe(false);
+
+        const modern = await connectClient(lenientServed.url);
+        try {
+          expect((await modern.listTools()).tools.map(tool => tool.name)).toContain('echoTool');
+        } finally {
+          await modern.close();
+        }
+      } finally {
+        await lenientServed.close();
+      }
+    });
+
     it('exposes no legacy transport entry points or options', async () => {
       // The 1.x entry points stay callable on the base class but are not served here.
       await expect(server.startSSE({} as never)).rejects.toThrow(/removed in MCP 2026-07-28\); use startHTTP instead/);

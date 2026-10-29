@@ -201,7 +201,7 @@ export const WithDialog: Story = {
           </kbd>{' '}
           or click the button below
         </p>
-        <Button onClick={() => setOpen(true)}>Open Command Palette</Button>
+        <Button onClick={() => setOpen(true)}>Open command palette</Button>
         <CommandDialog open={open} onOpenChange={setOpen}>
           <CommandInput placeholder="Type a command or search..." />
           <CommandList>

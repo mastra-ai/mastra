@@ -598,7 +598,7 @@ await agent.generateLegacy(
     },
     // Output processors for response validation
     outputProcessors: [
-      new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
       new TokenLimiterProcessor({ maxTokens: 1000 }),
     ],
   },

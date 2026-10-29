@@ -154,22 +154,18 @@ export class D1DB extends MastraBase {
           result = await statement.bind(...formattedParams).first();
           if (!result) return null;
           return result;
-        } else {
-          result = await statement.bind(...formattedParams).all();
-          const results = result.results || [];
-          return results;
         }
-      } else {
-        if (first) {
-          result = await statement.first();
-          if (!result) return null;
-          return result;
-        } else {
-          result = await statement.all();
-          const results = result.results || [];
-          return results;
-        }
+        result = await statement.bind(...formattedParams).all();
+        const results = result.results || [];
+        return results;
+      } else if (first) {
+        result = await statement.first();
+        if (!result) return null;
+        return result;
       }
+      result = await statement.all();
+      const results = result.results || [];
+      return results;
     } catch (error) {
       throw new MastraError(
         {
@@ -219,14 +215,41 @@ export class D1DB extends MastraBase {
     }
   }
 
+  /**
+   * Delete up to `limit` rows keyed by `runId` whose epoch-ms `column` is older
+   * than `cutoff`. Used to prune the run fencing tables.
+   */
+  async pruneRunRows({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: number;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const table = this.getTableName(tableName);
+    const rows = (await this.executeQuery({
+      sql: `DELETE FROM ${table} WHERE runId IN (
+        SELECT runId FROM ${table} WHERE ${column} < ? ORDER BY ${column} LIMIT ?
+      ) RETURNING runId`,
+      params: [cutoff, limit],
+    })) as Record<string, unknown>[] | null;
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+
   async executeQuery(options: SqlQueryOptions): Promise<Record<string, any>[] | Record<string, any> | null> {
     if (this.binding) {
       return this.executeWorkersBindingQuery(options);
     } else if (this.client) {
       return this.executeRestQuery(options);
-    } else {
-      throw new Error('Neither binding nor client is configured');
     }
+    throw new Error('Neither binding nor client is configured');
   }
 
   /**
@@ -600,13 +623,10 @@ export class D1DB extends MastraBase {
               return this.serializeValue(value);
             });
 
-            const recordToUpsert = columns.reduce(
-              (acc, col) => {
-                if (col !== 'createdAt') acc[col] = `excluded.${col}`;
-                return acc;
-              },
-              {} as Record<string, any>,
-            );
+            const recordToUpsert = columns.reduce<Record<string, any>>((acc, col) => {
+              if (col !== 'createdAt') acc[col] = `excluded.${col}`;
+              return acc;
+            }, {});
 
             const query = createSqlBuilder().insert(fullTableName, columns, values, ['id'], recordToUpsert, guard);
 

@@ -2,7 +2,6 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo, useCallback } from 'react';
@@ -10,13 +9,6 @@ import { useMemo, useCallback } from 'react';
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
 import { getOptionalResultColumns } from '../utils/result-output';
 import { ExperimentResultsList } from './experiment-results-list';
-import type { ExperimentResultsSortKey } from './experiment-results-list';
-
-// An active run with no results yet would otherwise read the same as a finished empty run.
-const emptyMessageByStatus: Record<string, string> = {
-  pending: 'Run queued — waiting to start…',
-  running: 'Run in progress — results appear as items complete',
-};
 
 export type ExperimentResultsSectionProps = {
   experimentId: string;
@@ -29,8 +21,6 @@ export type ExperimentResultsSectionProps = {
   selectedIds: Set<string>;
   onToggleSelect: (resultId: string) => void;
   onToggleSelectAll: () => void;
-  sort?: ListSort<ExperimentResultsSortKey>;
-  onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
   /** Fetches per-item usage and shows the Cost and Tokens columns. */
   supportsMetrics?: boolean;
 };
@@ -52,8 +42,6 @@ export function ExperimentResultsSection({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
-  sort,
-  onSortChange,
   supportsMetrics = false,
 }: ExperimentResultsSectionProps) {
   const { currentItemId, openItem, close } = useExperimentItemPanel();
@@ -114,11 +102,9 @@ export function ExperimentResultsSection({
 
   const resultsListColumns = useMemo(
     () => [
-      { name: 'itemId', label: 'Item ID', size: 'auto' },
-      { name: 'input', label: 'Input', size: '1fr' },
+      { name: 'itemId', label: 'Item ID', size: '7rem' },
+      { name: 'input', label: 'Input', size: '20rem' },
       ...getOptionalResultColumns(results),
-      { name: 'tags', label: 'Tags', size: 'auto' },
-      { name: 'startedAt', label: 'Created', size: 'auto' },
       ...(supportsMetrics
         ? [
             { name: 'cost', label: 'Cost', size: 'auto' },
@@ -144,12 +130,9 @@ export function ExperimentResultsSection({
         setEndOfListElement={setEndOfListElement}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
-        emptyMessage={emptyMessageByStatus[experimentStatus ?? ''] ?? 'No results yet'}
         selectedIds={selectedIds}
         onToggleSelect={onToggleSelect}
         onToggleSelectAll={onToggleSelectAll}
-        sort={sort}
-        onSortChange={onSortChange}
       />
     </div>
   );

@@ -1,10 +1,14 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { buildContinuationOpts, resolveScope } from '../../loop/shared/stream-until-idle-helpers';
+import {
+  buildContinuationOpts,
+  releaseContinuationToolCallIds,
+  resolveScope,
+} from '../../loop/shared/stream-until-idle-helpers';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
-import { RequestContext } from '../../request-context';
+import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, RequestContext } from '../../request-context';
 import { MockStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -132,6 +136,31 @@ describe('Agent.streamUntilIdle', () => {
           'IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls. IMPORTANT: The following tool-call IDs completed successfully: call-1 (view), background task task-1. Their results are now in the conversation. Do not call the same tool again — the result is already available.',
       },
     ]);
+    expect(options.requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-1']);
+  });
+
+  it('shares the caller request context with continuations', () => {
+    const requestContext = new RequestContext();
+    const options = buildContinuationOpts({ requestContext }, undefined, [
+      { type: 'background-task-completed', payload: { taskId: 'task-1', toolCallId: 'call-1', toolName: 'view' } },
+    ]);
+    expect(options.requestContext).toBe(requestContext);
+    expect(requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-1']);
+  });
+
+  it('keeps overlapping continuation IDs isolated on a shared request context', () => {
+    const requestContext = new RequestContext();
+    const first = buildContinuationOpts({ requestContext }, undefined, [
+      { type: 'background-task-completed', payload: { taskId: 'task-1', toolCallId: 'call-1', toolName: 'view' } },
+    ]);
+    buildContinuationOpts({ requestContext }, undefined, [
+      { type: 'background-task-completed', payload: { taskId: 'task-2', toolCallId: 'call-2', toolName: 'view' } },
+    ]);
+    expect(requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-1', 'call-2']);
+    releaseContinuationToolCallIds(requestContext, first.continuationToolCallIds);
+    expect(requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-2']);
+    releaseContinuationToolCallIds(requestContext, ['call-2']);
+    expect(requestContext.has(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toBe(false);
   });
 
   let mastra: Mastra;
@@ -1119,6 +1148,99 @@ describe('Agent.streamUntilIdle', () => {
 
     // Allow slack but confirm we're closing on the timer, not hanging open.
     expect(elapsed).toBeLessThan(2_000);
+  });
+
+  describe('backgroundTasks.untilIdleMaxIdleMs manager default', () => {
+    const publishRunning = (m: Mastra, agentId: string, threadId: string, taskId: string) =>
+      (m.backgroundTaskManager as any).publishLifecycleEvent('task.running', {
+        id: taskId,
+        toolName: 'dummy',
+        toolCallId: taskId,
+        runId: 'run-1',
+        agentId,
+        threadId,
+        resourceId: 'user-1',
+        status: 'running',
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 60_000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    const withManagerDefault = async (untilIdleMaxIdleMs: number, run: (m: Mastra) => Promise<void>) => {
+      const configured = new Mastra({
+        logger: false,
+        storage,
+        backgroundTasks: { enabled: true, untilIdleMaxIdleMs },
+      });
+      await configured.startEventEngine();
+      try {
+        await run(configured);
+      } finally {
+        await configured.backgroundTaskManager?.shutdown();
+        await configured.stopEventEngine();
+      }
+    };
+
+    const drainWithin = (stream: ReadableStream<any>, ms: number) =>
+      Promise.race([
+        drain(stream),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`stream did not close within ${ms}ms`)), ms),
+        ),
+      ]);
+
+    it('applies the manager default when untilIdle: true sets no maxIdleMs', async () => {
+      await withManagerDefault(100, async configured => {
+        const { model } = makeScriptedModel([textResponse('initial')]);
+        const agent = new Agent({
+          id: 'a-mgr-idle',
+          name: 'a-mgr-idle',
+          instructions: 'test',
+          model,
+          memory: new MockMemory(),
+        });
+        configured.addAgent(agent, 'a-mgr-idle');
+
+        const start = Date.now();
+        const result = await agent.stream('hi', {
+          memory: { thread: 'thread-mgr-idle', resource: 'user-1' },
+          untilIdle: true,
+        });
+        await publishRunning(configured, 'a-mgr-idle', 'thread-mgr-idle', 'task-1');
+
+        // With only the hard-coded 5-minute fallback this stream stays open.
+        await drainWithin(result.fullStream as ReadableStream<any>, 2_000);
+        expect(Date.now() - start).toBeGreaterThanOrEqual(90);
+      });
+    });
+
+    it('lets a per-call maxIdleMs override the manager default', async () => {
+      await withManagerDefault(100, async configured => {
+        const { model } = makeScriptedModel([textResponse('initial')]);
+        const agent = new Agent({
+          id: 'a-call-idle',
+          name: 'a-call-idle',
+          instructions: 'test',
+          model,
+          memory: new MockMemory(),
+        });
+        configured.addAgent(agent, 'a-call-idle');
+
+        const start = Date.now();
+        const result = await agent.stream('hi', {
+          memory: { thread: 'thread-call-idle', resource: 'user-1' },
+          untilIdle: { maxIdleMs: 600 },
+        });
+        await publishRunning(configured, 'a-call-idle', 'thread-call-idle', 'task-1');
+
+        // Closing near 100ms would mean the manager default beat the per-call value.
+        await drainWithin(result.fullStream as ReadableStream<any>, 3_000);
+        expect(Date.now() - start).toBeGreaterThanOrEqual(590);
+      });
+    });
   });
 
   it('re-arms maxIdleMs after a completion arrives mid-turn while another task remains running', async () => {

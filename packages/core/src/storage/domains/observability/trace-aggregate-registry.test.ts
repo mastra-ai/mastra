@@ -4,6 +4,7 @@ import {
   getTraceAggregateDimensionDescriptors,
   getTraceAggregateDimensionRule,
   getTraceAggregateMeasureDescriptors,
+  getTraceQueryFieldsResponseSchema,
   isTraceAggregateCanonicalDimension,
   isTraceAggregateCanonicalMeasure,
   isTraceAggregateCountDistinctField,
@@ -21,11 +22,15 @@ import {
   TRACE_AGGREGATE_USAGE_METRIC_NAMES,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_PATH_BYTES,
+  traceAggregateDiscoverySchema,
 } from '../../index';
 
 const TRACE_DIMENSIONS = [
   'entityType',
   'entityName',
+  'name',
+  'spanType',
+  'entityId',
   'environment',
   'status',
   'serviceName',
@@ -127,9 +132,19 @@ describe('trace aggregate dimension registry', () => {
       expect(isTraceAggregateDimension(field), field).toBe(false);
       expect(isTraceAggregateCountDistinctField(field), field).toBe(false);
     }
-    for (const field of ['name', 'spanType', 'model', 'provider', 'attributes.model', 'durationMs', 'source']) {
+    for (const field of ['model', 'provider', 'attributes.model', 'durationMs', 'source']) {
       expect(isTraceAggregateDimension(field), field).toBe(false);
       expect(isTraceAggregateCountDistinctField(field), field).toBe(false);
+    }
+  });
+
+  it('keeps every canonical dimension filterable at trace scope so groups can be drilled into', () => {
+    // Groupable-only dimensions predate this rule; new dimensions must also be trace-scope filter fields.
+    const groupableOnly = ['serviceName', 'executionSource', 'experimentId'];
+    const traceFields = Object.keys(TRACE_QUERY_FIELD_REGISTRY.trace);
+    for (const path of Object.keys(TRACE_AGGREGATE_DIMENSION_REGISTRY)) {
+      if (groupableOnly.includes(path)) continue;
+      expect(traceFields, path).toContain(path);
     }
   });
 
@@ -309,5 +324,21 @@ describe('trace aggregate measure registry', () => {
       unit: 'currency',
       approximate: false,
     });
+  });
+
+  it('produces descriptors the fields discovery response accepts', () => {
+    const aggregate = {
+      dimensions: getTraceAggregateDimensionDescriptors(),
+      measures: getTraceAggregateMeasureDescriptors(),
+    };
+    expect(traceAggregateDiscoverySchema.parse(aggregate)).toEqual(aggregate);
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields: [],
+        observedFieldsTruncated: false,
+        aggregate,
+      }).success,
+    ).toBe(true);
   });
 });

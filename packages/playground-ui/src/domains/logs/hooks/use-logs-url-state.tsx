@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef } from 'react';
-import type { SetURLSearchParamsLike } from '../../traces/hooks/use-trace-url-state';
 import {
   LOGS_DATE_FROM_PARAM,
   LOGS_DATE_PRESET_PARAM,
@@ -14,6 +13,7 @@ import {
 } from '../log-filters';
 import type { LogsDatePreset, LogsEntityOptions } from '../log-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 
 const LOG_PARAM = 'logId';
 const TRACE_PARAM = 'traceId';

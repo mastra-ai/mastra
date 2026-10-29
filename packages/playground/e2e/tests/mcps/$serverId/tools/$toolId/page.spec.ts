@@ -18,8 +18,9 @@ test.describe('MCP server tool detail page', () => {
       await page.getByRole('button', { name: 'Run' }).click();
 
       await expect(page.getByText('Success')).toBeVisible();
-      await expect(page.locator('pre')).toContainText('"result"');
-      await expect(page.locator('pre')).toContainText('"thisIsA": "fixture"');
+      const response = page.getByRole('textbox', { name: 'Tool response' });
+      await expect(response).toContainText('"result"');
+      await expect(response).toContainText('"thisIsA": "fixture"');
     });
   });
 });

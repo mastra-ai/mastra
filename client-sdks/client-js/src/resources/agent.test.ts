@@ -1,4 +1,3 @@
-import { formatDataStreamPart, processDataStream } from '@ai-sdk/ui-utils';
 import { createTool } from '@mastra/core/tools';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v3';
@@ -10,11 +9,13 @@ import type {
   ClientOptions,
   CancelQueuedAgentMessagesParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SendAgentMessageParams,
   SendAgentSignalParams,
   SubscribeAgentThreadParams,
 } from '../types';
 import { MastraClientError } from '../types';
+import { formatDataStreamPart, processDataStream } from '../utils/ai-sdk-v4';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -202,6 +203,26 @@ describe('Agent signal routes', () => {
     await agent.queueMessage(params);
 
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('queues typed signals to the queue-signal route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'queued-run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies QueueAgentSignalParams;
+    const routeBody: Body<'POST /agents/:agentId/queue-signal'> = params;
+
+    await agent.queueSignal(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-signal', {
       method: 'POST',
       body: routeBody,
     });
@@ -496,6 +517,47 @@ describe('Agent signal routes', () => {
       body: routeBody,
       stream: true,
     });
+  });
+
+  it('delivers history and retained outcomes through the subscription SSE parser', async () => {
+    const chunks = [
+      {
+        type: 'thread-history',
+        runId: '',
+        from: 'AGENT',
+        payload: { messages: [], hasMore: false, activeRunId: null },
+      },
+      { type: 'thread-run-status', runId: 'finished-run', from: 'AGENT', payload: { status: 'success' } },
+      { type: 'thread-run-status', runId: 'failed-run', from: 'AGENT', payload: { status: 'failed' } },
+    ];
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    agent['request'] = vi.fn().mockResolvedValue(createSseResponse(chunks));
+    const subscription = await agent.subscribeToThread({
+      threadId: 'thread-123',
+      withInitialHistory: true,
+      withRunStatus: true,
+    });
+    const received: unknown[] = [];
+    await subscription.processDataStream({
+      onChunk: chunk => {
+        received.push(chunk);
+      },
+    });
+    expect(received).toEqual(chunks);
+    subscription.unsubscribe();
+  });
+
+  it.each([undefined, false, true])('forwards run outcomes only when opted in (%s)', async withRunStatus => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(createSseResponse([]));
+    agent['request'] = mockRequest;
+    const subscription = await agent.subscribeToThread({ threadId: 'thread-123', withRunStatus });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/subscribe', {
+      method: 'POST',
+      body: { resourceId: undefined, threadId: 'thread-123', ...(withRunStatus ? { withRunStatus: true } : {}) },
+      stream: true,
+    });
+    subscription.unsubscribe();
   });
 
   it('forwards withInitialHistory when requested', async () => {

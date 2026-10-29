@@ -48,7 +48,7 @@ describe('ScoreDataPanel', () => {
       renderPanel();
 
       await screen.findByRole('button', { name: 'Close score' });
-      expect(screen.queryByRole('button', { name: 'Close Panel' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Close panel' })).toBeNull();
     });
   });
 

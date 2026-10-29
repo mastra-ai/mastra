@@ -144,8 +144,6 @@ describe('api command descriptors', () => {
       factoryAttentionRead: ['attentionRead', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionArchive: ['attentionArchive', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionRestore: ['attentionRestore', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
-      factorySupervisorSession: ['supervisorSession', ['id'], false, false, false],
-      factorySupervisorHealth: ['supervisorHealth', ['id'], false, false, false],
     } as const;
 
     const exposedRouteKeys = new Set<string>();

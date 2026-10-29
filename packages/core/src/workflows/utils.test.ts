@@ -51,7 +51,7 @@ describe('cleanStepResult', () => {
     const result = {
       status: 'success',
       output: {},
-      metadata: { nestedRunId: 'run-123', customField: 'keep-me' },
+      metadata: { nestedRunId: 'run-123', foreachNestedRunIds: { 0: 'child-0' }, customField: 'keep-me' },
     };
     const cleaned = cleanStepResult(result) as any;
     expect(cleaned.metadata).toEqual({ customField: 'keep-me' });

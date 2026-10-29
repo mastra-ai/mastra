@@ -25,7 +25,7 @@ const providersDir = join(packageDir, 'src/providers');
 const outFile = join(repoRoot, 'docs/src/content/en/reference/connect/providers.mdx');
 
 // Providers present in the package but not part of the documented release.
-const EXCLUDE = new Set(['anthropic', 'google-analytics', 'microsoft-teams', 'stripe', 'twitter-v2']);
+const EXCLUDE = new Set(['anthropic', 'google-analytics', 'stripe', 'twitter-v2']);
 
 const DISPLAY: Record<string, string> = {
   clerk: 'Clerk',
@@ -41,7 +41,12 @@ const DISPLAY: Record<string, string> = {
   'incident-io': 'incident.io',
   jira: 'Jira',
   linear: 'Linear',
+  'microsoft-powerpoint': 'Microsoft PowerPoint',
+  'microsoft-teams': 'Microsoft Teams',
+  'microsoft-word': 'Microsoft Word',
+  outlook: 'Microsoft Outlook',
   notion: 'Notion',
+  'one-drive': 'OneDrive',
   openai: 'OpenAI',
   posthog: 'PostHog',
   resend: 'Resend',
@@ -67,6 +72,10 @@ const LOGOS: Record<string, Logo> = {
   'incident-io': { src: 'https://app.nango.dev/images/template-logos/incident-io.svg' },
   jira: { slug: 'jira' },
   linear: { slug: 'linear' },
+  'microsoft-powerpoint': { src: 'https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg' },
+  'microsoft-teams': { slug: 'microsoftteams' },
+  'microsoft-word': { src: 'https://app.nango.dev/images/template-logos/microsoft-word.svg' },
+  outlook: { slug: 'microsoftoutlook' },
   notion: { slug: 'notion', mono: true },
   openai: { src: 'https://svgl.app/library/openai.svg', mono: true },
   posthog: { slug: 'posthog' },

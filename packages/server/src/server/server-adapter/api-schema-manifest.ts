@@ -41,6 +41,20 @@ function schemaType(schema: JSONSchema7 | undefined): JSONSchema7['type'] | unde
 function inferResponseShape(responseSchema: JSONSchema7 | undefined): ApiSchemaResponseShape {
   if (!responseSchema) return { kind: 'unknown' };
 
+  const alternatives: unknown[] | undefined = responseSchema.anyOf ?? responseSchema.oneOf;
+  if (alternatives?.length) {
+    const shapes = alternatives.map(schema => inferResponseShape(asJsonSchema(schema)));
+    const first = shapes[0]!;
+    return shapes.every(
+      shape =>
+        shape.kind === first.kind &&
+        shape.listProperty === first.listProperty &&
+        shape.paginationProperty === first.paginationProperty,
+    )
+      ? first
+      : { kind: 'single' };
+  }
+
   const type = schemaType(responseSchema);
   if (type === 'array') return { kind: 'array' };
   if (type !== 'object') return { kind: 'single' };
@@ -58,6 +72,15 @@ function inferResponseShape(responseSchema: JSONSchema7 | undefined): ApiSchemaR
   }
   if (responseSchema.additionalProperties && propertyNames.length === 0) return { kind: 'record' };
   return { kind: 'single' };
+}
+
+/** CLI flags cover all request variants; the endpoint still validates the selected variant. */
+export function getApiSchemaPropertyNames(schema: JSONSchema7 | undefined): string[] {
+  if (!schema) return [];
+  const names = Object.keys(schema.properties ?? {});
+  for (const branch of schema.anyOf ?? schema.oneOf ?? [])
+    names.push(...getApiSchemaPropertyNames(asJsonSchema(branch)));
+  return [...new Set(names)].sort();
 }
 
 function isManifestRoute(route: ServerRoute): boolean {

@@ -20,8 +20,11 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
   }
   // Planning is the approval boundary. When project auto-approval is off, only a
   // person or a successfully approved `submit_plan` result may move the card into Building.
+  // An agent cannot skip Planning from Intake or Triage either; maintainer-configured
+  // system rules may still route cards there.
+  const skipsPlanning = (fromStage === 'intake' || fromStage === 'triage') && actor.type === 'agent';
   if (
-    fromStage === 'planning' &&
+    (fromStage === 'planning' || skipsPlanning) &&
     toStage === 'execute' &&
     actor.type !== 'human' &&
     !plansAutoApproved &&
@@ -31,7 +34,7 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       type: 'reject',
       code: 'approval_required',
       reason:
-        'Auto-approve plans is off: a maintainer must approve the plan or move this work item into Building from the Factory UI.',
+        'Auto-approve plans is off, so a person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into Building with factory_transition_work_item.',
     };
   }
   // A Factory review requested changes on this item's pull request. Closing the
@@ -52,6 +55,31 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       reason: `Pull request #${item.metadata.openPullRequestNumber} is still open. The card moves to Done when it merges; a maintainer can still close the work.`,
     };
   }
+  // Self-review hit its round limit and parked the card for a person.
+  if (fromStage === 'intake' && actor.type === 'agent' && item.metadata?.selfReviewNeedsHuman === true) {
+    return {
+      type: 'reject',
+      code: 'approval_required',
+      reason:
+        'Self-review requested changes too many times and parked this work item for a person. Ask them to decide in a chat they are signed in to; that turn can move the card on with factory_transition_work_item.',
+    };
+  }
+  // In Review without a change request, the card is waiting on self-review; an agent cannot close it from there.
+  if (
+    fromStage === 'review' &&
+    toStage === 'done' &&
+    actor.type === 'agent' &&
+    typeof item.metadata?.openPullRequestNumber !== 'number' &&
+    item.metadata?.reviewVerdict === undefined &&
+    item.metadata?.selfReviewVerdict !== 'approve'
+  ) {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason:
+        'This work item is in self-review and has no open change request yet. Record a self-review verdict instead; a maintainer can still close the work.',
+    };
+  }
   const triageType = item.triageType ?? requestedTriageType;
   const entersWork = toStage === 'planning' || toStage === 'execute';
   // An intermediate phase is not evidence of human approval.
@@ -59,7 +87,8 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
     return {
       type: 'reject',
       code: 'approval_required',
-      reason: 'A maintainer must move this non-bug work item into Planning or Execute from the Factory UI.',
+      reason:
+        'A person must accept this non-bug work item before it enters Planning or Execute. Ask them to say so in a chat they are signed in to; that turn can move the card with factory_transition_work_item.',
     };
   }
   return {

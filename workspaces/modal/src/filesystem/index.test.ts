@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  createWorkspaceTools,
   DirectoryNotEmptyError,
   DirectoryNotFoundError,
   FileExistsError,
@@ -21,12 +22,16 @@ import {
   NotDirectoryError,
   PermissionError,
   StaleFileError,
+  Workspace,
+  WORKSPACE_TOOLS,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ModalSandbox } from '../sandbox';
 import { ModalFilesystem } from './index';
+
+const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
 
 const hasGnuTools = (() => {
   try {
@@ -284,6 +289,43 @@ describe.skipIf(!hasGnuTools)('ModalFilesystem (operations)', () => {
     expect(file.modifiedAt.getTime()).toBeGreaterThan(0);
     expect((await fs.stat('dir')).type).toBe('directory');
     await expect(fs.stat('nope')).rejects.toThrow(FileNotFoundError);
+  });
+
+  // read_file picks media, binary or text from stat().mimeType, so without one
+  // a PNG or PDF came back as garbled UTF-8 (#28453).
+  it('stat reports a MIME type for files and none for directories', async () => {
+    await fs.writeFile('w/page.png', png);
+    await fs.writeFile('w/doc.pdf', '%PDF-1.4 test');
+    await fs.mkdir('w/album.png');
+
+    expect(await fs.stat('w/page.png')).toMatchObject({ type: 'file', mimeType: 'image/png' });
+    expect(await fs.stat('w/doc.pdf')).toMatchObject({ type: 'file', mimeType: 'application/pdf' });
+    const dir = await fs.stat('w/album.png');
+    expect(dir.type).toBe('directory');
+    expect(dir.mimeType).toBeUndefined();
+  });
+
+  it('takes the MIME type of a symlink from its own name, like LocalFilesystem', async () => {
+    await fs.writeFile('w/pic.bin', png);
+    execFileSync('ln', ['-s', 'pic.bin', join(root, 'w/piclink.png')]);
+
+    expect(await fs.stat('w/piclink.png')).toMatchObject({ type: 'file', size: 12, mimeType: 'image/png' });
+  });
+
+  it('lets read_file return a PNG as native media the model can view', async () => {
+    await fs.writeFile('w/page.png', png);
+    const workspace = new Workspace({ filesystem: fs });
+    const tool = (await createWorkspaceTools(workspace))[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+
+    const result = await tool.execute({ path: 'w/page.png' }, { workspace });
+
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'content',
+      value: [
+        { type: 'text', text: `${join(root, 'w/page.png')} (12 bytes, image/png)` },
+        { type: 'media', data: png.toString('base64'), mediaType: 'image/png' },
+      ],
+    });
   });
 
   it('rejects symlinks that escape basePath', async () => {

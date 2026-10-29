@@ -1,12 +1,9 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 
-import {
-  defaultTraceIntelligenceContextValue,
-  TraceIntelligenceContext,
-  type TraceIntelligenceRequest,
-  type TraceSignalManagement,
-} from './trace-intelligence-context';
+import { defaultTraceIntelligenceContextValue, TraceIntelligenceContext } from './trace-intelligence-context';
+import type { TraceIntelligenceRequest, TraceSignalManagement } from './trace-intelligence-context';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface TraceIntelligenceProviderProps {

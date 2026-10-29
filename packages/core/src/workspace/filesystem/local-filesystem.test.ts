@@ -35,6 +35,170 @@ describe('LocalFilesystem', () => {
     }
   });
 
+  describe('symlinked destination parents (#27916)', () => {
+    const operations = ['writeFile', 'appendFile', 'mkdir', 'copyFile', 'copyDirectory', 'moveFile'] as const;
+
+    async function runOperation(operation: (typeof operations)[number], filesystem: LocalFilesystem, dest: string) {
+      switch (operation) {
+        case 'writeFile':
+          return filesystem.writeFile(dest, 'content');
+        case 'appendFile':
+          return filesystem.appendFile(dest, 'content');
+        case 'mkdir':
+          return filesystem.mkdir(dest);
+        case 'copyFile':
+          return filesystem.copyFile('source.txt', dest);
+        case 'copyDirectory':
+          return filesystem.copyFile('source-dir', dest, { recursive: true });
+        case 'moveFile':
+          return filesystem.moveFile('source.txt', dest);
+      }
+    }
+
+    async function setupDestination() {
+      const workspace = path.join(tempDir, 'workspace');
+      const outside = path.join(tempDir, 'outside');
+      await fs.mkdir(workspace);
+      await fs.mkdir(outside);
+      await fs.writeFile(path.join(workspace, 'source.txt'), 'content');
+      await fs.mkdir(path.join(workspace, 'source-dir'));
+      await fs.writeFile(path.join(workspace, 'source-dir', 'child.txt'), 'content');
+      await fs.symlink(outside, path.join(workspace, 'link'), 'dir');
+      return { workspace, outside };
+    }
+
+    describe.each(['workspace', 'allowed root'])('%s', rootKind => {
+      describe.each(['link/new.txt', 'link/missing/nested/new.txt'])('destination %s', destination => {
+        it.each(operations)('rejects %s before creating anything outside the roots', async operation => {
+          const { workspace, outside } = await setupDestination();
+          const allowed = path.join(tempDir, 'allowed');
+          await fs.mkdir(allowed);
+          await fs.symlink(outside, path.join(allowed, 'link'), 'dir');
+          const filesystem = new LocalFilesystem({ basePath: workspace, allowedPaths: [allowed] });
+          const target = rootKind === 'allowed root' ? path.join(allowed, destination) : destination;
+
+          await expect(runOperation(operation, filesystem, target)).rejects.toThrow(PermissionError);
+
+          expect(await fs.readdir(outside)).toEqual([]);
+          expect(await fs.readFile(path.join(workspace, 'source.txt'), 'utf-8')).toBe('content');
+        });
+      });
+    });
+
+    describe.each(['absolute', 'relative', 'chain', 'parent traversal'])('dangling %s symlink', linkKind => {
+      it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
+        'rejects %s without creating the outside target',
+        async operation => {
+          const { workspace, outside } = await setupDestination();
+          const target = path.join(outside, 'new.txt');
+          if (linkKind === 'parent traversal') {
+            await fs.mkdir(path.join(outside, 'deep'));
+            await fs.symlink(path.join(outside, 'deep'), path.join(workspace, 'pivot'), 'dir');
+          }
+          if (linkKind === 'chain') {
+            await fs.symlink('../outside/new.txt', path.join(workspace, 'alias.txt'));
+          }
+          await fs.symlink(
+            linkKind === 'absolute'
+              ? target
+              : linkKind === 'relative'
+                ? '../outside/new.txt'
+                : linkKind === 'parent traversal'
+                  ? 'pivot/../new.txt'
+                  : 'alias.txt',
+            path.join(workspace, 'dangling.txt'),
+          );
+          const filesystem = new LocalFilesystem({ basePath: workspace });
+
+          await expect(runOperation(operation, filesystem, 'dangling.txt')).rejects.toThrow(PermissionError);
+
+          expect(await fs.readdir(outside)).toEqual(linkKind === 'parent traversal' ? ['deep'] : []);
+        },
+      );
+    });
+
+    it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
+      'rejects %s to an existing outside symlink target despite an inside decoy',
+      async operation => {
+        const { workspace, outside } = await setupDestination();
+        await fs.mkdir(path.join(outside, 'deep'));
+        await fs.writeFile(path.join(outside, 'existing.txt'), 'outside');
+        await fs.writeFile(path.join(workspace, 'existing.txt'), 'decoy');
+        await fs.symlink(path.join(outside, 'deep'), path.join(workspace, 'pivot'), 'dir');
+        await fs.symlink('pivot/../existing.txt', path.join(workspace, 'alias.txt'));
+        const filesystem = new LocalFilesystem({ basePath: workspace });
+
+        await expect(runOperation(operation, filesystem, 'alias.txt')).rejects.toThrow(PermissionError);
+
+        expect(await fs.readFile(path.join(outside, 'existing.txt'), 'utf-8')).toBe('outside');
+        expect(await fs.readFile(path.join(workspace, 'existing.txt'), 'utf-8')).toBe('decoy');
+      },
+    );
+
+    describe.each(['inside/new.txt', 'internal-pivot/../new.txt'])('in-root dangling target %s', target => {
+      it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
+        'allows %s through a dangling symlink to an in-root file',
+        async operation => {
+          const { workspace } = await setupDestination();
+          await fs.mkdir(path.join(workspace, 'inside/deep'), { recursive: true });
+          await fs.symlink('inside/deep', path.join(workspace, 'internal-pivot'), 'dir');
+          await fs.symlink(target, path.join(workspace, 'dangling.txt'));
+          const filesystem = new LocalFilesystem({ basePath: workspace });
+
+          await runOperation(operation, filesystem, 'dangling.txt');
+
+          expect(await fs.readFile(path.join(workspace, 'inside/new.txt'), 'utf-8')).toBe('content');
+        },
+      );
+    });
+
+    describe.each(['in-root symlink', 'allowed root', 'symlinked allowed root', 'missing allowed root'])(
+      '%s',
+      rootKind => {
+        it.each(operations)('allows %s to a missing destination', async operation => {
+          const { workspace, outside } = await setupDestination();
+          const inside = path.join(workspace, 'inside');
+          await fs.mkdir(inside);
+          await fs.symlink(inside, path.join(workspace, 'internal-link'), 'dir');
+          const allowedLink = path.join(tempDir, 'allowed-link');
+          await fs.symlink(outside, allowedLink, 'dir');
+          const missingRoot = path.join(tempDir, 'missing-allowed');
+          const allowedPaths =
+            rootKind === 'allowed root'
+              ? [outside]
+              : rootKind === 'symlinked allowed root'
+                ? [allowedLink]
+                : rootKind === 'missing allowed root'
+                  ? [missingRoot]
+                  : [];
+          const filesystem = new LocalFilesystem({ basePath: workspace, allowedPaths });
+          const destination =
+            rootKind === 'in-root symlink'
+              ? 'internal-link/missing/new.txt'
+              : rootKind === 'missing allowed root'
+                ? path.join(missingRoot, 'nested/new.txt')
+                : 'link/missing/new.txt';
+          const targetRoot =
+            rootKind === 'in-root symlink' ? inside : rootKind === 'missing allowed root' ? missingRoot : outside;
+          const target = path.join(
+            targetRoot,
+            rootKind === 'missing allowed root' ? 'nested/new.txt' : 'missing/new.txt',
+          );
+
+          await runOperation(operation, filesystem, destination);
+
+          if (operation === 'mkdir') {
+            expect((await fs.stat(target)).isDirectory()).toBe(true);
+          } else {
+            expect(
+              await fs.readFile(operation === 'copyDirectory' ? path.join(target, 'child.txt') : target, 'utf-8'),
+            ).toBe('content');
+          }
+        });
+      },
+    );
+  });
+
   // ===========================================================================
   // Constructor
   // ===========================================================================

@@ -90,7 +90,7 @@ export const traceQueryPage: TraceQueryKeysetTraceResponse = {
 export const traceQueryPageWithThreadAndEnvironment: Awaited<ReturnType<MastraClient['queryTraces']>> = {
   traces: [
     {
-      ...traceQueryPage.traces[0]!,
+      ...traceQueryPage.traces[0],
       traceId: 'trace-env',
       rootSpanId: 'span-env',
       environment: 'production',
@@ -121,6 +121,15 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     threadQuery: true,
     spanQuery: true,
     feedback: true,
+  },
+};
+
+/** Store that also returns thread rows, so Studio can offer the threads view. */
+export const threadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    threadQueryRows: true,
   },
 };
 

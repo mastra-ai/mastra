@@ -247,6 +247,13 @@ export interface BackgroundTaskManagerConfig {
    * Can be overridden per-agent or per-tool. Default: undefined (wait indefinitely).
    */
   waitTimeoutMs?: number;
+  /**
+   * Default idle timeout (in ms) for `stream(..., { untilIdle: true })` when the
+   * call does not set `maxIdleMs`. The stream closes once background tasks are
+   * still running but no event has arrived for this long. A per-call
+   * `untilIdle: { maxIdleMs }` always takes precedence. Default: 300_000 (5 minutes).
+   */
+  untilIdleMaxIdleMs?: number;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */

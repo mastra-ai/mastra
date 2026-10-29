@@ -298,4 +298,32 @@ describe('CustomProvidersStorage enabling secretEncryption', () => {
       await backend.close();
     }
   });
+
+  it('keeps an api key that merely looks like an encrypted value, without disabling the domain', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-cp-')), 'envelope-lookalike.db')}`;
+    const lookalike = 'mastra:factory-secret:v1:not-a-real-envelope';
+    const encryption = () => createFactorySecretEncryption({ primary: testKey });
+    {
+      const { backend, domain } = await makeFileStore(url, encryption());
+      const saved = await domain.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: {
+          providerId: 'my-llm',
+          name: 'My LLM',
+          url: 'https://llm.example.com/v1',
+          apiKey: lookalike,
+          models: ['m'],
+        },
+      });
+      expect(saved.apiKey).toBe(lookalike);
+      await backend.close();
+    }
+
+    // A fresh boot migrates every row during init(); the lookalike must not fail it.
+    const { domain } = await makeFileStore(url, encryption());
+    await expect(domain.ensureReady()).resolves.toBeUndefined();
+    const [provider] = await domain.list({ orgId: 'org-1' });
+    expect(provider!.apiKey).toBe(lookalike);
+  });
 });

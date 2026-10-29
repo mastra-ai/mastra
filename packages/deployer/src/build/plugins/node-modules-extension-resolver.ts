@@ -62,7 +62,7 @@ export function nodeModulesExtensionResolver(): Plugin {
       try {
         const packageJSON = await getPackageJSON(pkgName, importer);
         // if it has exports, node should be able to rsolve it, if not the exports map is wrong.
-        if (!!packageJSON.exports) {
+        if (packageJSON.exports) {
           return null;
         }
 

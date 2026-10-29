@@ -5,6 +5,9 @@
  * (e.g. a Railway VM) rather than on the server host. File operations are
  * implemented by shelling out through the sandbox's `executeCommand`, so the
  * agent's file tools and command tools share one VM and one view of the repo.
+ * When the sandbox exposes its own `filesystem`, file operations use it
+ * instead, which takes one round trip rather than several commands; grep and
+ * walks still run as shell commands.
  *
  * Paths are workspace-relative (`/src/foo.ts`) and resolve under the sandbox
  * working directory (`basePath`). A traversal guard rejects any path that
@@ -36,6 +39,7 @@ import {
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
+  getMimeType,
   IsDirectoryError,
   NotDirectoryError,
   UnsupportedGrepPatternError,
@@ -60,7 +64,16 @@ export interface SandboxCommandResult {
 /** Minimal sandbox surface the filesystem needs. */
 export interface SandboxExec {
   readonly id: string;
-  executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
+  /**
+   * The sandbox's own file API, when it has one (`WorkspaceSandbox.filesystem`).
+   * File operations go through it instead of shell commands.
+   */
+  readonly filesystem?: WorkspaceFilesystem;
+  executeCommand(
+    command: string,
+    args?: string[],
+    options?: { timeout?: number; maxRetainedBytes?: number },
+  ): Promise<SandboxCommandResult>;
 }
 
 export interface SandboxFilesystemOptions {
@@ -76,14 +89,105 @@ export interface SandboxFilesystemOptions {
   workdir: string | (() => Promise<string> | string);
   /** Optional stable id; defaults to a sandbox-derived id. */
   id?: string;
+  /**
+   * Check that symlinks don't lead outside the workdir when using the
+   * sandbox's native filesystem. Off by default: native file APIs follow
+   * symlinks, and inside a sandbox the agent can read anything with a command
+   * anyway. Turn it on when files are served to someone other than the agent.
+   *
+   * Each path is checked once per instance, so keep such instances
+   * short-lived. Without a native filesystem the shell path always checks.
+   */
+  verifySymlinks?: boolean;
 }
+
+type ContainmentCheck = 'target' | 'dest' | 'parent';
 
 /** Default per-command deadline so a hung sandbox can't block file tools forever. */
 const COMMAND_TIMEOUT_MS = 30_000;
 
+/**
+ * Explain why a native grep command failed so callers can tell a timeout or
+ * broken toolchain apart from a pattern the engine cannot express.
+ */
+function describeGrepFailure(result: SandboxCommandResult): string {
+  if (result.exitCode === 124) return `timed out after ${COMMAND_TIMEOUT_MS / 1000}s`;
+  const stderrLine = result.stderr
+    .split('\n')
+    .map(line => line.trim())
+    .find(Boolean);
+  const detail = stderrLine ? `: ${stderrLine.length > 200 ? `${stderrLine.slice(0, 200)}…` : stderrLine}` : '';
+  return `exit code ${result.exitCode}${detail}`;
+}
+
 /** Single-quote a string for safe POSIX shell interpolation. */
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+interface SearchTools {
+  rg: boolean;
+  gnuGrep: boolean;
+  git: boolean;
+  /** `grep -P` works, and so does `git grep -P` when git is present. */
+  pcre: boolean;
+}
+
+/** One command that reports which search tools the sandbox has, one name per line. */
+const SEARCH_TOOLS_PROBE =
+  'command -v rg >/dev/null 2>&1 && echo rg; ' +
+  "grep --version 2>/dev/null | head -n 1 | grep -q 'GNU grep' && echo gnu-grep; " +
+  "printf 'a1\\n' | grep -qP '\\d(?=)' 2>/dev/null && echo grep-pcre; " +
+  'if command -v git >/dev/null 2>&1; then echo git; ' +
+  // git can be built without PCRE; check it on a throwaway repository.
+  'd=$(mktemp -d 2>/dev/null) && { ' +
+  "(cd \"$d\" && git init -q && printf 'a1\\n' >f && git grep -q --untracked -P -e '\\d(?=)') >/dev/null 2>&1 && echo git-pcre; " +
+  'rm -rf "$d"; }; fi; true';
+
+function isInsideNodeModules(path: string): boolean {
+  return path.split('/').includes('node_modules');
+}
+
+/** Lines a grep engine printed for one file: matches plus surrounding context. */
+interface GrepFileLines {
+  matches: FilesystemGrepMatch[];
+  linesByNumber: Map<number, string>;
+}
+
+function fileLines(files: Map<string, GrepFileLines>, filePath: string): GrepFileLines {
+  let state = files.get(filePath);
+  if (!state) {
+    state = { matches: [], linesByNumber: new Map() };
+    files.set(filePath, state);
+  }
+  return state;
+}
+
+/** Turn per-file lines into results relative to `abs`, attaching before/after context. */
+function toGrepResults(files: Map<string, GrepFileLines>, abs: string, contextLines: number): FilesystemGrepResult[] {
+  const results: FilesystemGrepResult[] = [];
+  for (const [filePath, state] of files) {
+    if (state.matches.length === 0) continue;
+    const rel = posixPath.relative(abs, filePath) || posixPath.basename(filePath);
+    const matches = state.matches.map(match => {
+      if (contextLines <= 0) return match;
+      const before: string[] = [];
+      for (let n = match.line - 1; n >= Math.max(1, match.line - contextLines); n--) {
+        const text = state.linesByNumber.get(n);
+        if (text === undefined) break;
+        before.unshift(text);
+      }
+      const after: string[] = [];
+      for (let n = match.line + 1; n <= match.line + contextLines; n++) {
+        const text = state.linesByNumber.get(n);
+        if (text === undefined) break;
+        after.push(text);
+      }
+      return { ...match, before, after };
+    });
+    results.push({ path: rel, matches });
+  }
+  return results;
 }
 
 function isFileContentString(content: FileContent): content is string {
@@ -105,10 +209,14 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   private readonly workdirSource: string | (() => Promise<string> | string);
   private resolvedBase?: string;
   private resolvingBase?: Promise<string>;
+  private readonly verifySymlinks: boolean;
+  /** `check:absolutePath` keys that passed while the entry existed. */
+  private readonly verified = new Set<string>();
 
   constructor(options: SandboxFilesystemOptions) {
     this.sandbox = options.sandbox;
     this.workdirSource = options.workdir;
+    this.verifySymlinks = options.verifySymlinks ?? false;
     if (typeof options.workdir === 'string') this.resolvedBase = options.workdir;
     // Include the workdir when known: one sandbox can back several
     // filesystems rooted at different checkouts, and each needs a distinct
@@ -190,7 +298,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Command helper ─────────────────────────────────────────────────────
 
   private async exec(script: string): Promise<SandboxCommandResult> {
-    return this.sandbox.executeCommand('sh', ['-c', script], { timeout: COMMAND_TIMEOUT_MS });
+    // File reads come back as base64 on stdout and listings/grep are parsed
+    // line by line, so dropping the oldest output would corrupt results.
+    return this.sandbox.executeCommand('sh', ['-c', script], {
+      timeout: COMMAND_TIMEOUT_MS,
+      maxRetainedBytes: Infinity,
+    });
   }
 
   /**
@@ -203,7 +316,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * busybox. If the path exists but cannot be canonicalized we fail CLOSED:
    * returning without a check would let a symlink bypass containment.
    */
-  private async assertContainedRealpath(abs: string, inputPath: string): Promise<void> {
+  private async assertContainedRealpath(abs: string, inputPath: string): Promise<boolean> {
     const result = await this.exec(
       [
         `p=${shellQuote(abs)}`,
@@ -219,7 +332,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     );
     // Path doesn't exist yet: nothing to canonicalize (writes to a fresh leaf
     // are covered by assertContainedDest checking the parent directory).
-    if (result.exitCode === EXIT_NOT_FOUND) return;
+    if (result.exitCode === EXIT_NOT_FOUND) return false;
     const [root, real] = result.stdout.split('\n').map(s => s.trim());
     if (result.exitCode !== 0 || !root || !real) {
       throw new Error(`Unable to verify path stays within workspace root: ${inputPath}`);
@@ -227,6 +340,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (real !== root && !real.startsWith(`${root}/`)) {
       throw new Error(`Path escapes workspace root (symlink): ${inputPath}`);
     }
+    return true;
   }
 
   /**
@@ -236,15 +350,33 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * of its nearest existing ancestor directory, since a symlinked parent is the
    * escape vector (e.g. `link -> /etc` then writing `link/passwd`).
    */
-  private async assertContainedDest(abs: string, inputPath: string): Promise<void> {
+  private async assertContainedDest(abs: string, inputPath: string): Promise<boolean> {
     // First check the target itself (covers overwriting an existing symlink).
-    await this.assertContainedRealpath(abs, inputPath);
+    const exists = await this.assertContainedRealpath(abs, inputPath);
     // Then check the parent directory's realpath; readlink -f resolves the
     // nearest existing ancestor when the leaf doesn't exist yet.
     const parent = posixPath.dirname(abs);
     if (parent && parent !== abs) {
       await this.assertContainedRealpath(parent, inputPath);
     }
+    return exists;
+  }
+
+  /**
+   * Before a native filesystem call, run the containment check the shell path
+   * runs for that operation, when `verifySymlinks` is on. A pass is remembered
+   * only for an entry that exists: a missing path may later appear as a
+   * symlink that leads outside the workdir.
+   */
+  private async verifyNative(check: ContainmentCheck, abs: string, inputPath: string): Promise<void> {
+    if (!this.verifySymlinks) return;
+    const key = `${check}:${abs}`;
+    if (this.verified.has(key)) return;
+    const existed =
+      check === 'dest'
+        ? await this.assertContainedDest(abs, inputPath)
+        : await this.assertContainedRealpath(check === 'parent' ? posixPath.dirname(abs) : abs, inputPath);
+    if (existed) this.verified.add(key);
   }
 
   private async execOk(script: string, context: string): Promise<SandboxCommandResult> {
@@ -259,6 +391,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', abs, path);
+      return native.readFile(abs, options);
+    }
     await this.assertContainedRealpath(abs, path);
     // Guard clauses first: redirecting from a directory "succeeds" with empty
     // output on some shells, so classify before reading.
@@ -279,6 +416,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('dest', abs, path);
+      return native.writeFile(abs, content, options);
+    }
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     const dir = posixPath.dirname(abs);
@@ -300,6 +442,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async appendFile(path: string, content: FileContent): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('dest', abs, path);
+      return native.appendFile(abs, content);
+    }
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     await this.execOk(
@@ -310,6 +457,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('parent', abs, path);
+      return native.deleteFile(abs, options);
+    }
     // Contain the parent's realpath: deleting `link/file` where `link` points
     // outside the workdir must fail, while deleting a symlink entry itself
     // (which lives inside the workdir) stays allowed.
@@ -332,6 +484,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const srcAbs = await this.resolveAsync(src);
     const destAbs = await this.resolveAsync(dest);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', srcAbs, src);
+      await this.verifyNative('dest', destAbs, dest);
+      return native.copyFile(srcAbs, destAbs, options);
+    }
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     const recursive = options?.recursive ? '-r ' : '';
@@ -375,6 +533,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const srcAbs = await this.resolveAsync(src);
     const destAbs = await this.resolveAsync(dest);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', srcAbs, src);
+      await this.verifyNative('dest', destAbs, dest);
+      return native.moveFile(srcAbs, destAbs, options);
+    }
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     if (options?.overwrite === false) {
@@ -411,6 +575,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('dest', abs, path);
+      return native.mkdir(abs, options);
+    }
     await this.assertContainedDest(abs, path);
     const flag = options?.recursive === false ? '' : '-p ';
     await this.execOk(`mkdir ${flag}${shellQuote(abs)}`, `mkdir ${path}`);
@@ -418,6 +587,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('parent', abs, path);
+      return native.rmdir(abs, options);
+    }
     // Same parent containment as deleteFile — `rm -r` through a symlinked
     // parent would otherwise delete outside the workspace.
     await this.assertContainedRealpath(posixPath.dirname(abs), path);
@@ -434,6 +608,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', abs, path);
+      return native.readdir(abs, options);
+    }
     await this.assertContainedRealpath(abs, path);
     if (options?.recursive) {
       // Recursive listing emitting "type\tpath". `find -printf` is GNU-only
@@ -509,15 +688,23 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
         ? `-maxdepth ${Math.max(0, Math.floor(options.maxDepth))} `
         : '';
     // Prune hidden entries in-sandbox when not requested, so a huge hidden
-    // tree (e.g. `.git`) doesn't inflate the response.
-    const hiddenPrune = options?.includeHidden ? '' : `-name '.*' -prune -o `;
+    // tree (e.g. `.git`) doesn't inflate the response. `.gitignore` files
+    // still come back when the caller applies them.
+    const keepGitignore = options?.includeGitignoreFiles ? `! \\( -type f -name .gitignore \\) ` : '';
+    const hiddenPrune = options?.includeHidden ? '' : `\\( -name '.*' ${keepGitignore}\\) -prune -o `;
+    // Skip directories like node_modules entirely instead of listing them
+    // only for the caller to filter them out.
+    const skipNames = options?.skipDirectoryNames?.filter(Boolean) ?? [];
+    const skipPrune = skipNames.length
+      ? `\\( -type d \\( ${skipNames.map(name => `-name ${shellQuote(name)}`).join(' -o ')} \\) \\) -prune -o `
+      : '';
     // Emit "flag\tpath[\ttarget]" — flag is d/f for regular entries, D/F for
     // symlinks (with the link target as a third field).
     const script =
       `root=${shellQuote(abs)}\n` +
       `[ -e "$root" ] || [ -L "$root" ] || exit ${EXIT_NOT_FOUND}\n` +
       `[ -d "$root" ] || exit ${EXIT_NOT_DIRECTORY}\n` +
-      `find "$root" -mindepth 1 ${maxDepth}${hiddenPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
+      `find "$root" -mindepth 1 ${maxDepth}${hiddenPrune}${skipPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
       `if [ -L "$f" ]; then if [ -d "$f" ]; then t=D; else t=F; fi; printf '%s\\t%s\\t%s\\n' "$t" "$f" "$(readlink "$f")"; ` +
       `elif [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`;
     const result = await this.exec(script);
@@ -555,41 +742,58 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   /**
-   * Content search executed inside the sandbox in one command. Prefers
-   * ripgrep (`rg --json`) when installed; otherwise falls back to
-   * `grep -rnE`. Patterns the ERE fallback can't express (PCRE-style classes,
-   * word boundaries, lookarounds, non-greedy quantifiers) throw
-   * {@link UnsupportedGrepPatternError} so callers use their host-side walk.
+   * Content search executed inside the sandbox in one command, using the best
+   * engine the sandbox has: ripgrep, then GNU grep (with git choosing files
+   * inside repositories), then POSIX `grep -rnE`. Patterns the grep engines
+   * can't express (PCRE-style classes, word boundaries, lookarounds,
+   * non-greedy quantifiers) throw {@link UnsupportedGrepPatternError} so
+   * callers use their host-side walk.
    *
-   * Callers are expected to apply their own gitignore/hidden/glob filtering
-   * to the returned paths; both engines run with ignore rules disabled so
-   * results are a superset of what any host-side filter would keep.
+   * ripgrep and GNU grep apply every `.gitignore` in the tree, relative to the
+   * directory that holds it, and skip `node_modules` unless the search path
+   * is inside one. Callers still apply their own hidden/glob filtering.
    */
   async grep(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
     const abs = await this.resolveAsync(options.path);
     await this.assertContainedRealpath(abs, options.path);
-    if (await this.hasRipgrep()) {
-      return this.grepWithRipgrep(abs, options);
-    }
+    const tools = await this.searchTools();
+    if (tools.rg) return this.grepWithRipgrep(abs, options);
+    if (tools.gnuGrep) return this.grepWithGnuGrep(abs, options, tools);
     return this.grepWithPosixGrep(abs, options);
   }
 
-  private rgCheck: Promise<boolean> | undefined;
+  private toolsCheck: Promise<SearchTools> | undefined;
 
-  private hasRipgrep(): Promise<boolean> {
-    this.rgCheck ??= this.exec('command -v rg >/dev/null 2>&1').then(
-      r => r.exitCode === 0,
-      () => false,
-    );
-    return this.rgCheck;
+  private searchTools(): Promise<SearchTools> {
+    const check = (this.toolsCheck ??= this.exec(SEARCH_TOOLS_PROBE).then(result => {
+      if (result.exitCode !== 0) throw new Error(`search tool probe exited with ${result.exitCode}`);
+      const found = new Set(result.stdout.split('\n').map(line => line.trim()));
+      const git = found.has('git');
+      return {
+        rg: found.has('rg'),
+        gnuGrep: found.has('gnu-grep'),
+        git,
+        pcre: found.has('grep-pcre') && (!git || found.has('git-pcre')),
+      };
+    }));
+    // Only a successful probe is cached; a failed one (e.g. the sandbox wasn't
+    // ready) is retried on the next search instead of pinning the slow path.
+    return check.catch(() => {
+      if (this.toolsCheck === check) this.toolsCheck = undefined;
+      return { rg: false, gnuGrep: false, git: false, pcre: false };
+    });
   }
 
   private async grepWithRipgrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
     const args = [
-      'rg --json --no-ignore --hidden',
+      // --no-require-git applies .gitignore files outside a git checkout too
+      // (e.g. a multi-repo root). A path passed explicitly is searched even
+      // when ignored, so targeting `dist/` or `node_modules/x` still works.
+      'rg --json --hidden --no-require-git',
       // .git is filtered host-side too; exclude it here so its object files
       // don't inflate the response.
       `-g ${shellQuote('!.git/**')}`,
+      isInsideNodeModules(abs) ? '' : `-g ${shellQuote('!**/node_modules/**')}`,
       options.caseSensitive ? '' : '-i',
       options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
       options.contextLines ? `-C ${Math.max(0, Math.floor(options.contextLines))}` : '',
@@ -607,17 +811,13 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (result.exitCode === 1) return [];
     const results = this.parseRipgrepJson(result.stdout, abs, options);
     if (result.exitCode !== 0 && results.length === 0) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, describeGrepFailure(result));
     }
     return results;
   }
 
   private parseRipgrepJson(stdout: string, abs: string, options: FilesystemGrepOptions): FilesystemGrepResult[] {
-    interface FileState {
-      matches: Array<FilesystemGrepMatch & { lineNumber: number }>;
-      linesByNumber: Map<number, string>;
-    }
-    const files = new Map<string, FileState>();
+    const files = new Map<string, GrepFileLines>();
     for (const line of stdout.split('\n')) {
       if (!line) continue;
       let event: any;
@@ -630,11 +830,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       const filePath: string | undefined = event.data?.path?.text;
       const lineNumber: number | undefined = event.data?.line_number;
       if (!filePath || !lineNumber) continue;
-      let state = files.get(filePath);
-      if (!state) {
-        state = { matches: [], linesByNumber: new Map() };
-        files.set(filePath, state);
-      }
+      const state = fileLines(files, filePath);
       const text: string = (event.data?.lines?.text ?? '').replace(/\r?\n$/, '');
       state.linesByNumber.set(lineNumber, text);
       if (event.type === 'match') {
@@ -642,33 +838,10 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
         // UTF-16 (JS string) index for the capability contract.
         const byteStart: number = event.data?.submatches?.[0]?.start ?? 0;
         const column = Buffer.from(text, 'utf8').subarray(0, byteStart).toString('utf8').length;
-        state.matches.push({ line: lineNumber, column, text, lineNumber });
+        state.matches.push({ line: lineNumber, column, text });
       }
     }
-    const contextLines = options.contextLines ?? 0;
-    const results: FilesystemGrepResult[] = [];
-    for (const [filePath, state] of files) {
-      if (state.matches.length === 0) continue;
-      const rel = posixPath.relative(abs, filePath) || posixPath.basename(filePath);
-      const matches: FilesystemGrepMatch[] = state.matches.map(({ lineNumber, ...match }) => {
-        if (contextLines <= 0) return match;
-        const before: string[] = [];
-        for (let n = lineNumber - 1; n >= Math.max(1, lineNumber - contextLines); n--) {
-          const t = state.linesByNumber.get(n);
-          if (t === undefined) break;
-          before.unshift(t);
-        }
-        const after: string[] = [];
-        for (let n = lineNumber + 1; n <= lineNumber + contextLines; n++) {
-          const t = state.linesByNumber.get(n);
-          if (t === undefined) break;
-          after.push(t);
-        }
-        return { ...match, before, after };
-      });
-      results.push({ path: rel, matches });
-    }
-    return this.applyTotalCap(results, options.maxTotalMatches);
+    return this.applyTotalCap(toGrepResults(files, abs, options.contextLines ?? 0), options.maxTotalMatches);
   }
 
   /**
@@ -679,23 +852,140 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    */
   private static readonly ERE_UNSUPPORTED = /\\[dDwWsSbB<>]|\(\?|[*+?}]\?|\[:[a-z]+:\]/;
 
-  private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
-    if (SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+  /**
+   * Escapes that `grep -P` (PCRE) and JS RegExp (without the `u` flag) both
+   * accept but read differently, e.g. `\A` is "start of subject" in PCRE and
+   * a literal `A` in JS, plus POSIX bracket classes. PCRE-only syntax that JS
+   * rejects (inline flags, possessive quantifiers, atomic groups) already
+   * fails the JS compile below.
+   */
+  private static readonly PCRE_UNSUPPORTED = /\\[AzZGKQEhHvVRXNCpPe]|\[:[a-z]+:\]/;
+
+  /** Reject patterns grep can't run with the same meaning as JS; return the JS regex used for columns. */
+  private static grepRegex(options: FilesystemGrepOptions, pcre = false): RegExp {
+    if (
+      pcre
+        ? SandboxFilesystem.PCRE_UNSUPPORTED.test(options.pattern)
+        : SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)
+    ) {
+      throw new UnsupportedGrepPatternError(
+        options.pattern,
+        pcre ? 'grep -P reads this syntax differently from JavaScript' : 'POSIX ERE cannot express this syntax',
+      );
     }
-    let jsRegex: RegExp;
     try {
-      jsRegex = new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
+      return new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
     } catch {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'invalid regular expression');
     }
+  }
+
+  /**
+   * GNU grep without ripgrep. Inside a git checkout, `git grep` picks the
+   * files (tracked plus untracked, every `.gitignore` applied) and GNU grep
+   * prints them with context. Outside a checkout (e.g. a multi-repo root),
+   * each child repository is searched the same way and plain grep covers the
+   * remaining files, skipping `node_modules`. `--null` ends each file name
+   * with NUL, so match (`N:`) and context (`N-`) lines parse unambiguously.
+   * When grep and git support it, patterns run as PCRE (`-P`), so `\d`,
+   * `\w`, `\s`, `\b`, and lookarounds don't need the host walk.
+   */
+  private async grepWithGnuGrep(
+    abs: string,
+    options: FilesystemGrepOptions,
+    tools: SearchTools,
+  ): Promise<FilesystemGrepResult[]> {
+    const hasGit = tools.git;
+    const mode = tools.pcre ? '-P' : '-E';
+    const jsRegex = SandboxFilesystem.grepRegex(options, tools.pcre);
+    const contextLines = Math.max(0, Math.floor(options.contextLines ?? 0));
+    const grepFlags = [
+      `-HnI${mode.slice(1)} --null`,
+      options.caseSensitive ? '' : '-i',
+      options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
+      contextLines > 0 ? `-C ${contextLines}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const skipNodeModules = !isInsideNodeModules(abs);
+    const nodeModulesPathspec = skipNodeModules ? ` ${shellQuote(':(exclude,glob)**/node_modules/**')}` : '';
+    const pruneNames = skipNodeModules ? '-name .git -o -name node_modules' : '-name .git';
+    const script = [
+      `pat=${shellQuote(options.pattern)}`,
+      `root=${shellQuote(abs)}`,
+      // xargs exit codes can't tell "no match" from "bad pattern"; check first.
+      `grep ${mode} -e "$pat" </dev/null >/dev/null 2>&1`,
+      'if [ $? -eq 2 ]; then echo "grep: invalid regular expression" >&2; exit 2; fi',
+      'tmp=$(mktemp -d) || exit 1',
+      `trap 'rm -rf "$tmp"' EXIT`,
+      `search_files() { xargs -0 -r grep ${grepFlags} -e "$pat" -- 2>/dev/null; }`,
+      // A line starting with NUL names the directory later paths are relative to.
+      'search_repo() {',
+      `  git -C "$1" grep -l -z -I --untracked ${options.caseSensitive ? '' : '-i '}${mode} -e "$pat" -- .${nodeModulesPathspec} >"$tmp/files" 2>/dev/null`,
+      '  [ $? -gt 1 ] && return 1',
+      `  printf '\\0%s\\n' "$1"`,
+      '  (cd "$1" && search_files) <"$tmp/files"',
+      '}',
+      ...(hasGit
+        ? [
+            'if git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 && ! git -C "$root" check-ignore -q . 2>/dev/null; then',
+            '  search_repo "$root" && exit 0',
+            'fi',
+            `find "$root" -mindepth 1 -maxdepth 3 \\( ${skipNodeModules ? '-name node_modules -prune' : '-false'} \\) -o \\( -name .git -prune -print \\) >"$tmp/repos" 2>/dev/null`,
+            ': >"$tmp/done"',
+            'while IFS= read -r g; do',
+            '  d=${g%/.git}',
+            '  search_repo "$d" && printf \'%s\\n\' "$d" >>"$tmp/done"',
+            'done <"$tmp/repos"',
+            'set --',
+            'while IFS= read -r d; do set -- "$@" -o -path "$d"; done <"$tmp/done"',
+          ]
+        : ['set --']),
+      `printf '\\0%s\\n' "$root"`,
+      `find "$root" -mindepth 1 \\( ${pruneNames} "$@" \\) -prune -o -type f -print0 2>/dev/null | search_files`,
+      'exit 0',
+    ].join('\n');
+    const result = await this.exec(script);
+    if (result.exitCode !== 0) {
+      throw new UnsupportedGrepPatternError(options.pattern, describeGrepFailure(result));
+    }
+    const files = new Map<string, GrepFileLines>();
+    let base = abs;
+    for (const line of result.stdout.split('\n')) {
+      if (!line || line === '--') continue;
+      if (line.startsWith('\0')) {
+        base = line.slice(1);
+        continue;
+      }
+      const nul = line.indexOf('\0');
+      if (nul <= 0) continue;
+      const parsed = /^(\d+)([:-])(.*)$/s.exec(line.slice(nul + 1));
+      if (!parsed) continue;
+      const lineNumber = Number(parsed[1]);
+      const text = parsed[3]!;
+      const state = fileLines(files, posixPath.resolve(base, line.slice(0, nul)));
+      state.linesByNumber.set(lineNumber, text);
+      if (parsed[2] !== ':') continue;
+      const column = jsRegex.exec(text)?.index;
+      if (column === undefined) {
+        throw new UnsupportedGrepPatternError(options.pattern, 'POSIX ERE and JS RegExp disagree on this pattern');
+      }
+      state.matches.push({ line: lineNumber, column, text });
+    }
+    return this.applyTotalCap(toGrepResults(files, abs, contextLines), options.maxTotalMatches);
+  }
+
+  private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+    const jsRegex = SandboxFilesystem.grepRegex(options);
     // Reconstructing per-match context from `grep -C` text output is not
     // reliable (separator lines are ambiguous); let the host walk handle it.
     if (options.contextLines) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'context lines are not supported by POSIX grep');
     }
     const args = [
       'grep -rnIE',
+      // .git is filtered host-side too; skip it so object files are not scanned.
+      '--exclude-dir=.git',
       options.caseSensitive ? '' : '-i',
       options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
       '--',
@@ -706,8 +996,10 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       .join(' ');
     const result = await this.exec(args);
     if (result.exitCode === 1) return [];
-    if (result.exitCode !== 0) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+    // Like rg, grep exits 2 on per-file errors (e.g. an unreadable file) while
+    // still printing matches for the rest; keep those partial results.
+    if (result.exitCode !== 0 && !(result.exitCode === 2 && result.stdout.trim())) {
+      throw new UnsupportedGrepPatternError(options.pattern, describeGrepFailure(result));
     }
     // grep -n has no column output; recompute with the JS regex host-side so
     // columns are UTF-16 indices, consistent with the fallback implementation.
@@ -721,7 +1013,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       const column = jsRegex.exec(text)?.index;
       // grep matched this line but the JS regex did not: the two dialects
       // disagree on this pattern, so the columns would be wrong. Fall back.
-      if (column === undefined) throw new UnsupportedGrepPatternError(options.pattern);
+      if (column === undefined) {
+        throw new UnsupportedGrepPatternError(options.pattern, 'POSIX ERE and JS RegExp disagree on this pattern');
+      }
       let matches = byFile.get(rel);
       if (!matches) {
         matches = [];
@@ -751,20 +1045,33 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async exists(path: string): Promise<boolean> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) return native.exists(abs);
     const result = await this.exec(`test -e ${shellQuote(abs)}`);
     return result.exitCode === 0;
   }
 
   async stat(path: string): Promise<FileStat> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', abs, path);
+      const info = await native.stat(abs);
+      return {
+        ...info,
+        name: posixPath.basename(abs),
+        path: `/${posixPath.relative(this.basePath, abs)}`,
+        mimeType: info.type === 'file' ? (info.mimeType ?? getMimeType(abs)) : info.mimeType,
+      };
+    }
     await this.assertContainedRealpath(abs, path);
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
     // `-f` format with the same field order (%HT=type, %z=size, %m=mtime,
     // %B=birth). Delimit with `|` — neither stat interprets `\t` escapes in
-    // its format string.
+    // its format string. `-L` reports the symlink target, like LocalFilesystem.
     const result = await this.exec(
-      `stat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
+      `stat -L -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -L -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
     );
     if (result.exitCode !== 0) {
       throw new FileNotFoundError(path);
@@ -781,6 +1088,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       size: type === 'directory' ? 0 : size,
       modifiedAt: new Date(mtime * 1000),
       createdAt: new Date((ctime > 0 ? ctime : mtime) * 1000),
+      mimeType: type === 'file' ? getMimeType(abs) : undefined,
     };
   }
 

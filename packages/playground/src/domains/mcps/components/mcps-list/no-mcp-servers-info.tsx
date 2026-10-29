@@ -18,7 +18,7 @@ export const NoMCPServersInfo = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        MCP Documentation
+        MCP documentation
       </Button>
     }
     variant="fill"

@@ -38,6 +38,10 @@ function cmd(command: string, exitCode: number) {
   return { toolName: 'execute_command', args: { command }, result: { exitCode } };
 }
 
+function commandResult(command: string, result: string) {
+  return { toolName: 'execute_command', args: { command }, result };
+}
+
 function tool(name: string, args: Record<string, unknown> = {}, result: unknown = null, state = 'result') {
   return { toolName: name, args, result, state };
 }
@@ -97,6 +101,56 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('Build failed');
     });
 
+    it('detects build success from real execute_command output', async () => {
+      const msgs = [makeMsg('assistant', [commandResult('pnpm build', 'Build completed')])];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build/typecheck passed');
+    });
+
+    it('ignores background build commands', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          {
+            toolName: 'execute_command',
+            args: { command: 'pnpm build', background: true },
+            result: 'Started background process (PID: 42)',
+          },
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('No build/typecheck ran');
+    });
+
+    it('treats markerless build output containing an error phrase as success', async () => {
+      const msgs = [
+        makeMsg('assistant', [commandResult('pnpm build', 'warning: Cannot find module "fsevents"\nBuild success')]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build/typecheck passed');
+    });
+
+    it('uses the exit status when failed build output contains the same error phrase', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          commandResult('pnpm build', 'warning: Cannot find module "fsevents"\nBuild failed\n\nExit code: 1'),
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build failed (exit 1)');
+    });
+
+    it('does not treat exit-code text in successful command output as a failure', async () => {
+      const msgs = [makeMsg('assistant', [commandResult('pnpm build', 'case logged Exit code: 1 and passed')])];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build/typecheck passed');
+    });
+
+    it('detects build failure from real execute_command output', async () => {
+      const msgs = [makeMsg('assistant', [commandResult('pnpm build', 'stderr:\nBuild failed\n\nExit code: 1')])];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build failed (exit 1)');
+    });
+
     it('handles compound command with build segment', async () => {
       const msgs = [makeMsg('assistant', [cmd('pnpm build && pnpm test', 0)])];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
@@ -131,14 +185,52 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('Tests failed');
     });
 
-    it('infers test pass from output text when no exit code', async () => {
+    it('detects test success from real execute_command output', async () => {
+      const msgs = [makeMsg('assistant', [commandResult('vitest run', '(no output)')])];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Tests passed');
+    });
+
+    it('recognizes markerless test output as success', async () => {
       const msgs = [
         makeMsg('assistant', [
           { toolName: 'execute_command', args: { command: 'vitest run' }, result: '5 tests passed ✓' },
         ]),
       ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
-      expect(reason).toContain('Tests passed (inferred)');
+      expect(reason).toContain('Tests passed');
+    });
+
+    it('treats markerless test output containing a failure phrase as success', async () => {
+      const msgs = [
+        makeMsg('assistant', [commandResult('vitest run', '✓ handles failed uploads\nTests 1 passed (1)')]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Tests passed');
+    });
+
+    it('uses the exit status when failed test output contains the same failure phrase', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          commandResult('vitest run', '✗ handles failed uploads\nTests 1 failed (1)\n\nExit code: 1'),
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Tests failed (exit 1)');
+    });
+
+    it('ignores background test commands', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          {
+            toolName: 'execute_command',
+            args: { command: 'pnpm test', background: true },
+            result: 'Started background process (PID: 42)',
+          },
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('No tests ran');
     });
   });
 
@@ -219,6 +311,32 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('regressed then recovered');
     });
 
+    it('detects recovery from real execute_command output', async () => {
+      const msgs = [
+        makeMsg('assistant', [commandResult('pnpm build', 'Build completed')]),
+        makeMsg('assistant', [commandResult('pnpm build', 'stderr:\nBuild failed\n\nExit code: 1')]),
+        makeMsg('assistant', [commandResult('pnpm build', 'Build completed')]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('regressed then recovered');
+    });
+
+    it('ignores background commands when detecting regressions', async () => {
+      const msgs = [
+        makeMsg('assistant', [cmd('pnpm test', 0)]),
+        makeMsg('assistant', [cmd('pnpm test', 1)]),
+        makeMsg('assistant', [
+          {
+            toolName: 'execute_command',
+            args: { command: 'pnpm test', background: true },
+            result: 'Started background process (PID: 42)',
+          },
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Tests regressed (persisted)');
+    });
+
     it('scores 1.0 when no regression', async () => {
       const msgs = [makeMsg('assistant', [cmd('tsc --noEmit', 0)]), makeMsg('assistant', [cmd('tsc --noEmit', 0)])];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
@@ -281,14 +399,14 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('Build failed (exit 1)');
     });
 
-    it('returns ambiguous score when exit code unknown', async () => {
+    it('treats markerless execute_command output as success', async () => {
       const msgs = [
         makeMsg('assistant', [
           { toolName: 'execute_command', args: { command: 'tsc --noEmit' }, result: 'some output...' },
         ]),
       ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
-      expect(reason).toContain('outcome unclear');
+      expect(reason).toContain('Build/typecheck passed');
     });
   });
 });

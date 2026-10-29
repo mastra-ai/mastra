@@ -1,6 +1,32 @@
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
-import type { DurableAgenticExecutionOutput } from '../../types';
+import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
+
+interface SpanClocks {
+  completionStartTime?: Date | string;
+  timeToFirstTokenMs?: number;
+}
+
+/**
+ * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
+ * resumed segment keeps them on the run registry beside its fresh spans; the
+ * originals keep them in the loop state. Undefined when none was captured yet.
+ */
+export function carriedSpanClocks(
+  registry:
+    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
+    | undefined,
+  state: SpanClocks,
+): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
+  const clocks: SpanClocks = registry?.resumeModelSpanData
+    ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
+    : state;
+  const attributes = {
+    ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
+    ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),
+  };
+  return Object.keys(attributes).length ? attributes : undefined;
+}
 
 /**
  * Input for creating iteration state update
@@ -15,16 +41,16 @@ export interface IterationStateUpdateInput {
 /**
  * Step record for tracking iteration history.
  *
- * Deliberate shape divergence from the main loop: main accumulates full
- * `DefaultStepResult` objects (with `content`, `response`, etc.); durable
- * serializes this reduced record across step boundaries instead. Processor
- * hooks receive these records via the `(inputData as any).accumulatedSteps`
- * casts in llm-execution.ts, so a processor reading `steps[i].content` gets
- * `undefined` on durable. Converging the shapes would require reworking
- * durable's serialized iteration state, so the divergence is kept for now.
+ * Main accumulates full `DefaultStepResult` objects; durable serializes this
+ * reduced record across step boundaries instead. `content` is the step's model
+ * content, the same value stopWhen and `stream.steps` see. It is absent on
+ * records written before it was added, where `buildDurableStepContent`
+ * rebuilds it from `text`/`toolCalls`/`toolResults`. Other fields of
+ * `DefaultStepResult` (`response`, etc.) are still not carried.
  */
 export interface StepRecord {
   text?: string;
+  content?: unknown[];
   toolCalls?: unknown[];
   toolResults?: unknown[];
   usage?: LanguageModelUsage;
@@ -71,12 +97,39 @@ export function calculateAccumulatedUsage(
 export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput): StepRecord {
   return {
     text: executionOutput.output.text,
+    content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults,
+    toolResults: executionOutput.toolResults?.map(({ stepSpanData: _stepSpanData, ...result }) => result),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
   };
+}
+
+/**
+ * An output processor can hold a tool result past its tool-call step and emit
+ * it when a later stream ends. The tool-call step recorded it as hidden; now
+ * that it was emitted, callbacks report it again.
+ */
+function withReleasedToolResults<T extends StepRecord>(steps: T[], released?: string[]): T[] {
+  if (!released?.length) return steps;
+  const ids = new Set(released);
+  return steps.map(step => {
+    if (!step.toolResults?.some(result => isHeldResult(result, ids))) return step;
+    return {
+      ...step,
+      toolResults: step.toolResults.map(result => {
+        if (!isHeldResult(result, ids)) return result;
+        const { resultHidden: _resultHidden, ...rest } = result as { resultHidden?: boolean };
+        return rest;
+      }),
+    };
+  });
+}
+
+function isHeldResult(result: unknown, ids: Set<string>): boolean {
+  const record = result as { toolCallId?: string; resultHidden?: boolean } | undefined;
+  return !!record?.resultHidden && !!record.toolCallId && ids.has(record.toolCallId);
 }
 
 /**
@@ -140,10 +193,14 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carried, not recomputed: the request context is fixed for the run, and
     // the steps that rebuild from Mastra have no other source for it.
     requestContextEntries: currentState.requestContextEntries,
+    inputTripwire: signalPreempted ? currentState.inputTripwire : undefined,
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
     accumulatedSteps: signalPreempted
       ? currentState.accumulatedSteps
-      : [...currentState.accumulatedSteps, buildStepRecord(executionOutput)],
+      : [
+          ...withReleasedToolResults(currentState.accumulatedSteps, executionOutput.releasedToolResultIds),
+          buildStepRecord(executionOutput),
+        ],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     lastStepResult,
@@ -159,5 +216,13 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
+    // First inference wins; later iterations never overwrite it. Both values travel
+    // together, so state saved with only the clock never gains a later step's number.
+    ...(currentState.completionStartTime
+      ? { completionStartTime: currentState.completionStartTime, timeToFirstTokenMs: currentState.timeToFirstTokenMs }
+      : {
+          completionStartTime: executionOutput.completionStartTime,
+          timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
+        }),
   };
 }

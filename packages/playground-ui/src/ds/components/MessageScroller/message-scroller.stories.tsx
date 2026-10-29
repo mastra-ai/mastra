@@ -99,6 +99,13 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
 
 export const Conversation: Story = {
   render: () => <MessageScrollerDemo />,
+  play: async ({ canvasElement }) => {
+    const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+    if (!viewport) throw new Error('Expected the conversation scroll viewport');
+    const style = getComputedStyle(viewport);
+    await expect(style.overscrollBehaviorX).toBe('auto');
+    await expect(style.overscrollBehaviorY).toBe('contain');
+  },
 };
 
 export const AutoFollow: Story = {

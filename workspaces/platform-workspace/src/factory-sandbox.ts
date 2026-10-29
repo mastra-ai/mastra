@@ -20,12 +20,14 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   cpuCount?: number;
   /** Memory in MB for the sandbox template. Part of the template identity. */
   memoryMb?: number;
+  /** Install Docker Engine and Compose, started on first use. Part of the template identity. */
+  docker?: boolean;
   /** Minutes idle before the sandbox pauses. Runtime only. */
   idleTimeoutMinutes?: number;
 }
 
 /** Applied when neither the environment setting nor a host default is set. */
-const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } as const;
+const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, docker: false, idleTimeoutMinutes: 5 } as const;
 
 const SETTINGS_SCHEMA = {
   type: 'object',
@@ -40,11 +42,24 @@ const SETTINGS_SCHEMA = {
     },
     memoryMb: {
       type: 'integer',
-      title: 'Memory (MB)',
-      description: 'Memory in MB for the sandbox template',
+      title: 'Memory',
+      description: 'Memory for the sandbox template',
       default: DEFAULT_SETTINGS.memoryMb,
-      minimum: 512,
-      maximum: 65536,
+      // E2B caps sandbox memory at 8 GiB by default.
+      oneOf: [
+        { const: 512, title: '512 MB' },
+        { const: 1024, title: '1 GB' },
+        { const: 2048, title: '2 GB' },
+        { const: 4096, title: '4 GB' },
+        { const: 8192, title: '8 GB' },
+      ],
+    },
+    docker: {
+      type: 'boolean',
+      title: 'Docker',
+      description:
+        'Install Docker Engine and Compose; the daemon starts on first use. We recommend at least 2 GB of memory for Docker.',
+      default: DEFAULT_SETTINGS.docker,
     },
     idleTimeoutMinutes: {
       type: 'integer',
@@ -137,6 +152,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...(template?.buildEnv ? { buildEnv: template.buildEnv } : {}),
       cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
+      docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });
   }
 

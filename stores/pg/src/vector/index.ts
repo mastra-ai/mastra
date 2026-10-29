@@ -21,6 +21,7 @@ import xxhash from 'xxhash-wasm';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../shared/pool-error-guard';
 import { parseSchemaName } from '../shared/schema-name';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
@@ -205,6 +206,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       this.pool = new pg.Pool(poolConfig);
+      guardCheckedOutClientErrors(this.pool, message => this.logger?.warn?.(message));
 
       // pg emits 'error' on the pool when an idle client's connection drops
       // (backend restart, network partition, cloud proxies reaping idle

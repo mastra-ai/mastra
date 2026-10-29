@@ -17,13 +17,14 @@ import type { JSONSchema7 } from '@mastra/schema-compat';
 import { applyCompatLayer, GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
 import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore, OAuthCredential } from '../auth/types.js';
 
 const COPILOT_PROVIDER_ID = 'github-copilot';
+const COPILOT_PROVIDER_NAME = 'GitHub Copilot';
 
 // Singleton auth storage instance (shared with claude-max.ts / openai-codex.ts when not overridden).
 let authStorageInstance: AuthStorage | null = null;
@@ -126,7 +127,7 @@ export function buildGitHubCopilotOAuthFetch(
 
     const cred = storage.get(COPILOT_PROVIDER_ID);
     if (!cred || cred.type !== 'oauth') {
-      throw new ProviderAuthRequiredError('Not logged in to GitHub Copilot.');
+      throw ProviderAuthRequiredError.notSignedIn(COPILOT_PROVIDER_NAME);
     }
 
     let accessToken: string | undefined;
@@ -140,9 +141,7 @@ export function buildGitHubCopilotOAuthFetch(
       const reloaded = storage.get(COPILOT_PROVIDER_ID);
       activeCred = reloaded?.type === 'oauth' ? { ...reloaded, access: accessToken ?? reloaded.access } : undefined;
     }
-    if (!accessToken || !activeCred) {
-      throw new ProviderAuthRequiredError('Failed to refresh the GitHub Copilot token.');
-    }
+    if (!accessToken || !activeCred) throw ProviderAuthRequiredError.signInExpired(COPILOT_PROVIDER_NAME);
     const enterpriseUrl = (activeCred as GitHubCopilotCredentials).enterpriseUrl;
 
     let parsedBody: unknown;
@@ -186,7 +185,10 @@ export function buildGitHubCopilotOAuthFetch(
       ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
     });
     try {
-      return await fetch(finalRequest);
+      return await rejectUnauthorizedResponse(await fetch(finalRequest), {
+        providerName: COPILOT_PROVIDER_NAME,
+        requestUrl: finalUrl.toString(),
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {

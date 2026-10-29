@@ -61,3 +61,12 @@ export const toolList: McpServerToolListResponse = {
 
 /** Auth disabled: every permission check passes. */
 export const authDisabled: AuthCapabilities = { enabled: false, login: { type: 'credentials' } };
+
+/** An authenticated user under RBAC holding exactly `permissions`. */
+export const rbacUser = (permissions: string[]): AuthCapabilities => ({
+  enabled: true,
+  login: { type: 'credentials' },
+  user: { id: 'user-1', email: 'user@example.com' },
+  capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+  access: { roles: ['member'], permissions },
+});

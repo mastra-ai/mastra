@@ -77,7 +77,11 @@
                 "entityType": "agent",
                 "entityId": "test-agent",
                 "attributes": {
-                  "instructions": "You are a test agent"
+                  "instructions": "You are a test agent",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -107,10 +111,11 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -166,7 +171,11 @@
                         "entityId": "test-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
+                          "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -318,6 +327,7 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
+                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,
@@ -337,6 +347,16 @@
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You are a test agent"
+                              },
+                              {
+                                "role": "user",
+                                "content": "Hello from workflow"
+                              }
+                            ],
                             "output": {
                               "text": "Mock V2 generate response",
                               "toolCalls": []

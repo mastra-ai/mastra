@@ -14,6 +14,8 @@ describe('toTracesListViewTraces', () => {
         name: trace.name,
         createdAt: trace.createdAt,
         inputPreview: trace.inputPreview,
+        outputPreview: trace.outputPreview ?? undefined,
+        errorPreview: trace.errorPreview ?? undefined,
         metadata: trace.metadata,
         entityId: trace.entityId,
         entityName: trace.entityName,
@@ -24,8 +26,35 @@ describe('toTracesListViewTraces', () => {
         status: trace.status,
         startedAt: trace.startedAt,
         endedAt: trace.endedAt,
+        timeToFirstChunkMs: trace.timeToFirstChunkMs,
       },
     ]);
+  });
+
+  it('passes the root time to first chunk through', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    const [streamed] = toTracesListViewTraces([{ ...trace, timeToFirstChunkMs: 412 }]);
+    const [neverStreamed] = toTracesListViewTraces([{ ...trace, timeToFirstChunkMs: null }]);
+    expect(streamed?.timeToFirstChunkMs).toBe(412);
+    expect(neverStreamed?.timeToFirstChunkMs).toBeNull();
+  });
+
+  it('passes the output and error previews through', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    const [row] = toTracesListViewTraces([
+      { ...trace, status: 'error', outputPreview: 'partial answer', errorPreview: 'Rate limit exceeded' },
+    ]);
+    expect(row).toMatchObject({ outputPreview: 'partial answer', errorPreview: 'Rate limit exceeded' });
+  });
+
+  it('turns null previews into undefined', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    const [row] = toTracesListViewTraces([{ ...trace, outputPreview: null, errorPreview: null }]);
+    expect(row?.outputPreview).toBeUndefined();
+    expect(row?.errorPreview).toBeUndefined();
   });
 
   describe('when the span name carries a run prefix', () => {

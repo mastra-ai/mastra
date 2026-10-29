@@ -1,20 +1,21 @@
-import { describe, beforeAll, afterAll } from 'vitest';
 import type { MastraStorage } from '@mastra/core/storage';
-import { createScoresTest } from './domains/scores';
-import { createMemoryTest } from './domains/memory';
-import { createWorkflowsTests } from './domains/workflows';
-import { createObservabilityTests } from './domains/observability';
+import { describe, beforeAll, afterAll } from 'vitest';
 import { createAgentsTests } from './domains/agents';
-import { createDatasetsTests } from './domains/datasets';
 import { createBackgroundTasksTests } from './domains/background-tasks';
+import { createChannelsTests } from './domains/channels';
+import { createDatasetsTests } from './domains/datasets';
 import { createExperimentsTests } from './domains/experiments';
 import { createFavoritesTests } from './domains/favorites';
-import { createSchedulesTests } from './domains/schedules';
-import { createChannelsTests } from './domains/channels';
-import { createToolProviderConnectionsTests } from './domains/tool-provider-connections';
-import { createSkillsTests } from './domains/skills';
-import { createWorkflowDefinitionsTests } from './domains/workflow-definitions';
+import { createMemoryTest } from './domains/memory';
+import { createObservabilityTests } from './domains/observability';
 import { createRunFencingTests } from './domains/run-fencing';
+import { createSchedulesTests } from './domains/schedules';
+import { createScoresTest } from './domains/scores';
+import { createSkillsTests } from './domains/skills';
+import { createToolProviderConnectionsTests } from './domains/tool-provider-connections';
+import { createWorkflowDefinitionsTests } from './domains/workflow-definitions';
+import { createWorkflowStepGuardTests } from './domains/workflow-step-guards';
+import { createWorkflowsTests } from './domains/workflows';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -59,6 +60,11 @@ export type TestCapabilities = {
    * columns must reject scoped calls; the suite asserts that rejection.
    */
   scopedTraceDeletion?: boolean;
+  /**
+   * Whether skills list/listResolved apply the `metadata` filter against the
+   * resolved version (defaults to true). Pending adapters: MongoDB, MySQL, Spanner.
+   */
+  skillsMetadataFilter?: boolean;
 };
 
 export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
@@ -154,11 +160,12 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createExperimentsTests({ storage, capabilities });
     createBackgroundTasksTests({ storage });
     createFavoritesTests({ storage });
-    createSkillsTests({ storage });
+    createSkillsTests({ storage, metadataFilter: capabilities.skillsMetadataFilter ?? true });
     createSchedulesTests({ storage });
     createChannelsTests({ storage });
     createToolProviderConnectionsTests({ storage });
     createWorkflowDefinitionsTests({ storage });
     createRunFencingTests({ storage });
+    createWorkflowStepGuardTests({ storage });
   });
 }

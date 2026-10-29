@@ -267,22 +267,21 @@ createWorkflowTestSuite({
 
         const result = await getWorkflowState();
         return { events, result: result as WorkflowResult };
-      } else {
-        const streamResult = run.stream({
-          inputData,
-          initialState: options.initialState,
-          perStep: options.perStep,
-          requestContext: options.requestContext as any,
-          closeOnSuspend: options.closeOnSuspend,
-        });
-
-        for await (const event of streamResult.fullStream) {
-          events.push(JSON.parse(JSON.stringify(event)));
-        }
-
-        const result = await streamResult.result;
-        return { events, result: result as WorkflowResult };
       }
+      const streamResult = run.stream({
+        inputData,
+        initialState: options.initialState,
+        perStep: options.perStep,
+        requestContext: options.requestContext as any,
+        closeOnSuspend: options.closeOnSuspend,
+      });
+
+      for await (const event of streamResult.fullStream) {
+        events.push(JSON.parse(JSON.stringify(event)));
+      }
+
+      const result = await streamResult.result;
+      return { events, result: result as WorkflowResult };
     } finally {
       await mastra.stopWorkers();
     }
@@ -620,6 +619,54 @@ describe('Workflow (Evented Engine Specific)', () => {
         expect(controlResult.status).toBe('success');
         const controlRow = await readRow('default-persist-success-workflow', controlRun.runId);
         expect((controlRow?.snapshot as any)?.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it.each(['success', 'failed'] as const)('returns the %s run result when snapshot cleanup fails', async status => {
+      const storage = new MockStore();
+      const workflowsStore = await storage.getStore('workflows');
+      vi.spyOn(workflowsStore!, 'deleteWorkflowRunById').mockRejectedValue(new Error('snapshot delete failed'));
+      const workflow = createWorkflow({
+        id: `failed-${status}-cleanup-workflow`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false, shouldPersistSnapshot: declineTerminals },
+      });
+      workflow
+        .then(
+          makeStep('terminal-step', async () => {
+            if (status === 'failed') throw new Error('step failed');
+            return { value: 'done' };
+          }),
+        )
+        .commit();
+      const mastra = new Mastra({
+        workflows: { [workflow.id]: workflow },
+        storage,
+        pubsub: new EventEmitterPubSub(),
+        logger: false,
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const result = await Promise.race([
+          run.start({ inputData: {} }),
+          new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+        ]);
+        expect(result).not.toBe('HANG');
+        if (result === 'HANG') return;
+        expect(result.status).toBe(status);
+        if (status === 'success') {
+          expect(result.result).toEqual({ value: 'done' });
+        } else {
+          expect(result.steps['terminal-step']?.status).toBe('failed');
+          expect(result.steps['terminal-step']?.error?.message).toBe('step failed');
+        }
+        expect(
+          await workflowsStore?.getWorkflowRunById({ runId: run.runId, workflowName: workflow.id }),
+        ).not.toBeNull();
       } finally {
         await mastra.stopWorkers();
       }
@@ -1032,19 +1079,18 @@ describe('Workflow (Evented Engine Specific)', () => {
 
             await suspend({ suspendValue: inputData.value });
             return { value: inputData.value, success: false };
-          } else {
-            // Resume - emit custom event to test that writer works on resume
-            await writer?.custom({
-              type: 'resume-event',
-              data: {
-                message: 'Successfully resumed',
-                originalValue: inputData.value,
-                resumeValue: resumeData.resumeValue,
-              },
-            });
-
-            return { value: resumeData.resumeValue, success: true };
           }
+          // Resume - emit custom event to test that writer works on resume
+          await writer?.custom({
+            type: 'resume-event',
+            data: {
+              message: 'Successfully resumed',
+              originalValue: inputData.value,
+              resumeValue: resumeData.resumeValue,
+            },
+          });
+
+          return { value: resumeData.resumeValue, success: true };
         },
       });
 

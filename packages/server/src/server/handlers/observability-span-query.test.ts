@@ -27,7 +27,7 @@ const CURSOR_VALUES = {
   spanId: 'span-1',
 };
 
-function createHarness(features: string[] = ['span-query', 'trace-query-tenant-scope']) {
+function createHarness(features: string[] = ['span-query', 'span-query-context-fields', 'trace-query-tenant-scope']) {
   const observabilityStore = {
     getFeatures: vi.fn(() => features),
     querySpans: vi.fn().mockResolvedValue({ spans: [], page: { next: null } }),
@@ -68,8 +68,87 @@ function strictValidationError(request: unknown) {
   return QUERY_SPANS.onValidationError?.(parsed.error, 'body');
 }
 
+const TIMING_FIELDS = [
+  {
+    field: 'timeToFirstChunkMs',
+    name: 'Time to first chunk',
+    feature: 'trace-query-time-to-first-chunk',
+    sortFeature: 'trace-query-time-to-first-chunk-sort',
+  },
+  {
+    field: 'timeToFirstTokenMs',
+    name: 'Time to first token',
+    feature: 'trace-query-time-to-first-token',
+    sortFeature: 'trace-query-time-to-first-token-sort',
+  },
+] as const;
+/** The storage features of every other timing field, so a test proves each field is gated on its own. */
+const otherTimingFeatures = (field: string, key: 'feature' | 'sortFeature') =>
+  TIMING_FIELDS.filter(timing => timing.field !== field).map(timing => timing[key]);
+
 describe('QUERY_SPANS', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    'traceId',
+    'spanId',
+    'parentSpanId',
+    'threadId',
+    'resourceId',
+    'requestId',
+    'serviceName',
+    'experimentId',
+    'environment',
+    'executionSource',
+    'parentEntityType',
+    'parentEntityId',
+    'parentEntityName',
+    'rootEntityType',
+    'rootEntityId',
+    'rootEntityName',
+  ])('rejects %s on an older adapter before calling its SQL compiler', async field => {
+    const { mastra, observabilityStore } = createHarness(['span-query']);
+    observabilityStore.querySpans.mockRejectedValue(new Error(`Unsupported trusted trace-query field: ${field}`));
+    const request = {
+      timeRange: TIME_RANGE,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'name' }, right: { literal: 'agent' } },
+          { op: 'not', arg: { op: 'exists', path: field } },
+        ],
+      },
+    };
+    const error = await captureHttpException(QUERY_SPANS.handler(params(mastra, request)));
+    expect(error.status).toBe(422);
+    expect(getDeclaredErrorSchema(422).parse(await error.getResponse().json())).toMatchObject({
+      code: 'TRACE_QUERY_INVALID',
+      issues: [{ code: 'field_not_allowed', path: ['where'], message: expect.stringContaining('storage adapter') }],
+    });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+
+    const updated = createHarness();
+    await QUERY_SPANS.handler(params(updated.mastra, request));
+    expect(updated.observabilityStore.querySpans).toHaveBeenCalledOnce();
+  });
+
+  it('keeps existing predicates usable with an older adapter', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-query']);
+    await QUERY_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'name' }, right: { literal: 'agent' } },
+            { op: 'gte', left: { path: 'durationMs' }, right: { literal: 100 } },
+            { op: 'exists', path: 'entityVersionId' },
+          ],
+        },
+      }),
+    );
+    expect(observabilityStore.querySpans).toHaveBeenCalledOnce();
+  });
 
   it('forwards the trusted plan to the request-available store and returns its response unchanged', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
@@ -90,13 +169,29 @@ describe('QUERY_SPANS', () => {
           entityType: 'tool',
           entityId: 'weather-tool',
           entityName: 'weather-tool',
+          entityVersionId: null,
+          parentEntityType: null,
+          parentEntityId: null,
+          parentEntityName: null,
+          parentEntityVersionId: null,
+          rootEntityType: null,
+          rootEntityId: null,
+          rootEntityName: null,
+          rootEntityVersionId: null,
+          threadId: null,
+          runId: null,
+          sessionId: null,
+          userId: null,
+          requestId: null,
+          serviceName: null,
+          experimentId: null,
+          environment: null,
+          executionSource: null,
           model: null,
           provider: null,
           inputPreview: '{"city":"Paris"}',
-          inputTruncated: false,
           outputPreview: null,
-          outputTruncated: false,
-          cost: { state: 'missing' },
+          errorPreview: 'Weather service unavailable',
         },
       ],
       page: { next: null },
@@ -135,6 +230,20 @@ describe('QUERY_SPANS', () => {
 
     expect(observabilityStore.querySpans).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 10, cursor: CURSOR_VALUES }),
+    );
+  });
+
+  it('accepts time ranges wider than 31 days', async () => {
+    const { mastra, observabilityStore } = createHarness();
+
+    await QUERY_SPANS.handler(
+      params(mastra, { timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timeRange: { from: '2026-01-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
+      }),
     );
   });
 
@@ -206,10 +315,10 @@ describe('QUERY_SPANS', () => {
       issues: [{ code: 'invalid_request', path: ['orderBy', 0, 'field'] }],
     });
 
-    const tooWide = strictValidationError({
-      timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+    const emptyRange = strictValidationError({
+      timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
     });
-    expect(getDeclaredErrorSchema(422).parse(tooWide?.body)).toMatchObject({
+    expect(getDeclaredErrorSchema(422).parse(emptyRange?.body)).toMatchObject({
       issues: [{ code: 'invalid_request', path: ['timeRange'] }],
     });
   });
@@ -224,6 +333,79 @@ describe('QUERY_SPANS', () => {
       message: 'Span queries are not supported by the configured observability store',
     });
     expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  });
+
+  it.each(TIMING_FIELDS)('returns 501 before calling an older store for $field predicates', async ({ field, name }) => {
+    const { mastra, observabilityStore } = createHarness(['span-query', ...otherTimingFeatures(field, 'feature')]);
+    const error = await captureHttpException(
+      QUERY_SPANS.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+              { op: 'gt', left: { path: field }, right: { literal: 500 } },
+            ],
+          },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_QUERY_UNSUPPORTED',
+      message: `${name} predicates are not supported by the configured observability store`,
+    });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  });
+
+  it.each(TIMING_FIELDS)('passes $field predicates to stores that advertise support', async ({ field, feature }) => {
+    const { mastra, observabilityStore } = createHarness(['span-query', feature]);
+
+    await QUERY_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'lte', left: { path: field }, right: { literal: 0 } },
+      }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field, operator: 'lte', value: 0 },
+      }),
+    );
+  });
+
+  it.each(TIMING_FIELDS)(
+    'returns 501 before calling an older store for a $field sort',
+    async ({ field, name, feature }) => {
+      const { mastra, observabilityStore } = createHarness([
+        'span-query',
+        feature,
+        ...otherTimingFeatures(field, 'sortFeature'),
+      ]);
+      const error = await captureHttpException(
+        QUERY_SPANS.handler(params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field, direction: 'asc' }] })),
+      );
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: `Sorting by ${name.toLowerCase()} is not supported by the configured observability store`,
+      });
+      expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(TIMING_FIELDS)('passes a $field sort to stores that advertise support', async ({ field, sortFeature }) => {
+    const { mastra, observabilityStore } = createHarness(['span-query', sortFeature]);
+
+    await QUERY_SPANS.handler(params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field, direction: 'desc' }] }));
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { field, direction: 'desc' } }),
+    );
   });
 
   it('returns the same structured 501 when observability storage is unavailable', async () => {
@@ -346,8 +528,11 @@ describe('QUERY_SPANS', () => {
     }
     const responses = operation.responses;
     const successSchema = JSON.stringify(responses['200']);
-    for (const field of ['spans', 'spanId', 'inputPreview', 'outputPreview', 'cost', 'next']) {
+    for (const field of ['spans', 'spanId', 'inputPreview', 'outputPreview', 'threadId', 'parentEntityId', 'next']) {
       expect(successSchema).toContain(field);
+    }
+    for (const field of ['cost', 'inputTruncated', 'outputTruncated', 'errorTruncated']) {
+      expect(successSchema).not.toContain(`"${field}"`);
     }
     expect(responses['422'].content['application/json'].schema.properties.code.const).toBe('TRACE_QUERY_INVALID');
     expect(responses['501'].content['application/json'].schema.properties.code.const).toBe('SPAN_QUERY_UNSUPPORTED');

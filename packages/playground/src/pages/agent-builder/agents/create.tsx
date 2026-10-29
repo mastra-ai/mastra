@@ -40,7 +40,6 @@ export default function AgentBuilderCreate() {
               viewTransition: true,
             })
           }
-          className="rounded-full"
           tooltip="Agents list"
           data-testid="agent-builder-back-to-list"
         >

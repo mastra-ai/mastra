@@ -104,6 +104,10 @@ const inputGroupAddonVariants = cva(
   ),
   {
     variants: {
+      variant: {
+        default: '',
+        flush: '',
+      },
       align: {
         'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
         'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
@@ -111,21 +115,38 @@ const inputGroupAddonVariants = cva(
         'block-end': 'order-last w-full justify-start border-t border-border px-3 pt-1 pb-2',
       },
     },
+    compoundVariants: [
+      { variant: 'flush', align: ['inline-start', 'inline-end'], className: 'gap-0 [&>button]:mx-0' },
+      { variant: 'flush', align: 'inline-start', className: 'pl-0 has-[>button]:pl-0' },
+      { variant: 'flush', align: 'inline-end', className: 'pr-0 has-[>button]:pr-0' },
+    ],
     defaultVariants: {
+      variant: 'default',
       align: 'inline-start',
     },
   },
 );
 
-export type InputGroupAddonProps = React.ComponentProps<'div'> & VariantProps<typeof inputGroupAddonVariants>;
+export type InputGroupAddonProps = React.ComponentProps<'div'> &
+  Omit<VariantProps<typeof inputGroupAddonVariants>, 'variant'> & {
+    /** `flush` joins inline buttons without a gap or an inset from the field's outside edge. */
+    variant?: VariantProps<typeof inputGroupAddonVariants>['variant'];
+  };
 
-function InputGroupAddon({ className, align = 'inline-start', onClick, ...props }: InputGroupAddonProps) {
+function InputGroupAddon({
+  className,
+  align = 'inline-start',
+  variant = 'default',
+  onClick,
+  ...props
+}: InputGroupAddonProps) {
   return (
     <div
       role="group"
       data-slot="input-group-addon"
       data-align={align}
-      className={cn(inputGroupAddonVariants({ align }), className)}
+      data-variant={variant}
+      className={cn(inputGroupAddonVariants({ align, variant }), className)}
       onClick={event => {
         // Click on non-interactive addon area focuses the control inside the group.
         // Skip when a button/input handled the click itself.

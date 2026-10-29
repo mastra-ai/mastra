@@ -141,7 +141,7 @@ export function AddItemsToDatasetDialog({
           <DialogFooter>
             <DialogCancel onClick={() => setSelectedDatasetId('')}>Cancel</DialogCancel>
             <DialogAction type="submit" disabled={!selectedDatasetId || availableDatasets.length === 0}>
-              {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
+              {isAdding ? `Adding... (${progress}/${items.length})` : 'Add items'}
             </DialogAction>
           </DialogFooter>
         </Form>

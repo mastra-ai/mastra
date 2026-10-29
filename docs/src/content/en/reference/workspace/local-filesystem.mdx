@@ -179,8 +179,8 @@ filesystem.setAllowedPaths([])
 Read file contents.
 
 ```typescript
-const content = await filesystem.readFile('/docs/guide.md', { encoding: 'utf-8' })
-const buffer = await filesystem.readFile('/image.png')
+const content = await filesystem.readFile('docs/guide.md', { encoding: 'utf-8' })
+const buffer = await filesystem.readFile('image.png')
 ```
 
 **Parameters:**
@@ -219,8 +219,8 @@ const buffer = await filesystem.readFile('/image.png')
 Write content to a file.
 
 ```typescript
-await filesystem.writeFile('/docs/new.md', '# New Document')
-await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
+await filesystem.writeFile('docs/new.md', '# New Document')
+await filesystem.writeFile('nested/path/file.md', content, { recursive: true })
 ```
 
 **Parameters:**
@@ -279,7 +279,7 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 Append content to an existing file.
 
 ```typescript
-await filesystem.appendFile('/logs/app.log', 'New log entry\n')
+await filesystem.appendFile('logs/app.log', 'New log entry\n')
 ```
 
 **Parameters:**
@@ -304,8 +304,8 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
 Delete a file.
 
 ```typescript
-await filesystem.deleteFile('/docs/old.md')
-await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if missing
+await filesystem.deleteFile('docs/old.md')
+await filesystem.deleteFile('docs/maybe.md', { force: true }) // Don't throw if missing
 ```
 
 **Parameters:**
@@ -345,8 +345,8 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
 Copy a file to a new location.
 
 ```typescript
-await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
-await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite: false })
+await filesystem.copyFile('docs/template.md', 'docs/new-doc.md')
+await filesystem.copyFile('src/config.json', 'backup/config.json', { overwrite: false })
 ```
 
 **Parameters:**
@@ -391,8 +391,8 @@ await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite
 Move or rename a file.
 
 ```typescript
-await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
-await filesystem.moveFile('/temp/upload.txt', '/files/document.txt')
+await filesystem.moveFile('docs/draft.md', 'docs/final.md')
+await filesystem.moveFile('temp/upload.txt', 'files/document.txt')
 ```
 
 **Parameters:**
@@ -437,8 +437,8 @@ await filesystem.moveFile('/temp/upload.txt', '/files/document.txt')
 Create a directory.
 
 ```typescript
-await filesystem.mkdir('/docs/api')
-await filesystem.mkdir('/deeply/nested/path', { recursive: true })
+await filesystem.mkdir('docs/api')
+await filesystem.mkdir('deeply/nested/path', { recursive: true })
 ```
 
 **Parameters:**
@@ -478,8 +478,8 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
 Remove a directory.
 
 ```typescript
-await filesystem.rmdir('/docs/old')
-await filesystem.rmdir('/docs/nested', { recursive: true })
+await filesystem.rmdir('docs/old')
+await filesystem.rmdir('docs/nested', { recursive: true })
 ```
 
 **Parameters:**
@@ -526,8 +526,11 @@ await filesystem.rmdir('/docs/nested', { recursive: true })
 List directory contents.
 
 ```typescript
-const entries = await filesystem.readdir('/docs')
+const entries = await filesystem.readdir('docs')
 // [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
+
+// List the basePath root
+const rootEntries = await filesystem.readdir('.')
 ```
 
 ### `exists(path)`
@@ -535,7 +538,7 @@ const entries = await filesystem.readdir('/docs')
 Check if a path exists.
 
 ```typescript
-const exists = await filesystem.exists('/docs/guide.md')
+const exists = await filesystem.exists('docs/guide.md')
 ```
 
 ### `stat(path)`
@@ -543,8 +546,8 @@ const exists = await filesystem.exists('/docs/guide.md')
 Get file or directory metadata.
 
 ```typescript
-const stat = await filesystem.stat('/docs/guide.md')
-// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
+const stat = await filesystem.stat('docs/guide.md')
+// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: 'docs/guide.md' }
 ```
 
 ### `getInfo()`
@@ -562,7 +565,7 @@ Returns a description of how paths work in this filesystem. When assigned to an 
 
 ```typescript
 const instructions = filesystem.getInstructions()
-// 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
+// 'Local filesystem at "/workspace". Relative paths resolve from this directory. File access is restricted to this directory.'
 ```
 
 Pass `requestContext` to enable per-request customization when the `instructions` constructor option is a function:
@@ -592,21 +595,43 @@ To override the default output, pass an `instructions` option to the constructor
 
 ### How `basePath` works
 
-The `basePath` option sets the root directory for all file operations. File paths passed to methods like `readFile()` are resolved relative to this base:
+The `basePath` option sets the root directory for all file operations. Paths passed to methods like `readFile()` are resolved as follows:
 
-- Leading slashes are stripped: `/docs/guide.md` → `docs/guide.md`
-- The path is normalized and joined with basePath
-- Result: `./workspace` + `docs/guide.md` → `./workspace/docs/guide.md`
+- Relative paths are resolved against `basePath`: `docs/guide.md` → `<basePath>/docs/guide.md`
+- Use `.` to refer to the root of `basePath`, for example `readdir('.')`
+- Absolute paths are treated as host paths, not as paths inside `basePath`. With the default `contained: true`, any absolute path that falls outside `basePath` and the configured `allowedPaths` is rejected with a `PermissionError`
+- `~` expands to the user's home directory, so it's also a host path and is subject to the same containment rules
 
 ```typescript
 const filesystem = new LocalFilesystem({
   basePath: './workspace',
 })
 
-// These all resolve to ./workspace/docs/guide.md
-await filesystem.readFile('/docs/guide.md')
+// Resolves to ./workspace/docs/guide.md
 await filesystem.readFile('docs/guide.md')
+await filesystem.readFile('./docs/guide.md')
+
+// Root of basePath
+await filesystem.readdir('.')
+
+// Throws a PermissionError with the default contained: true
+await filesystem.readFile('/docs/guide.md')
 ```
+
+To read host absolute paths outside `basePath`, add them to `allowedPaths` or set `contained: false`. Prefer `allowedPaths` when only a few external directories are needed.
+
+```typescript
+const filesystem = new LocalFilesystem({
+  basePath: './workspace',
+  allowedPaths: ['/home/user/shared-docs'],
+})
+
+await filesystem.readFile('/home/user/shared-docs/guide.md')
+```
+
+### Mounted filesystems
+
+When a `LocalFilesystem` is mounted in a workspace through `CompositeFilesystem`, workspace-facing paths include the mount prefix. For example, with a mount at `/workspace`, the workspace path `/workspace/report.md` is passed to the underlying filesystem as `report.md`, relative to its `basePath`. See [Filesystem mounts](/docs/sandbox/filesystem#mounts) for mount configuration.
 
 ### Relative paths and execution context
 

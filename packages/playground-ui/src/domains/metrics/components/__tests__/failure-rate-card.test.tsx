@@ -24,11 +24,11 @@ describe('FailureRateCard', () => {
     expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
   });
 
-  it('calls the handler from "View errors in Logs"', async () => {
+  it('calls the handler from "View errors in logs"', async () => {
     seedMetrics();
     const onViewErrors = vi.fn();
     renderInMetrics(<FailureRateCard onViewErrors={onViewErrors} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'View errors in Logs' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View errors in logs' }));
     expect(onViewErrors).toHaveBeenCalledOnce();
   });
 });
