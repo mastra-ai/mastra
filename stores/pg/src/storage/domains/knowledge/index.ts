@@ -84,7 +84,7 @@ type PageStoreMethod = {
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class KnowledgePG extends KnowledgeStorage {
   static getExportDDL(schemaName?: string): string[] {
-    return pgKnowledgePagesDDL(schemaName);
+    return pgKnowledgePagesDDL(schemaName).map(statement => `${statement};`);
   }
 
   readonly #client: DbClient;
