@@ -1,7 +1,7 @@
 import type { InlineSkill } from '@mastra/core/skills';
 
 import { findBoardSkillProblems } from '../skills/app-skills.js';
-import type { StoredBoardScope, StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type { StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { compileStoredBoard, seedFromDefinition } from './stored-board.js';
@@ -189,30 +189,20 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   async #refresh(scope: StoredBoardScope, key: string, generation: number): Promise<ProjectBoards> {
-    let seedFailure: string | undefined;
-    if (!this.#seeded.has(key)) {
-      try {
-        const { drifted } = await this.#storage.applySeed(scope, this.#seeds);
-        this.#seeded.add(key);
-        for (const board of drifted) {
-          this.#warnOnce(
-            `drift:${key}:${board}`,
-            `Board '${board}' in project ${scope.factoryProjectId} was edited, so its changed code definition was not applied. Reset the board to adopt it.`,
-          );
-        }
-      } catch (error) {
-        // The stored boards still serve; seeding is retried on the next recheck.
-        seedFailure = `Writing the code boards failed: ${error instanceof Error ? error.message : String(error)}`;
-        this.#warnOnce(`seed:${key}:${seedFailure}`, `${seedFailure} (project ${scope.factoryProjectId})`);
-      }
-    }
+    let seedFailure = this.#seeded.has(key) ? undefined : await this.#seed(scope, key);
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
     if (current && current.version === version && !seedFailure) {
       if ((this.#generations.get(key) ?? 0) === generation) current.checkedAt = this.#now();
       return current.boards;
     }
-    const snapshot = await this.#consistentSnapshot(scope);
+    let snapshot = await this.#consistentSnapshot(scope);
+    // A replica running other code rewrote a board nobody edited. Write this replica's code back,
+    // so a rollout settles on the code the remaining replicas run.
+    if (!seedFailure && this.#codeChangedUnder(snapshot.boards)) {
+      seedFailure = await this.#seed(scope, key);
+      snapshot = await this.#consistentSnapshot(scope);
+    }
     const boards =
       seedFailure && snapshot.boards.length === 0
         ? { registry: this.seedRegistry, details: new Map(), problems: [seedFailure] }
@@ -221,6 +211,36 @@ export class ProjectBoardCache implements ProjectBoardSource {
       this.#entries.set(key, { boards, version: snapshot.version, checkedAt: this.#now() });
     }
     return boards;
+  }
+
+  /** Writes the code boards into the project. Returns the problem to report when that fails. */
+  async #seed(scope: StoredBoardScope, key: string): Promise<string | undefined> {
+    try {
+      const { drifted } = await this.#storage.applySeed(scope, this.#seeds);
+      this.#seeded.add(key);
+      for (const board of drifted) {
+        this.#warnOnce(
+          `drift:${key}:${board}`,
+          `Board '${board}' in project ${scope.factoryProjectId} was edited, so its changed code definition was not applied. Reset the board to adopt it.`,
+        );
+      }
+      return undefined;
+    } catch (error) {
+      // The stored boards still serve; seeding is retried on the next recheck.
+      this.#seeded.delete(key);
+      const failure = `Writing the code boards failed: ${error instanceof Error ? error.message : String(error)}`;
+      this.#warnOnce(`seed:${key}:${failure}`, `${failure} (project ${scope.factoryProjectId})`);
+      return failure;
+    }
+  }
+
+  /** Whether an unedited board was last written from code other than this replica's. */
+  #codeChangedUnder(rows: readonly StoredBoardRecord[]): boolean {
+    return rows.some(row => {
+      if (row.customized || !row.seedHash) return false;
+      const seed = this.#seedsByKey.get(row.key);
+      return seed !== undefined && (seed.hash !== row.seedHash || seed.source !== row.seedSource);
+    });
   }
 
   /** Boards and phases are read in two statements; reread when a write landed between them. */

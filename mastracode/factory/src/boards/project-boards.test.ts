@@ -178,6 +178,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(warnings).toEqual([expect.stringContaining("Board 'release' in project project-1 was edited")]);
   });
 
+  it('settles on the newer code when a replica still running older code rewrites an unedited board mid-rollout', async () => {
+    const { a, b, scope } = await setup();
+    let now = 0;
+    const v2 = cache(a.boards, createBoardRegistry({ boards: [appBoard('release', { shipping: 'Publishing' })] }), {
+      now: () => now,
+    });
+    const v1 = cache(b.boards, createBoardRegistry({ boards: [appBoard('release')] }), { now: () => now });
+
+    expect((await v2.load(scope)).get('release')!.phases.shipping!.name).toBe('Publishing');
+    // An old pod restarts during the rollout and writes its own definition.
+    expect((await v1.load(scope)).get('release')!.phases.shipping!.name).toBe('Shipping');
+    expect((await a.boards.get(scope, 'release'))!.phases.find(phase => phase.key === 'shipping')!.name).toBe(
+      'Shipping',
+    );
+
+    now = RECHECK_MS;
+    const registry = await v2.load(scope);
+
+    expect(registry.get('release')!.phases.shipping!.name).toBe('Publishing');
+    expect(registry.get('release')!.rules.shipping?.manual?.onEnter).toBe(shipped);
+    const stored = (await a.boards.get(scope, 'release'))!;
+    expect(stored.phases.find(phase => phase.key === 'shipping')!.name).toBe('Publishing');
+    expect(stored.customized).toBe(false);
+    expect((await v2.describe(scope)).details.get('release')).toEqual({
+      source: 'app',
+      customized: false,
+      problems: [],
+    });
+  });
+
   it('skips a stored board that no longer compiles and still loads the rest of the project', async () => {
     const { a, scope } = await setup();
     await cache(a.boards).load(scope);
