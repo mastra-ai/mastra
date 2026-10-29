@@ -166,6 +166,17 @@ Mastra spans are converted to OTel format and sent to Langfuse via `LangfuseSpan
 - All other spans → Langfuse spans
 - Parent-child relationships are preserved via OTel trace/span IDs
 
+## Cost tracking
+
+Langfuse reports cost from `langfuse.observation.cost_details`. The exporter sends that field only for model generation spans whose cost metadata meets all of these conditions:
+
+- The span is a `MODEL_GENERATION` span.
+- `costContext.costMetadata.source` is `'provider_reported'`, meaning the model provider returned the cost. Estimated costs aren't exported, so Langfuse can apply its own model pricing instead.
+- `costContext.costUnit` is `'USD'`.
+- `costContext.estimatedCost` is a finite, non-negative number.
+
+When any condition fails, the generation is exported without cost details and Langfuse falls back to its own pricing model, which also covers providers such as most self-hosted or direct model APIs that don't report cost until you configure model prices in Langfuse.
+
 ## Prompt linking
 
 Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) using the `withLangfusePrompt` helper:

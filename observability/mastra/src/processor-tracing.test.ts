@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent/message-list';
@@ -973,13 +974,13 @@ describe('Processor Tracing Tests', () => {
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       // 4. MODEL_INFERENCE is child of MODEL_STEP
       expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
-      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
-      expect(chunkSpansInInference.length).toBe(1);
+      // 5. Model chunk spans are children of MODEL_STEP (processed content, siblings of MODEL_INFERENCE)
+      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
+      expect(chunkSpansInStep.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: input_step_processor → model_chunks
-      const firstChunkInInference = chunkSpansInInference[0];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
+      const firstChunkInStep = chunkSpansInStep[0];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
 
       await testExporter.finalExpectations();
     });
@@ -1048,13 +1049,86 @@ describe('Processor Tracing Tests', () => {
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       // 4. MODEL_INFERENCE is child of MODEL_STEP
       expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
-      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
-      expect(chunkSpansInInference.length).toBe(1);
+      // 5. Model chunk spans are children of MODEL_STEP (processed content, siblings of MODEL_INFERENCE)
+      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
+      expect(chunkSpansInStep.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: model_chunks → output_step_processor
-      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
-      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
+      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
+      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
+
+      await testExporter.finalExpectations();
+    });
+
+    /**
+     * Expected span structure:
+     * - test-agent AGENT_RUN (root)
+     *   - MODEL_GENERATION
+     *     - MODEL_STEP (step 0, the rejected call)
+     *       - request error processor: retry-once PROCESSOR_RUN
+     *     - MODEL_STEP (step 1, the retried call)
+     */
+    it('should nest request error processor spans under the model step whose call failed', async () => {
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          calls++;
+          if (calls === 1) {
+            throw new APICallError({
+              message: 'rate limited',
+              url: 'https://example.com/v1/messages',
+              requestBodyValues: {},
+              statusCode: 429,
+              isRetryable: false,
+            });
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'Mock response' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+            ]),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        maxProcessorRetries: 1,
+        errorProcessors: [
+          {
+            id: 'retry-once',
+            name: 'Retry once',
+            processAPIError: async () => ({ retry: true }),
+          },
+        ],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const result = await mastra.getAgent('agent').stream('Hello', { modelSettings: { maxRetries: 0 } });
+      for await (const _chunk of result.fullStream) {
+        // drain
+      }
+
+      const modelStepSpans = testExporter.getModelStepSpans();
+      expect(modelStepSpans.length).toBe(2);
+      const failedStepSpan = modelStepSpans.find(s => (s.attributes as any)?.stepIndex === 0);
+      expect(failedStepSpan).toBeDefined();
+
+      const errorProcessorSpans = testExporter
+        .getProcessorSpans()
+        .filter(s => s.name === 'request error processor: retry-once');
+      expect(errorProcessorSpans.length).toBe(1);
+      expect(errorProcessorSpans[0]?.parentSpanId).toBe(failedStepSpan?.id);
 
       await testExporter.finalExpectations();
     });
@@ -1137,19 +1211,19 @@ describe('Processor Tracing Tests', () => {
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       // 5. MODEL_INFERENCE is child of MODEL_STEP
       expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 6. Model chunk spans are children of MODEL_INFERENCE (the provider call)
-      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
-      expect(chunkSpansInInference.length).toBe(1);
+      // 6. Model chunk spans are children of MODEL_STEP (processed content, siblings of MODEL_INFERENCE)
+      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
+      expect(chunkSpansInStep.length).toBe(1);
 
       // EXECUTION ORDER: input -> MODEL_GENERATION -> output
       testExporter.expectStartedBefore(inputSpan, modelSpan);
       testExporter.expectStartedBefore(modelSpan, outputSpan);
 
       // EXECUTION ORDER within MODEL_STEP: input_step → model_chunks → output_step
-      const firstChunkInInference = chunkSpansInInference[0];
-      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
-      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
+      const firstChunkInStep = chunkSpansInStep[0];
+      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
+      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
 
       await testExporter.finalExpectations();
     });

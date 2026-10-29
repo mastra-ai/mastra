@@ -1,6 +1,32 @@
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
-import type { DurableAgenticExecutionOutput } from '../../types';
+import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
+
+interface SpanClocks {
+  completionStartTime?: Date | string;
+  timeToFirstTokenMs?: number;
+}
+
+/**
+ * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
+ * resumed segment keeps them on the run registry beside its fresh spans; the
+ * originals keep them in the loop state. Undefined when none was captured yet.
+ */
+export function carriedSpanClocks(
+  registry:
+    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
+    | undefined,
+  state: SpanClocks,
+): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
+  const clocks: SpanClocks = registry?.resumeModelSpanData
+    ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
+    : state;
+  const attributes = {
+    ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
+    ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),
+  };
+  return Object.keys(attributes).length ? attributes : undefined;
+}
 
 /**
  * Input for creating iteration state update
@@ -73,7 +99,7 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     text: executionOutput.output.text,
     content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults,
+    toolResults: executionOutput.toolResults?.map(({ stepSpanData: _stepSpanData, ...result }) => result),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
@@ -190,7 +216,13 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
-    // First inference wins; later iterations never overwrite it.
-    completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
+    // First inference wins; later iterations never overwrite it. Both values travel
+    // together, so state saved with only the clock never gains a later step's number.
+    ...(currentState.completionStartTime
+      ? { completionStartTime: currentState.completionStartTime, timeToFirstTokenMs: currentState.timeToFirstTokenMs }
+      : {
+          completionStartTime: executionOutput.completionStartTime,
+          timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
+        }),
   };
 }

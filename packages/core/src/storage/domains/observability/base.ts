@@ -119,6 +119,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
+ * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
@@ -128,6 +129,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-time-to-first-chunk-sort`: `orderBy` on `timeToFirstChunkMs` in trace and span queries
+ * - `trace-query-time-to-first-token`: `timeToFirstTokenMs` on trace, thread and span query results and predicates
+ * - `trace-query-time-to-first-token-sort`: `orderBy` on `timeToFirstTokenMs` in trace and span queries
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
@@ -145,6 +148,7 @@ export type ObservabilityStorageFeature =
   | 'metric-discovery'
   | 'span-query'
   | 'span-query-context-fields'
+  | 'span-query-model-fields'
   | 'span-aggregate'
   | 'trace-query'
   | 'trace-aggregate'
@@ -158,7 +162,9 @@ export type ObservabilityStorageFeature =
   | 'trace-query-time-to-first-chunk'
   | 'trace-query-root-span-fields'
   | 'trace-query-root-entity-id'
-  | 'trace-query-time-to-first-chunk-sort';
+  | 'trace-query-time-to-first-chunk-sort'
+  | 'trace-query-time-to-first-token'
+  | 'trace-query-time-to-first-token-sort';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
