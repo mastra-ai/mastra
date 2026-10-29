@@ -601,7 +601,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   async searchPages(input: Parameters<Store['searchPages']>[0]): Promise<KnowledgePageSearchHit[]> {
     const words = knowledgeSearchWords(input.query);
     if (!words.length) return [];
-    const phrase = words.join(' ');
+    const phrase = input.query.trim().toLowerCase().replace(/\s+/g, ' ');
     const limit = input.limit === undefined ? DEFAULT_SEARCH_LIMIT : pageSize(input.limit);
     const inScope = (page: KnowledgePage) => !input.scopeIds || input.scopeIds.includes(page.scopeId);
     const hasAll = (...texts: Array<string | undefined>) => {
@@ -609,7 +609,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       return words.every(word => haystack.includes(word));
     };
     const tier = (page: KnowledgePage) =>
-      page.name.toLowerCase().replace(/\s+/g, ' ').includes(phrase) ? 0 : hasAll(page.name) ? 1 : 2;
+      canonicalKnowledgeName(page.name).includes(phrase) ? 0 : hasAll(page.name) ? 1 : 2;
     const pageHits = [...this.#pages.values()]
       .filter(
         page =>

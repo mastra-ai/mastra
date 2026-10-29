@@ -566,8 +566,8 @@ export interface KnowledgePageStore {
    * and the limit. The query is split on whitespace into lowercased, deduplicated words (an empty
    * query returns nothing); each word matches as a case-insensitive substring. A page hits when every
    * word appears in its name, description and body combined; a note hits when every word appears in
-   * its own text. Scope pages are never returned. Results: pages with the whole query (words joined
-   * by single spaces) in the name, then pages with every word in the name, then other page hits (each
+   * its own text. Scope pages are never returned. Results: pages whose canonical name contains the
+   * whole query (trimmed, lowercased, whitespace runs collapsed to one space), then pages with every word in the name, then other page hits (each
    * newest `updatedAt` first, ties by id ascending), then notes (newest `updatedAt` first, ties by id
    * descending), truncated to `limit`. No quoting or operators.
    */

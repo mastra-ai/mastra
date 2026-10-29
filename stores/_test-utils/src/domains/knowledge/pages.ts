@@ -708,7 +708,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
 
         // 'Refund window' has "refund" in its name and "approval" only in a note: not a page hit,
         // but the note containing both words is. Scope pages (org:refund) never hit.
-        expect((await store.searchPages({ query: '  refund   APPROVAL refund ', read: r })).map(label)).toEqual([
+        expect((await store.searchPages({ query: '  refund   APPROVAL ', read: r })).map(label)).toEqual([
           `page:${phrase.name}`,
           `page:${scattered.name}`,
           `page:${inBody.name}`,
@@ -729,6 +729,11 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           `note:${noteBoth.text}`,
         ]);
         expect(await store.searchPages({ query: '   ', read: r })).toEqual([]);
+        // Repeated words count once for matching.
+        expect((await store.searchPages({ query: 'refund approval refund', read: r })).map(label)).toHaveLength(5);
+        expect((await store.searchPages({ query: 'approval  RULES', read: r })).map(label).slice(0, 1)).toEqual([
+          `page:${phrase.name}`,
+        ]);
       });
 
       it('never counts a hidden note toward search results or the limit', async () => {
@@ -766,6 +771,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           (await store.searchPages({ query, read: r })).map(hit => (hit.type === 'page' ? hit.page.id : hit.note.id));
         expect(await ids('50%')).toEqual([percent.id]);
         expect(await ids('a_b')).toEqual([underscore.id]);
+        expect(await ids('off 50%')).toEqual([percent.id]);
       });
 
       it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {
