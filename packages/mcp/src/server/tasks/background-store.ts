@@ -481,11 +481,11 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * left behind even if no client ever asks it about a task. Does nothing once the store is closed.
    */
   startSweeping(): void {
-    if (!this.#closed) this.#startSweeping();
+    this.#startSweeping();
   }
 
   #startSweeping(): void {
-    if (this.#sweepTimer) return;
+    if (this.#closed || this.#sweepTimer) return;
     // Once per lease: a dead worker's rows are noticed about a lease after it stops renewing.
     this.#sweepTimer = setInterval(() => {
       this.sweep().catch(error => this.#getLogger?.().debug('MCP task sweep failed', { error }));
@@ -499,6 +499,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * on the next tick. Rows that need a restart are restarted only while slots are free.
    */
   async #sweep(): Promise<void> {
+    if (this.#closed) return;
     const storage = await this.#manager.getStorage();
     const now = Date.now();
     const lease = this.#manager.config.leaseDurationMs;
