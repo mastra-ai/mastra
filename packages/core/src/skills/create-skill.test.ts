@@ -109,4 +109,17 @@ describe('isInlineSkill', () => {
     expect(isInlineSkill({ __inline: false })).toBe(false);
     expect(isInlineSkill({ __inline: 'true' })).toBe(false);
   });
+
+  it('returns false for hand-built objects that copy the inline shape', () => {
+    const skill = createSkill({ name: 'test-skill', description: 'A test skill.', instructions: 'Instructions.' });
+    // JSON keeps every string field but not the brand createSkill() sets.
+    const copied = JSON.parse(JSON.stringify(skill));
+    expect(copied.__inline).toBe(true);
+    expect(isInlineSkill(copied)).toBe(false);
+  });
+
+  it('recognises a spread copy of a createSkill() result', () => {
+    const skill = createSkill({ name: 'test-skill', description: 'A test skill.', instructions: 'Instructions.' });
+    expect(isInlineSkill({ ...skill, description: 'Changed.' })).toBe(true);
+  });
 });

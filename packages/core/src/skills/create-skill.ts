@@ -28,6 +28,12 @@ import { validateSkillMetadata } from '../workspace/skills/schemas';
 import type { InlineSkill, InlineSkillInput } from './types';
 
 /**
+ * Brand set only by `createSkill()`. A registered symbol, so skills from another
+ * copy of `@mastra/core` in the same app are still recognised.
+ */
+const INLINE_SKILL_BRAND = Symbol.for('mastra.skill.inline');
+
+/**
  * Create an inline skill from code — no filesystem needed.
  *
  * The returned object implements the `Skill` interface and can be passed
@@ -50,7 +56,7 @@ export function createSkill(input: InlineSkillInput): InlineSkill {
 
   const referenceKeys = references ? Object.keys(references) : [];
 
-  return {
+  const skill: InlineSkill = {
     __inline: true as const,
     __referenceContents: references ?? {},
     name,
@@ -67,11 +73,13 @@ export function createSkill(input: InlineSkillInput): InlineSkill {
     scripts: [],
     assets: [],
   };
+  return Object.assign(skill, { [INLINE_SKILL_BRAND]: true });
 }
 
 /**
- * Type guard: is this skill an inline skill (from createSkill)?
+ * Type guard: was this skill created by `createSkill()`? Objects that only set
+ * `__inline: true` are not, since they skipped its validation.
  */
 export function isInlineSkill(skill: unknown): skill is InlineSkill {
-  return typeof skill === 'object' && skill !== null && '__inline' in skill && (skill as InlineSkill).__inline === true;
+  return typeof skill === 'object' && skill !== null && (skill as Record<symbol, unknown>)[INLINE_SKILL_BRAND] === true;
 }
