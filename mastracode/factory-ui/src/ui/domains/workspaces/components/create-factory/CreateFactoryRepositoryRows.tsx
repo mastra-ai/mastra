@@ -3,7 +3,7 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Settings2 } from 'lucide-react';
+import { Settings2, Share2 } from 'lucide-react';
 
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
@@ -16,6 +16,11 @@ import { GitLabIcon } from '../../../../ui/icons';
 import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
+import {
+  INSTALL_ON_GITHUB_ORGANIZATION,
+  SHARE_WITH_THIS_FACTORY,
+  unavailableInstallNotice,
+} from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
 export interface CreateFactoryRepositoryRowsProps {
@@ -23,6 +28,8 @@ export interface CreateFactoryRepositoryRowsProps {
   githubRedirecting: boolean;
   onConnect: () => void;
   onManageConnection: () => void;
+  /** Opens the Platform page where the linker shares their personal GitHub account install with this factory. */
+  onShare: (shareUrl: string) => void;
   onSelectRepository: (repository: SourceControlRepository) => void;
 }
 
@@ -44,6 +51,7 @@ export function CreateFactoryRepositoryRows({
   githubRedirecting,
   onConnect,
   onManageConnection,
+  onShare,
   onSelectRepository,
 }: CreateFactoryRepositoryRowsProps) {
   const githubStatus = useGithubStatusQuery();
@@ -66,6 +74,17 @@ export function CreateFactoryRepositoryRows({
     return <PaletteRowsSkeleton label="Loading repositories" rows={3} />;
   }
 
+  const installNotice = unavailableInstallNotice(githubStatus.data);
+  const shareUrl = installNotice?.shareUrl;
+  const shareRow = shareUrl && (
+    <CommandPaletteItem
+      icon={<Share2 />}
+      title={SHARE_WITH_THIS_FACTORY}
+      subtitle={installNotice?.message}
+      value="share-github"
+      onSelect={() => onShare(shareUrl)}
+    />
+  );
   const githubRows = !connected ? (
     (() => {
       const unavailable =
@@ -73,13 +92,26 @@ export function CreateFactoryRepositoryRows({
 
       return (
         <CommandGroup heading="GitHub">
+          {shareRow}
           <CommandPaletteItem
             icon={githubRedirecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
-            title={unavailable ? 'GitHub unavailable' : 'Connect GitHub'}
-            subtitle={connectionMessage(githubStatus.data)}
+            title={
+              unavailable
+                ? 'GitHub unavailable'
+                : installNotice?.temporary
+                  ? 'Retry GitHub'
+                  : installNotice
+                    ? INSTALL_ON_GITHUB_ORGANIZATION
+                    : 'Connect GitHub'
+            }
+            subtitle={
+              shareUrl
+                ? 'Use a GitHub organization install instead.'
+                : (installNotice?.message ?? connectionMessage(githubStatus.data))
+            }
             value="connect-github"
             disabled={unavailable || githubRedirecting}
-            onSelect={onConnect}
+            onSelect={installNotice?.temporary ? () => void githubStatus.refetch() : onConnect}
           />
         </CommandGroup>
       );
@@ -88,10 +120,15 @@ export function CreateFactoryRepositoryRows({
     <>
       <GithubRepositoryResults query={query} onSelectRepository={onSelectRepository} />
       <CommandGroup heading="GitHub">
+        {shareRow}
         <CommandPaletteItem
           icon={<Settings2 />}
           title="Manage GitHub connection"
-          subtitle="Add installations or grant access to more repositories"
+          subtitle={
+            shareUrl
+              ? 'Add installations or grant access to more repositories'
+              : (installNotice?.message ?? 'Add installations or grant access to more repositories')
+          }
           value="manage-github"
           onSelect={onManageConnection}
         />

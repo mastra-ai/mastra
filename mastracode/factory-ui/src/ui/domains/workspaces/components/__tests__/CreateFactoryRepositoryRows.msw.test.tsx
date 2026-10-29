@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import type { GithubStatus } from '../../services/github';
 import { CreateFactoryRepositoryRows } from '../create-factory/CreateFactoryRepositoryRows';
 
 afterEach(() => vi.restoreAllMocks());
@@ -34,6 +35,7 @@ it('disables both connect actions when neither provider is configured', async ()
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />
     </Command>,
@@ -72,6 +74,7 @@ it('calls onConnect for GitHub directly without any Platform redirect', async ()
         githubRedirecting={false}
         onConnect={onConnect}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />
     </Command>,
@@ -81,6 +84,92 @@ it('calls onConnect for GitHub directly without any Platform redirect', async ()
   await userEvent.setup().click(github);
   expect(onConnect).toHaveBeenCalledOnce();
   expect(open).not.toHaveBeenCalledWith('https://projects.mastra.ai', expect.anything(), expect.anything());
+});
+
+it('offers installing on a GitHub organization when the only install is a hidden personal GitHub account install', async () => {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({
+        enabled: true,
+        connected: false,
+        installations: [],
+        hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        reason: 'personal_install_hidden',
+      } satisfies GithubStatus),
+    ),
+    http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+      HttpResponse.json({ enabled: false, configured: false, reason: 'missing_config' }),
+    ),
+  );
+  const onConnect = vi.fn();
+
+  renderWithProviders(
+    <Command>
+      <CreateFactoryRepositoryRows
+        query=""
+        githubRedirecting={false}
+        onConnect={onConnect}
+        onManageConnection={vi.fn()}
+        onShare={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />
+    </Command>,
+  );
+
+  await userEvent.setup().click(await screen.findByRole('option', { name: /Install on a GitHub organization/ }));
+  expect(onConnect).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('option', { name: /Connect GitHub/ })).not.toBeInTheDocument();
+});
+
+it('offers sharing a personal GitHub account install with this factory ahead of installing on a GitHub organization', async () => {
+  const shareUrl =
+    'https://api.mastra.ai/v1/server/github-app/share?organizationId=org-1&installationId=9&projectId=p-1';
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({
+        enabled: true,
+        connected: false,
+        installations: [],
+        unusableInstallations: [
+          {
+            installationId: 9,
+            accountLogin: 'ada',
+            accountType: 'User',
+            unusableReason: 'personal_installation_not_shared',
+            shareUrl,
+          },
+        ],
+        reason: 'installations_unusable',
+      } satisfies GithubStatus),
+    ),
+    http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+      HttpResponse.json({ enabled: false, configured: false, reason: 'missing_config' }),
+    ),
+  );
+  const onShare = vi.fn();
+
+  renderWithProviders(
+    <Command>
+      <CreateFactoryRepositoryRows
+        query=""
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onShare={onShare}
+        onSelectRepository={vi.fn()}
+      />
+    </Command>,
+  );
+
+  const options = await screen.findAllByRole('option', {
+    name: /Share with this factory|Install on a GitHub organization/,
+  });
+  expect(options.map(option => option.textContent)).toEqual([
+    expect.stringContaining('Share with this factory'),
+    expect.stringContaining('Install on a GitHub organization'),
+  ]);
+  await userEvent.setup().click(options[0]);
+  expect(onShare).toHaveBeenCalledExactlyOnceWith(shareUrl);
 });
 
 it('starts a Nango connect session when the user picks the GitLab row', async () => {
@@ -128,6 +217,7 @@ it('starts a Nango connect session when the user picks the GitLab row', async ()
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />
     </Command>,
@@ -171,6 +261,7 @@ it('disables the GitLab row when the account is personal (organization_required)
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />
     </Command>,

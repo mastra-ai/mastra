@@ -6,11 +6,14 @@
  */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { OnboardingPage } from '../../../../pages/OnboardingPage';
+import type { GithubStatus } from '../../services/github';
 import { GitHubAppCallbackHandler } from '../GitHubAppCallbackHandler';
 
 function renderCallback(initialEntry: string) {
@@ -106,6 +109,53 @@ describe('GitHubAppCallbackHandler', () => {
     renderCallback('/factories/fp-1/settings/repositories?github_app_error=something_new');
 
     expect(await screen.findByText('GitHub connection failed')).toBeInTheDocument();
+  });
+
+  it('given the install landed on a personal GitHub account the platform hides, when the settings page renders, then it explains instead of reporting success', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          reason: 'personal_install_hidden',
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        } satisfies GithubStatus),
+      ),
+    );
+    renderCallback('/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=123');
+
+    expect(await screen.findByText(/installed on a personal GitHub account/)).toBeInTheDocument();
+    expect(screen.queryByText('GitHub App installed')).not.toBeInTheDocument();
+  });
+
+  it('given the linker shared their personal GitHub account install, when the factory page returns, then it refetches GitHub status and confirms', async () => {
+    let statusRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => {
+        statusRequests += 1;
+        return HttpResponse.json({
+          enabled: true,
+          connected: true,
+          installations: [{ installationId: 9, accountLogin: 'ada', accountType: 'User' }],
+          reason: 'ready',
+        } satisfies GithubStatus);
+      }),
+    );
+    const router = renderCallback(
+      '/factories/fp-1/settings/repositories?github_app_share=granted&installation_id=9&keep=1',
+    );
+
+    expect(await screen.findByText('GitHub App shared with this factory')).toBeInTheDocument();
+    expect(statusRequests).toBeGreaterThan(0);
+    await waitFor(() => expect(router.state.location.search).toBe('?keep=1'));
+  });
+
+  it('given the linker declined to share, when the factory page returns, then it says nothing was shared', async () => {
+    const router = renderCallback('/factories/fp-1/settings/repositories?github_app_share=declined');
+
+    expect(await screen.findByText('The GitHub App was not shared with this factory.')).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe(''));
   });
 });
 

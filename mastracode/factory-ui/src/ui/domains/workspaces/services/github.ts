@@ -24,6 +24,15 @@ export interface GithubInstallation {
   accountType: string | null;
 }
 
+export type GithubInstallationUnusableReason =
+  | 'personal_installation_not_shared'
+  | 'personal_install_requires_single_member_org'
+  | 'installation_not_in_organization'
+  | 'not_visible_to_user'
+  | 'linker_not_organization_member'
+  | 'linker_membership_unavailable'
+  | 'personal_installation_without_linker';
+
 /**
  * Reason the GitHub feature is in its current state. Every value but
  * `unavailable` comes from the server; `unavailable` is set by the browser
@@ -36,6 +45,8 @@ export type GithubStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
+  | 'personal_install_hidden'
+  | 'installations_unusable'
   | 'ready'
   | 'unavailable';
 
@@ -66,6 +77,10 @@ export interface GithubStatus {
   organizationRequired?: boolean;
   /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
   reason?: GithubStatusReason;
+  /** Sent only by Platform releases without per-project sharing; newer ones report the install in `unusableInstallations`. */
+  hiddenPersonalInstallReason?: 'personal_install_requires_single_member_org' | null;
+  /** Installations the platform lists but refuses to this platform org, with why. */
+  unusableInstallations?: Array<GithubInstallation & { unusableReason: string; shareUrl?: string | null }>;
   /**
    * Whether the signed-in user has personally authorized the GitHub App, so
    * issues/PRs they originate are authored as them instead of the App bot.
@@ -138,6 +153,67 @@ function currentPageRedirectTo(): string {
 /** Begin the GitHub App install/connect flow (full-page redirect). */
 export function connectGithub(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect?redirectTo=${currentPageRedirectTo()}`);
+}
+
+export const INSTALL_ON_GITHUB_ORGANIZATION = 'Install on a GitHub organization';
+export const SHARE_WITH_THIS_FACTORY = 'Share with this factory';
+
+const HIDDEN_FOR_OTHER_MEMBERS = 'hidden because this platform org has other members.';
+
+const UNUSABLE_INSTALL_REASONS: Record<string, (account: string) => string> = {
+  personal_installation_not_shared: account =>
+    `${account} is linked to this platform org but not shared with this factory.`,
+  personal_install_requires_single_member_org: account => `The GitHub App on ${account} is ${HIDDEN_FOR_OTHER_MEMBERS}`,
+  linker_not_organization_member: account =>
+    `The GitHub App on ${account} can't be used: the member who linked it left this platform org.`,
+  linker_membership_unavailable: account =>
+    `The GitHub App on ${account} can't be used right now: the linker's platform org membership couldn't be checked.`,
+  personal_installation_without_linker: account =>
+    `The GitHub App on ${account} can't be used: no platform org member linked it.`,
+  installation_not_in_organization: account => `The GitHub App on ${account} isn't linked to this platform org.`,
+  not_visible_to_user: account => `The GitHub App on ${account} isn't available to you in this platform org.`,
+} satisfies Record<GithubInstallationUnusableReason, (account: string) => string>;
+
+export interface UnavailableInstallNotice {
+  message: string;
+  /** The platform could not decide right now; retrying may clear it, installing elsewhere will not. */
+  temporary: boolean;
+  /** Platform consent page where the linker shares their personal install with this factory's project. */
+  shareUrl: string | null;
+}
+
+export function unavailableInstallNotice(status: GithubStatus | undefined): UnavailableInstallNotice | undefined {
+  const unusable =
+    status?.unusableInstallations?.find(installation => installation.shareUrl) ?? status?.unusableInstallations?.[0];
+  if (unusable) {
+    const account = unusable.accountLogin ?? 'a personal GitHub account';
+    return {
+      message: Object.hasOwn(UNUSABLE_INSTALL_REASONS, unusable.unusableReason)
+        ? UNUSABLE_INSTALL_REASONS[unusable.unusableReason](account)
+        : `The GitHub App on ${account} can't be used by this platform org.`,
+      temporary: unusable.unusableReason === 'linker_membership_unavailable',
+      shareUrl: unusable.shareUrl ?? null,
+    };
+  }
+  if (!status?.hiddenPersonalInstallReason) return undefined;
+  return {
+    message: status.connected
+      ? `A personal GitHub account install is ${HIDDEN_FOR_OTHER_MEMBERS}`
+      : `The GitHub App is installed on a personal GitHub account, ${HIDDEN_FOR_OTHER_MEMBERS}`,
+    temporary: false,
+    shareUrl: null,
+  };
+}
+
+/** The Platform consent page, set to return to `returnTo` with `github_app_share=granted|declined`. */
+export function githubShareUrl(shareUrl: string, returnTo: string): string {
+  const url = new URL(shareUrl);
+  url.searchParams.set('returnTo', returnTo);
+  return url.toString();
+}
+
+export function shareGithubInstallation(shareUrl: string): void {
+  window.location.assign(githubShareUrl(shareUrl, window.location.href));
 }
 
 /**

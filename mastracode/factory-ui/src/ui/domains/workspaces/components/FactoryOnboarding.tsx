@@ -12,7 +12,7 @@ import { useApiConfig } from '../../../../api/config';
 import { useCompleteFactorySetup } from '../hooks/useCompleteFactorySetup';
 import { connectLinear } from '../../factory/services/linear';
 import type { SourceControlRepository } from '../services/github';
-import { connectGithub, manageGithubConnection } from '../services/github';
+import { connectGithub, manageGithubConnection, shareGithubInstallation } from '../services/github';
 import {
   persistOnboardingDraft,
   persistOnboardingReviewReturn,
@@ -156,6 +156,10 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
                   onManageConnection={() => {
                     persistOnboardingStep('vcs');
                     manageGithubConnection(baseUrl);
+                  }}
+                  onShare={shareUrl => {
+                    persistOnboardingStep('vcs');
+                    shareGithubInstallation(shareUrl);
                   }}
                   onPreviewRepository={previewed => previewWith({ repository: previewed })}
                   onSelectRepository={repo => {

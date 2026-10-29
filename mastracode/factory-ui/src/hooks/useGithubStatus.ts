@@ -1,8 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { fetchGithubStatus } from '../ui/domains/workspaces/services/github';
+
+export function githubStatusQueryOptions(baseUrl: string) {
+  return queryOptions({
+    queryKey: queryKeys.githubStatus(),
+    queryFn: () => fetchGithubStatus(baseUrl),
+  });
+}
 
 /**
  * GitHub feature/connection status through the shared React Query cache, so
@@ -13,9 +20,5 @@ import { fetchGithubStatus } from '../ui/domains/workspaces/services/github';
  */
 export function useGithubStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.githubStatus(),
-    queryFn: () => fetchGithubStatus(baseUrl),
-    enabled,
-  });
+  return useQuery({ ...githubStatusQueryOptions(baseUrl), enabled });
 }

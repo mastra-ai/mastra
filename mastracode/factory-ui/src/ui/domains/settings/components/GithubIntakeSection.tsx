@@ -4,6 +4,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
+import { unavailableInstallNotice } from '../../workspaces/services/github';
 import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
@@ -109,6 +110,8 @@ function githubDescription(status: GithubStatus | undefined, unavailable: boolea
   if (status?.reason === 'auth_required') return 'Sign in again to manage GitHub issue syncing.';
   if (status?.reason === 'organization_required') return 'Select an organization to manage GitHub issue syncing.';
   if (status?.enabled !== true) return 'GitHub is not configured on this server.';
-  if (!status.connected) return 'Connect GitHub to sync issues from this organization.';
+  if (!status.connected) {
+    return unavailableInstallNotice(status)?.message ?? 'Connect GitHub to sync issues from this organization.';
+  }
   return undefined;
 }

@@ -10,7 +10,7 @@ import { useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
 import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
 import { factoryHomePath } from '../../services/factoryPaths';
-import { connectGithub, manageGithubConnection } from '../../services/github';
+import { connectGithub, manageGithubConnection, shareGithubInstallation } from '../../services/github';
 import { CreateFactoryJiraRows } from './CreateFactoryJiraRows';
 import { CreateFactoryLinearRows } from './CreateFactoryLinearRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
@@ -126,6 +126,10 @@ export function CreateFactoryWizard() {
             onManageConnection={() => {
               flow.persistBeforeRedirect(factoryId);
               manageGithubConnection(baseUrl);
+            }}
+            onShare={shareUrl => {
+              flow.persistBeforeRedirect(factoryId);
+              shareGithubInstallation(shareUrl);
             }}
             onSelectRepository={repository => void flow.chooseRepository(repository)}
           />

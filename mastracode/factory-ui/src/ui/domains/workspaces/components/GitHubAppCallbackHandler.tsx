@@ -3,7 +3,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { githubStatusQueryOptions } from '../../../../hooks/useGithubStatus';
+import { unavailableInstallNotice } from '../services/github';
 
 const handledCallbackKeys = new Set<string>();
 const callbackParamNames = [
@@ -11,6 +14,7 @@ const callbackParamNames = [
   'github_app_requested',
   'github_app_user_authorized',
   'github_app_error',
+  'github_app_share',
   'installation_id',
   'setup_action',
 ];
@@ -51,6 +55,7 @@ function hasGitHubAppCallback(searchParams: URLSearchParams): boolean {
 export function GitHubAppCallbackHandler() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { baseUrl } = useApiConfig();
 
   useEffect(() => {
     if (!hasGitHubAppCallback(searchParams)) return;
@@ -62,6 +67,8 @@ export function GitHubAppCallbackHandler() {
     const requested = searchParams.get('github_app_requested') === 'true';
     const installed = searchParams.get('github_app_installed') === 'true';
     const userAuthorized = searchParams.get('github_app_user_authorized') === 'true';
+    const shared = searchParams.get('github_app_share') === 'granted';
+    const shareDeclined = searchParams.get('github_app_share') === 'declined';
     const failed = searchParams.has('github_app_error');
     const errorMessage = callbackErrorMessage(searchParams.get('github_app_error'));
 
@@ -76,8 +83,14 @@ export function GitHubAppCallbackHandler() {
         toast.success(
           'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
         );
-      } else if (installed) {
-        toast.success('GitHub App installed');
+      } else if (installed || shared) {
+        void queryClient.fetchQuery(githubStatusQueryOptions(baseUrl)).then(status => {
+          const notice = status.connected ? undefined : unavailableInstallNotice(status);
+          if (!notice) toast.success(installed ? 'GitHub App installed' : 'GitHub App shared with this factory');
+          else toast.warning(notice.message, notice.temporary ? undefined : { duration: Infinity });
+        });
+      } else if (shareDeclined) {
+        toast.info('The GitHub App was not shared with this factory.');
       } else if (userAuthorized) {
         toast.success('GitHub account connected');
       } else if (errorMessage) {
@@ -98,7 +111,7 @@ export function GitHubAppCallbackHandler() {
       },
       { replace: true },
     );
-  }, [queryClient, searchParams, setSearchParams]);
+  }, [baseUrl, queryClient, searchParams, setSearchParams]);
 
   return null;
 }

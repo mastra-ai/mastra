@@ -12,10 +12,11 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Plus, RefreshCw, RotateCcw, Settings2, X } from 'lucide-react';
+import { Link2, Plus, RefreshCw, RotateCcw, Settings2, Share2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
@@ -24,7 +25,14 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import { SettingsIntegrationIcon } from '../../settings/components/brand-icons/SettingsIntegrationIcon';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
-import { isGitLabRepository } from '../services/github';
+import {
+  connectGithub,
+  INSTALL_ON_GITHUB_ORGANIZATION,
+  isGitLabRepository,
+  SHARE_WITH_THIS_FACTORY,
+  shareGithubInstallation,
+  unavailableInstallNotice,
+} from '../services/github';
 
 export function AddRepositoryPicker({
   factory,
@@ -41,6 +49,7 @@ export function AddRepositoryPicker({
   const debouncedQuery = useDebouncedValue(query, 750);
   const searchQuery = (query && debouncedQuery) || undefined;
   const searchInput = useRef<HTMLInputElement>(null);
+  const { baseUrl } = useApiConfig();
   const githubStatus = useGithubStatusQuery();
   const gitlabStatus = useGitLabStatusQuery();
   const githubConnected = githubStatus.data?.connected === true;
@@ -77,6 +86,8 @@ export function AddRepositoryPicker({
   const githubUnavailable = githubStatus.data?.reason === 'unavailable';
   const gitlabUnavailable = gitlabStatus.data?.reason === 'unavailable';
   const statusUnavailable = githubUnavailable || gitlabUnavailable;
+  const installNotice = unavailableInstallNotice(githubStatus.data);
+  const shareUrl = installNotice?.shareUrl;
   const canSearch = githubConnected || gitlabConfigured;
   const waitingForSearch =
     githubConnected && (query !== (searchQuery ?? '') || reposQuery.isPlaceholderData || reposQuery.isFetching);
@@ -123,6 +134,37 @@ export function AddRepositoryPicker({
             onRetry={() => void githubStatus.refetch()}
           />
         )}
+        {installNotice && (
+          <Notice
+            variant="info"
+            action={
+              <>
+                {shareUrl && (
+                  <Button size="sm" icon={<Share2 />} onClick={() => shareGithubInstallation(shareUrl)}>
+                    {SHARE_WITH_THIS_FACTORY}
+                  </Button>
+                )}
+                {githubConnected ? null : installNotice.temporary ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<RotateCcw />}
+                    disabled={githubStatus.isFetching}
+                    onClick={() => void githubStatus.refetch()}
+                  >
+                    Retry GitHub
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="ghost" icon={<Link2 />} onClick={() => connectGithub(baseUrl)}>
+                    {INSTALL_ON_GITHUB_ORGANIZATION}
+                  </Button>
+                )}
+              </>
+            }
+          >
+            {installNotice.message}
+          </Notice>
+        )}
         {gitlabUnavailable && (
           <StatusUnavailableNotice
             provider="GitLab"
@@ -168,7 +210,7 @@ export function AddRepositoryPicker({
               </Txt>
             )}
           </div>
-        ) : !error && !statusUnavailable ? (
+        ) : !error && !statusUnavailable && !installNotice ? (
           <Txt as="p" variant="caption" tone="muted">
             {githubUnavailableMessage(githubStatus.data)}
           </Txt>
