@@ -388,13 +388,11 @@ A prompt-object `generateScore` step asks the judge for `{ score: number }`. Mas
 - 0.5: refund issued but policy explained poorly or a step was missed
 - 0.0: refund not issued, or issued against policy
 
-Return only the number.
-
 ${JSON.stringify(run.output)}`,
 })
 ```
 
-`Rate this refund handling from 0 to 1` alone leaves the middle of the scale undefined, and judges fill that gap differently between calls. Name the endpoints, describe at least one middle value, and say that only the number should come back. If your scorer must not drift outside a range, clamp or reject the value in a function step instead of trusting the judge.
+`Rate this refund handling from 0 to 1` alone leaves the middle of the scale undefined, and judges fill that gap differently between calls. Name the endpoints and describe at least one middle value. Leave the output format out of the prompt: the step already asks the judge for `{ score: number }`, and a prompt that says "return only the number" makes the judge answer in a shape the step can't read. If your scorer must not drift outside a range, clamp or reject the value in a function step instead of trusting the judge.
 
 This matters most for [gates](/docs/evals/gates-and-verdicts), whose thresholds must be between 0 and 1 even though the judge's number is stored exactly as returned. A prompt that asks for a 1 to 10 score makes a failing `2` pass every threshold you're allowed to set. The gate then never fires.
 

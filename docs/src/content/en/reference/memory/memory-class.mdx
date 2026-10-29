@@ -211,7 +211,7 @@ Returns `Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>`. 
 
 ### `MastraDBMessage`
 
-Storage uses a single message shape, `MastraDBMessage`. Every memory method takes and returns this shape, including [`recall()`](/reference/memory/recall) and [`deleteMessages()`](/reference/memory/deleteMessages).
+Storage uses a single message shape, `MastraDBMessage`. The methods that hand messages back or take them in use this shape, including `saveMessages()` and [`recall()`](/reference/memory/recall).
 
 <PropertiesTable
   content={[
