@@ -16,6 +16,7 @@ import { spanAggregateQueryObjectSchema } from '../observability/span-aggregate'
 import { traceAggregateQueryObjectSchema } from '../observability/trace-aggregate';
 import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from '../observability/trace-query';
 import { filterNodeSchema } from '../saved-views/filter-node';
+import type { FilterNode } from '../saved-views/filter-node';
 
 /**
  * Stored definition of a custom dashboard: rows of widgets on a 12-column grid, each widget
@@ -193,6 +194,41 @@ export const dashboardQuerySchema = z.preprocess((input: z.input<typeof dashboar
 
 const scopeSchema = z.enum(DASHBOARD_SCOPES).optional();
 
+/** Deepest nesting of filter groups. Checked before parsing so a deep tree fails instead of overflowing the stack. */
+export const DASHBOARD_MAX_FILTER_DEPTH = 12;
+
+const findFilterTooDeep = (filters: unknown): (string | number)[] | undefined => {
+  const stack: { value: unknown; path: (string | number)[]; depth: number }[] = [
+    { value: filters, path: [], depth: 0 },
+  ];
+  for (let next = stack.pop(); next; next = stack.pop()) {
+    const { value, path, depth } = next;
+    if (!Array.isArray(value)) continue;
+    if (depth > DASHBOARD_MAX_FILTER_DEPTH) return path;
+    value.forEach((node, index) => {
+      if (node && typeof node === 'object' && 'nodes' in node) {
+        stack.push({ value: node.nodes, path: [...path, index, 'nodes'], depth: depth + 1 });
+      }
+    });
+  }
+  return undefined;
+};
+
+const filtersSchema = z
+  .preprocess((input: FilterNode[], context) => {
+    const path = findFilterTooDeep(input);
+    if (path) {
+      context.addIssue({
+        code: 'custom',
+        path,
+        message: `Filter groups nest at most ${DASHBOARD_MAX_FILTER_DEPTH} levels deep`,
+      });
+      return z.NEVER;
+    }
+    return input;
+  }, z.array(filterNodeSchema))
+  .optional();
+
 const queriesArraySchema = <T extends z.ZodType>(query: T) => z.array(query).min(1).max(DASHBOARD_MAX_QUERIES_PER_VIEW);
 
 /** The serialized size is measured on the raw input, before defaults are applied. */
@@ -265,7 +301,7 @@ export const dashboardDrilldownTargetSchema = z
   .object({
     page: z.enum(DASHBOARD_DRILLDOWN_PAGES),
     /** Added to the page's range (and, for `click`, the clicked row's dimensions) when the drilldown opens. */
-    filters: z.array(filterNodeSchema).optional(),
+    filters: filtersSchema,
   })
   .strict();
 
@@ -320,7 +356,7 @@ export const dashboardRowSchema = z.object({ widgets: z.array(dashboardWidgetSch
 export const dashboardDefaultsSchema = z
   .object({
     datePreset: z.string().min(1).optional(),
-    filters: z.array(filterNodeSchema).optional(),
+    filters: filtersSchema,
   })
   .strict();
 

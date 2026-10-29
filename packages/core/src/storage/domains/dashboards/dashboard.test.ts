@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TRACE_QUERY_MAX_DEPTH, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from '../observability/trace-query';
 import {
   DASHBOARD_MAX_BYTES,
+  DASHBOARD_MAX_FILTER_DEPTH,
   DASHBOARD_MAX_QUERIES_PER_VIEW,
   DASHBOARD_MAX_WIDGETS,
   DASHBOARD_SCHEMA_VERSION,
@@ -405,6 +406,39 @@ describe('dashboardDefinitionSchema', () => {
       const input = { ...definition([[widget('w')]]), defaults: { filters } };
       expect(dashboardDefinitionSchema.safeParse(input).success).toBe(false);
     }
+  });
+
+  it('limits filter group nesting before parsing, so deep trees fail instead of throwing', () => {
+    const nested = (depth: number) => {
+      let node: Record<string, unknown> = { fieldId: 'status', value: 'error' };
+      for (let level = 0; level < depth; level += 1) node = { id: `g${level}`, logic: 'and', nodes: [node] };
+      return [node];
+    };
+    const withFilters = (filters: unknown[]) => [
+      { ...definition([[widget('w')]]), defaults: { filters } },
+      definition([[widget('w', { drilldown: { action: { page: 'traces', filters } } } as Partial<DashboardWidget>)]]),
+      definition([
+        [
+          widget('w', {
+            views: [{ queries: [countQuery], drilldown: { click: { page: 'spans', filters } } }],
+          } as Partial<DashboardWidget>),
+        ],
+      ]),
+    ];
+
+    for (const input of withFilters(nested(DASHBOARD_MAX_FILTER_DEPTH))) {
+      expect(dashboardDefinitionSchema.safeParse(input).success).toBe(true);
+    }
+    for (const input of withFilters(nested(DASHBOARD_MAX_FILTER_DEPTH + 1))) {
+      expect(messages(dashboardDefinitionSchema.safeParse(input))).toContain(
+        `Filter groups nest at most ${DASHBOARD_MAX_FILTER_DEPTH} levels deep`,
+      );
+    }
+    // About 35 KB: under the size limit, but deep enough to overflow the stack in a recursive parse.
+    const deep = { ...definition([[widget('w')]]), defaults: { filters: nested(1000) } };
+    expect(byteLength(deep)).toBeLessThan(DASHBOARD_MAX_BYTES);
+    expect(() => dashboardDefinitionSchema.safeParse(deep)).not.toThrow();
+    expect(dashboardDefinitionSchema.safeParse(deep).success).toBe(false);
   });
 
   it('follows the shared filter node schema: unknown filter fields are dropped, unknown dashboard fields rejected', () => {

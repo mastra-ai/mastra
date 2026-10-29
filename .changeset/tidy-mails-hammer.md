@@ -2,13 +2,45 @@
 '@mastra/core': minor
 ---
 
-Added a schema for custom dashboard definitions. A definition lays out rows of widgets on a 12-column grid; each widget stores its own trace aggregate, span aggregate, metrics, or scores queries without a time range, which the page supplies. The page's filters are intersected with each query's: `where` is ANDed, and a metrics or scores filter field set by both must agree (arrays intersect), so a contradiction returns no data. A query can carry an optional `id` (starting with a letter; letters, digits, `_` and `-`), unique within its view, and column ids are unique within a view. Comparison with the previous window is set with `compare: 'previousWindow'` on any query, and a scores query without `scorerId` covers every scorer, with one series per scorer. A view can set its own `description`, `scope`, and `drilldown` (`action` and `click` targets), overriding the widget's.
+Added schemas for custom dashboard definitions. These are schemas only: `@mastra/core` adds no storage methods for dashboards, and no store persists them.
 
-`defaults.filters` and drilldown `filters` use the same filter node schema as saved views (`filterNodeSchema`). These are schemas only: `@mastra/core` adds no storage methods for dashboards, and no store persists them. `dashboardDefinitionSchema` validates a whole definition. `dashboardDefinitionEnvelopeSchema` checks only what a service storing dashboards needs (known `schemaVersion`, at most 20 widgets, 1 to 8 queries per view, 64 KiB serialized, unique widget ids, every widget has `kind` and `views`), so new widget kinds can be stored without upgrading that service.
+**Layout**
 
-Widget `kind` accepts any non-empty string, and view `options` are passed through for each kind to validate, so new widget kinds need no `@mastra/core` upgrade. `DASHBOARD_WIDGET_KINDS` lists the built-in kinds (`kpis`, `table`, `timeseries`, `scores`). Adding an optional field keeps `schemaVersion` the same; a breaking change bumps it and comes with an upgrade step in `migrateDashboardDefinition`, which brings any stored version up to the current one before parsing.
+- A definition lays out rows of widgets on a 12-column grid.
+- Each widget stores its own trace aggregate, span aggregate, metrics, or scores queries. Queries have no time range; the page supplies it.
+- A view can set its own `description`, `scope`, and `drilldown`, overriding the widget's. A drilldown has an `action` target and a `click` target.
 
-The dashboard schemas are also exported from `@mastra/core/storage/dashboards`, which browser apps can import: it loads no Node built-ins and uses no Node globals such as `process` or `Buffer`, unlike `@mastra/core/storage`, which reaches agent code that reads `process` when it loads.
+**Queries**
+
+- A query can have an optional `id`. It starts with a letter, uses only letters, digits, `_` and `-`, and is unique within its view. Column ids are also unique within a view.
+- Set `compare: 'previousWindow'` on any query to compare with the previous window.
+- A scores query without `scorerId` covers every scorer, with one series per scorer.
+
+**Filters**
+
+- `defaults.filters` and drilldown `filters` use the same filter node schema as saved views (`filterNodeSchema`).
+- Filter groups can nest at most 12 levels deep (`DASHBOARD_MAX_FILTER_DEPTH`).
+- The page's filters are combined with each query's own. `where` clauses are ANDed. If both set the same metrics or scores filter field, the values must agree (arrays intersect). A contradiction returns no data.
+
+**Validation**
+
+- `dashboardDefinitionSchema` validates a whole definition.
+- `dashboardDefinitionEnvelopeSchema` checks only what a service storing dashboards needs: a known `schemaVersion`, at most 20 widgets, 1 to 8 queries per view, at most 64 KiB serialized, unique widget ids, and `kind` and `views` on every widget. New widget kinds can be stored without upgrading that service.
+
+**New widget kinds**
+
+- Widget `kind` accepts any non-empty string. View `options` are passed through for each kind to validate, so new widget kinds need no `@mastra/core` upgrade.
+- `DASHBOARD_WIDGET_KINDS` lists the built-in kinds: `kpis`, `table`, `timeseries` and `scores`.
+
+**Versions**
+
+- Adding an optional field keeps `schemaVersion` the same.
+- A breaking change bumps `schemaVersion` and adds an upgrade step to `migrateDashboardDefinition`. That function brings any stored version up to the current one before parsing.
+
+**Browser apps**
+
+- Import the dashboard schemas from `@mastra/core/storage/dashboards`. It loads no Node built-ins and uses no Node globals such as `process` or `Buffer`.
+- `@mastra/core/storage` reaches agent code that reads `process` when it loads, so it fails in the browser.
 
 ```ts
 import { dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
