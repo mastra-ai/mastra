@@ -22,8 +22,10 @@
 import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
+import { EventEmitterPubSub } from '../../../../events';
 import { MockMemory } from '../../../../memory/mock';
 import { MessageHistory } from '../../../../processors/memory';
+import { resolveRunFence } from '../../../../storage/run-fencing';
 import type { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
@@ -413,15 +415,138 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           });
           expect(snapshot?.status).not.toBe('running');
         }
-        await Promise.all(heldSaves);
+        // A save queued behind a held one is held in turn, so wait until no new save starts.
+        for (let drained = 0; drained < heldSaves.length;) {
+          const held = heldSaves.slice(drained);
+          drained = heldSaves.length;
+          await Promise.all(held);
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
         const { messages } = await memory.recall({ threadId: `slow-input-${engine}-${totalMs}`, resourceId: RESOURCE });
-        // Inngest takes no execution claim: the request was accepted before the deadline, so the deadline
-        // alone must not drop it (see #28659). Durable and evented cover memory with their claim, and the
-        // deadline releases it, so storage rejects an input save still in flight.
-        expect(messages.map(message => message.role)).toEqual(engine === 'inngest' ? ['user'] : []);
+        // The request was accepted before the deadline, so the deadline alone must not drop it.
+        expect(messages.map(message => message.role)).toEqual(['user']);
       } finally {
         saveSpy.mockRestore();
       }
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  // Only an execution that still owns the run may keep its input at the deadline. Inngest takes no claim.
+  it.skipIf(engine !== 'durable' && engine !== 'evented')(
+    'a deadline does not save the input of a run another execution took over during the input save',
+    async () => {
+      const memory = new MockMemory();
+      const memoryStore = (await memory.storage.getStore('memory'))!;
+      const llm = getMock();
+      const sharedAgent = await createSharedAgent(llm, { engine, memory });
+      const workflowsStore = (await sharedAgent.mastra.getStorage().getStore('workflows'))!;
+      const saveMessages = memory.saveMessages.bind(memory);
+      const heldSaves: Promise<unknown>[] = [];
+      const takenOver = Promise.withResolvers<void>();
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
+        if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        // Another process recovers the run while its input save is in flight.
+        const { runId } = resolveRunFence(memoryStore, undefined)!;
+        const held = (async () => {
+          const claimed = await workflowsStore.claimRunOwnership({
+            runId,
+            ownerId: 'foreign-recoverer',
+            leaseMs: 60_000,
+            force: true,
+          });
+          expect(claimed.acquired).toBe(true);
+          expect(
+            await memoryStore.raiseRunFence({
+              runId,
+              generation: claimed.record!.generation,
+              ownerId: 'foreign-recoverer',
+            }),
+          ).toBe(true);
+          takenOver.resolve();
+          await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500));
+          return saveMessages(args);
+        })();
+        heldSaves.push(held.catch(() => {}));
+        return held;
+      });
+      try {
+        const threadId = `taken-over-input-${engine}`;
+        await runLoopScenario({
+          engine,
+          llm,
+          sharedAgent,
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Save me slowly.',
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          // The superseded execution publishes nothing more, so its stream never ends.
+          manualStreamConsumption: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+        await takenOver.promise;
+        for (let drained = 0; drained < heldSaves.length;) {
+          const held = heldSaves.slice(drained);
+          drained = heldSaves.length;
+          await Promise.all(held);
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        // Past the deadline, so its settlement has had the chance to save.
+        await new Promise(resolve => setTimeout(resolve, 500));
+        expect(heldSaves).toHaveLength(1);
+        expect(llm.getRequests()).toHaveLength(0);
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages).toEqual([]);
+      } finally {
+        saveSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest')(
+    'a deadline does not save the input of a run with read-only memory',
+    async () => {
+      const memory = new MockMemory();
+      const saveSpy = vi.spyOn(memory, 'saveMessages');
+      const threadId = `readonly-input-${engine}`;
+      // Hold the run until its deadline has fired, so the deadline settles it before its input save.
+      const pubsub = new EventEmitterPubSub();
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      vi.spyOn(pubsub, 'subscribe').mockImplementation(async (...args) => {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return subscribe(...args);
+      });
+      await memory.createThread({ threadId, resourceId: RESOURCE });
+      const result = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        memoryOptions: { readOnly: true },
+        pubsub,
+        prompt: 'Do not keep me.',
+        modelSettings: { timeout: { totalMs: 1 } },
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+        },
+      });
+
+      const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+      await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+      expect(getMock().getRequests()).toHaveLength(0);
+      expect(saveSpy.mock.calls.flatMap(([args]) => args.messages).filter(message => message.role === 'user')).toEqual(
+        [],
+      );
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages).toEqual([]);
     },
     TEST_TIMEOUT_MS + 5_000,
   );

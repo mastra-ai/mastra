@@ -868,6 +868,11 @@ export class DurableAgent<
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
   #timedOutExecutions = new WeakSet<ExecutionFence>();
+  /**
+   * Accepted input of stream()/generate() executions not yet saved. A total
+   * deadline that settles the execution first saves it as a terminal write.
+   */
+  #unsavedInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
 
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
@@ -2414,8 +2419,13 @@ export class DurableAgent<
     }
   }
 
-  private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+  private async persistInitialInput(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+    fence: ExecutionFence,
+  ): Promise<void> {
     await persistDurableRunInput(runId, workflowInput, this.#mastra);
+    this.#unsavedInputs.delete(fence);
   }
 
   /**
@@ -2759,6 +2769,9 @@ export class DurableAgent<
     // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
     // find them.
     const finished = totalTimeout || (status !== undefined && status !== 'suspended');
+    const unsavedInput = totalTimeout && fence ? this.#unsavedInputs.get(fence) : undefined;
+    // Captured before the error below lets the caller clean the run up.
+    const unsavedInputEntry = unsavedInput && getRunRegistryEntry(runId, this.#mastra);
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
@@ -2766,6 +2779,23 @@ export class DurableAgent<
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
+      if (unsavedInput && unsavedInputEntry) {
+        // The request was accepted before the deadline, so the deadline alone must not drop it. A save
+        // already in flight carries the claim the deadline just replaced and is rejected, so save it again
+        // under the replacement. Saves upsert by ID.
+        this.#unsavedInputs.delete(fence!);
+        try {
+          await persistDurableRunInput(runId, unsavedInput, this.#mastra, {
+            entry: unsavedInputEntry,
+            assertOwnership: false,
+          });
+        } catch (saveError) {
+          this.logger.warn(`Failed to save the input of run ${runId} at its total deadline`, {
+            runId,
+            error: saveError,
+          });
+        }
+      }
     };
 
     if (!fence) return writeTerminalState();
@@ -3093,6 +3123,7 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
+    this.#unsavedInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -3262,7 +3293,7 @@ export class DurableAgent<
           }
           let result: { status?: string } | void;
           try {
-            await this.persistInitialInput(runId, workflowInput);
+            await this.persistInitialInput(runId, workflowInput, executionFence);
             result = await this.executeWorkflow(runId, workflowInput);
           } finally {
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
@@ -4720,6 +4751,7 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
+    this.#unsavedInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -4856,7 +4888,7 @@ export class DurableAgent<
             });
           }
           try {
-            await this.persistInitialInput(runId, workflowInput);
+            await this.persistInitialInput(runId, workflowInput, executionFence);
             return await this.executeWorkflow(runId, workflowInput);
           } finally {
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
