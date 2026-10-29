@@ -514,11 +514,27 @@ function warnDeprecatedFields(config: DeclaredBoard): void {
   );
 }
 
+const appBoards = new WeakSet<object>();
+
+/**
+ * Declares a board in code.
+ *
+ * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
+ * (README § Stored boards). A board passed to `MastraFactory({ boards })` is now only seed input,
+ * written into each project's database at startup.
+ */
 export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
-  return compileBoardDefinition(config);
+  const board = compileBoardDefinition(config);
+  appBoards.add(board);
+  return board;
+}
+
+/** Whether an app declared the board with the deprecated `defineBoard()`. */
+export function isDefinedBoard(board: object): boolean {
+  return appBoards.has(board);
 }
 
 /** Validates and resolves a board declaration. Factory's own boards use this directly. */

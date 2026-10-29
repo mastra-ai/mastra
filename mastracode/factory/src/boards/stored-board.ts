@@ -22,7 +22,7 @@ const storedExitToolSchema = z
   })
   .strict();
 
-const storedPhaseInputSchema = z
+export const storedPhaseInputSchema = z
   .object({
     key: z.string(),
     name: z.string(),
@@ -36,18 +36,27 @@ const storedPhaseInputSchema = z
   })
   .strict();
 
+function storedBoardFields() {
+  return {
+    name: z.string(),
+    description: z.string().nullish(),
+    phases: z.array(storedPhaseInputSchema).min(1, 'A board must define at least one phase.'),
+  };
+}
+
+/**
+ * A board's editable fields without its key, the shape of a replace. Only the shape: the board
+ * rules run once the key is known, through {@link storedBoardInputSchema}.
+ */
+export const storedBoardDefinitionSchema = z.object(storedBoardFields()).strict();
+
 /**
  * A board as the API accepts it. Beyond the shape, it holds every rule `defineBoard()` enforces
  * (identifiers, lengths, phase kinds, runners, exit tools, conditions, targets), reported with
  * the same messages.
  */
 export const storedBoardInputSchema = z
-  .object({
-    key: z.string(),
-    name: z.string(),
-    description: z.string().nullish(),
-    phases: z.array(storedPhaseInputSchema).min(1, 'A board must define at least one phase.'),
-  })
+  .object({ key: z.string(), ...storedBoardFields() })
   .strict()
   .superRefine((input, context) => {
     try {

@@ -55,9 +55,92 @@ MASTRA_TELEMETRY_DISABLED=true
 
 `1`, `true`, and `yes` are accepted, ignoring case and surrounding whitespace. Older servers without the explicit capability do not receive browser telemetry requests. Custom auth providers are outside this initial measurement scope until they have a stable identity namespace. No names, emails, tokens, prompts, input values, raw URLs, session replay, or anonymous browser identity are collected by this event. Account IDs are identifiable account data, not anonymous data.
 
+### Stored boards
+
+Each project's boards live in the database. The runtime reads boards only from there: the catalog, card creation, transitions, the dispatcher, phase runs, Factory tools and the attention views all use the project's stored boards. Board definitions in code — the built-in Work and Review boards and boards passed to `new MastraFactory({ boards })` — are seed input: Factory writes them into every project's database at startup, and into a new project when it is created or first loaded. Existing apps need no change. Until someone edits a board, a project behaves exactly as it did with code boards.
+
+**Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases`. The first phase is the initial phase and must be `resting`. A code board whose `initialPhase` is not its first declared phase is stored with its initial phase first, so the catalog lists that phase first. Saved boards pass the same checks `defineBoard()` applies, with the same messages.
+
+`nextPhases` on a board created through the API: leaving it out (or `null`) on a resting or working phase allows moves to every other phase, `[]` allows none, and a terminal phase allows none unless it lists some. Boards seeded from code store their `nextPhases` explicitly, so they move cards exactly as the code definition did.
+
+**Seeding and edits.** Every stored board remembers which code definition it was last written from (a hash of its serializable fields) and whether a person edited it. At startup, for each code board:
+
+| Stored board | Code definition | What happens                                                                                                                                  |
+| ------------ | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| none         | —               | It is written.                                                                                                                                |
+| not edited   | unchanged       | Nothing.                                                                                                                                      |
+| not edited   | changed         | It is overwritten with the code version. Upgrades arrive as they always did.                                                                  |
+| edited       | unchanged       | Nothing; the edit stands.                                                                                                                     |
+| edited       | changed         | The edit is kept. The catalog reports `Code definition changed since this board was edited. Reset to adopt it.` and Factory logs one warning. |
+
+Resetting a board (`POST …/boards/:boardKey/reset`) writes the current code definition and clears the edited and drift state. A board taken out of code keeps its stored row and becomes an ordinary stored board. `includeDefaultBoards: false` stops seeding Work and Review; boards already stored stay. Replicas booting together seed safely: inserts meet a unique index and overwrites compare and set the board's revision.
+
+**Code behaviors.** Functions cannot be stored. A board's code behaviors — `transitionPolicy`, `sourceClosed`, `tools` and `events` rules, and each phase's `onEnter`, `onExit` and `outcomes` — stay in code and attach to the stored board by board key and phase key. The stored data wins: a phase removed from a stored Work board drops its handlers, and a phase added to it runs only its stored `runner` (its `runner.skill` starts on entry). An edit that would break a behavior, such as removing the terminal phase Work's `sourceClosed` names or a phase an `outcomes` entry leads to, is refused. A board created through the API has no code behaviors.
+
+**Editing rules.**
+
+- Board and phase keys never change. Renaming changes `name`.
+- Removing a phase, or changing its `kind`, while cards sit in it is refused with `409 phase_in_use` and the count per phase. Deleting a board that has cards is refused with `409 board_in_use`. Factory never moves cards for you. A card created between the check and the write can still land on a removed phase; it then shows as an unsupported item until it is moved.
+- Work and Review can be edited but not deleted (`409 builtin_board`): intake defaults, cards stored without a board, the review-requested filter and overview metrics refer to them by key.
+- A board seeded from code keeps its first phase first (`422 initial_phase_locked`), because integrations place new cards in the code board's initial phase.
+- Deleting a board seeded from your app keeps a tombstone, so the next startup does not write it back. Reset restores it.
+- A runner skill that does not exist is refused (`422 unknown_skill`). A review skill outside the `review` context is saved with a warning in `problems`. A skill that disappears later never stops a board from loading; it shows in the catalog's `problems`.
+
+**Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
+
+**Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations still read the code boards: they evaluate code behaviors and place new cards in a code board's initial phase, which a stored board keeps first. Every card move they make goes through the transition service, which checks it against the stored board, so a move into a phase someone removed is refused. Intake bindings and label routes can target only boards defined in code.
+
+**Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated`, `reset` and `deleted`.
+
+| Method   | Path                                                            | Body                                                    | Result                                                                                               |
+| -------- | --------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `GET`    | `/web/factory/projects/:id/boards`                              | —                                                       | The catalog, with each board's `source` (`builtin`, `app` or `stored`), `customized` and `problems`. |
+| `GET`    | `/web/factory/projects/:id/boards/:boardKey`                    | —                                                       | The editable definition, `revision`, `source`, `customized`, `drift`, `deleted` and `problems`.      |
+| `POST`   | `/web/factory/projects/:id/boards`                              | The board, with `key`.                                  | `201` and the board.                                                                                 |
+| `PATCH`  | `/web/factory/projects/:id/boards/:boardKey`                    | The whole board without `key`, plus `expectedRevision`. | The board. Replaces every field.                                                                     |
+| `POST`   | `/web/factory/projects/:id/boards/:boardKey/reset`              | `{ "expectedRevision": n }`                             | The board as its code defines it. `409 not_seeded` when code defines no such board.                  |
+| `DELETE` | `/web/factory/projects/:id/boards/:boardKey?expectedRevision=n` | —                                                       | `204`.                                                                                               |
+
+A stale `expectedRevision` is refused with `409 revision_mismatch`; reload the board and try again.
+
+```bash
+# Create a board.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards" -H 'content-type: application/json' -d '{
+  "key": "bugs",
+  "name": "Bugs",
+  "phases": [
+    { "key": "reported", "name": "Reported", "kind": "resting" },
+    { "key": "fixing", "name": "Fixing", "kind": "working", "runner": { "context": "work" } },
+    { "key": "fixed", "name": "Fixed", "kind": "terminal" }
+  ]
+}'
+
+# Rename Work's Building phase: read the board, change it, send it back with its revision.
+curl "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" > work.json
+jq '.board | { name, description, phases: (.phases | map(if .key == "execute" then .name = "Shipping" else . end)), expectedRevision: .revision }' work.json \
+  | curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" -H 'content-type: application/json' -d @-
+```
+
+### Migrating from `defineBoard()`
+
+`defineBoard()`, and the `boards` and `includeDefaultBoards` options of `MastraFactory`, are deprecated. Nothing breaks: boards you pass are written into each project's database at startup, and Factory logs once per process:
+
+```text
+[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database and these definitions are only used as seed input. Manage boards through the boards API; see the README "Stored boards" section.
+```
+
+Using only the built-in boards logs nothing. To move a board without code behaviors off code, create it in each project with `POST /web/factory/projects/:id/boards`, or keep passing it until a project has it, then stop passing it: the stored board stays. Boards with handlers, policies or rules keep needing their code definition for now.
+
+Removing `defineBoard()` later takes:
+
+1. Turning code behaviors into named presets a stored board references (for example `behaviors: 'factory/work'`, or a phase's `onEnter: 'factory/plan-work-item'`), registered through a behavior registry rather than board definitions.
+2. Moving integrations and reconcilers to each project's stored boards.
+3. Replacing `includeDefaultBoards` and built-in seeding with installing the built-in boards once per project, plus an action to restore them.
+4. Removing `defineBoard`, the board definition input types and `MastraFactory({ boards })` in a major release.
+
 ### Board lifecycle rules
 
-Installed board definitions exclusively own phase entry and exit handlers. Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`:
+Board definitions in code own phase entry and exit handlers; they attach to each project's stored copy of the board (see [Stored boards](#stored-boards)). Work and Review are seeded automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`, which is deprecated but still seeds the board:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
@@ -277,7 +360,7 @@ A policy cannot bypass topology, ingress authorization, board ownership, externa
 
 ### Board phase semantics
 
-Every phase declares what it _is_ with a required `kind`; `defineBoard()` rejects a phase without one.
+Every phase declares what it _is_ with a required `kind`; `defineBoard()` and the boards API reject a phase without one.
 
 - `resting` — the card is parked. A human move out of a resting phase arms autonomy; a move back into one disarms it. `initialPhase` must be resting: a card cannot arrive already seated or already finished.
 - `working` — an agent carries the card. `runner.context` (same identifier rules as decision roles, default `work`) names the session context a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a context, and then a session; `phaseForRole` returns the first in declaration order.
@@ -300,7 +383,7 @@ Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` wo
 
 Planning and Building on Work share the `work` session, so the builder keeps the planner's reasoning, branch and sandbox. Self-review still runs in its own `review` session. When the planner moves the card to Building, the build prompt is queued onto its own run, and the planner's run binding ends at that point: Factory tools it calls later in the same turn are rejected. When the builder moves a card back from Building to Planning, no new planning run starts; the builder keeps working in its run. When a person moves it back, Planning starts again, in the same `work` session. The old `plan` role still names Planning: a run requested or queued for `plan` starts Planning in a `plan` session, and the build then continues in that session. Cards planned before this change do the same.
 
-Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the project's stored board; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
 Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
@@ -419,7 +502,7 @@ Settings › Skills shows the skill each custom phase runs, marks a phase whose 
 
 ### Execute a custom board
 
-Installed custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
+Custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
 
 This configuration runs a release rehearsal through `backlog → preparing → build → done`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
 
@@ -515,7 +598,7 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 
 ### Custom boards in the Factory UI
 
-`GET /web/factory/projects/:id/boards` returns the installed board catalog for an authorized project: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind`, and for working phases `role` and the `skill` the runner starts), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
+`GET /web/factory/projects/:id/boards` returns the project's stored boards for an authorized user: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind`, and for working phases `role` and the `skill` the runner starts), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
 
 - Installed boards appear in the sidebar — built-ins first, then custom boards in registry order. Work and Review keep `/factories/:id/work` and `/factories/:id/review`; custom boards open at `/factories/:id/boards/:boardId`. An unknown board ID or a failed catalog request shows an explicit unavailable state rather than falling back to Work.
 - Columns, phase labels, and working/terminal presentation come from the phase definitions. Card creation sends the selected `board`, so the server picks the initial phase. Card menus offer only moves the topology declares; the server still enforces policy, authorization, and revisions.
