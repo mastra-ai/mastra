@@ -768,7 +768,7 @@ export class BraintrustExporter extends TrackingExporter<
       // For non-LLM spans, put all attributes in metadata
       payload.metadata = {
         ...payload.metadata,
-        ...attributes,
+        ...omitKeys(attributes, ['timeToFirstTokenMs']),
       };
     }
 
