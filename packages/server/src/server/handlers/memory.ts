@@ -297,7 +297,8 @@ async function getMemoryFromContext({
   }
 
   if (agent) {
-    if (agent instanceof Agent) {
+    // Duck-typed rather than `instanceof Agent`, so a duplicate @mastra/core install can't skip the check.
+    if ('toRawConfig' in agent) {
       assertStoredAgentAccess({ agent, agentId: agentId!, requestContext, access: 'read' });
     }
     return await agent?.getMemory({

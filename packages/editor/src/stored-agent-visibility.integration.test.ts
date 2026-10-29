@@ -20,6 +20,7 @@ type User = { id: string; role: string };
 const PRIVATE = 'alice-private';
 const PUBLIC = 'alice-public';
 const LEGACY = 'legacy-unowned';
+const PRIVATE_WS = 'alice-private-ws';
 const REPLY = 'hello from the mock model';
 
 const USERS: Record<string, User> = {
@@ -28,6 +29,7 @@ const USERS: Record<string, User> = {
   admin: { id: 'admin', role: 'admin' },
   grantee: { id: 'grantee', role: 'grantee' },
   scheduler: { id: 'scheduler', role: 'scheduler' },
+  carol: { id: 'carol', role: 'editor' },
 };
 
 const ROLES: RoleDefinition[] = [
@@ -36,6 +38,12 @@ const ROLES: RoleDefinition[] = [
   { id: 'admin', name: 'Admin', permissions: ['*'] },
   { id: 'grantee', name: 'Grantee', permissions: ['*:read', '*:execute', `stored-agents:read:${PRIVATE}`] },
   { id: 'scheduler', name: 'Scheduler', permissions: ['*:read', '*:execute', 'schedules:write'] },
+  // A second builder: can write, publish and delete stored agents, but only their own.
+  {
+    id: 'editor',
+    name: 'Editor',
+    permissions: ['*:read', '*:execute', 'stored-agents:write', 'stored-agents:publish', 'stored-agents:delete'],
+  },
 ];
 
 async function startServer(mastra: Mastra) {
@@ -100,6 +108,21 @@ describe('stored agent visibility on /api/agents', () => {
       });
       expect(created.status).toBe(200);
     }
+    const withWorkspace = await http('alice', 'POST', '/stored/agents', {
+      id: PRIVATE_WS,
+      name: PRIVATE_WS,
+      instructions: 'Be brief.',
+      model,
+      visibility: 'private',
+      workspace: {
+        type: 'inline',
+        config: {
+          name: 'alice-secret-workspace',
+          filesystem: { provider: 'local', config: { basePath: join(dir, 'ws') } },
+        },
+      },
+    });
+    expect(withWorkspace.status, withWorkspace.text).toBe(200);
     // Rows created before ownership existed have no author and stay visible to everyone.
     const agentsStore = await storage.getStore('agents');
     await agentsStore!.create({ agent: { id: LEGACY, name: LEGACY, instructions: 'Be brief.', model } as any });
@@ -253,6 +276,75 @@ describe('stored agent visibility on /api/agents', () => {
       expect(result.status).toBe(200);
       expect(result.json.text).toBe(REPLY);
     });
+  });
+
+  // Version routes serve the agent's full config and change which config is live, so they follow the same rules as
+  // GET/PATCH/DELETE /stored/agents/:id.
+  describe('/stored/agents/:id/versions', () => {
+    let versionId: string;
+    beforeAll(async () => {
+      const versions = await http('alice', 'GET', `/stored/agents/${PRIVATE}/versions`);
+      expect(versions.status).toBe(200);
+      versionId = versions.json.versions[0].id;
+    });
+
+    it.each([
+      ['GET versions', () => `/stored/agents/${PRIVATE}/versions`],
+      ['GET versions/:id', () => `/stored/agents/${PRIVATE}/versions/${versionId}`],
+      ['GET versions/compare', () => `/stored/agents/${PRIVATE}/versions/compare?from=${versionId}&to=${versionId}`],
+    ])("bob gets 404 on %s for alice's private agent and sees none of its config", async (_name, path) => {
+      const result = await http('bob', 'GET', path());
+      expect(result.status).toBe(404);
+      expect(result.text).not.toContain('Be brief.');
+    });
+
+    it("another builder can't create, activate, restore or delete versions of alice's private agent", async () => {
+      const base = `/stored/agents/${PRIVATE}/versions`;
+      expect((await http('carol', 'POST', base, { changeMessage: 'carol' })).status).toBe(404);
+      expect((await http('carol', 'POST', `${base}/${versionId}/activate`)).status).toBe(404);
+      expect((await http('carol', 'POST', `${base}/${versionId}/restore`)).status).toBe(404);
+      expect((await http('carol', 'DELETE', `${base}/${versionId}`)).status).toBe(404);
+      // Nothing changed: still exactly alice's one version.
+      const versions = await http('alice', 'GET', base);
+      expect(versions.json.versions.map((v: { id: string }) => v.id)).toEqual([versionId]);
+    });
+
+    it('public visibility lets others read versions but not change them', async () => {
+      const base = `/stored/agents/${PUBLIC}/versions`;
+      const versions = await http('carol', 'GET', base);
+      expect(versions.status).toBe(200);
+      expect((await http('carol', 'POST', base, { changeMessage: 'carol' })).status).toBe(404);
+    });
+
+    it('the owner and the write role still work on their own agents', async () => {
+      const created = await http('alice', 'POST', `/stored/agents/${PRIVATE}/versions`, { changeMessage: 'alice' });
+      expect(created.status).toBe(200);
+      const own = await http('carol', 'POST', '/stored/agents', {
+        id: 'carol-own',
+        name: 'carol-own',
+        instructions: 'Be brief.',
+        model: { provider: 'openai', name: 'gpt-4o-mini' },
+      });
+      expect(own.status).toBe(200);
+      const mine = await http('carol', 'GET', '/stored/agents/carol-own/versions');
+      expect(mine.status).toBe(200);
+      const ownVersion = mine.json.versions[0].id;
+      expect((await http('carol', 'POST', `/stored/agents/carol-own/versions/${ownVersion}/activate`)).status).toBe(
+        200,
+      );
+    });
+  });
+
+  // Handlers that search across every registered agent (here: the workspace list) must skip hidden stored agents too.
+  it("bob's GET /workspaces does not surface the workspace of alice's private agent after she used it", async () => {
+    reply();
+    expect((await generate('alice', PRIVATE_WS)).status).toBe(200);
+    const mine = await http('alice', 'GET', '/workspaces');
+    expect(mine.text).toContain(PRIVATE_WS);
+    const theirs = await http('bob', 'GET', '/workspaces');
+    expect(theirs.status).toBe(200);
+    expect(theirs.text).not.toContain(PRIVATE_WS);
+    expect(theirs.text).not.toContain('alice-secret-workspace');
   });
 
   it('without auth configured, every stored agent stays listable and callable', async () => {

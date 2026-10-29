@@ -50,7 +50,10 @@ describe('getAgentFromSystem callers', () => {
       'schedules.ts': { count: 1, reason: 'assertStoredAgentAccess(execute) before scheduling' },
       'scores.ts': { count: 1, reason: 'scorer listing is author-filtered before hydration' },
       'channels.ts': { count: 1, reason: 'stored agents are write-checked against storage first; code agents only' },
-      'agent-versions.ts': { count: 1, reason: '/stored/agents versions existence check; no agent is resolved' },
+      'agent-versions.ts': {
+        count: 1,
+        reason: 'code-agent existence check only; stored records go through assertVersionAccess (read/write)',
+      },
     };
     const found: Record<string, number> = {};
 

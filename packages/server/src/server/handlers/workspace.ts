@@ -274,6 +274,8 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
       // Dynamic workspaces get lazily registered during agent execution (stream/generate).
       if (typeof mastra.listWorkspaces === 'function') {
         const registeredWorkspaces = mastra.listWorkspaces();
+        const allAgents = mastra.listAgents?.() ?? {};
+        const visibleAgents = listAgentsVisibleTo(allAgents, requestContext);
 
         for (const [, entry] of Object.entries(registeredWorkspaces)) {
           // Newer @mastra/core returns { workspace, source, agentId?, agentName? }.
@@ -282,6 +284,8 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
           const source: 'mastra' | 'agent' = (entry as any).source ?? 'mastra';
           const agentId: string | undefined = (entry as any).agentId;
           const agentName: string | undefined = (entry as any).agentName;
+          // Agents register their workspace here once used; skip those of stored agents the caller can't see.
+          if (source === 'agent' && agentId && agentId in allAgents && !(agentId in visibleAgents)) continue;
 
           workspaces.push({
             id: ws.id,
