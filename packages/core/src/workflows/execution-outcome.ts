@@ -22,8 +22,13 @@ export function workflowTermination(
       return { outcome: 'abort', stopReason: 'caller_cancelled', stopReasonContext: null };
     case 'suspended':
     case 'paused':
-    case 'waiting':
       // Generic suspension does not establish that human approval was requested.
+      return { outcome: 'suspend', stopReason: null, stopReasonContext: null };
+    case 'waiting':
+      // Waiting can mean a deliberate wait or an executor handoff. The signal
+      // distinguishes a stopped execution from suspension of the logical run.
+      if (abortSignal?.aborted && abortSignal.reason !== WORKFLOW_CANCELLED_SYMBOL)
+        return { outcome: 'interrupted', stopReason: null, stopReasonContext: null };
       return { outcome: 'suspend', stopReason: null, stopReasonContext: null };
     case 'tripwire':
       return tripwireTermination(result.tripwire);

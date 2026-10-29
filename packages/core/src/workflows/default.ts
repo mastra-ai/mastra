@@ -922,7 +922,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
           if (!this.writeRejectedByCancellation(runId, 'waiting')) {
             // The executor stopped; the logical run remains available for another worker.
-            workflowSpan?.end({ outcome: 'interrupted', stopReason: null, attributes: { status: 'waiting' } });
+            workflowSpan?.end({
+              ...workflowTermination({ status: 'waiting' }, params.abortController.signal),
+              attributes: { status: 'waiting' },
+            });
 
             const formattedResult = await this.fmtReturnValue<any>(
               params.pubsub,
@@ -1078,7 +1081,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         params.abortController.signal.reason !== WORKFLOW_CANCELLED_SYMBOL
       ) {
         // The executor stopped; the logical run remains available for another worker.
-        workflowSpan?.end({ outcome: 'interrupted', stopReason: null, attributes: { status: 'waiting' } });
+        workflowSpan?.end({
+          ...workflowTermination({ status: 'waiting' }, params.abortController.signal),
+          attributes: { status: 'waiting' },
+        });
 
         const formattedResult = await this.fmtReturnValue<any>(
           params.pubsub,

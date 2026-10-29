@@ -2274,50 +2274,21 @@ export class EventedRun<
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
-    const pubsub = this.mastra.pubsub;
-    const workflowSpan = getOrCreateSpan({
-      type: SpanType.WORKFLOW_RUN,
-      outcome: null,
-      name: `workflow run: '${this.workflowId}'`,
-      entityType: EntityType.WORKFLOW_RUN,
-      entityId: this.workflowId,
-      entityName: this.workflowId,
-      input: inputDataToUse,
-      metadata: { resourceId: this.resourceId, runId: this.runId },
-      tracingPolicy: this.tracingPolicy,
-      requestContext,
-      mastra: this.mastra,
-    });
-    this.workflowRunSpan = workflowSpan;
-    if (workflowSpan) {
-      this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
-    }
-    try {
-      // Fire-and-forget: publishing does not wait for workflow completion.
-      await pubsub.publish('workflows', {
-        type: 'workflow.start',
+    // Dispatch-only callers do not own execution spans; the worker may run in
+    // another process, so no local span or tracing registry entry is created here.
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.start',
+      runId: this.runId,
+      data: {
+        workflowId: this.workflowId,
         runId: this.runId,
-        data: {
-          workflowId: this.workflowId,
-          runId: this.runId,
-          prevResult: { status: 'success', output: inputDataToUse },
-          requestContext: requestContext.toJSON(),
-          actor,
-          initialState: initialStateToUse,
-          perStep,
-        },
-      });
-    } catch (error) {
-      this.completeWorkflowTracing(workflowSpan, {
-        error: {
-          ...executionFailureTermination(error),
-          error: error instanceof Error ? error : new Error(String(error)),
-        },
-      });
-
-      this.releaseWorkflowTracing(workflowSpan);
-      throw error;
-    }
+        prevResult: { status: 'success', output: inputDataToUse },
+        requestContext: requestContext.toJSON(),
+        actor,
+        initialState: initialStateToUse,
+        perStep,
+      },
+    });
 
     // Return immediately without waiting for completion
     return { runId: this.runId };

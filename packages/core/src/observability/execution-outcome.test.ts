@@ -2,6 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { TripWire } from '../agent/trip-wire';
 import { getErrorFromUnknown } from '../error';
+import { workflowTermination } from '../workflows/execution-outcome';
 import { executionFailureTermination, tripwireTermination } from './execution-outcome';
 
 function providerError(statusCode: number, code: string) {
@@ -123,5 +124,14 @@ it('retains explicit provider identity on authentication failures', () => {
     outcome: 'blocked',
     stopReason: 'authentication',
     stopReasonContext: { provider: 'test-provider', errorCode: '401' },
+  });
+});
+
+describe('workflow wait outcomes', () => {
+  it('distinguishes a deliberate wait from an executor handoff', () => {
+    expect(workflowTermination({ status: 'waiting' })).toMatchObject({ outcome: 'suspend' });
+    const controller = new AbortController();
+    controller.abort(new Error('executor stopping'));
+    expect(workflowTermination({ status: 'waiting' }, controller.signal)).toMatchObject({ outcome: 'interrupted' });
   });
 });

@@ -275,10 +275,14 @@ describe('workflow run cancellation tracing', () => {
       const run = await workflow.createRun();
       if (engine === 'evented-async' && 'startAsync' in run) {
         await run.startAsync({ inputData: {} });
-        await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
-      } else {
-        expect((await run.start({ inputData: {} })).status).toBe(fail ? 'failed' : 'success');
+        await expect
+          .poll(async () => (await workflow.getWorkflowRunById(run.runId))?.status)
+          .toBe(fail ? 'failed' : 'success');
+        expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toEqual([]);
+        expect(host.__getRunTracingContext(run.runId)).toBeUndefined();
+        return;
       }
+      expect((await run.start({ inputData: {} })).status).toBe(fail ? 'failed' : 'success');
       const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
       expectWorkflowOutcome(endedSpans(), fail ? 'error' : 'success');
       // A late cancel cannot rewrite an already completed execution.
@@ -323,11 +327,16 @@ describe('workflow run cancellation tracing', () => {
       const run = await workflow.createRun();
       if (engine === 'evented-async' && 'startAsync' in run) {
         await run.startAsync({ inputData: {} });
-        await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
-      } else {
-        const result = await run.start({ inputData: {} });
-        expect(result.status).toBe(mode === 'tripwire' ? 'tripwire' : 'success');
+        await expect
+          .poll(async () => (await workflow.getWorkflowRunById(run.runId))?.status)
+          .toBe(mode === 'tripwire' ? 'failed' : 'success');
+        if (mode === 'retry') expect(attempts()).toBe(2);
+        expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toEqual([]);
+        expect(host.__getRunTracingContext(run.runId)).toBeUndefined();
+        return;
       }
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe(mode === 'tripwire' ? 'tripwire' : 'success');
       if (mode === 'retry') expect(attempts()).toBe(2);
       expectWorkflowOutcome(endedSpans(), mode);
       expectNoDanglingSpans();
@@ -1079,10 +1088,8 @@ describe('workflow run cancellation tracing', () => {
       expectNoDanglingSpans();
       expectSingleEndPerSpan();
       expectParentsPresent();
-      expect(endedSpans().find(span => span.type === SpanType.WORKFLOW_RUN)).toMatchObject({
-        outcome: 'abort',
-        stopReason: 'caller_cancelled',
-      });
+      expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toEqual([]);
+      expect(mastra.__getRunTracingContext(run.runId)).toBeUndefined();
     } finally {
       // deafStep ignores cancellation, so there is nothing for the worker
       // drain to wait on; skip it instead of burning the default budget.
