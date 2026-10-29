@@ -3710,6 +3710,13 @@ type Shared_Type_64 = {
   status: 'success' | 'error';
   timeToFirstChunkMs?: (number | null) | undefined;
   timeToFirstTokenMs?: (number | null) | undefined;
+  outcome?: (string | null) | undefined;
+  stopReason?: (string | null) | undefined;
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
 };
 
 type Shared_Type_65 = {
@@ -11016,6 +11023,13 @@ export type PostObservabilitySpansQuery_Response = {
     errorPreview: string | null;
     timeToFirstChunkMs?: (number | null) | undefined;
     timeToFirstTokenMs?: (number | null) | undefined;
+    outcome?: (string | null) | undefined;
+    stopReason?: (string | null) | undefined;
+    stopReasonContext?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
   }[];
   page: {
     next: string | null;
