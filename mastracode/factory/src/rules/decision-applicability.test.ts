@@ -96,4 +96,29 @@ describe('decisionOvertaken on the Work board', () => {
     });
     expect(await heldInIntakeThenMoved('factory-plan', 'work', 'design', replacement)).toBe(false);
   });
+
+  it('matches a replacement work board that reuses the Planning name by context too', async () => {
+    const replacement = createBoardRegistry({
+      boards: [
+        defineBoard({
+          id: 'work',
+          name: 'Work',
+          initialPhase: 'intake',
+          phases: {
+            intake: { kind: 'resting', name: 'Intake', nextPhases: ['planning', 'done'] },
+            planning: {
+              kind: 'working',
+              name: 'Planning',
+              runner: { context: 'work', skill: 'design' },
+              nextPhases: ['done'],
+            },
+            done: { kind: 'terminal', name: 'Done' },
+          },
+        }),
+      ],
+      includeDefaultBoards: false,
+    });
+    // Built-in Work would hand Planning only factory-plan runs; this board runs its own skill there.
+    expect(await heldInIntakeThenMoved('design', 'work', 'planning', replacement)).toBe(false);
+  });
 });

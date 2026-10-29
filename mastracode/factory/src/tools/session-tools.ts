@@ -382,10 +382,9 @@ export function createFactorySessionTools(
     const item = await findWorkItem(deps.workItems, scope, workItem);
     if (!item) throw workItemNotFound(workItem);
     const label = workItemLabel(item);
-    const boardId = boardForWorkItem(item);
-    const board = deps.boards.get(boardId);
+    const board = deps.boards.get(boardForWorkItem(item));
     // Work's old `plan` role still names Planning, though no phase runs in a `plan` context any more.
-    if (!workLaneForRole(boardId, role, board) && !board?.phaseForRole(role)) {
+    if (!workLaneForRole(board, role) && !board?.phaseForRole(role)) {
       throw new Error(`${label}'s board has no ${role} role.`);
     }
     const seated = item.sessions[role];

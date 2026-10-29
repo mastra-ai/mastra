@@ -257,11 +257,10 @@ async function legacyPlanSession(
  * role plans. Other boards use the first phase that runs in the role's context.
  */
 function restingExitLane(
-  boardId: string,
-  board: { phaseForRole(role: string): string | undefined; isWorking(phase: string): boolean } | undefined,
+  board: { phaseForRole(role: string): string | undefined } | undefined,
   role: string,
 ): string | undefined {
-  return workLaneForRole(boardId, role, board) ?? board?.phaseForRole(role);
+  return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
 /**
@@ -298,7 +297,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? restingExitLane(boardId, board, input.role)
+          ? restingExitLane(board, input.role)
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
