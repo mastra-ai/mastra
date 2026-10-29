@@ -337,20 +337,6 @@ describe('assertExecutionOwned', () => {
         assertExecutionOwned({ runId, agentId, requestContext, mastra: undefined }),
       ).resolves.toBeUndefined();
     });
-
-    it('stops background-task writes once its deadline passes', async () => {
-      const requestContext = withDeadline(Date.now() - 1);
-      await expect(
-        assertExecutionNotSuperseded({ runId, agentId, requestContext, mastra: undefined }),
-      ).rejects.toMatchObject({ id: EXECUTION_TIMED_OUT_ERROR_ID });
-    });
-
-    it('lets background-task writes through before its deadline', async () => {
-      const requestContext = withDeadline(Date.now() + 60_000);
-      await expect(
-        assertExecutionNotSuperseded({ runId, agentId, requestContext, mastra: undefined }),
-      ).resolves.toBeUndefined();
-    });
   });
 
   it('always passes under NoopLeaseProvider', async () => {
@@ -390,6 +376,26 @@ describe('assertExecutionOwned', () => {
     await expect(assertExecutionOwned({ runId: 'run-1', agentId, requestContext, mastra })).rejects.toMatchObject({
       id: EXECUTION_SUPERSEDED_ERROR_ID,
     });
+  });
+});
+
+describe('assertExecutionNotSuperseded without an execution claim', () => {
+  const runId = 'claimless-run';
+  const withDeadline = (expiresAt: number) =>
+    new RequestContext(Object.entries(withRunDeadline({}, runId, { expiresAt })));
+
+  it('stops background-task writes once its deadline passes', async () => {
+    const requestContext = withDeadline(Date.now() - 1);
+    await expect(
+      assertExecutionNotSuperseded({ runId, agentId, requestContext, mastra: undefined }),
+    ).rejects.toMatchObject({ id: EXECUTION_TIMED_OUT_ERROR_ID });
+  });
+
+  it('lets background-task writes through before its deadline', async () => {
+    const requestContext = withDeadline(Date.now() + 60_000);
+    await expect(
+      assertExecutionNotSuperseded({ runId, agentId, requestContext, mastra: undefined }),
+    ).resolves.toBeUndefined();
   });
 });
 
