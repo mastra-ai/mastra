@@ -1,4 +1,4 @@
-import { createKnowledgePagesCoreLoader } from '@internal/core/knowledge-compat';
+import { createKnowledgePagesCoreLoader, knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
@@ -1097,25 +1097,34 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
   // Search and activity
 
   async searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]> {
-    const query = input.query.trim().toLowerCase();
-    if (!query) return [];
+    const words = knowledgeSearchWords(input.query);
+    if (!words.length) return [];
+    const phrase = input.query.trim().toLowerCase().replace(/\s+/g, ' ');
     const limit = Math.max(1, input.limit ?? 20);
-    const like = `%${escapeLike(query)}%`;
+    const likes = words.map(word => `%${escapeLike(word)}%`);
     const readable = pageReadable('p', input.read);
     const scopeFilter = input.scopeIds ? ` AND p.scopeId IN ${JV}` : '';
     const scopeArgs: InValue[] = input.scopeIds ? [jsonList(input.scopeIds)] : [];
+    const pageMatch = words
+      .map(
+        () =>
+          `(LOWER(p.name) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.description, '')) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.body, '')) LIKE ? ESCAPE '=')`,
+      )
+      .join(' AND ');
+    const nameMatch = words.map(() => `LOWER(p.name) LIKE ? ESCAPE '='`).join(' AND ');
     const pageRows = await this.#query(
       this.#read,
-      `SELECT p.* FROM ${T.pages} p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND (LOWER(p.name) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.description, '')) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.body, '')) LIKE ? ESCAPE '=') ORDER BY CASE WHEN LOWER(p.name) LIKE ? ESCAPE '=' THEN 0 ELSE 1 END, p.updatedAt DESC, p.id ASC LIMIT ?`,
-      [...readable.args, ...scopeArgs, like, like, like, like, limit],
+      `SELECT p.* FROM ${T.pages} p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND ${pageMatch} ORDER BY CASE WHEN LOCATE(?, p.canonicalName) > 0 THEN 0 WHEN ${nameMatch} THEN 1 ELSE 2 END, p.updatedAt DESC, p.id ASC LIMIT ?`,
+      [...readable.args, ...scopeArgs, ...likes.flatMap(like => [like, like, like]), phrase, ...likes, limit],
     );
     const hits: KnowledgePageSearchHit[] = pageRows.map(row => ({ type: 'page', page: toPage(row) }));
     if (hits.length >= limit) return hits;
     const noteVisible = noteReadable('n', input.read);
+    const noteMatch = words.map(() => `LOWER(n.text) LIKE ? ESCAPE '='`).join(' AND ');
     const noteRows = await this.#query(
       this.#read,
-      `SELECT n.* FROM ${T.notes} n JOIN ${T.pages} p ON p.id = n.pageId WHERE n.deletedAt IS NULL AND p.deletedAt IS NULL${scopeFilter} AND LOWER(n.text) LIKE ? ESCAPE '=' AND ${noteVisible.sql} ORDER BY n.createdAt DESC, n.id DESC LIMIT ?`,
-      [...scopeArgs, like, ...noteVisible.args, limit - hits.length],
+      `SELECT n.* FROM ${T.notes} n JOIN ${T.pages} p ON p.id = n.pageId WHERE n.deletedAt IS NULL AND p.deletedAt IS NULL${scopeFilter} AND ${noteMatch} AND ${noteVisible.sql} ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
+      [...scopeArgs, ...likes, ...noteVisible.args, limit - hits.length],
     );
     const notes = await this.#hydrateNotes(this.#read, noteRows);
     for (const note of notes) {
