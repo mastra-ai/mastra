@@ -83,17 +83,20 @@ const PROJECT: FilterBarItem = { id: 'project', fieldId: 'project', operatorId: 
 const CUSTOM_FROM = new Date('2026-10-27T00:00:00');
 const CUSTOM_TO = new Date('2026-10-29T00:00:00');
 
-function TimeRange({ initial, withReset }: { initial: DateRangePreset; withReset?: boolean }) {
+function useRangeFixture(initial: DateRangePreset) {
   const [preset, setPreset] = useState<DateRangePreset>(initial);
-  return (
-    <FilterBar.TimeRange
-      preset={preset}
-      onPresetChange={setPreset}
-      dateFrom={preset === 'custom' ? CUSTOM_FROM : undefined}
-      dateTo={preset === 'custom' ? CUSTOM_TO : undefined}
-      defaultPreset={withReset ? 'last-7d' : undefined}
-    />
-  );
+  const [range, setRange] = useState<{ from?: Date; to?: Date }>({ from: CUSTOM_FROM, to: CUSTOM_TO });
+  return {
+    preset,
+    onPresetChange: setPreset,
+    dateFrom: preset === 'custom' ? range.from : undefined,
+    dateTo: preset === 'custom' ? range.to : undefined,
+    onDateRangeChange: (from: Date | undefined, to: Date | undefined) => setRange({ from, to }),
+  };
+}
+
+function TimeRange({ initial, withReset }: { initial: DateRangePreset; withReset?: boolean }) {
+  return <FilterBar.TimeRange {...useRangeFixture(initial)} defaultPreset={withReset ? 'last-7d' : undefined} />;
 }
 
 /** A FilterBar whose time item renders the time range; everything else is a regular chip. */
@@ -193,8 +196,7 @@ function GroupByMenu() {
 }
 
 function StandalonePicker() {
-  const [preset, setPreset] = useState<DateRangePreset>('last-24h');
-  return <DateTimeRangePicker preset={preset} onPresetChange={setPreset} />;
+  return <DateTimeRangePicker {...useRangeFixture('last-24h')} />;
 }
 
 function Case({ name, source, children }: { name: string; source: string; children: ReactNode }) {

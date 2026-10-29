@@ -26,7 +26,14 @@ import {
   <FilterBar.Chips
     renderChip={item =>
       item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
-        <FilterBar.TimeRange preset={preset} onPresetChange={setPreset} defaultPreset="last-7d" />
+        <FilterBar.TimeRange
+          preset={preset}
+          onPresetChange={setPreset}
+          dateFrom={range.from}
+          dateTo={range.to}
+          onDateRangeChange={(from, to) => setRange({ from, to })}
+          defaultPreset="last-7d"
+        />
       ) : (
         <FilterBar.Chip item={item} />
       )
@@ -36,7 +43,24 @@ import {
 </FilterBar>;
 ```
 
-`DateTimeRangePicker` gains `size`, `defaultPreset` and `ref` (the trigger button). Its `renderTrigger` prop is removed: the trigger is always the shared calendar button.
+`DateTimeRangePicker` gains `size`, `defaultPreset` and `ref` (the trigger button).
+
+**Migrating removed APIs.**
+
+- `TraceTimeRangeChip` → `FilterBar.TimeRange` (same props), and `TRACE_TIME_RANGE_FIELD` / `_ITEM` / `_FIELD_ID` → `FILTER_BAR_TIME_RANGE_FIELD` / `_ITEM` / `_FIELD_ID`, imported from `@mastra/playground-ui/components/FilterBar`.
+
+  ```tsx
+  // Before
+  import { TraceTimeRangeChip, TRACE_TIME_RANGE_FIELD_ID } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
+  item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? <TraceTimeRangeChip preset={preset} onPresetChange={setPreset} /> : …
+
+  // After
+  import { FilterBar, FILTER_BAR_TIME_RANGE_FIELD_ID } from '@mastra/playground-ui/components/FilterBar';
+  item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? <FilterBar.TimeRange preset={preset} onPresetChange={setPreset} /> : …
+  ```
+
+- `DateTimeRangePicker`'s `renderTrigger` → remove it: the trigger is always the shared calendar button. Pass `size` for another rung and `ref` to reach the trigger.
+- `comboboxStyles.chevron` on a hand-built trigger → `<ButtonChevron size={size} />` from `@mastra/playground-ui/components/Button`.
 
 **Other controls.**
 
