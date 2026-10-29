@@ -64,7 +64,8 @@ type ComboboxSharedProps = {
   align?: 'start' | 'center' | 'end';
   /**
    * `anchor` (default) opens the popup at the trigger's width, at least 11rem. `content` fits it to the longest
-   * option (e.g. model ids), measured over all options so it holds still while you type, within the screen.
+   * option (e.g. model ids), measured over all options so it holds still while you type, up to 20rem; longer
+   * labels wrap onto a second line instead of truncating.
    */
   popupWidth?: 'anchor' | 'content';
   showChevron?: boolean;
@@ -201,10 +202,10 @@ function triggerClassName({ iconOnlyValue, className }: { iconOnlyValue: boolean
   return cn(iconOnlyValue && 'w-auto px-2.5', className);
 }
 
-function ComboboxOptionText({ option }: { option: ComboboxOption }) {
+function ComboboxOptionText({ option, wrap = false }: { option: ComboboxOption; wrap?: boolean }) {
   return (
     <span className={comboboxStyles.optionText}>
-      <span className={comboboxStyles.optionLabel}>{option.label}</span>
+      <span className={wrap ? comboboxStyles.optionLabelWrap : comboboxStyles.optionLabel}>{option.label}</span>
       {option.description && <span className={comboboxStyles.optionDescription}>{option.description}</span>}
     </span>
   );
@@ -242,7 +243,7 @@ function ComboboxPopupSizer({ option }: { option: ComboboxOption }) {
       <div className={comboboxStyles.item}>
         <span className="flex min-w-0 flex-1 items-center gap-2">
           {option.start}
-          <ComboboxOptionText option={option} />
+          <ComboboxOptionText option={option} wrap />
           {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
         </span>
         <span className={comboboxStyles.checkContainer} />
@@ -271,7 +272,11 @@ function ComboboxOptionsContent({
   sizerOption?: ComboboxOption;
 }) {
   return (
-    <ComboboxContent align={align} container={container} className={cn(sizerOption && 'w-max')}>
+    <ComboboxContent
+      align={align}
+      container={container}
+      className={cn(sizerOption && comboboxStyles.contentWidthPopup)}
+    >
       {showSearch ? <ComboboxSearch placeholder={searchPlaceholder} /> : null}
       {sizerOption ? <ComboboxPopupSizer option={sizerOption} /> : null}
       <ComboboxEmpty>{emptyText}</ComboboxEmpty>
@@ -279,7 +284,7 @@ function ComboboxOptionsContent({
         {(option: ComboboxOption) => (
           <ComboboxItem key={option.value} value={option}>
             {option.start}
-            <ComboboxOptionText option={option} />
+            <ComboboxOptionText option={option} wrap={Boolean(sizerOption)} />
             {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
           </ComboboxItem>
         )}

@@ -133,6 +133,12 @@ export const comboboxStyles = {
   /** Option label */
   optionLabel: 'truncate',
 
+  /** Option label in a `content`-width popup: an id past the popup's cap wraps instead of hiding its end. */
+  optionLabelWrap: 'whitespace-normal wrap-anywhere',
+
+  /** A `content`-width popup: fits the longest option, capped so one outlier can't stretch it. */
+  contentWidthPopup: 'w-max max-w-[min(20rem,var(--available-width))]',
+
   /** Option description */
   optionDescription: 'text-caption text-muted-foreground truncate',
 

@@ -144,7 +144,7 @@ export const ModelSelector: Story = {
   },
 };
 
-/** `popupWidth="content"`: the popup fits the longest id and keeps that width while you search. */
+/** `popupWidth="content"`: the popup fits the longest id, up to 20rem (longer ids wrap), and keeps that width while you search. */
 export const ContentWidthPopup: Story = {
   args: {
     options: [
