@@ -1266,6 +1266,20 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
   });
 
+  it("names the provider's physical sandbox in a start failure, since the logical id survives a recreate", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(
+      new SetupCommandError('Setup command failed (exit 124)', 'setup-failed'),
+    );
+
+    const error = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }).catch(
+      e => e,
+    );
+    expect(error.message).toMatch(/Setup command failed \(exit 124\).*\(provider sandbox vm-session-a\)$/);
+  });
+
   it('persists no sandbox id for a provider without a physical one, so resume provisions by logical id', async () => {
     mocks.physicalId = false;
     try {
