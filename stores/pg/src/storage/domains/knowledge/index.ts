@@ -1,4 +1,4 @@
-import { createKnowledgePagesCoreLoader } from '@internal/core/knowledge-compat';
+import { createKnowledgePagesCoreLoader, KNOWLEDGE_PAGES_SCHEMA_VERSION } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
@@ -110,14 +110,19 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   override getCapabilities() {
-    return { ...super.getCapabilities(), supportsExplicitReset: true } as const;
+    return {
+      ...super.getCapabilities(),
+      schemaVersion: KNOWLEDGE_PAGES_SCHEMA_VERSION,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    } as const;
   }
 
   async init(): Promise<void> {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
   }
 
-  async inspectPagesSchema() {
+  override async inspectSchema() {
     return inspectPgKnowledgePagesSchema(this.#client, this.#schemaName);
   }
 
