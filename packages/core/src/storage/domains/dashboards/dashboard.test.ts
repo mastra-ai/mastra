@@ -418,6 +418,14 @@ describe('dashboardDefinitionSchema', () => {
       { id: 'g', logic: 'or', nodes: [{ fieldId: 'env', value: ['prod'] }] },
     ]);
 
+    const operator = dashboardDefinitionSchema.safeParse({
+      ...definition([[widget('w')]]),
+      defaults: { filters: [{ fieldId: 'latency', value: '5', operatorId: 'futureOperator' }] },
+    });
+    expect(operator.data?.defaults?.filters).toEqual([
+      { fieldId: 'latency', value: '5', operatorId: 'futureOperator' },
+    ]);
+
     const strict = dashboardDefinitionSchema.safeParse({
       ...definition([[widget('w')]]),
       defaults: { filters: [], extra: true },
