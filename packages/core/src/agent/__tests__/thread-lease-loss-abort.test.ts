@@ -1796,7 +1796,6 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         }
       }
       const pubsub = new StallingProcessPubSub(shared);
-      let ticks = 0;
       const tick = createTool({
         id: 'tick',
         description: 'Tick once',
@@ -2406,15 +2405,6 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   }, 20_000);
 
   it('frees the thread when a retake it gave up on is granted after the run stopped', async () => {
-    const thread = 'late-retake-grant-thread';
-    const key = [RESOURCE, thread].join('\u0000');
-    for (let i = 0; i < 100; i++) {
-      llm.on(
-        { userMessage: 'late retake grant', sequenceIndex: i },
-        { toolCalls: [{ id: `call_late_grant_${i}`, name: 'tick', arguments: {} }] },
-      );
-    }
-    const shared = new SharedLeases();
     /** Once cut, renewals never answer and a retake is granted only after the run gave up on it. */
     class LateGrantPubSub extends ReplicaPubSub {
       cut = false;
@@ -2434,38 +2424,59 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         return lease;
       }
     }
-    const pubsub = new LateGrantPubSub(shared);
-    let ticks = 0;
-    const tick = createTool({
-      id: 'tick',
-      description: 'Tick once',
-      inputSchema: z.object({}),
-      execute: async () => {
-        ticks++;
-        await new Promise(resolve => setTimeout(resolve, 20));
-        return 'ticked';
-      },
-    });
-    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
-    const { output, drain } = await startStream(agent, 'late retake grant', {
-      maxSteps: 100,
-      memory: { thread, resource: RESOURCE },
-    });
-    const done = drain().catch(() => undefined);
-    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
-    pubsub.cut = true;
-    // The run is stopped while its retake is on its way, so it gives up on that retake.
-    await vi.waitFor(() => expect(pubsub.sent).toBeGreaterThan(0), { timeout: 5_000 });
-    expect(agent.abortThreadStream({ resourceId: RESOURCE, threadId: thread })).toBe(true);
-    await done;
-    expect(await output.finishReason).toBe('aborted');
 
-    // The backend granted the abandoned retake to a run that no longer exists. Nothing renews that lease,
-    // so the thread must be freed at once rather than stay held for a TTL.
-    await vi.waitFor(() => expect(pubsub.grantedLate).toBe(true), { timeout: 5_000 });
-    await new Promise(resolve => setTimeout(resolve, 30));
-    expect(shared.owner(key)).toBeUndefined();
-  }, 20_000);
+    // The scenario needs a run that is still going when its retake is sent. A loaded machine can stall past the
+    // 300ms TTL before that, and a durable run then rightly stops on its own (its execution claim lapses), so no
+    // retake is ever sent. That says nothing about the behaviour under test, so set the scenario up again.
+    for (let attempt = 1; ; attempt++) {
+      const thread = `late-retake-grant-thread-${attempt}`;
+      const key = [RESOURCE, thread].join('\u0000');
+      const prompt = `late retake grant #${attempt}`;
+      for (let i = 0; i < 100; i++) {
+        llm.on(
+          { userMessage: prompt, sequenceIndex: i },
+          { toolCalls: [{ id: `call_late_grant_${attempt}_${i}`, name: 'tick', arguments: {} }] },
+        );
+      }
+      const shared = new SharedLeases();
+      const pubsub = new LateGrantPubSub(shared);
+      let ticks = 0;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Tick once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          // Cut the backend off as soon as the run is going, leaving a stall as little time as possible to end it.
+          pubsub.cut = true;
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return 'ticked';
+        },
+      });
+      const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+      const { output, drain } = await startStream(agent, prompt, {
+        maxSteps: 100,
+        memory: { thread, resource: RESOURCE },
+      });
+      let settled = false;
+      const done = drain()
+        .catch(() => undefined)
+        .finally(() => (settled = true));
+      // The run is stopped while its retake is on its way, so it gives up on that retake.
+      await vi.waitFor(() => expect(pubsub.sent > 0 || settled).toBe(true), { timeout: 5_000 });
+      const stopped = pubsub.sent > 0 && agent.abortThreadStream({ resourceId: RESOURCE, threadId: thread });
+      await done;
+      if (!stopped && attempt < 3) continue;
+      expect(stopped).toBe(true);
+      expect(await output.finishReason).toBe('aborted');
+
+      // The backend granted the abandoned retake to a run that no longer exists. Nothing renews that lease,
+      // so the thread must be freed at once rather than stay held for a TTL.
+      await vi.waitFor(() => expect(pubsub.grantedLate).toBe(true), { timeout: 5_000 });
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(shared.owner(key)).toBeUndefined();
+      return;
+    }
+  }, 40_000);
 
   it("never frees a successor's lease when a retake it gave up on settles after the successor took the run", async () => {
     const thread = 'late-retake-successor-thread';
