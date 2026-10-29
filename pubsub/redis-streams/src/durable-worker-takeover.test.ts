@@ -55,6 +55,7 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
             TAKEOVER_SCHEMA: schemaName,
             TAKEOVER_PREFIX: prefix,
             TAKEOVER_RUN_ID: runId,
+            MASTRA_AGENT_THREAD_LEASE_TTL_MS: String(AGENT_LEASE_TTL_MS),
             ...(thread ? { TAKEOVER_THREAD: `thread-${suffix}` } : {}),
             POSTGRES_CONNECTION_STRING: connectionString,
             REDIS_URL: url,

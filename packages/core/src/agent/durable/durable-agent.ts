@@ -111,7 +111,6 @@ import type {
   SerializableModelListEntry,
 } from './types';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
-import { assertValidRunId } from './utils/validate-run-id';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
@@ -3034,7 +3033,6 @@ export class DurableAgent<
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     options = await this.#resolveExecutionOptions(applyReservedMemoryContextKeys(options));
-    if (options?.runId !== undefined) assertValidRunId(options.runId);
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set.
     // Strip `untilIdle` before passing to the wrapper so its internal
@@ -3078,7 +3076,6 @@ export class DurableAgent<
     // 1. Claim the run before preparing it, so a run that is already executing
     // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
-    assertValidRunId(runId);
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
@@ -3366,7 +3363,6 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    assertValidRunId(runId);
     if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
       // The fenced run can never continue, so the rejected caller must not find it in
       // listSuspendedRuns() afterwards (#27619).
@@ -4238,7 +4234,6 @@ export class DurableAgent<
     runId: string,
     options?: DurableAgentRecoverOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    assertValidRunId(runId);
     if (!this.#mastra) {
       throw new MastraError({
         id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
@@ -4715,7 +4710,6 @@ export class DurableAgent<
 
     // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();
-    assertValidRunId(runId);
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 

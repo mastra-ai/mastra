@@ -7,8 +7,7 @@ import {
 import {
   DurableExecutionFenceError,
   EXECUTION_SUPERSEDED_ERROR_ID,
-  getExecutionClaim,
-  MASTRA_DURABLE_EXECUTIONS_KEY,
+  isStorageFencedExecution,
 } from '../../../agent/durable/execution-fence';
 import type { ActorSignal, RequireFGAOptions } from '../../../auth/ee';
 import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../../auth/ee';
@@ -4444,12 +4443,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     if (this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub) return this.#handleDelivery(event);
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
-    const claims = context.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY);
-    const currentClaim = getExecutionClaim(context, event.runId);
-    const storageFenced = currentClaim
-      ? currentClaim.generation !== undefined
-      : Object.keys(claims ?? {}).some(runId => getExecutionClaim(context, runId)?.generation !== undefined);
-    if (!storageFenced) return this.#handleDelivery(event);
+    if (!isStorageFencedExecution(context, event.runId)) return this.#handleDelivery(event);
     try {
       if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
       const execute = async () => {

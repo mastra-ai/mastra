@@ -986,84 +986,9 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       next.release();
     });
 
-    describe.each(['default', 'evented'] as const)('%s reserved lease delimiter validation', engine => {
-      describe.each(['custom\u0000retake\u000042', 'custom\u0000retake'])('ambiguous run ID %j', runId => {
-        it.each(['stream', 'generate', 'prepare', 'resume', 'recover'] as const)(
-          '%s rejects a reserved lease delimiter before claiming ownership',
-          async method => {
-            const storage = createStorage(backend);
-            const model = gatedModel('This execution must never reach the model.');
-            model.release();
-            const agent = new Agent({
-              id: 'reserved-run-id-agent',
-              name: 'Reserved run ID agent',
-              instructions: 'Answer the request.',
-              model: model.model as LanguageModelV2,
-            });
-            const durableAgent =
-              engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
-            new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
-            const workflows = (await storage.getStore('workflows'))!;
-
-            const result =
-              method === 'resume'
-                ? durableAgent.resume(runId, {})
-                : method === 'recover'
-                  ? durableAgent.recover(runId)
-                  : durableAgent[method]('hello', { runId });
-            await expect(result).rejects.toThrow(/`runId` must not contain the reserved lease delimiter/);
-            expect(await workflows.getRunOwnership({ runId })).toBeNull();
-            expect(await pubsub.getLeaseOwner(executionLeaseKey(durableAgent.id, runId))).toBeUndefined();
-            expect(globalRunRegistry.has(runId)).toBe(false);
-            expect(model.calls()).toBe(0);
-          },
-        );
-      });
-
-      it('rejects an ambiguous idle-stream run ID without aborting the existing stream', async () => {
-        const storage = createStorage(backend);
-        const model = gatedModel('The original stream completed.');
-        const agent = new Agent({
-          id: 'idle-run-id-agent',
-          name: 'Idle run ID agent',
-          instructions: 'Answer the request.',
-          model: model.model as LanguageModelV2,
-          memory: new MockMemory(),
-        });
-        const durableAgent =
-          engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
-        const mastra = new Mastra({
-          agents: { agent: durableAgent },
-          storage,
-          pubsub,
-          logger: false,
-          backgroundTasks: { enabled: true },
-        });
-        const options = { untilIdle: true, memory: { thread: THREAD, resource: RESOURCE } };
-        const original = await durableAgent.stream('hello', { ...options, runId: 'original-idle-run' });
-        const signal = globalRunRegistry.get(original.runId)!.abortController!.signal;
-        const text = original.output.text;
-        try {
-          await expect(
-            durableAgent.stream('invalid request', {
-              ...options,
-              runId: 'custom\u0000retake\u000042',
-            }),
-          ).rejects.toThrow(TypeError);
-          expect(signal.aborted).toBe(false);
-          model.release();
-          expect(await text).toBe('The original stream completed.');
-          expect(model.calls()).toBe(1);
-        } finally {
-          model.release();
-          await original.abort();
-          original.cleanup();
-          await mastra.backgroundTaskManager?.shutdown();
-        }
-      });
-
+    describe.each(['default', 'evented'] as const)('%s custom run IDs', engine => {
       it.each(['stream', 'generate'] as const)(
-        '%s accepts custom run IDs without the reserved delimiter',
+        '%s accepts custom run IDs containing the former lease delimiter',
         async method => {
           const storage = createStorage(backend);
           const model = gatedModel('Custom run completed.');
@@ -1078,7 +1003,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
             engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
           new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
 
-          const result = await durableAgent[method]('hello', { runId: String.raw`custom\u0000retake\u000042` });
+          const result = await durableAgent[method]('hello', { runId: 'custom\u0000retake\u000042' });
           expect(await ('output' in result ? result.output.text : result.text)).toBe('Custom run completed.');
           expect(model.calls()).toBe(1);
           if ('cleanup' in result) result.cleanup();

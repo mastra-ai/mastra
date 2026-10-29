@@ -1,15 +1,20 @@
+// @ts-check
 import { Agent } from '@mastra/core/agent';
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { PostgresStore } from '@mastra/pg';
 import { z } from 'zod';
-import { AGENT_LEASE_TTL_MS } from '../../../packages/core/src/agent/run-ownership.ts';
 import { Memory } from '../../../packages/memory/dist/index.js';
 import { RedisStreamsPubSub } from '../src/index.ts';
 
 const role = process.env.TAKEOVER_ROLE;
 const runId = process.env.TAKEOVER_RUN_ID;
+if (!runId) throw new Error('TAKEOVER_RUN_ID is required');
+const leaseTtlMs = Number(process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS);
+if (!Number.isFinite(leaseTtlMs) || leaseTtlMs <= 0) {
+  throw new Error('MASTRA_AGENT_THREAD_LEASE_TTL_MS must be a positive number');
+}
 const schema = process.env.TAKEOVER_SCHEMA;
 const storage = new PostgresStore({
   id: `api-loss-${role}`,
@@ -28,6 +33,7 @@ const tool = createTool({
   description: 'Perform one recorded operation.',
   inputSchema: z.object({ index: z.number().int().min(0).max(3) }),
   execute: async ({ index }, context) => {
+    if (!context.agent) throw new Error('Expected agent tool context');
     const callId = context.agent.toolCallId;
     const { id } = await storage.db.one(
       `INSERT INTO "${schema}".tool_executions (run_id, tool_call_id) VALUES ($1, $2) RETURNING id`,
@@ -35,28 +41,32 @@ const tool = createTool({
     );
     console.info(`tool-entered:${callId}`);
     // One sibling finishes early; the others outlive both execution and thread leases.
-    await new Promise((resolve, reject) => {
+    /** @type {Promise<void>} */
+    const completion = new Promise((resolve, reject) => {
       const signal = context.abortSignal;
       const abort = () => {
         clearTimeout(timer);
         console.info(`tool-aborted:${callId}`);
-        reject(signal.reason);
+        reject(signal?.reason);
       };
       const timer = setTimeout(
         () => {
           signal?.removeEventListener('abort', abort);
           resolve();
         },
-        index === 0 ? 2000 : AGENT_LEASE_TTL_MS * 2 + 5000,
+        index === 0 ? 2000 : leaseTtlMs * 2 + 5000,
       );
       if (signal?.aborted) abort();
       else signal?.addEventListener('abort', abort, { once: true });
     });
+    await completion;
     await storage.db.none(`UPDATE "${schema}".tool_executions SET completed = true WHERE id = $1`, [id]);
     console.info(`tool-completed:${callId}`);
     return { index, completed: true };
   },
 });
+/** @typedef {Extract<import('@mastra/core/llm').LanguageModel, { specificationVersion: 'v2' }>} FixtureModel */
+/** @type {FixtureModel} */
 const model = {
   specificationVersion: 'v2',
   provider: 'test',
@@ -67,6 +77,7 @@ const model = {
   },
   async doStream({ prompt }) {
     const finished = prompt.some(message => message.role === 'tool');
+    /** @type {Awaited<ReturnType<FixtureModel['doStream']>>['stream'] extends ReadableStream<infer Part> ? Part[] : never} */
     const chunks = finished
       ? [
           { type: 'text-start', id: 'answer' },
@@ -122,8 +133,10 @@ if (role === 'aborter') {
   await pubsub.flush();
   console.info('abort-requested');
 } else if (role === 'followup') {
-  const accepted = await agent.sendMessage('Continue after API loss.', thread).accepted;
-  console.info(`followup-accepted:${accepted.action}:${accepted.runId}`);
+  if (!thread.threadId) throw new Error('TAKEOVER_THREAD is required for followup');
+  const accepted = await agent.sendMessage('Continue after API loss.', { ...thread, threadId: thread.threadId })
+    .accepted;
+  console.info(`followup-accepted:${accepted.action}:${'runId' in accepted ? accepted.runId : ''}`);
   if (accepted.action === 'wake') console.info(`followup-completed:${await accepted.output.text}`);
 } else if (role !== 'worker') {
   const { output } = await agent.stream('Perform four operations.', {

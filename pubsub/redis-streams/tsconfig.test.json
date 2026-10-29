@@ -2,10 +2,14 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "paths": {
-      "@mastra/core/*": ["../../packages/core/src/*"]
-    }
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*", "test-fixtures/**/*", "tsdown.config.ts"],
-  "exclude": ["node_modules", "**/*.test.ts", "test-fixtures/cli-project/**"]
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    "test-fixtures/cli-project/**",
+    "test-fixtures/agent-thread-worker.entry.ts"
+  ]
 }

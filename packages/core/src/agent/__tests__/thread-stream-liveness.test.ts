@@ -14,14 +14,19 @@ describe('thread stream remote-run liveness', () => {
     vi.useRealTimers();
   });
 
-  it.each(['', '\u0000retake\u000042', '\u0000retake\u0000execution:worker'])(
+  it.each(['run', 'generation', 'execution'] as const)(
     'keeps a remote stream alive while its qualified lease owner remains valid (%j)',
-    async suffix => {
+    async kind => {
       vi.useFakeTimers();
       const harness = createHarness('liveness-qualified');
       const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
       const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
-      pubsub.owners.set(key, `${harness.runId}${suffix}`);
+      pubsub.owners.set(
+        key,
+        kind === 'run'
+          ? harness.runId
+          : `mastra:thread-lease:${JSON.stringify([harness.runId, kind, kind === 'generation' ? 42 : 'worker'])}`,
+      );
       const subscription = await runtime.subscribeToThread(
         harness.agent,
         { threadId: harness.threadId, resourceId: harness.resourceId },

@@ -225,6 +225,16 @@ export function getExecutionClaim(
   };
 }
 
+/** A direct claim takes precedence over ancestor claims carried by nested workflow events. */
+export function isStorageFencedExecution(requestContext: RequestContext, runId: string): boolean {
+  const currentClaim = getExecutionClaim(requestContext, runId);
+  return currentClaim
+    ? currentClaim.generation !== undefined
+    : Object.keys(requestContext.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY) ?? {}).some(
+        claimedRunId => getExecutionClaim(requestContext, claimedRunId)?.generation !== undefined,
+      );
+}
+
 /**
  * Whether a serialized request context (as carried on evented run events)
  * holds a claim on a run that `requestContext` also claims, under a different

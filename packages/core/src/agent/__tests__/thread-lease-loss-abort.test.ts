@@ -36,6 +36,7 @@ import { Agent } from '../agent';
 import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
 import { verifyRunLease } from '../run-lease-fence';
+import { isRetakeLeaseOwner } from '../thread-stream-runtime';
 
 const THREAD = 'lease-loss-thread';
 const RESOURCE = 'lease-loss-user';
@@ -106,7 +107,7 @@ class ReplicaPubSub extends EventEmitterPubSub {
     if (key.startsWith(`${RESOURCE}\u0000`)) {
       this.shared.renewals++;
       // A retake renews its temporary token while handing it over; only the run's own renewals move its deadline.
-      if (!owner.includes('\u0000retake\u0000')) {
+      if (!isRetakeLeaseOwner(owner)) {
         this.shared.confirmedSentAt = Math.max(this.shared.confirmedSentAt, sentAt);
       }
     }
@@ -581,11 +582,11 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       cut = false;
       handovers = 0;
       override async renewLease(k: string, owner: string, ttlMs: number) {
-        if (this.cut && k === key && !owner.includes('\u0000retake\u0000')) await new Promise(() => {});
+        if (this.cut && k === key && !isRetakeLeaseOwner(owner)) await new Promise(() => {});
         return super.renewLease(k, owner, ttlMs);
       }
       override async transferLease(k: string, from: string, to: string) {
-        if (k === key && from.includes('\u0000retake\u0000')) {
+        if (k === key && isRetakeLeaseOwner(from)) {
           this.handovers++;
           this.cut = false;
           await new Promise(resolve => setTimeout(resolve, 600));
@@ -645,18 +646,18 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       cut = false;
       handovers = 0;
       override async renewLease(k: string, owner: string, ttlMs: number) {
-        if (this.cut && k === key && !owner.includes('\u0000retake\u0000')) await new Promise(() => {});
+        if (this.cut && k === key && !isRetakeLeaseOwner(owner)) await new Promise(() => {});
         return super.renewLease(k, owner, ttlMs);
       }
       override async transferLease(k: string, from: string, to: string, ttlMs: number) {
-        if (k === key && from.includes('\u0000retake\u0000') && ++this.handovers === 1) {
+        if (k === key && isRetakeLeaseOwner(from) && ++this.handovers === 1) {
           this.cut = false;
           throw new Error('transfer failed: connection reset');
         }
         return super.transferLease(k, from, to, ttlMs);
       }
       override async releaseLease(k: string, owner: string) {
-        if (k === key && owner.includes('\u0000retake\u0000')) await new Promise(resolve => setTimeout(resolve, 80));
+        if (k === key && isRetakeLeaseOwner(owner)) await new Promise(resolve => setTimeout(resolve, 80));
         return super.releaseLease(k, owner);
       }
     }
@@ -706,11 +707,11 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       failing = true;
       handovers = 0;
       override async renewLease(k: string, owner: string, ttlMs: number) {
-        if (this.cut && k === key && !owner.includes('\u0000retake\u0000')) await new Promise(() => {});
+        if (this.cut && k === key && !isRetakeLeaseOwner(owner)) await new Promise(() => {});
         return super.renewLease(k, owner, ttlMs);
       }
       override async transferLease(k: string, from: string, to: string, ttlMs: number) {
-        if (k === key && from.includes('\u0000retake\u0000')) {
+        if (k === key && isRetakeLeaseOwner(from)) {
           this.handovers++;
           if (this.failing) throw new Error('transfer rejected');
           this.cut = false;
@@ -1860,7 +1861,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         return super.renewLease(k, owner, ttlMs);
       }
       override async transferLease(k: string, from: string, to: string) {
-        if (k === key && from.includes('\u0000retake\u0000')) {
+        if (k === key && isRetakeLeaseOwner(from)) {
           handoverStarted?.();
           await new Promise<void>(resolve => (releaseHandover = resolve));
         }
@@ -1890,7 +1891,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     let resume!: () => void;
     pubsub.stalled = new Promise<void>(resolve => (resume = resolve));
     await handover;
-    expect(shared.owner(key)?.startsWith(`${runId}\u0000retake\u0000`)).toBe(true);
+    expect(isRetakeLeaseOwner(shared.owner(key))).toBe(true);
 
     // The fence must wait for that handover instead of stopping the run. Once it has read the token as owner it
     // either fails at once or keeps waiting for the retake, so one turn is enough to tell the two apart.
@@ -1947,7 +1948,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         return super.renewLease(k, owner, ttlMs);
       }
       override async transferLease(k: string, from: string, to: string) {
-        if (k === key && from.includes('\u0000retake\u0000')) {
+        if (k === key && isRetakeLeaseOwner(from)) {
           handoverStarted?.();
           await new Promise(() => {});
         }
@@ -1988,13 +1989,13 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     // Several intervals on, the run still waits for the handoff and keeps the token.
     await new Promise(resolve => setTimeout(resolve, 400));
     expect(settled).toBe(false);
-    expect(released.some(owner => owner.startsWith(`${runId}\u0000retake\u0000`))).toBe(false);
+    expect(released.some(owner => isRetakeLeaseOwner(owner))).toBe(false);
 
     // Once the run is stopped, the retake gives up and releases the token lease it took.
     const stoppedAt = Date.now();
     expect(agent.abortThreadStream({ resourceId: RESOURCE, threadId: thread })).toBe(true);
     resume();
-    await vi.waitFor(() => expect(released.some(owner => owner.startsWith(`${runId}\u0000retake\u0000`))).toBe(true), {
+    await vi.waitFor(() => expect(released.some(owner => isRetakeLeaseOwner(owner))).toBe(true), {
       timeout: 1_500,
     });
     expect(Date.now() - stoppedAt).toBeLessThan(1_500);
@@ -2030,7 +2031,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       }
       override async transferLease(k: string, from: string, to: string) {
         if (k === key) this.transfers.push({ from, to });
-        if (k === key && from.includes('\u0000retake\u0000')) {
+        if (k === key && isRetakeLeaseOwner(from)) {
           handoverStarted?.();
           await new Promise<void>(resolve => (releaseHandoff = resolve));
         }
@@ -2040,7 +2041,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         released.push(owner);
         if (k !== key) return super.releaseLease(k, owner);
         // A backend whose release of the temporary token loses the race with the handoff still grants it.
-        if (owner.includes('\u0000retake\u0000')) return;
+        if (isRetakeLeaseOwner(owner)) return;
         return super.releaseLease(k, owner);
       }
     }
@@ -2144,7 +2145,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
           return super.renewLease(key, owner, ttlMs);
         }
         override async transferLease(key: string, from: string, to: string) {
-          if (from.includes('\u0000retake\u0000')) {
+          if (isRetakeLeaseOwner(from)) {
             this.tokenHeld = true;
             await transferGate;
           }
@@ -2182,7 +2183,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         ownerPubSub.cut = true;
         shared.drop(key);
         await vi.waitFor(() => expect(ownerPubSub.tokenHeld).toBe(true));
-        expect(shared.owner(key)).toContain('\u0000retake\u0000');
+        expect(isRetakeLeaseOwner(shared.owner(key))).toBe(true);
         const sender = replica(shared, new MockMemory(), {}, senderPubSub);
         const sent = sender.sendSignal(
           { type: 'user-message', contents: marker },
@@ -2237,7 +2238,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       const key = [RESOURCE, thread].join('\u0000');
       const runId = `draining-run-${engine}-${queue}-${stuck}`;
       const successor = `successor-${engine}-${queue}-${stuck}`;
-      const token = `${successor}\u0000retake\u0000attempt`;
+      const token = `mastra:thread-lease:${JSON.stringify([successor, 'retake', 'attempt'])}`;
       const prompt = `retake drain ${queue} ${stuck}`;
       llm.on(
         { userMessage: prompt, sequenceIndex: 0 },
@@ -2351,58 +2352,83 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   );
 
   it('keeps a run going while its lapsed lease is taken back slowly, as long as a step runs', async () => {
-    const thread = 'slow-retake-thread';
-    for (let i = 0; i < 100; i++) {
-      llm.on(
-        { userMessage: 'slow retake', sequenceIndex: i },
-        { toolCalls: [{ id: `call_slow_retake_${i}`, name: 'tick', arguments: {} }] },
+    // A real event-loop pause must not expire the separate execution claim while testing thread-lease retakes.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    const advanceUntil = async (done: () => boolean) => {
+      const deadline = performance.now() + 10_000;
+      while (!done()) {
+        if (performance.now() > deadline) throw new Error('timed out waiting for the run');
+        await vi.advanceTimersByTimeAsync(10);
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    };
+    try {
+      const thread = 'slow-retake-thread';
+      for (let i = 0; i < 100; i++) {
+        llm.on(
+          { userMessage: 'slow retake', sequenceIndex: i },
+          { toolCalls: [{ id: `call_slow_retake_${i}`, name: 'tick', arguments: {} }] },
+        );
+      }
+      const shared = new SharedLeases();
+      /** Once cut, renewals never answer and taking the lease back answers only after most of a TTL (300ms). */
+      class SlowBackendPubSub extends ReplicaPubSub {
+        cut = false;
+        completedRetakes = 0;
+        override async renewLease(key: string, owner: string, ttlMs: number) {
+          if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+          return super.renewLease(key, owner, ttlMs);
+        }
+        override async acquireLease(key: string, owner: string, ttlMs: number) {
+          if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(resolve => setTimeout(resolve, 250));
+          const result = await super.acquireLease(key, owner, ttlMs);
+          if (this.cut && result.acquired && isRetakeLeaseOwner(owner)) this.completedRetakes++;
+          return result;
+        }
+      }
+      const pubsub = new SlowBackendPubSub(shared);
+      let ticks = 0;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Tick once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticks++;
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return 'ticked';
+        },
+      });
+      const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+      const { output, drain } = await startStream(agent, 'slow retake', {
+        maxSteps: 100,
+        memory: { thread, resource: RESOURCE },
+      });
+      let settled = false;
+      // Observe either outcome without creating an unhandled derived promise; assert the terminal reason below.
+      void output.finishReason.then(
+        () => (settled = true),
+        () => (settled = true),
       );
-    }
-    const shared = new SharedLeases();
-    /** Once cut, renewals never answer and taking the lease back answers only after most of a TTL (300ms). */
-    class SlowBackendPubSub extends ReplicaPubSub {
-      cut = false;
-      override async renewLease(key: string, owner: string, ttlMs: number) {
-        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
-        return super.renewLease(key, owner, ttlMs);
-      }
-      override async acquireLease(key: string, owner: string, ttlMs: number) {
-        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(resolve => setTimeout(resolve, 250));
-        return super.acquireLease(key, owner, ttlMs);
-      }
-    }
-    const pubsub = new SlowBackendPubSub(shared);
-    let ticks = 0;
-    const tick = createTool({
-      id: 'tick',
-      description: 'Tick once',
-      inputSchema: z.object({}),
-      execute: async () => {
-        ticks++;
-        await new Promise(resolve => setTimeout(resolve, 20));
-        return 'ticked';
-      },
-    });
-    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
-    const { output, drain } = await startStream(agent, 'slow retake', {
-      maxSteps: 100,
-      memory: { thread, resource: RESOURCE },
-    });
-    let settled = false;
-    void output.finishReason.then(() => (settled = true));
-    const done = drain().catch(() => undefined);
-    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+      const done = drain().catch(() => undefined);
+      await advanceUntil(() => ticks >= 2);
 
-    // Every renewal now hangs, so the lease lapses each TTL (300ms), and taking it back takes most of a TTL. Nobody
-    // else wants the thread: the run waits for each answer and keeps going through several lapses.
-    pubsub.cut = true;
-    // Past several lapses, the run is still ticking.
-    await new Promise(resolve => setTimeout(resolve, 1_000));
-    const ticksLater = ticks;
-    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(ticksLater + 3), { timeout: 10_000 });
-    expect(settled).toBe(false);
-    expect(agent.abortThreadStream({ resourceId: RESOURCE, threadId: thread })).toBe(true);
-    await done;
+      // Every renewal now hangs, so the lease lapses each TTL (300ms), and taking it back takes most of a TTL. Nobody
+      // else wants the thread: the run waits for each answer and keeps going through several lapses.
+      pubsub.cut = true;
+      const observeUntil = Date.now() + 1_000;
+      await advanceUntil(() => Date.now() >= observeUntil);
+      const ticksLater = ticks;
+      await advanceUntil(() => ticks >= ticksLater + 3 || settled);
+      expect(ticks).toBeGreaterThanOrEqual(ticksLater + 3);
+      expect(pubsub.completedRetakes).toBeGreaterThan(0);
+      expect(settled).toBe(false);
+      expect(agent.abortThreadStream({ resourceId: RESOURCE, threadId: thread })).toBe(true);
+      await advanceUntil(() => settled);
+      await done;
+      expect(await output.finishReason).toBe('aborted');
+    } finally {
+      vi.useRealTimers();
+    }
   }, 20_000);
 
   it('frees the thread when a retake it gave up on is granted after the run stopped', async () => {

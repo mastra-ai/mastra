@@ -1,8 +1,4 @@
-import {
-  getExecutionClaim,
-  isExecutionFenceError,
-  MASTRA_DURABLE_EXECUTIONS_KEY,
-} from '../../agent/durable/execution-fence';
+import { isExecutionFenceError, isStorageFencedExecution } from '../../agent/durable/execution-fence';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -422,13 +418,7 @@ export class StepExecutor extends MastraBase {
         this.mastra &&
         !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
       ) {
-        const currentClaim = getExecutionClaim(requestContext, runId);
-        const storageFenced = currentClaim
-          ? currentClaim.generation !== undefined
-          : Object.keys(requestContext.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY) ?? {}).some(
-              claimedRunId => getExecutionClaim(requestContext, claimedRunId)?.generation !== undefined,
-            );
-        if (storageFenced) throw error;
+        if (isStorageFencedExecution(requestContext, runId)) throw error;
       }
 
       // Log the error for observability (matching default engine behavior)

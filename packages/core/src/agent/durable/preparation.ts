@@ -71,7 +71,6 @@ import {
   serializeModelConfig,
   serializeToolsetToolNames,
 } from './utils/serialize-state';
-import { assertValidRunId } from './utils/validate-run-id';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
@@ -331,7 +330,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 1. Generate IDs
   const runId = providedRunId ?? crypto.randomUUID();
-  assertValidRunId(runId);
   const messageId = crypto.randomUUID();
 
   // 2. Get request context

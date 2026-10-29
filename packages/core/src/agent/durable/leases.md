@@ -79,13 +79,15 @@ File: `../thread-stream-runtime.ts`.
 
 Thread-bound runs (signals, `subscribeToThread`, idle wakes) allow at most one active run per memory thread across processes. A message for a busy thread is folded into the running run or queued behind it instead of starting a competing run.
 
-- Key: `resourceId` and `threadId` joined by NUL. Owner: the run id, qualified as `runId + '\u0000retake\u0000' + generation` for generation-backed executions on shared transports. Lease-only executions use `execution:<executionId>` as the suffix instead. Routing strips the suffix; renewal and release compare the exact token. A later execution generation can transfer the previous token, but an earlier generation cannot renew or release its successor's lease.
+- Key: `resourceId` and `threadId` joined by NUL. Qualified owners use `mastra:thread-lease:` followed by a JSON tuple `[runId, kind, value]`. The kind is `generation` for a storage generation, `execution` for a lease-only execution ID, or `retake` for a temporary handover token. Unqualified owners remain bare run IDs unless they start with the encoding prefix, in which case `[runId, 'run', null]` escapes them. Routing decodes one tuple; renewal and release compare the exact token. A later execution generation can transfer the previous token, but an earlier generation cannot renew or release its successor's lease.
 - Acquired when a thread-bound run registers; strict registration throws `AgentThreadLeaseConflictError` when another run holds it. When a run finishes and the next queued run starts, the lease is transferred between them so no other process can start a run in the gap. If the transfer fails, the next run falls back to a fresh acquire.
 - TTL 15s, renewal every 5s. Override with `MASTRA_AGENT_THREAD_LEASE_TTL_MS` and `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS`. Evented worker participants renew the same thread key under the same run id alongside the execution claim, so losing the API does not make a busy thread appear idle. The terminal worker conditionally releases that run's thread lease; it never acquires or transfers one during renewal.
 - The thread runtime stops renewal when the lease is gone and lets the current stream finish, preferring a duplicate over dropped messages. Shared evented worker invocations instead stop within their ownership uncertainty budget if they cannot renew the captured thread token; their unfinished deliveries remain retryable. Released fire-and-forget when a local run ends, or awaited during shared terminal settlement.
 - Recovery uses it as the liveness signal for durable runs without an ownership record (`isRunHoldingThreadLease`). Without a lease-capable pubsub, those runs are treated as not live.
 
 The thread lease does not fence writes. A durable run on a thread holds both its run ownership claim and the thread lease, for different reasons.
+
+Older processes cannot decode the qualified JSON owner tokens, and the new codec treats older delimiter-qualified tokens as bare run IDs. Drain active thread runs and restart API and worker processes together when upgrading a shared deployment; do not mix lease-owner encodings on the same thread keys.
 
 ## Thread claim lease
 

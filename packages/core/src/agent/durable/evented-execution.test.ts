@@ -328,7 +328,9 @@ it('preserves the thread lease when recovery takes over between terminal validat
     ownerId: successor?.executionId,
     live: true,
   });
-  expect(await pubsub.getLeaseOwner(threadKey)).toBe(`run\u0000retake\u0000${successor?.generation}`);
+  expect(await pubsub.getLeaseOwner(threadKey)).toBe(
+    `mastra:thread-lease:${JSON.stringify(['run', 'generation', successor?.generation])}`,
+  );
 });
 
 it('does not release a successor thread token on lease-only stores', async () => {
@@ -348,7 +350,7 @@ it('does not release a successor thread token on lease-only stores', async () =>
     resourceId: 'resource',
   };
   const oldOwner = await pubsub.getLeaseOwner(key);
-  const successorOwner = 'run\u0000retake\u0000execution:successor';
+  const successorOwner = 'mastra:thread-lease:["run","execution","successor"]';
   const release = pubsub.releaseLease.bind(pubsub);
   vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (releasedKey, owner) => {
     if (releasedKey === key) await pubsub.transferLease(key, oldOwner!, successorOwner, EXECUTION_LEASE_TTL_MS);
