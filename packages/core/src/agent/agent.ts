@@ -173,7 +173,7 @@ import { createStep, createStepFromProcessor, isProcessor } from '../workflows/w
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
-import { createSkillTools } from '../workspace/skills';
+import { createSkillTools, ResolvedSourceWorkspaceSkills } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -1786,6 +1786,7 @@ export class Agent<
     requestContext?: RequestContext,
     workspaceOverride?: AnyWorkspace,
     tracingContext?: TracingContext,
+    resolveDynamicProviders = true,
   ): Promise<WorkspaceSkills | undefined> {
     const rc = requestContext || new RequestContext();
 
@@ -1810,9 +1811,13 @@ export class Agent<
     // Resolve workspace-level skills (if configured)
     const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
     const configuredWorkspaceSkills = workspace?.skills;
-    const workspaceSkills = configuredWorkspaceSkills?.getScoped
-      ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
-      : configuredWorkspaceSkills;
+    // Resolved-source skills read from a filesystem resolver; skip them when the caller must not resolve providers.
+    const workspaceSkills =
+      !resolveDynamicProviders && configuredWorkspaceSkills instanceof ResolvedSourceWorkspaceSkills
+        ? undefined
+        : configuredWorkspaceSkills?.getScoped
+          ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
+          : configuredWorkspaceSkills;
 
     // Merge if both exist (agent skills win on name conflicts)
     if (agentSkills && workspaceSkills) {
@@ -3013,7 +3018,9 @@ export class Agent<
   /**
    * List all skills available to this agent (from both agent-level and workspace).
    *
-   * @param options - Optional request context for dynamic skill resolution
+   * @param options - Optional request context for dynamic skill resolution.
+   *   Set `resolveDynamicProviders: false` to skip workspace skills that come from a
+   *   filesystem resolver, so listing doesn't call the resolver.
    * @returns Array of skill metadata (name, description, path)
    *
    * @example
@@ -3024,8 +3031,16 @@ export class Agent<
    * }
    * ```
    */
-  public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
-    const skills = await this.resolveSkills(options?.requestContext);
+  public async listSkills(options?: {
+    requestContext?: RequestContext;
+    resolveDynamicProviders?: boolean;
+  }): Promise<SkillMetadata[]> {
+    const skills = await this.resolveSkills(
+      options?.requestContext,
+      undefined,
+      undefined,
+      options?.resolveDynamicProviders ?? true,
+    );
     if (!skills) return [];
     return skills.list();
   }

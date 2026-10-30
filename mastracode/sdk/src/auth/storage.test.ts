@@ -359,6 +359,151 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.isLoggedIn(PROVIDER)).toBe(false);
   });
 
+  it('removing an inactive entry keeps the active entry and slot; removing the active last entry wraps to the first', async () => {
+    const { storage } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE });
+    await storage.addAccount(PROVIDER, { refresh: 'r2', access: 'a2', expires: FUTURE });
+    await storage.addAccount(PROVIDER, { refresh: 'r3', access: 'a3', expires: FUTURE });
+    const [a, b, c] = storage.listAccounts(PROVIDER);
+
+    storage.activateAccount(PROVIDER, c!.id);
+    storage.removeAccount(PROVIDER, b!.id);
+    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(c!.id);
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r3', access: 'a3' });
+
+    storage.removeAccount(PROVIDER, c!.id);
+    expect(storage.listAccounts(PROVIDER).map(entry => [entry.id, entry.active])).toEqual([[a!.id, true]]);
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r1', access: 'a1' });
+  });
+
+  it('rotates through the pool in insertion order, wrapping once, with numbered default labels', async () => {
+    const { storage } = makeStorage();
+    for (const n of [1, 2, 3])
+      await storage.addAccount(PROVIDER, { refresh: `r${n}`, access: `a${n}`, expires: FUTURE });
+    const accounts = storage.listAccounts(PROVIDER);
+    expect(accounts.map(entry => entry.label)).toEqual(
+      [1, 2, 3].map(n => `${anthropicOAuthProvider.name} account ${n}`),
+    );
+
+    storage.activateAccount(PROVIDER, accounts[0]!.id);
+    const order = [1, 2, 3, 4].map(() => storage.activateAccount(PROVIDER)?.id);
+    expect(order).toEqual([accounts[1]!.id, accounts[2]!.id, accounts[0]!.id, accounts[1]!.id]);
+    expect(storage.listAccounts(PROVIDER).filter(entry => entry.active)).toHaveLength(1);
+  });
+
+  it('renameAccount only renames an account of the named provider', async () => {
+    const { storage } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE });
+    const [entry] = storage.listAccounts(PROVIDER);
+
+    storage.renameAccount(CODEX, entry!.id, 'Wrong provider');
+    expect(storage.listAccounts(PROVIDER)[0]!.label).toBe(entry!.label);
+
+    storage.renameAccount(PROVIDER, entry!.id, 'Work');
+    expect(storage.listAccounts(PROVIDER)[0]).toMatchObject({ id: entry!.id, label: 'Work', active: true });
+  });
+
+  it('gives each new account the next priority, so it goes to the end of the switch order', async () => {
+    const { storage, authPath } = makeStorage();
+    for (const n of [1, 2, 3])
+      await storage.addAccount(PROVIDER, { refresh: `r${n}`, access: `a${n}`, expires: FUTURE });
+    expect(storage.listAccounts(PROVIDER).map(entry => entry.priority)).toEqual([0, 1, 2]);
+
+    const [first, second, third] = storage.listAccounts(PROVIDER);
+    storage.reorderAccounts(PROVIDER, [third!.id, first!.id, second!.id]);
+    const added = await storage.addAccount(PROVIDER, { refresh: 'r4', access: 'a4', expires: FUTURE });
+    expect(added.priority).toBe(3);
+    expect(storage.listAccounts(PROVIDER).map(entry => entry.id)).toEqual([third!.id, first!.id, second!.id, added.id]);
+
+    // Re-authorizing an account keeps its place in the order.
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1-new', expires: FUTURE });
+    expect(storage.listAccounts(PROVIDER).find(entry => entry.id === first!.id)?.priority).toBe(1);
+
+    const onDisk = readAuthJson(authPath);
+    expect(onDisk[`accounts:${added.id}`]).toMatchObject({ priority: 3 });
+  });
+
+  it('reorderAccounts changes the rotation order and persists it, without changing the active account', async () => {
+    const { storage, authPath } = makeStorage();
+    for (const n of [1, 2, 3])
+      await storage.addAccount(PROVIDER, { refresh: `r${n}`, access: `a${n}`, expires: FUTURE });
+    const [first, second, third] = storage.listAccounts(PROVIDER);
+    storage.activateAccount(PROVIDER, first!.id);
+
+    storage.reorderAccounts(PROVIDER, [first!.id, third!.id, second!.id]);
+    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(first!.id);
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r1' });
+
+    const order = [1, 2, 3].map(() => storage.activateAccount(PROVIDER)?.id);
+    expect(order).toEqual([third!.id, second!.id, first!.id]);
+    expect(new AuthStorage(authPath).listAccounts(PROVIDER).map(entry => entry.id)).toEqual([
+      first!.id,
+      third!.id,
+      second!.id,
+    ]);
+  });
+
+  it('reorderAccounts ignores unknown or repeated ids', async () => {
+    const { storage } = makeStorage();
+    for (const n of [1, 2]) await storage.addAccount(PROVIDER, { refresh: `r${n}`, access: `a${n}`, expires: FUTURE });
+    const before = storage.listAccounts(PROVIDER);
+
+    storage.reorderAccounts(PROVIDER, [before[1]!.id, `${PROVIDER}:missing`]);
+    storage.reorderAccounts(PROVIDER, [before[1]!.id, before[1]!.id]);
+    expect(storage.listAccounts(PROVIDER)).toEqual(before);
+  });
+
+  it('removing the active account activates the next one in switch order, not insertion order', async () => {
+    const { storage } = makeStorage();
+    for (const n of [1, 2, 3])
+      await storage.addAccount(PROVIDER, { refresh: `r${n}`, access: `a${n}`, expires: FUTURE });
+    const [first, second, third] = storage.listAccounts(PROVIDER);
+    storage.reorderAccounts(PROVIDER, [first!.id, third!.id, second!.id]);
+    storage.activateAccount(PROVIDER, first!.id);
+
+    storage.removeAccount(PROVIDER, first!.id);
+    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(third!.id);
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r3' });
+  });
+
+  it('backfills priorities for entries written before priorities existed, keeping their insertion order', () => {
+    const work = accountRecord('r1', 'a1', { active: true, label: 'Work' });
+    const personal = accountRecord('r2', 'a2', { label: 'Personal' });
+    const spare = accountRecord('r3', 'a3', { label: 'Spare' });
+    const { storage, authPath } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${work.id}`]: work,
+      [`accounts:${personal.id}`]: personal,
+      [`accounts:${spare.id}`]: spare,
+    });
+
+    expect(storage.listAccounts(PROVIDER).map(entry => [entry.id, entry.priority])).toEqual([
+      [work.id, 0],
+      [personal.id, 1],
+      [spare.id, 2],
+    ]);
+    const onDisk = readAuthJson(authPath);
+    expect(onDisk[`accounts:${spare.id}`]).toMatchObject({ priority: 2 });
+    // Rotation is unchanged by the migration.
+    expect(storage.activateAccount(PROVIDER)?.id).toBe(personal.id);
+    expect(storage.activateAccount(PROVIDER)?.id).toBe(spare.id);
+  });
+
+  it('backfills only the entries missing a priority, after the existing ones', () => {
+    const work = { ...accountRecord('r1', 'a1', { active: true, label: 'Work' }), priority: 5 };
+    const legacy = accountRecord('r2', 'a2', { label: 'Older build' });
+    const { storage } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${legacy.id}`]: legacy,
+      [`accounts:${work.id}`]: work,
+    });
+
+    expect(storage.listAccounts(PROVIDER).map(entry => [entry.id, entry.priority])).toEqual([
+      [work.id, 5],
+      [legacy.id, 6],
+    ]);
+  });
+
   it('leaves account switching to the rotation processor when an automatic refresh fails', async () => {
     const entry1 = accountRecord('r1', 'a1', { active: true, expires: PAST });
     const entry2 = accountRecord('r2', 'a2');
