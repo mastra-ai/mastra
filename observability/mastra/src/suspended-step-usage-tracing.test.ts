@@ -484,6 +484,65 @@ describe('tracing when a tool call suspends', () => {
     expect(generationCosts(exporter)).toEqual([undefined, undefined]);
   });
 
+  it('keeps provider cost on the suspended leg when it records only some token counts', async () => {
+    const exporter = new TestExporter();
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream<any>(
+          calls++ === 0
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'approve', input: '{}', providerExecuted: false },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 100, outputTokens: undefined, totalTokens: undefined },
+                  providerMetadata: gatewayCost('0.5'),
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'done' },
+                { type: 'text-end', id: 't' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: RESUMED_STEP_USAGE,
+                  providerMetadata: gatewayCost('2'),
+                },
+              ],
+        ),
+      }),
+    });
+    const agent = new Agent({
+      id: 'usage-agent',
+      name: 'usage-agent',
+      instructions: 'use the tool',
+      model,
+      tools: { approve: approvalTool },
+    });
+    observability = new Observability({
+      configs: { default: { serviceName: 'suspended-usage', exporters: [exporter] } },
+    });
+    new Mastra({ logger: false, agents: { agent }, storage: new InMemoryStore(), observability });
+
+    const output = await agent.stream('Hello');
+    await output.consumeStream();
+    const resumed = await agent.approveToolCall({ runId: output.runId, toolCallId: 'call-1' });
+    await resumed.consumeStream();
+    expect(resumed.status).toBe('success');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(generationCosts(exporter)).toEqual([
+      { estimatedCost: 0.5, reportedStepCount: 1 },
+      { estimatedCost: 2, reportedStepCount: 1 },
+    ]);
+  });
+
   it('records no new provider-reported cost for a later approval request from the same step', async () => {
     const exporter = new TestExporter();
     let calls = 0;
