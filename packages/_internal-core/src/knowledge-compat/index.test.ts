@@ -5,6 +5,7 @@ import {
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   createKnowledgePagesCoreLoader,
   inspectKnowledgePagesSchema,
+  legacyKnowledgeTablesToDrop,
 } from './index';
 
 describe('schema 4 inspection', () => {
@@ -45,6 +46,53 @@ describe('schema 4 inspection', () => {
       expect.arrayContaining([...KNOWLEDGE_PAGES_TABLE_NAMES, 'mastra_knowledge_nodes', 'mastra_knowledge_cursors']),
     );
     expect(new Set(KNOWLEDGE_RESETTABLE_TABLE_NAMES).size).toBe(KNOWLEDGE_RESETTABLE_TABLE_NAMES.length);
+  });
+});
+
+describe('old Knowledge tables dropped on init', () => {
+  const published = [
+    'mastra_knowledge_nodes',
+    'mastra_knowledge_records',
+    'mastra_knowledge_mentions',
+    'mastra_knowledge_activity',
+    'mastra_knowledge_semantic_outbox',
+    'mastra_knowledge_access_state',
+    'mastra_knowledge_cursors',
+  ];
+
+  it('drops a whole published layout, including the names schema 4 reuses', () => {
+    const drop = legacyKnowledgeTablesToDrop({ tableNames: [...published, 'mastra_threads'], schemaVersion: 2 });
+    expect(new Set(drop)).toEqual(new Set(published));
+    expect(drop.indexOf('mastra_knowledge_records')).toBeLessThan(drop.indexOf('mastra_knowledge_nodes'));
+  });
+
+  it('on a schema-4 store drops only what an older process recreated, never schema-4 tables', () => {
+    const drop = legacyKnowledgeTablesToDrop({
+      tableNames: [
+        ...KNOWLEDGE_PAGES_TABLE_NAMES,
+        'mastra_knowledge_nodes',
+        'mastra_knowledge_records',
+        'mastra_knowledge_semantic_outbox',
+      ],
+      schemaVersion: 4,
+    });
+    expect(new Set(drop)).toEqual(
+      new Set(['mastra_knowledge_nodes', 'mastra_knowledge_records', 'mastra_knowledge_semantic_outbox']),
+    );
+  });
+
+  it('drops nothing on an empty or clean schema-4 store, or schema-4 tables alone', () => {
+    expect(legacyKnowledgeTablesToDrop({ tableNames: [] })).toEqual([]);
+    expect(legacyKnowledgeTablesToDrop({ tableNames: [...KNOWLEDGE_PAGES_TABLE_NAMES], schemaVersion: 4 })).toEqual([]);
+    expect(legacyKnowledgeTablesToDrop({ tableNames: [...KNOWLEDGE_PAGES_TABLE_NAMES] })).toEqual([]);
+  });
+
+  it('leaves a store that inspects clean once the listed tables are gone', () => {
+    const tableNames = [...published, 'mastra_knowledge_pages'];
+    const drop = new Set(legacyKnowledgeTablesToDrop({ tableNames, schemaVersion: 2 }));
+    expect(drop.has('mastra_knowledge_pages')).toBe(false);
+    const rest = tableNames.filter(name => !drop.has(name));
+    expect(rest).toEqual(['mastra_knowledge_pages']);
   });
 });
 

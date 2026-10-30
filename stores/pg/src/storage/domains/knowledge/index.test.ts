@@ -1,4 +1,4 @@
-import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
+import { createKnowledgeLegacyUpgradeTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -104,3 +104,63 @@ beforeAll(async () => {
 });
 
 createKnowledgePageStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
+
+const LEGACY_SCHEMA = 'knowledge_legacy_test';
+const legacyTable = (name: string) => `"${LEGACY_SCHEMA}"."${name}"`;
+const legacyKnowledgeTables = async () =>
+  (
+    await pool.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name LIKE 'mastra\\_knowledge\\_%'`,
+      [LEGACY_SCHEMA],
+    )
+  ).rows.map(row => String(row.table_name));
+
+createKnowledgeLegacyUpgradeTests({
+  createStore: () => new KnowledgePG({ pool, schemaName: LEGACY_SCHEMA }),
+  clear: async () => {
+    await pool.query(`DROP SCHEMA IF EXISTS "${LEGACY_SCHEMA}" CASCADE`);
+    await pool.query(`CREATE SCHEMA "${LEGACY_SCHEMA}"`);
+    await pool.query(`CREATE TABLE ${legacyTable('existing_domain')} (id text PRIMARY KEY)`);
+    await pool.query(`INSERT INTO ${legacyTable('existing_domain')} VALUES ('preserved')`);
+  },
+  // The shape @mastra/pg 1.33.0 created, reduced to the columns, keys and references that matter here.
+  createPublishedLayout: async ({ rows }) => {
+    await pool.query(`CREATE TABLE ${legacyTable('mastra_knowledge_nodes')} (id text PRIMARY KEY, name text)`);
+    await pool.query(
+      `CREATE TABLE ${legacyTable('mastra_knowledge_records')} (id text PRIMARY KEY, node text REFERENCES ${legacyTable('mastra_knowledge_nodes')} (id))`,
+    );
+    await pool.query(`CREATE TABLE ${legacyTable('mastra_knowledge_semantic_outbox')} (id text PRIMARY KEY)`);
+    await pool.query(
+      `CREATE TABLE ${legacyTable('mastra_knowledge_mentions')} ("sourceType" text, "sourceId" text, "recordId" text, PRIMARY KEY ("recordId", "sourceId"))`,
+    );
+    await pool.query(
+      `CREATE TABLE ${legacyTable('mastra_knowledge_activity')} (id text PRIMARY KEY, action text, "recordType" text, "recordId" text)`,
+    );
+    await pool.query(
+      `CREATE TABLE ${legacyTable('mastra_knowledge_access_state')} (id text PRIMARY KEY, epoch integer NOT NULL, "schemaVersion" integer NOT NULL)`,
+    );
+    if (!rows) return;
+    await pool.query(`INSERT INTO ${legacyTable('mastra_knowledge_access_state')} VALUES ('knowledge', 1, 2)`);
+    await pool.query(`INSERT INTO ${legacyTable('mastra_knowledge_nodes')} VALUES ('01LEGACY', 'Legacy')`);
+    await pool.query(`INSERT INTO ${legacyTable('mastra_knowledge_records')} VALUES ('01REC', '01LEGACY')`);
+    await pool.query(`INSERT INTO ${legacyTable('mastra_knowledge_mentions')} VALUES ('record', '01REC', '01REC')`);
+    await pool.query(
+      `INSERT INTO ${legacyTable('mastra_knowledge_activity')} VALUES ('01ACT', 'create', 'node', '01LEGACY')`,
+    );
+  },
+  recreateLegacyTables: async () => {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS ${legacyTable('mastra_knowledge_nodes')} (id text PRIMARY KEY, name text)`,
+    );
+    await pool.query(`CREATE TABLE IF NOT EXISTS ${legacyTable('mastra_knowledge_records')} (id text PRIMARY KEY)`);
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS ${legacyTable('mastra_knowledge_semantic_outbox')} (id text PRIMARY KEY)`,
+    );
+    await pool.query(
+      `INSERT INTO ${legacyTable('mastra_knowledge_nodes')} VALUES ('01OLD', 'Old') ON CONFLICT DO NOTHING`,
+    );
+  },
+  knowledgeTables: legacyKnowledgeTables,
+  otherTableRows: async () =>
+    Number((await pool.query(`SELECT COUNT(*) AS n FROM ${legacyTable('existing_domain')}`)).rows[0].n),
+});

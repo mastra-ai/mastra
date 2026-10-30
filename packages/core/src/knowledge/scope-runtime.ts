@@ -30,6 +30,7 @@ export interface KnowledgeAccessExplanation {
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
   readonly compiled: CompiledKnowledgeScopes;
+  #declarationsChecked?: Promise<void>;
 
   constructor(
     declarations: KnowledgeScopeDeclarations,
@@ -47,8 +48,73 @@ export class KnowledgeScopeRuntime {
     }
   }
 
+  /**
+   * Fails when stored scope pages carry declaration keys this config doesn't declare: a renamed or
+   * removed key would otherwise silently cut those scopes off from prefix and `belongsTo` reach.
+   * Checked once per instance; only a pass is remembered, so a store error is retried next time.
+   */
+  checkDeclarations(): Promise<void> {
+    if (!this.#declarationsChecked) {
+      const check = this.#checkDeclarations();
+      this.#declarationsChecked = check;
+      check.catch(() => {
+        if (this.#declarationsChecked === check) this.#declarationsChecked = undefined;
+      });
+    }
+    return this.#declarationsChecked;
+  }
+
+  async #checkDeclarations(): Promise<void> {
+    const storage = await this.getStorage();
+    const orphans = (await storage.listScopeDeclarations()).filter(
+      ({ declaration }) => !this.compiled.declarations.has(declaration),
+    );
+    if (orphans.length === 0) return;
+    const listed = orphans
+      .map(({ declaration, scopes }) => `"${declaration}" (${scopes} scope${scopes === 1 ? '' : 's'})`)
+      .join(', ');
+    throw new KnowledgeDeclarationError(
+      `Knowledge storage has scopes created from declarations this config doesn't declare: ${listed}. ` +
+        'Restore each key in scopes, rename it with knowledge.renameScopeDeclaration(from, to), ' +
+        'or keep the key with no access rules to retire it.',
+    );
+  }
+
+  /** Re-keys stored scopes from declaration `from` to `to`. See {@link Knowledge.renameScopeDeclaration}. */
+  async renameScopeDeclaration(from: string, to: string): Promise<number> {
+    if (this.compiled.declarations.has(from)) {
+      throw new KnowledgeDeclarationError(
+        `Can't rename scope declaration "${from}": it is still declared. Remove it from scopes first.`,
+      );
+    }
+    if (!this.compiled.declarations.has(to)) {
+      throw new KnowledgeDeclarationError(`Can't rename scope declaration to "${to}": it isn't declared in scopes.`);
+    }
+    const storage = await this.getStorage();
+    const renamed = await storage.renameScopeDeclaration({
+      from,
+      to,
+      check: scopes => {
+        const mismatched = scopes.filter(scope => this.compiled.match(scope.address)?.declaration !== scope.to);
+        if (mismatched.length === 0) return;
+        throw new KnowledgeDeclarationError(
+          `Can't rename scope declaration "${from}" to "${to}": ` +
+            mismatched
+              .slice(0, 5)
+              .map(scope => `"${scope.address}" doesn't match "${scope.to}"`)
+              .join(', ') +
+            (mismatched.length > 5 ? `, and ${mismatched.length - 5} more` : '') +
+            '. Nothing was renamed.',
+        );
+      },
+    });
+    this.#declarationsChecked = undefined;
+    return renamed;
+  }
+
   async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
     this.validatePrincipals(principals);
+    await this.checkDeclarations();
     const storage = await this.getStorage();
     return knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses));
   }
@@ -138,6 +204,7 @@ export class KnowledgeScopeRuntime {
     ancestors: readonly string[] = [],
   ): Promise<KnowledgePage> {
     this.validatePrincipals(principals);
+    await this.checkDeclarations();
     const match = this.compiled.match(address);
     if (!match)
       throw new KnowledgeDeclarationError(`Knowledge scope "${address}" does not match a declared scope type.`);
