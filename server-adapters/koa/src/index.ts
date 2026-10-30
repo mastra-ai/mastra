@@ -136,7 +136,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         const isClientError = status >= 400 && status < 500;
         const loggedAsWarning = status === 501 && (ctx as any)._mastraLoggedNotImplementedError === err;
         if (isClientError || loggedAsWarning) {
-          for (const listener of ctx.app.listeners('error')) {
+          for (const listener of ctx.app.rawListeners('error')) {
             if (listener !== ctx.app.onerror) listener.call(ctx.app, err, ctx);
           }
           return;

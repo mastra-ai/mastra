@@ -85,4 +85,16 @@ describe('Koa client error logging', () => {
     expect(appListener.mock.calls[0]![0]).toMatchObject({ status: 400 });
     expect(consoleError).not.toHaveBeenCalled();
   });
+
+  it('removes a once error listener after delivering the first 400', async () => {
+    const { app, send } = await startServer();
+    const onceListener = vi.fn();
+    app.once('error', onceListener);
+
+    expect((await send()).status).toBe(400);
+    expect((await send()).status).toBe(400);
+
+    expect(onceListener).toHaveBeenCalledTimes(1);
+    expect(app.listeners('error')).not.toContain(onceListener);
+  });
 });
