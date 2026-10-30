@@ -5,6 +5,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { createScorer } from '../../../../evals';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { MockMemory } from '../../../../memory/mock';
 import { SCENARIO_MODEL_ID } from '../types';
 import { SamplingStrategyType, SpanType, TracingEventType } from '../../../../observability';
 import type { Processor } from '../../../../processors';
@@ -277,6 +278,104 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
         outputProcessors: [slowFinish],
         modelSettings: { timeout: { totalMs: 1500 } },
         fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'quick answer' }),
+      });
+      expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+      expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    },
+  );
+
+  // A caller abort stops the caller's deadline, so a deadline passing later while the aborted run
+  // finishes must not turn the abort into a timeout.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'keeps a caller abort when the deadline passes while the aborted run finishes',
+    async () => {
+      const { observability, ended } = capture();
+      const controller = new AbortController();
+      const slowFinish: Processor = {
+        id: 'slow-finish',
+        processOutputResult: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Look up the order',
+        abortSignal: controller.signal,
+        maxSteps: 3,
+        errorProcessors: [],
+        maxRetries: 0,
+        outputProcessors: [slowFinish],
+        modelSettings: { timeout: { totalMs: 1500 } },
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up an order',
+            inputSchema: z.object({}),
+            execute: async () => {
+              controller.abort();
+              throw new DOMException('Tool canceled', 'AbortError');
+            },
+          }),
+        },
+        fixtures: llm =>
+          llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+      });
+      expect(ended().at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+    },
+  );
+
+  // emitEvent holds the end of the run until the title is generated, so a slow title model
+  // runs the run past its deadline after the finish side effects are done.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'reports a deadline that expires while the thread title is generated as a limit',
+    async () => {
+      const { observability, ended } = capture();
+      const llm = getMock();
+      // The title model answers only after the deadline has passed.
+      const titleModel = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` }).chat('title-model');
+      const slowTitleModel: typeof titleModel = {
+        ...titleModel,
+        specificationVersion: titleModel.specificationVersion,
+        provider: titleModel.provider,
+        modelId: titleModel.modelId,
+        supportedUrls: titleModel.supportedUrls,
+        doGenerate: async options => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return titleModel.doGenerate(options);
+        },
+        doStream: async options => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return titleModel.doStream(options);
+        },
+      };
+      const memory = new MockMemory({ options: { generateTitle: { model: slowTitleModel, emitEvent: true } } });
+      await runLoopScenario({
+        engine,
+        llm,
+        observability,
+        memory,
+        threadId: 'deadline-title',
+        resourceId: 'user-1',
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Quick answer',
+        errorProcessors: [],
+        maxRetries: 0,
+        modelSettings: { timeout: { totalMs: 1500 } },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', predicate: (request: any) => request?.model === 'title-model' },
+            { content: 'Slow Title' },
+          );
+          llm.on({ endpoint: 'chat' }, { content: 'quick answer' });
+        },
       });
       expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
       expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });

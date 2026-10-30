@@ -483,6 +483,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // reaches this worker either through the caller's composed signal (same process) or as a
           // timeout abort request over pubsub (another worker). A worker that saw neither still has the
           // deadline carried on request context: past it, the caller has already reported the timeout.
+          // A run the caller aborted first stays an abort: the caller's deadline stopped with it.
           const resolveDeadlineError = () => {
             const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
             const carriedDeadline = readRunDeadline(requestContext);
@@ -490,7 +491,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               ? abortReason
               : state.deadlineTimeout
                 ? new MastraTimeoutError(state.deadlineTimeout)
-                : carriedDeadline && Date.now() >= carriedDeadline.at
+                : !state.runAborted && carriedDeadline && Date.now() >= carriedDeadline.at
                   ? new MastraTimeoutError({ timeoutType: 'total', timeoutMs: carriedDeadline.timeoutMs })
                   : undefined;
           };
@@ -525,9 +526,6 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               steps: state.accumulatedSteps,
             },
           });
-          // The deadline can expire while the side effects run; the caller has then already
-          // reported the timeout, so the run must end as it here too.
-          const deadlineError = sideEffectsDeadlineError ?? resolveDeadlineError();
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;
@@ -560,6 +558,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               });
             }
           }
+
+          // The deadline can expire while the side effects or the title generation run; the caller
+          // has then already reported the timeout, so the run must end as it here too.
+          const deadlineError = sideEffectsDeadlineError ?? resolveDeadlineError();
 
           const finalOutput = {
             messageListState: finishResult.messageListState,
