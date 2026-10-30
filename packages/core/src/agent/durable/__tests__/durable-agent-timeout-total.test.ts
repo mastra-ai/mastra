@@ -21,6 +21,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
@@ -329,7 +330,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     result.cleanup();
   });
 
-  it.each([true, false])('persists completed steps only when savePerStep is enabled (%s)', async savePerStep => {
+  it.each([true, false])('persists completed steps at the total deadline (savePerStep: %s)', async savePerStep => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });
     const firstStep = toolCallingModel('lookup');
@@ -369,10 +370,307 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       expect(findTimeoutErrorChunk(chunks)).toBeDefined();
       await vi.waitFor(async () => {
         const { messages } = await memory.recall({ threadId: 'timeout-memory-parity-thread' });
-        expect(JSON.stringify(messages).includes('Found NYC')).toBe(savePerStep);
+        expect(JSON.stringify(messages).includes('Found NYC')).toBe(true);
       });
     } finally {
       result.cleanup();
+    }
+  });
+
+  it('keeps a slow deadline save when the run ID is reused right away', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const firstStep = toolCallingModel('lookup');
+    const followUp = textModel('Retried.');
+    let calls = 0;
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-slow-save',
+        name: 'Timeout slow save',
+        instructions: 'Look up the city.',
+        memory,
+        model: new MockLanguageModelV2({
+          doStream: async options => {
+            calls++;
+            if (calls === 1) return firstStep.doStream(options);
+            if (calls === 2) return new Promise<never>(() => {});
+            return followUp.doStream(options);
+          },
+        }),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async () => 'Found NYC',
+          }),
+        },
+        // Holds the deadline's save past DEADLINE_SAVE_WAIT_MS, before it writes.
+        outputProcessors: [
+          {
+            id: 'slow-output-processor',
+            processOutputResult: async ({ messages }: { messages: unknown[] }) => {
+              await new Promise(resolve => setTimeout(resolve, 1_500));
+              return messages;
+            },
+          } as any,
+        ],
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const threadId = 'timeout-slow-save-thread';
+    const result = await agent.stream('hello', {
+      memory: { thread: threadId, resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 500 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      // The caller retries under the same run ID as soon as it sees the deadline, claiming the run.
+      const retry = await agent.stream('again', {
+        runId: result.runId,
+        memory: { thread: threadId, resource: 'timeout-resource' },
+      });
+      await drain(retry.fullStream);
+      retry.cleanup();
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId });
+          expect(JSON.stringify(messages)).toContain('Found NYC');
+        },
+        { timeout: 4_000 },
+      );
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('removes per-step saves when an output processor trips at the total deadline', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const firstStep = toolCallingModel('lookup');
+    let calls = 0;
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-tripwire',
+        name: 'Timeout tripwire',
+        instructions: 'Look up the city.',
+        memory,
+        model: new MockLanguageModelV2({
+          doStream: async options => {
+            if (++calls === 1) return firstStep.doStream(options);
+            return new Promise<never>(() => {});
+          },
+        }),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async () => 'Found NYC',
+          }),
+        },
+        outputProcessors: [
+          {
+            id: 'timeout-blocking-output-processor',
+            processOutputResult: ({ abort }: { abort: (reason?: string) => never }) => abort('blocked'),
+          } as any,
+        ],
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const threadId = 'timeout-tripwire-thread';
+    const result = await agent.stream('hello', {
+      memory: { thread: threadId, resource: 'timeout-resource' },
+      savePerStep: true,
+      modelSettings: { timeout: { totalMs: 1000 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'tool-result')).toBe(true);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const { messages } = await memory.recall({ threadId });
+      expect(JSON.stringify(messages)).not.toContain('Found NYC');
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('does not save a raw late tool result that a processToolResult hook would have seen', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-late-redaction',
+        name: 'Timeout late redaction',
+        instructions: 'Look up the city.',
+        memory,
+        model: toolCallingModel('lookup'),
+        outputProcessors: [{ id: 'redact', processToolResult: () => '[redacted]' } as any],
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            // Ignores the abort for a moment, then returns inside the grace window.
+            execute: async (_input, { abortSignal }) => {
+              await new Promise<void>(resolve => abortSignal?.addEventListener('abort', () => resolve()));
+              await new Promise(resolve => setTimeout(resolve, 50));
+              return 'SECRET-TOKEN';
+            },
+          }),
+        },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const result = await agent.stream('hello', {
+      memory: { thread: 'timeout-late-redaction-thread', resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 500 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'timeout-late-redaction-thread' });
+        expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+      });
+      const { messages } = await memory.recall({ threadId: 'timeout-late-redaction-thread' });
+      expect(JSON.stringify(messages)).not.toContain('SECRET-TOKEN');
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('keeps a late parallel tool result when its sibling never returns', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+          { type: 'tool-call' as const, toolCallId: 'tc-fast', toolName: 'fast', input: '{}' },
+          { type: 'tool-call' as const, toolCallId: 'tc-stuck', toolName: 'stuck', input: '{}' },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-late-parallel',
+        name: 'Timeout late parallel',
+        instructions: 'Call both tools.',
+        memory,
+        model,
+        tools: {
+          // Returns inside the deadline's grace window.
+          fast: createTool({
+            id: 'fast',
+            description: 'Returns once aborted',
+            inputSchema: z.object({}),
+            execute: async (_input, { abortSignal }) => {
+              await new Promise<void>(resolve => abortSignal?.addEventListener('abort', () => resolve()));
+              await new Promise(resolve => setTimeout(resolve, 50));
+              return 'FAST-RESULT';
+            },
+          }),
+          // A client-side tool: no result ever comes back on the server.
+          stuck: createTool({
+            id: 'stuck',
+            description: 'Runs on the client',
+            inputSchema: z.object({}),
+          }),
+        },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const result = await agent.stream('hello', {
+      memory: { thread: 'timeout-late-parallel-thread', resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 500 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'timeout-late-parallel-thread' });
+        const saved = JSON.stringify(messages);
+        expect(saved).toContain('FAST-RESULT');
+        expect(saved).toContain(TOOL_ABORT_NOTICE);
+      });
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('saves a resumed run at its total deadline', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const firstCall = toolCallingModel('approve');
+    let calls = 0;
+    // The first call asks for the approval-gated tool; the call after the approval hangs.
+    const model = new MockLanguageModelV2({
+      doStream: async options => (++calls === 1 ? firstCall.doStream(options) : new Promise<never>(() => {})),
+    });
+    const outputPasses = vi.fn();
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-resumed',
+        name: 'Timeout resumed',
+        instructions: 'Use the tool.',
+        memory,
+        model,
+        outputProcessors: [
+          {
+            id: 'count-output-passes',
+            processOutputResult: ({ messages }: { messages: unknown[] }) => {
+              outputPasses();
+              return messages;
+            },
+          } as any,
+        ],
+        tools: {
+          approve: createTool({
+            id: 'approve',
+            description: 'Needs approval',
+            inputSchema: z.object({ city: z.string() }),
+            requireApproval: true,
+            execute: async () => 'APPROVED-RESULT',
+          }),
+        },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    let suspended = false;
+    const initial = await agent.stream('hello', {
+      memory: { thread: 'timeout-resumed-thread', resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 800 } },
+      onSuspended: () => {
+        suspended = true;
+      },
+    });
+    await vi.waitFor(() => expect(suspended).toBe(true));
+    outputPasses.mockClear();
+
+    const resumed = await agent.resume(initial.runId, { approved: true });
+    try {
+      const chunks = await drain(resumed.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(() => expect(outputPasses).toHaveBeenCalledTimes(1));
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'timeout-resumed-thread' });
+        expect(JSON.stringify(messages)).toContain('APPROVED-RESULT');
+      });
+    } finally {
+      initial.cleanup();
+      resumed.cleanup();
     }
   });
 
