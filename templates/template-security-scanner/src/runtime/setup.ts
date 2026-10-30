@@ -1,4 +1,4 @@
-import { loadSettings, morphModelConfiguration, type Settings } from '../config/settings.js';
+import { loadSettings, morphModelDescriptor, type Settings } from '../config/settings.js';
 import { buildLocalImage, preflight, reconcileOwnedSandboxes, releaseImage } from './docker.js';
 import { withSetupLock, writeReceipt } from './files.js';
 import { probeSandbox } from './sandbox.js';
@@ -29,7 +29,7 @@ export async function setup(settings: Settings = loadSettings(), signal?: AbortS
         sandbox,
         discovery: await prepareDiscoveryCapability(settings, signal),
         imageDisposition,
-        models: morphModelConfiguration(settings),
+        models: morphModelDescriptor(settings),
         scanningEnabled: false,
         completedAt: new Date().toISOString(),
       };

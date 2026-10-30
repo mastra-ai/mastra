@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { diagnostic, loadSettings, morphModelConfiguration } from '../src/config/settings.js';
+import { diagnostic, loadSettings, morphModelConfiguration, morphModelDescriptor } from '../src/config/settings.js';
 import { parseBrowserSandboxStatus } from '../src/runtime/browser.js';
 import {
   inspectAppliedPolicy,
@@ -14,7 +14,7 @@ import {
 } from '../src/runtime/seccomp.js';
 
 describe('local runtime configuration', () => {
-  it('uses finite native Docker settings and explicit Morph models without resolving credentials', () => {
+  it('uses finite native Docker settings and exposes only safe Morph model descriptors', () => {
     const settings = loadSettings({}, '/tmp/scanner-settings');
     expect(settings.SANDBOX_MEMORY_MIB).toBe(1024);
     expect(settings.SANDBOX_PIDS).toBe(256);
@@ -22,7 +22,8 @@ describe('local runtime configuration', () => {
     expect(settings.OUTPUT_LIMIT_BYTES).toBe(8192);
     expect(settings.DOCKER_RETAIN_SHARED_BASE_IMAGE).toBe(false);
     expect(settings.databaseUrl).toBe('file:/tmp/scanner-settings/data/security-scanner.db');
-    expect(morphModelConfiguration(settings)).toEqual({
+    expect(settings.mastraDatabaseUrl).toBe('file:/tmp/scanner-settings/data/security-scanner-mastra.db');
+    expect(morphModelDescriptor(settings)).toEqual({
       explorer: {
         providerId: 'morph',
         modelId: 'morph-dsv41flash-abliterated',
@@ -31,6 +32,14 @@ describe('local runtime configuration', () => {
       },
       judge: { providerId: 'morph', modelId: 'morph-glm53-744b', url: 'https://api.morphllm.com/v1', api: 'chat' },
     });
+    expect(() => morphModelConfiguration(settings, {})).toThrowError(
+      expect.objectContaining({ code: 'MORPH_API_KEY_REQUIRED' }),
+    );
+    const syntheticKey = 'synthetic-test-key-only';
+    const configured = morphModelConfiguration(settings, { MORPH_API_KEY: syntheticKey });
+    expect(configured.explorer.apiKey).toBe(syntheticKey);
+    expect(configured.judge.apiKey).toBe(syntheticKey);
+    expect(JSON.stringify(morphModelDescriptor(settings))).not.toContain(syntheticKey);
   });
 
   it.each([

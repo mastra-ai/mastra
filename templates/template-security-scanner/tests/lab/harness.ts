@@ -16,6 +16,8 @@ import { ownedLabBoundary } from '../../src/discovery/driver.js';
 import { stageFiles, control, readRuntimeFile } from '../../src/discovery/io.js';
 import { SecretGuard } from '../../src/discovery/parser.js';
 import { terminal, type Scan, type Evidence } from '../../src/discovery/contracts.js';
+import type { InvestigationModels } from '../../src/investigation/models.js';
+import type { AdvisorySource } from '../../src/advisory/source.js';
 
 const root = resolve(import.meta.dirname, '../..');
 const cleanup: Array<() => Promise<void>> = [];
@@ -32,7 +34,14 @@ export async function closeDiscoveryLabs() {
 export function registerLabCleanup(close: () => Promise<void>) {
   cleanup.push(close);
 }
-export async function startDiscoveryLab(options: { processMode?: boolean } = {}) {
+export async function startDiscoveryLab(
+  options: {
+    processMode?: boolean;
+    investigationModels?: InvestigationModels;
+    investigationEnabled?: boolean;
+    advisorySource?: AdvisorySource;
+  } = {},
+) {
   const name = `discovery-${randomUUID()}`;
   const bootstrap = randomBytes(32).toString('base64url');
   const settings = loadSettings(
@@ -41,11 +50,14 @@ export async function startDiscoveryLab(options: { processMode?: boolean } = {})
       CONTROL_BOOTSTRAP_SECRET: bootstrap,
       SCANNER_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
       SCANNER_DISCOVERY_ENABLED: 'true',
+      SCANNER_INVESTIGATION_ENABLED:
+        (options.investigationEnabled ?? Boolean(options.investigationModels)) ? 'true' : 'false',
     },
     root,
   );
   cleanup.push(async () => {
-    for (const suffix of ['', '-wal', '-shm']) await rm(settings.databasePath + suffix, { force: true });
+    for (const path of [settings.databasePath, settings.mastraDatabasePath])
+      for (const suffix of ['', '-wal', '-shm']) await rm(path + suffix, { force: true });
   });
   await setup(settings);
   const client = dockerClient(settings),
@@ -216,7 +228,10 @@ except Exception as e:
       },
     };
   };
-  const start = () => (options.processMode ? startProcess() : startControlPlane(settings, 0, undefined, boundary));
+  const start = () =>
+    options.processMode
+      ? startProcess()
+      : startControlPlane(settings, 0, undefined, boundary, options.advisorySource, options.investigationModels);
   let running = await start();
   cleanup.push(() => running.close());
   let cookie = '',
@@ -245,7 +260,7 @@ except Exception as e:
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    const data = (await response.json()) as Record<string, unknown>;
+    const data = (response.status === 204 ? {} : await response.json()) as Record<string, unknown>;
     exported.push(JSON.stringify(data));
     return { status: response.status, data };
   };
@@ -282,6 +297,14 @@ except Exception as e:
   return {
     settings,
     request,
+    async query(sql: string) {
+      const database = createClient({ url: settings.databaseUrl });
+      try {
+        return (await database.execute(sql)).rows;
+      } finally {
+        database.close();
+      }
+    },
     stats,
     wait,
     restart,
@@ -304,6 +327,7 @@ export async function discoveryCase(
     origins?: string[];
     limits?: Policy['scanLimits'];
     authenticated?: boolean;
+    profileExpiresAt?: string;
   } = {},
 ) {
   const limits = options.limits ?? {
@@ -349,6 +373,7 @@ export async function discoveryCase(
           name: 'Account viewer',
           identityEndpoint: origin + '/identity',
           expectedIdentity: 'viewer-account',
+          ...(options.profileExpiresAt ? { expiresAt: options.profileExpiresAt } : {}),
           credential: { name: 'x-api-key', value: lab.privateValues.viewer },
         }
       : { kind: 'public', role: 'public', name: 'Public inventory' },
@@ -383,7 +408,7 @@ export async function discoveryCase(
 
 export async function fixtureCommand(lab: DiscoveryLab, path: string) {
   if (
-    !/^\/(?:dns\?mode=(?:allow|mixed|denied|rebind|mapped|cname|malformed|timeout|many)|expire\?role=viewer)$/.test(
+    !/^\/(?:dns\?mode=(?:allow|mixed|denied|rebind|mapped|cname|malformed|timeout|many)|expire\?role=viewer|ssrf-pair\?mode=(?:hold|release))$/.test(
       path,
     )
   )

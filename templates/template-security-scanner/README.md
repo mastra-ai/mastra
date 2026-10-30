@@ -13,7 +13,7 @@ A useful security inventory needs to show which identity observed a surface whil
 - Chromium must support the enabled namespace and seccomp sandbox. Setup rejects an unavailable browser sandbox instead of enabling unsafe flags or extra crawler capabilities.
 - Set `CONTROL_BOOTSTRAP_SECRET` to an independent random secret and `SCANNER_ENCRYPTION_KEY` to a 32-byte key encoded as 64 lowercase hex characters. [Local API setup](CONTROL_PLANE.md) includes generation and session commands. Keep the key outside source control; a lost key requires credential re-registration.
 - Discovery is disabled by default. `SCANNER_DISCOVERY_ENABLED=true` explicitly enables admission after successful setup; every request still requires current scope, profile and policy bindings. Use only targets you are authorized to assess. Non-lab targets require an operator-selected retention policy before admission.
-- No model API key is required for runtime setup, the control plane, or discovery. The declared Morph model settings do not make model requests.
+- No model API key is required for setup, the control plane, or discovery. Investigation planning is separately opt-in with `SCANNER_INVESTIGATION_ENABLED=true` and a private `MORPH_API_KEY`; it can make paid Morph requests. Keep it disabled while configuring scopes and budgets.
 
 ## Quickstart 🚀
 
@@ -36,6 +36,7 @@ A useful security inventory needs to show which identity observed a surface whil
 - Select headless discovery to collect browser XHR surfaces. Browser observations remain advertised surfaces without an upstream HTTP status claim. Discovery never submits forms or authorizes writes.
 - Cancel a running scan or update its bound target. Inspect the persisted partial state, cleanup outcome, and evidence rather than assuming the interrupted run completed.
 - Search the pinned offline references for a testing topic, then [manually sync the advisory inbox](INTELLIGENCE.md) and compare its stale status and material revision events across repeated imports.
+- In the owned Docker lab, enable investigation planning, create a bounded investigation from a completed scan, and inspect hypotheses, jobs, proofs and findings. A per-target recurrence or newly published/materially revised advisory can replan from an existing completed scan and investigation precedent; a new discovery scan is still an explicit operation.
 
 ## Customization
 
@@ -50,9 +51,11 @@ Each profile has its own ephemeral sandbox, credential file and browser state. A
 
 Raw crawler output remains bounded and private in trusted memory, with native retained buffers disabled. Strict normalization and credential-aware minimization precede persistence and API export. Reflected unsafe fields are withheld and produce partial results. Some credential fragments can conflict with required metadata; admission then returns `CREDENTIAL_METADATA_CONFLICT` without dispatch. Cookie support does not imply every cookie string is accepted.
 
-The local database and receipts live under private `data/`. One process owns the installation and one discovery runs at a time. Restart reconciles interrupted runs as failed and removes only recorded owned resources; it does not resume crawling or restore consumed budgets. Cleanup debt remains visible. Evidence expires only under the chosen retention policy, with persisted expiry counts and timestamps. Unrelated containers and shared-image consumers are preserved; no command uses global Docker pruning.
+Local storage and receipts live under private `data/`. The configured `DATABASE_URL` file holds application-owned policy, target, discovery, advisory, and investigation state. Native Mastra storage uses a sibling file with `-mastra.db` in place of `.db`. Stop the server before backing up or restoring both files and their `-wal` and `-shm` sidecars. Setup and startup reject an existing single-file database with nonempty native SDK tables as `LEGACY_MASTRA_STATE`; they preserve those records and do not migrate them. Restore a compatible two-file backup or obtain a separately reviewed lossless migration before retrying.
 
-Native agent/workflow execution, models, schedules, and recurring queue execution remain unavailable. Authenticated sessions can read allowlisted native metadata through the official Mastra Hono adapter. See [local API operation](CONTROL_PLANE.md) and [discovery operation](SCANNING.md) for supported routes and outcomes.
+One process owns the installation and one discovery runs at a time. Restart reconciles interrupted runs as failed and removes only recorded owned resources; it does not resume crawling or restore consumed budgets. Cleanup debt remains visible. Evidence expires only under the chosen retention policy, with persisted expiry counts and timestamps. Unrelated containers and shared-image consumers are preserved; no command uses global Docker pruning.
+
+Investigation planning uses the configured Morph explorer and judge only when enabled. The owned Docker lab adapter supports bounded verification and approval-gated SSRF with a unique receiver for each approval; outside that boundary, verification fails closed. Due per-target recurrences and new/materially revised local advisories automatically plan against an existing completed scan and investigation precedent, with durable event identities across restarts. Advisory applicability stays unknown without verified software version evidence. Native execution routes remain blocked; authenticated sessions can read allowlisted native metadata through the official Mastra Hono adapter. See [local API operation](CONTROL_PLANE.md) and [discovery operation](SCANNING.md) for supported routes and outcomes.
 
 The [offline reference catalog and advisory inbox](INTELLIGENCE.md) are available through the same protected API. Advisory synchronization is operator-initiated and remains visibly incomplete because it polls a bounded portion of the upstream feed each run.
 

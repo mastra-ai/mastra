@@ -52,9 +52,9 @@ export class ScanResources {
   }
   async verify(resource: OwnedResource) {
     if (resource.kind === 'image') {
-      const image = await this.client.getImage(resource.id).inspect();
+      const image = await this.client.getImage(resource.imageId ?? resource.id).inspect();
       if (
-        image.Id !== resource.id ||
+        image.Id !== (resource.imageId ?? resource.id) ||
         image.Config.Labels?.[OWNER_LABEL] !== ownerIdentity(this.settings) ||
         image.Config.Labels?.[INPUT_LABEL] !== resource.token
       )
@@ -82,15 +82,19 @@ export class ScanResources {
       await this.client.getContainer(resource.id).wait();
     }
   }
-  async cleanup() {
+  async cleanup(retainImageRecords = false) {
     let complete = true;
     for (const resource of (await this.store.resources(this.scanId)).reverse()) {
       try {
         await this.verify(resource);
+        if (resource.kind === 'image' && retainImageRecords) continue;
         if (resource.kind === 'container') await this.client.getContainer(resource.id).remove({ force: true, v: true });
         else if (resource.kind === 'network') await this.client.getNetwork(resource.id).remove();
-        else if (!(await this.client.listContainers({ all: true, filters: { ancestor: [resource.id] } })).length)
-          await this.client.getImage(resource.id).remove({ force: false, noprune: true });
+        else if (
+          !(await this.client.listContainers({ all: true, filters: { ancestor: [resource.imageId ?? resource.id] } }))
+            .length
+        )
+          await this.client.getImage(resource.imageId ?? resource.id).remove({ force: false, noprune: true });
         await this.store.forget(resource.id);
       } catch (error) {
         if ((error as { statusCode?: number }).statusCode === 404) await this.store.forget(resource.id);

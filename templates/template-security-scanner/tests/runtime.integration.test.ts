@@ -132,6 +132,7 @@ describe('real local runtime', () => {
       await expect(client.getContainer(first.sandbox.containerId).inspect()).rejects.toMatchObject({ statusCode: 404 });
       expect((await lstat(settings.imageReceiptPath)).mode & 0o777).toBe(0o600);
       expect((await lstat(settings.databasePath)).mode & 0o777).toBe(0o600);
+      expect((await lstat(settings.mastraDatabasePath)).mode & 0o777).toBe(0o600);
 
       unrelated = await client.createContainer({
         Image: first.imageId,

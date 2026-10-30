@@ -32,6 +32,7 @@ const environmentSchema = z.object({
   DOCKER_RETAIN_SHARED_BASE_IMAGE: booleanSetting.prefault('false'),
   DOCKER_REMOVE_SCAN_IMAGES: z.literal('true').default('true'),
   SCANNER_DISCOVERY_ENABLED: booleanSetting.prefault('false'),
+  SCANNER_INVESTIGATION_ENABLED: booleanSetting.prefault('false'),
   SANDBOX_MEMORY_MIB: integerSetting(512, 2048, '1024'),
   SANDBOX_PIDS: integerSetting(64, 512, '256'),
   COMMAND_TIMEOUT_MS: integerSetting(1000, 60000, '20000'),
@@ -71,6 +72,7 @@ export function loadSettings(environment: NodeJS.ProcessEnv = process.env, root 
   const settings = parsed.data;
   const applicationRoot = resolve(root);
   const databasePath = resolve(applicationRoot, settings.DATABASE_URL.slice(5));
+  const mastraDatabasePath = databasePath.replace(/\.db$/, '-mastra.db');
   const dataDirectory = resolve(applicationRoot, 'data');
   const inside = relative(dataDirectory, databasePath);
   if (isAbsolute(inside) || inside.startsWith(`..${sep}`)) {
@@ -82,6 +84,8 @@ export function loadSettings(environment: NodeJS.ProcessEnv = process.env, root 
     dataDirectory,
     databasePath,
     databaseUrl: `file:${databasePath}`,
+    mastraDatabasePath,
+    mastraDatabaseUrl: `file:${mastraDatabasePath}`,
     imageReceiptPath: resolve(dataDirectory, 'runtime-image.json'),
   };
 }
@@ -94,10 +98,25 @@ export function diagnostic(error: unknown) {
     : { code: 'RUNTIME_FAILURE', message: 'Runtime operation failed. Check local prerequisites and retry.' };
 }
 
-export function morphModelConfiguration(settings: Settings) {
+export function hasMorphApiKey(environment: NodeJS.ProcessEnv = process.env) {
+  return typeof environment.MORPH_API_KEY === 'string' && environment.MORPH_API_KEY.trim().length > 0;
+}
+
+export function morphModelDescriptor(settings: Settings) {
   const common = { providerId: 'morph', url: 'https://api.morphllm.com/v1', api: 'chat' as const };
   return {
     explorer: { ...common, modelId: settings.EXPLORER_MODEL } satisfies OpenAICompatibleConfig,
     judge: { ...common, modelId: settings.JUDGE_MODEL.slice('morph/'.length) } satisfies OpenAICompatibleConfig,
+  };
+}
+
+export function morphModelConfiguration(settings: Settings, environment: NodeJS.ProcessEnv = process.env) {
+  if (!hasMorphApiKey(environment))
+    throw new RuntimeDiagnostic('MORPH_API_KEY_REQUIRED', 'Set MORPH_API_KEY before enabling investigation models.');
+  const descriptor = morphModelDescriptor(settings);
+  const apiKey = environment.MORPH_API_KEY!;
+  return {
+    explorer: { ...descriptor.explorer, apiKey } satisfies OpenAICompatibleConfig,
+    judge: { ...descriptor.judge, apiKey } satisfies OpenAICompatibleConfig,
   };
 }

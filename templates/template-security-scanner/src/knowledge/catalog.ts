@@ -103,6 +103,11 @@ export class ReferenceCatalog {
     return manifest;
   }
 
+  async contentDigest(): Promise<string> {
+    await this.verify();
+    return MANIFEST_SHA256;
+  }
+
   async initialize() {
     const manifest = await this.verify();
     await this.client.execute(

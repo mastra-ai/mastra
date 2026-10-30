@@ -43,6 +43,11 @@ export class DiscoveryStore {
         'CREATE UNIQUE INDEX IF NOT EXISTS scanner_discovery_active_target ON scanner_discovery_scans(target_id) WHERE active=1',
       );
       await transaction.execute(
+        `CREATE INDEX IF NOT EXISTS scanner_discovery_usable_target ON scanner_discovery_scans(owner,target_id)
+          WHERE json_extract(data,'$.state')='COMPLETED' AND json_extract(data,'$.partial')=0
+          AND json_extract(data,'$.cleanup')='COMPLETE'`,
+      );
+      await transaction.execute(
         `CREATE TABLE IF NOT EXISTS scanner_discovery_jobs (id TEXT PRIMARY KEY,scan_id TEXT UNIQUE NOT NULL,state TEXT NOT NULL)`,
       );
       await transaction.execute(
@@ -121,6 +126,15 @@ export class DiscoveryStore {
       args: targetId ? [owner, targetId, limit, offset] : [owner, limit, offset],
     });
     return result.rows.map(row => scanSchema.parse(JSON.parse(String(row.data))));
+  }
+  async latestUsable(owner: string, targetId: string): Promise<Scan | null> {
+    const result = await this.client.execute({
+      sql: `SELECT data FROM scanner_discovery_scans WHERE owner=? AND target_id=?
+        AND json_extract(data,'$.state')='COMPLETED' AND json_extract(data,'$.partial')=0
+        AND json_extract(data,'$.cleanup')='COMPLETE' ORDER BY rowid DESC LIMIT 1`,
+      args: [owner, targetId],
+    });
+    return result.rows[0] ? scanSchema.parse(JSON.parse(String(result.rows[0].data))) : null;
   }
   async interrupted() {
     const result = await this.client.execute(

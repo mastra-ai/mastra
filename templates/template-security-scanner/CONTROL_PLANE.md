@@ -1,6 +1,6 @@
 # Local control plane
 
-The API manages one local operator's policies, explicitly authorized targets, and public, header, or bearer identity profiles. It binds only to `127.0.0.1`. All state lives in the configured file-backed libSQL database. Discovery and confined identity checks are opt-in after runtime setup. Native agent/workflow execution, model requests, recurrence, and general queue execution remain unavailable. See [discovery operation](SCANNING.md).
+The API manages one local operator's policies, explicitly authorized targets, and public, header, bearer or cookie identity profiles. It binds only to `127.0.0.1`. Application state lives in the configured file-backed libSQL database; native Mastra storage uses a sibling `-mastra.db` file. Discovery and confined identity checks are opt-in after runtime setup. Investigation planning, per-target recurrence and advisory-triggered reassessment are opt-in with `SCANNER_INVESTIGATION_ENABLED=true` and a private `MORPH_API_KEY`; enabling them can make paid model requests, including after an advisory sync or restart. Verification is supported only in the owned Docker lab adapter and fails closed without it. Native agent/workflow execution routes remain blocked. See [discovery operation](SCANNING.md).
 
 ## Operator configuration
 
@@ -98,7 +98,7 @@ A target's `authProfileIds` is managed through profile creation/removal. A targe
 
 A policy contains `name`, `permittedMethods`, and `scanLimits`. The target's methods and each limit must fit within that policy. Finite limits are: requests 1–10000, duration 1–3600 seconds, response bytes 1024–10485760, and concurrency 1–8. A policy can include an explicitly chosen `retention: { evidenceDays, approvedBy }`, with 1–365 days. Missing retention blocks non-lab scan admission before dispatch. No retention period is inferred.
 
-Targets require a nonempty authorization evidence reference and explicit `authorizationConfirmed: true`, environment `lab`, `staging`, or `production`, canonical HTTP(S) origins, scoped paths, methods, and a current policy revision. Exclusions override allowed paths, including for the entry URL and safe identity endpoint. Path matching uses segment boundaries. URLs reject credentials, query strings, fragments, percent encoding, traversal, backslashes and noncanonical authorities. Schedules currently accept only `{ enabled: false, timezone: '<IANA timezone>' }`.
+Targets require a nonempty authorization evidence reference and explicit `authorizationConfirmed: true`, environment `lab`, `staging`, or `production`, canonical HTTP(S) origins, scoped paths, methods, and a current policy revision. Exclusions override allowed paths, including for the entry URL and safe identity endpoint. Path matching uses segment boundaries. URLs reject credentials, query strings, fragments, percent encoding, traversal, backslashes and noncanonical authorities. Recurrence is an F5 opt-in per target: `PUT /api/targets/:id/recurrence` accepts `{ targetId, cron, timezone: '<IANA timezone>', enabled: true }` with the current `If-Match` revision. Use `enabled: false` with the next revision to pause. Due events are coalesced and revalidated against current authorization and scan lineage before admission.
 
 ## Identity states and execution boundaries
 

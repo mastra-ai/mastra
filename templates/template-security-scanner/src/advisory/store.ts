@@ -1,6 +1,15 @@
 import { createClient, type Transaction } from '@libsql/client';
 import { ControlPlaneError } from '../core/contracts.js';
-import { advisoryId, materialHash, type AdvisoryDetail } from './contracts.js';
+import { advisoryId, detailSchema, materialHash, type AdvisoryDetail } from './contracts.js';
+
+export type PlanningAdvisory = {
+  id: string;
+  revision: number;
+  applicability: 'APPLICABILITY_UNKNOWN';
+  affectedProducts: Array<{ vendor: string; product: string } | { ecosystem: string; package: string }>;
+  referenceHosts: string[];
+};
+const safeAtom = (value: string) => /^[A-Za-z0-9][A-Za-z0-9.+-]{0,63}$/.test(value);
 
 export type CursorKind = 'head' | 'rotation';
 export class AdvisoryStore {
@@ -53,6 +62,12 @@ export class AdvisoryStore {
       await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_advisory_events (
         id TEXT NOT NULL, revision INTEGER NOT NULL, event TEXT NOT NULL, occurred_at TEXT NOT NULL,
         PRIMARY KEY(id,revision))`);
+      await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_advisory_reassessment_sources (
+        id TEXT NOT NULL, revision INTEGER NOT NULL, occurred_at TEXT NOT NULL,
+        PRIMARY KEY(id,revision))`);
+      await tx.execute(`INSERT OR IGNORE INTO scanner_advisory_reassessment_sources(id,revision,occurred_at)
+        SELECT id,revision,strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        FROM scanner_advisories WHERE upstream_status='published'`);
       await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_advisory_quarantine (
         id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)`);
       await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_advisory_checkpoint (
@@ -100,6 +115,44 @@ export class AdvisoryStore {
       triageStatus: String(row.triage_status),
       detail: JSON.parse(String(row.detail)),
     }));
+  }
+  async planningCandidates(limit: number): Promise<PlanningAdvisory[]> {
+    const result = await this.client.execute({
+      sql: `SELECT id,revision,detail FROM scanner_advisories
+        WHERE upstream_status='published' ORDER BY provider_modified_at DESC,id LIMIT ?`,
+      args: [Math.max(0, Math.min(limit, 8))],
+    });
+    return result.rows.map(row => this.planningCandidateFromRow(row));
+  }
+  async planningCandidate(id: string, revision: number): Promise<PlanningAdvisory> {
+    const result = await this.client.execute({
+      sql: "SELECT id,revision,detail FROM scanner_advisories WHERE id=? AND revision=? AND upstream_status='published'",
+      args: [id, revision],
+    });
+    if (!result.rows[0]) throw new ControlPlaneError('ADVISORY_NOT_CURRENT', 409);
+    return this.planningCandidateFromRow(result.rows[0]);
+  }
+  private planningCandidateFromRow(row: Record<string, unknown>): PlanningAdvisory {
+    const detail = detailSchema.parse(JSON.parse(String(row.detail)));
+    const affectedProducts: PlanningAdvisory['affectedProducts'] = [];
+    for (const item of detail.affected) {
+      if (affectedProducts.length === 2) break;
+      if ('vendor' in item && safeAtom(item.vendor) && safeAtom(item.product))
+        affectedProducts.push({ vendor: item.vendor, product: item.product });
+      else if ('ecosystem' in item && safeAtom(item.ecosystem) && safeAtom(item.package))
+        affectedProducts.push({ ecosystem: item.ecosystem, package: item.package });
+    }
+    const referenceHosts = detail.sources
+      .map(source => new URL(source.url).hostname)
+      .filter(host => /^[a-zA-Z0-9.-]{1,100}$/.test(host))
+      .slice(0, 2);
+    return {
+      id: String(row.id),
+      revision: Number(row.revision),
+      applicability: 'APPLICABILITY_UNKNOWN' as const,
+      affectedProducts,
+      referenceHosts,
+    };
   }
   async get(id: string) {
     const result = await this.client.execute({
@@ -182,6 +235,11 @@ export class AdvisoryStore {
             sql: 'INSERT INTO scanner_advisory_refresh_queue(advisory_id) VALUES (?)',
             args: [id],
           });
+          if (detail.status === 'published')
+            await tx.execute({
+              sql: 'INSERT INTO scanner_advisory_reassessment_sources(id,revision,occurred_at) VALUES (?,?,?)',
+              args: [id, revision, now],
+            });
         } else {
           await tx.execute({
             sql: 'UPDATE scanner_advisories SET revision=?,record_revision=record_revision+?,material_hash=?,provider_modified_at=?,retrieved_at=?,upstream_status=?,detail=? WHERE id=?',
@@ -202,6 +260,11 @@ export class AdvisoryStore {
               sql: 'INSERT INTO scanner_advisory_events(id,revision,event,occurred_at) VALUES (?,?,?,?)',
               args: [id, revision, 'material_revision', now],
             });
+            if (detail.status === 'published')
+              await tx.execute({
+                sql: 'INSERT INTO scanner_advisory_reassessment_sources(id,revision,occurred_at) VALUES (?,?,?)',
+                args: [id, revision, now],
+              });
           }
         }
         await tx.execute({ sql: 'DELETE FROM scanner_advisory_aliases WHERE id = ?', args: [id] });

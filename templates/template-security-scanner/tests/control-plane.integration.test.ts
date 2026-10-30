@@ -1,11 +1,12 @@
 import { createClient } from '@libsql/client';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { request } from 'node:http';
+import { createServer, request } from 'node:http';
+import { Agent } from '@mastra/core/agent';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadSettings } from '../src/config/settings.js';
+import { diagnostic, loadSettings, morphModelConfiguration, morphModelDescriptor } from '../src/config/settings.js';
 import type { IdentityBinding, Policy, Profile, Target } from '../src/core/contracts.js';
 import { ownedLoopbackIdentityTransport } from '../src/core/identity.js';
 import { startControlPlane } from '../src/http/server.js';
@@ -201,6 +202,86 @@ async function wireRequest(url: string, headers: Record<string, string>, chunks:
 }
 
 describe('protected local control plane over real HTTP and libSQL', () => {
+  it('sends the synthetic key only as Morph Authorization in a local model-wire fixture', async () => {
+    const syntheticKey = 'synthetic-morph-' + randomUUID();
+    const settings = loadSettings({}, '/tmp/scanner-model-auth');
+    const configured = morphModelConfiguration(settings, { MORPH_API_KEY: syntheticKey });
+    const requests: { path: string; authorization: string | undefined; model: string }[] = [];
+    const fixture = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = JSON.parse(Buffer.concat(chunks).toString()) as { model: string };
+      requests.push({ path: request.url ?? '', authorization: request.headers.authorization, model: body.model });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          id: 'chatcmpl-local',
+          object: 'chat.completion',
+          created: 1,
+          model: body.model,
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ready' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      );
+    });
+    await new Promise<void>((resolve, reject) => {
+      fixture.once('error', reject);
+      fixture.listen(0, '127.0.0.1', resolve);
+    });
+    try {
+      const address = fixture.address();
+      if (!address || typeof address === 'string') throw new Error('LOCAL_MODEL_FIXTURE_MISSING');
+      const localUrl = `http://127.0.0.1:${address.port}/v1`;
+      for (const [name, model] of Object.entries(configured)) {
+        const agent = new Agent({
+          id: `test-${name}`,
+          name: `Test ${name}`,
+          model: { ...model, url: localUrl },
+          instructions: 'Reply ready.',
+        });
+        const result = await agent.generate('Reply ready.', {
+          toolChoice: 'none',
+          maxSteps: 1,
+          modelSettings: { maxOutputTokens: 16, maxRetries: 0 },
+        });
+        expect(result.text).toBe('ready');
+        expect(JSON.stringify(result)).not.toContain(syntheticKey);
+      }
+      expect(requests).toEqual([
+        { path: '/v1/chat/completions', authorization: `Bearer ${syntheticKey}`, model: settings.EXPLORER_MODEL },
+        {
+          path: '/v1/chat/completions',
+          authorization: `Bearer ${syntheticKey}`,
+          model: settings.JUDGE_MODEL.slice('morph/'.length),
+        },
+      ]);
+      expect(configured.explorer.url).toBe('https://api.morphllm.com/v1');
+      expect(configured.judge.url).toBe('https://api.morphllm.com/v1');
+      expect(JSON.stringify(morphModelDescriptor(settings))).not.toContain(syntheticKey);
+      expect(JSON.stringify(diagnostic(new Error(syntheticKey)))).not.toContain(syntheticKey);
+    } finally {
+      await new Promise<void>((resolve, reject) => fixture.close(error => (error ? reject(error) : resolve())));
+    }
+  });
+  it('does not expose a configured Morph key through native or custom HTTP metadata', async () => {
+    const previousKey = process.env.MORPH_API_KEY;
+    const syntheticKey = `synthetic-morph-${randomUUID()}`;
+    process.env.MORPH_API_KEY = syntheticKey;
+    try {
+      const app = await startHarness(false);
+      for (const path of ['/native/agents', '/native/workflows', '/native/openapi.json', '/api/runtime']) {
+        const response = await app.call(path);
+        expect(response.status).toBe(200);
+        expect(response.text).not.toContain(syntheticKey);
+      }
+      delete process.env.MORPH_API_KEY;
+      const noKey = loadSettings({ SCANNER_INVESTIGATION_ENABLED: 'true' }, app.root);
+      await expect(startControlPlane(noKey, 0)).rejects.toMatchObject({ code: 'MORPH_API_KEY_REQUIRED' });
+    } finally {
+      if (previousKey === undefined) delete process.env.MORPH_API_KEY;
+      else process.env.MORPH_API_KEY = previousKey;
+    }
+  });
   it('target_and_sealed_profiles_persist_without_secret_readback', async () => {
     const app = await startHarness();
     const policy = await app.createPolicy();

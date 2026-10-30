@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { ControlPlaneError, parse } from '../core/contracts.js';
 import { ReferenceCatalog } from './catalog.js';
 
@@ -57,6 +58,12 @@ const playbookSchema = z
   .strict()
   .refine(value => registeredTools[value.toolId] === value.category);
 export type Playbook = z.infer<typeof playbookSchema>;
+export type PlaybookBinding = {
+  catalogDigest: string;
+  playbookId: Category;
+  playbookVersion: number;
+  playbookDigest: string;
+};
 
 const bounds = { maxAttempts: 2, maxRequests: 6, maxDurationSeconds: 30 };
 const definitions: Playbook[] = [
@@ -169,7 +176,7 @@ const contextSchema = z
   })
   .strict();
 const responseCode = z.number().int().min(100).max(599);
-const observationSchema = z.discriminatedUnion('category', [
+export const observationSchema = z.discriminatedUnion('category', [
   z
     .object({
       category: z.literal('idor'),
@@ -328,6 +335,16 @@ export class PlaybookRegistry {
   async list() {
     await this.catalog.verify();
     return [...this.byCategory.values()];
+  }
+  async binding(category: Category): Promise<PlaybookBinding> {
+    const playbook = (await this.list()).find(item => item.category === category);
+    if (!playbook) throw new ControlPlaneError('PLAYBOOK_NOT_FOUND', 404);
+    return {
+      catalogDigest: await this.catalog.contentDigest(),
+      playbookId: playbook.category,
+      playbookVersion: playbook.version,
+      playbookDigest: createHash('sha256').update(JSON.stringify(playbook)).digest('hex'),
+    };
   }
   async assess(
     category: Category,

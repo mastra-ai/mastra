@@ -6,10 +6,15 @@ export type OwnedLabBoundary = {
   networkId: string;
   fixtureId: string;
   address: string;
+  callback: string;
   token: string;
   upstreamCa?: Buffer;
   [labBrand]: true;
 };
+export function ownedApprovalCallback(boundary: OwnedLabBoundary, approvalId: string) {
+  z.string().uuid().parse(approvalId);
+  return `${boundary.callback}/${approvalId}`;
+}
 export async function ownedLabBoundary(
   client: Docker,
   fixtureId: string,
@@ -38,6 +43,7 @@ export async function ownedLabBoundary(
     networkId,
     fixtureId,
     address,
+    callback: `http://${address}:18080/owned/callback`,
     token,
     ...(upstreamCa ? { upstreamCa: Buffer.from(upstreamCa) } : {}),
     [labBrand]: true,

@@ -17,6 +17,7 @@ export function registerIntelligenceRoutes(
   catalog: ReferenceCatalog,
   registry: PlaybookRegistry,
   advisory: AdvisorySync,
+  onAdvisorySync?: () => Promise<void>,
 ) {
   app.get('/api/references', async context => {
     const query = parse(z.string().trim().min(1).max(120), context.req.query('q'));
@@ -36,7 +37,9 @@ export function registerIntelligenceRoutes(
   });
   app.post('/api/advisories/sync', async context => {
     parse(z.object({}).strict(), await readJson(context.req));
-    return context.json(await advisory.syncOnce(), 200);
+    const result = await advisory.syncOnce();
+    await onAdvisorySync?.();
+    return context.json(result, 200);
   });
   app.get('/api/advisories/:id', async context => {
     const id = parse(advisoryId, context.req.param('id'));
