@@ -1578,6 +1578,39 @@ describe('GitHub session workspace preparation', () => {
       expect(await resolver({ requestContext })).toBe(workspace);
       expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Edited plan');
     });
+
+    it('returns a reused workspace with the original skills while only the snapshot read fails', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addSession({ id: 'session-a' });
+      await save(skillOverrides, 'project-1', 'factory-plan', editedPlan('Edited plan'));
+      let unreadable = true;
+      const read = skillOverrides.snapshot.bind(skillOverrides) as (...args: never[]) => Promise<unknown>;
+      const reads = vi
+        .spyOn(skillOverrides, 'snapshot')
+        .mockImplementation(((...args: never[]) =>
+          unreadable ? Promise.reject(new Error('connection reset')) : read(...args)) as never);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = (await resolver({ requestContext }))!;
+      expect(await planOf(workspace)).toContain('# Factory Plan');
+
+      reads.mockClear();
+      const reused = await Promise.race([
+        resolver({ requestContext }),
+        new Promise(resolve => setTimeout(() => resolve('still resolving'), 2_000)),
+      ]);
+      expect(reused).toBe(workspace);
+      expect(reads.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(await planOf(workspace)).toContain('# Factory Plan');
+
+      unreadable = false;
+      expect(await resolver({ requestContext })).toBe(workspace);
+      expect(await planOf(workspace)).toContain('# Edited plan');
+    });
   });
 
   it('drops cached review skills when a reused workspace leaves the review role', async () => {

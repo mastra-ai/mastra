@@ -1346,9 +1346,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             // Record the revision the source actually serves; a save landing after
             // `readTarget` makes the next check rescan rather than skip it.
             skillCacheState.set(workspaceId, skillCacheKey(isReview, served));
+            return served;
           })().finally(() => skillCacheRefreshes.delete(workspaceId));
           skillCacheRefreshes.set(workspaceId, pending);
-          await pending;
+          const served = await pending;
+          // The snapshot could not be read, so this refresh served the original
+          // skills. Re-reading the target would refresh again for as long as the
+          // failure lasts; the unread sentinel stays recorded so a later
+          // resolution retries.
+          if (served === UNREAD_SKILL_OVERRIDES) break;
           target = await readTarget();
         }
       }
