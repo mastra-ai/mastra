@@ -14,6 +14,7 @@ import { MessageHistory } from '../../../../processors/memory/message-history';
 import { RequestContext } from '../../../../request-context';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
+import { TOOL_ABORT_NOTICE } from '../../../shared/tool-abort-grace';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import type { EngineVariant } from '../types';
 
@@ -83,7 +84,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'durable', 'evented', 'inngest'];
+  const deadlineSavePending: EngineVariant[] = ['durable', 'evented', 'inngest'];
   const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
   // Inngest already keeps the user message when the deadline lands during the input save.
   const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
@@ -91,6 +92,26 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  function createObservationalMemory() {
+    return new Memory({
+      storage: new InMemoryStore(),
+      options: {
+        generateTitle: false,
+        semanticRecall: false,
+        observationalMemory: {
+          enabled: true,
+          scope: 'thread',
+          observation: {
+            model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat('gpt-4o-mini'),
+            messageTokens: 100_000,
+            bufferTokens: false,
+          },
+          reflection: { observationTokens: 100_000 },
+        },
+      },
+    });
+  }
 
   async function expectTurnSavedAndRecalled(
     memory: MastraMemory,
@@ -178,6 +199,150 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // The deadline cuts the model off mid-reply, before its step finished. Only the completed step is saved.
+  itDeadline(
+    'total-timeout during a slow model reply saves only the completed step',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-midreply-${engine}`;
+      const result = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        stopWhen: stepCountIs(5),
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        collectChunks: true,
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 1 },
+            { content: 'PARTIAL '.repeat(200) },
+            { chunkSize: 8, latency: 50 },
+          );
+        },
+      });
+      expect(result.chunks!.some(chunk => chunk.type === 'text-delta')).toBe(true);
+      expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(toolResultIds(messages)).toEqual(['call_echo']);
+      // Nothing of the unfinished step is kept, not even the boundary it opened.
+      expect(messages.map(message => message.content.parts.map(part => part.type))).toEqual([
+        ['text'],
+        ['tool-invocation'],
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // No step finishes in time, so only the user message is left to save. History is append-only,
+  // so the input-only failed turn is still kept.
+  it(
+    'total-timeout before any step finishes keeps the user message',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-input-only-${engine}`;
+      const result = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Answer slowly.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        stopWhen: stepCountIs(5),
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { content: 'PARTIAL '.repeat(200) },
+            { chunkSize: 8, latency: 50 },
+          );
+        },
+      });
+      expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.map(message => message.role)).toEqual(['user']);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A step whose calls all settled, one with an error and one with the abort notice, is saved whole.
+  itDeadline(
+    'total-timeout saves a step whose tool call failed alongside one cut off at the deadline',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-failed-call-${engine}`;
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Run both tools.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            failing: createTool({
+              id: 'failing',
+              description: 'Always throws.',
+              inputSchema: z.object({}),
+              execute: async () => {
+                throw new Error('lookup failed');
+              },
+            }),
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              {
+                toolCalls: [
+                  { id: 'call_fail', name: 'failing', arguments: {} },
+                  { id: 'call_hang', name: 'hanging', arguments: {} },
+                ],
+              },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const saved = JSON.stringify(messages);
+          expect(saved).toContain('lookup failed');
+          expect(saved).toContain(TOOL_ABORT_NOTICE);
+        });
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     'provider-error after a completed tool step',
     async () => {
@@ -215,6 +380,103 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       await expectTurnSavedAndRecalled(memory, 'provider-error', threadId);
       expect(calls.map(call => call.hook)).toContain('MessageHistory.processOutputResult');
       expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Observational memory and user processOutputResult processors see the failed turn and keep its input.
+  itDeadline(
+    'total-timeout before any step finishes keeps the user message, observational memory',
+    async () => {
+      const memory = createObservationalMemory();
+      const threadId = `${THREAD}-timeout-input-only-om-${engine}`;
+      const { probe, calls } = createProbes(memory);
+      const result = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Answer slowly.',
+        memory,
+        memoryOptions: { observationalMemory: true },
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [probe],
+        stopWhen: stepCountIs(5),
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { content: 'PARTIAL '.repeat(200) },
+            { chunkSize: 8, latency: 50 },
+          );
+        },
+      });
+      expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.filter(message => message.role === 'user').map(message => message.content.content)).toEqual([
+        'Answer slowly.',
+      ]);
+      expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A client that retries a failed turn by resending the same message (same id) does not duplicate it:
+  // memory upserts by message id. Resending only the text creates a new message, so it is saved again.
+  it(
+    'client retry after a provider error saves the user message once when it reuses the message id',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-client-retry-${engine}`;
+      const userMessage = { id: `retry-user-${engine}`, role: 'user' as const, content: 'Please answer.' };
+      const failed = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: [userMessage],
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        maxRetries: 0,
+        errorProcessors: [],
+        expectStreamError: true,
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { error: { message: 'provider exploded', type: 'invalid_request_error' }, status: 400 },
+          );
+        },
+      });
+      expect(failed.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.id)).toContain(userMessage.id);
+      });
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: [userMessage],
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat', userMessage: 'Please answer.' }, { content: 'Here is the answer.' });
+        },
+      });
+
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        const users = messages.filter(message => message.role === 'user');
+        expect(users.map(message => message.id)).toEqual([userMessage.id]);
+        // The failed attempt stays in history next to the successful answer.
+        const saved = JSON.stringify(messages);
+        expect(saved).toContain('provider exploded');
+        expect(saved).toContain('Here is the answer.');
+      });
     },
     TEST_TIMEOUT_MS,
   );
@@ -288,23 +550,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   itDeadline(
     'total-timeout after a completed tool step, observational memory',
     async () => {
-      const memory = new Memory({
-        storage: new InMemoryStore(),
-        options: {
-          generateTitle: false,
-          semanticRecall: false,
-          observationalMemory: {
-            enabled: true,
-            scope: 'thread',
-            observation: {
-              model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat('gpt-4o-mini'),
-              messageTokens: 100_000,
-              bufferTokens: false,
-            },
-            reflection: { observationTokens: 100_000 },
-          },
-        },
-      });
+      const memory = createObservationalMemory();
       const threadId = `${THREAD}-timeout-om-${engine}`;
       const { probe, calls } = createProbes(memory);
       const hang = Promise.withResolvers<unknown>();
@@ -419,6 +665,65 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
         expect(messages.map(message => message.role)).toEqual([]);
         expect(denied).toContain(threadId);
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The finish path undoes per-step saves when an output processor trips, so the deadline pass must too.
+  itDeadline(
+    'total-timeout removes per-step saves when an output processor trips',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-tripwire-${engine}`;
+      const tripper: Processor = {
+        id: 'deadline-tripper',
+        processOutputResult: ({ abort }) => abort('blocked'),
+      };
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then wait.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          savePerStep: true,
+          agentOutputProcessors: [tripper],
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            echoTool,
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'tool-result')).toBe(true);
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        // Absence can't be polled for; give a late write time to land.
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
       } finally {
         hang.resolve({});
       }

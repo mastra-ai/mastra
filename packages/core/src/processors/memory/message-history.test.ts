@@ -713,7 +713,7 @@ describe('MessageHistory', () => {
       });
     });
 
-    it('should not persist an input-only failed run', async () => {
+    it('should persist the input of a failed run that produced no output', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
         getThreadById: vi.fn().mockResolvedValue({
@@ -756,7 +756,9 @@ describe('MessageHistory', () => {
       });
 
       expect(result).toBe(messageList);
-      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'msg-2', role: 'user' })],
+      });
     });
 
     it('should persist a failed run that produced output', async () => {
@@ -832,8 +834,7 @@ describe('MessageHistory', () => {
       const messageList = new MessageList().add([userMessage], `input`);
 
       // A terminal failure recorded as an `error` part produces a real assistant
-      // response message, so the input-only orphan guard above no longer applies
-      // and no special empty-message rule is needed.
+      // response message, which is saved alongside the user message.
       recordTerminalErrorMessage({
         messageList,
         attemptId: 'msg-3',

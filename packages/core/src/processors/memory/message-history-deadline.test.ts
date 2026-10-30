@@ -29,7 +29,7 @@ async function setup() {
  * `viaAgentWorkflow` runs it the way an agent does: chained with another processor inside the
  * generated processor workflow.
  */
-async function saveInputOnlyFailedTurn(inputAccepted: boolean | undefined, { viaAgentWorkflow = false } = {}) {
+async function saveInputOnlyFailedTurn({ viaAgentWorkflow = false } = {}) {
   const { memoryStore, processor, requestContext } = await setup();
   const userMessage: MastraDBMessage = {
     id: 'msg-user',
@@ -45,7 +45,6 @@ async function saveInputOnlyFailedTurn(inputAccepted: boolean | undefined, { via
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     finishReason: 'error',
     steps: [],
-    ...(inputAccepted === undefined ? {} : { inputAccepted }),
   };
   if (viaAgentWorkflow) {
     const agent = new Agent({
@@ -83,28 +82,13 @@ async function saveInputOnlyFailedTurn(inputAccepted: boolean | undefined, { via
 }
 
 describe('MessageHistory input-only failed turn', () => {
-  it('keeps the input when the run accepted it', async () => {
-    const saved = await saveInputOnlyFailedTurn(true);
+  it('keeps the input when the provider errored before any output', async () => {
+    const saved = await saveInputOnlyFailedTurn();
     expect(saved.map(message => [message.role, message.id])).toEqual([['user', 'msg-user']]);
   });
 
-  it('keeps the accepted input when run inside the agent processor workflow', async () => {
-    const saved = await saveInputOnlyFailedTurn(true, { viaAgentWorkflow: true });
+  it('keeps the input when run inside the agent processor workflow', async () => {
+    const saved = await saveInputOnlyFailedTurn({ viaAgentWorkflow: true });
     expect(saved.map(message => [message.role, message.id])).toEqual([['user', 'msg-user']]);
-  });
-
-  it('drops the input on a provider error when run inside the agent processor workflow', async () => {
-    const saved = await saveInputOnlyFailedTurn(undefined, { viaAgentWorkflow: true });
-    expect(saved).toEqual([]);
-  });
-
-  it('drops the input when inputAccepted is unset', async () => {
-    const saved = await saveInputOnlyFailedTurn(undefined);
-    expect(saved).toEqual([]);
-  });
-
-  it('drops the input when inputAccepted is false', async () => {
-    const saved = await saveInputOnlyFailedTurn(false);
-    expect(saved).toEqual([]);
   });
 });

@@ -173,6 +173,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
+      beforeDeadlineSave: rest.options?.beforeDeadlineSave,
+      onDeadlineTripwire: rest.options?.onDeadlineTripwire,
       includeRawChunks: !!includeRawChunks,
       structuredOutput: rest.structuredOutput,
       outputProcessors,

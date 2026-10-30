@@ -318,13 +318,6 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    // Don't persist an input-only failed turn: if the provider errored before
-    // producing any output, saving the user message would orphan it in history.
-    // A run that accepted the input before failing (e.g. cut off by its total deadline) keeps it.
-    if (result?.finishReason === 'error' && newOutput.length === 0 && !result.inputAccepted) {
-      return messageList;
-    }
-
     // The runner records failures on this span and ends it.
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { messageCount: messagesToSave.length } });
