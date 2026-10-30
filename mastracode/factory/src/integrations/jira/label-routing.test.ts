@@ -132,8 +132,11 @@ const paths: JiraPath[] = [
   },
 ];
 
+const nextMinute = () => vi.setSystemTime(Date.now() + 60_000);
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe.each(paths)('Jira project shared by label — $name', path => {
@@ -142,6 +145,8 @@ describe.each(paths)('Jira project shared by label — $name', path => {
   let factories: Record<'platform' | 'payments' | 'mobile', string>;
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-05T09:00:00.000Z'));
     seed = await createFactoryStorageForTests();
     const rules = new JiraRules({
       projects: seed.projects,
@@ -177,11 +182,11 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         board: 'work',
         labels,
       });
-    // Created in order, a millisecond apart, so the oldest-wins rule has an unambiguous order.
+    // Created a minute apart, so the oldest-wins rule has an unambiguous order.
     await bind(factories.platform, null);
-    await new Promise(resolve => setTimeout(resolve, 2));
+    nextMinute();
     await bind(factories.payments, ['payments']);
-    await new Promise(resolve => setTimeout(resolve, 2));
+    nextMinute();
     await bind(factories.mobile, ['mobile', 'ios']);
   });
 
@@ -227,6 +232,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         `/web/jira/issues/${key}?factoryProjectId=${factoryProjectId}&issueRef=${encodeURIComponent(path.issueRef(key))}`,
       );
 
+    nextMinute();
     await bindTriage(null);
     expect(await poll(factories.platform)).toContain('OPS-2');
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
