@@ -3374,7 +3374,7 @@ describe('GithubRules label routes', () => {
 
   async function setupRoutes(
     route: string | undefined,
-    binding?: { board: string | null; sourceId?: 'id' | 'slug'; factoryProjectId?: string },
+    binding?: { board: string | null; sourceId?: 'id' | 'slug'; otherProject?: boolean },
   ) {
     const base = await setup('write');
     const intake = base.intake;
@@ -3389,11 +3389,14 @@ describe('GithubRules label routes', () => {
       });
     }
     if (binding) {
+      const factoryProjectId = binding.otherProject
+        ? (await base.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Project 2' } })).id
+        : base.project.id;
       await intake.setBinding({
         orgId: 'org-1',
         integrationId: 'github',
         sourceId: binding.sourceId === 'slug' ? 'acme/repo' : base.projectRepository.repositoryId,
-        factoryProjectId: binding.factoryProjectId ?? base.project.id,
+        factoryProjectId,
         board: binding.board,
         userId: 'user-1',
       });
@@ -3486,7 +3489,7 @@ describe('GithubRules label routes', () => {
   it.each([
     ['has no board', { board: null }],
     ['names a board that is not installed', { board: 'missing' }],
-    ['belongs to another project', { board: 'release', factoryProjectId: 'other-project' }],
+    ['belongs to another project', { board: 'release', otherProject: true }],
   ])('keeps the issue on Work › Intake when the binding %s', async (_, binding) => {
     const { service, workItems, project } = await setupRoutes(undefined, binding);
     await expect(service.ingest(issueOpened('binding-fallback'))).resolves.toEqual({ status: 'committed' });
