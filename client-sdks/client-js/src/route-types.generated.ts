@@ -13604,6 +13604,8 @@ export type GetWorkspaces_Response = {
     agentName?: string | undefined;
     capabilities: {
       hasFilesystem: boolean;
+      /** True when the filesystem comes from a resolver, so file routes cannot browse it */
+      hasDynamicFilesystem?: boolean | undefined;
       hasSandbox: boolean;
       canBM25: boolean;
       canVector: boolean;
@@ -13647,6 +13649,8 @@ export type GetWorkspacesWorkspaceId_Response = {
   capabilities?:
     | {
         hasFilesystem: boolean;
+        /** True when the filesystem comes from a resolver, so file routes cannot browse it */
+        hasDynamicFilesystem?: boolean | undefined;
         hasSandbox: boolean;
         canBM25: boolean;
         canVector: boolean;
