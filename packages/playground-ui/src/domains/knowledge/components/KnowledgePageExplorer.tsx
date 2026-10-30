@@ -86,7 +86,8 @@ export interface KnowledgePageExplorerProps {
   graph: KnowledgeExplorerGraph;
   source: KnowledgeExplorerSource;
   selectedPageId: string | null;
-  onSelect: (pageId: string) => void;
+  /** `null` clears the selection: a click on empty graph canvas. */
+  onSelect: (pageId: string | null) => void;
   view: KnowledgeExplorerView;
   onViewChange: (view: KnowledgeExplorerView) => void;
 }
@@ -658,6 +659,10 @@ export function KnowledgePageExplorer({
                 selectedPageId={selectedPageId}
                 onSelect={page => onSelect(page.id)}
                 onOpen={page => openPage(page.id)}
+                onClearSelection={() => {
+                  setMention(null);
+                  if (selectedPageId) onSelect(null);
+                }}
                 onMentionSelect={setMention}
               />
             ) : null}

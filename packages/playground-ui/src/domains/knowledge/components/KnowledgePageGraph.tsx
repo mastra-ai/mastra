@@ -247,6 +247,9 @@ function GraphLegend() {
   );
 }
 
+/** How far the pointer may move between press and release and still count as a click, not a pan. */
+const CLICK_SLOP_PX = 4;
+
 export interface KnowledgePageGraphProps {
   pages: KnowledgePagePayload[];
   /** Mention edges between pages; parent edges are derived from `pages`. */
@@ -257,6 +260,8 @@ export interface KnowledgePageGraphProps {
   onSelect: (page: KnowledgePagePayload) => void;
   /** The already-selected page was clicked, tapped, or activated again: open it. Without it, that only reselects. */
   onOpen?: (page: KnowledgePagePayload) => void;
+  /** Empty canvas was clicked without moving the pointer (a pan doesn't count): clear the selection. */
+  onClearSelection?: () => void;
   /** A mention line was clicked: notes on `source` mention `target`. `point` is where, in the graph's own box. */
   onMentionSelect?: (mention: {
     source: KnowledgePagePayload;
@@ -286,6 +291,7 @@ function KnowledgePageGraphInner({
   selectedPageId,
   onSelect,
   onOpen,
+  onClearSelection,
   onMentionSelect,
 }: KnowledgePageGraphProps) {
   const allEdges = useMemo(() => pageGraphEdges(pages, edges), [pages, edges]);
@@ -448,6 +454,14 @@ function KnowledgePageGraphInner({
     selectedHere.current = page.id;
     onSelect(page);
   };
+  // Where the pointer went down, so a click that ends a pan isn't taken for a click on empty canvas.
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
+  const onPaneClick = (event: React.MouseEvent) => {
+    const start = pressedAt.current;
+    pressedAt.current = null;
+    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
+    onClearSelection?.();
+  };
   // React Flow focuses nodes but only toggles its own selection on Enter or Space; route them like a click.
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -469,7 +483,15 @@ function KnowledgePageGraphInner({
   }
 
   return (
-    <div ref={containerRef} className="relative size-full" data-testid="knowledge-page-graph" onKeyDown={onKeyDown}>
+    <div
+      ref={containerRef}
+      className="relative size-full"
+      data-testid="knowledge-page-graph"
+      onKeyDown={onKeyDown}
+      onPointerDownCapture={event => {
+        pressedAt.current = { x: event.clientX, y: event.clientY };
+      }}
+    >
       <GraphLegend />
       <ReactFlow
         nodes={nodes}
@@ -484,6 +506,7 @@ function KnowledgePageGraphInner({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
         nodesDraggable={false}
+        onPaneClick={onPaneClick}
         onNodeClick={(_: unknown, node: PageFlowNode) => activate(node.data.page)}
         onEdgeClick={(event: React.MouseEvent, edge: Edge<RimEdgeData>) => {
           if (edge.data?.kind !== 'mention' || !onMentionSelect) return;
