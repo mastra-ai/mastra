@@ -3,6 +3,7 @@ import { rangeBeforeZoom, rememberZoom } from '../lib/zoom-memory';
 import type { ZoomMemory } from '../lib/zoom-memory';
 import {
   OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
+  OBSERVABILITY_LIST_SORT_FIELDS,
   readObservabilityListDates,
   readObservabilityListFilters,
   readObservabilityListSort,
@@ -10,13 +11,12 @@ import {
   writeObservabilityListFilters,
   writeObservabilityListSort,
 } from '../observability-list-url-state';
-import type { ObservabilityListDates } from '../observability-list-url-state';
+import type { ObservabilityListDates, ObservabilityListSort } from '../observability-list-url-state';
 import { recoveryRefetchInterval } from '@/domains/observability/list-polling';
 import { resolveTracesDateWindow } from '@/domains/traces/components/traces-explorer/traces-explorer-actions';
 import { resolveTraceQueryTimeRange } from '@/domains/traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '@/domains/traces/trace-query-filters';
 import type { TraceDatePreset } from '@/domains/traces/types';
-import type { DataListSort } from '@/ds/components/DataList/data-list-sortable-top-cell';
 import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 
 /**
@@ -46,9 +46,12 @@ function useListSearchParams(url: ObservabilityListUrlState | undefined): Observ
 /**
  * The time range, filter and sort state of a spans or threads list, kept in the host's URL (same
  * date, sort and group params as /traces) so it survives a reload and can be shared. Without `url`
- * the state lives in memory.
+ * the state lives in memory. A sort on a field outside `sortFields` reads as start time, newest first.
  */
-export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
+export function useObservabilityListFilters<F extends string = 'startedAt'>(
+  url?: ObservabilityListUrlState,
+  { sortFields }: { sortFields?: readonly F[] } = {},
+) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
   // Decoded values keep their identity while unrelated params (e.g. the open row) change.
@@ -64,7 +67,14 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-read when the filter params change
     [filtersKey],
   );
-  const sort: DataListSort = readObservabilityListSort(searchParams);
+  const urlSort = readObservabilityListSort<F | 'startedAt'>(
+    searchParams,
+    sortFields ?? OBSERVABILITY_LIST_SORT_FIELDS,
+  );
+  const sort = useMemo<ObservabilityListSort<F | 'startedAt'>>(
+    () => ({ field: urlSort.field, direction: urlSort.direction }),
+    [urlSort.field, urlSort.direction],
+  );
 
   const fromMs = dateFrom?.getTime();
   const toMs = dateTo?.getTime();
@@ -131,7 +141,8 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     });
   const onFiltersChange = (nextTokens: TraceFilterToken[], nextGroups: TraceFilterGroup[]) =>
     update(next => writeObservabilityListFilters(next, { tokens: nextTokens, groups: nextGroups }));
-  const setSort = (direction: DataListSort) => update(next => writeObservabilityListSort(next, direction));
+  const setSort = (next: ObservabilityListSort<F | 'startedAt'>) =>
+    update(params => writeObservabilityListSort(params, next));
 
   const contentFiltersApplied = tokens.length > 0 || groups.length > 0;
   const filtersApplied = contentFiltersApplied || datePreset !== OBSERVABILITY_LIST_DEFAULT_DATE_PRESET;
