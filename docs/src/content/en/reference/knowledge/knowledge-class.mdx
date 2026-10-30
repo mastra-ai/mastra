@@ -232,7 +232,7 @@ Returns what a holder of `principals` can read: the principals themselves plus e
 renameScopeDeclaration(from: string, to: string): Promise<number>
 ```
 
-Moves stored scopes created from declaration key `from`, and its child scopes (`from/<name>`), to key `to`, in one step. Resolves to how many scopes moved. Refuses, and changes nothing, when `from` is still in `scopes`, `to` isn't, or a stored address doesn't match `to`'s pattern. Until stored keys match `scopes`, the instance refuses to run. See [rename or retire a scope type](/docs/knowledge/scope-types#rename-or-retire-a-scope-type).
+Moves stored scopes created from declaration key `from`, and its child scopes (`from/<name>`), to key `to`, in one step. Resolves to how many scopes moved. Refuses, and changes nothing, when `from` is still in `scopes`, `to` isn't, or a stored address doesn't match `to`'s pattern. Until stored keys match `scopes`, the instance refuses to run. On MongoDB the rename runs in a transaction only when the server is a replica set; on a standalone server it isn't atomic, so a failure partway can leave some scopes renamed. See [rename or retire a scope type](/docs/knowledge/scope-types#rename-or-retire-a-scope-type).
 
 ### `getStorage()`
 
