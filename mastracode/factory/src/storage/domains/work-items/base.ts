@@ -1610,13 +1610,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * reads every card of the project every few seconds, and cloning thousands of rows per poll
    * costs more than the query the cache saves. Callers must not mutate the result.
    */
-  async listShared({
-    orgId,
-    factoryProjectId,
-  }: {
-    orgId: string;
-    factoryProjectId: string;
-  }): Promise<readonly Card[]> {
+  async listShared({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<readonly Card[]> {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
@@ -1737,11 +1731,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   /** Drop the org-wide claims a project's cards hold, so a deleted project stops reserving their records. */
   async releaseProjectClaims({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<void> {
-    await this.#db.updateMany(
-      'work_items',
-      { org_id: orgId, factory_project_id: factoryProjectId },
-      { claim_key: null },
-    );
+    await new Cards(this.#db).updateMany({ org_id: orgId, factory_project_id: factoryProjectId }, { claim_key: null });
   }
 
   /**

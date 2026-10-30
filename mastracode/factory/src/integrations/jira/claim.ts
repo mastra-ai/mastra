@@ -1,4 +1,4 @@
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 
 /**
  * Org-wide ownership key for a Jira issue's Factory card. Keyed by the issue
@@ -15,7 +15,7 @@ export function jiraClaimKey(issueRef: string): string {
 export async function jiraIssueCards(
   workItems: Pick<WorkItemsStorage, 'getByClaimKey' | 'listBySource'>,
   { orgId, issueRef }: { orgId: string; issueRef: string },
-): Promise<WorkItemRow[]> {
+): Promise<Card[]> {
   const [claimant, legacy] = await Promise.all([
     workItems.getByClaimKey({ orgId, claimKey: jiraClaimKey(issueRef) }),
     workItems.listBySource({ orgId, source: { integrationId: 'jira', type: 'issue', externalId: issueRef } }),
