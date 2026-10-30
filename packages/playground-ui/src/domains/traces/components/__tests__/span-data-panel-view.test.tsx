@@ -146,6 +146,34 @@ describe('SpanDataPanelView', () => {
       expect(valueOf('Duration')).toBe('1.000 s');
     });
 
+    describe('when the span streamed', () => {
+      it('lists how long it took to stream its first chunk and first token', () => {
+        renderWithProviders(
+          <SpanDataPanelView
+            {...baseProps}
+            span={{ ...spanFixture, timeToFirstChunkMs: 412, timeToFirstTokenMs: 538 }}
+          />,
+        );
+
+        expect(valueOf('Time to first chunk')).toBe('412 ms');
+        expect(valueOf('Time to first token')).toBe('538 ms');
+      });
+    });
+
+    describe('when the span did not stream', () => {
+      it('lists neither timing', () => {
+        renderWithProviders(
+          <SpanDataPanelView
+            {...baseProps}
+            span={{ ...spanFixture, timeToFirstChunkMs: null, timeToFirstTokenMs: null }}
+          />,
+        );
+
+        expect(screen.queryByText('Time to first chunk')).toBeNull();
+        expect(screen.queryByText('Time to first token')).toBeNull();
+      });
+    });
+
     it('lists the ids the span has, each copyable, and skips the ones it does not', () => {
       renderWithProviders(
         <SpanDataPanelView {...baseProps} span={{ ...spanFixture, runId: 'run-1', sessionId: 'session-1' }} />,
@@ -213,6 +241,19 @@ describe('SpanDataPanelView', () => {
 
         expect(screen.queryByText('Model')).toBeNull();
         expect(screen.queryByText('Token usage')).toBeNull();
+      });
+
+      describe('but recorded the model it ran', () => {
+        const agentRunSpan = { ...spanFixture, model: 'claude-sonnet-4-5', provider: 'anthropic' };
+
+        it('lists the model and provider, keeping the span named after its entity', () => {
+          renderWithProviders(<SpanDataPanelView {...baseProps} span={agentRunSpan} />);
+
+          expect(valueOf('Model')).toBe('claude-sonnet-4-5');
+          expect(screen.getByRole('img', { name: 'anthropic logo' })).toBeTruthy();
+          expect(valueOf('Provider')).toBe('anthropic');
+          expect(screen.getByRole('heading', { name: 'agent run' })).toBeTruthy();
+        });
       });
     });
   });

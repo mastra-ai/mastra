@@ -10,11 +10,22 @@ import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
 import { ShareBar } from '@/ds/components/ShareBar';
 import type { ShareBarRow } from '@/ds/components/ShareBar';
 
 type View = 'agents' | 'models' | 'threads';
+
+const TITLE: Record<View, string> = {
+  agents: 'Usage by agent',
+  models: 'Usage by model',
+  threads: 'Usage by thread',
+};
+
+const VIEWS = [
+  { value: 'agents', label: TITLE.agents },
+  { value: 'models', label: TITLE.models },
+  { value: 'threads', label: TITLE.threads },
+] as const;
 type UsageRow = { key: string; cost: number; tokens: number; onClick?: () => void };
 
 export type UsageCardProps = {
@@ -101,7 +112,7 @@ function ThreadsUsage(props: ViewProps) {
   );
 }
 
-/** The card itself: tabs, the cost summary and the ranked list, for whichever tab is open. */
+/** The card itself: the view menu, the cost total and the ranked list, for whichever tab is open. */
 function UsageFrame({
   view,
   onViewChange,
@@ -122,18 +133,9 @@ function UsageFrame({
   }));
 
   const layout = {
-    title: 'Usage',
-    description: 'Who is spending: cost share, with tokens.',
+    title: TITLE[view],
+    titleMenu: { value: view, onValueChange: onViewChange, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
-    toolbar: (
-      <MetricsCard.Toolbar>
-        <MetricsCard.Tabs<View> value={view} onValueChange={onViewChange}>
-          <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
-          <MetricsCard.Tab value="models">Models</MetricsCard.Tab>
-          <MetricsCard.Tab value="threads">Threads</MetricsCard.Tab>
-        </MetricsCard.Tabs>
-      </MetricsCard.Toolbar>
-    ),
   };
 
   if (isError) {
@@ -147,13 +149,8 @@ function UsageFrame({
   return (
     <ChartCard
       {...layout}
-      summary={
-        <MetricsCard.Summary
-          value={formatUsd(rows.reduce((sum, r) => sum + r.cost, 0))}
-          label="cost"
-          isLoading={isLoading}
-        />
-      }
+      total={formatUsd(rows.reduce((sum, r) => sum + r.cost, 0))}
+      isLoading={isLoading}
       isUpdating={isUpdating}
     >
       <ChartArea>

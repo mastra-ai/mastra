@@ -62,7 +62,7 @@ export function SessionChatSurface({
                 <ChatMessageBoundary showPreparation={false}>
                   <TranscriptHistoryLoader />
                   {transcript.entries.length === 0 && emptyState}
-                  <Transcript tail={<ActivityLine />} />
+                  <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
                 </ChatMessageBoundary>
               </ChatShell.Column>
             </ChatShell.Content>

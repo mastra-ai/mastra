@@ -29,8 +29,11 @@ const MEASURES = [
 
 let requests: TraceAggregateRequest[] = [];
 
-/** A legend entry's label and range total, e.g. `Resources5`. */
-const legendEntry = (label: string) => screen.getByText(label).parentElement?.textContent;
+/** Legend text only: each total also names its id, for screen readers. */
+const LEGEND = { ignore: 'script, style, .sr-only' };
+
+/** A legend entry's text: its label alone, e.g. `Resources`. */
+const legendEntry = (label: string) => screen.getByText(label, LEGEND).parentElement?.textContent;
 
 type Served = { empty?: boolean; totals?: typeof distinctIdsTotalsFixture };
 
@@ -72,20 +75,28 @@ beforeEach(() => {
 describe('when the server answers aggregateTraces()', () => {
   beforeEach(() => serveCapabilities(traceAggregateCapabilities));
 
-  it('shows range totals from their own request, not the sum of buckets', async () => {
+  it('labels each id in the legend, without its range total', async () => {
     serveCard();
     render(<DistinctIdsCard />);
 
-    // Buckets hold 3 + 4 resources; the range has 5.
-    await screen.findByText('Resources');
-    expect(legendEntry('Resources')).toBe('Resources5');
-    expect(legendEntry('Threads')).toBe('Threads14');
+    await screen.findByText('Resources', LEGEND);
+    expect(legendEntry('Resources')).toBe('Resources');
+    expect(legendEntry('Threads')).toBe('Threads');
+  });
+
+  it("shows each id's range total top right, from the range request", async () => {
+    serveCard();
+    render(<DistinctIdsCard />);
+
+    // 5 and 14 for the range, not the sum of the hourly counts.
+    expect(await screen.findByText((_, el) => el?.textContent === 'Resources 5')).toBeDefined();
+    expect(screen.getByText((_, el) => el?.textContent === 'Threads 14')).toBeDefined();
   });
 
   it('asks for all four distinct ids once per hour and once for the range', async () => {
     serveCard();
     render(<DistinctIdsCard />);
-    await screen.findByText('Resources');
+    await screen.findByText('Resources', LEGEND);
 
     expect(requests).toHaveLength(2);
     expect(requests.find(r => r.interval)).toMatchObject({
@@ -101,22 +112,22 @@ describe('when the server answers aggregateTraces()', () => {
     it('leaves users and sessions out of the legend', async () => {
       serveCard();
       render(<DistinctIdsCard />);
-      await screen.findByText('Resources');
+      await screen.findByText('Resources', LEGEND);
 
-      expect(screen.getByText('Threads')).toBeDefined();
-      expect(screen.queryByText('Users')).toBeNull();
-      expect(screen.queryByText('Sessions')).toBeNull();
+      expect(screen.getByText('Threads', LEGEND)).toBeDefined();
+      expect(screen.queryByText('Users', LEGEND)).toBeNull();
+      expect(screen.queryByText('Sessions', LEGEND)).toBeNull();
     });
   });
 
   describe('when the traces also set user and session ids', () => {
-    it('adds them to the legend with their totals', async () => {
+    it('adds them to the legend', async () => {
       serveCard({ totals: distinctIdsWithUsersTotalsFixture });
       render(<DistinctIdsCard />);
-      await screen.findByText('Resources');
+      await screen.findByText('Resources', LEGEND);
 
-      expect(legendEntry('Users')).toBe('Users2');
-      expect(legendEntry('Sessions')).toBe('Sessions3');
+      expect(legendEntry('Users')).toBe('Users');
+      expect(legendEntry('Sessions')).toBe('Sessions');
     });
   });
 
@@ -136,8 +147,8 @@ describe('when the server answers aggregateTraces()', () => {
     await waitFor(() => expect(screen.getByText(ERROR)).toBeDefined(), { timeout: 5000 });
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
-    expect(legendEntry('Resources')).toBe('Resources5');
+    expect(await screen.findByText('Resources', LEGEND, { timeout: 5000 })).toBeDefined();
+    expect(screen.getByText('Threads', LEGEND)).toBeDefined();
     // Two waits of up to 5 s each: the default 5 s test timeout cuts it short under a loaded run.
   }, 15_000);
 
