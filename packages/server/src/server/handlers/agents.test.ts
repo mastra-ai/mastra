@@ -60,6 +60,7 @@ import {
   REORDER_AGENT_MODEL_LIST_ROUTE,
   isProviderConnected,
   extractVersionOptions,
+  UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
 } from './agents';
 
 // Mock the PROVIDER_REGISTRY before importing anything that uses it
@@ -820,6 +821,11 @@ describe('Agent Routes Authorization', () => {
   }
 
   describe('Editor-owned model list persistence', () => {
+    it('requires stored-agent write permission for persistent model-list mutations', () => {
+      expect(REORDER_AGENT_MODEL_LIST_ROUTE.requiresPermission).toBe('stored-agents:write');
+      expect(UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.requiresPermission).toBe('stored-agents:write');
+    });
+
     it('creates a sparse initial override when the legacy reorder route persists an Editor-owned model list', async () => {
       const modelOwnedAgent = new Agent({
         id: 'model-owned-agent',

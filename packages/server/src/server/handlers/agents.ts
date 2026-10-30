@@ -3885,6 +3885,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
+  requiresPermission: 'stored-agents:write',
   handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
       const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
@@ -3933,6 +3934,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
+  requiresPermission: 'stored-agents:write',
   handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
       const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
