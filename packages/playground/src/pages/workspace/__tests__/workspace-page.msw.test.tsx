@@ -98,7 +98,18 @@ describe('Workspace page', () => {
   });
 
   describe('when the filesystem comes from a resolver', () => {
-    it('explains why files cannot be browsed and never calls the file or skills routes', async () => {
+    it('explains why files cannot be browsed instead of rendering the tree', async () => {
+      useWorkspace({ auth: authDisabledCapabilities, info: workspaceInfoWithDynamicFilesystem });
+      renderPage();
+
+      expect(await screen.findByText('Filesystem resolved per request')).not.toBeNull();
+      expect(screen.queryByText('No filesystem or skills configured')).toBeNull();
+      expect(screen.queryByText('notes')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Add skill' })).toBeNull();
+    });
+
+    it('never calls the file or skills routes, which could run the resolver', async () => {
       let listRequests = 0;
       let skillsRequests = 0;
       useWorkspace({ auth: authDisabledCapabilities, info: workspaceInfoWithDynamicFilesystem });
@@ -113,12 +124,8 @@ describe('Workspace page', () => {
         }),
       );
       renderPage();
+      await screen.findByText('Filesystem resolved per request');
 
-      expect(await screen.findByText('Filesystem resolved per request')).not.toBeNull();
-      expect(screen.queryByText('No filesystem or skills configured')).toBeNull();
-      expect(screen.queryByText('notes')).toBeNull();
-      expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Add skill' })).toBeNull();
       expect(listRequests).toBe(0);
       expect(skillsRequests).toBe(0);
     });
