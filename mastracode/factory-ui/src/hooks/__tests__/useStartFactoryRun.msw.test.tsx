@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { providerFactsCard } from '../../ui/__tests__/fixtures/providerFactsCard';
 import { useStartFactoryRun } from '../useStartFactoryRun';
 import type { StartFactoryRunWorkItem } from '../useStartFactoryRun';
 
@@ -102,7 +103,7 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
         { id: 'repo-1', externalId: '101', slug: 'acme/renamed' },
       ],
     ],
-  ])('starts a renamed repository card by its provider id with %s', async (_label, repositories) => {
+  ])('starts a renamed repository card by its normalized provider id with %s', async (_label, repositories) => {
     const providerWorkItem: StartFactoryRunWorkItem = {
       ...workItem,
       source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
@@ -110,7 +111,14 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
       metadata: {
         number: 7,
         repository: 'acme/old-name',
-        ...(provider === 'github' ? { githubRepositoryId: 101 } : { gitlabProjectId: '101' }),
+        githubRepositoryId: 202,
+        gitlabProjectId: '202',
+        labels: ['stale-label'],
+        state: 'closed',
+      },
+      workItem: {
+        ...providerFactsCard.workItem,
+        metadata: provider === 'github' ? { githubRepositoryId: 101 } : { gitlabProjectId: '101' },
       },
     };
     const calls = stubEndpoints(repositories.map(repository => ({ ...repository, provider })));
@@ -124,9 +132,8 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
     });
 
     expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
-    expect(calls.patches).toEqual([{ metadata: { ...providerWorkItem.metadata, repository: 'acme/renamed' } }]);
-    const startedWorkItem = calls.started()?.workItem as { input: { metadata: Record<string, unknown> } };
-    expect(startedWorkItem.input.metadata.repository).toBe('acme/renamed');
+    expect(calls.patches).toEqual([{ metadata: { repository: 'acme/renamed' } }]);
+    expect(calls.started()).toHaveProperty('workItem.input.metadata', { repository: 'acme/renamed' });
   });
 });
 

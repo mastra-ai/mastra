@@ -2199,17 +2199,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "provider": {
                     "type": "string"
                   },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "issue",
-                      "pull_request",
-                      "merge_request",
-                      "thread",
-                      "incident",
-                      "follow_up"
-                    ]
-                  },
                   "key": {
                     "type": [
                       "string",
@@ -2246,7 +2235,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 },
                 "required": [
                   "provider",
-                  "kind",
                   "key",
                   "url",
                   "title",
@@ -3655,17 +3643,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "provider": {
                   "type": "string"
                 },
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "issue",
-                    "pull_request",
-                    "merge_request",
-                    "thread",
-                    "incident",
-                    "follow_up"
-                  ]
-                },
                 "key": {
                   "type": [
                     "string",
@@ -3702,7 +3679,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               },
               "required": [
                 "provider",
-                "kind",
                 "key",
                 "url",
                 "title",
@@ -5267,17 +5243,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "provider": {
                   "type": "string"
                 },
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "issue",
-                    "pull_request",
-                    "merge_request",
-                    "thread",
-                    "incident",
-                    "follow_up"
-                  ]
-                },
                 "key": {
                   "type": [
                     "string",
@@ -5314,7 +5279,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               },
               "required": [
                 "provider",
-                "kind",
                 "key",
                 "url",
                 "title",
