@@ -60,12 +60,24 @@ describe('KnowledgeImporters', () => {
     });
   });
 
+  describe('when addressing one connection of a provider', () => {
+    it('sends the whole key as a single path segment', async () => {
+      await importers().saveSettings('linear:conn_01J948KS', {
+        enabled: false,
+        schedule: null,
+        options: {},
+        expectedVersion: 0,
+      });
+
+      expect(seen.map(r => r.url)).toEqual(['/knowledge-importers/linear%3Aconn_01J948KS/settings']);
+    });
+  });
+
   describe('when saving settings', () => {
     it('sends the settings and expected version as a JSON PUT', async () => {
       await importers().saveSettings('slack', {
         enabled: true,
         schedule: '*/30 * * * *',
-        connectionId: null,
         options: { channels: ['eng'] },
         expectedVersion: 3,
       });
@@ -77,7 +89,6 @@ describe('KnowledgeImporters', () => {
           body: JSON.stringify({
             enabled: true,
             schedule: '*/30 * * * *',
-            connectionId: null,
             options: { channels: ['eng'] },
             expectedVersion: 3,
           }),
@@ -92,7 +103,7 @@ describe('KnowledgeImporters', () => {
       };
 
       const error = await importers()
-        .saveSettings('slack', { enabled: false, schedule: null, connectionId: null, options: {}, expectedVersion: 1 })
+        .saveSettings('slack', { enabled: false, schedule: null, options: {}, expectedVersion: 1 })
         .catch((e: unknown) => e);
 
       expect(error).toBeInstanceOf(MastraClientError);

@@ -16,8 +16,6 @@ export interface KnowledgeImporterSettings {
   enabled: boolean;
   /** 5-field cron; null falls back to the env/default schedule. */
   schedule: string | null;
-  /** null picks the single linked connection automatically. */
-  connectionId: string | null;
   options: Record<string, KnowledgeImporterOptionValue>;
   /** Optimistic concurrency token; 0 means no saved row. */
   version: number;
@@ -26,7 +24,7 @@ export interface KnowledgeImporterSettings {
   source: 'saved' | 'env';
 }
 
-export type KnowledgeImporterConnectionStatus = 'ok' | 'none' | 'ambiguous' | 'needs_reauth' | 'error';
+export type KnowledgeImporterConnectionStatus = 'ok' | 'needs_reauth' | 'error';
 
 export interface KnowledgeImporterRunSummary {
   id: string;
@@ -73,8 +71,12 @@ export interface KnowledgeImporterRunPreview {
   truncated: boolean;
 }
 
+/** One importer for one linked Platform connection. */
 export interface KnowledgeImporterSummary {
+  /** `<importerId>:<connectionId>`; identifies this entry in every per-importer route. */
+  key: string;
   importerId: string;
+  /** Provider name, e.g. "Linear". */
   label: string;
   /** One plain sentence: what this importer brings in and where it lands. */
   description?: string;
@@ -83,8 +85,8 @@ export interface KnowledgeImporterSummary {
   /** What the scheduler will actually use; null when disabled. */
   effectiveSchedule: string | null;
   connection: {
+    id: string;
     status: KnowledgeImporterConnectionStatus;
-    connectionId: string | null;
     message?: string;
     /** The linked account/workspace label, for display. */
     accountName?: string;
@@ -96,6 +98,8 @@ export interface ListKnowledgeImportersResponse {
   summaries: KnowledgeImporterSummary[];
   /** Whether the caller may save settings or start runs. Read-only callers get 403 `forbidden` on writes. */
   canWrite: boolean;
+  /** The project's Platform Connect settings page (an `https://` URL), or null when the server has none configured. */
+  connectUrl: string | null;
 }
 
 export interface KnowledgeImporterConnection {
@@ -112,7 +116,6 @@ export interface ListKnowledgeImporterConnectionsResponse {
 export interface SaveKnowledgeImporterSettingsParams {
   enabled: boolean;
   schedule: string | null;
-  connectionId: string | null;
   options: Record<string, KnowledgeImporterOptionValue>;
   expectedVersion: number;
 }
@@ -136,36 +139,33 @@ export class KnowledgeImporters extends BaseResource {
     super({ ...options, apiPrefix: '' });
   }
 
-  #path(importerId: string, suffix: string) {
-    return `/knowledge-importers/${encodeURIComponent(importerId)}/${suffix}`;
+  #path(key: string, suffix: string) {
+    return `/knowledge-importers/${encodeURIComponent(key)}/${suffix}`;
   }
 
-  /** Every importer with its effective settings, connection state and last run. */
+  /** One entry per linked connection, with its effective settings, connection state and last run. */
   list(): Promise<ListKnowledgeImportersResponse> {
     return this.request('/knowledge-importers');
   }
 
-  /** Platform connections linked for the importer's provider. */
-  connections(importerId: string): Promise<ListKnowledgeImporterConnectionsResponse> {
-    return this.request(this.#path(importerId, 'connections'));
+  /** Platform connections linked for the entry's provider. */
+  connections(key: string): Promise<ListKnowledgeImporterConnectionsResponse> {
+    return this.request(this.#path(key, 'connections'));
   }
 
   /** Saves settings; rejects with 409 when `expectedVersion` is stale. */
-  saveSettings(importerId: string, params: SaveKnowledgeImporterSettingsParams): Promise<KnowledgeImporterSummary> {
-    return this.request(this.#path(importerId, 'settings'), { method: 'PUT', body: params, retries: 0 });
+  saveSettings(key: string, params: SaveKnowledgeImporterSettingsParams): Promise<KnowledgeImporterSummary> {
+    return this.request(this.#path(key, 'settings'), { method: 'PUT', body: params, retries: 0 });
   }
 
   /** Drops the saved row so the importer falls back to env configuration. */
-  resetSettings(importerId: string): Promise<KnowledgeImporterSummary> {
-    return this.request(this.#path(importerId, 'settings'), { method: 'DELETE', retries: 0 });
+  resetSettings(key: string): Promise<KnowledgeImporterSummary> {
+    return this.request(this.#path(key, 'settings'), { method: 'DELETE', retries: 0 });
   }
 
   /** Starts a dry run, optionally previewing unsaved settings. Writes nothing to Knowledge. */
-  dryRun(
-    importerId: string,
-    settings?: Partial<KnowledgeImporterSettings>,
-  ): Promise<StartKnowledgeImporterRunResponse> {
-    return this.request(this.#path(importerId, 'dry-run'), {
+  dryRun(key: string, settings?: Partial<KnowledgeImporterSettings>): Promise<StartKnowledgeImporterRunResponse> {
+    return this.request(this.#path(key, 'dry-run'), {
       method: 'POST',
       body: settings ? { settings } : {},
       retries: 0,
@@ -173,16 +173,16 @@ export class KnowledgeImporters extends BaseResource {
   }
 
   /** Starts a real import with the effective settings. */
-  run(importerId: string): Promise<StartKnowledgeImporterRunResponse> {
-    return this.request(this.#path(importerId, 'run'), { method: 'POST', body: {}, retries: 0 });
+  run(key: string): Promise<StartKnowledgeImporterRunResponse> {
+    return this.request(this.#path(key, 'run'), { method: 'POST', body: {}, retries: 0 });
   }
 
   getRun(runId: string): Promise<KnowledgeImporterRunSummary> {
     return this.request(`/knowledge-importers/runs/${encodeURIComponent(runId)}`);
   }
 
-  /** Newest-first run history for one importer. */
-  runs(importerId: string, limit = 20): Promise<ListKnowledgeImporterRunsResponse> {
-    return this.request(`${this.#path(importerId, 'runs')}?limit=${limit}`);
+  /** Newest-first run history for one entry. */
+  runs(key: string, limit = 20): Promise<ListKnowledgeImporterRunsResponse> {
+    return this.request(`${this.#path(key, 'runs')}?limit=${limit}`);
   }
 }

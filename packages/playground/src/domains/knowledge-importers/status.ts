@@ -12,8 +12,6 @@ export const IMPORTER_STATE: Record<ImporterState, { label: string; variant: Bad
   attention: { label: 'Needs attention', variant: 'warning' },
 };
 
-export const isConnected = (summary: KnowledgeImporterSummary) => summary.connection.status !== 'none';
-
 /** Why the importer needs attention, in one short phrase; undefined when it doesn't. */
 export function attentionReason(summary: KnowledgeImporterSummary): string | undefined {
   switch (summary.connection.status) {
@@ -21,8 +19,6 @@ export function attentionReason(summary: KnowledgeImporterSummary): string | und
       return 'Connection needs re-auth';
     case 'error':
       return 'Connection error';
-    case 'ambiguous':
-      return 'Choose a connection';
     default:
       return summary.lastRun?.status === 'failed' ? 'Last run failed' : undefined;
   }

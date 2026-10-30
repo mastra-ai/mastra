@@ -13,8 +13,8 @@ import { RunStatusBadge } from './status-badges';
 
 const SKELETON_ROWS = [0, 1, 2];
 
-export function RunHistory({ importerId }: { importerId: string }) {
-  const runs = useImporterRuns(importerId);
+export function RunHistory({ importerKey }: { importerKey: string }) {
+  const runs = useImporterRuns(importerKey);
 
   if (runs.isPending) {
     return (

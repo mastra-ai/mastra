@@ -1,11 +1,13 @@
 import type {
   KnowledgeImporterRunSummary,
   KnowledgeImporterSummary,
-  ListKnowledgeImporterConnectionsResponse,
   ListKnowledgeImportersResponse,
 } from '@mastra/client-js';
 
+export const NOTION_KEY = 'notion:conn_notion';
+
 export const buildNotionSummary = (overrides: Partial<KnowledgeImporterSummary> = {}): KnowledgeImporterSummary => ({
+  key: NOTION_KEY,
   importerId: 'notion',
   label: 'Notion',
   description: 'Pages from each teamspace; each teamspace lands in its own container.',
@@ -13,7 +15,6 @@ export const buildNotionSummary = (overrides: Partial<KnowledgeImporterSummary> 
     importerId: 'notion',
     enabled: true,
     schedule: null,
-    connectionId: null,
     options: { teamspaces: ['Engineering'] },
     version: 3,
     updatedAt: '2026-10-29T12:00:00.000Z',
@@ -30,7 +31,7 @@ export const buildNotionSummary = (overrides: Partial<KnowledgeImporterSummary> 
     },
   ],
   effectiveSchedule: '*/15 * * * *',
-  connection: { status: 'ok', connectionId: 'conn_notion' },
+  connection: { id: 'conn_notion', status: 'ok', accountName: 'Acme workspace' },
   lastRun: {
     id: 'run_prev',
     importerId: 'notion',
@@ -43,14 +44,19 @@ export const buildNotionSummary = (overrides: Partial<KnowledgeImporterSummary> 
   ...overrides,
 });
 
-export const buildSlackSummary = (): KnowledgeImporterSummary => ({
-  importerId: 'slack',
-  label: 'Slack',
+/** One Linear entry per linked connection; the project links several Linear accounts. */
+export const buildLinearSummary = (
+  connectionId: string,
+  accountName: string,
+  overrides: Partial<KnowledgeImporterSummary> = {},
+): KnowledgeImporterSummary => ({
+  key: `linear:${connectionId}`,
+  importerId: 'linear',
+  label: 'Linear',
   settings: {
-    importerId: 'slack',
+    importerId: 'linear',
     enabled: false,
     schedule: null,
-    connectionId: null,
     options: {},
     version: 0,
     updatedAt: null,
@@ -59,21 +65,22 @@ export const buildSlackSummary = (): KnowledgeImporterSummary => ({
   },
   optionsSchema: [],
   effectiveSchedule: null,
-  connection: { status: 'none', connectionId: null },
+  connection: { id: connectionId, status: 'ok', accountName },
   lastRun: null,
+  ...overrides,
 });
+
+export const PLATFORM_CONNECT_URL = 'https://projects.mastra.ai/acme/knowledge/settings/connect';
 
 export const buildListImportersResponse = (
   summaries: KnowledgeImporterSummary[],
   canWrite = true,
+  connectUrl: string | null = PLATFORM_CONNECT_URL,
 ): ListKnowledgeImportersResponse => ({
   summaries,
   canWrite,
+  connectUrl,
 });
-
-export const notionConnections: ListKnowledgeImporterConnectionsResponse = {
-  connections: [{ id: 'conn_notion', provider: 'notion', accountName: 'Acme workspace', status: 'active' }],
-};
 
 export const buildRun = (overrides: Partial<KnowledgeImporterRunSummary> = {}): KnowledgeImporterRunSummary => ({
   id: 'run_dry',

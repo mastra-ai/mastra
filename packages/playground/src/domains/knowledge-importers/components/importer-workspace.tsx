@@ -6,6 +6,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Eye, Play } from 'lucide-react';
 import { useState } from 'react';
+import { entryAccount } from '../connection-name';
 import { parseCron, scheduleChoice, SCHEDULE_PRESETS } from '../schedule';
 import type { ScheduleChoice } from '../schedule';
 import {
@@ -21,7 +22,6 @@ import type { ImporterDraft } from '../settings';
 import {
   isRunActive,
   useImporterCanWrite,
-  useImporterConnections,
   useImporterRun,
   useImporterRuns,
   useImporterSummaries,
@@ -29,7 +29,6 @@ import {
   useSaveImporterSettings,
   useStartImporterRun,
 } from '../use-knowledge-importers';
-import { ConnectionField } from './connection-field';
 import { ImportNowDialog } from './import-now-dialog';
 import { ImporterHeader } from './importer-header';
 import { OptionFields } from './option-fields';
@@ -40,7 +39,7 @@ import { ScheduleControl } from './schedule-control';
 
 /** The editable detail pane for a connected importer: preview, what, when, activity — one draft, one save bar. */
 export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSummary }) {
-  const { importerId, settings } = summary;
+  const { key: importerKey, settings } = summary;
   const [draft, setDraft] = useState<ImporterDraft>(() => draftFromSettings(settings));
   const [baseVersion, setBaseVersion] = useState(settings.version);
   const [customPinned, setCustomPinned] = useState(false);
@@ -48,18 +47,17 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
   const [activeRunId, setActiveRunId] = useState<string>();
 
   const summaries = useImporterSummaries();
-  const connections = useImporterConnections(importerId, true);
-  const runs = useImporterRuns(importerId);
-  const activeRun = useImporterRun(importerId, activeRunId);
-  const save = useSaveImporterSettings(importerId);
-  const reset = useResetImporterSettings(importerId);
-  const startRun = useStartImporterRun(importerId);
+  const runs = useImporterRuns(importerKey);
+  const activeRun = useImporterRun(importerKey, activeRunId);
+  const save = useSaveImporterSettings(importerKey);
+  const reset = useResetImporterSettings(importerKey);
+  const startRun = useStartImporterRun(importerKey);
   const canWrite = useImporterCanWrite();
 
   // A 403 on any write means the list's canWrite was stale; trust the server.
   const readOnly =
     !canWrite || isForbiddenError(save.error) || isForbiddenError(reset.error) || isForbiddenError(startRun.error);
-  const gate = connectionGate(summary.connection, draft.connectionId);
+  const gate = connectionGate(summary.connection);
   const blocked = gate.kind === 'disabled' ? gate.reason : undefined;
   const dirty = isDraftDirty(draft, settings);
   const saving = save.isPending || reset.isPending;
@@ -74,10 +72,7 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
     (activeRunId !== undefined && (!activeRun.data || isRunActive(activeRun.data))) ||
     (summary.lastRun !== null && isRunActive(summary.lastRun));
   const lastPreview = runs.data?.find(run => run.kind === 'dry-run' && !isRunActive(run));
-  const accountName =
-    summary.connection.accountName ??
-    connections.data?.find(connection => connection.id === summary.connection.connectionId)?.accountName;
-  const showConnectionField = summary.connection.status === 'ambiguous' || (connections.data?.length ?? 0) > 1;
+  const account = entryAccount(summary, summaries.data ?? [summary]);
 
   const update = (patch: Partial<ImporterDraft>) => setDraft(previous => ({ ...previous, ...patch }));
 
@@ -106,7 +101,7 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
           const { code, status } = readApiError(error);
           if (code !== 'version_conflict' && status !== 409) return;
           const refreshed = await summaries.refetch();
-          const latest = refreshed.data?.find(item => item.importerId === importerId);
+          const latest = refreshed.data?.find(item => item.key === importerKey);
           if (latest) adopt(latest);
           toast.warning('Someone else changed this — reloaded');
         },
@@ -140,7 +135,7 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
     <div className="flex flex-col gap-6">
       <ImporterHeader
         summary={summary}
-        accountName={accountName}
+        account={account}
         meta={
           !readOnly && settings.source === 'saved' ? (
             <>
@@ -211,15 +206,6 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
 
       <SectionCard title="What gets imported">
         <div className="flex flex-col gap-4">
-          {showConnectionField ? (
-            <ConnectionField
-              value={draft.connectionId}
-              ambiguous={summary.connection.status === 'ambiguous'}
-              connections={connections.data ?? []}
-              disabled={readOnly || saving}
-              onChange={connectionId => update({ connectionId })}
-            />
-          ) : null}
           {summary.optionsSchema.length > 0 ? (
             <OptionFields
               schema={summary.optionsSchema}
@@ -249,7 +235,7 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
       </SectionCard>
 
       <SectionCard title="Activity">
-        <RunHistory importerId={importerId} />
+        <RunHistory importerKey={importerKey} />
       </SectionCard>
 
       {saveError ? (
