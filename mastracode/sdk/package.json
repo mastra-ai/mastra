@@ -62,7 +62,7 @@
     "@ai-sdk/openai": "^3.0.131",
     "@ai-sdk/openai-compatible": "^2.0.87",
     "@ast-grep/napi": "^0.42.3",
-    "@aws-sdk/credential-providers": "^3.1156.0",
+    "@aws-sdk/credential-providers": "^3.1157.0",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/client-js": "workspace:*",
     "@mastra/duckdb": "workspace:*",

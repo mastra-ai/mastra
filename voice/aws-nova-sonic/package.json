@@ -32,8 +32,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1156.0",
-    "@aws-sdk/credential-provider-node": "^3.972.88",
+    "@aws-sdk/client-bedrock-runtime": "^3.1157.0",
+    "@aws-sdk/credential-provider-node": "^3.972.89",
     "@smithy/node-http-handler": "^4.12.1",
     "@smithy/types": "^4.19.0"
   },
