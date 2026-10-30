@@ -446,6 +446,61 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
   );
 
   it.skipIf(engine !== 'inngest')(
+    'a deadline during the input save skips the running-snapshot write',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `slow-input-no-running-row-${engine}`;
+      const saveMessages = memory.saveMessages.bind(memory);
+      const heldSaves: Promise<unknown>[] = [];
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
+        if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => saveMessages(args));
+        heldSaves.push(held);
+        return held;
+      });
+      // The Inngest host's store, which the caller writes the running row to.
+      const workflowsStore = (await getScenarioEngineHost()!.getMastra().getStorage()!.getStore('workflows'))!;
+      const runningWrites: string[] = [];
+      const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot');
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Save me slowly.',
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        expect(heldSaves).toHaveLength(1);
+        await Promise.all(heldSaves);
+        // Give the startup chain time to continue past the input save.
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+        for (const [args] of persistSpy.mock.calls) {
+          if (args.runId === result.output.runId && args.snapshot.status === 'running') {
+            runningWrites.push(args.workflowName);
+          }
+        }
+        // The deadline already cleared the run's rows, so startup stops before writing a new one.
+        expect(runningWrites).toEqual([]);
+        expect(getMock().getRequests()).toHaveLength(0);
+      } finally {
+        saveSpy.mockRestore();
+        persistSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 10_000,
+  );
+
+  it.skipIf(engine !== 'inngest')(
     'a deadline during the running-snapshot write stops the run before it starts',
     async () => {
       const memory = new MockMemory();
