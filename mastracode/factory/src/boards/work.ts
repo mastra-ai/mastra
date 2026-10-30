@@ -1,10 +1,12 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
 import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
-import { defineBoard } from './define-board.js';
+import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
+
+const INCIDENTIO_SOURCE_KEY_PREFIX = 'incidentio:issue:';
 
 function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
   const identifier = item.metadata?.identifier;
@@ -31,7 +33,15 @@ function sourceRef(item: FactoryRuleItemContext): string {
   }
   if (item.source === 'incidentio-follow-up') {
     const identifier = sourceIdentifier(item);
-    return identifier ? `incident.io follow-up ${identifier}${link}` : `incident.io follow-up ${item.title}${link}`;
+    const label = identifier
+      ? `incident.io follow-up ${identifier}${link}`
+      : `incident.io follow-up ${item.title}${link}`;
+    // The item source key is `incidentio:issue:<externalId>`; incidentio_get_issue resolves only the
+    // external id (`incidentio:follow-up:<id>`), not the display identifier.
+    const reference = item.sourceKey?.startsWith(INCIDENTIO_SOURCE_KEY_PREFIX)
+      ? item.sourceKey.slice(INCIDENTIO_SOURCE_KEY_PREFIX.length)
+      : undefined;
+    return reference ? `${label}, reference ${reference}` : label;
   }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
@@ -264,7 +274,7 @@ export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'rev
 /** Every Work phase: a card may move from any phase to any other. */
 const ALL_PHASES: readonly WorkBoardPhase[] = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
 
-export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
+export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
   name: 'Work',
   initialPhase: 'intake',

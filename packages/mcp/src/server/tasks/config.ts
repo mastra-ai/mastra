@@ -1,10 +1,19 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolType } from '@mastra/core/tools';
-import { DEFAULT_TASK_TTL_MS } from '../../shared/tasks';
+import { DEFAULT_TASK_TTL_MS, taskKeyOf } from '../../shared/tasks';
 import type { MCPDetailedTask } from '../../shared/tasks';
 import { InMemoryMCPTaskStore } from './in-memory-store';
-import type { MCPTaskLimits, MCPTaskStore } from './store';
+import { isMCPTaskStoreAdmin } from './store';
+import type {
+  MCPTaskAccess,
+  MCPTaskCreateParams,
+  MCPTaskLimits,
+  MCPTaskRunOptions,
+  MCPTaskStore,
+  MCPTaskStoreAdmin,
+  MCPTaskWork,
+} from './store';
 
 /**
  * How a tool answers `tools/call` for a client that declared the Tasks extension.
@@ -24,7 +33,17 @@ export interface MCPServerToolTaskConfig {
   syncWindowMs?: number;
   /** Overrides `tasks.ttlMs` for this tool's tasks. */
   ttlMs?: number | null;
+  /** Overrides `tasks.recover` for this tool's tasks. */
+  recover?: boolean;
 }
+
+/**
+ * How one workflow's `run_<key>` tool is served as a task. There is no `recover`: a task whose
+ * server restarted re-attaches to its workflow run, which core's workflow recovery continues.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export type MCPServerWorkflowTaskConfig = Omit<MCPServerToolTaskConfig, 'recover'>;
 
 /**
  * What `tasks.authorize` receives on every `tasks/get`, `tasks/update` and `tasks/cancel`.
@@ -45,22 +64,39 @@ export interface MCPServerTaskAuthorizeContext {
  * @experimental SEP-2663 extension; API may change.
  */
 export interface MCPServerTasksOptions {
-  /** Mode for tools not listed in `tools`. Default `'off'`. */
+  /** Mode for every tool, workflow and agent not listed in `tools`, `workflows` or `agents`. Default `'off'`. */
   default?: MCPServerTaskMode;
   /** Per-tool mode, keyed by tool name. */
   tools?: Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
-  /** Tasks for workflows are not supported yet. */
-  workflows?: never;
-  /** Tasks for agents are not supported yet. */
-  agents?: never;
   /**
-   * Tools that only run as tasks: a client that did not declare the Tasks extension gets a -32021
-   * error instead of a synchronous answer.
+   * Per-workflow mode, keyed by the server's `workflows` key; applies to its `run_<key>` tool. A
+   * workflow task follows its workflow run: a suspended step asks the client for input, and
+   * cancelling the task cancels the run.
+   */
+  workflows?: Record<string, MCPServerTaskMode | MCPServerWorkflowTaskConfig>;
+  /** Per-agent mode, keyed by the server's `agents` key; applies to its `ask_<key>` tool. */
+  agents?: Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
+  /**
+   * Tools that only run as tasks, by the name clients call them (`run_<workflow>` and
+   * `ask_<agent>` for workflows and agents): a client that did not declare the Tasks extension
+   * gets a -32021 error instead of a synchronous answer.
    */
   required?: string[];
   /** How long a task is kept from creation, in ms; `null` keeps it until the server closes. Default 24 hours. */
   ttlMs?: number | null;
-  /** Where tasks are kept. Default an {@link InMemoryMCPTaskStore}, which serves a single instance. */
+  /**
+   * Whether a task whose server crashed or restarted mid-attempt runs the tool or agent again from
+   * the start. Only applies to stores that outlive a process (Mastra background tasks). Only turn
+   * this on for idempotent tools: `execute` may run twice. When off, such a task fails as lost.
+   * Workflow tasks ignore it: they always re-attach to their run. Default `false`.
+   */
+  recover?: boolean;
+  /**
+   * Where tasks are kept. By default, Mastra's background tasks when the server is registered on a
+   * Mastra instance with `backgroundTasks` enabled and storage that supports task expiry, so every
+   * instance sharing that storage serves the same tasks. Otherwise an {@link InMemoryMCPTaskStore},
+   * which serves a single instance.
+   */
   store?: MCPTaskStore;
   /**
    * Most open (`working` or `input_required`) tasks one client may hold. Past it, a call that
@@ -99,15 +135,15 @@ export interface ResolvedToolTaskMode {
   mode: MCPServerTaskMode;
   syncWindowMs: number;
   ttlMs: number | null;
+  recover: boolean;
 }
 
 export interface ResolvedTasksConfig {
   /** Whether any tool can answer with a task; gates the capability and the `tasks/*` handlers. */
   enabled: boolean;
-  store: MCPTaskStore;
+  /** The store passed in, if any. */
+  store?: MCPTaskStore;
   limits: MCPTaskLimits;
-  /** The store created here when none was passed in, so the server closes it. */
-  ownedStore?: InMemoryMCPTaskStore;
   required: ReadonlySet<string>;
   authorize?: MCPServerTasksOptions['authorize'];
   modeFor(name: string, toolType: MCPToolType | undefined): ResolvedToolTaskMode;
@@ -142,6 +178,19 @@ function assertDuration(owner: string, value: number | null | undefined): void {
   }
 }
 
+function assertBoolean(owner: string, value: unknown): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw invalid(`${owner} must be a boolean, got ${String(value)}.`);
+  }
+}
+
+/** The keys a server serves, for checking `tasks` against. */
+export interface TasksConfigSurfaces {
+  tools: readonly string[];
+  workflows?: readonly string[];
+  agents?: readonly string[];
+}
+
 function positiveInteger(owner: string, value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isSafeInteger(value) || value < 1) throw invalid(`${owner} must be a positive integer, got ${value}.`);
@@ -167,21 +216,18 @@ function caps(
   ];
 }
 
-/** Validates `tasks` against the configured tools. Throws on anything a server could not serve. */
+/** Validates `tasks` against the configured tools, workflows and agents. Throws on anything a server could not serve. */
 export function resolveTasksConfig(
   options: MCPServerTasksOptions | undefined,
-  toolNames: readonly string[],
+  surfaces: TasksConfigSurfaces,
 ): ResolvedTasksConfig {
   const config = options ?? {};
-  // TODO(MCP Tasks PR 4): serve workflows (`run_*`) as tasks.
-  if (config.workflows !== undefined) throw invalid('tasks.workflows is not supported yet.');
-  // TODO(MCP Tasks PR 5): serve agents (`ask_*`) as tasks.
-  if (config.agents !== undefined) throw invalid('tasks.agents is not supported yet.');
-
   const defaultMode = config.default ?? 'off';
   assertMode('tasks.default', defaultMode);
   assertDuration('tasks.ttlMs', config.ttlMs);
   const ttlMs = config.ttlMs === undefined ? DEFAULT_TASK_TTL_MS : config.ttlMs;
+  assertBoolean('tasks.recover', config.recover);
+  const recover = config.recover ?? false;
   const [perPrincipal, retainedPerPrincipal] = caps(
     ['tasks.maxOpenTasksPerClient', config.maxOpenTasksPerClient, DEFAULT_MAX_OPEN_TASKS_PER_CLIENT],
     ['tasks.maxRetainedTasksPerClient', config.maxRetainedTasksPerClient, DEFAULT_MAX_RETAINED_TASKS_PER_CLIENT],
@@ -192,43 +238,199 @@ export function resolveTasksConfig(
   );
   const limits: MCPTaskLimits = { perPrincipal, total, retainedPerPrincipal, retainedTotal };
 
-  const known = new Set(toolNames);
-  const perTool = new Map<string, ResolvedToolTaskMode>();
-  for (const [name, entry] of Object.entries(config.tools ?? {})) {
-    if (!known.has(name)) throw invalid(`tasks.tools names "${name}", which is not one of this server's tools.`);
-    const tool = typeof entry === 'string' ? { mode: entry } : entry;
-    assertMode(`tasks.tools.${name}`, tool.mode);
-    assertDuration(`tasks.tools.${name}.syncWindowMs`, tool.syncWindowMs);
-    assertDuration(`tasks.tools.${name}.ttlMs`, tool.ttlMs);
-    perTool.set(name, {
-      mode: tool.mode,
-      syncWindowMs: tool.syncWindowMs ?? DEFAULT_SYNC_WINDOW_MS,
-      ttlMs: tool.ttlMs === undefined ? ttlMs : tool.ttlMs,
-    });
-  }
-  const fallback: ResolvedToolTaskMode = { mode: defaultMode, syncWindowMs: DEFAULT_SYNC_WINDOW_MS, ttlMs };
-  const off: ResolvedToolTaskMode = { ...fallback, mode: 'off' };
-  const modeFor = (name: string, toolType: MCPToolType | undefined) =>
-    // Agent and workflow tools stay synchronous until they are served as tasks of their own.
-    toolType ? off : (perTool.get(name) ?? fallback);
+  /** Resolves one surface's per-key entries, keyed by the tool name each key is exposed as. */
+  const resolveSurface = (
+    option: 'tools' | 'workflows' | 'agents',
+    keys: readonly string[],
+    exposedAs: (key: string) => string,
+    surfaceRecover: (entry: MCPServerToolTaskConfig) => boolean,
+  ) => {
+    const known = new Set(keys);
+    const tools = new Set(surfaces.tools);
+    const resolved = new Map<string, ResolvedToolTaskMode>();
+    const entries = (config[option] ?? {}) as Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
+    const noun = option.slice(0, -1);
+    for (const [key, entry] of Object.entries(entries)) {
+      if (!known.has(key))
+        throw invalid(`tasks.${option} names "${key}", which is not one of this server's ${option}.`);
+      const owner = `tasks.${option}.${key}`;
+      // The server skips a workflow or agent whose run_/ask_ name a tool already has.
+      if (option !== 'tools' && tools.has(exposedAs(key))) {
+        throw invalid(`${owner} names a ${noun} hidden by the tool "${exposedAs(key)}", so it is never served.`);
+      }
+      const surface = typeof entry === 'string' ? { mode: entry } : entry;
+      assertMode(owner, surface.mode);
+      assertDuration(`${owner}.syncWindowMs`, surface.syncWindowMs);
+      assertDuration(`${owner}.ttlMs`, surface.ttlMs);
+      if (option === 'workflows' && 'recover' in surface) {
+        throw invalid(`${owner}.recover is not a ${noun} option: a workflow task always re-attaches to its run.`);
+      }
+      assertBoolean(`${owner}.recover`, surface.recover);
+      resolved.set(exposedAs(key), {
+        mode: surface.mode,
+        syncWindowMs: surface.syncWindowMs ?? DEFAULT_SYNC_WINDOW_MS,
+        ttlMs: surface.ttlMs === undefined ? ttlMs : surface.ttlMs,
+        recover: surfaceRecover(surface),
+      });
+    }
+    return resolved;
+  };
+  const perTool = resolveSurface(
+    'tools',
+    surfaces.tools,
+    key => key,
+    tool => tool.recover ?? recover,
+  );
+  // Re-attaching never runs a step again (core's workflow recovery continues the run), so it is always safe.
+  const perWorkflow = resolveSurface(
+    'workflows',
+    surfaces.workflows ?? [],
+    key => `run_${key}`,
+    () => true,
+  );
+  const perAgent = resolveSurface(
+    'agents',
+    surfaces.agents ?? [],
+    key => `ask_${key}`,
+    agent => agent.recover ?? recover,
+  );
 
+  const fallback: ResolvedToolTaskMode = {
+    mode: defaultMode,
+    syncWindowMs: DEFAULT_SYNC_WINDOW_MS,
+    ttlMs,
+    recover,
+  };
+  const modeFor = (name: string, toolType: MCPToolType | undefined): ResolvedToolTaskMode => {
+    if (toolType === 'workflow') return perWorkflow.get(name) ?? { ...fallback, recover: true };
+    if (toolType === 'agent') return perAgent.get(name) ?? fallback;
+    return perTool.get(name) ?? fallback;
+  };
+
+  const exposed = new Map<string, MCPToolType | undefined>([
+    ...surfaces.tools.map(name => [name, undefined] as const),
+    ...(surfaces.workflows ?? []).map(key => [`run_${key}`, 'workflow'] as const),
+    ...(surfaces.agents ?? []).map(key => [`ask_${key}`, 'agent'] as const),
+  ]);
   const required = new Set(config.required ?? []);
   for (const name of required) {
-    if (!known.has(name)) throw invalid(`tasks.required names "${name}", which is not one of this server's tools.`);
-    if (modeFor(name, undefined).mode === 'off') {
+    if (!exposed.has(name)) throw invalid(`tasks.required names "${name}", which is not one of this server's tools.`);
+    if (modeFor(name, exposed.get(name)).mode === 'off') {
       throw invalid(`tasks.required names "${name}", which is not served as a task.`);
     }
   }
 
-  const enabled = defaultMode !== 'off' || [...perTool.values()].some(tool => tool.mode !== 'off');
-  const ownedStore = config.store ? undefined : new InMemoryMCPTaskStore();
+  const enabled =
+    defaultMode !== 'off' ||
+    [...perTool.values(), ...perWorkflow.values(), ...perAgent.values()].some(surface => surface.mode !== 'off');
   return {
     enabled,
-    store: config.store ?? ownedStore!,
+    store: config.store,
     limits,
-    ownedStore,
     required,
     authorize: config.authorize,
     modeFor,
   };
+}
+
+/**
+ * Picks the store on first use, once the server knows whether it runs on a Mastra instance with
+ * durable background tasks. `run` follows the `create` it pairs with, so the choice is made by then.
+ */
+export class SelectingMCPTaskStore implements MCPTaskStore {
+  readonly #select: () => Promise<MCPTaskStore>;
+  #selecting?: Promise<MCPTaskStore>;
+  #selected?: MCPTaskStore;
+  /** In-memory stores chosen before a later registration on Mastra, still serving the tasks created on them. */
+  readonly #earlier: InMemoryMCPTaskStore[] = [];
+
+  constructor(select: () => Promise<MCPTaskStore>) {
+    this.#select = select;
+  }
+
+  /** The chosen store, choosing it if no task request has yet. */
+  resolve(): Promise<MCPTaskStore> {
+    return this.#store();
+  }
+
+  /**
+   * Chooses again on next use, for a server registered on Mastra after it served tasks. An
+   * in-memory store chosen before keeps the tasks created on it and goes on serving them.
+   */
+  reselect(): void {
+    const chosen = this.#selected;
+    if (chosen) {
+      if (!(chosen instanceof InMemoryMCPTaskStore)) return;
+      this.#earlier.push(chosen);
+      this.#selected = undefined;
+      this.#selecting = undefined;
+      return;
+    }
+    const choosing = this.#selecting;
+    if (!choosing) return;
+    // A choice still in flight was made without Mastra: set it aside once made, and choose again.
+    const next = choosing.then(() => {
+      this.reselect();
+      return this.#store();
+    });
+    next.catch(() => {});
+    this.#selecting = next;
+  }
+
+  /** Cancels the work of the in-memory stores it chose; a background-task store is closed by the server. */
+  close(): void {
+    for (const store of [...this.#earlier.splice(0), this.#selected]) {
+      if (store instanceof InMemoryMCPTaskStore) store.close();
+    }
+  }
+
+  /** The store that holds this task: an earlier in-memory store that created it, else the chosen one. */
+  #storeOf(taskId: string): Promise<MCPTaskStore> {
+    const earlier = this.#earlier.find(store => store.has(taskId));
+    return earlier ? Promise.resolve(earlier) : this.#store();
+  }
+
+  #store(): Promise<MCPTaskStore> {
+    // A failed choice (e.g. storage briefly unreachable) is not remembered: the next request chooses again.
+    this.#selecting ??= this.#select().then(
+      store => (this.#selected = store),
+      error => {
+        this.#selecting = undefined;
+        throw error;
+      },
+    );
+    return this.#selecting;
+  }
+
+  async create(params: MCPTaskCreateParams) {
+    return (await this.#store()).create(params);
+  }
+
+  async get(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).get(taskId, access);
+  }
+
+  async update(taskId: string, inputResponses: Parameters<MCPTaskStore['update']>[1], access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).update(taskId, inputResponses, access);
+  }
+
+  async cancel(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).cancel(taskId, access);
+  }
+
+  async traceOf(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).traceOf?.(taskId, access);
+  }
+
+  run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void {
+    const store = this.#earlier.find(earlier => earlier.has(taskId)) ?? this.#selected;
+    if (!store) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
+    store.run(taskId, work, options);
+  }
+
+  /** The chosen store's admin view, or `undefined` when it has none. */
+  async admin(): Promise<MCPTaskStoreAdmin | undefined> {
+    const store = await this.#store();
+    return isMCPTaskStoreAdmin(store) ? store : undefined;
+  }
 }

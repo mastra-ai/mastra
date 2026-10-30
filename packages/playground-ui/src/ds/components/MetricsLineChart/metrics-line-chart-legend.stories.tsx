@@ -1,25 +1,24 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { percentileSeries, requestsByHour, statusSeries } from '../MetricsCard/metrics-story-data';
+import { requestsVsPreviousSeries, statusSeries } from '../MetricsCard/metrics-story-data';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 
 const meta: Meta<typeof MetricsLineChartLegend> = {
   title: 'Metrics/MetricsLineChartLegend',
   component: MetricsLineChartLegend,
   parameters: { layout: 'centered' },
-  args: { data: requestsByHour },
 };
 
 export default meta;
 type Story = StoryObj<typeof MetricsLineChartLegend>;
 
-/** Square markers with each series' aggregate beside its label. */
-export const WithAggregates: Story = {
+/** A square marker and the label per series. */
+export const Default: Story = {
   args: { series: statusSeries },
 };
 
-/** Without `aggregate`, just the marker and the label. */
-export const LabelsOnly: Story = {
-  args: { series: percentileSeries.map(({ aggregate: _aggregate, ...s }) => s) },
+/** A dashed series (e.g. the previous period) gets a dashed marker. */
+export const Dashed: Story = {
+  args: { series: requestsVsPreviousSeries },
 };
 
 /** Long labels truncate instead of pushing the row wider. */
