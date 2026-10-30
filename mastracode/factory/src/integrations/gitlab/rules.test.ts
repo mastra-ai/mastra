@@ -1022,7 +1022,7 @@ describe('merge request cards on the Work board', () => {
     ).item;
   }
 
-  function mergeRequestEvent(deliveryId: string, action: 'update' | 'close' | 'merge') {
+  function mergeRequestEvent(deliveryId: string, action: 'update' | 'reopen' | 'close' | 'merge') {
     const base = mergeRequestOpened(deliveryId);
     const state = action === 'close' ? 'closed' : action === 'merge' ? 'merged' : 'opened';
     return {
@@ -1058,6 +1058,22 @@ describe('merge request cards on the Work board', () => {
     });
     expect((await decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
   });
+
+  it.each(['work', 'review'] as const)(
+    'refiles a reopened merge request onto the %s card it already has instead of failing',
+    async board => {
+      const { seeded, project, service, dispatch, decisions, get } = await harness();
+      const card = await mergeRequestCard(seeded, project.id, board, 'intake');
+
+      await expect(service.ingest(mergeRequestEvent('d-reopen', 'reopen'))).resolves.toEqual({ status: 'committed' });
+      await dispatch();
+
+      expect(await seeded.workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
+      expect(await get(card.id)).toMatchObject({ board, stages: ['intake'] });
+      const upserts = (await decisions()).filter(entry => entry.decision.type === 'upsertLinkedWorkItem');
+      expect(upserts.map(entry => entry.status)).toEqual(['succeeded']);
+    },
+  );
 
   it.each(['work', 'review'] as const)('re-reviews a push to a reviewed merge request card on %s', async board => {
     const { seeded, project, service, dispatch, decisions, get } = await harness();

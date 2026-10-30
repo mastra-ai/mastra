@@ -4858,6 +4858,24 @@ describe('pull request cards on the Work board', () => {
     ).item;
   }
 
+  it.each(['work', 'review'] as const)(
+    'refiles a pull request opened again onto the %s card it already has instead of failing',
+    async board => {
+      const harness = await workBoardHarness('write');
+      const card = await lonePullRequestCard(harness, board, 'intake');
+
+      // A feed listing or backlog ingest re-emits "opened" under a new delivery id.
+      await harness.service.ingest(pullRequest('opened', 'poll:10:pull-request:17'));
+      await harness.dispatch();
+
+      const cards = await harness.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: card.id, board, stages: ['intake'] });
+      const upserts = (await harness.decisions()).filter(entry => entry.decision.type === 'upsertLinkedWorkItem');
+      expect(upserts.map(entry => entry.status)).toEqual(['succeeded']);
+    },
+  );
+
   it('files an untrusted pull request in Work intake without starting a review', async () => {
     const harness = await workBoardHarness('read');
     await expect(harness.service.ingest(pullRequest('opened', 'delivery-open'))).resolves.toEqual({
