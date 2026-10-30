@@ -98,13 +98,18 @@ describe('Workspace page', () => {
   });
 
   describe('when the filesystem comes from a resolver', () => {
-    it('explains why files cannot be browsed instead of rendering the tree', async () => {
+    it('explains why files cannot be browsed and never calls the file or skills routes', async () => {
       let listRequests = 0;
+      let skillsRequests = 0;
       useWorkspace({ auth: authDisabledCapabilities, info: workspaceInfoWithDynamicFilesystem });
       server.use(
         http.get(`${api}/${workspaceId}/fs/list`, () => {
           listRequests++;
           return HttpResponse.json(rootListing);
+        }),
+        http.get(`${api}/${workspaceId}/skills`, () => {
+          skillsRequests++;
+          return HttpResponse.json(skillsList);
         }),
       );
       renderPage();
@@ -115,6 +120,7 @@ describe('Workspace page', () => {
       expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Add skill' })).toBeNull();
       expect(listRequests).toBe(0);
+      expect(skillsRequests).toBe(0);
     });
   });
 
