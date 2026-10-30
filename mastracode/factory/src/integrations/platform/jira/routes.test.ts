@@ -18,7 +18,7 @@ let seed!: FactoryStorageTestSeed;
 const listJiraSources = vi.fn(async () => [
   { id: '1', name: 'Engineering', type: 'project', metadata: { key: 'ENG' } },
 ]);
-const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[]) => ({
+const listActiveJiraIssues = vi.fn(async (_after?: string, _scopes?: unknown[]) => ({
   issues: [
     {
       id: '10001',
@@ -72,6 +72,18 @@ function buildApp(
 }
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
+
+const createProject = async (id: string) => {
+  const now = new Date();
+  await seed.storage.ops.insertOne('factory_projects', {
+    id,
+    org_id: 'org1',
+    created_by: 'u1',
+    name: id,
+    created_at: now,
+    updated_at: now,
+  });
+};
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
@@ -222,12 +234,12 @@ describe('issues route', () => {
       labels: ['bug'],
     });
     expect(json.nextCursor).toBe('page-2');
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('forwards the pagination cursor', async () => {
     await buildApp(org1()).request('/web/jira/issues?after=page-2');
-    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('rejects malformed cursors', async () => {
@@ -299,8 +311,8 @@ describe('issues route — Factory source bindings', () => {
   const projectB = '22222222-2222-4222-8222-222222222222';
 
   const seedProjects = async (count: number) => {
-    for (let i = 0; i < count; i += 1) {
-      await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: `project-${i}` } });
+    for (const id of [projectA, projectB].slice(0, count)) {
+      await createProject(id);
     }
   };
 
@@ -322,7 +334,7 @@ describe('issues route — Factory source bindings', () => {
     const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
 
     expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('returns the description for a Jira issue routed to the viewed Factory', async () => {
@@ -417,7 +429,7 @@ describe('issues route — Factory source bindings', () => {
 
     await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}&after=page-2`);
 
-    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('keeps the unscoped selection for callers that omit the Factory project', async () => {
@@ -427,7 +439,10 @@ describe('issues route — Factory source bindings', () => {
     const res = await buildApp(org1()).request('/web/jira/issues');
 
     expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [
+      { projectId: '1', include: null, exclude: [] },
+      { projectId: '2', include: null, exclude: [] },
+    ]);
   });
 
   it('ingests a board-scoped listing through the Factory rules', async () => {

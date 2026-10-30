@@ -102,8 +102,9 @@ export interface AddAccountInput {
 export interface RefreshAccountOAuthOptions {
   /**
    * Refresh even if the stored token has not expired (the provider rejected
-   * it with a 401). Skipped when `staleAccess` is given and the stored access
-   * token already differs from it: another caller refreshed in the meantime.
+   * it with a 401/403). An unexpired token is kept when `staleAccess` is given
+   * and the stored access token already differs from it: another caller
+   * refreshed in the meantime. Expired tokens are always refreshed.
    */
   force?: boolean;
   staleAccess?: string;
@@ -785,7 +786,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       const current = decrypted.value;
       // Re-check under the lock: another replica may have refreshed while we waited.
       const replaced = options.staleAccess !== undefined && current.access !== options.staleAccess;
-      if (replaced || (!options.force && !isOAuthCredentialExpired(current))) {
+      if (!isOAuthCredentialExpired(current) && (!options.force || replaced)) {
         result = current;
         return decrypted.needsReencryption ? { data: await this.encryption.encrypt(current) } : null;
       }

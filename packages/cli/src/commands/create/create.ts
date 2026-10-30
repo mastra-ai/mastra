@@ -10,6 +10,14 @@ import type { Template } from '../../utils/template-utils';
 import { getToken, LoginCancelledError } from '../auth/credentials.js';
 import type { LoginSource } from '../auth/credentials.js';
 import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
+import {
+  createGatewayApiKey,
+  creditsPageUrl,
+  GATEWAY_API_KEY_ENV,
+  getGatewayCredits,
+  revokeGatewayApiKey,
+} from '../gateway/api.js';
+import { formatCredits, offerGatewayCredits } from '../gateway/credits.js';
 import { provisionObservabilityProject } from '../init/observability-provision';
 import { installMastraSkills } from '../init/skills-install';
 import { writeObservabilityEnv } from '../init/utils.js';
@@ -28,7 +36,7 @@ import {
   validateProjectName,
 } from './command';
 import type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions } from './command';
-import { adaptDefaultTemplate } from './provider-adapter';
+import { adaptDefaultTemplate, writeManagedApiKey } from './provider-adapter';
 import {
   cleanupOwnedStagingDirectory,
   createOwnedStagingDirectory,
@@ -94,8 +102,24 @@ export interface CreateOptions {
   loginSource?: LoginSource;
 }
 
+/** The Gateway key and credits, set up during the shared Mastra sign-in. */
+type GatewaySetupResult =
+  /** `remaining` is undefined when the balance couldn't be read. */
+  | {
+      status: 'ready';
+      apiKey: string;
+      /** Set for organization keys, so a key the project never got can be revoked. */
+      keyId?: string;
+      orgName: string;
+      creditsUrl: string;
+      remaining?: number;
+      unlimited?: boolean;
+      openedDashboard?: boolean;
+    }
+  | { status: 'failed'; error: unknown };
+
 type PlatformSetupResult =
-  | { status: 'ready'; token: string; org: { orgId: string; orgName: string } }
+  | { status: 'ready'; token: string; org: { orgId: string; orgName: string }; gateway?: GatewaySetupResult }
   | { status: 'cancelled' }
   | { status: 'failed'; error: unknown };
 
@@ -252,6 +276,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   let llmApiKey = options.llmApiKey;
   let providerSelectionMethod: 'cli_args' | 'interactive' | undefined;
   let observabilityEnabled = false;
+  let needsGatewayKey = false;
   let platformSetupController: AbortController | undefined;
   let platformSetupPromise: Promise<PlatformSetupResult> | undefined;
 
@@ -264,9 +289,11 @@ export const create = async (args: CreateOptions): Promise<void> => {
       providerSelectionMethod = 'interactive';
     }
 
-    if (llmApiKey === undefined && !providerProvidedByCli) {
+    if (llmApiKey === undefined && !providerProvidedByCli && llmProvider !== 'mastra') {
       llmApiKey = await promptForApiKey(llmProvider);
     }
+    // The Gateway key comes from the Mastra sign-in, so nobody has to paste one.
+    needsGatewayKey = llmProvider === 'mastra' && llmApiKey === undefined;
 
     const offerObservability = options.projectName === undefined || options.llmProvider === undefined;
     if (offerObservability) {
@@ -277,28 +304,24 @@ export const create = async (args: CreateOptions): Promise<void> => {
         answer: observabilityEnabled ? 'yes' : 'no',
         selection_method: 'interactive',
       });
-      if (observabilityEnabled) {
-        platformSetupController = new AbortController();
-        platformSetupPromise = (async (): Promise<PlatformSetupResult> => {
-          try {
-            const token = await getToken(platformSetupController!.signal, {
-              skipOnInput: true,
-              source: args.loginSource,
-            });
-            const org = await resolveCurrentOrg(token, {
-              forcePrompt: true,
-              exitOnCancel: false,
-              signal: platformSetupController!.signal,
-            });
-            return { status: 'ready', token, org };
-          } catch (error) {
-            if (error instanceof LoginCancelledError || error instanceof OrgSelectionCancelledError) {
-              return { status: 'cancelled' };
-            }
-            return { status: 'failed', error };
+    }
+    if (observabilityEnabled || needsGatewayKey) {
+      // One sign-in serves both the Gateway key and observability. The template clones meanwhile.
+      platformSetupController = new AbortController();
+      const signal = platformSetupController.signal;
+      platformSetupPromise = (async (): Promise<PlatformSetupResult> => {
+        try {
+          const token = await getToken(signal, { skipOnInput: true, source: args.loginSource });
+          const org = await resolveCurrentOrg(token, { forcePrompt: true, exitOnCancel: false, signal });
+          const gateway = needsGatewayKey ? await setUpGateway({ token, org, projectName, signal }) : undefined;
+          return { status: 'ready', token, org, gateway };
+        } catch (error) {
+          if (error instanceof LoginCancelledError || error instanceof OrgSelectionCancelledError) {
+            return { status: 'cancelled' };
           }
-        })();
-      }
+          return { status: 'failed', error };
+        }
+      })();
     }
   }
 
@@ -360,7 +383,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
           targetDir: staging.rootPath,
           branch,
           signal: materializationController.signal,
-          ...(observabilityEnabled ? { silent: true } : {}),
+          ...(platformSetupPromise ? { silent: true } : {}),
         });
 
         if (isManaged) {
@@ -382,7 +405,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
       }
 
       if (options.install) {
-        if (observabilityEnabled) {
+        if (platformSetupPromise) {
           await installDependencies(
             staging.projectPath,
             packageManager,
@@ -427,7 +450,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
     if (platformSetup.status === 'cancelled' && !interruptionSignal) {
       // A SIGINT also cancels platform setup; in that case the interruption
       // branch below reports the 'cancelled' outcome instead.
-      analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
+      if (observabilityEnabled) {
+        analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
+      }
       p.log.info('Skipping Mastra platform setup.');
     }
     const scaffoldSpinner = p.spinner();
@@ -447,6 +472,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   }
   process.removeListener('SIGINT', handleSigint);
   process.removeListener('SIGTERM', handleSigterm);
+  if (interruptionSignal || materializationError) await discardUnusedGatewayKey(platformSetup);
 
   if (interruptionSignal === 'SIGINT') {
     if (observabilityEnabled) {
@@ -472,10 +498,15 @@ export const create = async (args: CreateOptions): Promise<void> => {
   if (postSetup.hasFailure) p.log.warn(setupSummary);
   else p.log.success(setupSummary);
 
+  let gatewaySummary: string | undefined;
+  if (needsGatewayKey) {
+    gatewaySummary = await finishGatewaySetup({ projectPath: targetPath, platformSetup, analytics });
+  }
+
   let observabilitySummary: string | undefined;
   let platformEnvWritten = false;
-  let platformError = platformSetup?.status === 'failed' ? platformSetup.error : undefined;
-  if (platformSetup?.status === 'ready') {
+  let platformError = observabilityEnabled && platformSetup?.status === 'failed' ? platformSetup.error : undefined;
+  if (observabilityEnabled && platformSetup?.status === 'ready') {
     try {
       const result = await provisionObservabilityProject({
         defaultProjectName: projectName,
@@ -511,13 +542,15 @@ export const create = async (args: CreateOptions): Promise<void> => {
   }
 
   if (mode === 'managed') {
-    const apiKeySummary = llmApiKey
-      ? selectedApiKeyWritten
-        ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
-        : `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
-      : platformEnvWritten
-        ? `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
-        : `Copy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`;
+    const apiKeySummary = gatewaySummary
+      ? gatewaySummary
+      : llmApiKey
+        ? selectedApiKeyWritten
+          ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+          : `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
+        : platformEnvWritten
+          ? `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
+          : `Copy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`;
     p.note(
       `${color.green('Success!')}\n\n${apiKeySummary}${observabilitySummary ? `\n\n${observabilitySummary}` : ''}`,
     );
@@ -529,6 +562,134 @@ export const create = async (args: CreateOptions): Promise<void> => {
 
   postCreate({ projectName, packageManager });
 };
+
+async function setUpGateway({
+  token,
+  org,
+  projectName,
+  signal,
+}: {
+  token: string;
+  org: { orgId: string; orgName: string };
+  projectName: string;
+  signal: AbortSignal;
+}): Promise<GatewaySetupResult> {
+  // Without a spinner the terminal looks stuck while the key is created and the balance is read.
+  const spinner = p.spinner();
+  spinner.start('Setting up your Gateway key...');
+  let spinning = true;
+  let key: Awaited<ReturnType<typeof createGatewayApiKey>> | undefined;
+  try {
+    key = await createGatewayApiKey(token, org.orgId, projectName, signal);
+    // Credits are optional: a failed balance read still keeps the new key.
+    let credits: Awaited<ReturnType<typeof getGatewayCredits>> | undefined;
+    try {
+      credits = await getGatewayCredits(token, org.orgId, signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+    }
+    spinner.stop(`Created a Gateway key in ${org.orgName}.`);
+    spinning = false;
+
+    let openedDashboard = false;
+    if (credits) {
+      try {
+        openedDashboard = await offerGatewayCredits({ orgId: org.orgId, credits, signal });
+      } catch (error) {
+        if (signal.aborted) throw error;
+      }
+    }
+    return {
+      status: 'ready',
+      apiKey: key.apiKey,
+      keyId: key.keyId,
+      orgName: org.orgName,
+      creditsUrl: creditsPageUrl(org.orgId),
+      remaining: credits?.remaining,
+      unlimited: credits?.unlimited,
+      openedDashboard,
+    };
+  } catch (error) {
+    if (spinning) spinner.stop('Could not set up a Gateway key.');
+    if (signal.aborted) {
+      // Create failed or was cancelled after the key was made: nothing will use it.
+      await discardGatewayKey({ token, orgId: org.orgId, keyId: key?.keyId });
+      throw error;
+    }
+    return { status: 'failed', error };
+  }
+}
+
+/** Revoke a key no project ended up with. Best effort: a failure here shouldn't hide the real one. */
+async function discardGatewayKey({ token, orgId, keyId }: { token: string; orgId: string; keyId?: string }) {
+  if (!keyId) return;
+  try {
+    await revokeGatewayApiKey(token, orgId, keyId);
+  } catch {
+    // The key stays listed in the dashboard, where it can be revoked by hand.
+  }
+}
+
+/** The Gateway key that was created but won't be written to a project. */
+async function discardUnusedGatewayKey(platformSetup: PlatformSetupResult | undefined) {
+  if (platformSetup?.status !== 'ready' || platformSetup.gateway?.status !== 'ready') return;
+  await discardGatewayKey({
+    token: platformSetup.token,
+    orgId: platformSetup.org.orgId,
+    keyId: platformSetup.gateway.keyId,
+  });
+}
+
+async function finishGatewaySetup({
+  projectPath,
+  platformSetup,
+  analytics,
+}: {
+  projectPath: string;
+  platformSetup: PlatformSetupResult | undefined;
+  analytics: PosthogAnalytics | null | undefined;
+}): Promise<string> {
+  const envName = color.cyan(GATEWAY_API_KEY_ENV);
+  const manualSteps = `Get a key at ${color.cyan('https://gateway.mastra.ai')} and set ${envName} in ${color.cyan('.env')}.`;
+  const gateway = platformSetup?.status === 'ready' ? platformSetup.gateway : undefined;
+
+  if (gateway?.status !== 'ready') {
+    const error =
+      gateway?.status === 'failed'
+        ? gateway.error
+        : platformSetup?.status === 'failed'
+          ? platformSetup.error
+          : undefined;
+    analytics?.trackEvent('cli_gateway_outcome', { command: 'create', outcome: error ? 'failed' : 'skipped' });
+    const reason =
+      error instanceof Error ? `${color.yellow('Could not create a Gateway key:')} ${error.message}\n\n` : '';
+    return `${reason}${manualSteps}`;
+  }
+
+  if (!(await writeManagedApiKey({ projectPath, apiKeyEnv: GATEWAY_API_KEY_ENV, apiKey: gateway.apiKey }))) {
+    await discardUnusedGatewayKey(platformSetup);
+    analytics?.trackEvent('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
+    return `${color.yellow('Could not write the Gateway key to .env.')}\n\n${manualSteps}`;
+  }
+
+  analytics?.trackEvent('cli_gateway_outcome', {
+    command: 'create',
+    outcome: 'completed',
+    opened_dashboard: gateway.openedDashboard ?? false,
+  });
+  const written = `Your Gateway key was written to ${color.cyan('.env')} as ${envName}.`;
+  const creditsUrl = color.cyan(gateway.creditsUrl);
+  if (gateway.unlimited) {
+    return `${written}\n${gateway.orgName} has unlimited Gateway credits.`;
+  }
+  if (gateway.remaining === undefined) {
+    return `${written}\nModel calls are paid per token from Gateway credits. Check your balance in the Mastra dashboard: ${creditsUrl}`;
+  }
+  if (gateway.remaining === 0) {
+    return `${written}\n${color.yellow('Model calls fail until you add Gateway credits:')} ${creditsUrl}`;
+  }
+  return `${written}\nBalance: ${formatCredits(gateway.remaining)} in ${gateway.orgName}. Model calls are paid per token from these credits.`;
+}
 
 interface PostCreateSetupResult {
   skillsAgents: AgentResult[0][];

@@ -38,10 +38,16 @@ function isModelNotAllowedError(error: unknown): error is ModelNotAllowedErrorLi
   return error instanceof Error && (error as { code?: unknown }).code === MODEL_NOT_ALLOWED_CODE;
 }
 
-const WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE = 'WORKFLOW_SCHEMA_VALIDATION_FAILED';
+// Input the caller sent failed a workflow or agent schema (including an agent's requestContextSchema),
+// so it is a bad request, not a server fault.
+const SCHEMA_VALIDATION_FAILED_CODES = new Set([
+  'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+]);
 
-function isWorkflowSchemaValidationError(error: unknown): error is Error {
-  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
+function isSchemaValidationError(error: unknown): error is Error {
+  const id = (error as { id?: unknown } | undefined)?.id;
+  return error instanceof Error && typeof id === 'string' && SCHEMA_VALIDATION_FAILED_CODES.has(id);
 }
 
 // A resume or time travel the run can't accept: another caller claimed it, it is still running,
@@ -185,7 +191,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  if (isWorkflowSchemaValidationError(error)) {
+  if (isSchemaValidationError(error)) {
     throw new HTTPException(400, {
       message: error.message,
       stack: error.stack,

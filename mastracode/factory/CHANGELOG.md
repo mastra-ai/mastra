@@ -1,5 +1,30 @@
 # @mastra/factory
 
+## 0.26.0-alpha.2
+
+### Minor Changes
+
+- Added factory-scoped sandbox environment. A deployment that hosts several factories can now give a credential to one factory's sessions only: every Factory sandbox provider accepts `env` as a function of the session's sandbox context, which carries the new `factoryId` and `factoryName` fields. Scope secrets by `factoryId`, because names can be edited and aren't unique. ([#28767](https://github.com/mastra-ai/mastra/pull/28767))
+
+  ```ts
+  new PlatformFactorySandbox({
+    env: ctx => (ctx.factoryId === PLATFORM_FACTORY_ID ? { PLATFORM_TOKEN } : {}),
+  });
+  ```
+
+  Platform and Docker sandboxes keep the environment they started with when they resume. When you remove a credential from a factory, recreate its running sandboxes.
+
+### Patch Changes
+
+- Factory no longer reports a stalled sandbox as "git is not installed". When the `git --version` check times out (exit 124), the failure is now reported as an unresponsive sandbox that can be retried. A genuinely missing git includes the real exit code and output. Sandbox start failures also name the provider's VM id, so they can be matched against provider logs even after the sandbox is recreated. ([#28792](https://github.com/mastra-ai/mastra/pull/28792))
+
+- Linking a GitHub repository to a Factory is faster: it now looks up the one selected repository instead of listing every repository the GitHub App can see. On accounts with hundreds of repositories this cuts several seconds from each link. The repository row also goes straight from "Linking…" to linked instead of briefly showing "Link" again. ([#28551](https://github.com/mastra-ai/mastra/pull/28551))
+
+- Updated dependencies [[`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990), [`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990)]:
+  - @mastra/code-sdk@1.16.1-alpha.1
+  - @mastra/core@1.81.0-alpha.1
+  - @mastra/platform-workspace@1.11.0-alpha.0
+
 ## 0.26.0-alpha.1
 
 ### Minor Changes

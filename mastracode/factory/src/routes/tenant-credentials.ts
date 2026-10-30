@@ -31,7 +31,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
-import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { ModelCredentialsStorage, RefreshAccountOAuthOptions } from '../storage/domains/credentials/base.js';
 import { getAuthProviderId, getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
@@ -151,14 +151,53 @@ export class TenantCredentialStore implements CredentialStore {
       return oauthProvider.getApiKey(resolved.credential);
     }
 
+    return this.#refreshOAuth(storage, resolved.scope, provider);
+  }
+
+  /**
+   * Refresh the OAuth credential even though it hasn't expired. The
+   * account-rotation processor calls this once when the provider rejects the
+   * token (401/403): providers can revoke an access token before the expiry
+   * recorded at sign-in. Only the token this store last served is replaced, so
+   * when another session or replica already refreshed it the newer token is
+   * reused instead of rotating the refresh token again.
+   */
+  async forceRefreshActiveAccount(provider: string): Promise<string | undefined> {
+    const storage = await getTenantCredentialsStorage(this.#credentials);
+    if (!storage) return undefined;
+    const served = this.#snapshot.get(provider);
+    const resolved = await storage.resolveCredential(
+      this.#orgId,
+      this.#userId,
+      provider,
+      this.#scope === 'factory' ? 'org' : 'user',
+    );
+    if (resolved?.credential.type !== 'oauth') return undefined;
+    const rejectedAccess = served?.type === 'oauth' ? served.access : resolved.credential.access;
+    return this.#refreshOAuth(storage, resolved.scope, provider, { force: true, staleAccess: rejectedAccess });
+  }
+
+  async #refreshOAuth(
+    storage: ModelCredentialsStorage,
+    scope: 'user' | 'org',
+    provider: string,
+    options?: RefreshAccountOAuthOptions,
+  ): Promise<string | undefined> {
+    const oauthProvider = getOAuthProvider(provider);
+    if (!oauthProvider) return undefined;
     // Refresh at the scope the credential actually lives at (OAuth rows are
     // user-scoped by policy, but resolve defensively from the record).
-    const rowTenant = resolved.scope === 'user' ? { orgId: this.#orgId, userId: this.#userId } : { orgId: this.#orgId };
+    const rowTenant = scope === 'user' ? { orgId: this.#orgId, userId: this.#userId } : { orgId: this.#orgId };
     try {
-      const refreshed = await storage.refreshOAuth(rowTenant, provider, async current => ({
-        type: 'oauth' as const,
-        ...(await oauthProvider.refreshToken(current)),
-      }));
+      const refreshed = await storage.refreshOAuth(
+        rowTenant,
+        provider,
+        async current => ({
+          type: 'oauth' as const,
+          ...(await oauthProvider.refreshToken(current)),
+        }),
+        options,
+      );
       if (!refreshed) return undefined;
       this.#snapshot.set(provider, refreshed);
       return oauthProvider.getApiKey(refreshed);

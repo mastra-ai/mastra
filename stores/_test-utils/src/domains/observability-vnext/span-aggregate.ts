@@ -70,6 +70,11 @@ export function evaluateSpanAggregateRequest(
 // | t3    | t3-pending  | tool_call        | search           | –     | tool/search  | nightly | nightly |             | pending: excluded        |
 // | t4    | t4-late     | tool_call        | search           | 1 s   | tool/search  | –       | –       |             | 08-05: outside window    |
 //
+// Model and provider columns: t1-model (both copies) gpt-4o / openai; t3-model claude-sonnet-5-5 /
+// anthropic. t2-model carries its model only in attributes, as spans exported before the columns
+// were filled do, so span filters on model and provider must not match it and grouping by them puts
+// it under null (no backfill).
+//
 // The older t1-model copy is written first and also ends first, so every store's version rule
 // (latest end time or latest write) picks the 2 s copy; without the collapse, llm counts 4 spans.
 //
@@ -99,6 +104,7 @@ interface SpanSpec {
   parent?: { type: string; name: string };
   root: { type: string; name: string } | null;
   model?: string;
+  columns?: { model: string; provider: string };
   error?: boolean;
   isPending?: boolean;
 }
@@ -110,6 +116,8 @@ function fixtureSpan(spec: SpanSpec): RawTraceQuerySpan {
     name: spec.name,
     spanType: spec.spanType,
     attributes: spec.model ? { model: spec.model, provider: 'openai' } : null,
+    model: spec.columns?.model ?? null,
+    provider: spec.columns?.provider ?? null,
     error: spec.error ? { message: 'boom' } : null,
     startedAt: spec.startedAt,
     endedAt: spec.seconds === null ? null : after(spec.startedAt, spec.seconds),
@@ -180,6 +188,7 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       startedAt: after(t1, 1),
       seconds: 1,
       model: 'gpt-4o',
+      columns: { model: 'gpt-4o', provider: 'openai' },
       ...child(support),
     }),
     fixtureSpan({
@@ -192,6 +201,7 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       startedAt: after(t1, 1),
       seconds: 2,
       model: 'gpt-4o',
+      columns: { model: 'gpt-4o', provider: 'openai' },
       ...child(support),
     }),
     fixtureSpan({
@@ -262,6 +272,7 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       name: 'llm',
       startedAt: after(t3, 1),
       seconds: 6,
+      columns: { model: 'claude-sonnet-5-5', provider: 'anthropic' },
       ...child(nightly),
     }),
     fixtureSpan({
@@ -478,6 +489,99 @@ export const SPAN_AGGREGATE_CONFORMANCE_CASES: SpanAggregateConformanceCase[] = 
         { dimensions: { rootEntityType: 'agent', spanType: 'model_generation' }, measures: { count: 2 } },
       ],
       truncated: true,
+    },
+  },
+  {
+    // t2-model has `openai` only in its attributes, so it doesn't match; the retried t1-model counts once.
+    name: 'filters provider on the dedicated column only',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'eq', left: { path: 'provider' }, right: { literal: 'openai' } },
+      measures: ['count', 'countDistinct.traceId'],
+    },
+    expected: { rows: [{ measures: { count: 1, 'countDistinct.traceId': 1 } }], truncated: false },
+  },
+  {
+    name: 'counts spans whose model column is set',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'exists', path: 'model' },
+      measures: ['count', 'countDistinct.traceId'],
+    },
+    expected: { rows: [{ measures: { count: 2, 'countDistinct.traceId': 2 } }], truncated: false },
+  },
+  {
+    // No backfill: t2-model has its model only in attributes, so it groups under null. The retried
+    // t1-model counts once, with its tokens counted once.
+    name: 'groups model calls by the model column, with attribute-only spans under null',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+      groupBy: ['model'],
+      measures: ['count', 'tokens.total.sum'],
+    },
+    expected: {
+      rows: [
+        { dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 1, 'tokens.total.sum': 50 } },
+        { dimensions: { model: 'gpt-4o' }, measures: { count: 1, 'tokens.total.sum': 150 } },
+        { dimensions: { model: null }, measures: { count: 1, 'tokens.total.sum': 280 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by provider and model across spans with and without model columns',
+    request: { timeRange: spanRange, groupBy: ['provider', 'model'], measures: ['count'] },
+    expected: {
+      rows: [
+        { dimensions: { provider: null, model: null }, measures: { count: 6 } },
+        { dimensions: { provider: 'anthropic', model: 'claude-sonnet-5-5' }, measures: { count: 1 } },
+        { dimensions: { provider: 'openai', model: 'gpt-4o' }, measures: { count: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'filters and groups on the model columns together',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'in', value: { path: 'provider' }, set: ['openai', 'anthropic'] },
+      groupBy: ['model'],
+      measures: ['count', 'tokens.total.sum'],
+      orderBy: { field: 'tokens.total.sum', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: { model: 'gpt-4o' }, measures: { count: 1, 'tokens.total.sum': 150 } },
+        { dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 1, 'tokens.total.sum': 50 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    // Spans without a model column don't count as a distinct model, so billing has none.
+    name: 'counts distinct models and providers per root entity',
+    request: {
+      timeRange: spanRange,
+      groupBy: ['rootEntityName'],
+      measures: ['count', 'countDistinct.model', 'countDistinct.provider'],
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: { rootEntityName: 'billing' },
+          measures: { count: 3, 'countDistinct.model': 0, 'countDistinct.provider': 0 },
+        },
+        {
+          dimensions: { rootEntityName: 'support' },
+          measures: { count: 3, 'countDistinct.model': 1, 'countDistinct.provider': 1 },
+        },
+        {
+          dimensions: { rootEntityName: 'nightly' },
+          measures: { count: 2, 'countDistinct.model': 1, 'countDistinct.provider': 1 },
+        },
+      ],
+      truncated: false,
     },
   },
 ];

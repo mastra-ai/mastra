@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import type { QueryClient } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { useWorkItemComments } from '../../../../../hooks/useWorkItemComments';
+import { HIDDEN_STREAM_GRACE_MS } from '../../../../lib/hooks/useDocumentVisible';
 import { FeedEventsProvider, useFeedEventsConnected } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
@@ -110,7 +111,7 @@ describe('FeedEventsProvider', () => {
     await waitFor(() => expect(commentRequests).toBe(before + 1));
   });
 
-  it('catches up on comments when the tab comes back from hidden', async () => {
+  it('keeps the stream through a quick tab switch', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     let commentRequests = 0;
     server.use(
@@ -122,14 +123,47 @@ describe('FeedEventsProvider', () => {
     const { result } = rendered;
     await settle(rendered);
     const before = commentRequests;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
 
-    setVisibility('hidden');
-    await waitFor(() => expect(result.current.connected).toBe(false));
+    try {
+      act(() => setVisibility('hidden'));
+      act(() => vi.advanceTimersByTime(HIDDEN_STREAM_GRACE_MS - 1_000));
+      act(() => setVisibility('visible'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(result.current.connected).toBe(true);
+      expect(commentRequests).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    setVisibility('visible');
-    await waitFor(() => expect(result.current.connected).toBe(true));
-    // A hidden tab holds no stream, so nothing announced what landed meanwhile.
-    await waitFor(() => expect(commentRequests).toBe(before + 1));
+  it('catches up on comments when the tab comes back after being left hidden', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    let commentRequests = 0;
+    server.use(
+      stream.handler,
+      countComments(() => (commentRequests += 1)),
+    );
+
+    const rendered = renderHookWithProviders(watch, { inner });
+    const { result } = rendered;
+    await settle(rendered);
+    const before = commentRequests;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      act(() => setVisibility('hidden'));
+      act(() => vi.advanceTimersByTime(HIDDEN_STREAM_GRACE_MS));
+      await waitFor(() => expect(result.current.connected).toBe(false));
+
+      act(() => setVisibility('visible'));
+      await waitFor(() => expect(result.current.connected).toBe(true));
+      // A tab left hidden holds no stream, so nothing announced what landed meanwhile.
+      await waitFor(() => expect(commentRequests).toBe(before + 1));
+      await waitForMutationsIdle(rendered.client);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops reconnecting once the stream is refused', async () => {

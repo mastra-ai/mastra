@@ -2363,6 +2363,10 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
           permission: MastraFGAPermissions.MEMORY_WRITE,
         });
       }
+      // Another server may be executing the run: only report it aborted once that server confirms.
+      if (typeof agent.__abortRunAcknowledged === 'function') {
+        return { aborted: await agent.__abortRunAcknowledged(runId) };
+      }
       return { aborted: await agent.abortRunStream(runId) };
     } catch (error) {
       return handleError(error, 'error aborting agent run');

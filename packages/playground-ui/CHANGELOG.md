@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 66.1.0-alpha.2
+
+### Patch Changes
+
+- Improved the trace span views in Studio: ([#28867](https://github.com/mastra-ai/mastra/pull/28867))
+
+  - The timeline view now matches the span tree: same span icons and row size on a single line, with each span's duration printed right after its bar and gridlines on the time axis.
+  - The span search header is now a flat bar with compact tree/timeline toggle buttons.
+  - The span details panel is at least 384px wide and at most half of the trace panel; tab labels always show.
+
+- Updated dependencies [[`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990)]:
+  - @mastra/core@1.81.0-alpha.1
+  - @mastra/client-js@1.57.1-alpha.1
+  - @mastra/react@1.13.1-alpha.1
+
 ## 66.1.0-alpha.1
 
 ### Minor Changes

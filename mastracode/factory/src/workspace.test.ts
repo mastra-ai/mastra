@@ -440,7 +440,7 @@ describe('bundled Factory skill assets', () => {
 
     expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
     expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
-    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    expect(phase1).toContain('For Linear, GitLab, Jira, and incident.io issues, skip this GitHub-only label mutation.');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
   });
 
@@ -555,7 +555,7 @@ describe('bundled Factory skill assets', () => {
     );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
-      'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
+      'For non-GitHub sources, use the same structured handoff without attempting GitHub publication or label mutations:',
     );
 
     const plan = await read('factory-plan');
@@ -1264,6 +1264,20 @@ describe('GitHub session workspace preparation', () => {
     await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
+  });
+
+  it("names the provider's physical sandbox in a start failure, since the logical id survives a recreate", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(
+      new SetupCommandError('Setup command failed (exit 124)', 'setup-failed'),
+    );
+
+    const error = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }).catch(
+      e => e,
+    );
+    expect(error.message).toMatch(/Setup command failed \(exit 124\).*\(provider sandbox vm-session-a\)$/);
   });
 
   it('persists no sandbox id for a provider without a physical one, so resume provisions by logical id', async () => {
@@ -3425,6 +3439,7 @@ describe('factory environment sandbox context', () => {
     const project = {
       id: 'factory-1',
       orgId: 'org-1',
+      name: 'Platform',
       sandboxWorkingDirectory: '/workspace',
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
@@ -3564,6 +3579,8 @@ describe('factory environment sandbox context', () => {
     const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
     expect(ctx).toMatchObject({
       sessionId: 'session-a',
+      factoryId: 'factory-1',
+      factoryName: 'Platform',
       repoFullName: 'octocat/hello',
       workspaceSetupCommand: 'touch .workspace-ready',
       continueOnSetupFailure: true,
@@ -3575,6 +3592,8 @@ describe('factory environment sandbox context', () => {
     expect('idleTimeoutMinutes' in ctx).toBe(false);
     expect(Object.keys(ctx).sort()).toEqual([
       'continueOnSetupFailure',
+      'factoryId',
+      'factoryName',
       'getRepositoryAccess',
       'repoFullName',
       'repos',
@@ -3638,18 +3657,17 @@ describe('factory environment sandbox context', () => {
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
+    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand'];
     for (const call of mocks.createSandbox.mock.calls) {
       const ctx = call[0] as any;
       expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
       expect(typeof ctx.getRepositoryAccess).toBe('function');
-      expect(Object.keys(ctx).sort()).toEqual([
-        'getRepositoryAccess',
-        'repoFullName',
-        'sandboxId',
-        'sessionId',
-        'setupCommand',
-      ]);
     }
+    // The factory session still names its factory; the session without one carries neither field.
+    const [factoryCtx, legacyCtx] = mocks.createSandbox.mock.calls.map(call => call[0] as any);
+    expect(factoryCtx).toMatchObject({ factoryId: 'factory-1', factoryName: 'Platform' });
+    expect(Object.keys(factoryCtx).sort()).toEqual(['factoryId', 'factoryName', ...singleRepoKeys]);
+    expect(Object.keys(legacyCtx).sort()).toEqual(singleRepoKeys);
     // The settings belong to the project: the factory session boots with them
     // in single-repository form too; a session without a factory gets none.
     expect(sandbox.calls.map(call => call.settings)).toEqual([{ memoryMb: 4096 }, {}]);

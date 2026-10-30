@@ -84,6 +84,11 @@ export function setScenarioEngineHost(host: ScenarioEngineHost | undefined): voi
   engineHost = host;
 }
 
+/** The external engine host registered by {@link setScenarioEngineHost}, if any. */
+export function getScenarioEngineHost(): ScenarioEngineHost | undefined {
+  return engineHost;
+}
+
 function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any): any {
   if (engine === 'durable') return createDurableAgent({ agent });
   if (engine === 'evented') return createEventedAgent({ agent, pubsub });
@@ -159,6 +164,7 @@ async function buildScenarioAgent({
   pubsub,
   cache,
   observability,
+  server,
   engine,
   inputProcessors,
   fsRouted,
@@ -185,6 +191,7 @@ async function buildScenarioAgent({
   | 'pubsub'
   | 'cache'
   | 'observability'
+  | 'server'
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'
@@ -310,6 +317,7 @@ async function buildScenarioAgent({
     ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
     ...(cache ? { cache } : {}),
     ...(observability ? { observability } : {}),
+    ...(server ? { server } : {}),
   });
 
   if (isFs) {
@@ -399,6 +407,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     pubsub,
     cache,
     observability,
+    server,
     engine = 'normal',
     fsRouted,
   } = opts;
@@ -455,6 +464,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       pubsub,
       cache,
       observability,
+      server,
       engine,
       inputProcessors,
       fsRouted,

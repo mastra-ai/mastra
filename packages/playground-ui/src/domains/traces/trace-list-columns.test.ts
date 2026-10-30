@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
-  THREAD_LIST_COLUMN_PREFERENCES,
   TRACE_COLUMN_CATALOGS,
   TRACE_OPTIONAL_COLUMNS,
   TRACE_USAGE_COLUMNS,
@@ -69,13 +68,13 @@ describe('trace list columns', () => {
   describe('when the grid is built', () => {
     it('keeps the existing default layout', () => {
       expect(buildTraceListColumns(DEFAULT_TRACE_COLUMN_PREFERENCES)).toBe(
-        '11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem',
+        '11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 7rem 9rem 7rem 8rem',
       );
     });
 
     it('gives Output its own flexible track and keeps Name bounded without Input', () => {
       expect(buildTraceListColumns({ visibleColumns: ['output'], customColumns: [], metadataKeys: [] })).toBe(
-        '11rem 14rem minmax(8rem,1fr) 6rem',
+        '11rem 14rem minmax(8rem,1fr) 7rem 9rem',
       );
     });
 
@@ -86,7 +85,7 @@ describe('trace list columns', () => {
           customColumns: [],
           metadataKeys: ['tenant'],
         }),
-      ).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      ).toBe('11rem minmax(8rem,1fr) 7rem 9rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
 
     it('places model and provider after environment, in tracks and keys alike', () => {
@@ -95,11 +94,12 @@ describe('trace list columns', () => {
         customColumns: [],
         metadataKeys: [],
       };
-      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 8rem 10rem 8rem');
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 7rem 9rem 8rem 10rem 8rem');
       expect(buildTraceListColumnKeys(preferences)).toEqual([
         'startTime',
         'name',
         'status',
+        'stopReason',
         'environment',
         'model',
         'provider',
@@ -112,13 +112,32 @@ describe('trace list columns', () => {
         customColumns: [],
         metadataKeys: [],
       };
-      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 7rem 7rem 11rem');
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 7rem 9rem 7rem 7rem 11rem');
       expect(buildTraceListColumnKeys(preferences)).toEqual([
         'startTime',
         'name',
         'status',
+        'stopReason',
         'duration',
         'timeToFirstChunk',
+        'endTime',
+      ]);
+    });
+
+    it('places time to first token right after time to first chunk, in tracks and keys alike', () => {
+      const preferences: TraceColumnPreferences = {
+        visibleColumns: ['endTime', 'timeToFirstToken', 'timeToFirstChunk'],
+        customColumns: [],
+        metadataKeys: [],
+      };
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 7rem 9rem 7rem 7rem 11rem');
+      expect(buildTraceListColumnKeys(preferences)).toEqual([
+        'startTime',
+        'name',
+        'status',
+        'stopReason',
+        'timeToFirstChunk',
+        'timeToFirstToken',
         'endTime',
       ]);
     });
@@ -129,11 +148,12 @@ describe('trace list columns', () => {
         customColumns: [],
         metadataKeys: [],
       };
-      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 7rem 6rem 7rem');
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 7rem 9rem 7rem 6rem 7rem');
       expect(buildTraceListColumnKeys(preferences)).toEqual([
         'startTime',
         'name',
         'status',
+        'stopReason',
         'duration',
         'traceCount',
         'timeToFirstChunk',
@@ -175,6 +195,7 @@ describe('trace list columns', () => {
         'duration',
         'traceCount',
         'timeToFirstChunk',
+        'timeToFirstToken',
         'endTime',
         'environment',
         'model',
@@ -188,7 +209,16 @@ describe('trace list columns', () => {
 
     it('offers traces their standard columns with usage and metadata', () => {
       expect(TRACE_COLUMN_CATALOGS.traces).toEqual({
-        standardColumns: ['type', 'input', 'output', 'duration', 'timeToFirstChunk', 'endTime', 'environment'],
+        standardColumns: [
+          'type',
+          'input',
+          'output',
+          'duration',
+          'timeToFirstChunk',
+          'timeToFirstToken',
+          'endTime',
+          'environment',
+        ],
         usage: true,
         metadata: true,
         defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,
@@ -197,10 +227,44 @@ describe('trace list columns', () => {
 
     it('offers spans their own columns, without usage or metadata they do not carry', () => {
       expect(TRACE_COLUMN_CATALOGS.spans).toEqual({
-        standardColumns: ['type', 'input', 'output', 'duration', 'endTime', 'environment', 'model', 'provider'],
+        standardColumns: [
+          'type',
+          'input',
+          'output',
+          'duration',
+          'timeToFirstChunk',
+          'timeToFirstToken',
+          'endTime',
+          'environment',
+          'model',
+          'provider',
+        ],
         usage: false,
         metadata: false,
         defaults: { visibleColumns: ['type', 'input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+      });
+    });
+
+    it('offers threads their own columns, with the message count but without usage or metadata', () => {
+      expect(TRACE_COLUMN_CATALOGS.threads).toEqual({
+        standardColumns: [
+          'type',
+          'input',
+          'output',
+          'duration',
+          'traceCount',
+          'timeToFirstChunk',
+          'timeToFirstToken',
+          'endTime',
+          'environment',
+        ],
+        usage: false,
+        metadata: false,
+        defaults: {
+          visibleColumns: ['type', 'input', 'output', 'duration', 'traceCount'],
+          customColumns: [],
+          metadataKeys: [],
+        },
       });
     });
 
@@ -217,11 +281,7 @@ describe('trace list columns', () => {
       });
     });
 
-    it('shows the trace count only on the threads list, which no column picker offers', () => {
-      expect(THREAD_LIST_COLUMN_PREFERENCES).toEqual({
-        ...DEFAULT_TRACE_COLUMN_PREFERENCES,
-        visibleColumns: [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns, 'traceCount'],
-      });
+    it('offers the message count only on the threads list', () => {
       expect(buildTraceListColumnKeys(DEFAULT_TRACE_COLUMN_PREFERENCES)).not.toContain('traceCount');
       expect(TRACE_COLUMN_CATALOGS.traces.standardColumns).not.toContain('traceCount');
       expect(TRACE_COLUMN_CATALOGS.spans.standardColumns).not.toContain('traceCount');
@@ -346,35 +406,41 @@ describe('trace list columns', () => {
 
   describe('when a single optional column is toggled', () => {
     it.each([
-      ['input', '11rem 14rem minmax(8rem,1fr) 6rem'],
-      ['type', '11rem 7rem minmax(8rem,1fr) 6rem'],
-      ['duration', '11rem minmax(8rem,1fr) 6rem 7rem'],
-      ['traceCount', '11rem minmax(8rem,1fr) 6rem 6rem'],
-      ['endTime', '11rem minmax(8rem,1fr) 6rem 11rem'],
-      ['environment', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['totalTokens', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['inputTokens', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['outputTokens', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['estimatedCost', '11rem minmax(8rem,1fr) 6rem 8rem'],
+      ['input', '11rem 14rem minmax(8rem,1fr) 7rem 9rem'],
+      ['type', '11rem 7rem minmax(8rem,1fr) 7rem 9rem'],
+      ['duration', '11rem minmax(8rem,1fr) 7rem 9rem 7rem'],
+      ['traceCount', '11rem minmax(8rem,1fr) 7rem 9rem 6rem'],
+      ['endTime', '11rem minmax(8rem,1fr) 7rem 9rem 11rem'],
+      ['environment', '11rem minmax(8rem,1fr) 7rem 9rem 8rem'],
+      ['totalTokens', '11rem minmax(8rem,1fr) 7rem 9rem 8rem'],
+      ['inputTokens', '11rem minmax(8rem,1fr) 7rem 9rem 8rem'],
+      ['outputTokens', '11rem minmax(8rem,1fr) 7rem 9rem 8rem'],
+      ['estimatedCost', '11rem minmax(8rem,1fr) 7rem 9rem 8rem'],
     ] as const)('lays out %s on its own', (column, expected) => {
       expect(buildTraceListColumns({ visibleColumns: [column], customColumns: [], metadataKeys: [] })).toBe(expected);
     });
 
+    it('keeps the narrow Status track when the outcome column is off', () => {
+      expect(
+        buildTraceListColumns({ visibleColumns: [], customColumns: [], metadataKeys: [] }, { outcomeColumn: false }),
+      ).toBe('11rem minmax(8rem,1fr) 6rem');
+    });
+
     it('widens the second track only when input is hidden', () => {
       expect(buildTraceListColumns({ visibleColumns: [], customColumns: [], metadataKeys: [] })).toBe(
-        '11rem minmax(8rem,1fr) 6rem',
+        '11rem minmax(8rem,1fr) 7rem 9rem',
       );
     });
 
     it('adds one bounded track per metadata key', () => {
       expect(buildTraceListColumns({ visibleColumns: [], customColumns: [], metadataKeys: ['a', 'b'] })).toBe(
-        '11rem minmax(8rem,1fr) 6rem minmax(8rem,14rem) minmax(8rem,14rem)',
+        '11rem minmax(8rem,1fr) 7rem 9rem minmax(8rem,14rem) minmax(8rem,14rem)',
       );
     });
 
     it('adds one bounded track per custom column before metadata columns', () => {
       expect(buildTraceListColumns({ visibleColumns: [], customColumns: ['threadId'], metadataKeys: ['a'] })).toBe(
-        '11rem minmax(8rem,1fr) 6rem minmax(8rem,14rem) minmax(8rem,14rem)',
+        '11rem minmax(8rem,1fr) 7rem 9rem minmax(8rem,14rem) minmax(8rem,14rem)',
       );
     });
   });
