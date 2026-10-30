@@ -5790,12 +5790,16 @@ export class AgentThreadStreamRuntime {
     // Queued streams of a run aborted before this subscriber read them.
     const abortedPendingStreamIds = new Set<string>();
 
+    /** Owner agents of remote runs registered here, kept for runs whose lease check deferred them. */
+    const remoteAgentIdsByRegisteredRunId = new Map<string, string>();
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean): Promise<boolean> => {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return false;
       state.activeThreadRunIds.set(key, runId);
       state.activeThreadStreamIds.set(key, streamId);
       if (!local) {
         state.remoteThreadKeysByRunId.set(runId, key);
+        const agentId = remoteAgentIdsByRegisteredRunId.get(runId);
+        if (agentId) state.remoteAgentIdsByRunId.set(runId, agentId);
         // The lease check awaited; only trust the run if someone still observes the thread.
         if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
       }
@@ -6131,6 +6135,7 @@ export class AgentThreadStreamRuntime {
             ? this.#isThreadBlockingRun(state, localRecord) || sameSourceLive
             : !displacesActiveRun &&
               (sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)));
+        if (!local && data.agentId) remoteAgentIdsByRegisteredRunId.set(data.runId, data.agentId);
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
@@ -6493,8 +6498,13 @@ export class AgentThreadStreamRuntime {
         // All reads share one renewal interval; a stalled or failing backend falls back to this process's view.
         const unreachable = Symbol('unreachable');
         let giveUp: ReturnType<typeof setTimeout> | undefined;
+        let expired = false;
         const deadline = new Promise<typeof unreachable>(
-          resolve => (giveUp = setTimeout(() => resolve(unreachable), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+          resolve =>
+            (giveUp = setTimeout(() => {
+              expired = true;
+              resolve(unreachable);
+            }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
         );
         let leaseError: unknown;
         const readOwner = (): Promise<string | null | undefined | typeof unreachable> => {
@@ -6523,6 +6533,9 @@ export class AgentThreadStreamRuntime {
           for (let attempt = 0; attempt < 3 && leaseOwner !== unreachable; attempt++) {
             const tail = eventTail;
             await tail;
+            // The deadline passed while earlier events were processed: keep the last answer rather than
+            // issue a read that would get no time and be noted as a stall on a healthy backend.
+            if (expired) break;
             const nextOwner = await readOwner();
             const stable = nextOwner === leaseOwner && tail === eventTail;
             leaseOwner = nextOwner;

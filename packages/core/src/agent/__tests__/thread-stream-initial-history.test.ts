@@ -182,6 +182,32 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  // Events delivered during the first read can take the stability check past the shared deadline. A healthy
+  // backend already answered, so the snapshot keeps that answer instead of falling back to local state.
+  it('keeps an answered lease owner when events outlast the deadline before the stability read', async () => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const slowRead = (AGENT_LEASE_RENEW_INTERVAL_MS * 3) / 5;
+      vi.spyOn(pubsub, 'getLeaseOwner').mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve(runId), slowRead)),
+      );
+      const subscribing = subscribe();
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS / 10);
+      void emitRun('other-1', 'other-stream-1').registered();
+      void emitRun('other-2', 'other-stream-2').registered();
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS * 2);
+      vi.useRealTimers();
+      const { subscription, collected, consumed } = await subscribing;
+      await nextTicks(10);
+      expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: runId } });
+      subscription.unsubscribe();
+      await consumed;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Every later backlog part checks the lease too. While one read is stalled, the next ones can't answer
   // sooner, so they must not each wait out another interval.
   it('opens within one renewal interval when several backlog parts check a stalled lease', async () => {
