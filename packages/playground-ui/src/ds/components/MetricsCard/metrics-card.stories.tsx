@@ -3,9 +3,9 @@ import { EyeIcon, LogsIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button/Button';
 import { MetricsLineChart } from '../MetricsLineChart';
-import { MetricsShareList } from '../MetricsShareList';
-import type { MetricsShareListColumn, MetricsShareListRow } from '../MetricsShareList';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
+import { ShareBar } from '../ShareBar';
+import type { ShareBarColumn, ShareBarRow } from '../ShareBar';
 import { Txt } from '../Txt';
 import { MetricsCard } from './metrics-card';
 import { count, ms, percent, percentileSeries, requestsByHour, routeStats, statusSeries } from './metrics-story-data';
@@ -22,14 +22,14 @@ const meta: Meta<typeof MetricsCard> = {
 export default meta;
 type Story = StoryObj<typeof MetricsCard>;
 
-/** The common case: a stacked bar chart with its legend, under a title and a summary. */
+/** The common case: a stacked bar chart with its legend, under a title and a total. */
 export const Default: Story = {
   render: () => (
     <div style={{ width: '48rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Requests" description="Responses by status class." />
-          <MetricsCard.Summary value="64.5K" label="requests" />
+          <MetricsCard.Title>Requests</MetricsCard.Title>
+          <MetricsCard.Total value="64.5K" />
         </MetricsCard.TopBar>
         <MetricsCard.Content>
           <MetricsStackedBarChart data={requestsByHour} series={statusSeries} valueFormatter={count} height={240} />
@@ -45,8 +45,8 @@ export const WithLineChart: Story = {
     <div style={{ width: '32rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Latency" description="Edge duration percentiles." />
-          <MetricsCard.Summary value="2.6s" label="P95" />
+          <MetricsCard.Title>Latency</MetricsCard.Title>
+          <MetricsCard.Total value="2.6s" />
         </MetricsCard.TopBar>
         <MetricsCard.Content>
           <MetricsLineChart data={requestsByHour} series={percentileSeries} valueFormatter={ms} height={200} />
@@ -61,7 +61,7 @@ export const Loading: Story = {
     <div style={{ width: '30rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Latency" description="Hourly p50 and p95 latency." />
+          <MetricsCard.Title>Latency</MetricsCard.Title>
         </MetricsCard.TopBar>
         <MetricsCard.Loading />
       </MetricsCard>
@@ -74,7 +74,7 @@ export const Error: Story = {
     <div style={{ width: '30rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Scores" description="Evaluation scorer performance." />
+          <MetricsCard.Title>Scores</MetricsCard.Title>
         </MetricsCard.TopBar>
         <MetricsCard.Error message="Failed to fetch scores data" />
       </MetricsCard>
@@ -87,7 +87,7 @@ export const NoData: Story = {
     <div style={{ width: '30rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Trace Volume" description="Runs and call counts." />
+          <MetricsCard.Title>Trace Volume</MetricsCard.Title>
         </MetricsCard.TopBar>
         <MetricsCard.Content>
           <MetricsCard.NoData message="No trace volume data yet" />
@@ -97,17 +97,14 @@ export const NoData: Story = {
   ),
 };
 
-/** Capped single-series bars (one value per column), with the total as the summary. */
-export const WithSummary: Story = {
+/** Capped single-series bars (one value per column), with the total right of the title. */
+export const WithTotal: Story = {
   render: () => (
     <div style={{ width: '32rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription
-            title="Cold starts"
-            description="Requests that woke a stopped environment."
-          />
-          <MetricsCard.Summary value="178" label="cold starts" />
+          <MetricsCard.Title>Cold starts</MetricsCard.Title>
+          <MetricsCard.Total value="178" />
         </MetricsCard.TopBar>
         <MetricsCard.Content>
           <MetricsStackedBarChart
@@ -128,10 +125,7 @@ export const TitleOnly: Story = {
     <div style={{ width: '30rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription>
-            <MetricsCard.Title>Custom Title</MetricsCard.Title>
-            <MetricsCard.Description>Custom description with children pattern</MetricsCard.Description>
-          </MetricsCard.TitleAndDescription>
+          <MetricsCard.Title>Latency</MetricsCard.Title>
         </MetricsCard.TopBar>
         <MetricsCard.Content>
           <MetricsLineChart
@@ -152,14 +146,16 @@ type Lens = 'busiest' | 'failing';
 const LENSES: Record<
   Lens,
   {
+    title: string;
     valueLabel: string;
     share: (r: RouteStat) => number;
     value: (r: RouteStat) => string;
     cell: (r: RouteStat) => string;
-    column: MetricsShareListColumn;
+    column: ShareBarColumn;
   }
 > = {
   busiest: {
+    title: 'Busiest routes',
     valueLabel: 'Requests',
     share: r => r.requests,
     value: r => count(r.requests),
@@ -167,6 +163,7 @@ const LENSES: Record<
     cell: r => ms(r.p95),
   },
   failing: {
+    title: 'Failing routes',
     valueLabel: '5xx',
     share: r => r.e5xx,
     value: r => count(r.e5xx),
@@ -175,11 +172,13 @@ const LENSES: Record<
   },
 };
 
-function RoutesToolbarCard() {
+const LENS_OPTIONS = (Object.keys(LENSES) as Lens[]).map(value => ({ value, label: LENSES[value].title }));
+
+function RoutesCard() {
   const [lens, setLens] = useState<Lens>('busiest');
   const spec = LENSES[lens];
   const columns = [spec.column];
-  const rows: MetricsShareListRow[] = routeStats
+  const rows: ShareBarRow[] = routeStats
     .filter(r => spec.share(r) > 0)
     .map(r => ({
       key: `${r.method} ${r.path}`,
@@ -201,24 +200,16 @@ function RoutesToolbarCard() {
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Routes" description="Grouped by method and route." />
-        <MetricsCard.Summary value={String(routeStats.length)} label="routes" />
+        <MetricsCard.TitleMenu<Lens> title={spec.title} value={lens} onValueChange={setLens} options={LENS_OPTIONS} />
+        <MetricsCard.Total value={String(routeStats.length)} />
       </MetricsCard.TopBar>
       <MetricsCard.Content className="flex flex-col gap-4 overflow-visible">
-        <MetricsCard.Toolbar>
-          <MetricsCard.Tabs<Lens> value={lens} onValueChange={setLens}>
-            <MetricsCard.Tab value="busiest">Busiest</MetricsCard.Tab>
-            <MetricsCard.Tab value="failing">Failing</MetricsCard.Tab>
-          </MetricsCard.Tabs>
-          <MetricsShareList.Header columns={columns} valueLabel={spec.valueLabel} valueWidth="w-16" />
-        </MetricsCard.Toolbar>
-        <MetricsShareList
+        <ShareBar
           key={lens}
           rows={rows}
           columns={columns}
           valueLabel={spec.valueLabel}
           valueWidth="w-16"
-          showHeader={false}
           palette="hues"
           limit={6}
           overflow="more"
@@ -229,15 +220,13 @@ function RoutesToolbarCard() {
 }
 
 /**
- * `MetricsCard.Toolbar`: one row under the top bar, first child left, last child right. Here
- * compact tabs (`MetricsCard.Tabs`) pick the question, and the list's
- * column headers (`MetricsShareList.Header`) sit beside them, so the list drops its own header
- * (`showHeader={false}`).
+ * `MetricsCard.TitleMenu`: the title is a dropdown of the card's views, here the question for
+ * the `ShareBar` under it.
  */
-export const Toolbar: Story = {
+export const TitleMenu: Story = {
   render: () => (
     <div style={{ width: '44rem' }}>
-      <RoutesToolbarCard />
+      <RoutesCard />
     </div>
   ),
 };
@@ -251,7 +240,7 @@ export const ActionsOnHover: Story = {
     <div style={{ width: '32rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Latency" description="Edge duration percentiles." />
+          <MetricsCard.Title>Latency</MetricsCard.Title>
           <MetricsCard.Actions reveal="hover">
             <Button variant="ghost" size="icon-md" tooltip="View in traces">
               <EyeIcon />
@@ -260,7 +249,7 @@ export const ActionsOnHover: Story = {
               <LogsIcon />
             </Button>
           </MetricsCard.Actions>
-          <MetricsCard.Summary value="2.6s" label="P95" />
+          <MetricsCard.Total value="2.6s" />
         </MetricsCard.TopBar>
         <MetricsCard.Content>
           <MetricsLineChart
@@ -277,16 +266,16 @@ export const ActionsOnHover: Story = {
 };
 
 /**
- * `MetricsCard.Summary isLoading`: skeletons in the value's and label's line boxes, so the top
- * bar keeps its height when the numbers land. Pairs with the chart's own `isLoading`.
+ * `MetricsCard.Total isLoading`: a skeleton in the value's line box, so the top bar keeps its
+ * height when the number lands. Pairs with the chart's own `isLoading`.
  */
-export const LoadingSummary: Story = {
+export const LoadingTotal: Story = {
   render: () => (
     <div style={{ width: '32rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Latency" description="Edge duration percentiles." />
-          <MetricsCard.Summary value="2.6s" label="P95" isLoading />
+          <MetricsCard.Title>Latency</MetricsCard.Title>
+          <MetricsCard.Total value="2.6s" isLoading />
         </MetricsCard.TopBar>
         <MetricsCard.Content>
           <MetricsLineChart data={requestsByHour} series={percentileSeries} height={200} showYAxis={false} isLoading />

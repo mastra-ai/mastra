@@ -3,6 +3,7 @@ import { TRACE_FILTER_BAR_OPERATORS } from '../../trace-filters';
 import type { TraceDatePreset } from '../../types';
 import { TRACE_TIME_RANGE_FIELD_ID, TraceTimeRangeChip } from '../trace-time-range-chip';
 import type { TraceTimeRangeChipProps } from '../trace-time-range-chip';
+import { DEFAULT_TRACES_FILTERS } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
 import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
@@ -92,7 +93,7 @@ export function TracesExplorerTimeRangeChip({
   minDate,
   maxRangeMs,
 }: TracesExplorerTimeRangeChipProps) {
-  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange } = useTracesFilters();
+  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange, resetDateRange } = useTracesFilters();
   const { isLoading } = useTracesList();
 
   return (
@@ -105,6 +106,8 @@ export function TracesExplorerTimeRangeChip({
       onDateRangeChange={setDateRange}
       disabled={isLoading}
       presets={presets}
+      defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
+      onReset={() => resetDateRange(DEFAULT_TRACES_FILTERS.datePreset)}
       minDate={minDate}
       maxRangeMs={maxRangeMs}
     />

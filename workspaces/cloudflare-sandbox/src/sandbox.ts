@@ -283,7 +283,7 @@ export class CloudflareSandbox extends MastraSandbox {
               case 'error':
                 stderr += event.message;
                 options?.onStderr?.(event.message);
-                return;
+                break;
             }
           },
         },

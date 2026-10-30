@@ -1,21 +1,24 @@
-import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useSpansListSource } from '../hooks/use-spans-list-source';
 import { buildSpanQueryWhere } from '../span-filters';
 import { spanToListRow } from '../span-list-row';
 import type { SpanSelection } from './span-detail-panel';
+import { SpansExplorerHistogram } from './spans-explorer-histogram';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
-import {
-  observabilityListQueryOptions,
-  useObservabilityListFilters,
-} from '@/domains/observability/hooks/use-observability-list-filters';
+import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
+import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
+import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
+import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
-import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import type { TracesListSortField, TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
+import { hasTraceColumn, withoutUnrecordedStreamingColumns } from '@/domains/traces/trace-list-columns';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export type SpansExplorerPanelArgs = {
@@ -32,25 +35,77 @@ export type SpansExplorerBodyProps = {
   onSelectionChange: (selection: SpanSelection | undefined) => void;
   /** Renders the open span's panel in the host's own side panel or drawer. */
   renderPanel: (args: SpansExplorerPanelArgs) => ReactNode;
+  /** The host's search params, so the time range, filters and sort survive a reload. Omitted: kept in memory. */
+  urlState?: ObservabilityListUrlState;
 };
 
 /** The spans page body: filter bar, span list and the host's span panel. Router-agnostic. */
-export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }: SpansExplorerBodyProps) {
-  const filters = useObservabilityListFilters();
-  const { timeRange, tokens, groups, sort } = filters;
+export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, urlState }: SpansExplorerBodyProps) {
+  const filters = useObservabilityListFilters(urlState, { sortFields: SPAN_LIST_SORT_FIELDS });
+  const { timeRange, tokens, groups } = filters;
+  const columns = useTraceColumnPreferences({ scope: 'spans' });
 
-  const { data: capabilities } = useObservabilityCapabilities();
+  const { data: capabilities, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
+  const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
+  const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
 
-  const query = useMemo<SpanQueryArgs>(() => {
-    const where = buildSpanQueryWhere(tokens, groups, { withContextFields });
-    return { timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) };
-  }, [timeRange, sort, tokens, groups, withContextFields]);
+  // Stored columns the store can't fill stay saved but aren't drawn, so they come back on a store that can.
+  const displayedColumns = useMemo(
+    () =>
+      isCapabilitiesLoading
+        ? columns.preferences
+        : withoutUnrecordedStreamingColumns(columns.preferences, { withTimeToFirstChunk, withTimeToFirstToken }),
+    [columns.preferences, isCapabilitiesLoading, withTimeToFirstChunk, withTimeToFirstToken],
+  );
 
-  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useQuerySpans({
-    query,
-    queryOptions: observabilityListQueryOptions,
-  });
+  const sortableFields = useMemo(() => {
+    const fields: TracesListSortField[] = ['startedAt'];
+    if (
+      withTimeToFirstChunk &&
+      capabilities?.capabilities.traceQueryTimeToFirstChunkSort &&
+      hasTraceColumn(displayedColumns, 'timeToFirstChunk')
+    ) {
+      fields.push('timeToFirstChunkMs');
+    }
+    if (
+      withTimeToFirstToken &&
+      capabilities?.capabilities.traceQueryTimeToFirstTokenSort &&
+      hasTraceColumn(displayedColumns, 'timeToFirstToken')
+    ) {
+      fields.push('timeToFirstTokenMs');
+    }
+    return fields;
+  }, [capabilities, withTimeToFirstChunk, withTimeToFirstToken, displayedColumns]);
+
+  // A URL sort the store can't run, or on a hidden column, lists newest first without rewriting the URL.
+  const sort = sortableFields.includes(filters.sort.field)
+    ? filters.sort
+    : ({ field: 'startedAt', direction: 'desc' } as const);
+  const { field: sortField, direction: sortDirection } = sort;
+
+  const where = useMemo(
+    () =>
+      buildSpanQueryWhere(tokens, groups, {
+        withContextFields,
+        withOutcomeFields,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+      }),
+    [tokens, groups, withContextFields, withOutcomeFields, withTimeToFirstChunk, withTimeToFirstToken],
+  );
+  const query = useMemo<SpanQueryArgs>(
+    () => ({ timeRange, orderBy: [{ field: sortField, direction: sortDirection }], ...(where ? { where } : {}) }),
+    [timeRange, sortField, sortDirection, where],
+  );
+
+  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
+    {
+      query,
+      rolling: filters.rolling,
+    },
+  );
 
   const rows = useMemo(() => (spans ?? []).map(spanToListRow), [spans]);
   const panelSpans = useMemo(
@@ -75,6 +130,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
         toolbar={
           <ActionRow>
             <ActionRow.Start>
+              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
               <SpansFilterBar
                 datePreset={filters.datePreset}
                 dateFrom={filters.dateFrom}
@@ -85,11 +141,19 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
                 onDatePresetChange={filters.onDatePresetChange}
                 onDateChange={filters.onDateChange}
                 onDateRangeChange={filters.onDateRangeChange}
+                onDateReset={filters.onDateReset}
                 onFiltersChange={filters.onFiltersChange}
                 disabled={isLoading}
               />
             </ActionRow.Start>
           </ActionRow>
+        }
+        chart={
+          <SpansExplorerHistogram
+            timeRange={timeRange}
+            where={where}
+            onZoom={({ from, to }) => filters.onZoom(from, to)}
+          />
         }
         error={
           isError ? <TracesErrorContent error={error} resource="spans" errorTitle="Failed to load spans" /> : undefined
@@ -108,6 +172,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
         <TracesListView
           listId="all-spans"
           traces={rows}
+          columnPreferences={displayedColumns}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
@@ -115,7 +180,8 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
           filtersApplied={filters.filtersApplied}
           resource="spans"
           isBranchesMode
-          createdSort={sort}
+          sort={sort}
+          sortableFields={sortableFields}
           onSortChange={filters.setSort}
           featuredTraceId={selection?.traceId}
           featuredSpanId={selection?.spanId}

@@ -21,23 +21,37 @@ import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
-  resumeContext,
-  requireToolApproval,
-  models,
-  toolChoice,
-  modelSettings,
-  _internal,
-  messageId,
-  runId,
-  messageList,
-  startTimestamp,
-  streamState,
-  agentId,
-  toolCallId,
-  toolCallConcurrency,
-  ...rest
-}: LoopRun<Tools, OUTPUT>) {
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
+  {
+    resumeContext,
+    requireToolApproval,
+    models,
+    toolChoice,
+    modelSettings,
+    _internal,
+    messageId,
+    runId,
+    messageList,
+    startTimestamp,
+    streamState,
+    agentId,
+    toolCallId,
+    toolCallConcurrency,
+    ...rest
+  }: LoopRun<Tools, OUTPUT>,
+  finalization?: { register: (cleanup: () => Promise<void>) => void },
+) {
+  let finishQueued = false;
+  let terminalErrorReported = false;
+  const reportTerminalTracingError = (error: unknown) => {
+    if (finishQueued || terminalErrorReported) return;
+    terminalErrorReported = true;
+    try {
+      rest.onTracingTerminalError?.(getErrorFromUnknown(error));
+    } catch {
+      // Optional tracing must not replace the stream's original failure.
+    }
+  };
   const loopSource = {
     start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
       // Stamp chunks when the loop produces them; consumers may read them much later.
@@ -69,6 +83,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent: rest.agent,
             processorStates: dataChunkProcessorStates,
           })
         : undefined;
@@ -492,7 +507,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             payload: { error },
           });
 
-          await rest.options?.onError?.({ error });
+          try {
+            await rest.options?.onError?.({ error });
+          } finally {
+            reportTerminalTracingError(error);
+          }
           await deleteRunSnapshots();
           safeClose(controller);
           return;
@@ -511,8 +530,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               payload: { error },
             });
 
-            if (rest.options?.onError) {
+            try {
               await rest.options?.onError?.({ error });
+            } finally {
+              reportTerminalTracingError(error);
             }
           }
 
@@ -526,12 +547,18 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           return;
         }
 
-        await deleteRunSnapshots();
+        // Enqueuing finish does not await the agent's final memory save. Hand successful
+        // cleanup to the output's awaited finish lifecycle; bails retain immediate cleanup.
+        if (finalization && executionResult.result.stepResult.reason !== 'tripwire' && !upstreamAbortSignal?.aborted) {
+          finalization.register(deleteRunSnapshots);
+        } else {
+          await deleteRunSnapshots();
+        }
 
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
         // The tripwire/abort status is communicated through the stepResult.reason
-        safeEnqueue(controller, {
+        finishQueued = safeEnqueue(controller, {
           type: 'finish',
           runId,
           from: ChunkFrom.AGENT,
@@ -570,6 +597,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       try {
         await loopSource.start(streamController);
       } catch (error) {
+        // Also cover throws before the workflow returns a result. If finish was
+        // queued, its consumer still owns finalization after draining the queue.
+        reportTerminalTracingError(error);
         failure = { error };
       }
     },

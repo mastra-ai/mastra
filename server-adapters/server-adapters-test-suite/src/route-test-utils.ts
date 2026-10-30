@@ -160,9 +160,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodDefault') {
     if ('_zod' in schema) {
       return def.defaultValue;
-    } else {
-      return def.defaultValue();
     }
+    return def.defaultValue();
   }
 
   if (typeName === 'ZodString') {
@@ -285,22 +284,20 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodNull') return null;
   if (typeName === 'ZodUndefined') return undefined;
   if (typeName === 'ZodDate') return new Date();
-  if (typeName === 'ZodBigInt') return BigInt(0);
+  if (typeName === 'ZodBigInt') return 0n;
 
   if (typeName === 'ZodLiteral') {
     if ('_zod' in schema) {
       return def.values?.[0];
-    } else {
-      return def.value;
     }
+    return def.value;
   }
 
   if (typeName === 'ZodEnum') {
     if ('_zod' in schema) {
       return Object.values(def.entries)[0];
-    } else {
-      return def.values[0];
     }
+    return def.values[0];
   }
   if (typeName === 'ZodNativeEnum') {
     const values = Object.values(def.values);
@@ -310,9 +307,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodArray') {
     if ('_zod' in schema) {
       return [generateValidDataFromSchema(def.element, fieldName)];
-    } else {
-      return [generateValidDataFromSchema(def.type, fieldName)];
     }
+    return [generateValidDataFromSchema(def.type, fieldName)];
   }
 
   if (typeName === 'ZodObject') {
@@ -447,6 +443,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
   if (route.path.includes(':eventName')) params.eventName = 'ticket.created';
+  if (route.path.includes(':taskKey')) params.taskKey = 'test-task-key';
 
   // Workspace route params
   if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';

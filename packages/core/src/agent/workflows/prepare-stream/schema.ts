@@ -24,6 +24,8 @@ export type AgentCapabilities = {
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
+  /** Called when the run suspends (e.g. for tool approval), before it can be resumed. */
+  onRunSuspended?: () => void;
   outputProcessors?:
     | OutputProcessorOrWorkflow[]
     | ((args: {

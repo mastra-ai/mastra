@@ -77,6 +77,7 @@ function makeChannels(
       isError?: boolean;
     }) => string | Record<string, unknown> | null;
     logger?: any;
+    formatError?: (error: Error, context: unknown) => string;
   } = {},
 ) {
   const recording = createRecording();
@@ -91,6 +92,7 @@ function makeChannels(
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
   if (opts.formatToolCall !== undefined) adapterConfig.formatToolCall = opts.formatToolCall;
+  if (opts.formatError !== undefined) adapterConfig.formatError = opts.formatError;
   const channels = new AgentChannels({
     adapters: { test: adapterConfig as any },
   });
@@ -103,10 +105,10 @@ async function drive(
   chunks: any[],
   chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
+  requestContext: Map<string, unknown> = new Map(),
 ) {
   const render = (channels as any)._buildRenderContext(chatThread, 'test', { approvalContext });
   const processor = new ChatChannelOutputProcessor();
-  const requestContext = new Map<string, unknown>();
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
   const state: Record<string, unknown> = {};
 
@@ -301,6 +303,22 @@ describe('ChatChannelOutputProcessor', () => {
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
       expect((posts[0] as any).arg).toBe('❌ Error: boom');
+    });
+
+    it.each([false, true])("hands formatError the run's request context (streaming: %s)", async streaming => {
+      const formatError = vi.fn((_error: Error, _context: unknown) => 'custom feedback');
+      const { channels, calls, chatThread } = makeChannels({ streaming, formatError });
+      const runContext = new Map<string, unknown>([['controller', { sessionId: 'session-1' }]]);
+      const error = new Error('boom');
+      await drive(channels, [{ type: 'error', payload: { error } }], chatThread, undefined, runContext);
+
+      expect(formatError).toHaveBeenCalledOnce();
+      const [formatted, context] = formatError.mock.calls[0]!;
+      expect(formatted).toBe(error);
+      expect((context as { requestContext: Map<string, unknown> }).requestContext.get('controller')).toEqual({
+        sessionId: 'session-1',
+      });
+      expect(calls.filter(c => c.kind === 'post').map(c => (c as any).arg)).toEqual(['custom feedback']);
     });
   });
 

@@ -374,7 +374,7 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
         case 'error':
           outcome = message;
           resolveOutcome();
-          return;
+          break;
       }
     });
 

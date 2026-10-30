@@ -2,12 +2,13 @@ import { Area, CartesianGrid, ComposedChart, Line, Tooltip } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
-import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
+import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
+import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
 
@@ -15,7 +16,6 @@ export type MetricsLineChartSeries = {
   dataKey: string;
   label: string;
   color: string;
-  aggregate?: (data: Record<string, unknown>[]) => { value: string; suffix?: string };
   /** A secondary reading (e.g. an average next to counts): dashed, no fill under it. */
   dashed?: boolean;
   /** The series to read first (e.g. P95 among percentiles): a slightly heavier line. */
@@ -45,23 +45,15 @@ const LINE_STYLES: Record<MetricsLineChartLineStyle, { width: number; emphasis: 
  * edge where the line starts and stops. A mask sized to each fill's own box.
  */
 const THIN_FILL_FADE = '[&_.recharts-area-area]:mask-x-from-[calc(100%-24px)]';
-/** A series with this few points gets a dot on each: a lone point draws no line at all. */
-const SPARSE_POINTS = 12;
+/** A lone point draws no line at all, so it gets a dot; lines already bridge gaps (`connectNulls`). */
+const SPARSE_POINTS = 1;
 
-// Positioned via transform so the hover line glides between points instead of jumping.
-function SmoothCursor({ points }: { points?: { x: number; y: number }[] }) {
+// Jumps straight to the hovered point, with the dots and the tooltip.
+function HoverLine({ points }: { points?: { x: number; y: number }[] }) {
   const [top, bottom] = points ?? [];
   if (!top || !bottom) return null;
   return (
-    <line
-      x1={0}
-      x2={0}
-      y1={top.y}
-      y2={bottom.y}
-      {...CHART_CURSOR_PROPS}
-      className="pointer-events-none transition-transform duration-150 ease-out"
-      style={{ transform: `translateX(${top.x}px)` }}
-    />
+    <line x1={top.x} x2={top.x} y1={top.y} y2={bottom.y} {...CHART_CURSOR_PROPS} className="pointer-events-none" />
   );
 }
 
@@ -85,10 +77,10 @@ export type MetricsLineChartProps = {
   xLabels?: ChartXLabels;
   /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
   tooltipLabelKey?: string;
-  /** Render a visible dot on every point. Series with few points get them anyway. */
+  /** Render a visible dot on every point. A series with a single point gets one anyway. */
   showDots?: boolean;
   /**
-   * Point markers. `auto`: on every point of a sparse series (or all with `showDots`). `hover`:
+   * Point markers. `auto`: on a series' lone point (or every point with `showDots`). `hover`:
    * none at rest, only the hovered point's.
    */
   dots?: 'auto' | 'hover';
@@ -116,7 +108,7 @@ export function MetricsLineChart(props: MetricsLineChartProps) {
   // The legend stays while loading: it comes from the series, not the data.
   return (
     <div className={root}>
-      {showLegend && <MetricsLineChartLegend data={isLoading ? undefined : data} series={series} className="mb-4" />}
+      {showLegend && <MetricsLineChartLegend series={series} className="mb-4" />}
       {isLoading ? <ChartSkeleton kind="line" height={height} /> : <LinePlot {...props} />}
     </div>
   );
@@ -206,8 +198,13 @@ function LinePlot({
           ),
         })}
         <Tooltip
-          content={<MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />}
-          cursor={<SmoothCursor />}
+          {...CHART_TOOLTIP_PROPS}
+          content={
+            <ChartTooltipPosition>
+              <MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />
+            </ChartTooltipPosition>
+          }
+          cursor={<HoverLine />}
         />
         {series.map((s, i) => {
           const common = {

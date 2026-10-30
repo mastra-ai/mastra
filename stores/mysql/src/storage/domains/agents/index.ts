@@ -87,6 +87,7 @@ export class AgentsMySQL extends AgentsStorage {
    * Currently no default indexes are defined for agents.
    */
   async createDefaultIndexes(): Promise<void> {
+    // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
     if (this.#skipDefaultIndexes) return;
     // No default indexes for agents domain
   }

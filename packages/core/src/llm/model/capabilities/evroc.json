@@ -34,9 +34,9 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
-    "evroc/roc": [
+    "Qwen/Qwen3.6-35B-A3B": [
       {
-        "type": "budget_tokens"
+        "type": "toggle"
       }
     ],
     "Qwen/Qwen3.8-27B": [
@@ -48,9 +48,9 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.6-35B-A3B": [
+    "evroc/roc": [
       {
-        "type": "toggle"
+        "type": "budget_tokens"
       }
     ],
     "mistralai/Mistral-Medium-3.5-128B": [

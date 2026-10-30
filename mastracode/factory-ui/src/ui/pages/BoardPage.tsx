@@ -9,6 +9,7 @@ import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout
 import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardContent } from './board/BoardContent';
+import { BoardLoadingSkeleton } from '../domains/factory/components/BoardLoadingSkeleton';
 
 /**
  * Factory › Board: an org-wide grouped list of the repository's work items. The
@@ -45,11 +46,7 @@ function BoardLayout({ kind }: { kind: string }) {
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
   const catalog = useBoardCatalog(factory.id);
   if (catalog.isPending) {
-    return (
-      <p role="status" className="p-4">
-        Loading boards…
-      </p>
-    );
+    return <BoardLoadingSkeleton />;
   }
   if (catalog.isError) {
     return <EmptyState variant="fill" titleSlot={<span role="alert">Unable to load boards.</span>} />;

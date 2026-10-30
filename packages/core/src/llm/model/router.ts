@@ -594,6 +594,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         : '';
     const useInstanceCache = this.shouldUseInstanceGatewayCache(auth);
     const cache = useInstanceCache ? this.instanceGatewayCache : this.getGatewayCache();
+    // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string coercion at the model-cache key boundary.
     const authScopeKey = useInstanceCache ? `${auth.source ?? ''}` : '';
     const key = ModelRouterLanguageModel.computeModelCacheKey({
       gatewayId: this.gatewayId,

@@ -589,6 +589,41 @@ describe('Create Factory wizard', () => {
     ]);
   });
 
+  it('still creates the Factory when the picked Jira project already sends all its issues elsewhere', async () => {
+    const calls: string[] = [];
+    seedDraft('project-management');
+    stubConnectedJira();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, workspace: null, reason: 'missing_config' }),
+      ),
+    );
+    stubModelStepEndpoints(calls);
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json(
+          {
+            error: 'binding_conflict',
+            message: 'Another factory already takes all issues from this source.',
+            conflicts: [{ factoryProjectId: 'fp-other', labels: null }],
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Engineering/ }));
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
+    expect(calls).toContain('create');
+  });
+
   it.each([
     { integrationId: 'linear', project: /Mobile App/, sourceId: 'lin-1' },
     { integrationId: 'jira', project: /Engineering/, sourceId: 'jira-source-1' },

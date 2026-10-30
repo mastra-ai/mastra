@@ -338,7 +338,7 @@ Before enabling workers:
 - **`mastra-server.workers.splitDeployment: true`.** Without it the API keeps running workers in-process and every worker runs twice, double-firing every cron schedule. The chart refuses to render if you enable workers without it.
 
 :::warning Redis eviction policy
-Set `maxmemory-policy` to `noeviction` (or a `volatile-*` policy) on Redis or Valkey. The common default `allkeys-lru` evicts unacknowledged workflow events under memory pressure, and runs then stall with no error on either side. On managed Redis this is a parameter-group setting.
+Set `maxmemory-policy` to `noeviction` on Redis or Valkey. Every evicting policy deletes live Mastra state under memory pressure: `allkeys-*` policies evict unacknowledged workflow events, and `volatile-*` policies evict lease keys and streams, which carry a TTL by default. Runs then stall without a run error. `RedisStreamsPubSub` and `ValkeyStreamsPubSub` log a one-time warning after they first connect when the policy can evict. On managed Redis this is a parameter-group setting, and Amazon ElastiCache defaults to `volatile-lru`.
 :::
 
 ### Build the worker artifact into your image
