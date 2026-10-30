@@ -1171,35 +1171,34 @@ async function mapTools(
           } as Parameters<typeof request.registration.createTools>[0]);
           applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval);
         }
-      } else {
+      } else if (request.registration.transport === 'mcp') {
         // kind === 'multi'
-        if (request.registration.transport === 'mcp') {
-          for (const connection of resolution.connections) {
-            activeMcpKeys.add(`${integrationId}::${connection.id}`);
-          }
-          providerTools = await buildMcpMultiConnectionTools({
-            registration: request.registration,
-            connections: resolution.connections,
-            allowTools: request.options.allowTools,
-            disallowTools: request.options.disallowTools,
-            requireApproval: request.options.requireApproval,
-            client,
-            globalClient,
-            mcpClients,
-            resolverId,
-          });
-        } else {
-          providerTools = buildProxyMultiConnectionTools({
-            registration: request.registration as ProxyProviderRegistration,
-            connections: resolution.connections,
-            allowTools: request.options.allowTools,
-            disallowTools: request.options.disallowTools,
-            client: clientOptions,
-          });
-          applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
-            listConnectionsToolKey(integrationId),
-          ]);
+
+        for (const connection of resolution.connections) {
+          activeMcpKeys.add(`${integrationId}::${connection.id}`);
         }
+        providerTools = await buildMcpMultiConnectionTools({
+          registration: request.registration,
+          connections: resolution.connections,
+          allowTools: request.options.allowTools,
+          disallowTools: request.options.disallowTools,
+          requireApproval: request.options.requireApproval,
+          client,
+          globalClient,
+          mcpClients,
+          resolverId,
+        });
+      } else {
+        providerTools = buildProxyMultiConnectionTools({
+          registration: request.registration as ProxyProviderRegistration,
+          connections: resolution.connections,
+          allowTools: request.options.allowTools,
+          disallowTools: request.options.disallowTools,
+          client: clientOptions,
+        });
+        applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
+          listConnectionsToolKey(integrationId),
+        ]);
       }
     } catch (error) {
       // Warn-and-skip exists so one unreachable provider never takes down the

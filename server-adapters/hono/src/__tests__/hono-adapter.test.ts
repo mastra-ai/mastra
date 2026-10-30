@@ -135,24 +135,23 @@ describe('Hono Server Adapter', () => {
           stream: response.body,
           headers,
         };
-      } else {
-        // Read the body exactly once; parsing JSON from text avoids consuming
-        // the body twice when the payload is not valid JSON.
-        const rawText = await response.text();
-        let data: unknown;
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          data = rawText;
-        }
-
-        return {
-          status: response.status,
-          type: 'json',
-          data,
-          headers,
-        };
       }
+      // Read the body exactly once; parsing JSON from text avoids consuming
+      // the body twice when the payload is not valid JSON.
+      const rawText = await response.text();
+      let data: unknown;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = rawText;
+      }
+
+      return {
+        status: response.status,
+        type: 'json',
+        data,
+        headers,
+      };
     },
   });
 

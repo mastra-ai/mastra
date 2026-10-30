@@ -2,7 +2,7 @@ import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import type { IconSize } from '@/ds/icons/icon-size-classes';
@@ -212,7 +212,7 @@ function ButtonAdornment({ slot, size, children }: { slot: string; size: IconSiz
   );
 }
 
-function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
+export function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
   if (variant !== 'link') return children;
   return (
     <span data-slot="button-label" className={LINK_LABEL}>

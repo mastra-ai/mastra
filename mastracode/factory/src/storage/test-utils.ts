@@ -9,6 +9,7 @@ import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
 import { AuditStorage } from './domains/audit/base.js';
+import { StoredBoardsStorage } from './domains/boards/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './domains/comments/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
@@ -37,6 +38,7 @@ export interface FactoryStorageTestSeed {
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
   comments: WorkItemCommentsStorage;
+  boards: StoredBoardsStorage;
 }
 
 /**
@@ -49,8 +51,8 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const intake = storage.registerDomain(new IntakeStorage());
   const audit = storage.registerDomain(new AuditStorage());
   const workItems = storage.registerDomain(new WorkItemsStorage());
-  const boards = createBoardRegistry();
-  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
+  const boardRegistry = createBoardRegistry();
+  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boardRegistry, item)?.kind === 'terminal');
   const credentials = storage.registerDomain(new ModelCredentialsStorage());
   const integrations = storage.registerDomain(new IntegrationStorage());
   const projects = storage.registerDomain(new FactoryProjectsStorage());
@@ -61,6 +63,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
+  const boards = storage.registerDomain(new StoredBoardsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -78,5 +81,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     queueHealth,
     channelIdentity,
     comments,
+    boards,
   };
 }

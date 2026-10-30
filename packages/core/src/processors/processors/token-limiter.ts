@@ -286,12 +286,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       if (currentTokens + messageTokens <= remainingBudget) {
         messagesToKeep.unshift(message);
         currentTokens += messageTokens;
-      } else {
-        if (this.trimMode === 'contiguous') {
-          break;
-        }
-        // best-fit → continue (existing behavior)
+      } else if (this.trimMode === 'contiguous') {
+        break;
       }
+      // best-fit → continue (existing behavior)
     }
 
     if (messagesToKeep.length === 0) {
@@ -712,20 +710,18 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
           if (cumulativeTokens + tokens <= limit) {
             cumulativeTokens += tokens;
             return part;
+          } else if (this.strategy === 'abort') {
+            abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
           } else {
-            if (this.strategy === 'abort') {
-              abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
-            } else {
-              // Truncate the text to fit within the remaining token limit
-              const remainingTokens = Math.max(0, limit - cumulativeTokens);
-              const truncatedText = remainingTokens > 0 ? sliceByTokensSafe(textContent, 0, remainingTokens) : '';
-              cumulativeTokens += this.countTokens(truncatedText);
+            // Truncate the text to fit within the remaining token limit
+            const remainingTokens = Math.max(0, limit - cumulativeTokens);
+            const truncatedText = remainingTokens > 0 ? sliceByTokensSafe(textContent, 0, remainingTokens) : '';
+            cumulativeTokens += this.countTokens(truncatedText);
 
-              return {
-                ...part,
-                text: truncatedText,
-              };
-            }
+            return {
+              ...part,
+              text: truncatedText,
+            };
           }
         }
 

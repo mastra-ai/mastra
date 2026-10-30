@@ -7,7 +7,7 @@ description: "Browse AI/ML API model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/aimlapi.svg" alt="AI/ML API logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AI/ML API
 
-Access 178 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
+Access 172 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
 
 Learn more in the [AI/ML API documentation](https://docs.aimlapi.com).
 
@@ -822,8 +822,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 127000,
-    "inputCost": 1.04,
-    "outputCost": 1.04
+    "inputCost": 0.76176,
+    "outputCost": 2.383674
   },
   {
     "model": "aimlapi/meta/muse-glimmer-30b",
@@ -1186,42 +1186,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.7406
   },
   {
-    "model": "aimlapi/openai/gpt-3.5-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 16000,
-    "maxOutput": 4096,
-    "inputCost": 0.5,
-    "outputCost": 1.5
-  },
-  {
-    "model": "aimlapi/openai/gpt-4",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 8000,
-    "maxOutput": 8192,
-    "inputCost": 30,
-    "outputCost": 60
-  },
-  {
-    "model": "aimlapi/openai/gpt-4-turbo",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 10,
-    "outputCost": 30
-  },
-  {
     "model": "aimlapi/openai/gpt-4.1",
     "imageInput": true,
     "audioInput": false,
@@ -1246,18 +1210,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.6
   },
   {
-    "model": "aimlapi/openai/gpt-4.1-nano",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1000000,
-    "maxOutput": 32768,
-    "inputCost": 0.1,
-    "outputCost": 0.4
-  },
-  {
     "model": "aimlapi/openai/gpt-4o",
     "imageInput": true,
     "audioInput": false,
@@ -1278,8 +1230,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": 5,
-    "outputCost": 15
+    "inputCost": 5.29,
+    "outputCost": 15.87
   },
   {
     "model": "aimlapi/openai/gpt-4o-2024-08-06",
@@ -1630,6 +1582,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "aimlapi/openai/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
     "model": "aimlapi/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -1664,42 +1628,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.07935,
     "outputCost": 0.3174
-  },
-  {
-    "model": "aimlapi/openai/o1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 100000,
-    "inputCost": 15,
-    "outputCost": 60
-  },
-  {
-    "model": "aimlapi/openai/o1-pro",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 158.7,
-    "outputCost": 634.8
-  },
-  {
-    "model": "aimlapi/openai/o3-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 1.1,
-    "outputCost": 4.4
   },
   {
     "model": "aimlapi/openai/o3-pro",
@@ -2191,6 +2119,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -2208,6 +2138,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

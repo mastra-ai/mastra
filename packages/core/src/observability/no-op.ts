@@ -87,16 +87,12 @@ export const noOpMetricsContext: MetricsContext = {
 
 /** No-op observability entrypoint that silently discards all operations. */
 export class NoOpObservability implements ObservabilityEntrypoint {
-  setMastraContext(_options: { mastra: Mastra }): void {
-    return;
-  }
+  setMastraContext(_options: { mastra: Mastra }): void {}
 
-  setLogger(_options: { logger: IMastraLogger }): void {
-    return;
-  }
+  setLogger(_options: { logger: IMastraLogger }): void {}
 
   getSelectedInstance(_options: ConfigSelectorOptions): ObservabilityInstance | undefined {
-    return;
+    return undefined;
   }
 
   async getRecordedTrace(_args: { traceId: string }): Promise<RecordedTrace | null> {
@@ -108,29 +104,23 @@ export class NoOpObservability implements ObservabilityEntrypoint {
     spanId?: string;
     correlationContext?: CorrelationContext;
     score: ScoreInput;
-  }): Promise<void> {
-    return;
-  }
+  }): Promise<void> {}
 
   async addFeedback(_args: {
     traceId?: string;
     spanId?: string;
     correlationContext?: CorrelationContext;
     feedback: FeedbackInput;
-  }): Promise<void> {
-    return;
-  }
+  }): Promise<void> {}
 
-  registerInstance(_name: string, _instance: ObservabilityInstance, _isDefault = false): void {
-    return;
-  }
+  registerInstance(_name: string, _instance: ObservabilityInstance, _isDefault = false): void {}
 
   getInstance(_name: string): ObservabilityInstance | undefined {
-    return;
+    return undefined;
   }
 
   getDefaultInstance(): ObservabilityInstance | undefined {
-    return;
+    return undefined;
   }
 
   listInstances(): ReadonlyMap<string, ObservabilityInstance> {
@@ -145,19 +135,11 @@ export class NoOpObservability implements ObservabilityEntrypoint {
     return false;
   }
 
-  setConfigSelector(_selector: ConfigSelector): void {
-    return;
-  }
+  setConfigSelector(_selector: ConfigSelector): void {}
 
-  clear(): void {
-    return;
-  }
+  clear(): void {}
 
-  async flush(): Promise<void> {
-    return;
-  }
+  async flush(): Promise<void> {}
 
-  async shutdown(): Promise<void> {
-    return;
-  }
+  async shutdown(): Promise<void> {}
 }

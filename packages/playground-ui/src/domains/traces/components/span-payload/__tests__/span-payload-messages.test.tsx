@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { formatSkillsCatalog } from '@mastra/core/processors';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SpanInputRenderer } from '../span-input-renderers';
@@ -39,6 +40,125 @@ describe('SpanPayloadMessages', () => {
       expect(container.querySelector('li')?.textContent).toBe('item');
       expect(container.querySelector('pre')).toBeNull();
       expect(container.textContent).not.toMatch(/\*\*|#/);
+    });
+  });
+  describe('when an assistant message is recorded as memory stores it', () => {
+    const storedAssistant = (reasoning: Record<string, unknown>) => ({
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'reasoning', ...reasoning },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'call_1',
+              toolName: 'weatherInfo',
+              args: { city: 'Paris' },
+              result: { temperature: 11.9 },
+            },
+          },
+          { type: 'step-start', createdAt: 1793014088036 },
+          { type: 'text', text: 'Current weather in Paris' },
+        ],
+      },
+    });
+    const json = (container: HTMLElement) => container.querySelectorAll('[data-slot="span-payload-json"]');
+
+    it('draws the tool call and the answer, without raw JSON for the step boundary or an empty reasoning', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[
+            storedAssistant({
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: { openai: { reasoningEncryptedContent: 'gAAAAB' } },
+            }),
+          ]}
+        />,
+      );
+      expect(json(container)).toHaveLength(0);
+      expect(screen.queryByRole('button', { name: 'Reasoning' })).toBeNull();
+      expect(container.querySelectorAll('[data-slot="span-payload-tool"]')).toHaveLength(1);
+      expect(screen.queryByText('Tool call')).toBeNull();
+      expect(screen.getByText('Current weather in Paris')).toBeTruthy();
+      expect(container.textContent).not.toContain('gAAAAB');
+    });
+
+    it('shows the reasoning the model summarized', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[
+            storedAssistant({
+              reasoning: 'Look up the weather first.',
+              details: [{ type: 'text', text: 'Look up the weather first.' }],
+            }),
+          ]}
+        />,
+      );
+      expect(json(container)).toHaveLength(0);
+      expect(screen.getByText('Look up the weather first.')).toBeTruthy();
+    });
+
+    it('says when the provider redacted the reasoning', () => {
+      render(
+        <SpanPayloadMessages
+          value={[storedAssistant({ reasoning: '', details: [{ type: 'redacted', data: 'opaque' }] })]}
+        />,
+      );
+      expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
+    });
+  });
+  describe('when a system message carries the skills catalog', () => {
+    const catalog = formatSkillsCatalog([
+      {
+        name: 'tailwind-v4',
+        description: 'Tailwind <v4> & CSS-first config',
+        location: '/skills/tailwind-v4/SKILL.md',
+        source: 'local',
+      },
+      { name: 'grill-me', description: 'Stress-test a plan', location: '/skills/grill-me/SKILL.md', source: 'local' },
+    ]);
+    const items = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll('[data-slot="span-skills"] li'), item => item.textContent);
+
+    it('lists the skills by name and description instead of the raw XML', () => {
+      const { container } = render(<SpanPayloadMessages value={[{ role: 'system', content: catalog }]} />);
+      expect(items(container)).toEqual(['grill-meStress-test a plan', 'tailwind-v4Tailwind <v4> & CSS-first config']);
+      expect(container.textContent).not.toContain('available_skills');
+      expect(container.textContent).not.toContain('SKILL.md');
+      expect(container.querySelectorAll('[data-slot="span-skills"] a')).toHaveLength(0);
+    });
+
+    it('names the message once when it is only the catalog', () => {
+      const { container } = render(<SpanPayloadMessages value={[{ role: 'system', content: catalog }]} />);
+      const labels = Array.from(container.querySelectorAll('[data-role="system"] > span'), label => label.textContent);
+      expect(labels).toEqual(['system · Skills (2)']);
+    });
+
+    it('keeps the text around the catalog', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[
+            {
+              role: 'system',
+              content: { format: 2, parts: [{ type: 'text', text: `You are Michel.\n\n${catalog}\n\nBe brief.` }] },
+            },
+          ]}
+        />,
+      );
+      expect(container.textContent).toMatch(/^systemYou are Michel\.Skills \(2\).*Be brief\.$/);
+    });
+
+    it('leaves a catalog it cannot read as text', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[{ role: 'system', content: '<available_skills>\nnothing\n</available_skills>' }]}
+        />,
+      );
+      expect(container.querySelector('[data-slot="span-skills"]')).toBeNull();
+      expect(container.textContent).toContain('nothing');
     });
   });
   describe('when user and assistant messages are recorded', () => {

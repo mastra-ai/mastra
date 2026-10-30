@@ -18,7 +18,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  *    `isFinal` only on the last.
  */
 describeForAllEngines('AIMock loop scenario: supervisor isTaskComplete', engine => {
-  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  // Inngest's agentic loop does not call onIterationComplete yet.
   const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
@@ -34,67 +34,61 @@ describeForAllEngines('AIMock loop scenario: supervisor isTaskComplete', engine 
   const taskCompleteChunks = (chunks: any[] | undefined) =>
     (chunks ?? []).filter(c => c.type === 'is-task-complete').map(c => c.payload);
 
-  itFailsOnInngest(
-    'resolves the model answer as final text and does not persist the report when the check passes',
-    async () => {
-      const answer = 'Both accounts are healthy. Nothing needs attention.';
-      const memory = new MockMemory();
-      const threadId = `itc-pass-${engine}`;
-      const resourceId = 'itc-res';
-      await memory.saveThread({
-        thread: { id: threadId, resourceId, title: 't', createdAt: new Date(), updatedAt: new Date() },
-      });
+  it('resolves the model answer as final text and does not persist the report when the check passes', async () => {
+    const answer = 'Both accounts are healthy. Nothing needs attention.';
+    const memory = new MockMemory();
+    const threadId = `itc-pass-${engine}`;
+    const resourceId = 'itc-res';
+    await memory.saveThread({
+      thread: { id: threadId, resourceId, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
 
-      const { output, requests } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Check the accounts.',
-        maxSteps: 4,
-        memory,
-        threadId,
-        resourceId,
-        errorProcessors: [],
-        isTaskComplete: { scorers: [scorer('always-complete', [{ score: 1, reason: 'Task is complete' }])] },
-        fixtures: llm => {
-          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: answer });
-        },
-      });
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Check the accounts.',
+      maxSteps: 4,
+      memory,
+      threadId,
+      resourceId,
+      errorProcessors: [],
+      isTaskComplete: { scorers: [scorer('always-complete', [{ score: 1, reason: 'Task is complete' }])] },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: answer });
+      },
+    });
 
-      expect(requests).toHaveLength(1);
-      expect(await output.text).toBe(answer);
+    expect(requests).toHaveLength(1);
+    expect(await output.text).toBe(answer);
 
-      const { messages } = await memory.recall({ threadId, resourceId });
-      const persisted = JSON.stringify(messages);
-      expect(persisted).toContain(answer);
-      expect(persisted).not.toContain('Completion Check Results');
-    },
-  );
+    const { messages } = await memory.recall({ threadId, resourceId });
+    const persisted = JSON.stringify(messages);
+    expect(persisted).toContain(answer);
+    expect(persisted).not.toContain('Completion Check Results');
+  });
 
-  itFailsOnInngest(
-    'resolves the last model answer as final text when the check keeps failing until maxSteps',
-    async () => {
-      const { output, requests } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Do the task.',
-        maxSteps: 2,
-        errorProcessors: [],
-        isTaskComplete: { scorers: [scorer('never-complete', [{ score: 0, reason: 'Not complete' }])] },
-        fixtures: llm => {
-          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Attempt one.' });
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Attempt two.' });
-        },
-      });
+  it('resolves the last model answer as final text when the check keeps failing until maxSteps', async () => {
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Do the task.',
+      maxSteps: 2,
+      errorProcessors: [],
+      isTaskComplete: { scorers: [scorer('never-complete', [{ score: 0, reason: 'Not complete' }])] },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Attempt one.' });
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Attempt two.' });
+      },
+    });
 
-      expect(requests).toHaveLength(2);
-      expect(JSON.stringify((requests[1]!.body as any).messages)).toContain('Completion Check Results');
-      const text = await output.text;
-      expect(text).not.toContain('Completion Check Results');
-      expect(text.endsWith('Attempt two.')).toBe(true);
-    },
-  );
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify((requests[1]!.body as any).messages)).toContain('Completion Check Results');
+    const text = await output.text;
+    expect(text).not.toContain('Completion Check Results');
+    expect(text.endsWith('Attempt two.')).toBe(true);
+  });
 
-  itFailsOnInngest('reports scorer id, reason and pass state in the is-task-complete chunk', async () => {
+  it('reports scorer id, reason and pass state in the is-task-complete chunk', async () => {
     const { chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -119,7 +113,7 @@ describeForAllEngines('AIMock loop scenario: supervisor isTaskComplete', engine 
     expect(payload.results[0].reason).toBe('Task clearly completed with all requirements met');
   });
 
-  itFailsOnInngest('reports suppressFeedback on the is-task-complete chunk (false by default)', async () => {
+  it('reports suppressFeedback on the is-task-complete chunk (false by default)', async () => {
     const run = (suppressFeedback?: boolean) =>
       runLoopScenario({
         engine,
@@ -143,7 +137,7 @@ describeForAllEngines('AIMock loop scenario: supervisor isTaskComplete', engine 
     expect(getDefault[0].suppressFeedback).toBe(false);
   });
 
-  itFailsOnInngest('reports maxIterationReached only on the iteration that hits maxSteps', async () => {
+  it('reports maxIterationReached only on the iteration that hits maxSteps', async () => {
     const { chunks, requests } = await runLoopScenario({
       engine,
       llm: getMock(),

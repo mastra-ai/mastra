@@ -25,6 +25,11 @@
     "moonshotai/Kimi-K2.6"
   ],
   "reasoning": {
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
     "Qwen/Qwen3.5-397B-A17B-FP8": [
       {
         "type": "toggle"
@@ -36,11 +41,6 @@
       }
     ],
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }

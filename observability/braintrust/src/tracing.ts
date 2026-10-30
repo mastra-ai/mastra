@@ -338,14 +338,12 @@ export class BraintrustExporter extends TrackingExporter<
         // External span detected - attach Mastra traces to it
         this.#externalSpan = externalSpan;
         return externalSpan;
-      } else {
-        // No external span - use provided logger
-        return this.#providedLogger!;
       }
-    } else {
-      // Use the local logger
-      return this.getLocalLogger();
+      // No external span - use provided logger
+      return this.#providedLogger!;
     }
+    // Use the local logger
+    return this.getLocalLogger();
   }
 
   protected override async _buildSpan(args: {
@@ -760,6 +758,7 @@ export class BraintrustExporter extends TrackingExporter<
         'usage',
         'parameters',
         'completionStartTime',
+        'timeToFirstTokenMs',
       ]);
       payload.metadata = {
         ...payload.metadata,
@@ -769,7 +768,7 @@ export class BraintrustExporter extends TrackingExporter<
       // For non-LLM spans, put all attributes in metadata
       payload.metadata = {
         ...payload.metadata,
-        ...attributes,
+        ...omitKeys(attributes, ['timeToFirstTokenMs']),
       };
     }
 

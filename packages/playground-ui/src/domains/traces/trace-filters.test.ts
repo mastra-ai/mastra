@@ -124,6 +124,10 @@ describe('createTraceFilterBarFields', () => {
     expect(byId('serviceName')).toBeUndefined();
   });
 
+  it('labels the span model field as Span Model', () => {
+    expect(byId('spans.model')?.label).toBe('Span Model');
+  });
+
   describe('when the server supports root duration predicates', () => {
     const rootDuration = createTraceFilterBarFields({
       availableRootEntityNames: [],
@@ -144,6 +148,34 @@ describe('createTraceFilterBarFields', () => {
   describe('when the server does not support root duration predicates', () => {
     it('does not offer a Duration (ms) field', () => {
       expect(byId('durationMs')).toBeUndefined();
+    });
+  });
+
+  describe('when the server supports outcome predicates', () => {
+    const withOutcome = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      withOutcomeFields: true,
+    });
+    const outcome = withOutcome.find(f => f.id === 'outcome');
+    const stopReason = withOutcome.find(f => f.id === 'stopReason');
+
+    it('offers free-text Outcome and Stop reason fields', () => {
+      expect(outcome?.label).toBe('Outcome');
+      expect(stopReason?.label).toBe('Stop reason');
+      expect(outcome?.strict).toBeFalsy();
+    });
+
+    it('reads a missing outcome as not recorded', () => {
+      expect(outcome?.operatorLabels).toEqual({ notExists: 'is not recorded' });
+      expect(outcome?.operators).toContain('notExists');
+    });
+  });
+
+  describe('when the server does not support outcome predicates', () => {
+    it('does not offer Outcome or Stop reason fields', () => {
+      expect(byId('outcome')).toBeUndefined();
+      expect(byId('stopReason')).toBeUndefined();
     });
   });
 
@@ -371,10 +403,10 @@ describe('createTraceFilterBarFields', () => {
       'resourceId',
       'threadId',
       'traceId',
-      'spans.model',
       'spans.provider',
       'spans.durationMs',
       'spans.error',
+      'spans.model',
       'spans.name',
       'spans.spanType',
       'scores.score',

@@ -209,6 +209,9 @@ Open [Studio](/docs/studio/overview) and select a workflow from the **Workflows*
 Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. Use state for tracking progress or accumulating results, or alternatively sharing configuration across the entire workflow.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const step1 = createStep({
   id: 'step-1',
   inputSchema: z.object({ message: z.string() }),
@@ -232,7 +235,10 @@ Visit [Workflow State](/docs/workflows/workflow-state) for complete documentatio
 
 Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
 
-```typescript {26} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
+```typescript {29} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
+
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -267,7 +273,7 @@ export const testWorkflow = createWorkflow({
 Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and shows up as a distinct workflow in logs and observability tools.
 
 ```typescript oxfmt:false {6} title="src/mastra/workflows/test-workflow.ts"
-import { cloneWorkflow } from "@mastra/core/workflows";
+import { cloneWorkflow, createWorkflow, createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({...});
 
@@ -546,6 +552,8 @@ When running the local mastra server, all active workflow runs will be restarted
 Use [RequestContext](/docs/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+
 export type UserTier = {
   'user-tier': 'enterprise' | 'pro'
 }

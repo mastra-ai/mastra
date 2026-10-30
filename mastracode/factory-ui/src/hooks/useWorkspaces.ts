@@ -154,6 +154,9 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.userSession(sessionId),
     queryFn: sessionId ? () => getUserSession(baseUrl, sessionId) : skipToken,
+    // A lazy page mounting after the session read failed must not read it again;
+    // reopening the session still does, since its key changes.
+    retryOnMount: false,
   });
 }
 

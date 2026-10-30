@@ -253,7 +253,6 @@ describe('captureSessionFilesystem across environment repositories', () => {
     dir: dirs[slug]!,
     branch: slug === 'acme/api' ? 'session-branch' : 'develop',
     defaultBranch: 'develop',
-    position: slugs.indexOf(slug) + 1,
     setupStatus: 'ok',
   });
 

@@ -42,3 +42,37 @@ describe('WorkflowsInMemory persistWorkflowSnapshot', () => {
     expect(new Date(second!.updatedAt).getTime()).toBeGreaterThan(createdAtBefore);
   });
 });
+
+describe('WorkflowsInMemory guarded snapshot writes', () => {
+  it('rejects a write whose expectedStatus does not match the persisted status', async () => {
+    const workflows = (await new InMemoryStore().getStore('workflows'))!;
+    const workflowName = 'wf';
+    const runId = 'run-guarded';
+
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: makeSnapshot(runId, 'canceled') });
+    const written = await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: makeSnapshot(runId, 'success'),
+      expectedStatus: ['running', 'success'],
+    });
+
+    expect(written).toBe(false);
+    expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('canceled');
+  });
+
+  it('inserts a new run regardless of expectedStatus', async () => {
+    const workflows = (await new InMemoryStore().getStore('workflows'))!;
+
+    const written = await workflows.persistWorkflowSnapshot({
+      workflowName: 'wf',
+      runId: 'run-new',
+      snapshot: makeSnapshot('run-new', 'running'),
+      expectedStatus: ['running'],
+    });
+
+    expect(written).toBe(true);
+    expect(await workflows.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'run-new' })).toBe('running');
+    expect(await workflows.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'missing' })).toBeNull();
+  });
+});

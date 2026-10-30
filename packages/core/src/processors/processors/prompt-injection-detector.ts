@@ -402,10 +402,10 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         if (result.rewritten_content) {
           console.info(`[PromptInjectionDetector] Rewrote message: ${alertMessage}`);
           return this.createRewrittenMessage(message, result.rewritten_content);
-        } else {
-          console.warn(`[PromptInjectionDetector] No rewrite available, filtering: ${alertMessage}`);
-          return null; // Fallback to filtering if no rewrite available
         }
+        console.warn(`[PromptInjectionDetector] No rewrite available, filtering: ${alertMessage}`);
+        return null; // Fallback to filtering if no rewrite available
+
       default:
         return null;
     }

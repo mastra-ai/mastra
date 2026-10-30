@@ -1,11 +1,16 @@
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
+import {
+  createStep as createEventedStep,
+  createWorkflow as createEventedWorkflow,
+} from '@mastra/core/workflows/evented';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
@@ -1365,6 +1370,74 @@ describe('vNext Workflow Handlers', () => {
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
     });
+
+    it('should settle an evented run owned by another instance as canceled', async () => {
+      const storage = new MockStore();
+      const pubsub = new EventEmitterPubSub();
+      let markEntered!: () => void;
+      const entered = new Promise<void>(resolve => (markEntered = resolve));
+
+      const buildEventedWorkflow = () =>
+        createEventedWorkflow({ id: 'evented-cancel', inputSchema: z.object({}), outputSchema: z.object({}) })
+          .then(
+            createEventedStep({
+              id: 'blocking',
+              inputSchema: z.object({}),
+              outputSchema: z.object({}),
+              execute: async ({ abortSignal }) => {
+                markEntered();
+                await new Promise<void>(resolve => {
+                  const timer = setTimeout(resolve, 10_000);
+                  abortSignal.addEventListener('abort', () => {
+                    clearTimeout(timer);
+                    resolve();
+                  });
+                });
+                return {};
+              },
+            }),
+          )
+          .commit();
+
+      // Two replicas sharing storage and pubsub, both running workers; the cancel request lands on the one
+      // that does not own the run.
+      const ownerMastra = new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        workflows: { 'evented-cancel': buildEventedWorkflow() },
+      });
+      const otherMastra = new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        workflows: { 'evented-cancel': buildEventedWorkflow() },
+      });
+      await ownerMastra.startWorkers();
+      await otherMastra.startWorkers();
+
+      try {
+        const run = await ownerMastra.getWorkflow('evented-cancel').createRun({ runId: 'evented-remote-cancel' });
+        const resultPromise = run.start({ inputData: {} });
+        await entered;
+
+        const response = await CANCEL_WORKFLOW_RUN_ROUTE.handler({
+          ...createTestServerContext({ mastra: otherMastra }),
+          workflowId: 'evented-cancel',
+          runId: 'evented-remote-cancel',
+        });
+        expect(response).toEqual({ message: 'Workflow run cancelled' });
+
+        const result = await Promise.race([
+          resultPromise,
+          new Promise<{ status: string }>(resolve => setTimeout(() => resolve({ status: 'timed out' }), 5_000)),
+        ]);
+        expect(result.status).toBe('canceled');
+      } finally {
+        await otherMastra.stopWorkers();
+        await ownerMastra.stopWorkers();
+      }
+    }, 15_000);
   });
 
   describe('STREAM_WORKFLOW_ROUTE', () => {

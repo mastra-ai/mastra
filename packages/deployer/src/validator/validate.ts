@@ -51,12 +51,10 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
     childProcess.on('close', code => {
       if (code === 0) {
         resolve();
+      } else if (validationError) {
+        reject(new ValidationError(validationError));
       } else {
-        if (validationError) {
-          reject(new ValidationError(validationError));
-        } else {
-          reject(new Error(stderr));
-        }
+        reject(new Error(stderr));
       }
     });
   });
@@ -108,6 +106,7 @@ globalThis.__dirname = dirname(__filename);
     {
       env: {
         ...process.env,
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string coercion at the child-process environment boundary.
         MODULE_MAP: `${moduleResolveMapLocation}`,
         STUBBED_EXTERNALS: JSON.stringify(stubbedExternals),
       },

@@ -10,10 +10,11 @@ import type {
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import { z } from 'zod/v4';
+import type { Agent } from '../agent';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
-import type { AgentSignalType, CreatedAgentSignal } from '../agent/signals';
+import type { PendingSignalListener, AgentSignalType, CreatedAgentSignal } from '../agent/signals';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -140,6 +141,8 @@ export type StreamInternal = {
   stepUsage?: LanguageModelUsage;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
+  /** @deprecated Use `runScope.get(STEP_RESPONSE_MESSAGE_ID_KEY)` from `loop/run-scope-keys`. */
+  stepResponseMessageId?: string;
   /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
   eagerToolExecutionCoordinator?: import('./workflows/agentic-execution/eager-tool-execution').EagerToolExecutionCoordinator;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
@@ -168,7 +171,7 @@ export type StreamInternal = {
   /** @deprecated Use `runScope.get(DRAIN_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   /** @deprecated Use `runScope.get(SUBSCRIBE_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
-  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
+  subscribePendingSignals?: (runId: string, listener: PendingSignalListener) => () => void;
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */
@@ -231,6 +234,16 @@ export type AgentLoopResumeClaim = {
 };
 
 export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
+  /** @internal Live per-run tracing state, never part of step I/O or snapshots. */
+  tracingScope?: import('../mastra/run-scope').RunScope;
+  /** @internal End owned spans when the stream fails without a subsequent finish callback. */
+  onTracingTerminalError?: (error: Error) => void;
+  /** @internal Observes a terminal stream tripwire without invoking user lifecycle hooks. */
+  onTracingTripwire?: (
+    tripwire: import('../stream/types').StepTripwireData,
+    usage: import('../stream/types').LanguageModelUsage,
+    text: string,
+  ) => void;
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;
@@ -339,6 +352,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Keyed by processor ID.
    */
   processorStates?: Map<string, ProcessorState>;
+  /** The agent running this loop, passed to every processor hook as `agent`. */
+  agent?: Agent<any, any, any, any>;
 } & Partial<ObservabilityContext>;
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Chat, Adapter, Attachment, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
@@ -23,6 +24,10 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
+import { WORKSPACE_TOOLS } from '../workspace/constants';
+import { CompositeFilesystem } from '../workspace/filesystem/composite-filesystem';
+import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
+import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
@@ -34,6 +39,7 @@ import {
   extractUrls,
   findInlineLinkRule,
   headContentType,
+  isTextMimeType,
   normalizeInlineLinks,
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
@@ -80,11 +86,21 @@ export interface ChannelLogContext {
 
 type ChannelAgent = Pick<
   Agent<any, any, any, any>,
-  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory'
+  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory' | 'getWorkspace'
 >;
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
+
+/** Size cap for text attachments decoded into the agent's prompt. */
+const MAX_TEXT_ATTACHMENT_BYTES = 128 * 1024;
+
+/** Text and binary attachments larger than this are not downloaded or saved. */
+const MAX_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+
+/** Default total for attachments stored under `channel-attachments/` in a workspace. */
+const DEFAULT_MAX_ATTACHMENT_STORAGE_BYTES = 100 * 1024 * 1024;
+const ATTACHMENT_DIR = 'channel-attachments';
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -117,6 +133,8 @@ export class AgentChannels {
   private shouldInline: (mimeType: string) => boolean;
   /** Inline-link rules for promoting URLs in message text to file parts. */
   private inlineLinkRules: InlineLinkRule[] | undefined;
+  /** Total bytes of attachments that may be stored under `channel-attachments/`. */
+  private maxAttachmentStorageBytes: number;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
   /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
@@ -187,6 +205,7 @@ export class AgentChannels {
     this.threadContext = config.threadContext ?? {};
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
+    this.maxAttachmentStorageBytes = config.maxAttachmentStorageBytes ?? DEFAULT_MAX_ATTACHMENT_STORAGE_BYTES;
     this.toolsEnabled = config.tools !== false;
     this.resolveResourceId = config.resolveResourceId;
     this.resolveThreadId = config.resolveThreadId;
@@ -484,7 +503,8 @@ export class AgentChannels {
       });
 
       // Register handlers with optional overrides
-      const { onDirectMessage, onMention, onSubscribedMessage, onSlashCommand, onAction } = this.handlerOverrides;
+      const { onDirectMessage, onMention, onMessage, onSubscribedMessage, onSlashCommand, onAction } =
+        this.handlerOverrides;
 
       // Per-message dispatch scope. The request context and the handler context
       // MUST be built per message, never once at initialize() time: a custom
@@ -494,11 +514,24 @@ export class AgentChannels {
       // when the Chat SDK batched the dispatch under a `burst`/`debounce`/`queue`
       // concurrency strategy; `batchIds` covers the whole batch so a first
       // mention never re-fetches batched messages as thread history.
-      const beginMessage = (skipped: readonly Message[] = [], batchIds?: ReadonlySet<string>) => {
+      const beginMessage = (
+        skipped: readonly Message[] = [],
+        batchIds?: ReadonlySet<string>,
+        eventType?: ChannelContext['eventType'],
+      ) => {
         const requestContext = new RequestContext();
         const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
+          this.handleChatMessage(
+            chatThread,
+            message,
+            mastra,
+            requestContext,
+            signalMetadata,
+            skipped,
+            batchIds,
+            eventType,
+          );
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
@@ -516,6 +549,7 @@ export class AgentChannels {
         message: Message,
         skipped: readonly Message[] | undefined,
         handler: ChannelHandlerConfig,
+        route: 'direct' | 'mention' | 'subscribed' | 'message',
       ) => {
         const all = [...(skipped ?? []), message];
         const batchIds = new Set(all.map(m => m.id));
@@ -529,9 +563,27 @@ export class AgentChannels {
         let failure: { err: unknown } | undefined;
         for (const run of runs) {
           const runMessage = run[run.length - 1]!;
-          const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds);
+          let runHandler = handler;
+          let runEventType: ChannelContext['eventType'] = thread.isDM || route === 'message' ? 'message' : 'mention';
+          // The SDK selects one handler for the whole batch if any message is
+          // a mention. Preserve DM/subscription precedence, but when onMessage
+          // is opted in, route each new sender run independently so unmentioned
+          // messages go through its filter. Without onMessage, unmentioned runs
+          // keep reaching the batch's handler as before.
+          if (!thread.isDM && (route === 'mention' || route === 'message')) {
+            if (run.some(m => m.isMention)) {
+              if (onMention === false) continue;
+              runHandler = onMention;
+              runEventType = 'mention';
+            } else if (typeof onMessage === 'function') {
+              runHandler = onMessage;
+              runEventType = 'message';
+            }
+          }
+          if (runHandler === false) continue;
+          const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds, runEventType);
           try {
-            if (typeof handler === 'function') await handler(thread, runMessage, defaultHandler, handlerContext);
+            if (typeof runHandler === 'function') await runHandler(thread, runMessage, defaultHandler, handlerContext);
             else await defaultHandler(thread, runMessage);
           } catch (err) {
             // A host handler that throws for one sender must not silence later
@@ -560,17 +612,29 @@ export class AgentChannels {
 
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message, _channel, context) =>
-          dispatchBatch(thread, message, context?.skipped, onDirectMessage),
+          dispatchBatch(thread, message, context?.skipped, onDirectMessage, 'direct'),
         );
       }
 
-      if (onMention !== false) {
-        chat.onNewMention((thread, message, context) => dispatchBatch(thread, message, context?.skipped, onMention));
+      // With onMention disabled, still register the mention route when onMessage
+      // is opted in: the SDK sends a batch ending in a mention there and skips
+      // the catch-all, so its unmentioned sender runs would otherwise be lost.
+      // Per-run routing above drops the disabled runs.
+      if (onMention !== false || typeof onMessage === 'function') {
+        chat.onNewMention((thread, message, context) =>
+          dispatchBatch(thread, message, context?.skipped, onMention, 'mention'),
+        );
       }
 
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message, context) =>
-          dispatchBatch(thread, message, context?.skipped, onSubscribedMessage),
+          dispatchBatch(thread, message, context?.skipped, onSubscribedMessage, 'subscribed'),
+        );
+      }
+
+      if (typeof onMessage === 'function') {
+        chat.onNewMessage(/[\s\S]*/, (thread, message, context) =>
+          dispatchBatch(thread, message, context?.skipped, onMessage, 'message'),
         );
       }
 
@@ -626,7 +690,7 @@ export class AgentChannels {
               threadId: (event.thread as Thread | null)?.id,
               messageId,
               actionId,
-              toolCallId: actionId.split(':')[1],
+              toolCallId: actionId.slice(actionId.indexOf(':') + 1),
               actorId: event.user?.userId,
             };
             try {
@@ -729,7 +793,7 @@ export class AgentChannels {
                             )
                             .filter((id): id is string => !!id),
                         );
-                        if (!requesterId && authors.size > 1) {
+                        if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
                           this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                           return;
                         }
@@ -750,7 +814,7 @@ export class AgentChannels {
               // Only the user whose message triggered the tool call may answer
               // its approval card. Skip the check when either identity is unknown.
               const actorId = event.user?.userId;
-              if (requesterId && actorId && requesterId !== actorId) {
+              if (adapterConfig?.toolApprovers !== 'anyone' && requesterId && actorId && requesterId !== actorId) {
                 this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
                   ...actionEventContext,
                   requesterId,
@@ -927,7 +991,7 @@ export class AgentChannels {
                   const error = err instanceof Error ? err : new Error(String(err));
                   const adapterConfig = this.adapterConfigs[event.adapter.name];
                   const errorMessage = adapterConfig?.formatError
-                    ? adapterConfig.formatError(error)
+                    ? adapterConfig.formatError(error, { requestContext: handlerContext.requestContext })
                     : `❌ Error: ${error.message}`;
                   await thread.post(errorMessage);
                 }
@@ -1316,15 +1380,30 @@ export class AgentChannels {
     signalMetadata: Record<string, unknown>,
     skipped: readonly Message[] = [],
     batchIds?: ReadonlySet<string>,
+    eventType?: ChannelContext['eventType'],
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
+      await this.processChatMessage(
+        chatThread,
+        message,
+        mastra,
+        requestContext,
+        signalMetadata,
+        skipped,
+        batchIds,
+        eventType,
+      );
     } catch (err) {
-      await this.handleRunError(chatThread, message, err);
+      await this.handleRunError(chatThread, message, err, requestContext);
     }
   }
 
-  private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
+  private async handleRunError(
+    chatThread: Thread,
+    message: Message,
+    err: unknown,
+    requestContext: RequestContext,
+  ): Promise<void> {
     const error = err instanceof Error ? err : new Error(String(err));
     // A refused request is not a malfunction: the host decided this sender
     // gets nothing. Log it and stop — posting would echo the host's
@@ -1366,7 +1445,9 @@ export class AgentChannels {
     this.log('error', `Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
     try {
       const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
-      const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
+      const errorMessage = adapterConfig?.formatError
+        ? adapterConfig.formatError(error, { requestContext })
+        : `❌ Error: ${error.message}`;
       await chatThread.post(errorMessage);
     } catch (postErr) {
       this.log('warn', 'Failed to post error message to thread', {
@@ -1385,6 +1466,7 @@ export class AgentChannels {
     signalMetadata: Record<string, unknown> = {},
     skipped: readonly Message[] = [],
     historyExcludeIds: ReadonlySet<string> = new Set([...skipped, message].map(m => m.id)),
+    eventType: ChannelContext['eventType'] = chatThread.isDM ? 'message' : 'mention',
   ): Promise<void> {
     const platform = chatThread.adapter.name;
     // Messages batched by a concurrency strategy, oldest first, then the current one.
@@ -1404,6 +1486,23 @@ export class AgentChannels {
       });
       return;
     }
+
+    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
+      chatThread,
+      platform,
+      eventType,
+      messageId: message.id,
+      actor: message.author,
+    });
+
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here. Set it before thread mapping and attachments: the
+    // workspace caches the filesystem it resolves per request context, so a
+    // channel-aware resolver must see the channel on its first call, even
+    // from a resolveResourceId/resolveThreadId hook.
+    requestContext.set('channel', channelContext);
 
     // Map to a Mastra thread for memory/history.
     // chatThread.id encodes channel + threadTs, so it's stable per conversation:
@@ -1472,7 +1571,8 @@ export class AgentChannels {
         const hasHistory = history.root !== undefined || history.recent.length > 0;
         if (hasHistory) {
           const persisted = await this.persistThreadHistorySignals({
-            buildSignals: () => this.buildThreadHistorySignals({ history, chatThread, platform, mastraThread }),
+            buildSignals: () =>
+              this.buildThreadHistorySignals({ history, chatThread, platform, mastraThread, requestContext }),
             requestContext,
             thread: mastraThread,
             memory: { thread: mastraThread.id, resource: threadResourceId },
@@ -1506,7 +1606,7 @@ export class AgentChannels {
     });
     const parts: Exclude<AgentSignalContents, string> = [
       { type: 'text', text },
-      ...(await this.attachmentsToParts(attachments)),
+      ...(await this.attachmentsToParts(attachments, requestContext)),
     ];
 
     // Promote URLs in message text to file parts based on `inlineLinks` config.
@@ -1564,20 +1664,6 @@ export class AgentChannels {
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
 
-    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
-      chatThread,
-      platform,
-      eventType: chatThread.isDM ? 'message' : 'mention',
-      messageId: message.id,
-      actor: message.author,
-    });
-
-    // NOTE: `requestContext` is constructed per message at the handler boundary
-    // (see `beginMessage` in initialize) so a custom handler can contribute to
-    // it — e.g. stamping the tenant — before the run dispatches. Core only
-    // enriches it here.
-    requestContext.set('channel', channelContext);
-
     // Stash the per-event render deps so `ChatChannelOutputProcessor` can
     // route the agent's stream to the chat platform. The processor opens an
     // async queue on the first chunk and hands the iterable to the existing
@@ -1621,12 +1707,20 @@ export class AgentChannels {
   /**
    * Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
    * Inline types are sent as file parts (the LLM adapter converts image/* to
-   * image content automatically). Non-inline types are described as text
+   * image content automatically). Non-inline text-like types (text/*, JSON,
+   * YAML, XML, …) that come with an authenticated `fetchData` are decoded and
+   * sent as text. Other non-inline types are described as text
    * metadata so the agent is aware of them without crashing models that
-   * reject unsupported media (e.g. OpenAI rejects video/mp4).
+   * reject unsupported media (e.g. OpenAI rejects video/mp4). When the agent
+   * has a writable workspace, those with `fetchData` are saved there and the
+   * description carries the workspace path instead of the URL.
    */
-  private async attachmentsToParts(attachments: Attachment[]): Promise<Exclude<AgentSignalContents, string>> {
+  private async attachmentsToParts(
+    attachments: Attachment[],
+    requestContext: RequestContext,
+  ): Promise<Exclude<AgentSignalContents, string>> {
     const parts: Exclude<AgentSignalContents, string> = [];
+    let filesystem: Promise<WorkspaceFilesystem | undefined> | undefined;
     for (const att of attachments) {
       if (!att.url && !att.fetchData) continue;
       const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
@@ -1669,14 +1763,124 @@ export class AgentChannels {
             text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
           });
         }
+      } else if (
+        att.fetchData &&
+        isTextMimeType(mimeType) &&
+        !(att.size !== undefined && att.size > MAX_ATTACHMENT_DOWNLOAD_BYTES)
+      ) {
+        // Text-like files behind an authenticated fetch (e.g. Slack's
+        // url_private) are decoded and handed to the agent as text, since the
+        // URL alone is unreadable without the adapter's credentials.
+        try {
+          const buf = await att.fetchData();
+          const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+          const truncated = bytes.byteLength > MAX_TEXT_ATTACHMENT_BYTES;
+          const content = new TextDecoder().decode(truncated ? bytes.subarray(0, MAX_TEXT_ATTACHMENT_BYTES) : bytes);
+          parts.push({
+            type: 'text',
+            text:
+              `[Attached file: ${filename} (${mimeType})]\n${content}` +
+              (truncated
+                ? `\n[Truncated: showing the first ${MAX_TEXT_ATTACHMENT_BYTES} of ${bytes.byteLength} bytes]`
+                : ''),
+          });
+        } catch (err) {
+          this.log('warn', 'Attachment fetchData failed', { mimeType, error: err });
+          parts.push({
+            type: 'text',
+            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
+          });
+        }
       } else {
+        // Binary files behind an authenticated fetch (e.g. Slack's url_private)
+        // go to the workspace so tools can open them. The URL stays as the
+        // fallback: some adapters with fetchData (Discord) have public URLs.
+        let savedPath: string | undefined;
+        if (att.fetchData && !(att.size !== undefined && att.size > MAX_ATTACHMENT_DOWNLOAD_BYTES)) {
+          filesystem ??= this.resolveAttachmentFilesystem(requestContext);
+          const fs = await filesystem;
+          if (fs) savedPath = await this.saveAttachmentToWorkspace(fs, att, att.fetchData, filename, mimeType);
+        }
         parts.push({
           type: 'text',
-          text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
+          text: savedPath
+            ? `[Attached file: ${filename} (${mimeType}) — saved in the workspace at ${savedPath}]`
+            : `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
         });
       }
     }
     return parts;
+  }
+
+  /**
+   * The agent's workspace filesystem when one is configured and writable, and
+   * the workspace lets the agent write files without approval. Saving follows
+   * the same policy as the write tool so a deployer who disables or gates
+   * writes doesn't get channel participants' files written anyway.
+   */
+  private async resolveAttachmentFilesystem(requestContext: RequestContext): Promise<WorkspaceFilesystem | undefined> {
+    try {
+      const workspace = await this.getDispatchAgent()?.getWorkspace?.({ requestContext });
+      if (!workspace) return undefined;
+      const writeConfig = await resolveToolConfig(workspace.getToolsConfig(), WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE, {
+        requestContext: Object.fromEntries(requestContext.entries()),
+        workspace,
+      });
+      if (!writeConfig.enabled || writeConfig.requireApproval !== false) return undefined;
+      const fs = await workspace.resolveFilesystem({ requestContext });
+      return fs && !fs.readOnly ? fs : undefined;
+    } catch (err) {
+      this.log('warn', 'Could not resolve the agent workspace for attachments', { error: err });
+      return undefined;
+    }
+  }
+
+  /**
+   * Save an attachment under `channel-attachments/<hash>/<name>` (inside the
+   * first writable mount of a composite filesystem) and return
+   * the path, or undefined when it cannot be downloaded or written, or when
+   * it would push the folder over `maxAttachmentStorageBytes`. The folder
+   * hashes the URL so history walks reuse a saved file without refetching;
+   * attachments without a URL hash their downloaded bytes, so different
+   * files never share a path.
+   */
+  private async saveAttachmentToWorkspace(
+    fs: WorkspaceFilesystem,
+    att: Attachment,
+    fetchData: () => Promise<Buffer | ArrayBuffer>,
+    filename: string,
+    mimeType: string,
+  ): Promise<string | undefined> {
+    const dir = attachmentDirFor(fs);
+    if (!dir) return undefined;
+    const safeName = filename.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '') || 'file';
+    const pathFor = (source: string | Uint8Array) =>
+      `${dir}/${createHash('sha256').update(source).digest('hex').slice(0, 16)}/${safeName}`;
+    const limit = this.maxAttachmentStorageBytes;
+    const overLimit = (used: number, size: number) => {
+      if (used + size <= limit) return false;
+      this.log('warn', 'Attachment storage limit reached, not saved', { mimeType, bytes: size, used, limit });
+      return true;
+    };
+    try {
+      if (att.url && (await fs.exists(pathFor(att.url)))) return pathFor(att.url);
+      const used = await storedAttachmentBytes(fs, dir);
+      if (att.size !== undefined && overLimit(used, att.size)) return undefined;
+      const buf = await fetchData();
+      const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+      if (bytes.byteLength > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
+        this.log('warn', 'Attachment exceeds the download ceiling, not saved', { mimeType, bytes: bytes.byteLength });
+        return undefined;
+      }
+      const path = pathFor(att.url ?? bytes);
+      if (!att.url && (await fs.exists(path))) return path;
+      if (overLimit(used, bytes.byteLength)) return undefined;
+      await fs.writeFile(path, bytes, { recursive: true, mimeType });
+      return path;
+    } catch (err) {
+      this.log('warn', 'Attachment could not be saved to the workspace', { mimeType, error: err });
+      return undefined;
+    }
   }
 
   /**
@@ -1690,8 +1894,9 @@ export class AgentChannels {
     chatThread: Thread;
     platform: string;
     mastraThread: Pick<StorageThreadType, 'id'>;
+    requestContext: RequestContext;
   }): Promise<AgentSignalInput[]> {
-    const { history, chatThread, platform, mastraThread } = args;
+    const { history, chatThread, platform, mastraThread, requestContext } = args;
     const ordered: Array<{ message: Message; gapAfter: boolean }> = [];
     if (history.root) ordered.push({ message: history.root, gapAfter: history.omitted > 0 });
     for (const message of history.recent) ordered.push({ message, gapAfter: false });
@@ -1720,7 +1925,7 @@ export class AgentChannels {
       const text = messageText(message);
       const parts: Exclude<AgentSignalContents, string> = [
         ...(text ? [{ type: 'text' as const, text }] : []),
-        ...(await this.attachmentsToParts(message.attachments ?? [])),
+        ...(await this.attachmentsToParts(message.attachments ?? [], requestContext)),
       ];
       if (parts.length > 0) {
         const { attributes, providerOptions } = await this.buildEventContext({
@@ -2516,4 +2721,27 @@ function parseLastSender(value: unknown): LastSender | undefined {
   const { author, raw } = value as Partial<LastSender>;
   if (!author || typeof author.userId !== 'string') return undefined;
   return { author, raw: raw && typeof raw === 'object' ? raw : {} };
+}
+
+/**
+ * Folder for saved attachments. A composite filesystem only accepts paths
+ * under one of its mounts, so the folder goes in the first writable mount.
+ */
+function attachmentDirFor(fs: WorkspaceFilesystem): string | undefined {
+  if (!(fs instanceof CompositeFilesystem)) return ATTACHMENT_DIR;
+  // A "/" mount is skipped: CompositeFilesystem only routes the exact path "/" to it.
+  const mount = fs.mountPaths.find(path => path !== '/' && !fs.mounts.get(path)?.readOnly);
+  return mount === undefined ? undefined : `${mount}/${ATTACHMENT_DIR}`;
+}
+
+/** Total size of the files under `dir` (0 when the folder doesn't exist yet). */
+async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir: string, root = true): Promise<number> {
+  if (root && !(await fs.exists(dir))) return 0;
+  let total = 0;
+  for (const entry of await fs.readdir(dir)) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.type === 'directory') total += await storedAttachmentBytes(fs, path, false);
+    else total += entry.size ?? (await fs.stat(path)).size;
+  }
+  return total;
 }

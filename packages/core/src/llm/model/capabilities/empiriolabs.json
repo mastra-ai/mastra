@@ -1,6 +1,5 @@
 {
   "attachment": [
-    "deepseek-v4-1-flash",
     "deepseek-v4-1-flash-1017",
     "fugu-max",
     "fugu-ultra-v1-0",
@@ -51,7 +50,6 @@
     "step-5-preview"
   ],
   "temperature": [
-    "deepseek-v4-1-flash",
     "deepseek-v4-1-flash-1017",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -61,6 +59,7 @@
     "glm-4-5-flash",
     "glm-4-6v-flash",
     "glm-4-7-flash",
+    "glm-4-7-flashx",
     "glm-5-1",
     "glm-5-2",
     "glm-5-3",
@@ -108,7 +107,6 @@
     "step-5-preview"
   ],
   "structuredOutput": [
-    "deepseek-v4-1-flash",
     "deepseek-v4-1-flash-1017",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -121,6 +119,7 @@
     "glm-4-5-flash",
     "glm-4-6v-flash",
     "glm-4-7-flash",
+    "glm-4-7-flashx",
     "glm-5-1",
     "glm-5-2",
     "glm-5-3",
@@ -165,28 +164,12 @@
     "step-5-preview"
   ],
   "reasoning": {
-    "seed-2-0-mini": [
+    "mimo-v2-6-pro-ultraspeed": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
-    "fugu-ultra-v2-0": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "qwen3-8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "glm-5-1": [
+    "qwen3-7-plus": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -194,120 +177,7 @@
       {
         "type": "budget_tokens",
         "min": 1,
-        "max": 38912
-      }
-    ],
-    "mimo-v2-6-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-6-plus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "fugu-ultra-v1-0": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "muse-spark-1-1": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "qwen3-5-9b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 32768
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3-5-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 81920
-      }
-    ],
-    "glm-4-5-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "fugu-max": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "gemma-4-26b-a4b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3-7-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 64000
-      }
-    ],
-    "qwen3-5-122b-a10b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 80000
-      }
-    ],
-    "seed-2-0-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "max": 262144
       }
     ],
     "deepseek-v4-pro": [
@@ -321,13 +191,105 @@
         "max": 393216
       }
     ],
-    "seed-2-0-code": [
+    "minimax-m3": [
       {
         "type": "toggle"
+      }
+    ],
+    "muse-spark-1-3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-4-7-flashx": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-7-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
       },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 262144
+      }
+    ],
+    "qwen3-5-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "qwen3-7-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 131072
+      }
+    ],
+    "gemma-4-26b-a4b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "qwen3-8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "minimax-m3-1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3-6-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "glm-5-1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 38912
+      }
+    ],
+    "step-5-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "qwen3-8-max": [
@@ -341,18 +303,7 @@
         "max": 262144
       }
     ],
-    "glm-4-7-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5-3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4-1-flash": [
+    "qwen3-6-27b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -360,20 +311,21 @@
       {
         "type": "budget_tokens",
         "min": 1,
-        "max": 393216
+        "max": 131072
       }
     ],
-    "qwen3-5-flash": [
+    "glm-4-5-flash": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 81920
       }
     ],
-    "qwen3-5-35b-a3b": [
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3-6-plus": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -381,68 +333,12 @@
       {
         "type": "budget_tokens",
         "min": 1,
-        "max": 80000
+        "max": 131072
       }
     ],
     "mimo-v2-6-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "qwen3-8-omni-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 262144
-      }
-    ],
-    "muse-spark-1-3": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "mimo-v2-6-pro-ultraspeed": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "fugu-ultra-v1-1": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "qwen3-5-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 80000
-      }
-    ],
-    "qwen3-6-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 64000
       }
     ],
     "qwen3-8-max-0902": [
@@ -456,22 +352,76 @@
         "max": 262144
       }
     ],
-    "step-3-7-flash": [
+    "fugu-ultra-v1-1": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3-6-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "values": ["high", "xhigh", "max"]
       }
     ],
     "glm-5-3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3-5-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "glm-4-7-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2-6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "step-3-7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3-5-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "qwen3-5-397b-a17b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "fugu-ultra-v1-0": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
       }
     ],
     "seed-2-0-lite": [
@@ -483,22 +433,15 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "step-3-5-flash-2603": [
+    "fugu-max": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["high", "xhigh", "max"]
       }
     ],
-    "muse-spark-1-2": [
+    "glm-4-6v-flash": [
       {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
     "deepseek-v4-pro-0813": [
@@ -523,15 +466,19 @@
         "max": 32768
       }
     ],
-    "qwen3-7-flash": [
+    "step-3-5-flash-2603": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "values": ["low", "high"]
+      }
+    ],
+    "seed-2-0-pro": [
+      {
+        "type": "toggle"
       },
       {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 131072
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "seed-2-1-turbo": [
@@ -543,12 +490,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-4-6v-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-flash-0731": [
+    "deepseek-v4-1-flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -559,35 +501,7 @@
         "max": 393216
       }
     ],
-    "qwen3-7-plus": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 256000
-      }
-    ],
-    "qwen3-6-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 80000
-      }
-    ],
-    "minimax-m3-1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "kimi-k2-6": [
+    "qwen3-5-122b-a10b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -596,6 +510,26 @@
         "type": "budget_tokens",
         "min": 1,
         "max": 81920
+      }
+    ],
+    "qwen3-6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 64000
+      }
+    ],
+    "seed-2-0-mini": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "qwen3-8-flash": [
@@ -609,7 +543,19 @@
         "max": 262144
       }
     ],
-    "qwen3-5-27b": [
+    "muse-spark-1-2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "fugu-ultra-v2-0": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
+      }
+    ],
+    "qwen3-8-omni-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -617,10 +563,41 @@
       {
         "type": "budget_tokens",
         "min": 1,
-        "max": 80000
+        "max": 262144
       }
     ],
-    "deepseek-v4-1-flash-1017": [
+    "glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2-6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-5-9b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 32768
+      }
+    ],
+    "seed-2-0-code": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4-flash-0731": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -629,6 +606,28 @@
         "type": "budget_tokens",
         "min": 1,
         "max": 393216
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3-5-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "muse-spark-1-1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

@@ -26,20 +26,6 @@ export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(i
   label: BOARD_STAGE_LABELS[id],
 }));
 
-/**
- * Stages that hold work in the pipeline, in column order — the board minus its
- * terminal columns and minus `intake`.
- *
- * Intake is left out because the Board's Intake column merges persisted cards
- * with live GitHub/Linear candidates that have no `work_items` row yet, so any
- * aggregation over persisted rows undercounts it. Charting it means merging the
- * live candidates in first, which needs its own age semantics (upstream open
- * date vs. time in stage).
- */
-export const PIPELINE_STAGES: BoardStageId[] = FACTORY_RULE_STAGES.filter(
-  id => id !== 'intake' && !isTerminalStage(id),
-);
-
 /** Stages where the work has stopped for good. */
 export function isTerminalStage(stage: string): boolean {
   return stage === 'done' || stage === 'canceled';

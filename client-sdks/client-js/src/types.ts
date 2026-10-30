@@ -33,7 +33,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-import type { ChunkType, ThreadHistoryChunk } from '@mastra/core/stream';
+import type { ChunkType, ThreadHistoryChunk, ThreadRunStatusChunk } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { SerializedStepFlowEntry, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -147,6 +147,8 @@ export interface SubscribeAgentThreadParams {
    * run parts; parts already covered by that history are not replayed.
    */
   withInitialHistory?: boolean | { perPage?: number };
+  /** Emit thread-run-status chunks, including retained outcomes. Defaults to false. */
+  withRunStatus?: boolean;
 }
 
 export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
@@ -171,9 +173,11 @@ export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
 
-export interface ProcessAgentThreadStreamOptions {
-  /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
-  onChunk: (chunk: ChunkType | ThreadHistoryChunk) => void | Promise<void>;
+export interface ProcessAgentThreadStreamOptions<WITH_RUN_STATUS extends boolean = false> {
+  /** Receives history and run status chunks only when requested by the subscription. */
+  onChunk: (
+    chunk: ChunkType | ThreadHistoryChunk | (WITH_RUN_STATUS extends true ? ThreadRunStatusChunk : never),
+  ) => void | Promise<void>;
   reconnect?:
     | boolean
     | {
@@ -2560,3 +2564,15 @@ export type SendNotificationInput = GeneratedRequest<
 
 export type SendNotificationResult =
   GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>;
+
+// Saved views: a named copy of an observability list page's URL state.
+export type {
+  FilterGroup,
+  FilterNode,
+  FilterToken,
+  SavedViewColumn,
+  SavedViewDateRange,
+  SavedViewPage,
+  SavedViewSort,
+  SavedViewState,
+} from '@mastra/core/storage';

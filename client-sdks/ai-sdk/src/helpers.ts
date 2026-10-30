@@ -212,7 +212,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'reasoning-signature':
-      return;
+      return undefined;
     // return {
     //   type: 'reasoning-signature' as const,
     //   id: chunk.payload.id,
@@ -241,17 +241,17 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           title: chunk.payload.title,
           providerMetadata: chunk.payload.providerMetadata,
         };
-      } else {
-        return {
-          type: 'source',
-          sourceType: 'document',
-          id: chunk.payload.id,
-          mediaType: chunk.payload.mimeType!,
-          title: chunk.payload.title,
-          filename: chunk.payload.filename,
-          providerMetadata: chunk.payload.providerMetadata,
-        };
       }
+      return {
+        type: 'source',
+        sourceType: 'document',
+        id: chunk.payload.id,
+        mediaType: chunk.payload.mimeType!,
+        title: chunk.payload.title,
+        filename: chunk.payload.filename,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
     case 'file':
       if (mode === 'generate') {
         return {
@@ -423,6 +423,8 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         // Carries the `toModelOutput` projection as `mastra.modelOutput`; dropping it sent
         // the raw tool output back into the prompt on a `useChat` round trip (issue #22012).
         ...(chunk.payload.providerMetadata != null ? { providerMetadata: chunk.payload.providerMetadata } : {}),
+        // Partial provider results (e.g. OpenAI image_generation partial images); the final result follows.
+        ...('preliminary' in chunk.payload && chunk.payload.preliminary === true ? { preliminary: true } : {}),
       };
     case 'tool-error':
       return {
@@ -478,7 +480,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
       if ('type' in chunk && chunk.type?.startsWith('data-')) {
         return chunk as any;
       }
-      return;
+      return undefined;
   }
 }
 
@@ -860,6 +862,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         // `resultProviderMetadata`, so `mastra.modelOutput` survives the trip (issue #22012).
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+        ...(part.preliminary != null ? { preliminary: part.preliminary } : {}),
       };
     }
 
@@ -965,7 +968,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-input-end': {
-      return;
+      return undefined;
     }
 
     case 'raw': {
@@ -991,7 +994,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         return toUIDataChunk(part) as InferUIMessageChunk<UI_MESSAGE>;
       }
 
-      return;
+      return undefined;
     }
   }
 }

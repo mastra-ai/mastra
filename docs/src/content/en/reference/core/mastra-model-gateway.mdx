@@ -281,6 +281,11 @@ Examples:
 
 - Gateway with `id = 'custom'`: `'custom/my-provider/model-1'`
 
+Two-part IDs are also accepted:
+
+- `[gateway-id]/[model]`: for gateways whose provider ID is the same as the gateway ID, such as `amazon-bedrock`. The provider ID resolves to the gateway ID, so `'custom/model-1'` resolves to provider `custom` and model `model-1`. The model segment can't be empty.
+- `azure-openai/[deployment]`: Azure OpenAI uses the deployment name in place of a provider and model.
+
 ## Built-in implementations
 
 - **NetlifyGateway** - Netlify AI Gateway integration

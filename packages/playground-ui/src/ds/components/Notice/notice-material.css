@@ -1,0 +1,43 @@
+:where([data-slot='notice'], .mastra-toaster [data-sonner-toast]) {
+  --notice-subtle: var(--card);
+  --notice-edge: transparent;
+  --notice-ink: var(--foreground);
+  --notice-tint: 35%;
+  --notice-fill: color-mix(in oklab, var(--notice-subtle) var(--notice-tint), var(--card));
+  --notice-semantic-rim: inset 0 0 0 0 transparent;
+  --notice-shadow:
+    var(--notice-semantic-rim), var(--elevation-lip), inset 0 0 0 1px var(--surface-rim), var(--elevation-raised);
+}
+
+:where([data-slot='notice'][data-tone='info'], .mastra-toaster [data-sonner-toast][data-type='info']) {
+  --notice-subtle: var(--info-subtle);
+  --notice-edge: var(--info-edge);
+  --notice-ink: var(--info-subtle-foreground);
+}
+
+:where([data-slot='notice'][data-tone='success'], .mastra-toaster [data-sonner-toast][data-type='success']) {
+  --notice-subtle: var(--success-subtle);
+  --notice-edge: var(--success-edge);
+  --notice-ink: var(--success-subtle-foreground);
+}
+
+:where([data-slot='notice'][data-tone='warning'], .mastra-toaster [data-sonner-toast][data-type='warning']) {
+  --notice-subtle: var(--warning-subtle);
+  --notice-edge: var(--warning-edge);
+  --notice-ink: var(--warning-subtle-foreground);
+}
+
+:where([data-slot='notice'][data-tone='destructive'], .mastra-toaster [data-sonner-toast][data-type='error']) {
+  --notice-subtle: var(--destructive-subtle);
+  --notice-edge: var(--destructive-edge);
+  --notice-ink: var(--destructive-subtle-foreground);
+}
+
+html.light :where([data-slot='notice'], .mastra-toaster [data-sonner-toast]) {
+  --notice-semantic-rim: inset 0 0 0 1px color-mix(in srgb, var(--notice-edge) 12%, transparent);
+}
+
+html:not(.light)
+  :where([data-slot='notice'][data-tone='success'], .mastra-toaster [data-sonner-toast][data-type='success']) {
+  --notice-tint: 30%;
+}
