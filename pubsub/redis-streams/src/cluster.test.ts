@@ -203,5 +203,69 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
       }
       expect(leftover).toEqual(nodes.map(() => 0));
     }, 15_000);
+
+    async function clientsNamed(nodes: string[], name: string) {
+      const counts: number[] = [];
+      for (const address of nodes) {
+        const node = createClient({ url: `redis://${address}` });
+        await node.connect();
+        counts.push((await node.clientList()).filter(c => c.name === name).length);
+        await node.close();
+      }
+      return counts;
+    }
+
+    it('leaves no node connections behind when a retry times out while the original connect is still pending', async () => {
+      // A retry that starts its own slot discovery reuses the original's node
+      // entries, so it settles as soon as its slot reply lands. If that is
+      // within the moment the original's node clients are opening their TCP
+      // sockets, destroy() cannot reach them and they connect anyway. Both slot
+      // replies land together only some of the time, so repeat the scenario.
+      const leftover: number[][] = [];
+      for (let round = 0; round < 5; round++) {
+        const name = `connect-timeout-retry-leak-${randomUUID()}`;
+        const { ps, nodes } = await createProxiedPubSub(name);
+        const mine = proxies.slice(-nodes.length);
+        for (const p of mine) p.stall();
+
+        // The first connect times out, then a retry while still frozen times out too.
+        expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+        expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+        await ps.close();
+
+        // The cluster answers late, as after SIGCONT.
+        for (const p of mine) p.resume();
+        await new Promise(r => setTimeout(r, 1_000));
+        leftover.push(await clientsNamed(nodes, name));
+      }
+      expect(leftover).toEqual(leftover.map(counts => counts.map(() => 0)));
+    }, 60_000);
+
+    it('connects a retry made while the timed-out connect is pending, once the cluster answers', async () => {
+      const name = `connect-timeout-retry-live-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+
+      // Retry while frozen, then let the cluster answer within its budget.
+      const retry = settle(ps.publish(`t-${randomUUID()}`, makeEvent()));
+      await new Promise(r => setTimeout(r, 100));
+      for (const p of proxies) p.resume();
+      expect(await retry).toEqual({ status: 'resolved' });
+      await new Promise(r => setTimeout(r, 1_000));
+
+      // Cleaning up the abandoned connect must not have destroyed the live
+      // client: its node connections are still there before anything reconnects.
+      expect((await clientsNamed(nodes, name)).every(n => n > 0)).toBe(true);
+      const topic = `t-${randomUUID()}`;
+      let received = 0;
+      await ps.subscribe(topic, (_e, ack) => {
+        received += 1;
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent());
+      await waitFor(() => received === 1);
+    }, 15_000);
   });
 });

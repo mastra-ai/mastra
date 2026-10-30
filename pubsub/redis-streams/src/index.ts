@@ -89,38 +89,40 @@ function compareStreamIds(a: string, b: string): number {
  *
  * destroy() does not stop a cluster's slot discovery: once the nodes answer it
  * still connects node clients that nothing would close. So when the abandoned
- * connect settles, the client is destroyed again, unless a newer connect has
- * started on it since.
+ * connect settles, the client is destroyed again unless it is open. Until then
+ * no new connect starts on that client: a second discovery would share the
+ * first one's node entries, settle before they connect, and its destroy()
+ * would miss them. A call made meanwhile waits for the abandoned connect
+ * within its own deadline, then connects.
  */
-const connectAttempts = new WeakMap<object, number>();
+const abandonedConnects = new WeakMap<object, Promise<void>>();
 
 async function connectWithin(client: RedisClientType, role: 'write' | 'read'): Promise<void> {
   const cluster = client as unknown as Partial<Pick<RedisClusterType, '_options'>>;
   const socket = cluster._options ? cluster._options.defaults?.socket : client.options?.socket;
   const timeoutMs = socket?.connectTimeout ?? 5000;
-  const attempt = (connectAttempts.get(client) ?? 0) + 1;
-  connectAttempts.set(client, attempt);
-  const connecting = client.connect();
-  if (!timeoutMs) {
-    await connecting;
-    return;
-  }
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let connecting: Promise<unknown> | undefined;
   const timedOut = new Promise<never>((_, reject) => {
+    if (!timeoutMs) return;
     timer = setTimeout(() => {
-      void connecting
-        .catch(() => {})
-        .then(() => {
-          if (connectAttempts.get(client) !== attempt || client.isOpen) return;
-          try {
-            client.destroy();
-          } catch {
-            // A standalone client's destroy() throws ClientClosedError once closed.
-          }
-        });
-      // close() may already have destroyed this client, and a standalone
-      // client's destroy() throws ClientClosedError when called twice.
-      if (client.isOpen) client.destroy();
+      if (connecting) {
+        const settled = connecting
+          .catch(() => {})
+          .then(() => {
+            if (abandonedConnects.get(client) === settled) abandonedConnects.delete(client);
+            if (client.isOpen) return;
+            try {
+              client.destroy();
+            } catch {
+              // A standalone client's destroy() throws ClientClosedError once closed.
+            }
+          });
+        abandonedConnects.set(client, settled);
+        // close() may already have destroyed this client, and a standalone
+        // client's destroy() throws ClientClosedError when called twice.
+        if (client.isOpen) client.destroy();
+      }
       reject(
         new Error(
           `redis-streams: ${role} client did not connect to Redis within ${timeoutMs}ms (socket.connectTimeout); the server is unreachable or not responding`,
@@ -129,6 +131,9 @@ async function connectWithin(client: RedisClientType, role: 'write' | 'read'): P
     }, timeoutMs);
   });
   try {
+    const abandoned = abandonedConnects.get(client);
+    if (abandoned) await Promise.race([abandoned, timedOut]);
+    connecting = client.connect();
     await Promise.race([connecting, timedOut]);
   } finally {
     clearTimeout(timer);
