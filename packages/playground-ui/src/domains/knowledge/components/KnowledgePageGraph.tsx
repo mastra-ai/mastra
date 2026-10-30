@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Maximize, Pin } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { runLayout } from '../lib/layout';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
@@ -76,20 +76,39 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           as="span"
           variant="eyebrow"
           tone={page.isScope ? undefined : 'muted'}
-          className="pointer-events-none max-w-full truncate uppercase"
+          className="pointer-events-none line-clamp-2 max-w-full break-words uppercase"
           style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
           data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
         >
           {kind}
         </Txt>
         <Txt as="span" variant="label" tone="ink" className="pointer-events-none line-clamp-3 max-w-full break-words">
-          {page.isScope ? (page.address ?? page.name) : page.name}
+          {page.isScope && page.address ? <BreakAtColons text={page.address} /> : page.name}
         </Txt>
       </div>
       {pinned ? <PinBadge size={size} /> : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
+  );
+}
+
+/** Lets a scope address like `role:acme:admin` wrap after a colon instead of mid-word. */
+function BreakAtColons({ text }: { text: string }) {
+  const parts = text.split(':');
+  return (
+    <>
+      {parts.map((part, index) => (
+        <Fragment key={index}>
+          {part}
+          {index < parts.length - 1 ? (
+            <>
+              :<wbr />
+            </>
+          ) : null}
+        </Fragment>
+      ))}
+    </>
   );
 }
 
