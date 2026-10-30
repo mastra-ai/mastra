@@ -84,10 +84,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(messages, {
-        maxPartLength: 500,
-        timeZone: this.opts.record.observedTimezone,
-      }),
+      recentMessages: () =>
+        formatMessagesForObserver(messages, {
+          maxPartLength: 500,
+          timeZone: this.opts.record.observedTimezone,
+        }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,

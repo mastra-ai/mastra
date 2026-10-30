@@ -331,10 +331,11 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         failures: result.extractionFailures,
         previousValues,
         rawObservations: result.observations,
-        recentMessages: formatMessagesForObserver(threadMessages, {
-          maxPartLength: 500,
-          timeZone: this.opts.record.observedTimezone,
-        }),
+        recentMessages: () =>
+          formatMessagesForObserver(threadMessages, {
+            maxPartLength: 500,
+            timeZone: this.opts.record.observedTimezone,
+          }),
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,
