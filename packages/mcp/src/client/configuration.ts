@@ -76,7 +76,7 @@ export interface MCPDiscoveryOptions<T = unknown> {
    * aggregate result resolves. Lets callers report each server independently instead of
    * waiting for the slowest one. Errors thrown by the callback are logged and ignored.
    */
-  onServerSettled?: (serverName: string, result: MCPServerSettledResult<T>) => void | Promise<void>;
+  onServerSettled?: (serverName: string, result: MCPServerSettledResult<T>) => void;
 }
 
 // Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
@@ -1591,11 +1591,12 @@ To fix this you have three different options:
       };
       try {
         const { serverName, ...settled } = result;
-        const outcome = onServerSettled(serverName, settled);
-        // An `async` callback rejects instead of throwing, so attach a handler
-        // here. Otherwise the rejection escapes as an unhandled rejection and
-        // takes the host process down.
-        if (outcome && typeof (outcome as Promise<void>).then === 'function') {
+        // The callback is typed as returning `void`, so an `async` callback's
+        // promise is not visible here. Observe it anyway: an `async` callback
+        // rejects instead of throwing, and an unobserved rejection escapes as
+        // an unhandled rejection and takes the host process down.
+        const outcome: unknown = onServerSettled(serverName, settled);
+        if (outcome && typeof (outcome as PromiseLike<void>).then === 'function') {
           Promise.resolve(outcome).catch(logCallbackError);
         }
       } catch (error) {

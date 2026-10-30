@@ -133,6 +133,24 @@ describe('MCPClient discovery onServerSettled', () => {
     }
   }, 20_000);
 
+  it('accepts a callback that returns a value', async () => {
+    // A callback typed `=> void` may return anything, so the option type has to
+    // stay `void` — otherwise a caller whose callback returns a value stops
+    // compiling. `mastracode/sdk/src/mcp/manager.ts` has the same shape and is
+    // typechecked in CI.
+    const settled: string[] = [];
+    const result = await client!.listToolsetsWithErrors({
+      perServerTimeoutMs: 2_000,
+      onServerSettled: serverName => {
+        settled.push(serverName);
+        return settled.length;
+      },
+    });
+
+    expect(settled).toEqual(['healthy', 'stalled']);
+    expect(Object.keys(result.toolsets)).toEqual(['healthy']);
+  }, 20_000);
+
   it('discovers only the servers named in serverNames', async () => {
     const settled: string[] = [];
     const started = Date.now();
