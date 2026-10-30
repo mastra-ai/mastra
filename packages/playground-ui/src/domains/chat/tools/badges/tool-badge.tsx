@@ -75,7 +75,7 @@ export const ToolBadge = ({
     toolOutput.length > 0 ||
     needsApproval;
 
-  const mcpTask = useMcpTaskProgress(result, status);
+  const mcpTask = useMcpTaskProgress(result, status, { deferred: backgroundTaskId !== undefined });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks

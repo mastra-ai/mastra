@@ -49,14 +49,21 @@ export interface McpTaskView extends McpTaskProgress {
  * progress writes, so the last one seen is kept for as long as the card is mounted; its terminal
  * status then comes from how the call ended. Progress isn't saved with the thread, so a reloaded
  * card has no task to show.
+ *
+ * A deferred call (one running as a Mastra background task) settles its part with a placeholder
+ * long before the task ends, so its end is never inferred here: the background task says when.
  */
-export function useMcpTaskProgress(result: unknown, status: ActivityStatus): McpTaskView | undefined {
+export function useMcpTaskProgress(
+  result: unknown,
+  status: ActivityStatus,
+  { deferred = false }: { deferred?: boolean } = {},
+): McpTaskView | undefined {
   const live = latestProgress(result);
   const [seen, setSeen] = useState(live);
   if (live && (live.taskId !== seen?.taskId || live.status !== seen.status)) setSeen(live);
 
   const task = live ?? seen;
-  const ended = task && !live && status !== 'running';
+  const ended = task && !live && !deferred && status !== 'running';
   const taskStatus: McpTaskStatus | undefined = !task
     ? undefined
     : ended && !isTerminalMcpTaskStatus(task.status)

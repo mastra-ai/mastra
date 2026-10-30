@@ -141,6 +141,7 @@ export const ToolCardInner = ({
           toolCalled={toolCalled}
           withoutArgs={isAgent || isWorkflow}
           status={status}
+          backgroundTaskId={backgroundTaskId}
         />
       );
     }
