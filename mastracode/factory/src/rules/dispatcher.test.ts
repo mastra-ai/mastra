@@ -5325,6 +5325,68 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await storage.get({ orgId: 'org-1', id: elsewhere.item.id })).toEqual(elsewhere.item);
   });
 
+  it('reuses the Linear card filed under an older identifier instead of filing a second one', async () => {
+    const { workItems: storage } = await createFactoryStorageForTests();
+    // Filed as OLD-1; the issue has since moved teams and is now ENG-1.
+    const renamed = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:OLD-1' },
+        title: 'OLD-1: moved teams',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { linearIssueId: 'issue-1' },
+      },
+    });
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-renamed',
+            board: 'work',
+            source: 'linear-issue',
+            sourceKey: 'linear:ENG-1',
+            title: 'ENG-1: moved teams',
+            url: null,
+            stage: 'intake',
+            metadata: { linearIssueId: 'issue-1' },
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-renamed' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
+      item => item.metadata?.linearIssueId === 'issue-1',
+    );
+    expect(cards.map(card => card.id)).toEqual([renamed.item.id]);
+    expect(await decisionByKey(storage, 'linked-renamed')).toMatchObject({ status: 'succeeded' });
+  });
+
   it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {
     const { workItems: storage } = await createFactoryStorageForTests();
     const parent = await createItem(storage);

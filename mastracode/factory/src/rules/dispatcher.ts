@@ -1296,6 +1296,20 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /** The project's card for a Linear issue by its stable id, wherever its identifier now points. */
+  async #linearCardByIssueId(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+  ) {
+    const issueId = decision.metadata?.linearIssueId;
+    if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
+    const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
+    return (
+      items.find(item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issueId) ??
+      null
+    );
+  }
+
   async #upsertLinkedItem(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
@@ -1347,21 +1361,30 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    let result: UpsertWorkItemResult = await this.#storage.upsert({
-      orgId: record.orgId,
-      userId: 'factory-rule-dispatcher',
-      factoryProjectId: record.factoryProjectId,
-      input: {
-        externalSource: externalSourceForDecision(decision),
-        parentWorkItemId,
-        title: decision.title,
-        board: decision.board,
-        stages: [entryStage],
-        sessions: {},
-        metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
-      },
-      reuseMode: 'preserve',
-    });
+    // A Linear identifier changes when its issue moves teams; the card filed
+    // under the old one is still this issue's card.
+    const renamed = existing ? null : await this.#linearCardByIssueId(record, decision);
+    let result: UpsertWorkItemResult = renamed
+      ? {
+          created: false,
+          item: renamed,
+          previous: { stages: renamed.stages, sessionRoles: Object.keys(renamed.sessions) },
+        }
+      : await this.#storage.upsert({
+          orgId: record.orgId,
+          userId: 'factory-rule-dispatcher',
+          factoryProjectId: record.factoryProjectId,
+          input: {
+            externalSource: externalSourceForDecision(decision),
+            parentWorkItemId,
+            title: decision.title,
+            board: decision.board,
+            stages: [entryStage],
+            sessions: {},
+            metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
+          },
+          reuseMode: 'preserve',
+        });
     const itemBoard = boardForWorkItem(result.item);
     if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);

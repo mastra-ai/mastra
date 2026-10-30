@@ -21,7 +21,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
-import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
@@ -169,27 +169,28 @@ function winningLinearSourceId(
 }
 
 /**
- * The card this Factory holds for an issue, if any: by the stable issue id when
- * the SPA sent one, else by the identifier the card was filed under.
+ * Whether this Factory holds a live card for an issue: under the identifier it
+ * was filed with, or by the stable issue id when the SPA sent one.
  */
-async function findHeldCard(
+async function holdsLiveCardFor(
   options: MountLinearRoutesOptions,
   orgId: string,
   factoryProjectId: string,
   identifier: string,
   issueId: string | undefined,
 ) {
-  if (!options.workItems) return null;
-  if (issueId) {
-    const items = await options.workItems.list({ orgId, factoryProjectId });
-    const byIssueId = items.find(item => item.metadata?.linearIssueId === issueId);
-    if (byIssueId) return byIssueId;
-  }
-  return options.workItems.getByProjectSource({
+  if (!options.workItems) return false;
+  const isLive = (item: WorkItemRow) =>
+    !(options.boards ? isTerminalWorkItem(options.boards, item) : isTerminalFactoryRuleStage(item.stages));
+  const byIdentifier = await options.workItems.getByProjectSource({
     orgId,
     factoryProjectId,
     source: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}` },
   });
+  if (byIdentifier && isLive(byIdentifier)) return true;
+  if (!issueId) return false;
+  const items = await options.workItems.list({ orgId, factoryProjectId });
+  return items.some(item => item.metadata?.linearIssueId === issueId && isLive(item));
 }
 
 /** Map a Linear read failure to the API response for the SPA. */
@@ -519,10 +520,13 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         // every selected source (never beyond the selection), and the routing
         // check is waived for that card alone. Without a live card, the strict
         // routed-source rule applies.
-        const held = await findHeldCard(options, resolved.tenant.orgId, factoryProjectId, identifier, issueId);
-        const holdsLiveCard =
-          held != null &&
-          !(options.boards ? isTerminalWorkItem(options.boards, held) : isTerminalFactoryRuleStage(held.stages));
+        const holdsLiveCard = await holdsLiveCardFor(
+          options,
+          resolved.tenant.orgId,
+          factoryProjectId,
+          identifier,
+          issueId,
+        );
         if (routedSourceIds.length === 0 && !holdsLiveCard) return c.json({ error: 'issue_not_found' }, 404);
         const fetchSourceIds = holdsLiveCard ? selectedIds : routedSourceIds;
 
