@@ -61,8 +61,8 @@ describe('Knowledge limits are counted in tokens', () => {
   });
 });
 
-describe('config pin overcommit', () => {
-  it('warns at startup when a scope has more config pins than the budget holds', () => {
+describe('pinnedContext overcommit', () => {
+  it('warns at startup when a scope has more pinnedContext pages than the budget holds', () => {
     const declare = (pins: string[], maxPins?: number) => {
       const knowledge = new Knowledge({
         storage: new InMemoryStore({ id: 'overcommit' }),
@@ -70,21 +70,21 @@ describe('config pin overcommit', () => {
         scopes: {
           ...knowledgeMemoryScopes(),
           'policy:$orgId': {},
-          'role:$orgId:$role': { pins },
+          'role:$orgId:$role': { pinnedContext: pins },
         },
       });
       return knowledge;
     };
     const warnings: string[] = [];
     const spy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation((message: string) => {
-      if (message.includes('config pins')) warnings.push(message);
+      if (message.includes('pinnedContext pages')) warnings.push(message);
     });
     try {
       declare(['policy:$orgId#a', 'policy:$orgId#b']);
       expect(warnings).toEqual([]);
       declare(['policy:$orgId#a', 'policy:$orgId#b', 'policy:$orgId#c'], 2);
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain('"role:$orgId:$role" has 3 config pins');
+      expect(warnings[0]).toContain('"role:$orgId:$role" has 3 pinnedContext pages');
       declare(Array.from({ length: 11 }, (_, i) => `policy:$orgId#p${i}`));
       expect(warnings).toHaveLength(2);
     } finally {

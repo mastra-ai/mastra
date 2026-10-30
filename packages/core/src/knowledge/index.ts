@@ -59,16 +59,18 @@ export class Knowledge extends MastraBase {
     const { declarations, concrete } = this.#runtime.compiled;
     const entries: Array<[string, string[] | undefined]> = [
       ...[...declarations.values()].map(
-        compiled => [compiled.key, compiled.declaration.pins] as [string, string[] | undefined],
+        compiled => [compiled.key, compiled.declaration.pinnedContext] as [string, string[] | undefined],
       ),
-      ...[...concrete].map(([address, entry]) => [address, entry.declaration.pins] as [string, string[] | undefined]),
+      ...[...concrete].map(
+        ([address, entry]) => [address, entry.declaration.pinnedContext] as [string, string[] | undefined],
+      ),
     ];
     for (const [key, pins] of entries) {
       const count = pins?.length ?? 0;
       if (count === 0) continue;
       if (count > budget.maxPins || budget.maxTokens / count < MIN_TOKENS_PER_CONFIG_PIN) {
         this.logger.warn(
-          `Knowledge scope "${key}" has ${count} config pins for a budget of ${budget.maxPins} pins / ${budget.maxTokens} tokens; config pins are never dropped, so each will be cut to about ${Math.floor(budget.maxTokens / count)} tokens and stored pins won't fit. Pin fewer pages or raise pinnedContext.maxTokens.`,
+          `Knowledge scope "${key}" has ${count} pinnedContext pages for a budget of ${budget.maxPins} pins / ${budget.maxTokens} tokens; pinnedContext pages are never dropped, so each will be cut to about ${Math.floor(budget.maxTokens / count)} tokens and stored pins won't fit. Pin fewer pages or raise pinnedContext.maxTokens.`,
         );
       }
     }

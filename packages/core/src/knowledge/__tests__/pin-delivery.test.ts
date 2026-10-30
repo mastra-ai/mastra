@@ -10,7 +10,7 @@ import { OVERFLOW_NAMES, PIN_OVERFLOW_ID } from '../pinned';
 
 const scopes = {
   ...knowledgeMemoryScopes(),
-  'role:$orgId:$role': { pinPriority: 5 },
+  'role:$orgId:$role': { pinnedContextPriority: 5 },
   'policy:$orgId': { access: [{ principal: 'org:$orgId', role: 'viewer' as const }] },
 };
 const host = { author: 'host' };
@@ -62,7 +62,7 @@ describe('Knowledge pin delivery cost', () => {
     const calls = countCalls(storage);
     const pins = await knowledge.__deliveredPins(context as never);
 
-    // One listing per pinPriority tier the run holds (role, thread, resource, org), one count, one
+    // One listing per pinnedContextPriority tier the run holds (role, thread, resource, org), one count, one
     // batched page fetch and one batched scope fetch for display labels; never a page read per pin (run start may read scope pages; that is checked
     // below by comparing with a run that has few pins).
     expect(calls.filter(call => call === 'listPins' || call === 'getPages')).toEqual([
