@@ -246,7 +246,12 @@ describe('JiraRules', () => {
   it('reports missing when the Factory project does not exist', async () => {
     const { service } = await setup();
     await expect(
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: 'nope', issues: [issue] }),
+      service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: '00000000-0000-4000-8000-000000000000',
+        issues: [issue],
+      }),
     ).resolves.toEqual({ status: 'missing', ingested: 0 });
   });
 
