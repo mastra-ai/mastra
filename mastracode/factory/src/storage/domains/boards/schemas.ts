@@ -52,6 +52,39 @@ export const FACTORY_BOARD_PHASES_SCHEMA: CollectionSchema = {
 };
 
 /**
+ * A project's ordered intake routes: where new cards matching `when_condition` land and whether
+ * an agent may start them without a person.
+ */
+export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
+  name: 'factory_intake_routes',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    name: { type: 'text' },
+    enabled: { type: 'boolean', default: true },
+    position: { type: 'integer' },
+    // A card RuleGroup; null matches every card. Not named `when`, which is an SQL keyword.
+    when_condition: { type: 'json', nullable: true },
+    // Null leaves placement to the label routes, bindings and integration defaults.
+    board_key: { type: 'text', nullable: true },
+    phase_key: { type: 'text', nullable: true },
+    hold: { type: 'text' },
+    // Rises on every write to the route, including a move; the compare-and-set token for edits.
+    revision: { type: 'integer' },
+    created_by: { type: 'text' },
+    created_at: { type: 'timestamp' },
+    updated_by: { type: 'text' },
+    updated_at: { type: 'timestamp' },
+  },
+  // Two writers appending at once meet this index; the loser retries from fresh reads.
+  uniqueIndexes: [
+    { name: 'factory_intake_routes_project_position', columns: ['org_id', 'factory_project_id', 'position'] },
+  ],
+  indexes: [{ name: 'factory_intake_routes_project', columns: ['org_id', 'factory_project_id'] }],
+};
+
+/**
  * One row per project whose `version` is replaced inside every board write, so other replicas
  * can tell their cached boards are stale with one indexed read.
  */
