@@ -92,6 +92,8 @@ import {
   assertObservabilitySpanQuerySupported,
   assertObservabilitySpanQueryFieldsSupported,
   assertObservabilitySpanAggregateModelDimensionsSupported,
+  assertObservabilityAggregateTimeToFirstMeasuresSupported,
+  filterObservabilityAggregateMeasureDescriptors,
   assertObservabilitySpanQueryModelFieldsSupported,
   assertObservabilitySpanQueryOutcomeFieldsSupported,
   assertObservabilityTraceQueryOutcomeFieldsSupported,
@@ -521,6 +523,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryOutcomeFieldsSupported(observabilityStore, plan);
+      assertObservabilityAggregateTimeToFirstMeasuresSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -652,6 +655,7 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanAggregateModelDimensionsSupported(observabilityStore, plan);
       assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);
+      assertObservabilityAggregateTimeToFirstMeasuresSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
@@ -909,7 +913,10 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
                   !isObservabilityOutcomeField(dimension.path) ||
                   supportsObservabilityTraceQueryOutcomeFields(observabilityStore),
               ),
-            measures: coreStorage.getTraceAggregateMeasureDescriptors(),
+            measures: filterObservabilityAggregateMeasureDescriptors(
+              observabilityStore,
+              coreStorage.getTraceAggregateMeasureDescriptors(),
+            ),
           },
         }),
       };

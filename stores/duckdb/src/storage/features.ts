@@ -24,6 +24,10 @@ export const spanAggregateFeatures =
       ] as const)
     : ([] as const);
 
+/** Core before the time-to-first measures rejects them, so they are only declared when core plans them. */
+export const aggregateTimeToFirstFeatures: readonly 'aggregate-time-to-first-measures'[] =
+  'timeToFirstToken.p50' in coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY ? ['aggregate-time-to-first-measures'] : [];
+
 /** Core versions without the field reject it in trace query results, so it is only returned when core knows it. */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
 

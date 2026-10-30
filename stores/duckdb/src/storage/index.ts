@@ -16,6 +16,7 @@ import type {
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
 import {
+  aggregateTimeToFirstFeatures,
   outcomeFeatures,
   spanAggregateFeatures,
   spanQueryFeatures,
@@ -37,6 +38,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'metric-discovery',
   'trace-query',
   'trace-aggregate',
+  ...aggregateTimeToFirstFeatures,
   ...spanQueryFeatures,
   ...spanAggregateFeatures,
   ...threadQueryFeatures,
@@ -63,6 +65,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'delta-polling',
   'trace-query',
   'trace-aggregate',
+  ...aggregateTimeToFirstFeatures,
   ...spanQueryFeatures,
   ...spanAggregateFeatures,
   ...threadQueryFeatures,

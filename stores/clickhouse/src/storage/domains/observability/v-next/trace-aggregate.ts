@@ -122,6 +122,31 @@ const PERCENTILES: Record<string, number> = {
   'duration.p99': 0.99,
 };
 
+/** Quantile for each percentile statistic of a time-to-first measure. */
+const STATISTIC_PERCENTILES: Partial<Record<coreStorage.TraceAggregateMeasureStatistic, number>> = {
+  p50: 0.5,
+  p90: 0.9,
+  p95: 0.95,
+  p99: 0.99,
+};
+
+/**
+ * Store features this compiler supports beyond `trace-aggregate` / `span-aggregate`. Core before
+ * the time-to-first measures rejects them, so they are only declared when core plans them.
+ */
+export const aggregateTimeToFirstFeatures: readonly 'aggregate-time-to-first-measures'[] =
+  'timeToFirstToken.p50' in coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY ? ['aggregate-time-to-first-measures'] : [];
+
+/** The nullable span columns read by the plan's time-to-first measures. */
+function timeToFirstFields(plan: Pick<AggregatePlan, 'measures'>): coreStorage.TraceAggregateTimeToFirstField[] {
+  const fields = new Set<coreStorage.TraceAggregateTimeToFirstField>();
+  for (const measure of plan.measures) {
+    const field = measureRule(measure.name)?.field;
+    if (field) fields.add(field);
+  }
+  return [...fields];
+}
+
 const COMPARISON_SQL = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
 
 /**
@@ -164,6 +189,7 @@ export function compileClickHouseSpanAggregate(plan: TrustedSpanAggregatePlan): 
     ...plan.measures.flatMap(measure =>
       measure.type === 'countDistinct' && measure.field !== 'traceId' ? [measure.field] : [],
     ),
+    ...timeToFirstFields(plan),
   ];
   const ctes = compileClickHouseSpanSelection(plan, fields, parameters);
   return compileClickHouseAggregate(plan, parameters, {
@@ -206,6 +232,7 @@ function compileClickHouseAggregate(
     `toFloat64(${durationMsSql('r.startedAt', 'r.endedAt')}) AS durationMs`,
     `${source.isErrorSql} AS isError`,
     `cityHash64(${source.usageKey.map(column => `r.${column}`).join(', ')}) AS traceSeed`,
+    ...timeToFirstFields(plan).map(field => `toNullable(toFloat64(r.${field})) AS ${field}`),
   );
   if (plan.interval !== undefined) {
     const intervalMs = coreStorage.TRACE_AGGREGATE_INTERVAL_MS[plan.interval];
@@ -254,6 +281,16 @@ function compileClickHouseAggregate(
     if (rule?.kind === 'cost') {
       const aggregate = rule.statistic === 'avg' ? 'avgOrNull' : 'sumOrNull';
       return `if(${mixedUnitsSql}, NULL, toFloat64(${aggregate}(traceCost)))`;
+    }
+    // NULL values (no first token/chunk) are skipped, never read as 0; a group without any
+    // value gets NULL, and `.count` counts the rows that have one.
+    if (rule?.field) {
+      if (rule.statistic === 'count') return `toFloat64(count(${rule.field}))`;
+      if (rule.statistic === 'avg') return `avgOrNull(${rule.field})`;
+      if (rule.statistic === 'min') return `minOrNull(${rule.field})`;
+      if (rule.statistic === 'max') return `maxOrNull(${rule.field})`;
+      const quantile = rule.statistic && STATISTIC_PERCENTILES[rule.statistic];
+      if (quantile !== undefined) return `quantileDeterministicOrNull(${quantile})(${rule.field}, traceSeed)`;
     }
     if (name === 'errorCount') return 'toFloat64(countIf(isError))';
     if (name === 'errorRate') return 'countIf(isError) / count()';

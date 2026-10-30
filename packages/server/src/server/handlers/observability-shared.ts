@@ -49,6 +49,7 @@ const SPAN_QUERY_CONTEXT_FIELDS = new Set([
 const OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE = 'span-query-model-fields';
 const SPAN_QUERY_MODEL_FIELDS = new Set(['model', 'provider']);
 const OBSERVABILITY_SPAN_AGGREGATE_MODEL_DIMENSIONS_STORAGE_FEATURE = 'span-aggregate-model-dimensions';
+const OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE = 'aggregate-time-to-first-measures';
 const OBSERVABILITY_SPAN_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE = 'span-query-outcome-fields';
 const OBSERVABILITY_TRACE_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE = 'trace-query-outcome-fields';
 const OUTCOME_FIELDS = new Set(['outcome', 'stopReason']);
@@ -257,6 +258,44 @@ export function assertObservabilitySpanAggregateModelDimensionsSupported(
 
   throw new HTTPException(501, {
     message: 'Grouping spans by model or provider is not supported by the configured observability store',
+  });
+}
+
+function isTimeToFirstMeasure(name: string): boolean {
+  return name.startsWith('timeToFirstToken.') || name.startsWith('timeToFirstChunk.');
+}
+
+/** `timeToFirstToken.*` / `timeToFirstChunk.*` aggregate measures need a store that compiles them. */
+export function supportsObservabilityAggregateTimeToFirstMeasures(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE) === true
+  );
+}
+
+/** Drops the time-to-first measures from aggregate discovery when the store cannot compile them. */
+export function filterObservabilityAggregateMeasureDescriptors<T extends { name: string }>(
+  observabilityStore: ObservabilityStorage,
+  descriptors: readonly T[],
+): T[] {
+  return supportsObservabilityAggregateTimeToFirstMeasures(observabilityStore)
+    ? [...descriptors]
+    : descriptors.filter(descriptor => !isTimeToFirstMeasure(descriptor.name));
+}
+
+/** Rejects `timeToFirstToken.*` / `timeToFirstChunk.*` measures on stores that do not compile them. */
+export function assertObservabilityAggregateTimeToFirstMeasuresSupported(
+  observabilityStore: ObservabilityStorage,
+  plan: { measures: readonly { name: string }[] },
+) {
+  if (
+    !plan.measures.some(measure => isTimeToFirstMeasure(measure.name)) ||
+    supportsObservabilityAggregateTimeToFirstMeasures(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Time to first token and chunk measures are not supported by the configured observability store',
   });
 }
 
@@ -634,6 +673,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryOutcomeFields: boolean;
   spanAggregate: boolean;
   spanAggregateModelDimensions: boolean;
+  aggregateTimeToFirstMeasures: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -670,6 +710,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   spanQueryContextFields: false,
   spanQueryModelFields: false,
   spanAggregateModelDimensions: false,
+  aggregateTimeToFirstMeasures: false,
   spanQueryOutcomeFields: false,
   traceQueryOutcomeFields: false,
   feedback: false,
@@ -778,6 +819,13 @@ export function getObservabilityStorageCapabilities(
       supportsSpanAggregateCore() &&
       declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE) &&
       declares(OBSERVABILITY_SPAN_AGGREGATE_MODEL_DIMENSIONS_STORAGE_FEATURE),
+    aggregateTimeToFirstMeasures:
+      newApiCore &&
+      supportsTraceAggregateCore() &&
+      'timeToFirstToken.p50' in (coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY ?? {}) &&
+      (declares(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE) ||
+        declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE)) &&
+      declares(OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }

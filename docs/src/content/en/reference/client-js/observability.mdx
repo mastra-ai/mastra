@@ -154,6 +154,8 @@ if (capabilities.spanAggregate) {
 
 The request and response match `aggregateTraces()`, with span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling, and `capabilities.spanAggregateModelDimensions` before grouping or counting distinct values by `model` or `provider`. With an older adapter, those requests return `501`.
 
+Both `aggregateTraces()` and `aggregateSpans()` accept `timeToFirstToken.*` and `timeToFirstChunk.*` measures when `capabilities.aggregateTimeToFirstMeasures` is `true`. Spans and traces without a recorded value are skipped, never counted as 0. See [Time to first token and chunk measures](/reference/observability/tracing/advanced-queries#time-to-first-token-and-chunk-measures).
+
 See [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) for selection, dimensions, per-span usage, and how to list the spans behind a group.
 
 ## Querying threads

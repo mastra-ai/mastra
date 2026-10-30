@@ -359,6 +359,37 @@ describe('AGGREGATE_TRACES', () => {
     expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
   });
 
+  it.each(['timeToFirstToken.p95', 'timeToFirstChunk.count'])(
+    'returns 501 for %s before calling a store without time-to-first measures',
+    async measure => {
+      const request = { timeRange: TIME_RANGE, groupBy: ['entityName'], measures: ['count', measure] };
+      const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-tenant-scope']);
+      const error = await captureHttpException(AGGREGATE_TRACES.handler(params(mastra, request)));
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'TRACE_AGGREGATE_UNSUPPORTED',
+        message: 'Time to first token and chunk measures are not supported by the configured observability store',
+      });
+      expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+
+      const updated = createHarness([
+        'trace-aggregate',
+        'trace-query-tenant-scope',
+        'aggregate-time-to-first-measures',
+      ]);
+      await AGGREGATE_TRACES.handler(params(updated.mastra, request));
+      expect(updated.observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          measures: [
+            { type: 'canonical', name: 'count' },
+            { type: 'canonical', name: measure },
+          ],
+        }),
+      );
+    },
+  );
+
   it('passes outcome grouping and predicates to stores that advertise trace-query-outcome-fields', async () => {
     const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-outcome-fields']);
     await AGGREGATE_TRACES.handler(
