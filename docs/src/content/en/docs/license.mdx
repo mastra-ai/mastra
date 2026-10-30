@@ -36,12 +36,6 @@ Whether you need a Mastra Enterprise Edition (EE) license depends on which featu
 | Fine-grained authorization (FGA) with `server.fga` or `studio.fga` | Yes |
 | Agent Builder | Yes |
 
-### Development and production
-
-Mastra treats a deployment as production when `NODE_ENV` is `production` or `prod`. Any other value, or no value, counts as development. In development, EE features run without a license and Mastra logs a warning.
-
-`mastra start` sets `NODE_ENV=production`. If you run the build output another way, for example in a container, set `NODE_ENV=production` yourself.
-
 ### Without a license in production
 
 Set your license key in the `MASTRA_LICENSE_KEY` environment variable. Mastra also reads the older `MASTRA_EE_LICENSE` variable. Without a valid key in production:
