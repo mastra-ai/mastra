@@ -674,4 +674,71 @@ describe('thread ownership (#24878)', () => {
     senderRuntime.releaseThreadRunReservation(accepted.runId!, pubsub);
     subscription.unsubscribe();
   });
+
+  describe('when a live remote run acknowledges late or never', () => {
+    class AckDroppingPubSub extends LossyPubSub {
+      acksToDrop = 0;
+      droppedAcks = 0;
+      enqueued = 0;
+      override async publish(topic: string, event: any): Promise<void> {
+        if (event.data?.type === 'signal-enqueued') this.enqueued++;
+        if (event.data?.type === 'signal-accepted' && this.droppedAcks < this.acksToDrop) {
+          this.droppedAcks++;
+          return;
+        }
+        return super.publish(topic, event);
+      }
+    }
+
+    const setup = async (acksToDrop: number) => {
+      const pubsub = new AckDroppingPubSub();
+      pubsub.acksToDrop = acksToDrop;
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const senderRuntime = new AgentThreadStreamRuntime();
+      const threadId = `lost-ack-thread-${acksToDrop}`;
+      const resourceId = 'lost-ack-user';
+      const agent = {
+        id: 'lost-ack-agent',
+        stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({ runId: options.runId })),
+      } as unknown as Agent<any, any, any, any>;
+      const ownerSubscription = await ownerRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+      const subscription = await senderRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+      const run = registerRun(ownerRuntime, agent, pubsub, 'remote-live', threadId, resourceId);
+      await run.registered;
+      await vi.waitFor(() => expect(subscription.activeRunId()).toBe('remote-live'));
+      const result = senderRuntime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'while remote runs' },
+        { resourceId, threadId },
+        pubsub,
+      );
+      return {
+        pubsub,
+        agent,
+        run,
+        result,
+        cleanup: () => (subscription.unsubscribe(), ownerSubscription.unsubscribe()),
+      };
+    };
+
+    it('delivers to the live run once and starts no second run when its first acknowledgement is lost', async () => {
+      const { pubsub, agent, run, result, cleanup } = await setup(1);
+      const accepted = await result.accepted;
+      expect(accepted).toMatchObject({ action: 'deliver', runId: 'remote-live' });
+      expect(pubsub.droppedAcks).toBe(1);
+      // The retry re-forwarded the same signal to the lease holder; no run was started for it.
+      expect(pubsub.enqueued).toBeGreaterThanOrEqual(2);
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      run.complete();
+      cleanup();
+    }, 20_000);
+
+    it('rejects without starting a second run when the live run never acknowledges', async () => {
+      const { agent, run, result, cleanup } = await setup(Number.POSITIVE_INFINITY);
+      await expect(result.accepted).rejects.toThrow(/Thread owner did not accept signal/);
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      run.complete();
+      cleanup();
+    }, 20_000);
+  });
 });
