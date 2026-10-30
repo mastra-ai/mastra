@@ -1201,6 +1201,12 @@ export class Memory extends MastraMemory {
     }
 
     await memoryStore.deleteThread({ threadId });
+    // Fire-and-forget (it never throws): neither deleteThread nor settled() may wait on
+    // the pubsub, which can stall indefinitely while e.g. Redis reconnects.
+    // The peer range still admits @mastra/core versions without clearThreadStream.
+    if (typeof this.clearThreadStream === 'function') {
+      void this.clearThreadStream(threadId, resourceId);
+    }
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);
     }
