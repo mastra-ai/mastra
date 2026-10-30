@@ -130,12 +130,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.status = status;
         ctx.body = { ...body, error: error.message || 'Unknown error' };
 
-        // The route handler already logged this 501 at warn level. Skip the emit when only
-        // Koa's default listener would receive it, since that prints to console.error.
-        // Apps that register their own 'error' listeners still get the event.
+        // Client errors (4xx) aren't server faults, and the route handler already logged this 501
+        // at warn level. Koa's default listener prints to console.error, so deliver these only to
+        // listeners the app registered itself.
+        const isClientError = status >= 400 && status < 500;
         const loggedAsWarning = status === 501 && (ctx as any)._mastraLoggedNotImplementedError === err;
-        const onlyDefaultListener = ctx.app.listeners('error').every(listener => listener === ctx.app.onerror);
-        if (loggedAsWarning && onlyDefaultListener) {
+        if (isClientError || loggedAsWarning) {
+          for (const listener of ctx.app.listeners('error')) {
+            if (listener !== ctx.app.onerror) listener.call(ctx.app, err, ctx);
+          }
           return;
         }
 
