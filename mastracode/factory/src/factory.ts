@@ -1754,6 +1754,10 @@ export class MastraFactory {
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoApprovePlans ?? false;
                 },
+                factoryProjectExists: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
+                },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),

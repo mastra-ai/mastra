@@ -722,9 +722,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               await handle.connections.delete({ orgId: tenant.orgId, id: connection.id });
             }
           }
+          await this.#releaseIntakeSources(tenant.orgId, id);
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
           await this.#dropSchedule(id);
-          await this.#releaseIntakeSources(tenant.orgId, id);
           return context.body(null, 204);
         },
       }),

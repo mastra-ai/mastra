@@ -367,41 +367,42 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   /**
    * Copy `intake_source_bindings` into `intake_source_subscriptions` as
-   * all-issues bindings, once. The migration marker stops a later boot from
-   * resurrecting bindings users removed after the copy. Concurrent boots both
-   * copy; the unique index keeps one row per binding.
+   * all-issues bindings, once. The marker and the copy commit together, so a
+   * boot racing another cannot re-copy a binding removed after the first
+   * boot finished.
    */
   async #copyLegacyBindings(): Promise<void> {
-    if (await this.ops.findOne('intake_data_migrations', { name: COPY_LEGACY_BINDINGS_MIGRATION })) return;
-    const legacyRows = await this.ops.findMany<IntakeSourceBindingRow & { updated_at: Date }>(
-      'intake_source_bindings',
-      {},
-    );
-    for (const row of legacyRows) {
-      try {
-        await this.ops.insertOne('intake_source_subscriptions', {
-          org_id: row.org_id,
-          integration_id: row.integration_id,
-          source_id: row.source_id,
-          factory_project_id: row.factory_project_id,
-          board: row.board ?? null,
-          labels: null,
-          created_by_user_id: row.created_by_user_id ?? null,
-          created_at: row.created_at,
-          updated_at: row.updated_at,
+    await this.storage.withTransaction(
+      async ops => {
+        if (await ops.findOne('intake_data_migrations', { name: COPY_LEGACY_BINDINGS_MIGRATION })) return;
+        const legacyRows = await ops.findMany<IntakeSourceBindingRow & { updated_at: Date }>(
+          'intake_source_bindings',
+          {},
+        );
+        for (const row of legacyRows) {
+          const key = {
+            org_id: row.org_id,
+            integration_id: row.integration_id,
+            source_id: row.source_id,
+            factory_project_id: row.factory_project_id,
+          };
+          if (await ops.findOne('intake_source_subscriptions', key)) continue;
+          await ops.insertOne('intake_source_subscriptions', {
+            ...key,
+            board: row.board ?? null,
+            labels: null,
+            created_by_user_id: row.created_by_user_id ?? null,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+          });
+        }
+        await ops.insertOne('intake_data_migrations', {
+          name: COPY_LEGACY_BINDINGS_MIGRATION,
+          completed_at: new Date(),
         });
-      } catch (error) {
-        if (!(error instanceof UniqueViolationError)) throw error;
-      }
-    }
-    try {
-      await this.ops.insertOne('intake_data_migrations', {
-        name: COPY_LEGACY_BINDINGS_MIGRATION,
-        completed_at: new Date(),
-      });
-    } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-    }
+      },
+      { isolationLevel: 'serializable' },
+    );
   }
 
   async #foldLegacyUserSelections(): Promise<void> {
