@@ -1,6 +1,6 @@
 ---
 title: 'Observational Memory | Memory'
-description: 'Keep long agent conversations inside the context window. Observational Memory replaces old messages with dense observations as a thread grows.'
+description: 'Give agents long-running memory with a small, stable, cache-friendly context. Observational Memory turns older messages into dense observations as a thread grows.'
 packages:
   - '@mastra/core'
   - '@mastra/libsql'
@@ -13,9 +13,9 @@ import OmContextOverTimeImage from '@site/src/components/OmContextOverTimeImage'
 
 **Added in:** `@mastra/memory@1.1.0`
 
-Observational Memory (OM) keeps one long conversation inside the agent's context window. An **Observer** agent turns older messages into short, dated observations in the background, and a **Reflector** agent condenses those observations when they grow. The agent sees its recent messages in full and everything earlier as observations. Its context stays small and stable however long the thread runs.
+Observational Memory (OM) lets an agent work in one thread for as long as the task takes, with a context that stays small, focused and prompt-cache friendly. An **Observer** agent turns older messages into short, dated observations in the background, and a **Reflector** agent condenses those observations when they grow. The agent sees its recent messages in full and everything earlier as observations.
 
-Use OM when threads get long or tool-heavy: coding agents, browser agents, support threads that run for hours. For a short chat, [message history](/docs/memory/message-history) alone is enough. For a few facts that every conversation should know, such as a user's name or preferences, use [working memory](/docs/memory/working-memory), which works alongside OM.
+Use OM for any agent that does more than a one-off summary or a single workflow step. Every agent that takes multiple steps benefits: chat assistants, coding agents, browser agents, support threads that run for hours.
 
 ## Quickstart
 
@@ -236,7 +236,7 @@ The same filter applies to images and files inside tool results. Attachments the
 
 ## Cost and latency
 
-Each observation and reflection is a model call. With the defaults, a thread costs one Observer call for roughly every 6,000 tokens of new messages, and one Reflector call each time the log reaches 40,000 tokens. In return, every main-agent call reads a context of at most a few tens of thousands of tokens instead of the whole thread, and the observation prefix changes rarely, so prompt caching keeps working.
+Each observation and reflection is a model call. With the defaults, a thread costs one Observer call for roughly every 6,000 tokens of new messages, and one Reflector call each time the log reaches 40,000 tokens. In return, every main-agent call reads a context of at most a few tens of thousands of tokens instead of the whole thread. The observation prefix changes rarely, so prompt caching keeps working: users generally see 97 to 99% prompt cache hit rates with OM.
 
 The Observer runs ahead in the background (async buffering), so the agent doesn't stop to wait for it. These settings control the timing:
 
@@ -263,11 +263,45 @@ const memory = new Memory({
 })
 ```
 
+### Long runs of tool calls
+
+Agents that run long chains of tool calls, such as coding and browser agents, re-send the same growing prefix on every step, and the provider serves most of it from the prompt cache. For these agents, raise the observation threshold well above the default, for example to 60,000 to 80,000 tokens, so OM compresses less often and more of each run stays cached:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        messageTokens: 70_000,
+      },
+    },
+  },
+})
+```
+
+Keep the threshold within the main model's context window. `bufferTokens`, `bufferActivation` and `blockAfter` are fractions of `messageTokens` by default, so they scale with it.
+
+### Activate when the prompt cache expires
+
+Once the prompt cache expires, the next request pays full price for the whole context anyway. `activateAfterIdle` makes OM activate its prepared observations when a thread has been idle that long, so the request after a pause sends a smaller, compressed context. It isn't set by default. Set it to `'auto'` to use the active provider's prompt cache TTL (for example 5 minutes for Anthropic, 1 hour for DeepSeek):
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      activateAfterIdle: 'auto',
+    },
+  },
+})
+```
+
+See [early activation](/reference/memory/observational-memory#early-activation) for fixed durations, per-provider values and activating when the provider changes.
+
+### Synchronous observation
+
 To observe synchronously instead, set `observation.bufferTokens: false`. That turns off background buffering for both observations and reflections, and the agent pauses while each one runs.
 
 `shareTokenBudget: true` lets message history borrow the unused part of the observation budget, so up to about 70,000 tokens of messages stay before observation starts while the log is small. It requires `observation.bufferTokens: false`. See [shared token budget](/reference/memory/observational-memory#shared-token-budget).
-
-To activate observations early when a prompt cache expires or the provider changes, see [early activation](/reference/memory/observational-memory#early-activation).
 
 ## Threads and cross-thread memory
 
@@ -275,24 +309,7 @@ To activate observations early when a prompt cache expires or the provider chang
 
 Each thread has its own observations. Every call needs a thread: without one, OM throws `OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED`, so that unrelated threads never share one observation record.
 
-OM remembers within a thread. To carry knowledge between a user's threads, add one or both of these:
-
-- [Retrieval mode](#retrieval-mode): a `recall` tool that lets the agent look up the raw messages behind observations, and other threads of the same resource.
-- [Resource-scoped working memory](/docs/memory/working-memory#resource-scoped-memory-default): small, durable facts that every thread of the resource reads.
-
-```typescript
-const memory = new Memory({
-  options: {
-    observationalMemory: {
-      retrieval: true,
-    },
-    workingMemory: {
-      enabled: true,
-      scope: 'resource',
-    },
-  },
-})
-```
+OM remembers within a thread. To let the agent reach a user's other threads, turn on [retrieval mode](#retrieval-mode), which gives it a `recall` tool for the raw messages behind observations and for other threads of the same resource.
 
 ### Retrieval mode
 
@@ -323,7 +340,7 @@ See the [recall tool reference](/reference/memory/observational-memory#recall-to
 
 :::warning[Deprecated]
 
-`scope: 'resource'` is deprecated and will be removed in a future release. Mastra logs a warning the first time OM is created with resource scope. Remove the `scope` option to use thread scope, and use [retrieval mode or resource-scoped working memory](#thread-scope-default) for cross-thread continuity.
+`scope: 'resource'` is deprecated and will be removed in a future release. Mastra logs a warning the first time OM is created with resource scope. Remove the `scope` option to use thread scope, and use [retrieval mode](#retrieval-mode) for cross-thread continuity.
 
 :::
 
@@ -333,7 +350,7 @@ Resource scope shares one observation record across all of a resource's threads.
 - **Agent understanding**: each thread sees observations from every other thread, and the agent may continue work that another thread started.
 - **Performance**: unobserved messages from all threads are processed together, which is slow for users with many threads. Resource scope also turns off async buffering.
 
-Switching to thread scope doesn't migrate resource-scoped observations. Each thread uses its own thread-scoped record if it has one, or starts empty, and messages already observed under resource scope aren't observed again. Keep facts that must carry over in resource-scoped working memory.
+Switching to thread scope doesn't migrate resource-scoped observations. Each thread uses its own thread-scoped record if it has one, or starts empty, and messages already observed under resource scope aren't observed again.
 
 ## Extractors
 
