@@ -59,7 +59,7 @@ MASTRA_TELEMETRY_DISABLED=true
 
 Factory separates the work (`factory_work_items`) from external facts (`factory_work_item_sources`) and placement/process state (`factory_board_items`). A work item can have several sources; current intake still creates separate work items for an issue and its pull request. Native cards have no external source. Sources are deduplicated per organization, project, provider and external ID, not claimed across projects.
 
-The split migration preserves legacy card IDs for comments, subscriptions, runs and URLs. It never rewrites the legacy `work_items` table, and does not copy retired claim, triage, acceptance or plan-preapproval columns. It stores the autonomy arm in board metadata. A deterministic legacy fingerprint detects changes even when an older replica does not update `updated_at`; conflicting newer split-side changes are reported rather than overwritten.
+The split migration preserves legacy card IDs for comments, subscriptions, runs and URLs. It never rewrites the legacy `work_items` table. Board placements preserve `claim_key`, `triage_type`, `accepted_at`, `autonomy_armed_at` and `plans_preapproved_at` with main's existing read/write behavior; their removal belongs to separate policy changes. A deterministic legacy fingerprint detects changes even when an older replica does not update `updated_at`; conflicting newer split-side changes are reported rather than overwritten.
 
 There is no dual-write rollback: an older Factory version sees the legacy snapshot, not cards created or changed after cutover. Operators must inspect migration reports for skipped IDs before retiring old replicas.
 

@@ -359,6 +359,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         factory_project_id: PROJECT,
         board: card.board,
         claim_key: card.claimKey,
+        triage_type: card.triageType,
+        accepted_at: card.acceptedAt,
+        autonomy_armed_at: card.autonomyArmedAt,
+        plans_preapproved_at: card.plansPreapprovedAt,
         parent_board_item_id: card.parentWorkItemId,
         stages: card.stages,
         revision: card.revision,
@@ -383,19 +387,37 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         expect(source?.metadata ?? {}, `${fixture.name}: source ${key}`).not.toHaveProperty(key);
       }
       for (const row of [workItem, boardItem, source].filter(Boolean)) {
-        for (const column of [
-          'kind',
-          'triage_type',
-          'accepted_at',
-          'plans_preapproved_at',
-          'comment_count',
-          'feed_activity_at',
-        ]) {
+        for (const column of ['kind', 'comment_count', 'feed_activity_at']) {
           expect(row, `${fixture.name}: retired ${column}`).not.toHaveProperty(column);
         }
       }
     }
     expect(split.boardItems.get(githubIssue)).toMatchObject({ stages: ['planning'], parent_board_item_id: parent });
+  });
+
+  it('preserves classification, acceptance, autonomy and plan grants on the board placement', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    const id = cards.get('github issue')!;
+    const process = {
+      triage_type: 'feature request',
+      accepted_at: new Date('2030-01-01T00:00:00Z'),
+      autonomy_armed_at: new Date('2030-01-02T00:00:00Z'),
+      plans_preapproved_at: new Date('2030-01-03T00:00:00Z'),
+    };
+    await storage.ops.updateMany('work_items', { id }, process);
+
+    await migrateWorkItemSplit(storage);
+
+    const split = await readSplit(storage);
+    const board = split.boardItems.get(id)!;
+    expect(board).toMatchObject(process);
+    for (const column of Object.keys(process)) {
+      expect(split.workItems.get(board.work_item_id)).not.toHaveProperty(column);
+      for (const source of split.sources) expect(source).not.toHaveProperty(column);
+    }
+    expect(board.metadata ?? {}).not.toHaveProperty('autonomyArmedAt');
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 0, skipped: [] });
   });
 
   it('writes nothing on later boots once every card is copied', async () => {
@@ -489,13 +511,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     await storage.ops.updateMany('work_items', { id }, { autonomy_armed_at: armed });
     const report = await migrateWorkItemSplit(storage);
     expect(report).toMatchObject({ recopied: 1, skipped: [] });
-    expect((await readSplit(storage)).boardItems.get(id)?.metadata?.autonomyArmedAt).toBe(armed.toISOString());
+    expect((await readSplit(storage)).boardItems.get(id)?.autonomy_armed_at).toEqual(armed);
     expect(await migrateWorkItemSplit(storage)).toMatchObject({ recopied: 0, unchanged: FIXTURES.length });
     // A timestamp-only fingerprint would miss this second Date-only change too.
     const later = new Date('2032-01-01T00:00:00Z');
     await storage.ops.updateMany('work_items', { id }, { autonomy_armed_at: later });
     expect(await migrateWorkItemSplit(storage)).toMatchObject({ recopied: 1 });
-    expect((await readSplit(storage)).boardItems.get(id)?.metadata?.autonomyArmedAt).toBe(later.toISOString());
+    expect((await readSplit(storage)).boardItems.get(id)?.autonomy_armed_at).toEqual(later);
   });
 
   it('reports conflicting legacy recopies without reverting newer board state', async () => {
