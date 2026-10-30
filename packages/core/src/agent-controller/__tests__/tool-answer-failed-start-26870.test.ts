@@ -180,6 +180,80 @@ describe('tool answer that fails before its run starts', () => {
     expect(env.session.run.isRunning()).toBe(false);
   }, 30_000);
 
+  it('re-arms from the subscription when the resume rejects after the run started but before the session saw it', async () => {
+    // Hold the session's thread subscription (the first one opened) so the
+    // server-side run can start before the subscription arms the session run.
+    let hold = false;
+    let markHeld!: () => void;
+    const held = new Promise<void>(resolve => (markHeld = resolve));
+    let release!: () => void;
+    const released = new Promise<void>(resolve => (release = resolve));
+    const subscribe = Agent.prototype.subscribeToThread;
+    let gated = false;
+    vi.spyOn(Agent.prototype, 'subscribeToThread').mockImplementation(async function (this: Agent, input: any) {
+      const subscription: any = await subscribe.call(this, input);
+      if (gated) return subscription;
+      gated = true;
+      const source = subscription.stream;
+      const stream = (async function* () {
+        for await (const chunk of source) {
+          if (hold) {
+            markHeld();
+            await released;
+          }
+          yield chunk;
+        }
+      })();
+      return new Proxy(subscription, {
+        get: (target, prop) => {
+          if (prop === 'stream') return stream;
+          const value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    });
+
+    const env = await createSession('confirm');
+    const agent = env.session.machinery.getAgent();
+    await env.session.sendMessage({ content: 'confirm it' });
+    expect(env.events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'suspended' });
+    env.events.length = 0;
+
+    const realResume = agent.sendStreamResume.bind(agent);
+    hold = true;
+    vi.spyOn(agent, 'sendStreamResume').mockImplementationOnce(async (...args: any[]) => {
+      await (realResume as any)(...args);
+      // The resumed run is streaming, but the session subscription has not armed it yet.
+      await held;
+      throw new Error('resume rejected after the run started');
+    });
+
+    await env.session.respondToToolSuspension({ resumeData: { ok: true } });
+
+    expect(env.events.some(event => event.type === 'agent_start')).toBe(false);
+    expect(env.session.run.isRunning()).toBe(false);
+
+    let started: { runId: string | null; running: boolean } | undefined;
+    env.session.subscribe(event => {
+      if (event.type === 'agent_start') {
+        started = { runId: env.session.run.getRunId(), running: env.session.run.isRunning() };
+      }
+    });
+    hold = false;
+    release();
+
+    await vi.waitFor(() =>
+      expect(env.events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' }),
+    );
+    // The subscription armed the session for the resumed run once it saw it.
+    expect(started?.running).toBe(true);
+    expect(started?.runId).toEqual(expect.any(String));
+    expect(env.executed).toEqual(['confirm']);
+    expect(env.session.run.isRunning()).toBe(false);
+    expect(env.session.run.getRunId()).toBeNull();
+    expect(env.session.displayState.get().pendingSuspensions.size).toBe(0);
+  }, 30_000);
+
   it('leaves the session idle when two answers in flight together both fail', async () => {
     const env = await suspended();
     const resume = vi.spyOn(env.session.machinery.getAgent(), 'sendStreamResume');
@@ -208,25 +282,43 @@ describe('tool answer that fails before its run starts', () => {
     expect(env.executed).toEqual(['confirm']);
     expect(env.session.run.isRunning()).toBe(false);
   }, 30_000);
+
+  it('keeps a run that was already armed when the answer fails', async () => {
+    const env = await suspended();
+    const liveSignal = env.session.run.ensureAbortController().signal;
+    vi.spyOn(env.session.machinery.getAgent(), 'sendStreamResume').mockRejectedValueOnce(new Error('resume failed'));
+
+    await env.session.respondToToolSuspension({ resumeData: { ok: true } });
+
+    expect(env.session.run.isRunning()).toBe(true);
+    expect(env.session.run.getAbortSignal()).toBe(liveSignal);
+    env.session.run.reset();
+  }, 30_000);
 });
 
 describe('persisted tool approval that fails before its run starts', () => {
+  // Park an approval, then answer it from a fresh runtime with no gate armed.
+  async function parkedApproval() {
+    const shared = stores();
+    const first = await createSession('lookup', shared);
+    void first.session.sendMessage({ content: 'use the tool' }).catch(() => {});
+    await vi.waitFor(() => expect(first.events.some(event => event.type === 'tool_approval_required')).toBe(true), {
+      timeout: 10_000,
+    });
+    agentThreadStreamRuntime.resetForTests();
+
+    const env = await createSession('lookup', shared);
+    const agent = env.session.machinery.getAgent();
+    const suspendedRuns = async () =>
+      (await agent.listSuspendedRuns({ threadId: ids.threadId, resourceId: ids.resourceId })).runs;
+    await vi.waitFor(async () => expect(await suspendedRuns()).toHaveLength(1));
+    return { env, agent, suspendedRuns };
+  }
+
   it.each([true, false])(
     'leaves the session idle (approved: %s) and the retry settles the call',
     async approved => {
-      const shared = stores();
-      const first = await createSession('lookup', shared);
-      void first.session.sendMessage({ content: 'use the tool' }).catch(() => {});
-      await vi.waitFor(() => expect(first.events.some(event => event.type === 'tool_approval_required')).toBe(true), {
-        timeout: 10_000,
-      });
-      agentThreadStreamRuntime.resetForTests();
-
-      const env = await createSession('lookup', shared);
-      const agent = env.session.machinery.getAgent();
-      const suspendedRuns = async () =>
-        (await agent.listSuspendedRuns({ threadId: ids.threadId, resourceId: ids.resourceId })).runs;
-      await vi.waitFor(async () => expect(await suspendedRuns()).toHaveLength(1));
+      const { env, agent, suspendedRuns } = await parkedApproval();
       vi.spyOn(agent, 'sendToolApproval').mockRejectedValueOnce(new Error('dispatch failed'));
 
       await expect(env.session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved })).rejects.toThrow(
@@ -246,19 +338,7 @@ describe('persisted tool approval that fails before its run starts', () => {
   );
 
   it('leaves the session idle when two approvals in flight together both fail', async () => {
-    const shared = stores();
-    const first = await createSession('lookup', shared);
-    void first.session.sendMessage({ content: 'use the tool' }).catch(() => {});
-    await vi.waitFor(() => expect(first.events.some(event => event.type === 'tool_approval_required')).toBe(true), {
-      timeout: 10_000,
-    });
-    agentThreadStreamRuntime.resetForTests();
-
-    const env = await createSession('lookup', shared);
-    const agent = env.session.machinery.getAgent();
-    const suspendedRuns = async () =>
-      (await agent.listSuspendedRuns({ threadId: ids.threadId, resourceId: ids.resourceId })).runs;
-    await vi.waitFor(async () => expect(await suspendedRuns()).toHaveLength(1));
+    const { env, agent, suspendedRuns } = await parkedApproval();
     let failBoth!: () => void;
     const bothArmed = new Promise<void>(resolve => (failBoth = resolve));
     let calls = 0;
@@ -285,4 +365,45 @@ describe('persisted tool approval that fails before its run starts', () => {
     await vi.waitFor(() => expect(env.executed).toEqual(['lookup']));
     await vi.waitFor(async () => expect(await suspendedRuns()).toEqual([]));
   }, 30_000);
+
+  it.each(['before', 'after'] as const)(
+    'keeps the run when one of two approvals in flight dispatches and the other fails %s it',
+    async order => {
+      const { env, agent } = await parkedApproval();
+      let bothArmed!: () => void;
+      const armed = new Promise<void>(resolve => (bothArmed = resolve));
+      let markDispatched!: () => void;
+      const dispatched = new Promise<void>(resolve => (markDispatched = resolve));
+      let markFailed!: () => void;
+      const failed = new Promise<void>(resolve => (markFailed = resolve));
+      // A macrotask lets the other answer's settle bookkeeping run first.
+      const settled = (promise: Promise<void>) => promise.then(() => new Promise(resolve => setTimeout(resolve, 0)));
+      let calls = 0;
+      const approve = vi.spyOn(agent, 'sendToolApproval').mockImplementation(async () => {
+        const call = ++calls;
+        if (call === 2) bothArmed();
+        await armed;
+        if (call === 1) {
+          if (order === 'after') await settled(dispatched);
+          markFailed();
+          throw new Error('dispatch failed');
+        }
+        // Dispatched, but the subscription has not armed the run yet.
+        if (order === 'before') await settled(failed);
+        markDispatched();
+        return undefined as any;
+      });
+
+      const answers = await Promise.allSettled([
+        env.session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved: true }),
+        env.session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved: true }),
+      ]);
+
+      expect(answers.map(answer => answer.status)).toEqual(['rejected', 'fulfilled']);
+      expect(approve).toHaveBeenCalledTimes(2);
+      expect(env.session.run.isRunning()).toBe(true);
+      env.session.run.reset();
+    },
+    30_000,
+  );
 });
