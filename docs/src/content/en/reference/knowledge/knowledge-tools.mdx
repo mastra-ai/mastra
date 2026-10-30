@@ -145,6 +145,8 @@ Creates, edits, moves, merges and deletes pages. `scope` only names the destinat
 
 Template pages, declared in a scope's `pages`, can be edited, annotated with notes and merged into, but not moved, merged away or deleted, whatever the run's role.
 
+A scope page's name and description come from config, so `write` on a scope page changes only its body. The scope page can't be moved, merged or deleted.
+
 `delete` removes a page from reads, search and pins. It's refused while the page has child pages, for a scope page and for a template page.
 
 Errors:
@@ -157,6 +159,7 @@ Moving a page needs the destination scope.
 Merging needs into: the page that remains.
 "Escalation" has child pages; move or delete them first.
 "org:acme" is a scope page; scope pages can't be moved, merged or deleted.
+"org:acme" is a scope page; its name and description come from config, so only its body can be written.
 Knowledge page "org:acme#policies/escalation" not found.
 Knowledge page key "a/b" must not contain "/", "#" or "%"
 Knowledge page key "escalation" already exists under page aa8f6099-6111-4952-b9cb-04cb97eb2bb5. Keys are unique among siblings; pick another key or move one of the pages.
