@@ -159,6 +159,81 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
       });
     });
 
+    describe('scope declaration keys', () => {
+      const seed = async () => {
+        await scope('org:acme', ORG);
+        await scope('team:acme:eng', TEAM);
+        await scope('team:acme:ops', TEAM);
+        // A key that only shares a prefix with ACCOUNT, so a rename of ACCOUNT must leave it alone.
+        await scope('accountx:acme:9', `${ACCOUNT}x`);
+        const account = await store.materializeScope({
+          address: 'account:acme:1',
+          declaration: ACCOUNT,
+          name: 'Account 1',
+          children: [{ address: 'account:acme:1/internal', declaration: ACCOUNT_INTERNAL, name: 'internal' }],
+          provenance: host,
+        });
+        return account.scope;
+      };
+
+      it('lists every stored declaration key with its scope count, in key order', async () => {
+        await seed();
+        expect(await store.listScopeDeclarations()).toEqual([
+          { declaration: ACCOUNT, scopes: 1 },
+          { declaration: ACCOUNT_INTERNAL, scopes: 1 },
+          { declaration: `${ACCOUNT}x`, scopes: 1 },
+          { declaration: ORG, scopes: 1 },
+          { declaration: TEAM, scopes: 2 },
+        ]);
+      });
+
+      it('renames a key and its template children, after the check sees every affected scope', async () => {
+        const account = await seed();
+        const seen: unknown[] = [];
+        const renamed = await store.renameScopeDeclaration({
+          from: ACCOUNT,
+          to: 'acct:$orgId:$accountId',
+          check: scopes => {
+            seen.push(...scopes);
+          },
+        });
+        expect(renamed).toBe(2);
+        expect(seen).toHaveLength(2);
+        expect(seen).toEqual(
+          expect.arrayContaining([
+            { address: 'account:acme:1', from: ACCOUNT, to: 'acct:$orgId:$accountId' },
+            { address: 'account:acme:1/internal', from: ACCOUNT_INTERNAL, to: 'acct:$orgId:$accountId/internal' },
+          ]),
+        );
+        expect(await store.listScopeDeclarations()).toEqual([
+          { declaration: `${ACCOUNT}x`, scopes: 1 },
+          { declaration: 'acct:$orgId:$accountId', scopes: 1 },
+          { declaration: 'acct:$orgId:$accountId/internal', scopes: 1 },
+          { declaration: ORG, scopes: 1 },
+          { declaration: TEAM, scopes: 2 },
+        ]);
+        const [stored] = await store.getScopesByAddress(['account:acme:1']);
+        expect(stored).toMatchObject({ id: account.id, declaration: 'acct:$orgId:$accountId' });
+      });
+
+      it('changes nothing when the check throws, and renames nothing for an unused key', async () => {
+        await seed();
+        const before = await store.listScopeDeclarations();
+        await expect(
+          store.renameScopeDeclaration({
+            from: TEAM,
+            to: 'squad:$orgId:$teamId',
+            check: () => {
+              throw new Error('pattern mismatch');
+            },
+          }),
+        ).rejects.toThrow('pattern mismatch');
+        expect(await store.listScopeDeclarations()).toEqual(before);
+        expect(await store.renameScopeDeclaration({ from: 'gone:$x', to: ORG, check: () => {} })).toBe(0);
+        expect(await store.listScopeDeclarations()).toEqual(before);
+      });
+    });
+
     describe('key paths', () => {
       it('keeps keys unique among live siblings only', async () => {
         const acme = await scope('org:acme', ORG);

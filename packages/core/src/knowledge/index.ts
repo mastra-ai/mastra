@@ -135,6 +135,22 @@ export class Knowledge extends MastraBase {
     return this.#runtime.explainAccess(runScopes, target);
   }
 
+  /**
+   * After renaming a scope declaration key in `scopes`, moves the scopes stored under the old key
+   * (and its template children, `from/<name>`) to the new one, in one atomic step. Until then this
+   * instance refuses to run: stored scopes under an undeclared key would otherwise silently lose
+   * prefix and `belongsTo` reach. Refuses when `from` is still declared, `to` isn't, or any stored
+   * address doesn't match the `to` pattern; nothing changes then. Returns how many scopes moved.
+   *
+   * In a rolling deploy, instances with the new config fail until the rename runs, and instances
+   * still on the old config lose reach to those scopes after it; deploy, then rename right away.
+   *
+   * @experimental
+   */
+  renameScopeDeclaration(from: string, to: string): Promise<number> {
+    return this.#runtime.renameScopeDeclaration(from, to);
+  }
+
   #groups(override?: KnowledgeToolSelection): { read: boolean; write: boolean; pins: boolean } {
     const pinnedContext = override?.pinnedContext;
     return {
