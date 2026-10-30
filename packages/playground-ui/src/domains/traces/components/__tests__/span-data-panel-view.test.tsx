@@ -242,6 +242,19 @@ describe('SpanDataPanelView', () => {
         expect(screen.queryByText('Model')).toBeNull();
         expect(screen.queryByText('Token usage')).toBeNull();
       });
+
+      describe('but recorded the model it ran', () => {
+        const agentRunSpan = { ...spanFixture, model: 'claude-sonnet-4-5', provider: 'anthropic' };
+
+        it('lists the model and provider, keeping the span named after its entity', () => {
+          renderWithProviders(<SpanDataPanelView {...baseProps} span={agentRunSpan} />);
+
+          expect(valueOf('Model')).toBe('claude-sonnet-4-5');
+          expect(screen.getByRole('img', { name: 'anthropic logo' })).toBeTruthy();
+          expect(valueOf('Provider')).toBe('anthropic');
+          expect(screen.getByRole('heading', { name: 'agent run' })).toBeTruthy();
+        });
+      });
     });
   });
 
