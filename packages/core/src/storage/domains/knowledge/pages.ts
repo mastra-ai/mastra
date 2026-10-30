@@ -649,6 +649,11 @@ export interface KnowledgePageStore {
 
   // Notes
   getNote(input: { id: string; read: KnowledgeReadScope; includeDeleted?: boolean }): Promise<KnowledgeNote | null>;
+  /**
+   * How many live notes `read` can see on each page, keyed by page id; one call for all the pages.
+   * Pages with no visible notes map to 0. Duplicate ids count once.
+   */
+  countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>>;
   /** Visible notes on a page, oldest first. */
   listNotes(input: {
     pageId: string;
