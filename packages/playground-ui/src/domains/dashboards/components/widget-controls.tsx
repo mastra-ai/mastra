@@ -2,6 +2,8 @@ import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import {
   OpenErrorsInLogsButton,
   OpenInLogsButton,
+  OpenInSpansButton,
+  OpenInThreadsButton,
   OpenInTracesButton,
 } from '../../metrics/components/card-action-buttons';
 import type { Views } from '../hooks/use-widget-views';
@@ -33,7 +35,7 @@ export function ViewTabs<Options>({
   );
 }
 
-/** The view's action button: open in Traces, or in Logs (naming errors only when the target keeps to them). */
+/** The view's action button, named for the page it opens (Logs names errors only when the target keeps to them). */
 export function DrilldownAction({
   widget,
   view,
@@ -47,6 +49,14 @@ export function DrilldownAction({
   if (!onDrilldown || !action) return null;
   const scope = targetScope(action);
   const open = () => onDrilldown(action.page, scope);
-  if (action.page !== 'logs') return <OpenInTracesButton onClick={open} />;
-  return scope.status === 'error' ? <OpenErrorsInLogsButton onClick={open} /> : <OpenInLogsButton onClick={open} />;
+  switch (action.page) {
+    case 'traces':
+      return <OpenInTracesButton onClick={open} />;
+    case 'spans':
+      return <OpenInSpansButton onClick={open} />;
+    case 'threads':
+      return <OpenInThreadsButton onClick={open} />;
+    case 'logs':
+      return scope.status === 'error' ? <OpenErrorsInLogsButton onClick={open} /> : <OpenInLogsButton onClick={open} />;
+  }
 }

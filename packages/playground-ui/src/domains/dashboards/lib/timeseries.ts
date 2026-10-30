@@ -204,9 +204,13 @@ export function shapeTimeseries({
   };
 }
 
+/** Aggregations whose values for several groups add up to the value for all of them. */
+const ADDITIVE = new Set<string>(['sum', 'count']);
+
 /**
  * What the schema can't say: query ids the view has, bucketed queries that leave their interval to the
- * chart's grid, and refs that pick one percentile when their query asks for several.
+ * chart's grid, refs that pick one of the percentiles their query asks for, and refs that pick one group
+ * of a grouped aggregation that can't be added up.
  */
 export function timeseriesIssues(options: TimeseriesOptions, queries: readonly DashboardQuery[]): string[] {
   const exprs = options.series.flatMap(s => (s.legendValue ? [s.value, s.legendValue] : [s.value]));
@@ -235,6 +239,32 @@ export function timeseriesIssues(options: TimeseriesOptions, queries: readonly D
       );
     })
     .map(r => `a value reading query '${r.query}' must pick one of its percentiles`);
+  const missingPercentiles = refs
+    .filter(r => {
+      const query = byId.get(r.query);
+      return (
+        r.percentile !== undefined &&
+        query !== undefined &&
+        'request' in query &&
+        query.request === 'percentiles' &&
+        !query.percentiles.includes(r.percentile)
+      );
+    })
+    .map(r => `a value reading query '${r.query}' picks percentile ${r.percentile}, which the query doesn't ask for`);
+  // Every series a ref matches adds up, which is only right for counts and sums.
+  const mixedGroups = refs
+    .filter(r => {
+      const query = byId.get(r.query);
+      return (
+        r.groups?.length !== 1 &&
+        query !== undefined &&
+        'request' in query &&
+        query.request === 'timeSeries' &&
+        (query.groupBy?.length ?? 0) > 0 &&
+        !ADDITIVE.has(query.aggregation)
+      );
+    })
+    .map(r => `a value reading query '${r.query}' must pick one group, since its groups' values can't be added up`);
 
   return [
     ...unknownQueryIssues(
@@ -244,5 +274,7 @@ export function timeseriesIssues(options: TimeseriesOptions, queries: readonly D
     ...unknownQueryIssues(options.totals ?? [], queries, 'options.totals'),
     ...ownIntervals,
     ...new Set(ambiguousPercentiles),
+    ...new Set(missingPercentiles),
+    ...new Set(mixedGroups),
   ];
 }

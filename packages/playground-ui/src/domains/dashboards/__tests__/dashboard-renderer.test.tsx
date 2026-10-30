@@ -344,6 +344,20 @@ describe('DashboardRenderer', () => {
       fireEvent.click(within(cell(container, 'any')).getByRole('button', { name: 'View in logs' }));
       expect(onDrilldown).toHaveBeenCalledWith('logs', { entityName: 'support' });
     });
+
+    it('names the page each action opens', () => {
+      const onDrilldown = vi.fn();
+      const target = (page: 'traces' | 'spans' | 'threads') =>
+        controls({ id: page, drilldown: { action: { page, filters: [] } } });
+      const { container } = renderDashboard(definition(target('traces'), target('spans'), target('threads')), {
+        kinds: [controlsKind],
+        onDrilldown,
+      });
+      expect(within(cell(container, 'traces')).getByRole('button', { name: 'View in traces' })).toBeDefined();
+      expect(within(cell(container, 'spans')).getByRole('button', { name: 'View in spans' })).toBeDefined();
+      fireEvent.click(within(cell(container, 'threads')).getByRole('button', { name: 'View in threads' }));
+      expect(onDrilldown).toHaveBeenCalledWith('threads', {});
+    });
   });
 
   describe('scope', () => {

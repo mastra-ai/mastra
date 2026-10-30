@@ -1,4 +1,4 @@
-import { EyeIcon, LogsIcon } from 'lucide-react';
+import { EyeIcon, ListTreeIcon, LogsIcon, MessagesSquareIcon } from 'lucide-react';
 import { Button } from '../../../ds/components/Button/Button';
 
 type CardActionButtonProps = {
@@ -37,6 +37,26 @@ export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
   return (
     <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in logs" aria-label="View in logs">
       <LogsIcon />
+    </Button>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Spans page scoped to
+ *  the card's current dimensions. */
+export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
+  return (
+    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in spans" aria-label="View in spans">
+      <ListTreeIcon />
+    </Button>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Threads page scoped to
+ *  the card's current dimensions. */
+export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
+  return (
+    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in threads" aria-label="View in threads">
+      <MessagesSquareIcon />
     </Button>
   );
 }

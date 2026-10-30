@@ -631,6 +631,35 @@ describe('timeseriesIssues', () => {
     const totals: TimeseriesOptions = { ...options({ query: 'latency', percentile: 0.5 }), totals: ['latency'] };
     expect(timeseriesIssues(totals, [{ ...latency, interval: '1d' }])).toEqual([]);
   });
+
+  it("reports a ref that picks a percentile its query doesn't ask for, which no series would match", () => {
+    expect(timeseriesIssues(options({ query: 'latency', percentile: 0.75 }), [latency])).toEqual([
+      "a value reading query 'latency' picks percentile 0.75, which the query doesn't ask for",
+    ]);
+  });
+
+  describe('when a grouped query reads a series per group', () => {
+    const grouped = (aggregation: 'avg' | 'count'): DashboardQuery => ({
+      id: 'duration',
+      source: 'metrics',
+      request: 'timeSeries',
+      name: ['mastra_agent_duration_ms'],
+      aggregation,
+      groupBy: ['entityName'],
+    });
+
+    it("reports a ref reading every group of an average, since averages don't add up", () => {
+      expect(timeseriesIssues(options({ query: 'duration' }), [grouped('avg')])).toEqual([
+        "a value reading query 'duration' must pick one group, since its groups' values can't be added up",
+      ]);
+      expect(timeseriesIssues(options({ query: 'duration', notGroups: ['idle'] }), [grouped('avg')])).toHaveLength(1);
+    });
+
+    it('takes a ref picking one group of an average, or every group of a count', () => {
+      expect(timeseriesIssues(options({ query: 'duration', groups: ['support'] }), [grouped('avg')])).toEqual([]);
+      expect(timeseriesIssues(options({ query: 'duration' }), [grouped('count')])).toEqual([]);
+    });
+  });
 });
 
 describe('kpisIssues', () => {
@@ -661,5 +690,11 @@ describe('kpisIssues', () => {
       aggregation: 'count',
     };
     expect(kpisIssues(kpi([aggregate]))).toEqual([]);
+  });
+
+  it('reports a KPI reading a scores aggregate that names no scorer, since nothing would be sent', () => {
+    const scores: DashboardQuery = { id: 'runs', source: 'scores', request: 'aggregate', aggregation: 'avg' };
+    expect(kpisIssues(kpi([scores]))).toEqual(["KPI 'Runs' reads scores query 'runs', which must name a scorer"]);
+    expect(kpisIssues(kpi([{ ...scores, scorerId: 'relevance' }]))).toEqual([]);
   });
 });

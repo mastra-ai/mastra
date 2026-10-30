@@ -66,7 +66,7 @@ const readsAggregates = (expr: ValueExpr): boolean =>
 const isAggregate = (query: DashboardQuery | undefined) =>
   (query?.source === 'metrics' || query?.source === 'scores') && query.request === 'aggregate';
 
-/** What the schema can't say: query ids the view has, and only metrics or scores aggregates, or sums of them. */
+/** What the schema can't say: query ids the view has, and only metrics or scores aggregates (scores naming a scorer), or sums of them. */
 export const kpisIssues = (view: ResolvedView<KpisOptions>) => {
   const byId = new Map(view.queries.map(q => [q.id, q]));
   return [
@@ -81,6 +81,15 @@ export const kpisIssues = (view: ResolvedView<KpisOptions>) => {
       exprRefs(i.value)
         .filter(r => byId.has(r.query) && !isAggregate(byId.get(r.query)))
         .map(r => `KPI '${i.label}' reads query '${r.query}', which is not a metrics or scores aggregate`),
+    ),
+    // A KPI shows one figure, so it can't discover scorers the way the scores widget does.
+    ...view.options.items.flatMap(i =>
+      exprRefs(i.value)
+        .filter(r => {
+          const query = byId.get(r.query);
+          return query?.source === 'scores' && query.scorerId === undefined;
+        })
+        .map(r => `KPI '${i.label}' reads scores query '${r.query}', which must name a scorer`),
     ),
   ];
 };
