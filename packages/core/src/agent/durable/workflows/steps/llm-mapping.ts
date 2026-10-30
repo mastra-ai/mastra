@@ -60,6 +60,7 @@ const durableLLMMappingOutputSchema = z.object({
   state: z.any(),
   delegationBailed: z.boolean().optional(),
   deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  runAborted: z.boolean().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   releasedToolResultIds: z.array(z.string()).optional(),
@@ -345,10 +346,7 @@ export function createDurableLLMMappingStep() {
       // loop re-invoked the model on a result nobody produced.
       const hasPendingHITL = toolResults.some(isPendingClientCall);
       const tripwire = toolResults.find(r => r.tripwire)?.tripwire;
-      // abort() stopped a tool, possibly on a worker the next step never hears from: end the run here.
-      const runAborted = toolResults.some(r => r?.runAborted === true);
-      const isContinued =
-        hasPendingHITL || runAborted ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The primary channel
       // is the tool-call step's serializable output: the hook writes the flag
@@ -366,6 +364,8 @@ export function createDurableLLMMappingStep() {
 
       // A tool the total deadline aborted, possibly on another worker, ends the run as the deadline.
       const deadlineTimeout = toolResults.find(r => r?.deadlineTimeout)?.deadlineTimeout;
+      // abort() stopped a tool, possibly on a worker the next step never hears from.
+      const runAborted = toolResults.some(r => r?.runAborted === true);
 
       // 4. Carry the deferred step-finish after tool-result chunks have been
       // emitted. The loop predicate adds step content and emits it after resolving
@@ -395,7 +395,6 @@ export function createDurableLLMMappingStep() {
         messageId,
         stepResult: {
           ...llmOutput.stepResult,
-          ...(runAborted ? { reason: 'abort' as const } : {}),
           isContinued,
         },
         toolResults,
@@ -427,6 +426,7 @@ export function createDurableLLMMappingStep() {
         releasedToolResultIds: llmOutput.releasedToolResultIds,
         delegationBailed,
         ...(deadlineTimeout ? { deadlineTimeout } : {}),
+        ...(runAborted ? { runAborted } : {}),
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,

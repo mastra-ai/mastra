@@ -52,6 +52,14 @@ function freePort(): Promise<number> {
   });
 }
 
+function killGroup(proc: ChildProcess, signal: NodeJS.Signals) {
+  try {
+    process.kill(-proc.pid!, signal);
+  } catch {
+    // already exited
+  }
+}
+
 function startWorker(port: number, name: string): Promise<ChildProcess> {
   return new Promise((resolve, reject) => {
     const proc = spawn(
@@ -59,11 +67,13 @@ function startWorker(port: number, name: string): Promise<ChildProcess> {
       ['tsx', WORKER, DB_URL, AGENT_ID, String(INNGEST_PORT), mock.url, OUT_DIR, String(port), name],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
+        // Own process group, so teardown also stops the node process tsx starts.
+        detached: true,
         env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
       },
     );
     const timer = setTimeout(() => {
-      proc.kill('SIGKILL');
+      killGroup(proc, 'SIGKILL');
       reject(new Error(`worker ${name} did not become ready in 90s`));
     }, 90_000);
     const onData = (buf: Buffer) => {
@@ -159,9 +169,9 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
   });
 
   afterAll(async () => {
-    for (const worker of workers) worker.kill('SIGTERM');
+    for (const worker of workers) killGroup(worker, 'SIGTERM');
     await new Promise(r => setTimeout(r, 500));
-    for (const worker of workers) if (!worker.killed) worker.kill('SIGKILL');
+    for (const worker of workers) killGroup(worker, 'SIGKILL');
     await new Promise<void>(resolve => (proxy ? proxy.close(() => resolve()) : resolve()));
     await stopInngestDevServer(devServer);
     await mock?.stop();

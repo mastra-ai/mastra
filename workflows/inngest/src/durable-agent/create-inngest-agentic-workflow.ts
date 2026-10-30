@@ -393,9 +393,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           }
         };
 
-        // A tool the total deadline aborted ends the run. The flag travels on iteration state
+        // A tool the total deadline or abort() stopped ends the run. The flag travels on iteration state
         // because this predicate can run on a worker that never received the abort request.
-        if (state.deadlineTimeout) {
+        if (state.deadlineTimeout || state.runAborted) {
           if (tracingRegistry) tracingRegistry.tracingStopCause = 'model_finished';
           await emitStepFinish(false);
           return false;
@@ -510,7 +510,11 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
-              finishReason: deadlineError ? 'error' : (state.lastStepResult?.reason ?? 'unknown'),
+              finishReason: deadlineError
+                ? 'error'
+                : state.runAborted
+                  ? 'abort'
+                  : (state.lastStepResult?.reason ?? 'unknown'),
               steps: state.accumulatedSteps,
               ...(deadlineError ? { error: deadlineError } : {}),
             },
@@ -553,7 +557,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             messageId: state.messageId,
             stepResult: tripwire
               ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
-              : state.lastStepResult || {
+              : state.runAborted
+                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
+                : state.lastStepResult || {
                   reason: 'stop',
                   warnings: [],
                   isContinued: false,

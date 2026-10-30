@@ -591,6 +591,8 @@ export interface DurableAgenticExecutionOutput {
   delegationBailed?: boolean;
   /** Set when the total deadline aborted a tool call this iteration */
   deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped a tool call this iteration */
+  runAborted?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
