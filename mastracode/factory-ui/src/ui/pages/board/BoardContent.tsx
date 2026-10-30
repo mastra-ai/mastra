@@ -414,7 +414,6 @@ export function BoardContent({
                 <BoardAutomationSettings
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
-                  autoApprovePlans={factory.autoApprovePlans ?? false}
                   reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
                   selfReviewEnabled={factory.selfReviewEnabled ?? false}
                 />

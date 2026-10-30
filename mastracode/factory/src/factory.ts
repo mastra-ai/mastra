@@ -1056,11 +1056,6 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
-          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-            await factoryProjectsStorage.ensureReady();
-            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.autoApprovePlans ?? false;
-          },
           selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
@@ -1825,11 +1820,6 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoRunEnabled ?? false;
-                },
-                autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.autoApprovePlans ?? false;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,

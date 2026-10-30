@@ -117,11 +117,6 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     item: WorkItemRow;
   }) => Promise<void> | void;
-  /**
-   * Resolves whether a project auto-approves produced plans. Unset means off:
-   * a plan without explicit approval is a plan a person must review.
-   */
-  autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
   selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
@@ -247,7 +242,6 @@ export class FactoryTransitionService {
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
-  readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
   readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
@@ -260,7 +254,6 @@ export class FactoryTransitionService {
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
-    this.#autoApprovePlans = options.autoApprovePlans;
     this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
@@ -484,14 +477,8 @@ export class FactoryTransitionService {
     try {
       evaluation = await withRuleTimeout(
         (async () => {
-          // Resolve the project switch inside the timed block so a resolver rejection
-          // surfaces as a committed rule_error and a slow lookup is bounded.
-          // A phase whose submit_plan exit tool is auto-approved for this card approves its plans too.
-          const plansAutoApproved =
-            autoApprovedExitTool(boards, item) === 'submit_plan' ||
-            (this.#autoApprovePlans
-              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : false);
+          // Plans are approved without a person only where the card's phase auto-approves submit_plan.
+          const plansAutoApproved = autoApprovedExitTool(boards, item) === 'submit_plan';
           // When the board's own rule for a phase's exit tool moves the card on success, that
           // result is the handoff to the next working phase (for submit_plan, only an approved
           // plan). Anyone but a person needs it, unless the tool is auto-approved for this card.
@@ -505,15 +492,13 @@ export class FactoryTransitionService {
             entersWorking &&
             !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id)
           ) {
-            const autoApproved =
-              exitTool.id === 'submit_plan' ? plansAutoApproved : autoApprovedExitTool(boards, item) === exitTool.id;
-            if (!autoApproved) {
+            if (autoApprovedExitTool(boards, item) !== exitTool.id) {
               return {
                 outcome: 'rejected' as const,
                 code: 'approval_required',
                 reason:
                   exitTool.id === 'submit_plan'
-                    ? `Auto-approve plans is off, so a person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
+                    ? `A person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
                     : `${fromPhase!.name} ends when ${exitTool.id} succeeds, and that moves the card. A person can also move it from the Factory board or a chat they are signed in to.`,
               };
             }

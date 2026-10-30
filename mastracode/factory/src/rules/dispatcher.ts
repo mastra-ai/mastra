@@ -394,8 +394,6 @@ export interface FactoryDecisionDispatcherOptions {
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  /** `true` lets the dispatcher answer a run's plan itself, so started work carries to Done. */
-  autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -598,7 +596,6 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  readonly #autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -632,7 +629,6 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
-    this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
@@ -1609,9 +1605,8 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Whether the run answers its plan approvals itself: the project says so, or the card's phase
-   * ends with an auto-approved `submit_plan`. Unset means off: a plan nobody asked us to answer is
-   * a plan someone should see.
+   * Whether the run answers its plan approvals itself: the card's phase ends with an auto-approved
+   * `submit_plan`. Otherwise a plan waits for a person.
    */
   async #plansAreAutoApproved({
     orgId,
@@ -1623,9 +1618,10 @@ export class FactoryDecisionDispatcher {
     workItemId: string | null;
   }): Promise<boolean> {
     const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
-    if (item && autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan')
-      return true;
-    return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
+    return (
+      item !== null &&
+      autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan'
+    );
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {

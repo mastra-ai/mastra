@@ -336,6 +336,29 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
   return prepared.binding;
 }
 
+/**
+ * Work with Planning and Building ending in an auto-approved `submit_plan`: the only way the
+ * dispatcher answers a plan itself now that the project switch is gone.
+ */
+function plansAutoApprovedBoards(): BoardRegistry {
+  const board = defineBoard({
+    id: 'work',
+    name: 'Work',
+    initialPhase: 'intake',
+    sourceClosed: workBoard.sourceClosed,
+    tools: workBoard.tools,
+    phases: {
+      ...workBoard.phases,
+      planning: { ...workBoard.phases.planning, exitTool: { id: 'submit_plan', autoApprove: true } },
+      execute: { ...workBoard.phases.execute, exitTool: { id: 'submit_plan', autoApprove: true } },
+    },
+  });
+  return new Map([
+    [board.id, board],
+    [reviewBoard.id, reviewBoard],
+  ]);
+}
+
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
 async function queueRunKickoff(storage: WorkItemsStorage, options?: { preapprovePlans?: boolean }) {
   const item = await createItem(storage);
@@ -4057,7 +4080,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
-  it("approves a plan on the project's behalf when plan review is off", async () => {
+  it("approves a plan itself when the card's phase auto-approves submit_plan", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -4073,7 +4096,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      boards: plansAutoApprovedBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4101,7 +4124,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4129,7 +4151,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4155,13 +4176,13 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      boards: plansAutoApprovedBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     // A plan has an approvable default; a question does not. Answering one on
-    // the project's behalf would be inventing the answer.
+    // the board's behalf would be inventing the answer.
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record).toMatchObject({ status: 'succeeded' });
@@ -4177,7 +4198,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage: personStorage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      boards: plansAutoApprovedBoards(),
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(personSession.session.respondToToolSuspension).not.toHaveBeenCalled();
@@ -4194,7 +4215,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => false,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4203,9 +4223,11 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
   });
 
-  it("approves a person-started run's plan too when plan review is off", async () => {
+  it("approves a person-started run's plan too when its phase auto-approves submit_plan", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueRunKickoff(storage);
+    const { item, transitionService } = await queueRunKickoff(storage);
+    // A person asked for a plan: the card sits in Planning.
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -4213,7 +4235,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => false,
-      autoApprovePlans: async () => true,
+      boards: plansAutoApprovedBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4225,7 +4247,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("leaves a legacy hands-off item's plan parked while the project switch stays off", async () => {
+  it("leaves a legacy hands-off item's plan parked: only the board approves plans", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueRunKickoff(storage, { preapprovePlans: true });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
@@ -4235,7 +4257,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => false,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4261,7 +4282,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4286,7 +4306,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      boards: plansAutoApprovedBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -6513,7 +6533,6 @@ describe('run-end backstop report', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
       ...(reportRunEnd ? { reportRunEnd } : {}),
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -6581,7 +6600,6 @@ describe('run-end backstop report', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
       reportRunEnd,
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7089,7 +7107,6 @@ describe('board phase automation', () => {
         boards,
         ownerId: 'worker-1',
         isAutoRunEnabled: async () => true,
-        autoApprovePlans: async () => false,
       }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
       if (approved) {

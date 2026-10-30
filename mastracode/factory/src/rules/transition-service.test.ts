@@ -1466,7 +1466,6 @@ describe('FactoryTransitionService', () => {
       configVersion: 'rules-v1',
       storage,
       boards: createBoardRegistry({ boards: [planned] }),
-      autoApprovePlans: async () => false,
     });
     const move = (item: { id: string; revision: number; board?: string | null }, identity: string) =>
       service.transition({
@@ -1496,19 +1495,16 @@ describe('FactoryTransitionService', () => {
   it('still hands the next seat its run when an agent moves the card past its own stage', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['planning'] });
-    const service = new FactoryTransitionService({
-      configVersion: 'rules-v1',
-      storage,
-      // The plan agent's planning -> execute handoff only stands when plans are
-      // auto-approved; the gate is exercised separately below.
-      autoApprovePlans: async () => true,
-    });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
+    // The plan agent's planning -> execute handoff stands once a person approved the
+    // plan; the gate itself is exercised separately below.
     const result = await service.transition({
       ...request(item, { stage: 'execute' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'plan' },
       ingress: { type: 'agent', identity: 'request-1' },
       cause: 'plan approved',
+      planApproved: true,
     });
 
     assert(result.status === 'accepted');
@@ -2116,9 +2112,21 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     return createItem(storage, { stages: ['planning'], sourceKey, metadata: { authorTrusted: true } });
   }
 
-  function planAgentToExecute(item: { id: string; revision: number }, identity: string) {
+  /** Work, except Planning's submit_plan is auto-approved: the only way a plan skips a person now. */
+  const autoApprovingWork = defineBoard({
+    id: 'auto-approving-work',
+    name: 'Auto-approving Work',
+    initialPhase: 'intake',
+    tools: workBoard.tools,
+    phases: {
+      ...workBoard.phases,
+      planning: { ...workBoard.phases.planning, exitTool: { id: 'submit_plan', autoApprove: true } },
+    },
+  });
+
+  function planAgentToExecute(item: { id: string; revision: number; board?: string | null }, identity: string) {
     return {
-      ...request(item, { stage: 'execute', identity }),
+      ...request(item, { board: item.board ?? 'work', stage: 'execute', identity }),
       actor: { type: 'agent' as const, bindingId: 'plan-binding', role: 'plan' },
       ingress: { type: 'agent' as const, identity },
     };
@@ -2129,7 +2137,6 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => false,
     });
     const item = await planningItem(storage, 'no-auto-approve');
 
@@ -2155,14 +2162,25 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['planning'] });
   });
 
-  it('lets the plan agent advance when the project auto-approves plans', async () => {
+  it('lets the plan agent advance only where the board auto-approves submit_plan, never on Work itself', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => true,
+      boards: createBoardRegistry({ boards: [autoApprovingWork] }),
     });
-    const item = await planningItem(storage, 'auto-approve');
+    const onWork = await planningItem(storage, 'work-plan');
+    expect(await service.transition(planAgentToExecute(onWork, 'work-execute'))).toMatchObject({
+      status: 'rejected',
+      code: 'approval_required',
+    });
+
+    const item = await createItem(storage, {
+      board: autoApprovingWork.id,
+      stages: ['planning'],
+      sourceKey: 'auto-approve',
+      metadata: { authorTrusted: true },
+    });
 
     const result = await service.transition(planAgentToExecute(item, 'plan-execute'));
 
@@ -2171,12 +2189,11 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     expect(result.decisions).toContainEqual(expect.objectContaining({ type: 'invokeSkill', role: 'work' }));
   });
 
-  it('does not treat legacy item preapproval as permission to bypass the project setting', async () => {
+  it('does not treat legacy item preapproval as permission to skip plan approval', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => false,
     });
     let item = await planningItem(storage, 'preapproved');
     const updated = await storage.update({
@@ -2199,7 +2216,6 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => false,
     });
     const item = await planningItem(storage, 'human-move');
 
@@ -2216,7 +2232,6 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => false,
     });
     const item = await planningItem(storage, `${role}-agent`);
 
@@ -2234,7 +2249,6 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => false,
     });
     const item = await planningItem(storage, 'unapproved-system-rule');
 
@@ -2253,7 +2267,6 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => false,
     });
     const item = await planningItem(storage, 'approved-plan-result');
 
@@ -2279,16 +2292,17 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
       const service = new FactoryTransitionService({
         configVersion: 'plan-gate-v1',
         storage,
-        autoApprovePlans: async () => autoApprove,
+        boards: createBoardRegistry({ boards: [autoApprovingWork] }),
       });
       const item = await createItem(storage, {
+        board: autoApprove ? autoApprovingWork.id : 'work',
         stages: [stage],
         sourceKey: `skip-${stage}`,
         metadata: { authorTrusted: true },
       });
 
       const result = await service.transition({
-        ...request(item, { stage: 'execute', identity: `skip-${stage}` }),
+        ...request(item, { board: item.board ?? 'work', stage: 'execute', identity: `skip-${stage}` }),
         actor: { type: 'agent', bindingId: 'triage-binding', role: 'triage' },
         ingress: { type: 'agent', identity: `skip-${stage}` },
       });
@@ -2306,7 +2320,6 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
-      autoApprovePlans: async () => true,
     });
     const item = await createItem(storage, {
       stages: ['triage'],
