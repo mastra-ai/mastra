@@ -115,9 +115,13 @@ export function toolFromInvocationPart(
     toolName: invocation.toolName,
     argsText: runtime?.argsText ?? '',
     args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
-    status: terminalStatus ?? runtime?.status ?? 'running',
+    status: exitedWithFailure(runtime) ? 'error' : (terminalStatus ?? runtime?.status ?? 'running'),
     result,
     output: runtime?.output ?? '',
     createdAt: part.createdAt ?? runtime?.createdAt ?? fallbackCreatedAt,
   };
+}
+
+function exitedWithFailure(runtime: ToolCall | undefined): boolean {
+  return runtime?.exitCode !== undefined && runtime.exitCode !== 0;
 }

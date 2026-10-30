@@ -259,7 +259,16 @@ export function MessageBubble({
         return <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} />;
       }
       if (row.kind === 'divider') return <TranscriptDivider label={row.label} title={row.title} />;
-      if (row.kind === 'reminder') return <SignalActivity kind="reminder" label="System reminder" message={row.text} />;
+      if (row.kind === 'reminder') {
+        return (
+          <SignalActivity
+            kind="reminder"
+            label={row.loadedFile ? 'Project instructions' : 'System reminder'}
+            detail={row.loadedFile}
+            message={row.text}
+          />
+        );
+      }
       return <SignalActivity kind="reactive" label={row.tagName} message={row.text} />;
     }
     case 'status':

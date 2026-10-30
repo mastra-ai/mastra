@@ -4,6 +4,7 @@ import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { z } from 'zod';
 
 import { sentByOther } from './message-author';
 
@@ -17,6 +18,7 @@ export interface ToolCall {
   output: string;
   // Epoch milliseconds.
   createdAt?: number;
+  exitCode?: number;
 }
 
 export function toolCallStatus(status: ToolCall['status']): ActivityStatus {
@@ -296,6 +298,10 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       );
     case 'shell_output':
       return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
+    case 'command_exit':
+      return toolAnchorIndex(state.entries, event.toolCallId, -1) === -1
+        ? state
+        : withTool(state, event.toolCallId, t => (runsCommand(t) ? { ...t, exitCode: event.exitCode } : t));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -444,7 +450,44 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
+  const exits = commandExits(messages);
+  return messages.flatMap(message => [
+    toMessageEntry(message, { streaming: false, runtimeTools: exitedCommands(message, exits) }),
+    ...persistedPrompts(message),
+  ]);
+}
+
+const COMMAND_TOOLS = new Set(['execute_command', 'mastra_workspace_execute_command']);
+
+const sandboxExitSchema = z.object({ toolCallId: z.string(), exitCode: z.number() });
+
+/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
+function runsCommand(tool: ToolCall): boolean {
+  return COMMAND_TOOLS.has(tool.toolName);
+}
+
+/** A command's exit is saved in a message of its own, after the call it ends. */
+function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, number> {
+  const exits = new Map<string, number>();
+  for (const part of messages.flatMap(message => message.content.parts)) {
+    if (part.type !== 'data-sandbox-exit' || !('data' in part)) continue;
+    const exit = sandboxExitSchema.safeParse(part.data);
+    if (exit.success) exits.set(exit.data.toolCallId, exit.data.exitCode);
+  }
+  return exits;
+}
+
+function exitedCommands(
+  message: MastraDBMessage,
+  exits: ReadonlyMap<string, number>,
+): Record<string, ToolCall> | undefined {
+  const commands = message.content.parts.flatMap(part => {
+    const tool = toolCallFromPart(part);
+    if (!tool || !runsCommand(tool)) return [];
+    const exitCode = exits.get(tool.toolCallId);
+    return exitCode === undefined ? [] : [[tool.toolCallId, { ...tool, exitCode }] as const];
+  });
+  return commands.length > 0 ? Object.fromEntries(commands) : undefined;
 }
 
 function persistedPrompts(message: MastraDBMessage): Array<ApprovalPrompt | SuspensionPrompt> {
@@ -1005,14 +1048,18 @@ function hasAssistantText(state: TranscriptState): boolean {
   );
 }
 
-function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
+function toolAnchorIndex(
+  entries: TimelineEntry[],
+  toolCallId: string,
+  fallback = currentTurnAssistantIndex(entries),
+): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (entry.kind !== 'message') continue;
     if (entry.runtimeTools?.[toolCallId]) return i;
     if (entry.message.content.parts.some(part => toolCallIdForPart(part) === toolCallId)) return i;
   }
-  return currentTurnAssistantIndex(entries);
+  return fallback;
 }
 
 function currentTurnAssistantIndex(entries: TimelineEntry[]): number {
