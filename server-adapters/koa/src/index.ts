@@ -1,3 +1,4 @@
+import { errorMonitor } from 'node:events';
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
@@ -17,7 +18,7 @@ import {
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
-import type Koa from 'koa';
+import Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
@@ -132,15 +133,17 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         // Client errors (4xx) aren't server faults, and the route handler already logged this 501
         // at warn level, so keep them away from Koa's built-in listener, which prints to
-        // console.error. Skip the emit when no other listener would receive it (this also covers
-        // an empty listener list, where emit('error') would throw). Otherwise mark the error
+        // console.error. When no other 'error' listener would receive it (this also covers an
+        // empty listener list, where emit('error') would throw), notify only errorMonitor
+        // listeners and skip the 'error' emit. A subclass onerror override is an app listener,
+        // so compare against Koa.prototype.onerror itself. Otherwise mark the error
         // `expose` so the built-in listener returns early while app listeners still get the event.
         // The response is already written, so `expose` doesn't change what the client sees.
         const isClientError = status >= 400 && status < 500;
         const loggedAsWarning = status === 501 && (ctx as any)._mastraLoggedNotImplementedError === err;
         if (isClientError || loggedAsWarning) {
-          const builtInOnError = Object.getPrototypeOf(ctx.app).onerror;
-          if (ctx.app.rawListeners('error').every(listener => listener === builtInOnError)) {
+          if (ctx.app.rawListeners('error').every(listener => listener === Koa.prototype.onerror)) {
+            ctx.app.emit(errorMonitor, err, ctx);
             return;
           }
           // Reflect.set returns false instead of throwing on frozen or non-writable errors.

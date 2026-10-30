@@ -172,6 +172,55 @@ describe('Koa client error logging', () => {
     expect(onceListener).toHaveBeenCalledTimes(1);
   });
 
+  it('notifies an errorMonitor-only app of a 400 and a logged 501', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const monitor = vi.fn();
+    const { send } = await startServer(app => app.on(errorMonitor, monitor));
+
+    expect((await send()).status).toBe(400);
+    expect(monitor).toHaveBeenCalledTimes(1);
+    expect(monitor.mock.calls[0]![0]).toMatchObject({ status: 400 });
+    await new Promise<void>(resolve => server!.close(() => resolve()));
+    server = null;
+
+    const notImplemented = Object.assign(new Error('not implemented'), { status: 501 });
+    const throwing = await startThrowingServer(
+      ctx => throwLoggedNotImplemented(ctx, notImplemented),
+      app => app.on(errorMonitor, monitor),
+    );
+    expect((await throwing.send()).status).toBe(501);
+    expect(monitor).toHaveBeenCalledTimes(2);
+    expect(monitor.mock.calls[1]![0]).toBe(notImplemented);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('delivers the 400 to an onerror override on a Koa subclass', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const subclassOnError = vi.fn();
+    class CustomKoa extends Koa {
+      onerror(err: Error) {
+        subclassOnError(err);
+      }
+    }
+    const mastra = new Mastra({});
+    const app = new CustomKoa();
+    const adapter = new MastraServer({ app, mastra });
+    (adapter as any).registerErrorMiddleware();
+    app.use(() => {
+      throw Object.assign(new Error('bad request'), { status: 400 });
+    });
+    server = await new Promise(resolve => {
+      const s = app.listen(0, () => resolve(s));
+    });
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    expect((await fetch(`http://localhost:${port}/`)).status).toBe(400);
+    expect(subclassOnError).toHaveBeenCalledTimes(1);
+    expect(subclassOnError.mock.calls[0]![0]).toMatchObject({ status: 400 });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it('keeps the 501 for a logged non-Error object', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { send } = await startThrowingServer(ctx =>
