@@ -67,6 +67,14 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
       'Promote URLs found in message text to file parts so the model can process linked content. Each entry matches a domain. Disabled by default.',
   },
   {
+    name: 'maxAttachmentStorageBytes',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '104857600 (100 MiB)',
+    description:
+      'Total size of attachments the agent may store under `channel-attachments/` in its workspace. Binary attachments that need an authenticated download, such as Slack files, are saved there (up to 10 MiB each) so workspace tools can open them. When saving a file would go over this limit, the agent gets the attachment URL instead and nothing is written.',
+  },
+  {
     name: 'tools',
     type: 'boolean',
     isOptional: true,
