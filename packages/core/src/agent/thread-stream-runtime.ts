@@ -123,6 +123,14 @@ const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
  * Kept short because the claim path waits out the full window whenever no owner
  * exists. Overridable via `MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS`.
  */
+/**
+ * Per-attempt window for a thread lease owner to acknowledge a forwarded signal.
+ * Overridable via `MASTRA_AGENT_THREAD_SIGNAL_ACCEPTANCE_TIMEOUT_MS`.
+ */
+const AGENT_THREAD_SIGNAL_ACCEPTANCE_TIMEOUT_MS = readPositiveIntEnv(
+  'MASTRA_AGENT_THREAD_SIGNAL_ACCEPTANCE_TIMEOUT_MS',
+  500,
+);
 const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = readPositiveIntEnv(
   'MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS',
   100,
@@ -2871,7 +2879,7 @@ export class AgentThreadStreamRuntime {
       return await Promise.race([
         received.then(() => true),
         new Promise<false>(resolve => {
-          timer = setTimeout(() => resolve(false), 500);
+          timer = setTimeout(() => resolve(false), AGENT_THREAD_SIGNAL_ACCEPTANCE_TIMEOUT_MS);
         }),
       ]);
     } finally {
@@ -7340,6 +7348,8 @@ export class AgentThreadStreamRuntime {
             }
             if (state.remoteThreadKeysByRunId.get(remoteRunId) === remoteKey) {
               state.remoteThreadKeysByRunId.delete(remoteRunId);
+              state.remoteAgentIdsByRunId.delete(remoteRunId);
+              state.unobservedRemoteRunIds.delete(remoteRunId);
             }
             return this.#sendSignal(agent, { ...signalInput, id: signal.id }, inputTarget, pubsub, waitForIdle)
               .accepted;
