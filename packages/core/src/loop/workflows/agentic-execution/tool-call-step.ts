@@ -437,8 +437,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               publishError,
             );
             safeEnqueue(controller, {
-              ...failureChunk,
-              payload: { ...failureChunk.payload, error: new Error(flushFailureMessage) },
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { error: new Error(flushFailureMessage) },
             } as ChunkType<OUTPUT>);
           }
           return false;
