@@ -71,9 +71,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
   useEffect(() => {
     pending.current = null;
   }, [searchParams]);
-  const update = (changes: Record<string, string>) => {
+  // A null value drops the param: an empty-canvas click clears `page`.
+  const update = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams(pending.current ?? searchParams);
-    for (const [name, value] of Object.entries(changes)) next.set(name, value);
+    for (const [name, value] of Object.entries(changes)) {
+      if (value === null) next.delete(name);
+      else next.set(name, value);
+    }
     pending.current = next;
     setSearchParams(next);
   };

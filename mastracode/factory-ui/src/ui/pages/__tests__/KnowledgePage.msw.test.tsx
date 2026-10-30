@@ -262,6 +262,18 @@ describe('KnowledgePage', () => {
     expect(router.state.location.search).toContain('view=page');
   });
 
+  it('drops the selected page from the URL on a click on empty graph canvas', async () => {
+    stubKnowledge();
+    const { router, container } = renderRoute(`/factories/${FACTORY_ID}/knowledge?view=graph&page=runbook`);
+    await screen.findAllByTestId('knowledge-page-node');
+    const pane = container.querySelector('.react-flow__pane');
+    if (!pane) throw new Error('no graph pane');
+    fireEvent.pointerDown(pane, { clientX: 30, clientY: 30 });
+    fireEvent.click(pane, { clientX: 30, clientY: 30 });
+    await waitFor(() => expect(router.state.location.search).not.toContain('page='));
+    expect(router.state.location.search).toContain('view=graph');
+  });
+
   it('says when a linked page is gone', async () => {
     stubKnowledge();
     renderRoute(`/factories/${FACTORY_ID}/knowledge?page=missing`);

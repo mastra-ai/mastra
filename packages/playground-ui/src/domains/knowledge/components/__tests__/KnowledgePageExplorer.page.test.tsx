@@ -243,6 +243,35 @@ describe('KnowledgePageExplorer page view', () => {
       expect(row.textContent).toContain('Escalation Process');
     });
 
+    it('clears the selection on a click on empty canvas', async () => {
+      const { container } = renderWithProviders(<Host />);
+      fireEvent.click(await escalationNode());
+      expect(screen.getAllByTestId('knowledge-page-node').some(node => node.style.opacity === '0.35')).toBe(true);
+
+      const pane = container.querySelector('.react-flow__pane');
+      if (!pane) throw new Error('no graph pane');
+      fireEvent.pointerDown(pane, { clientX: 40, clientY: 40 });
+      fireEvent.click(pane, { clientX: 40, clientY: 40 });
+
+      expect((await escalationNode()).querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(false);
+      expect(screen.queryByRole('treeitem', { selected: true })).toBeNull();
+      expect(screen.getAllByTestId('knowledge-page-node').every(node => node.style.opacity === '1')).toBe(true);
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+    });
+
+    it('keeps the selection when the canvas is dragged', async () => {
+      const { container } = renderWithProviders(<Host />);
+      fireEvent.click(await escalationNode());
+
+      const pane = container.querySelector('.react-flow__pane');
+      if (!pane) throw new Error('no graph pane');
+      fireEvent.pointerDown(pane, { clientX: 40, clientY: 40 });
+      fireEvent.click(pane, { clientX: 140, clientY: 90 });
+
+      expect((await escalationNode()).querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(true);
+      expect(screen.getByRole('treeitem', { selected: true }).textContent).toContain('Escalation Process');
+    });
+
     it('opens it as a page on the second click', async () => {
       renderWithProviders(<Host />);
       fireEvent.click(await escalationNode());
