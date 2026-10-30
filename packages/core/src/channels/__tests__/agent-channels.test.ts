@@ -4559,7 +4559,11 @@ describe('per-sender handler runs end to end', () => {
         hold: false,
         workspace: new Workspace({
           filesystem: ({ requestContext }) => {
-            const channelId = (requestContext.get('channel') as { channelId?: string } | undefined)?.channelId;
+            const channel = requestContext.get('channel');
+            const channelId =
+              channel && typeof channel === 'object' && 'channelId' in channel && typeof channel.channelId === 'string'
+                ? channel.channelId
+                : undefined;
             seen.push(channelId);
             return new LocalFilesystem({ basePath: join(root, channelId ? 'per-channel' : 'no-channel') });
           },
