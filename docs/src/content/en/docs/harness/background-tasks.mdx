@@ -204,8 +204,7 @@ export const mastra = new Mastra({
 When a deferred task finishes and no `untilIdle` stream is open for its thread, Mastra sends the agent a `notification` signal with the tag `background-task`. The signal names the tool call and task, and tells the agent the result is now on the tool call. It doesn't copy the result into the prompt. This covers a `stream()` call without `untilIdle`, a client that disconnected, and a task resumed after it [suspended](#suspending-and-resuming).
 
 - If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome.
-- If a run is already active on the thread, the signal is delivered to that run's next model request, and no other run starts.
-- If the run that dispatched the task is still going, no signal is sent, because the result is already merged into that run's messages.
+- If a run is already active on the thread, including the run that dispatched the task, the signal is delivered to that run's next model request. If that run ends without making another request, the signal runs as its own turn.
 - If an `untilIdle` stream is open for the thread, no signal is sent, because that stream runs its own follow-up turn.
 - If the caller cancelled or aborted the `untilIdle` stream that was waiting for the task, no signal is sent either: stopping the stream means the caller doesn't want a reply for that work. A task that suspended and is answered later isn't covered by this, because the stream stopped waiting for it when it suspended.
 

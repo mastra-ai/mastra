@@ -3,6 +3,7 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
+import type { ToolPayloadTransform } from '../../../../tools/types';
 import {
   createSharedAgent,
   runLoopScenario,
@@ -475,13 +476,14 @@ describeForAllEngines(
     // A chat that reloads the thread while a deferred background tool waits for input must
     // still see the open request on the tool call, and the resumed tool must know which
     // request it is answering. (#28986)
-    function makeSuspendingResearchTool(seenOnResume: unknown[]) {
+    function makeSuspendingResearchTool(seenOnResume: unknown[], transform?: ToolPayloadTransform) {
       return createTool({
         id: 'research-with-approval',
         description: 'Research a topic after analyst approval',
         inputSchema: z.object({ topic: z.string() }),
         outputSchema: z.object({ summary: z.string() }),
         background: { enabled: true },
+        transform,
         execute: async ({ topic }, options) => {
           const resumeData = options?.agent?.resumeData as { notes?: string } | undefined;
           if (!resumeData) {
@@ -509,14 +511,18 @@ describeForAllEngines(
       };
     }
 
-    async function startSuspendingResearch(seenOnResume: unknown[], threadId: string) {
+    async function startSuspendingResearch(
+      seenOnResume: unknown[],
+      threadId: string,
+      transform?: ToolPayloadTransform,
+    ) {
       const memory = new MockMemory();
       const thread = { threadId, resourceId: `${threadId}-user` };
       const { chunks, mastra } = await runLoopScenario({
         engine,
         llm: getMock(),
         prompt: 'Research solana',
-        tools: { researchWithApproval: makeSuspendingResearchTool(seenOnResume) },
+        tools: { researchWithApproval: makeSuspendingResearchTool(seenOnResume, transform) },
         agentBackgroundTasks: { tools: { researchWithApproval: true } },
         backgroundTasks: BG_CONFIG,
         memory,
@@ -580,6 +586,36 @@ describeForAllEngines(
         async () => JSON.stringify((await memory.recall(thread)).messages),
         s => s.includes('The analyst answered.'),
       );
+    }, 30_000);
+
+    it("stores a suspended deferred tool call's request through the tool's transcript transform (#28986)", async () => {
+      const seenOnResume: unknown[] = [];
+      const { memory, thread, manager, taskId } = await startSuspendingResearch(
+        seenOnResume,
+        'bg-suspend-transform-thread',
+        {
+          transcript: {
+            input: () => ({ topic: '[redacted]' }),
+            suspend: context => ({ awaiting: (context.suspendPayload as { awaiting: string }).awaiting }),
+          },
+        },
+      );
+
+      const open = await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.suspended?.taskId !== undefined,
+      );
+      expect(open.suspended.suspendPayload).toEqual({ awaiting: 'analyst-approval' });
+      expect(open.suspended.args).toEqual({ topic: '[redacted]' });
+      expect(JSON.stringify(open.suspended)).not.toContain('solana');
+
+      // The tool itself still resumes with its own, unredacted payload.
+      await manager.resume(taskId, { notes: 'ok' });
+      await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'solana' }]);
     }, 30_000);
 
     it('clears the open request from memory when a suspended deferred task is cancelled (#28986)', async () => {
@@ -879,10 +915,14 @@ describeForAllEngines(
         );
       }
       await waitFor(storedText(memory, thread), s => s.includes('Both research tasks are finished.'));
-      await new Promise(resolve => setTimeout(resolve, 500));
 
       // One signal per task: the first wakes the thread, the second joins that run or the one after it.
-      const followUps = requestsFor(llm, prompt).slice(2);
+      const notified = (r: { body: unknown }, id: string) =>
+        JSON.stringify((r.body as any).messages).includes(`Background task ${id} `);
+      const followUps = await waitFor(
+        async () => requestsFor(llm, prompt).slice(2),
+        rs => taskIds.every(id => rs.some(r => notified(r, id))),
+      );
       expect(followUps.length).toBeGreaterThanOrEqual(1);
       expect(followUps.length).toBeLessThanOrEqual(2);
       const lastToolResults = ((followUps.at(-1)!.body as any).messages as any[])
@@ -891,11 +931,6 @@ describeForAllEngines(
         .join('\n');
       expect(lastToolResults).toContain('tides');
       expect(lastToolResults).toContain('winds');
-      for (const id of taskIds) {
-        expect(
-          followUps.filter(r => JSON.stringify((r.body as any).messages).includes(`Background task ${id} `)),
-        ).not.toHaveLength(0);
-      }
     }, 30_000);
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.

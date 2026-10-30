@@ -1,6 +1,7 @@
 import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { normalizeModelOutput } from '../normalize-model-output';
 
 /** Completion payload delivered by the background-task manager's onResult hook. */
@@ -234,22 +235,34 @@ export interface BackgroundToolExecutionParams {
   suspendPayload?: unknown;
 }
 
+/** A `tool-call-suspended` chunk, as handed to the run's tool payload transform. */
+export interface BackgroundSuspensionChunk {
+  type: 'tool-call-suspended';
+  runId: string;
+  payload: { toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown };
+  metadata?: Record<string, any>;
+}
+
 /**
  * Shared background-task execution injector: records the task's lifecycle on
  * the assistant message that holds the tool call. While the task is suspended
  * the tool call carries a `suspendedTools[toolCallId]` entry (the same shape
  * as a foreground suspension, plus `taskId` and `suspendedAt`), so a client
- * that reloads the thread can still see and answer the open request. When
- * the manager reports the task running again (resume) or cancels it, the
- * entry this task wrote is removed. Returns whether that entry changed, so an
- * engine that doesn't flush every lifecycle update knows it must flush now.
+ * that reloads the thread can still see and answer the open request. The
+ * entry's args and payload go through the run's transcript transform, as a
+ * foreground suspension's do. When the manager reports the task running again
+ * (resume) or cancels it, the entry this task wrote is removed. Returns
+ * whether that entry changed, so an engine that doesn't flush every lifecycle
+ * update knows it must flush now.
  */
-export function applyBackgroundToolExecution(deps: {
+export async function applyBackgroundToolExecution(deps: {
   params: BackgroundToolExecutionParams;
   /** Tool args with `_background` removed. */
   args: unknown;
   messageList: MessageList;
-}): boolean {
+  /** Applies the run's tool payload transform to a chunk. */
+  transformChunk: (chunk: BackgroundSuspensionChunk) => Promise<BackgroundSuspensionChunk>;
+}): Promise<boolean> {
   const { params, messageList } = deps;
   messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
     mode: 'stream',
@@ -262,23 +275,37 @@ export function applyBackgroundToolExecution(deps: {
     },
   });
 
-  return writeSuspendedToolEntry(
-    messageList,
-    params.toolCallId,
-    params.taskId,
-    params.suspendedAt
-      ? {
-          toolCallId: params.toolCallId,
-          toolName: params.toolName,
-          args: deps.args,
-          type: 'suspension',
-          suspendPayload: params.suspendPayload,
-          runId: params.runId,
-          taskId: params.taskId,
-          suspendedAt: params.suspendedAt,
-        }
-      : undefined,
-  );
+  if (!params.suspendedAt) {
+    return writeSuspendedToolEntry(messageList, params.toolCallId, params.taskId, undefined);
+  }
+
+  const { metadata } = await deps.transformChunk({
+    type: 'tool-call-suspended',
+    runId: params.runId,
+    payload: {
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+      args: deps.args,
+      suspendPayload: params.suspendPayload,
+    },
+  });
+  const inputTransform = getTransformedToolPayload(metadata, 'transcript', 'input-available');
+  const suspendTransform = getTransformedToolPayload(metadata, 'transcript', 'suspend');
+  return writeSuspendedToolEntry(messageList, params.toolCallId, params.taskId, {
+    toolCallId: params.toolCallId,
+    toolName: params.toolName,
+    args: hasTransformedToolPayload(inputTransform)
+      ? inputTransform.transformed
+      : hasTransformedToolPayload(suspendTransform)
+        ? suspendTransform.transformed
+        : deps.args,
+    type: 'suspension',
+    suspendPayload: hasTransformedToolPayload(suspendTransform) ? suspendTransform.transformed : params.suspendPayload,
+    ...(metadata ? { metadata } : {}),
+    runId: params.runId,
+    taskId: params.taskId,
+    suspendedAt: params.suspendedAt,
+  });
 }
 
 /**

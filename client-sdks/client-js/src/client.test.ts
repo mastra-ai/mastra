@@ -887,6 +887,15 @@ describe('MastraClient', () => {
         await client.resumeBackgroundTask('t1', null);
         expect(sent().body).toEqual({ resumeData: null });
       });
+
+      it('sends the answer once: a lost response is not retried, so the answer cannot land twice', async () => {
+        const retrying = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 2, backoffMs: 1 });
+        (global.fetch as any).mockRejectedValueOnce(new TypeError('fetch failed'));
+        respondWith({ id: 't1', status: 'running' });
+
+        await expect(retrying.resumeBackgroundTask('t1', { approved: true })).rejects.toThrow('fetch failed');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
     });
 
     describe('getBackgroundTask', () => {

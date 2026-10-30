@@ -1866,7 +1866,6 @@ export function createDurableToolCallStep() {
                   toolCallId: params.toolCallId,
                   toolName: params.toolName,
                   status: params.status === 'failed' ? 'failed' : 'completed',
-                  originRunId: runId,
                 });
               }
             } catch (error) {
@@ -1878,7 +1877,17 @@ export function createDurableToolCallStep() {
           onExecution: async (params: any) => {
             if (!messageList) return;
 
-            applyBackgroundToolExecution({ params, args: cleanedArgs, messageList });
+            await applyBackgroundToolExecution({
+              params,
+              args: cleanedArgs,
+              messageList,
+              transformChunk: chunk =>
+                applyToolPayloadTransformToChunk(chunk, {
+                  policy: toolPayloadTransform,
+                  tools: toolsForTransform,
+                  logger: logger as any,
+                }),
+            });
 
             // Flush to storage so the metadata update (especially an open suspension)
             // is persisted. Unlike the regular agent which has a single long-lived

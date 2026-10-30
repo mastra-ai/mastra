@@ -1465,7 +1465,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         status: params.status === 'failed' ? 'failed' : 'completed',
-                        originRunId: runId,
                       });
                     }
                   }
@@ -1478,7 +1477,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // open suspension) on the assistant message without changing the
               // model-visible tool result.
               onExecution: async params => {
-                if (applyBackgroundToolExecution({ params, args, messageList })) await flushBackgroundMessages();
+                const changed = await applyBackgroundToolExecution({
+                  params,
+                  args,
+                  messageList,
+                  transformChunk: chunk =>
+                    applyToolPayloadTransformToChunk(chunk, {
+                      policy: transformSource.policy,
+                      toolTransform: transformSource.toolTransform,
+                      logger,
+                      transformInput: {
+                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                      },
+                    }),
+                });
+                if (changed) await flushBackgroundMessages();
               },
 
               // Per-task callbacks

@@ -2740,6 +2740,8 @@ export class MastraClient extends BaseResource {
     return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}/resume`, {
       method: 'POST',
       body: { resumeData, suspendedAt: options.suspendedAt },
+      // A retry after a lost response could deliver this answer to a later suspension.
+      retries: 0,
     });
   }
 
