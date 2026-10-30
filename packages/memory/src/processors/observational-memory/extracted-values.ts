@@ -1,3 +1,4 @@
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -248,6 +249,7 @@ export async function applyExtractorHooks(opts: {
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
   requestContext?: RequestContext;
+  observabilityContext?: ObservabilityContext;
   observationCommitted?: Promise<boolean>;
 }): Promise<{ values?: Record<string, unknown>; failures?: ExtractionFailure[] }> {
   const values = normalizeExtractedValues(opts.values) ?? {};
@@ -287,6 +289,7 @@ export async function applyExtractorHooks(opts: {
         writer: opts.writer,
         abortSignal: opts.abortSignal,
         requestContext: opts.requestContext,
+        observabilityContext: opts.observabilityContext,
         observationCommitted: opts.observationCommitted,
       });
       if (isHook || hookValue === undefined) {

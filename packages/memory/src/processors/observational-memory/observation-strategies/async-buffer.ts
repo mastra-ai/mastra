@@ -97,6 +97,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       writer: this.opts.writer,
       abortSignal: this.opts.abortSignal,
       requestContext: this.opts.requestContext,
+      observabilityContext: result.observabilityContext ?? this.opts.observabilityContext,
       observationCommitted: this.observationCommitted,
     });
     return {

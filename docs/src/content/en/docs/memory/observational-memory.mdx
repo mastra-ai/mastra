@@ -441,6 +441,20 @@ new Extractor({
 })
 ```
 
+To trace work that `onExtracted` starts as part of the observation, spread `observabilityContext` into the agent call options. The run then appears as a child of the `memory: observe` or `memory: reflect` span instead of as a separate trace:
+
+```typescript title="src/mastra/agents/agent.ts"
+new Extractor({
+  name: 'Status review',
+  mode: 'hook',
+  async onExtracted({ rawObservations, observabilityContext }) {
+    await reviewAgent.generate(`Review these observations:\n${rawObservations}`, {
+      ...observabilityContext,
+    })
+  },
+})
+```
+
 Extractor failures are reported in OM markers and don't block other successful extractor values. See [the API reference](/reference/memory/observational-memory#extractor-api) for the full `Extractor` shape.
 
 If your Observer model is text-only or its API rejects multimodal input, set `observation.observeAttachments` to `false` to drop attachments before they reach the Observer. The readable placeholders (`[Image #1: ...]`, `[File #1: ...]`) are kept in the transcript so the Observer can still reason about what was shared without receiving the binary payload. The same filter applies to tool results that contain image or file parts:

@@ -56,6 +56,8 @@ export interface ObserverOutput {
   extractors?: readonly Extractor<any>[];
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   providerMetadata?: ProviderMetadata;
+  /** Context of the observer span, so hook extractors can nest their work under it. */
+  observabilityContext?: ObservabilityContext;
 }
 
 /** Result returned from ObservationStrategy.run(). */

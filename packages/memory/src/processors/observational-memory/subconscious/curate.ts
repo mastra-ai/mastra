@@ -55,7 +55,7 @@ export const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, kno
 
 type CuratorContext = Pick<
   ExtractorOnExtractedContext,
-  'abortSignal' | 'mainAgent' | 'requestContext' | 'resourceId' | 'threadId'
+  'abortSignal' | 'mainAgent' | 'observabilityContext' | 'requestContext' | 'resourceId' | 'threadId'
 >;
 
 export function resolveCuratorScope(context: CuratorContext): KnowledgeScope {
@@ -164,6 +164,7 @@ export function dispatchCuratorObservation(
       threadId,
       ifIdle: {
         streamOptions: {
+          ...context.observabilityContext,
           requestContext,
           maxSteps: config.maxSteps,
           memory: { thread: threadId, resource: resourceId },
@@ -245,6 +246,7 @@ export async function createCuratorAgent(
       .join('\n\n'),
     model,
     memory: curatorMemory,
+    mastra: context.mainAgent?.getMastraInstance?.(),
     tools: {
       ...createKnowledgeTools(memory, scope),
       ...createKnowledgeWriteTools(memory, {

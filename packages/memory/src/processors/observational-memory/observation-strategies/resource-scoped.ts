@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ThreadOMMetadata } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
@@ -48,6 +49,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       extractedValues?: Record<string, unknown>;
       extractionFailures?: Array<{ slug: string; error: string }>;
       extractors?: readonly Extractor<any>[];
+      observabilityContext?: ObservabilityContext;
     }
   >();
   private totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -352,6 +354,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         writer: this.opts.writer,
         abortSignal: this.opts.abortSignal,
         requestContext: this.opts.requestContext,
+        observabilityContext: result.observabilityContext ?? this.opts.observabilityContext,
         observationCommitted: this.observationCommitted,
       });
       this.observationResults.push({

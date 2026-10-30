@@ -108,6 +108,8 @@ interface ObserverCallResult {
   extractors?: readonly Extractor<any>[];
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   providerMetadata?: ProviderMetadata;
+  /** Context of the observer span, so hook extractors can nest their work under it. */
+  observabilityContext?: ObservabilityContext;
 }
 
 interface MultiThreadObserverResult {
@@ -118,6 +120,8 @@ interface MultiThreadObserverResult {
   extractedValues?: Record<string, unknown>;
   extractionFailures?: Array<{ slug: string; error: string }>;
   extractors?: readonly Extractor<any>[];
+  /** Context of the observer span, so hook extractors can nest their work under it. */
+  observabilityContext?: ObservabilityContext;
 }
 
 function filterObserverExtractors(
@@ -350,6 +354,7 @@ export class ObserverRunner {
       ),
     ];
 
+    let spanObservabilityContext = options?.observabilityContext;
     const doGenerate = async () => {
       return withRetry(
         (attemptSignal, onActivity) =>
@@ -370,8 +375,9 @@ export class ObserverRunner {
               ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
               ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
             },
-            callback: childObservabilityContext =>
-              this.withAbortCheck(async () => {
+            callback: childObservabilityContext => {
+              spanObservabilityContext = childObservabilityContext;
+              return this.withAbortCheck(async () => {
                 try {
                   attemptMemory = temporaryMemory?.newThread();
                   const streamResult = await agent.stream(observerMessages, {
@@ -416,7 +422,8 @@ export class ObserverRunner {
                     childObservabilityContext.tracingContext?.currentSpan,
                   );
                 }
-              }, abortSignal),
+              }, abortSignal);
+            },
           }),
         {
           label: 'observer',
@@ -453,7 +460,7 @@ export class ObserverRunner {
       memory: attemptMemory,
       priorExtractedValues: options?.priorExtractedValues,
       requestContext: internalRequestContext,
-      observabilityContext: options?.observabilityContext,
+      observabilityContext: spanObservabilityContext,
       abortSignal,
     });
     const extractedValues = mergeExtractedValues(parsed.extractedValues, structuredExtraction.values);
@@ -499,6 +506,7 @@ export class ObserverRunner {
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
       providerMetadata: result.providerMetadata,
+      observabilityContext: spanObservabilityContext,
     };
   }
 
@@ -659,6 +667,7 @@ export class ObserverRunner {
           extractedValues: threadResult.extractedValues,
           extractionFailures: threadResult.extractionFailures,
           extractors: threadResult.extractors,
+          observabilityContext: threadResult.observabilityContext,
         });
         if (threadResult.usage) {
           totalUsage.inputTokens += threadResult.usage.inputTokens ?? 0;
@@ -696,6 +705,7 @@ export class ObserverRunner {
       ),
     ];
 
+    let spanObservabilityContext = observabilityContext;
     const doGenerate = async () => {
       return withRetry(
         (attemptSignal, onActivity) =>
@@ -716,8 +726,9 @@ export class ObserverRunner {
               ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
               ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
             },
-            callback: childObservabilityContext =>
-              this.withAbortCheck(async () => {
+            callback: childObservabilityContext => {
+              spanObservabilityContext = childObservabilityContext;
+              return this.withAbortCheck(async () => {
                 try {
                   const streamResult = await agent.stream(observerMessages, {
                     // One prompt, one reply. Without this cap, a reply cut off with finishReason
@@ -762,7 +773,8 @@ export class ObserverRunner {
                     childObservabilityContext.tracingContext?.currentSpan,
                   );
                 }
-              }, abortSignal),
+              }, abortSignal);
+            },
           }),
         {
           label: 'observer-multi-thread',
@@ -856,6 +868,7 @@ export class ObserverRunner {
         extractedValues,
         extractionFailures,
         extractors: activeExtractors,
+        observabilityContext: spanObservabilityContext,
       });
     }
 

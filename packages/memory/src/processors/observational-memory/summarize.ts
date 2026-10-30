@@ -146,6 +146,7 @@ export async function summarizeConversation(opts: SummarizeConversationOptions):
     resourceId,
     memory: opts.memory,
     requestContext: opts.requestContext,
+    observabilityContext: result.observabilityContext ?? opts.observabilityContext,
   });
 
   return {

@@ -1,3 +1,4 @@
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
@@ -28,6 +29,12 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   sendStateSignal?: ProcessorContext['sendStateSignal'];
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
+  /**
+   * Tracing context of the observer or reflector run that produced `rawObservations`. Spread it into
+   * `agent.stream()` / `agent.generate()` options (or a `sendMessage` `streamOptions`) so work the
+   * hook starts is traced as a child of that run instead of as a separate root trace.
+   */
+  observabilityContext?: ObservabilityContext;
   /**
    * Settles after the observation cycle that produced `rawObservations` ends: `true` once its
    * observations are committed to storage, `false` when the cycle fails or skips the commit.
