@@ -83,6 +83,32 @@ function assistantMessage(
   };
 }
 
+function environmentSignal(workingDirectory: string, id = 'environment'): TimelineEntry {
+  return {
+    kind: 'message',
+    id,
+    message: {
+      id,
+      role: 'signal',
+      createdAt: CREATED_AT,
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: `Factory environment: 1 repository at ${workingDirectory}, your working directory.` },
+        ],
+        metadata: {
+          signal: {
+            id: 'environment',
+            type: 'state',
+            tagName: 'factory-environment',
+            attributes: { workingDirectory, repositories: 1 },
+          },
+        },
+      },
+    },
+  };
+}
+
 function userMessage(id: string, text: string): TimelineEntry {
   return {
     kind: 'message',
@@ -168,7 +194,7 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(failedRow).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
   });
 
-  it('keeps a live stretch on screen when it opens with a thought that has no text yet', () => {
+  it('keeps a live stretch on screen when it opens with a thought that has no text yet, reading its running call', () => {
     renderEntries(
       [
         assistantMessage(
@@ -185,6 +211,18 @@ describe('TranscriptEntries tool rows', () => {
       true,
     );
 
+    expect(screen.getByRole('group', { name: 'Running pnpm test' })).toBeInTheDocument();
+  });
+
+  it('keeps the run thinking on screen while its reply has opened a thought with no text yet', () => {
+    renderEntries(
+      [
+        userMessage('user-1', 'again please'),
+        assistantMessage('msg-1', [{ type: 'reasoning', reasoning: '', details: [] }], undefined, true),
+      ],
+      true,
+    );
+
     expect(screen.getByRole('group', { name: 'Thinking' })).toBeInTheDocument();
   });
 
@@ -195,6 +233,33 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(line).getByText('Ran')).toBeInTheDocument();
     expect(within(line).getByText('pnpm build')).toBeInTheDocument();
     expect(within(line).queryByText('execute_command')).not.toBeInTheDocument();
+  });
+
+  it('reads a path inside the working directory the environment gave the agent relative to it', () => {
+    renderEntries([
+      environmentSignal('/sandboxes/7b45/mastra'),
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view', { path: '/sandboxes/7b45/mastra/packages/core/package.json' }),
+      ]),
+    ]);
+
+    expect(screen.getByText('packages/core/package.json')).toBeInTheDocument();
+    expect(screen.queryByText('/sandboxes/7b45/mastra/packages/core/package.json')).not.toBeInTheDocument();
+  });
+
+  it('reads each turn relative to the working directory it had, after an environment edit moves it', () => {
+    renderEntries([
+      environmentSignal('/sandboxes/7b45/mastra', 'environment-1'),
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view', { path: '/sandboxes/7b45/mastra/packages/core/package.json' }),
+      ]),
+      userMessage('user-2', 'now the docs repo too'),
+      environmentSignal('/sandboxes/7b45', 'environment-2'),
+      assistantMessage('msg-2', [doneTool('call-2', 'view', { path: '/sandboxes/7b45/docs/README.md' })]),
+    ]);
+
+    expect(screen.getByText('packages/core/package.json')).toBeInTheDocument();
+    expect(screen.getByText('docs/README.md')).toBeInTheDocument();
   });
 
   it("reads a running shell command's description alone, and shows the command when expanded", async () => {

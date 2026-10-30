@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('parallel tool calls landing at once', () => {
-  it('opens one busy line on the first call and keeps it as the rest land', () => {
+  it('opens one busy line at once, reading the latest call, and keeps it as the rows land', () => {
     vi.useFakeTimers();
     renderWithProviders(
       <MemoryRouter>
@@ -39,15 +39,11 @@ describe('parallel tool calls landing at once', () => {
       </MemoryRouter>,
     );
 
-    expect(document.querySelector('[data-slot="activity-stretch"]')).toBeNull();
-
-    act(() => void vi.advanceTimersByTime(600));
-
-    const line = screen.getByRole('group', { name: 'Reading src/call-1.ts' });
+    const line = screen.getByRole('group', { name: 'Reading src/call-3.ts' });
     expect(line).toHaveAttribute('aria-busy', 'true');
     expect(screen.queryAllByRole('group', { name: 'Tool: view' })).toHaveLength(0);
 
-    act(() => void vi.advanceTimersByTime(4000));
+    act(() => void vi.advanceTimersByTime(4600));
 
     expect(screen.getByRole('group', { name: 'Reading src/call-3.ts' })).toBe(line);
     expect(line).toHaveAttribute('aria-busy', 'true');

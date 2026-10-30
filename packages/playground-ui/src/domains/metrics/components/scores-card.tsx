@@ -5,7 +5,6 @@ import { CHART_COLORS } from '../lib/chart-colors';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
 
@@ -21,13 +20,12 @@ const SCORER_COLORS = [
 const formatScore = (score: number) => score.toFixed(2);
 const axisScore = (score: number) => String(+score.toFixed(2));
 
-/** One line per scorer; the legend carries its mean over the range. */
+/** One line per scorer. */
 function scorerSeries(scorers: ScorerAverage[]): MetricsLineChartSeries[] {
-  return scorers.map(({ scorerId, name, average }, i) => ({
+  return scorers.map(({ scorerId, name }, i) => ({
     dataKey: scorerId,
     label: name,
     color: SCORER_COLORS[i % SCORER_COLORS.length] ?? CHART_COLORS.neutral,
-    aggregate: () => ({ value: formatScore(average) }),
   }));
 }
 
@@ -36,7 +34,7 @@ export function ScoresCard() {
   const { data, isLoading, isError, isPlaceholderData } = useMetricsScores();
   const scorers = data?.scorers ?? [];
 
-  const layout = { title: 'Scores', description: 'Average scorer result, 0 to 1.' };
+  const layout = { title: 'Scores' };
 
   if (isError) {
     return (
@@ -47,17 +45,7 @@ export function ScoresCard() {
   }
 
   return (
-    <ChartCard
-      {...layout}
-      summary={
-        <MetricsCard.Summary
-          value={String(scorers.length)}
-          label={scorers.length === 1 ? 'scorer' : 'scorers'}
-          isLoading={isLoading}
-        />
-      }
-      isUpdating={isPlaceholderData}
-    >
+    <ChartCard {...layout} isUpdating={isPlaceholderData}>
       <ChartArea isEmpty={!isLoading && scorers.length === 0} emptyMessage="No scores in this range.">
         <MetricsLineChart
           data={data?.buckets ?? []}

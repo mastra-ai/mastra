@@ -5,6 +5,7 @@ import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClu
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIM_PAGE_SIZE = 500;
 
 /**
@@ -149,6 +150,17 @@ async function connectWithin(
 }
 
 /**
+ * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
+ * return the policy when the server can evict keys under memory pressure.
+ */
+function evictingMaxmemoryPolicy(info: string): string | undefined {
+  const field = (name: string) => info.match(new RegExp(`^${name}:(.*)$`, 'm'))?.[1]?.trim();
+  const policy = field('maxmemory_policy');
+  if (!policy || policy === 'noeviction' || Number(field('maxmemory') ?? 0) <= 0) return undefined;
+  return policy;
+}
+
+/**
  * Disconnect a client, standalone or cluster.
  *
  * node-redis 5 `quit()` never settles on a client that is open but waiting to
@@ -216,9 +228,9 @@ export interface RedisStreamsPubSubConfig {
    * the full duration is deleted by Redis automatically — entries, consumer
    * groups and their pending lists included.
    *
-   * Defaults to 0 (disabled) to preserve existing behavior: streams live
-   * until an explicit `clearTopic`, and a stream that never reaches one stays
-   * in Redis forever. **Production deployments should set this** — see below.
+   * Defaults to 7 days (604_800_000). Set to 0 to disable expiry: streams
+   * then live until an explicit `clearTopic`, and a stream that never reaches
+   * one stays in Redis forever.
    *
    * Why a TTL matters: topics fall into two classes.
    * - *Lifecycle-owned* topics (workflow/agent run streams, request/reply
@@ -340,6 +352,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #closed = false;
   /** Set once close() has drained publishes and is about to release the writer. */
   #writerReleased = false;
+  #evictionPolicyChecked = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
     super();
@@ -349,7 +362,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
     this.#blockMs = options.blockMs ?? 1000;
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
-    const ttl = options.streamIdleTtlMs ?? 0;
+    const ttl = options.streamIdleTtlMs ?? DEFAULT_STREAM_IDLE_TTL_MS;
     // Must be a non-negative integer: node-redis serializes the PEXPIRE arg with
     // toString(), and Redis rejects a non-integer/Infinity ('value is not an
     // integer or out of range'). Without this guard a bad value would poison
@@ -466,12 +479,46 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // second connect().
     if (!this.#writerConnecting && this.#writeClient.isOpen) return;
     if (!this.#writerConnecting) {
-      this.#writerConnecting = connectWithin(this.#writeClient, 'write', () => this.#writerReleased).finally(() => {
-        // Clear so a failed initial connect can be retried on the next call.
-        this.#writerConnecting = undefined;
-      });
+      this.#writerConnecting = connectWithin(this.#writeClient, 'write', () => this.#writerReleased)
+        .then(() => {
+          if (!this.#evictionPolicyChecked) {
+            this.#evictionPolicyChecked = true;
+            void this.#warnOnEvictingPolicy();
+          }
+        })
+        .finally(() => {
+          // Clear so a failed initial connect can be retried on the next call.
+          this.#writerConnecting = undefined;
+        });
     }
     return this.#writerConnecting;
+  }
+
+  /**
+   * Consumer-group state, lease keys and TTL'd streams are all live data. A
+   * server with `maxmemory` set and any policy other than `noeviction` deletes
+   * them under memory pressure (silently losing events and leases), so warn
+   * once. INFO rather than CONFIG GET because managed Redis often blocks CONFIG.
+   */
+  async #warnOnEvictingPolicy(): Promise<void> {
+    try {
+      const client = this.#writeClient as unknown as Partial<Pick<RedisClusterType, 'masters'>>;
+      const reply = Array.isArray(client.masters)
+        ? await (this.#writeClient as unknown as RedisClusterType).sendCommand(undefined, true, ['INFO', 'memory'])
+        : await this.#writeClient.sendCommand(['INFO', 'memory']);
+      const policy = evictingMaxmemoryPolicy(String(reply));
+      if (!policy) return;
+      const warn = this.#logger?.warn ? this.#logger.warn.bind(this.#logger) : console.warn;
+      warn(
+        `redis-streams: Redis maxmemory-policy is "${policy}". Under memory pressure Redis will evict ` +
+          `pubsub keys (TTL'd streams, consumer groups, lease keys), losing events and leases. ` +
+          `Set maxmemory-policy to "noeviction".`,
+      );
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: maxmemory-policy check failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   #streamKey(topic: string): string {
