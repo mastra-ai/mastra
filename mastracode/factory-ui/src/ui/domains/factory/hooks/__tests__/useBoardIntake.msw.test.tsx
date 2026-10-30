@@ -826,11 +826,35 @@ describe('useBoardIntake across linked repositories', () => {
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
-      'github:1:issue:5',
-      'github:2:issue:5',
+    await waitFor(() => expect(result.current.candidates).toHaveLength(5));
+    expect(
+      result.current.candidates.filter(candidate => candidate.source === 'github-issue').map(c => c.sourceKey),
+    ).toEqual(['github:1:issue:5', 'github:2:issue:5']);
+  });
+
+  it('offers Work the pull requests of every linked GitHub repository, filed onto its Intake', async () => {
+    const requested: string[] = [];
+    stubRepositories(requested);
+
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repositories,
+        definition: workBoard,
+        knownSourceKeys: new Set(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(5));
+    const pullRequests = result.current.candidates.filter(candidate => candidate.source === 'github-pr');
+    expect(pullRequests.map(candidate => [candidate.sourceKey, candidate.column])).toEqual([
+      ['github:1:pull-request:9', 'intake'],
+      ['github:2:pull-request:9', 'intake'],
+      ['github:3:pull-request:9', 'intake'],
     ]);
+    // Pull requests are not an issue source: Work still lists only its issue feeds.
+    expect(result.current.available).toEqual(['github']);
+    expect(requested).toEqual(expect.arrayContaining(['prs:repo-1', 'prs:repo-2', 'prs:repo-3']));
   });
 
   it('offers Review the pull requests of every linked GitHub repository', async () => {
@@ -866,7 +890,9 @@ describe('useBoardIntake across linked repositories', () => {
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'github:1:issue:5' });
+    await waitFor(() => expect(result.current.candidates).toHaveLength(4));
+    expect(result.current.candidates.filter(candidate => candidate.source === 'github-issue')).toEqual([
+      expect.objectContaining({ sourceKey: 'github:1:issue:5' }),
+    ]);
   });
 });

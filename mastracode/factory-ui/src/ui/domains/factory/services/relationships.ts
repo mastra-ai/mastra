@@ -92,8 +92,16 @@ export function inferredParentWorkItemId(
   )?.id;
 }
 
-export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: string): string {
-  return rememberedBoardPath(factoryId, isPullRequestSource(item.source) ? 'review' : 'work');
+/**
+ * Pull requests are filed on Work now, so an unfiled one opens Work; a filed one opens the
+ * board that holds it, which is Review for cards filed before the move.
+ */
+export function relationshipPath(
+  item: Pick<WorkItem, 'source'> & { readonly board?: string | null },
+  factoryId: string,
+): string {
+  if (!isPullRequestSource(item.source) || item.board === undefined) return rememberedBoardPath(factoryId, 'work');
+  return rememberedBoardPath(factoryId, item.board ?? 'review');
 }
 
 export function relationshipLabel(item: WorkItem): string {
