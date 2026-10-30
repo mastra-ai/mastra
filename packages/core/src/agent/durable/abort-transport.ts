@@ -249,8 +249,15 @@ const armedDeadlines = new WeakMap<RunRegistryEntry, { at: number; timer?: Retur
 
 /** Arm the entry's deadline, replacing a timer armed for a different deadline. */
 function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefined): void {
-  if (!deadline) return;
   const armed = armedDeadlines.get(entry);
+  if (!deadline) {
+    // A segment without a deadline (e.g. resumed without totalMs) must not inherit the last one's.
+    if (armed) {
+      clearTimeout(armed.timer);
+      armedDeadlines.delete(entry);
+    }
+    return;
+  }
   if (armed?.at === deadline.at) return;
   if (armed) {
     clearTimeout(armed.timer);

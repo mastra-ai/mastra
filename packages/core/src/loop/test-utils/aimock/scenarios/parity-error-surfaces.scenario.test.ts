@@ -221,10 +221,12 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     // mid-run. The deadline save must use the processors the run started with.
     { savePerStep: false, readOnly: false, dynamicHistory: true },
     // A custom processor takes the message-history id, so memory adds no MessageHistory and the
-    // finish path would not save to agent memory. The deadline save must not either.
+    // finish path would not save to agent memory. The deadline save must not either, except on
+    // Inngest: the stopped step ends the turn through the finish path, which saves it (asserted below)
+    // until the deadline save respects this config.
     { savePerStep: false, readOnly: false, customHistory: true },
     // History disabled in config and no MessageHistory configured, so the finish path saves nothing.
-    // The deadline save must not either.
+    // The deadline save must not either, with the same Inngest exception as above.
     { savePerStep: false, readOnly: false, historyOff: true },
   ])(
     'only steps that ended reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore, customHistory: $customHistory, historyOff: $historyOff)',
