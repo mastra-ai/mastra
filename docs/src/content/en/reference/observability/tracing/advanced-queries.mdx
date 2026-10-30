@@ -906,13 +906,13 @@ On ClickHouse, a request whose `where` limits `spanType` to agent, workflow, pro
 | `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName` | The calling entity and the trace's root entity, such as the agent that made a model call. |
 | `environment`, `serviceName`, `executionSource` | Deployment attributes recorded on the span. |
 | `threadId`, `resourceId`, `userId`, `sessionId`, `organizationId`, `experimentId` | Context identifiers recorded on the span. |
-| `model`, `provider` | The model and provider recorded on the span's `model` and `provider` columns, such as `claude-sonnet-5-5` and `anthropic`. Requires the `spanAggregateModelDimensions` capability. |
+| `model`, `provider` | The model and provider recorded on the span's `model` and `provider` columns, such as `__AI_SDK_ANTHROPIC_MODEL_SONNET__` and `anthropic`. Requires the `spanAggregateModelDimensions` capability. |
 
 `countDistinct.<field>` accepts these dimensions and `traceId`, so `countDistinct.traceId` counts the traces the selected spans belong to. Span aggregation can't group by `metadata.<key>` or identity fields such as `traceId`, `spanId`, or `runId`.
 
 Like the `model` and `provider` filters, the `model` and `provider` dimensions read only the span's columns, not its attributes. Existing spans aren't backfilled, so spans exported before `@mastra/observability` filled the columns group under `null`, and `countDistinct.model` doesn't count them.
 
-Adapters that don't declare the `spanAggregateModelDimensions` capability return `501` for any request that groups by `model` or `provider` or counts their distinct values.
+Stores advertise support through the `span-aggregate-model-dimensions` feature, and the server reports it as the `spanAggregateModelDimensions` capability. Against an older store, a request that groups by `model` or `provider` or counts their distinct values returns `501` before storage runs.
 
 ### Span tokens and cost
 
@@ -948,7 +948,7 @@ if (capabilities.spanAggregateModelDimensions) {
     groupBy: ['provider', 'model'],
     measures: ['count', 'tokens.total.sum', 'cost.sum'],
   })
-  // rows[0]: { dimensions: { provider: 'anthropic', model: 'claude-sonnet-5-5' }, measures: { ... } }
+  // rows[0]: { dimensions: { provider: 'anthropic', model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' }, measures: { ... } }
 }
 ```
 
