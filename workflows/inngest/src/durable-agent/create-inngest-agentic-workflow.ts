@@ -560,10 +560,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               : state.runAborted
                 ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
                 : state.lastStepResult || {
-                  reason: 'stop',
-                  warnings: [],
-                  isContinued: false,
-                },
+                    reason: 'stop',
+                    warnings: [],
+                    isContinued: false,
+                  },
             output: {
               text: finalText,
               usage: state.accumulatedUsage,

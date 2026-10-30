@@ -424,11 +424,6 @@ export async function runDurableFinishSideEffects({
 }
 
 /**
- * Give the output processors (and with them memory) their one pass when a total deadline ends a
- * durable run. The run never reaches its finish step, so this runs over the message list as of the
- * last completed step, the same input a provider error's finish pass would see.
- */
-/**
  * The message list a total deadline saves: the steps that completed in time, plus the step in flight
  * when every tool call in it returned (or was aborted) during the deadline's grace window.
  */
@@ -455,6 +450,11 @@ export function deadlineMessageListState(entry: RunRegistryEntry): SerializedMes
   return entry.completedStepsState;
 }
 
+/**
+ * Give the output processors (and with them memory) their one pass when a total deadline ends a
+ * durable run. The run never reaches its finish step, so this runs over the message list as of the
+ * last completed step, the same input a provider error's finish pass would see.
+ */
 export async function runDurableDeadlineOutputPass({
   runId,
   initData,
