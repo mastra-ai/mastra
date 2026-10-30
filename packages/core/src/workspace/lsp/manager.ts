@@ -18,6 +18,12 @@ import { getLanguageId } from './language';
 import { buildCustomExtensions, buildServerDefs, getServersForFile, walkUp, walkUpAsync } from './servers';
 import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic, LSPServerDef } from './types';
 
+/** Subset of the workspace filesystem used by the LSP manager. */
+type LSPFilesystem = {
+  exists(path: string): Promise<boolean>;
+  readFile?(path: string, options?: { encoding?: BufferEncoding }): Promise<string | Buffer>;
+};
+
 const CLIENT_LEASE_ACQUIRE_TIMEOUT_MS = 5000;
 const CLIENT_LEASE_SHUTDOWN_TIMEOUT_MS = 5000;
 
@@ -52,18 +58,9 @@ export class LSPManager {
   private config: LSPConfig;
   private serverDefs: Record<string, LSPServerDef>;
   private customExtensions: Record<string, string>;
-  private filesystem?: {
-    exists(path: string): Promise<boolean>;
-  };
+  private filesystem?: LSPFilesystem;
 
-  constructor(
-    processManager: SandboxProcessManager,
-    root: string,
-    config: LSPConfig = {},
-    filesystem?: {
-      exists(path: string): Promise<boolean>;
-    },
-  ) {
+  constructor(processManager: SandboxProcessManager, root: string, config: LSPConfig = {}, filesystem?: LSPFilesystem) {
     if (
       config.maxOpenClients !== undefined &&
       (!Number.isInteger(config.maxOpenClients) || config.maxOpenClients < 1)
@@ -95,6 +92,31 @@ export class LSPManager {
       return (await walkUpAsync(fileDir, markers, this.filesystem)) ?? this._root;
     }
     return walkUp(fileDir, markers) ?? this._root;
+  }
+
+  /**
+   * Read file content for opening in the language server.
+   * Reads through the workspace filesystem when it can read files (supports
+   * remote filesystems) and never falls back to the host there, since a host
+   * file at the same path is unrelated content. The host filesystem is used
+   * only without a readable workspace filesystem. Returns an empty string if
+   * the file cannot be read.
+   */
+  private async readFileContent(filePath: string): Promise<string> {
+    if (this.filesystem?.readFile) {
+      try {
+        const content = await this.filesystem.readFile(filePath, { encoding: 'utf-8' });
+        return typeof content === 'string' ? content : content.toString('utf-8');
+      } catch {
+        return '';
+      }
+    }
+    try {
+      const fs = await import('node:fs/promises');
+      return await fs.readFile(filePath, 'utf-8');
+    } catch {
+      return '';
+    }
   }
 
   /** Mark a client as most recently used. */
@@ -409,7 +431,10 @@ export class LSPManager {
    * closing the file to allow the client to be evicted.
    * Returns null when no LSP client is available.
    */
-  async prepareQuery(filePath: string): Promise<{
+  async prepareQuery(
+    filePath: string,
+    content?: string,
+  ): Promise<{
     client: LSPClient;
     uri: string;
     languageId: string;
@@ -427,16 +452,8 @@ export class LSPManager {
     }
 
     try {
-      // Open the file (content doesn't matter for position queries, but server may need it)
-      const fs = await import('node:fs/promises');
-      let content = '';
-      try {
-        content = await fs.readFile(filePath, 'utf-8');
-      } catch {
-        content = '';
-      }
-
-      client.notifyOpen(filePath, content, languageId);
+      const fileContent = content ?? (await this.readFileContent(filePath));
+      client.notifyOpen(filePath, fileContent, languageId);
 
       // Use the same URI format as notifyOpen (pathToFileURL for proper encoding)
       const { pathToFileURL } = await import('node:url');

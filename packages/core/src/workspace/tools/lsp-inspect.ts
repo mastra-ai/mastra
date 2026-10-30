@@ -13,24 +13,47 @@ import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
+import type { WorkspaceFilesystem } from '../filesystem';
 import { requireWorkspace, emitWorkspaceMetadata } from './helpers';
 import { startWorkspaceSpan } from './tracing';
 
 const CURSOR_MARKER = '<<<';
 
 /**
- * Get a single line preview from a file at the specified line number.
- * Returns the trimmed line content, or null if the line cannot be read.
+ * Read a file as text through the workspace filesystem (supports remote sandboxes).
+ * The host filesystem is only used when the workspace has no filesystem: on a
+ * remote sandbox, a host file at the same path is unrelated content.
+ * Returns null if the file cannot be read.
  */
-async function getLinePreview(filePath: string, lineNumber: number): Promise<string | null> {
+async function readText(filesystem: WorkspaceFilesystem | undefined, filePath: string): Promise<string | null> {
+  if (filesystem) {
+    try {
+      const content = await filesystem.readFile(filePath, { encoding: 'utf-8' });
+      return typeof content === 'string' ? content : content.toString('utf-8');
+    } catch {
+      return null;
+    }
+  }
   try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    const lines = content.split('\n');
-    const line = lines[lineNumber - 1];
-    return line?.trim() ?? null;
+    return await fs.readFile(filePath, 'utf-8');
   } catch {
     return null;
   }
+}
+
+/**
+ * Get a single line preview from a file at the specified line number.
+ * Returns the trimmed line content, or null if the line cannot be read.
+ */
+async function getLinePreview(
+  filesystem: WorkspaceFilesystem | undefined,
+  filePath: string,
+  lineNumber: number,
+): Promise<string | null> {
+  const content = await readText(filesystem, filePath);
+  if (content === null) return null;
+  const line = content.split('\n')[lineNumber - 1];
+  return line?.trim() ?? null;
 }
 
 function getAbsolutePath(
@@ -174,17 +197,18 @@ export const lspInspectTool = createTool({
       workspace.filesystem?.resolveAbsolutePath?.bind(workspace.filesystem),
     );
 
-    let fileContent = '';
-    try {
-      fileContent = await fs.readFile(absolutePath, 'utf-8');
-    } catch {
-      fileContent = '';
+    const fileContent = await readText(workspace.filesystem, absolutePath);
+    if (fileContent === null) {
+      span.end({ success: false });
+      return {
+        error: `Could not read file: ${filePath}`,
+      };
     }
 
     // Get client and prepare for querying
     let queryResult;
     try {
-      queryResult = await lspManager.prepareQuery(absolutePath);
+      queryResult = await lspManager.prepareQuery(absolutePath, fileContent);
     } catch (err) {
       span.end({ success: false });
       return {
@@ -291,7 +315,9 @@ export const lspInspectTool = createTool({
         .filter(loc => !(loc.path === absolutePath && loc.line === line));
 
       if (definitionLocations.length > 0) {
-        const previews = await Promise.all(definitionLocations.map(loc => getLinePreview(loc.path, loc.line)));
+        const previews = await Promise.all(
+          definitionLocations.map(loc => getLinePreview(workspace.filesystem, loc.path, loc.line)),
+        );
         result.definition = definitionLocations.map((loc, i) => ({
           location: `${compressPath(loc.path)}:L${loc.line}:C${loc.character}`,
           preview: previews[i],
