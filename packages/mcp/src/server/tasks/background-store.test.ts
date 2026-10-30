@@ -206,7 +206,12 @@ describe('BackgroundTaskMCPTaskStore', () => {
     mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
     const manager = mastra.backgroundTaskManager!;
     const contexts: unknown[] = [];
-    const work: MCPTaskWork = () => new Promise(() => {});
+    let started!: () => void;
+    const running = new Promise<void>(resolve => (started = resolve));
+    const work: MCPTaskWork = () => {
+      started();
+      return new Promise(() => {});
+    };
     const store = new BackgroundTaskMCPTaskStore({
       manager,
       serverId: 's',
@@ -215,12 +220,12 @@ describe('BackgroundTaskMCPTaskStore', () => {
       onCancel: context => void contexts.push(context),
     });
     store.registerTool('tool');
-    const task = await store.create({ ttlMs: 300, principal: 'alice', context: { toolName: 'tool', id: 4 } });
+    const task = await store.create({ ttlMs: 1_000, principal: 'alice', context: { toolName: 'tool', id: 4 } });
+    store.run(task.taskId, work);
+    // Once the work runs, the next read of the row is the check after core aborts it at its TTL: fail it.
+    await running;
     const listTasks = manager.listTasks.bind(manager);
     let failed = false;
-    store.run(task.taskId, work);
-    // Fail the first read made after the attempt is aborted at its TTL.
-    await sleep(300);
     vi.spyOn(manager, 'listTasks').mockImplementation(async filter => {
       if (!failed && filter.toolCallId) {
         failed = true;
@@ -229,7 +234,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       return listTasks(filter);
     });
 
-    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 4 }]), { timeout: 4_000 });
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 4 }]), { timeout: 5_000 });
     expect(failed).toBe(true);
     await store.close();
   }, 10_000);
