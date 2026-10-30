@@ -50,7 +50,7 @@ function toolResultIds(messages: MastraDBMessage[]) {
     .map(part => (part as Extract<typeof part, { type: 'tool-invocation' }>).toolInvocation.toolCallId);
 }
 
-type Probe = { hook: string; finishReason?: string };
+type Probe = { hook: string; finishReason?: string; inputAccepted?: boolean };
 
 function createProbes(memory: MastraMemory) {
   const calls: Probe[] = [];
@@ -58,7 +58,11 @@ function createProbes(memory: MastraMemory) {
   const probe: Processor = {
     id: 'terminal-save-probe',
     processOutputResult: async ({ messageList, result }) => {
-      calls.push({ hook: 'probe.processOutputResult', finishReason: result?.finishReason });
+      calls.push({
+        hook: 'probe.processOutputResult',
+        finishReason: result?.finishReason,
+        inputAccepted: result?.inputAccepted,
+      });
       return messageList;
     },
   };
@@ -83,7 +87,8 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'durable', 'evented', 'inngest'];
+  // Inngest needs a caller-side deadline save that has not landed yet.
+  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'inngest'];
   const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
   // Inngest already keeps the user message when the deadline lands during the input save.
   const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
@@ -170,7 +175,11 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         // The deadline aborts the hanging call; its step is saved with the abort notice, like a tool that returns late.
         await expectTurnSavedAndRecalled(memory, 'total-timeout', threadId, undefined, ['call_echo', 'call_hang']);
         expect(calls.map(call => call.hook)).toContain('MessageHistory.processOutputResult');
-        expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+        // The deadline marks the input as accepted, and the flag reaches processors through the processor workflow.
+        expect(calls.find(call => call.hook === 'probe.processOutputResult')).toMatchObject({
+          finishReason: 'error',
+          inputAccepted: true,
+        });
       } finally {
         hang.resolve({});
       }
@@ -214,7 +223,10 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
       await expectTurnSavedAndRecalled(memory, 'provider-error', threadId);
       expect(calls.map(call => call.hook)).toContain('MessageHistory.processOutputResult');
-      expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+      const probeCall = calls.find(call => call.hook === 'probe.processOutputResult');
+      expect(probeCall?.finishReason).toBe('error');
+      // A provider error is not a deadline, so the input is not marked as accepted.
+      expect(probeCall?.inputAccepted).toBeUndefined();
     },
     TEST_TIMEOUT_MS,
   );
@@ -349,7 +361,11 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           'call_echo',
           'call_hang',
         ]);
-        expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+        // The deadline marks the input as accepted, and the flag reaches processors through the processor workflow.
+        expect(calls.find(call => call.hook === 'probe.processOutputResult')).toMatchObject({
+          finishReason: 'error',
+          inputAccepted: true,
+        });
       } finally {
         hang.resolve({});
       }
