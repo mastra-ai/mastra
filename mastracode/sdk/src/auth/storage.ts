@@ -491,6 +491,14 @@ export class AuthStorage {
     return active ? { ...active } : undefined;
   }
 
+  /** One registered account's OAuth credential, for a request-scoped account selection. */
+  getAccountCredential(providerId: string, instanceId: string): OAuthCredential | undefined {
+    const account = this.accountEntries(providerId).find(entry => entry.id === instanceId);
+    if (!account) return undefined;
+    const { type: _type, id: _id, label: _label, addedAt: _addedAt, active: _active, ...credential } = account;
+    return { type: 'oauth', ...credential };
+  }
+
   /**
    * Register OAuth credentials as an account for a provider, making it active
    * unless `activate: false` is passed.
