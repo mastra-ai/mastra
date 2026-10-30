@@ -31,6 +31,13 @@ export interface BackgroundTaskMCPTaskStoreOptions {
   workFor: (context: BackgroundToolTaskContext) => MCPTaskWork;
   /** Whether a crashed attempt of this tool runs again. */
   recoverFor: (toolName: string) => boolean;
+  /**
+   * Called with a task's context when it is cancelled or expires before finishing, on whichever
+   * instance does so, even while no attempt runs (e.g. while it waits for input). Stops whatever
+   * the task stands for outside the store, such as a suspended workflow run. Not awaited: the
+   * cancel answers and the sweep goes on without waiting for it; errors are logged.
+   */
+  onCancel?: (context: BackgroundToolTaskContext) => void | Promise<void>;
   /** Read on every log, since Mastra sets the server's logger after registering it. */
   logger?: () => IMastraLogger;
 }
@@ -85,6 +92,9 @@ export const TASK_EXPIRED_MESSAGE = 'Task expired before it finished';
 const TERMINAL_ROW_STATUSES = new Set<BackgroundTask['status']>(['completed', 'failed', 'cancelled', 'timed_out']);
 const OPEN_ROW_STATUSES: BackgroundTask['status'][] = ['pending', 'running', 'suspended'];
 const UPDATE_ATTEMPTS = 3;
+/** How long an aborted attempt's row is watched for core to record why: 20 reads, 50ms apart. */
+const ABORT_SETTLE_FIRST_READ_MS = 50;
+const ABORT_SETTLE_MAX_READ_MS = 1_000;
 /** The most rows one sweep reads, in each of its two listings. */
 const SWEEP_BATCH = 100;
 
@@ -120,6 +130,14 @@ function isFullyAnswered(row: BackgroundTask, envelope: BackgroundTaskEnvelope):
     Object.keys(envelope.inputRequests ?? {}).length > 0 &&
     Object.keys(openInputRequests(envelope)).length === 0
   );
+}
+
+/**
+ * Stopped by a client, by expiry (the sweep cancels the row, then records it as failed), or by core
+ * timing the attempt out at the task's TTL.
+ */
+function wasStopped(row: BackgroundTask, now: number): boolean {
+  return row.status === 'cancelled' || row.status === 'timed_out' || (row.status === 'failed' && isExpired(row, now));
 }
 
 function isExpired(row: BackgroundTask, now: number): boolean {
@@ -207,6 +225,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    */
   readonly #firstAttempts = new Map<string, (reason: unknown) => void>();
   readonly #executors = new Set<string>();
+  readonly #onCancel: BackgroundTaskMCPTaskStoreOptions['onCancel'];
   #sweepTimer?: ReturnType<typeof setInterval>;
   #closed = false;
   #sweeping?: Promise<void>;
@@ -218,6 +237,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     this.#owner = `mcp-server:${options.serverId}`;
     this.#workFor = options.workFor;
     this.#recoverFor = options.recoverFor;
+    this.#onCancel = options.onCancel;
     this.#getLogger = options.logger;
   }
 
@@ -446,8 +466,48 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         this.#getLogger?.().warn('Could not cancel MCP task', { error });
       }
       this.#abortFirstAttempt(found.row.id, new Error('Task cancelled'));
+      this.#notifyCancel(found.row);
     }
     return true;
+  }
+
+  /** Fire and forget: a slow hook must hold up neither the `tasks/cancel` ack nor the sweep. */
+  #notifyCancel(row: BackgroundTask): void {
+    const onCancel = this.#onCancel;
+    if (!onCancel) return;
+    const context = (row.args as unknown as RowArgs).context;
+    void Promise.resolve()
+      .then(() => onCancel(context))
+      .catch(error => this.#getLogger?.().warn('Could not stop what a cancelled MCP task stands for', { error }));
+  }
+
+  /**
+   * An attempt here was aborted. The abort says why only in core's message, so read the row: if
+   * another instance cancelled or expired the task, or core timed the attempt out, run `onCancel`
+   * here as well, where the work may be executing (a workflow run, say). Core records a timeout only
+   * once the aborted attempt settles, so a row still running under this worker is read again, less
+   * often each time and again after a failed read, until core records how the attempt ended. A shutdown releases the lease and a
+   * lost lease changes the owner: either leaves the row running without this worker, and the work
+   * alone.
+   */
+  #notifyIfCancelled(taskKey: string): void {
+    const check = async () => {
+      for (let wait = ABORT_SETTLE_FIRST_READ_MS; !this.#closed; wait = Math.min(wait * 2, ABORT_SETTLE_MAX_READ_MS)) {
+        let row: BackgroundTask | undefined;
+        try {
+          row = (await this.#manager.listTasks({ agentId: this.#owner, toolCallId: taskKey, perPage: 1 })).tasks[0];
+        } catch (error) {
+          this.#getLogger?.().warn('Could not read an aborted MCP task attempt; reading it again', { error });
+          await new Promise(resolve => setTimeout(resolve, wait));
+          continue;
+        }
+        if (!row) return;
+        if (wasStopped(row, Date.now())) return this.#notifyCancel(row);
+        if (row.status !== 'running' || row.ownerId !== this.#manager.ownerId) return;
+        await new Promise(resolve => setTimeout(resolve, wait));
+      }
+    };
+    check().catch(error => this.#getLogger?.().warn('Could not check why an MCP task attempt was aborted', { error }));
   }
 
   #abortFirstAttempt(rowId: string, reason: Error): void {
@@ -600,6 +660,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   async #expire(storage: BackgroundTasksStorage, row: BackgroundTask): Promise<void> {
     await this.#manager.cancel(row.id);
     this.#abortFirstAttempt(row.id, new Error(TASK_EXPIRED_MESSAGE));
+    this.#notifyCancel(row);
     await storage.updateTask(
       row.id,
       {
@@ -742,7 +803,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     }
     // An attempt that ignores its signal must still end, so the workflow can record the abort.
     const result = await new Promise<Awaited<typeof outcome>>((resolve, reject) => {
-      const onAbort = () => reject(signal.reason ?? new Error('Task cancelled'));
+      const onAbort = () => {
+        reject(signal.reason ?? new Error('Task cancelled'));
+        this.#notifyIfCancelled(args.taskKey);
+      };
       if (signal.aborted) onAbort();
       else signal.addEventListener('abort', onAbort, { once: true });
       outcome.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));

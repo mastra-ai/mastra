@@ -1702,6 +1702,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toWorkItem(row) : null;
   }
 
+  /** Drop the org-wide claims a project's cards hold, so a deleted project stops reserving their records. */
+  async releaseProjectClaims({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<number> {
+    return this.#db.updateMany(
+      'work_items',
+      { org_id: orgId, factory_project_id: factoryProjectId },
+      { claim_key: null },
+    );
+  }
+
   /**
    * Give an unclaimed card the org-wide claim for its record. Returns the card
    * once claimed, or null when the card already carries a different claim or
