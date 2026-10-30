@@ -513,6 +513,34 @@ describe('Agent signals: drain and lease handoff', () => {
     },
   );
 
+  it.each([
+    ['an encoded generation owner', `mastra:thread-lease:${JSON.stringify(['mixed-run', 'generation', 2])}`],
+    ['an encoded retake token', `mastra:thread-lease:${JSON.stringify(['mixed-run', 'retake', 'token'])}`],
+    ['a legacy retake token', 'mixed-run\u0000retake\u0000token'],
+    ['the bare run id', 'mixed-run'],
+  ])('queues a follow-up another process forwarded to %s of a run it owns', async (_label, address) => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'mixed-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const threadId = 'mixed-thread';
+    const resourceId = 'mixed-user';
+    const options = { memory: { thread: threadId, resource: resourceId } } as any;
+    runtime.registerRun(agent, createFakeThreadRun('mixed-run', new Promise<void>(() => {})), options, pubsub);
+    await pubsub.flush();
+
+    // A sender on the other lease-owner format addresses the follow-up with the owner it read verbatim.
+    const signal = createSignal({ type: 'user-message', contents: 'forwarded follow-up' });
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    await pubsub.publish(topic, {
+      type: 'signal-enqueued',
+      data: { type: 'signal-enqueued', runId: address, signal, sourceId: 'other-process' },
+    });
+    await pubsub.flush();
+    await nextTick();
+
+    expect(runtime.drainPendingSignals('mixed-run', pubsub)).toMatchObject([{ contents: 'forwarded follow-up' }]);
+  });
+
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();

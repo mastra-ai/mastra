@@ -8,4 +8,4 @@ Also fixed run IDs that contain the internal handover marker, or look like an en
 
 **Upgrading shared deployments**
 
-Drain active thread runs and restart API and worker processes together. Older processes do not recognize the new lease owner format and treat a busy thread as free.
+Drain active thread runs and restart API and worker processes together. Older processes do not recognize the new lease owner format: they cannot see a run as live, even while it is renewing its lease. Follow-ups that an older process forwards to a run on this release are still delivered.

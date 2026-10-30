@@ -179,6 +179,16 @@ function threadLeaseRunId(owner: string): string {
   return parseThreadLeaseOwner(owner)?.[0] ?? owner;
 }
 
+// Retake token suffix written by releases before the encoded lease-owner format.
+const LEGACY_RETAKE_LEASE_MARKER = '\u0000retake\u0000';
+
+/** Resolves a follow-up address forwarded as a lease owner, in either format, to its run ID. */
+function forwardedSignalRunId(address: string): string {
+  if (parseThreadLeaseOwner(address)) return threadLeaseRunId(address);
+  const legacyRetake = address.indexOf(LEGACY_RETAKE_LEASE_MARKER);
+  return legacyRetake > 0 ? address.slice(0, legacyRetake) : address;
+}
+
 /** @internal Distinguishes temporary handover tokens from qualified execution owners. */
 export function isRetakeLeaseOwner(owner: string | undefined): boolean {
   return parseThreadLeaseOwner(owner)?.[1] === 'retake';
@@ -1657,7 +1667,12 @@ export class AgentThreadStreamRuntime {
         )
           return;
         // Keep predecessor routing through a handoff, but never promote observer copies into execution.
-        if (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId)) {
+        const answersTo = (runId: string) =>
+          state.threadKeysByRunId.get(runId) === key || subscription.ownedRunIds.has(runId);
+        // A sender on another lease-owner format forwards the lease owner verbatim. Use the literal
+        // address when a run here answers to it (a caller run ID may look like an encoded owner).
+        const runId = answersTo(data.runId) ? data.runId : forwardedSignalRunId(data.runId);
+        if (!answersTo(runId)) {
           return;
         }
         const queues = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
@@ -1672,7 +1687,7 @@ export class AgentThreadStreamRuntime {
         queue.push(signal);
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
-        this.#publishPendingUserMessage(pubsub, key, data.runId, signal, 'pending');
+        this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
         this.#notifyPendingSignals(state, key, signal);
       } else if (data?.type === 'signals-cancelled') {
         // A backend retry can deliver the original enqueue after its cancellation.
