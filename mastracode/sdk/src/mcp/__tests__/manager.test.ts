@@ -370,6 +370,33 @@ describe('createMcpManager', () => {
 
       expect(Object.keys(manager.getTools())).toEqual(['fs_read', 'fs_write', 'remote_context']);
     });
+
+    it('keeps the tools of a server whose name starts with another server name', async () => {
+      setupConfig({
+        mcpServers: {
+          foo: { command: 'npx' },
+          foo_bar: { command: 'npx' },
+        },
+      });
+
+      // `foo_bar` settles first, so its tool is registered before `foo` settles.
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { foo_bar: { ping: {} }, foo: { ping: {} } },
+          errors: {},
+        });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(Object.keys(manager.getTools())).toEqual(['foo_ping', 'foo_bar_ping']);
+      expect(manager.getServerStatuses().find(s => s.name === 'foo_bar')).toMatchObject({
+        connected: true,
+        toolNames: ['foo_bar_ping'],
+      });
+    });
   });
 
   describe('extraServers parameter', () => {

@@ -440,12 +440,22 @@ export function createMcpManager(
     return { error: result.error.code === MCP_DISCOVERY_TIMEOUT_CODE ? discoveryTimeoutError() : result.error.message };
   }
 
+  /**
+   * Drop the tools a server registered earlier.
+   *
+   * Only the exact tool names that server reported are removed. Matching on the
+   * `${name}_` prefix would also delete the tools of a server whose name starts
+   * with this one, e.g. `foo` would drop `foo_bar_ping` from `foo_bar`.
+   */
+  function removeServerTools(name: string): void {
+    for (const key of serverStatuses.get(name)?.toolNames ?? []) {
+      delete tools[key];
+    }
+  }
+
   /** Replace a server's tools and status with one discovery outcome. */
   function applyServerResult(name: string, cfg: McpServerConfig, outcome: ServerOutcome): McpServerStatus {
-    const prefix = `${name}_`;
-    for (const key of Object.keys(tools)) {
-      if (key.startsWith(prefix)) delete tools[key];
-    }
+    removeServerTools(name);
 
     const transport = getTransport(cfg);
     const serverTools = outcome.tools ?? {};
@@ -581,12 +591,7 @@ export function createMcpManager(
     connectAttempts.set(name, attempt);
 
     // Remove old tools for this server
-    const prefix = `${name}_`;
-    for (const key of Object.keys(tools)) {
-      if (key.startsWith(prefix)) {
-        delete tools[key];
-      }
-    }
+    removeServerTools(name);
 
     // Clear old logs and mark as connecting
     stderrLogs.delete(name);
