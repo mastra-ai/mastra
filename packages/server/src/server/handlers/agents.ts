@@ -563,13 +563,14 @@ export function getSerializedProcessors(
 /**
  * Extract skills from an agent (both inline and workspace skills).
  * Uses agent.listSkills() which merges agent-level and workspace-level skills.
+ * Skips skills read through a filesystem resolver so metadata reads don't run it.
  */
 export async function getSerializedSkillsFromAgent(
   agent: Agent,
   requestContext?: RequestContext,
 ): Promise<SerializedSkill[]> {
   try {
-    const skillsList = await agent.listSkills({ requestContext });
+    const skillsList = await agent.listSkills({ requestContext, resolveDynamicProviders: false });
     return skillsList.map(skill => ({
       name: skill.name,
       description: skill.description,

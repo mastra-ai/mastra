@@ -238,18 +238,33 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   async init(): Promise<void> {
     // Knowledge before schema 4 was experimental and is not migrated: drop its collections, documents
-    // included. Mongo has no DDL lock; two processes upgrading the same old layout at once can both
-    // drop the reused activity and state collections, which only loses activity written in that
-    // window. Pages, notes and pins are never dropped.
-    for (const name of legacyKnowledgeTablesToDrop(await this.#snapshot())) await this.#drop(name);
+    // included. Mongo has no DDL lock, so processes starting together may act on each other's
+    // snapshots: the reused state collection is emptied of non-schema-4 rows rather than dropped, and
+    // the state row is claimed before any schema-4 collection exists, so no process ever sees pages
+    // without a version. A stale drop of the reused activity collection only loses activity written in
+    // that window. Pages, notes and pins are never dropped.
+    const stateName = MONGO_KNOWLEDGE_PAGES_COLLECTIONS.state;
+    for (const name of legacyKnowledgeTablesToDrop(await this.#snapshot())) {
+      if (name === stateName) {
+        await (await this.#c('state')).deleteMany({ schemaVersion: { $ne: KNOWLEDGE_PAGES_SCHEMA_VERSION } });
+      } else {
+        await this.#drop(name);
+      }
+    }
+    await (
+      await this.#c('state')
+    ).updateOne(
+      { id: 'knowledge' },
+      { $setOnInsert: { id: 'knowledge', schemaVersion: KNOWLEDGE_PAGES_SCHEMA_VERSION } },
+      { upsert: true },
+    );
     const inspection = await this.inspectSchema();
     if (inspection.status === 'incompatible-reset-required') throw new MongoKnowledgeResetRequiredError(inspection);
-    const [pages, notes, pins, activity, state] = await Promise.all([
+    const [pages, notes, pins, activity] = await Promise.all([
       this.#c('pages'),
       this.#c('notes'),
       this.#c('pins'),
       this.#c('activity'),
-      this.#c('state'),
     ]);
     await Promise.all([
       pages.createIndex({ id: 1 }, { unique: true }),
@@ -274,11 +289,6 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       activity.createIndex({ pageScopeId: 1, createdAt: -1, id: -1 }),
       activity.createIndex({ pageId: 1, createdAt: -1, id: -1 }),
     ]);
-    await state.updateOne(
-      { id: 'knowledge' },
-      { $setOnInsert: { id: 'knowledge', schemaVersion: KNOWLEDGE_PAGES_SCHEMA_VERSION } },
-      { upsert: true },
-    );
   }
 
   /** Drops exactly the Knowledge collections (never Memory's) and recreates schema 4. */
