@@ -713,6 +713,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         boards: deps.boardRegistry,
         storage: deps.domains.workItems,
         audit: deps.audit,
+        ...(deps.storedBoards ? { intakeRoutes: deps.storedBoards.storage } : {}),
       }))
     : undefined;
   const startCoordinator = transitionService

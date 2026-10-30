@@ -1041,6 +1041,7 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
+          ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
           autoApprovePlans: async ({ orgId, factoryProjectId }) => {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
