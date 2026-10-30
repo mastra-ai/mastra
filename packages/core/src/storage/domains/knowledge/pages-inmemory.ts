@@ -329,6 +329,13 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     return page && this.#pageReadable(page, input.read) ? clone(page) : null;
   }
 
+  async getPages(input: Parameters<Store['getPages']>[0]) {
+    return [...new Set(input.ids)]
+      .map(id => this.#pages.get(id))
+      .filter((page): page is KnowledgePage => !!page && !page.deletedAt && this.#pageReadable(page, input.read))
+      .map(clone);
+  }
+
   async getPageByPath(input: Parameters<Store['getPageByPath']>[0]) {
     let page: KnowledgePage | undefined;
     let parentId = input.scopeId;
@@ -741,10 +748,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
         const page = this.#pages.get(pin.pageId);
         if (!page || page.deletedAt || !this.#pageReadable(page, input.read)) return false;
         if (input.pageIds && !input.pageIds.includes(pin.pageId)) return false;
+        if (input.excludePageIds?.includes(pin.pageId)) return false;
+        if (input.withBody && !/\S/.test(page.body ?? '')) return false;
         return !audience || pin.audience.some(entry => audience.has(entry));
       })
       .sort(newestFirst);
     const { items, nextCursor } = paginate(pins, input.cursor, input.limit);
-    return { pins: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
+    return {
+      pins: items.map(pin => ({ ...clone(pin), pageName: this.#pages.get(pin.pageId)!.name })),
+      ...(nextCursor ? { nextCursor } : {}),
+      ...(input.count ? { total: pins.length } : {}),
+    };
   }
 }
