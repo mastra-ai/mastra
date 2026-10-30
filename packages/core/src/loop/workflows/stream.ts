@@ -16,7 +16,8 @@ import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
 import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
-import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
+import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../shared/tool-abort-grace';
+import { createTimeoutAbortSignal, isMastraTimeoutError, settledOrElapsed } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
@@ -499,6 +500,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           const error = getErrorFromUnknown(err, {
             fallbackMessage: 'Agent execution timed out',
           });
+          // A tool still running when the deadline aborted it records its result (or the abort notice)
+          // within the grace window. Wait that long, no longer, so memory saves the step it finishes.
+          await settledOrElapsed(executionPromise, TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_MS);
 
           safeEnqueue(controller, {
             type: 'error',
