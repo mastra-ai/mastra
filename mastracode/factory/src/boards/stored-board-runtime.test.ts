@@ -246,6 +246,60 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(elsewhere.status).not.toBe(200);
     }, 30_000);
 
+    it('keeps the phases agents may move cards into through create, reload and the catalog', async () => {
+      stubModel();
+      const orgId = `org-${randomUUID()}`;
+      const newStorage = database();
+      const replica = await boot(newStorage, orgId);
+      const projectId = await createProject(replica, 'Gated project');
+      const onlyFromReported = {
+        operator: 'AND',
+        conditions: [{ field: 'item.phase', operator: 'equals', value: 'reported' }],
+      };
+      const gated = {
+        ...bugsBoard,
+        key: 'gated-bugs',
+        phases: bugsBoard.phases.map(phase =>
+          phase.key === 'fixing'
+            ? { ...phase, agentEnterWhen: onlyFromReported }
+            : phase.key === 'fixed'
+              ? { ...phase, agentEnterWhen: false }
+              : phase,
+        ),
+      };
+
+      const created = await replica.send('POST', `/web/factory/projects/${projectId}/boards`, gated);
+      expect(created.status).toBe(201);
+
+      // A second replica reads the rows the first wrote.
+      const restarted = await boot(newStorage, orgId);
+      const stored = await restarted.send('GET', `/web/factory/projects/${projectId}/boards/gated-bugs`);
+      const storedPhases = Object.fromEntries(
+        (stored.json.board.phases as { key: string; agentEnterWhen?: unknown }[]).map(phase => [
+          phase.key,
+          phase.agentEnterWhen,
+        ]),
+      );
+      // Stored rows read back null where no condition was set, like the other nullable phase fields.
+      expect(storedPhases).toEqual({
+        reported: null,
+        fixing: onlyFromReported,
+        fixed: false,
+        wontfix: null,
+      });
+
+      const listed = (await catalog(restarted, projectId)).find(board => board.id === 'gated-bugs')!;
+      const listedPhases = Object.fromEntries(
+        (listed.phases as { id: string; agentEnterWhen?: unknown }[]).map(phase => [phase.id, phase.agentEnterWhen]),
+      );
+      expect(listedPhases).toEqual({
+        reported: undefined,
+        fixing: onlyFromReported,
+        fixed: false,
+        wontfix: undefined,
+      });
+    }, 30_000);
+
     it("treats a card in a stored board's terminal phase as finished as soon as a restarted replica is up", async () => {
       stubModel();
       const orgId = `org-${randomUUID()}`;

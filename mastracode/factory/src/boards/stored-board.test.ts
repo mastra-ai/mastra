@@ -25,11 +25,18 @@ describe('boardDefinitionOf', () => {
     expect(definition.phases.map(phase => phase.key).sort()).toEqual(Object.keys(board.phases).sort());
     for (const phase of definition.phases) {
       const code = board.phases[phase.key]!;
-      expect({ key: phase.key, name: phase.name, kind: phase.kind, nextPhases: phase.nextPhases }).toEqual({
+      expect({
+        key: phase.key,
+        name: phase.name,
+        kind: phase.kind,
+        nextPhases: phase.nextPhases,
+        agentEnterWhen: phase.agentEnterWhen,
+      }).toEqual({
         key: phase.key,
         name: code.name,
         kind: code.kind,
         nextPhases: [...code.nextPhases],
+        agentEnterWhen: code.agentEnterWhen,
       });
       if (code.kind === 'working') expect(code.runner).toMatchObject(phase.runner!);
     }
@@ -199,6 +206,40 @@ describe('boards authored through the API', () => {
     ],
   ];
 
+  it('keep the phases agents may move cards into when compiled and written back out', () => {
+    const input: StoredBoardInput = {
+      key: 'bugs',
+      name: 'Bugs',
+      phases: [
+        { key: 'reported', name: 'Reported', kind: 'resting', agentEnterWhen: null },
+        { key: 'fixing', name: 'Fixing', kind: 'working', agentEnterWhen: GO },
+        { key: 'fixed', name: 'Fixed', kind: 'terminal', agentEnterWhen: false },
+      ],
+    };
+    expect(storedBoardInputSchema.safeParse(input).success).toBe(true);
+
+    const board = compileStoredBoard(input);
+
+    expect(board.phases.reported!.agentEnterWhen).toBeUndefined();
+    expect(board.phases.fixing!.agentEnterWhen).toEqual(GO);
+    expect(board.phases.fixed!.agentEnterWhen).toBe(false);
+    expect(boardDefinitionOf(board).phases.map(phase => phase.agentEnterWhen)).toEqual([undefined, GO, false]);
+  });
+
+  it('refuse a malformed agentEnterWhen', () => {
+    for (const agentEnterWhen of [
+      true,
+      { operator: 'AND', conditions: [{ field: 'actor.type', operator: 'exists' }] },
+    ]) {
+      const result = storedBoardInputSchema.safeParse({
+        key: 'bugs',
+        name: 'Bugs',
+        phases: phases({ agentEnterWhen: agentEnterWhen as never }),
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
   it('refuse a malformed condition', () => {
     const result = storedBoardInputSchema.safeParse({
       key: 'bugs',
@@ -241,6 +282,7 @@ function asCodeBoard(input: StoredBoardInput) {
       ...(phase.autoStart ? { autoStart: phase.autoStart } : {}),
       ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
       ...(phase.exitTool ? { exitTool: phase.exitTool } : {}),
+      ...(phase.agentEnterWhen != null ? { agentEnterWhen: phase.agentEnterWhen } : {}),
     } as BoardPhaseDefinition<string>;
   }
   return {

@@ -1,5 +1,5 @@
 import type { BoardRegistry } from '../boards/index.js';
-import { autoApprovedExitTool } from '../boards/phase-automation.js';
+import { agentMayEnter, autoApprovedExitTool } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
@@ -441,6 +441,15 @@ export class FactoryTransitionService {
         transitionId,
         'invalid_transition',
         `The ${board.name} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
+      );
+    }
+    if (request.actor.type === 'agent' && fromStage !== request.stage && !agentMayEnter(board, request.stage, item)) {
+      const phaseName = board.phases[request.stage]!.name;
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        `Agents cannot move this card into ${phaseName}; a person can move it from the Factory board.`,
       );
     }
 

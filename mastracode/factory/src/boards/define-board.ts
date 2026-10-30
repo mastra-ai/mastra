@@ -146,6 +146,11 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly next?: PhaseId;
   /** Named moves rules can choose by outcome; each target is also an allowed next phase. */
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
+  /**
+   * Cards an agent may move into this phase: only those this matches, or none with `false`.
+   * People and the board's own rules are never held back. Unset lets agents move any card in.
+   */
+  readonly agentEnterWhen?: RuleGroup | false;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
@@ -186,6 +191,8 @@ type ResolvedPhaseBase<PhaseId extends string> = {
   /** @deprecated Use `nextPhases`; set when the phase declared `next`. */
   readonly next?: PhaseId;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
+  /** Cards an agent may move into this phase; `false` for none, unset for any. */
+  readonly agentEnterWhen?: RuleGroup | false;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
@@ -634,6 +641,8 @@ function buildBoard<
         if (exitTool && nextPhases.length === 0) {
           throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
+        const agentEnterWhen =
+          phase.agentEnterWhen === false ? false : ruleGroup(phase.agentEnterWhen, `${label} agentEnterWhen`);
         const onEnter = runner ? phaseEnterHandlers(phase.onEnter, runner) : phase.onEnter;
         const name = resolveName(phase.name, phase.title, label);
         const description = optionalText(phase.description, `${label} description`, MAX_DESCRIPTION_LENGTH);
@@ -647,6 +656,7 @@ function buildBoard<
             nextPhases,
             ...(phase.next !== undefined ? { next: phase.next } : {}),
             ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
+            ...(agentEnterWhen !== undefined ? { agentEnterWhen } : {}),
             ...(runner ? { runner, role: runner.context } : {}),
             ...(working?.autoStart ? { autoStart: true } : {}),
             ...(autoStartWhen ? { autoStartWhen } : {}),
