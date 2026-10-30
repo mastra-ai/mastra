@@ -39,6 +39,9 @@ const PARENT_EDGE_STYLE = {
   strokeWidth: 1.25,
 };
 const MENTION_EDGE_COLOR = 'var(--chart-blue)';
+// An open chevron in the dashed line's muted tone, at the child end: distinct from a mention's filled blue head.
+const PARENT_ARROW_COLOR = 'var(--muted-foreground)';
+const PARENT_ARROW = { type: MarkerType.Arrow, color: PARENT_ARROW_COLOR, width: 12, height: 12, strokeWidth: 1.5 };
 
 /**
  * The pin badge sits on the circle's rim at its top-right (45°).
@@ -213,11 +216,19 @@ function GraphLegend() {
         </Txt>
       </li>
       <li className="flex items-center gap-2">
-        <svg width="12" height="4" aria-hidden className="shrink-0">
-          <line x1="0" y1="2" x2="12" y2="2" {...PARENT_EDGE_STYLE} strokeDasharray="3 2" />
+        <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-parent-arrow">
+          <line x1="0" y1="4" x2="14" y2="4" {...PARENT_EDGE_STYLE} strokeDasharray="3 2" />
+          <polyline
+            points="10,1 14,4 10,7"
+            fill="none"
+            stroke={PARENT_ARROW_COLOR}
+            strokeWidth="1.25"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
         <Txt as="span" variant="meta" tone="muted">
-          Parent
+          Parent → child
         </Txt>
       </li>
       <li className="flex items-center gap-2">
@@ -346,9 +357,9 @@ function KnowledgePageGraphInner({
         style: mention
           ? { stroke: MENTION_EDGE_COLOR, strokeWidth: Math.min(1.5 + (edge.data?.count ?? 1) * 0.5, 4) }
           : PARENT_EDGE_STYLE,
-        ...(mention
-          ? { markerEnd: { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 } }
-          : {}),
+        markerEnd: mention
+          ? { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 }
+          : PARENT_ARROW,
       };
     });
   }, [laidOut, onMentionSelect, neighbours]);
