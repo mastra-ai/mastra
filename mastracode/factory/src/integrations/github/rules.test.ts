@@ -3016,7 +3016,7 @@ describe('GithubRules', () => {
     await service.ingest(pullRequest('opened', 'delivery-two-cards'));
 
     // Both decisions are committed against the authoring item — that binding is
-    // what links the Review card to it — but they come from separate
+    // what links the pull request's card to it — but they come from separate
     // evaluations: the arrival under the delivery's own identity, and the item
     // under one suffixed with its id.
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
@@ -3028,7 +3028,7 @@ describe('GithubRules', () => {
           decision: expect.objectContaining({
             type: 'upsertLinkedWorkItem',
             source: 'github-pr',
-            board: 'review',
+            board: 'work',
             idempotencyKey: '7:delivery-two-cards:pull-request-intake',
           }),
         }),
@@ -3132,7 +3132,7 @@ describe('GithubRules', () => {
     ]);
     // The pull request still gets its own card, linked to that item.
     expect(cards.find(card => card.externalSource?.type === 'pull-request')).toMatchObject({
-      board: 'review',
+      board: 'work',
       stages: ['intake'],
       parentWorkItemId: work.item.id,
     });
@@ -4759,5 +4759,287 @@ describe('GithubRules push hand-off', () => {
       configVersion: 'v1',
     });
     await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
+  });
+});
+
+describe('pull request cards on the Work board', () => {
+  async function workBoardHarness(permission: string | undefined) {
+    const harness = await setup(permission);
+    const configVersion = 'factory-config-v1';
+    const service = new GithubRules({
+      github: harness.github,
+      sourceControl: harness.sourceControl,
+      integrationStorage: harness.integrationStorage,
+      projects: harness.projects,
+      storage: harness.workItems,
+      boards: createBoardRegistry(),
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: harness.workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
+      storage: harness.workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    let tick = 0;
+    const dispatch = async () => {
+      for (let pass = 0; pass < 2; pass++) {
+        await dispatcher.runOnce(new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * tick++));
+      }
+    };
+    const cards = () => harness.workItems.list({ orgId: 'org-1', factoryProjectId: harness.project.id });
+    const decisions = () => harness.workItems.listDeferredDecisions('org-1', harness.project.id);
+    return { ...harness, service, dispatch, cards, decisions };
+  }
+
+  async function authoredPullRequest(harness: Awaited<ReturnType<typeof workBoardHarness>>) {
+    const work = await harness.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: harness.project.id,
+      input: {
+        board: 'work',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await harness.integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: harness.project.id, workItemId: work.item.id },
+    });
+    await harness.service.ingest(pullRequest('opened', 'delivery-open'));
+    await harness.dispatch();
+    const pullRequestCard = (await harness.cards()).find(card => card.externalSource?.type === 'pull-request')!;
+    return { workId: work.item.id, pullRequestCard };
+  }
+
+  async function lonePullRequestCard(
+    harness: Awaited<ReturnType<typeof workBoardHarness>>,
+    board: 'work' | 'review',
+    stage: string,
+    metadata: Record<string, unknown> = {},
+  ) {
+    return (
+      await harness.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: harness.project.id,
+        input: {
+          board,
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          title: 'PR 17',
+          stages: [stage],
+          sessions: {},
+          metadata: { authorTrusted: true, ...metadata },
+        },
+      })
+    ).item;
+  }
+
+  it('files an untrusted pull request in Work intake without starting a review', async () => {
+    const harness = await workBoardHarness('read');
+    await expect(harness.service.ingest(pullRequest('opened', 'delivery-open'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await harness.dispatch();
+
+    const [card, ...rest] = await harness.cards();
+    expect(rest).toEqual([]);
+    expect(card).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false, factoryAuthored: false, autoStartCandidate: false },
+    });
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+  });
+
+  it('files a Factory-authored pull request on Work beside the card that authored it, and closes both on merge', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    expect(pullRequestCard).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      parentWorkItemId: workId,
+      metadata: { factoryAuthored: true },
+    });
+    expect(await harness.workItems.get({ orgId: 'org-1', id: workId })).toMatchObject({
+      board: 'work',
+      metadata: { openPullRequestNumber: 17 },
+    });
+    // The authoring card is the one sent out for review; the pull request's own
+    // card waits in intake, and neither starts a review on its own.
+    const opened = await harness.decisions();
+    expect(opened.filter(entry => entry.decision.type === 'transition')).toEqual([
+      expect.objectContaining({
+        workItemId: workId,
+        decision: expect.objectContaining({ board: 'work', stage: 'review' }),
+      }),
+    ]);
+    expect(opened.filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+
+    await harness.service.ingest(pullRequest('closed', 'delivery-merge', true));
+    await harness.dispatch();
+
+    const cards = await harness.cards();
+    expect(cards.find(card => card.id === workId)).toMatchObject({ board: 'work', stages: ['done'] });
+    expect(cards.find(card => card.id === pullRequestCard.id)).toMatchObject({ board: 'work', stages: ['done'] });
+  });
+
+  it('cancels the pull request card and clears the authoring mark when the pull request closes unmerged', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    await harness.service.ingest(pullRequest('closed', 'delivery-close'));
+    await harness.dispatch();
+
+    const cards = await harness.cards();
+    expect(cards.find(card => card.id === pullRequestCard.id)).toMatchObject({ board: 'work', stages: ['canceled'] });
+    const authoring = cards.find(card => card.id === workId);
+    expect(authoring).toMatchObject({ board: 'work' });
+    expect(authoring?.stages).not.toEqual(['canceled']);
+    expect(authoring?.metadata?.openPullRequestNumber).toBeNull();
+  });
+
+  it('sends a comment on the pull request to the authoring card, never to the pull request card', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    await harness.service.ingest(
+      pullRequestComment('delivery-feedback', { sender: 'reviewer', body: 'This needs a null check.' }),
+    );
+
+    const messages = (await harness.decisions()).filter(entry => entry.decision.type === 'sendMessage');
+    expect(messages).toEqual([
+      expect.objectContaining({
+        workItemId: workId,
+        decision: expect.objectContaining({ role: 'work', priority: 'high' }),
+      }),
+    ]);
+    expect(messages.some(entry => entry.workItemId === pullRequestCard.id)).toBe(false);
+  });
+
+  it.each(['work', 'review'] as const)(
+    'ignores a comment on a pull request whose only card is on the %s board',
+    async board => {
+      const harness = await workBoardHarness('read');
+      await lonePullRequestCard(harness, board, 'review');
+
+      await harness.service.ingest(
+        pullRequestComment('delivery-feedback', { sender: 'reviewer', body: 'This needs a null check.' }),
+      );
+
+      expect((await harness.decisions()).filter(entry => entry.decision.type === 'sendMessage')).toEqual([]);
+    },
+  );
+
+  it.each(['work', 'review'] as const)('re-reviews a push to a reviewed pull request card on %s', async board => {
+    const harness = await workBoardHarness('write');
+    const card = await lonePullRequestCard(harness, board, 'review', { reviewVerdict: 'approve' });
+
+    await harness.service.ingest(pullRequest('synchronize', 'delivery-push'));
+    await harness.dispatch();
+
+    expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ board, stages: ['review'] });
+    const decisions = await harness.decisions();
+    expect(decisions.find(entry => entry.decision.type === 'transition')?.decision).toMatchObject({
+      board,
+      stage: 'review',
+      reenter: true,
+    });
+    expect(decisions.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
+      role: 'review',
+      skillName: 'factory-rereview',
+      cancelInFlight: true,
+    });
+  });
+
+  it.each(['work', 'review'] as const)('does not re-review a push to a %s pull request card in intake', async board => {
+    const harness = await workBoardHarness('write');
+    const card = await lonePullRequestCard(harness, board, 'intake');
+
+    await harness.service.ingest(pullRequest('synchronize', 'delivery-push'));
+    await harness.dispatch();
+
+    expect(await harness.decisions()).toEqual([]);
+    expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ board, stages: ['intake'] });
+  });
+
+  it.each(['work', 'review'] as const)(
+    'moves a merged pull request card to Done on %s, and a closed one to Canceled',
+    async board => {
+      const merged = await workBoardHarness('read');
+      const mergedCard = await lonePullRequestCard(merged, board, 'review');
+      await merged.service.ingest(pullRequest('closed', 'delivery-merge', true));
+      await merged.dispatch();
+      expect(await merged.workItems.get({ orgId: 'org-1', id: mergedCard.id })).toMatchObject({
+        board,
+        stages: ['done'],
+      });
+
+      const closed = await workBoardHarness('read');
+      const closedCard = await lonePullRequestCard(closed, board, 'intake');
+      await closed.service.ingest(pullRequest('closed', 'delivery-close'));
+      await closed.dispatch();
+      expect(await closed.workItems.get({ orgId: 'org-1', id: closedCard.id })).toMatchObject({
+        board,
+        stages: ['canceled'],
+      });
+    },
+  );
+
+  it.each(['work', 'review'] as const)(
+    "re-enters review when Factory's review command lands on a reviewed %s card",
+    async board => {
+      const harness = await workBoardHarness('write');
+      const card = await lonePullRequestCard(harness, board, 'done', { reviewVerdict: 'approve' });
+
+      await harness.service.ingest(pullRequestComment('delivery-command'));
+      await harness.dispatch();
+
+      expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+        board,
+        stages: ['review'],
+      });
+      expect(
+        (await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision,
+      ).toMatchObject({ role: 'review', skillName: 'factory-rereview' });
+    },
+  );
+
+  it("files a pull request a maintainer asks Factory to review straight into Work's review phase", async () => {
+    const harness = await workBoardHarness('write');
+
+    await harness.service.ingest(pullRequestComment('delivery-command'));
+    await harness.dispatch();
+
+    const [card] = await harness.cards();
+    expect(card).toMatchObject({ board: 'work', stages: ['review'] });
+    expect((await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
+      role: 'review',
+      skillName: 'factory-review',
+    });
   });
 });
