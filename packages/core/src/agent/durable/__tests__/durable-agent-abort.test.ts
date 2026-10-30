@@ -486,4 +486,46 @@ describe('DurableAgent abort signal', () => {
 
     cleanup();
   });
+  // The run abort route answers with __abortRunAcknowledged. On the process
+  // executing the run it must still confirm, with or without a memory thread.
+  // The threadless case runs last, and the threadless evented case lives in
+  // durable-agent-abort-ack.test.ts: on main, a run started after a threadless
+  // run of the other agent kind in the same process never reaches the model.
+  it.each([
+    ['evented', createEventedAgent, true],
+    ['durable', createDurableAgent, true],
+    ['durable', createDurableAgent, false],
+  ] as const)(
+    '%s __abortRunAcknowledged confirms a run executing in this process (case %#)',
+    async (_kind, createAgent, withThread) => {
+      let streaming: () => void;
+      const modelCalled = new Promise<void>(resolve => {
+        streaming = resolve;
+      });
+      const baseAgent = new Agent({
+        id: `abort-ack-owner-agent-${_kind}-${withThread}`,
+        name: 'Abort Ack Owner Agent',
+        instructions: 'Test',
+        model: createAbortableModel(() => streaming()) as LanguageModelV2,
+      });
+      const durableAgent = createAgent({ agent: baseAgent, pubsub });
+
+      let abortPayload: { steps: { finishReason?: string }[] } | undefined;
+      const { output, runId, cleanup } = await durableAgent.stream('Go', {
+        ...(withThread
+          ? { memory: { thread: `abort-ack-owner-thread-${_kind}`, resource: `abort-ack-owner-resource-${_kind}` } }
+          : {}),
+        onAbort: data => {
+          abortPayload = data;
+        },
+      });
+
+      await modelCalled;
+      await expect(durableAgent.__abortRunAcknowledged(runId)).resolves.toBe(true);
+      await output.consumeStream();
+      expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
+
+      cleanup();
+    },
+  );
 });

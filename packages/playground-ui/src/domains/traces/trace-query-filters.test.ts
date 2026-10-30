@@ -275,6 +275,43 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
+  describe('when an outcome token carries is', () => {
+    it('emits an eq predicate on the trace outcome', () => {
+      expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'outcome', value: 'limit' }], now }).where).toEqual({
+        op: 'and',
+        args: [{ op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } }],
+      });
+    });
+  });
+
+  describe('when an outcome token carries notExists', () => {
+    it('matches traces with no recorded outcome', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'outcome', value: '', operatorId: 'notExists' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'notExists', path: 'outcome' }] });
+    });
+  });
+
+  describe('when a stop reason token carries isNot', () => {
+    it('also matches traces with no recorded stop reason', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'stopReason', value: 'max_steps', operatorId: 'isNot' }], now })
+          .where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path: 'stopReason' }, right: { literal: 'max_steps' } },
+              { op: 'notExists', path: 'stopReason' },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
   describe('when an optional trace field carries isNot', () => {
     it('also matches traces where the field is unset', () => {
       expect(

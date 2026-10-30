@@ -17,17 +17,19 @@ import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
+import {
+  MENU_SIDE_OFFSET,
+  menuEmptyClass,
+  menuItemButtonClass,
+  menuItemTrailingIconClass,
+} from '@/ds/primitives/menu-item';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
-// Plain <button>s navigated with roving focus (not Base UI): the fluid highlight follows focus.
-const filterItemClass = cn(menuItemClass, 'focus:text-foreground');
-
+// Plain <button>s navigated with roving focus (not Base UI).
 const FilterMenuButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>((props, ref) => (
-  <button type="button" role="menuitem" data-filter-item="" ref={useFluidMenuItemRef(ref)} {...props} />
+  <button type="button" role="menuitem" data-filter-item="" ref={ref} {...props} />
 ));
 FilterMenuButton.displayName = 'FilterMenuButton';
 
@@ -77,7 +79,6 @@ export function PropertyFilterCreator({
     return fields.filter(f => !hidden.has(f.id));
   }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
-  const menu = useFluidMenu();
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [multiValue, setMultiValue] = useState<string[]>([]);
   const [error, setError] = useState<string | undefined>();
@@ -206,8 +207,7 @@ export function PropertyFilterCreator({
           {!selectedField && (
             <div
               role="menu"
-              className={cn('max-h-[80dvh] overflow-auto', menu.containerClassName)}
-              {...menu.getContainerProps({})}
+              className="max-h-[80dvh] overflow-auto"
               onKeyDown={e => {
                 if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
                 const buttons = Array.from(
@@ -225,7 +225,7 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              <FluidMenuItems menu={menu}>
+              <>
                 {visibleFields.length > 0 ? (
                   visibleFields.map(f => {
                     const used = singleUseFieldIds.has(f.id);
@@ -245,7 +245,7 @@ export function PropertyFilterCreator({
                     return (
                       <FilterMenuButton
                         key={f.id}
-                        className={cn(filterItemClass, 'group')}
+                        className={cn(menuItemButtonClass, 'group')}
                         disabled={used}
                         onClick={() => {
                           setError(undefined);
@@ -266,7 +266,7 @@ export function PropertyFilterCreator({
                           <span
                             className={cn(
                               menuItemTrailingIconClass,
-                              'text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
+                              'text-muted-foreground opacity-0 group-hover:opacity-100 group-focus:opacity-100',
                             )}
                           >
                             <PlusIcon />
@@ -278,7 +278,7 @@ export function PropertyFilterCreator({
                 ) : (
                   <div className={menuEmptyClass}>No matching property.</div>
                 )}
-              </FluidMenuItems>
+              </>
             </div>
           )}
 
@@ -349,7 +349,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
     >
       <PopoverTrigger asChild>
         <FilterMenuButton
-          className={filterItemClass}
+          className={menuItemButtonClass}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
             if (!open) onToggle(field.id);

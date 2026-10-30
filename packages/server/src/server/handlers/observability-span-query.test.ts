@@ -132,6 +132,32 @@ describe('QUERY_SPANS', () => {
     expect(updated.observabilityStore.querySpans).toHaveBeenCalledOnce();
   });
 
+  it.each(['model', 'provider'])(
+    'returns 501 for %s predicates before calling an adapter without dedicated columns',
+    async field => {
+      const request = {
+        timeRange: TIME_RANGE,
+        where: { op: 'not', arg: { op: 'eq', left: { path: field }, right: { literal: 'value' } } },
+      };
+      const { mastra, observabilityStore } = createHarness(['span-query', 'span-query-context-fields']);
+      const error = await captureHttpException(QUERY_SPANS.handler(params(mastra, request)));
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: 'Model and provider span predicates are not supported by the configured observability store',
+      });
+      expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+
+      const updated = createHarness(['span-query', 'span-query-context-fields', 'span-query-model-fields']);
+      await QUERY_SPANS.handler(params(updated.mastra, request));
+      expect(updated.observabilityStore.querySpans).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { type: 'not', arg: { type: 'comparison', field, operator: 'eq', value: 'value' } },
+        }),
+      );
+    },
+  );
+
   it('keeps existing predicates usable with an older adapter', async () => {
     const { mastra, observabilityStore } = createHarness(['span-query']);
     await QUERY_SPANS.handler(
@@ -405,6 +431,55 @@ describe('QUERY_SPANS', () => {
 
     expect(observabilityStore.querySpans).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { field, direction: 'desc' } }),
+    );
+  });
+
+  it.each(['outcome', 'stopReason'])('returns 501 before calling an older store for %s predicates', async field => {
+    const { mastra, observabilityStore } = createHarness(['span-query', 'span-query-context-fields']);
+    const error = await captureHttpException(
+      QUERY_SPANS.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: { op: 'not', arg: { op: 'in', value: { path: field }, set: ['limit', 'my-custom-outcome'] } },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_QUERY_UNSUPPORTED',
+      message: 'Outcome and stop reason span fields are not supported by the configured observability store',
+    });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  });
+
+  it('passes outcome predicates to stores that advertise span-query-outcome-fields', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-query', 'span-query-outcome-fields']);
+
+    await QUERY_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+            { op: 'notExists', path: 'stopReason' },
+          ],
+        },
+      }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          type: 'boolean',
+          operator: 'and',
+          args: [
+            { type: 'comparison', field: 'outcome', operator: 'eq', value: 'limit' },
+            { type: 'presence', field: 'stopReason', operator: 'notExists' },
+          ],
+        },
+      }),
     );
   });
 

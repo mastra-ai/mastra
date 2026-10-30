@@ -6,6 +6,7 @@
  * 2. Evented-engine-specific tests that cannot be shared across engines
  */
 
+import { EventEmitter } from 'node:events';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
 import type {
@@ -16,10 +17,12 @@ import type {
   StreamEvent,
   WorkflowRegistry,
 } from '@internal/workflow-test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
+import type { FGACheckParams } from '../../auth/ee';
 import { MastraNonRetryableError } from '../../error';
+import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
@@ -27,6 +30,7 @@ import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
+import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';
 
 // ============================================================================
@@ -1498,6 +1502,778 @@ describe('Workflow (Evented Engine Specific)', () => {
         await mastra.stopWorkers();
       }
     });
+  });
+
+  describe('nested user workflows', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    async function setup({
+      allowed = true,
+      suspend = false,
+      fail = false,
+      provider = true,
+      internal = false,
+      parallel = false,
+      foreach = false,
+      replaceResults = false,
+      beforeEffect = async () => {},
+    } = {}) {
+      let effects = 0;
+      const policy = { allowed, fail };
+      const schema = z.object({ value: z.string() });
+      const step = createStep({
+        id: 'nested-fga-effect',
+        inputSchema: schema,
+        outputSchema: schema,
+        resumeSchema: z.object({ approved: z.boolean() }),
+        suspendSchema: z.object({ waiting: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend: park }) => {
+          await beforeEffect();
+          if (suspend && !resumeData?.approved) return park({ waiting: true });
+          if (policy.fail) throw new Error('Interrupted child operation');
+          effects++;
+          return inputData;
+        },
+      });
+      const child = createWorkflow({ id: 'nested-fga-child', inputSchema: schema, outputSchema: schema })
+        .then(step)
+        .commit();
+      const parent = createWorkflow({
+        id: 'nested-fga-parent',
+        inputSchema: foreach ? schema.array() : schema,
+        outputSchema: z.any(),
+      });
+      if (foreach) parent.foreach(child);
+      else if (parallel) parent.parallel([child]);
+      else parent.then(child);
+      parent.commit();
+      const fga = {
+        require: vi.fn(async (_user: unknown, { resource }: FGACheckParams) => {
+          if (resource.id === child.id && !policy.allowed) throw new Error(`Denied workflows:execute on ${child.id}`);
+        }),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const storage = new MockStore();
+      if (replaceResults) {
+        const store = (await storage.getStore('workflows'))!;
+        // Model adapters such as MySQL that replace a step result rather than merging metadata.
+        store.updateWorkflowResults = async ({ workflowName, runId, stepId, result, requestContext, state }) => {
+          const snapshot = (await store.loadWorkflowSnapshot({ workflowName, runId }))!;
+          snapshot.context[stepId] = result;
+          if (state !== undefined) snapshot.context.__state = state;
+          snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+          return snapshot.context;
+        };
+      }
+      const emitter = new EventEmitter();
+      const deliveries: Event[] = [];
+      emitter.on('workflows', (event: Event) => {
+        if (event.type === 'workflow.step.run') deliveries.push({ ...event, data: { ...event.data } });
+      });
+      const pubsub = new EventEmitterPubSub(emitter);
+      const handling = vi.spyOn(WorkflowEventProcessor.prototype, 'handle');
+      // Observe the real handler's completion; emitter delivery and flush() do not await it.
+      const waitForDelivery = async (
+        event: Event,
+        occurrence: number,
+        expected: { ok: boolean; retry?: boolean } = { ok: true },
+      ) => {
+        let index = -1;
+        await vi.waitFor(() => {
+          index =
+            handling.mock.calls
+              .map(([candidate], i) => (candidate.id === event.id && candidate.runId === event.runId ? i : -1))
+              .filter(i => i !== -1)[occurrence - 1] ?? -1;
+          expect(index).toBeGreaterThanOrEqual(0);
+        });
+        const result = handling.mock.results[index]!;
+        expect(result.type).toBe('return');
+        await expect(result.value).resolves.toMatchObject(expected);
+      };
+      const leases = vi.spyOn(pubsub, 'acquireLease');
+      const publish = vi.spyOn(pubsub, 'publish');
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        workflows: { [parent.id]: parent, [child.id]: child },
+        server: provider ? { fga } : undefined,
+      });
+      if (internal) mastra.__registerInternalWorkflow(parent);
+      await mastra.startWorkers();
+      const run = await parent.createRun({ resourceId: 'tenant-1' });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set('organizationId', 'org-1');
+      return {
+        mastra,
+        run,
+        parent,
+        child,
+        storage,
+        publish,
+        fga,
+        policy,
+        requestContext,
+        emitter,
+        deliveries,
+        leases,
+        pubsub,
+        waitForDelivery,
+        effects: () => effects,
+      };
+    }
+
+    it.each([false, true])(
+      'blocks forbidden child effects (parallel=%s) (#28620)',
+      async parallel => {
+        const fixture = await setup({ allowed: false, parallel });
+        try {
+          const result = await fixture.run.start({
+            inputData: { value: 'ok' },
+            requestContext: fixture.requestContext,
+          });
+          expect(result.status).toBe('failed');
+          expect(JSON.stringify(result)).toContain(`Denied workflows:execute on ${fixture.child.id}`);
+          expect(fixture.fga.require).toHaveBeenCalledTimes(1);
+          expect(fixture.effects()).toBe(0);
+          expect(fixture.fga.require).toHaveBeenCalledWith(
+            { id: 'user-1' },
+            expect.objectContaining({
+              resource: { type: 'workflow', id: fixture.child.id },
+              permission: 'workflows:execute',
+            }),
+          );
+          expect(
+            fixture.publish.mock.calls.filter(
+              ([, event]) =>
+                event.data?.workflowId === fixture.child.id &&
+                ['workflow.start', 'workflow.resume'].includes(event.type),
+            ),
+          ).toHaveLength(0);
+          const store = await fixture.storage.getStore('workflows');
+          expect((await store!.listWorkflowRuns({ workflowName: fixture.child.id })).runs).toHaveLength(0);
+        } finally {
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
+    it.each([false, true])('settles nested foreach authorization (allowed=%s)', async allowed => {
+      const fixture = await setup({ foreach: true, allowed });
+      try {
+        const starting = fixture.run.start({
+          inputData: [{ value: 'ok' }],
+          requestContext: fixture.requestContext,
+        });
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalled());
+        const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+        await fixture.waitForDelivery(delivery, 1);
+        if (!allowed) {
+          expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(true);
+        }
+        const result = await starting;
+        expect(result.status).toBe(allowed ? 'success' : 'failed');
+        expect(fixture.effects()).toBe(allowed ? 1 : 0);
+        if (!allowed) {
+          expect(JSON.stringify(result)).toContain(`Denied workflows:execute on ${fixture.child.id}`);
+          expect(
+            fixture.publish.mock.calls.filter(
+              ([, event]) => event.type === 'workflow.start' && event.data?.workflowId === fixture.child.id,
+            ),
+          ).toHaveLength(0);
+        }
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    });
+
+    it.each([false, true])(
+      'preserves an authorized foreach child before start metadata (replaceResults=%s)',
+      async replaceResults => {
+        const entered = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        const fixture = await setup({ foreach: true, replaceResults });
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const update = store.updateWorkflowResults.bind(store);
+        vi.spyOn(store, 'updateWorkflowResults').mockImplementation(async args => {
+          if (args.result.metadata?.foreachNestedRunIds) {
+            entered.resolve();
+            await release.promise;
+          }
+          return update(args);
+        });
+        try {
+          const starting = fixture.run.start({
+            inputData: [{ value: 'ok' }],
+            requestContext: fixture.requestContext,
+          });
+          await entered.promise;
+          const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+          await fixture.waitForDelivery(delivery, 1);
+          fixture.policy.allowed = false;
+          const lease = fixture.leases.mock.calls.find(
+            ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+          )!;
+          await fixture.pubsub.releaseLease(lease[0], lease[1]);
+          fixture.emitter.emit('workflows', delivery);
+          await fixture.waitForDelivery(delivery, 2);
+          const snapshot = await store.loadWorkflowSnapshot({
+            workflowName: fixture.parent.id,
+            runId: fixture.run.runId,
+          });
+          expect(snapshot?.status).toBe('running');
+          expect(
+            fixture.publish.mock.calls.filter(
+              ([, event]) => event.type === 'workflow.fail' && event.runId === fixture.run.runId,
+            ),
+          ).toHaveLength(0);
+          release.resolve();
+          await expect(starting).resolves.toMatchObject({ status: 'success' });
+          expect(fixture.effects()).toBe(1);
+        } finally {
+          release.resolve();
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
+    it('does not fail an authorized foreach child after lease expiry', async () => {
+      const effect = Promise.withResolvers<void>();
+      const entered = Promise.withResolvers<void>();
+      const fixture = await setup({
+        foreach: true,
+        beforeEffect: () => {
+          entered.resolve();
+          return effect.promise;
+        },
+      });
+      try {
+        const starting = fixture.run.start({
+          inputData: [{ value: 'ok' }],
+          requestContext: fixture.requestContext,
+        });
+        await entered.promise;
+        fixture.policy.allowed = false;
+        const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+        const lease = fixture.leases.mock.calls.find(
+          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+        )!;
+        await fixture.pubsub.releaseLease(lease[0], lease[1]);
+        fixture.emitter.emit('workflows', delivery);
+        await fixture.waitForDelivery(delivery, 2);
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const snapshot = await store.loadWorkflowSnapshot({
+          workflowName: fixture.parent.id,
+          runId: fixture.run.runId,
+        });
+        expect(fixture.fga.require).toHaveBeenCalledTimes(2);
+        expect(snapshot?.status).toBe('running');
+        expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        effect.resolve();
+        await expect(starting).resolves.toMatchObject({ status: 'success' });
+        expect(fixture.effects()).toBe(1);
+      } finally {
+        effect.resolve();
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
+    it('retries foreach authorization persistence without failing the parent', async () => {
+      const fixture = await setup({ foreach: true });
+      const store = (await fixture.storage.getStore('workflows'))!;
+      const update = store.updateWorkflowResults.bind(store);
+      let failWrite = true;
+      vi.spyOn(store, 'updateWorkflowResults').mockImplementation(async args => {
+        if (failWrite && args.result.metadata?.authorizedEventIds) {
+          failWrite = false;
+          throw new Error('Transient authorization-record write failure');
+        }
+        return update(args);
+      });
+      try {
+        const starting = fixture.run.start({
+          inputData: [{ value: 'ok' }],
+          requestContext: fixture.requestContext,
+        });
+        await vi.waitFor(() => expect(failWrite).toBe(false));
+        const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+        await fixture.waitForDelivery(delivery, 1, { ok: false, retry: true });
+        expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        await expect(starting).resolves.toMatchObject({ status: 'success' });
+        await fixture.waitForDelivery(delivery, 2);
+        expect(fixture.effects()).toBe(1);
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    });
+
+    it('retries an authorized child after a transient snapshot-read failure', async () => {
+      const fixture = await setup();
+      try {
+        const store = await fixture.storage.getStore('workflows');
+        const snapshots = vi.spyOn(store!, 'loadWorkflowSnapshot');
+        fixture.fga.require.mockImplementationOnce(async () => {
+          // Fail the post-authorization recheck, not an earlier snapshot read.
+          snapshots.mockRejectedValueOnce(new Error('Transient snapshot-read failure'));
+        });
+        const starting = fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalled());
+        const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+        await fixture.waitForDelivery(delivery, 1, { ok: false, retry: true });
+        expect(fixture.publish.mock.calls.filter(([, event]) => event.type === 'workflow.fail')).toHaveLength(0);
+        await expect(starting).resolves.toMatchObject({ status: 'success', result: { value: 'ok' } });
+        await fixture.waitForDelivery(delivery, 2);
+        expect(fixture.fga.require).toHaveBeenCalledTimes(2);
+        expect(fixture.effects()).toBe(1);
+        expect(fixture.publish.mock.calls.filter(([, event]) => event.type === 'workflow.fail')).toHaveLength(0);
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    });
+
+    it('runs an authorized child with the caller and tenant context', async () => {
+      const fixture = await setup();
+      try {
+        await expect(
+          fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext }),
+        ).resolves.toMatchObject({ status: 'success', result: { value: 'ok' } });
+        expect(fixture.effects()).toBe(1);
+        expect(fixture.fga.require).toHaveBeenCalledWith(
+          { id: 'user-1' },
+          expect.objectContaining({
+            resource: { type: 'workflow', id: fixture.child.id },
+            permission: 'workflows:execute',
+            context: expect.objectContaining({ resourceId: 'tenant-1', requestContext: expect.any(RequestContext) }),
+          }),
+        );
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const children = await store.listWorkflowRuns({ workflowName: fixture.child.id });
+        expect(fixture.fga.require).toHaveBeenCalledWith(
+          { id: 'user-1' },
+          expect.objectContaining({
+            context: expect.objectContaining({
+              metadata: { workflowId: fixture.child.id, runId: children.runs[0]!.runId, resourceId: 'tenant-1' },
+            }),
+          }),
+        );
+        expect(fixture.fga.require.mock.calls[0]![1].context?.requestContext?.get('organizationId')).toBe('org-1');
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
+    it.each([false, true])(
+      'does not reauthorize a stale child delivery (suspended=%s)',
+      async suspend => {
+        const fixture = await setup({ suspend });
+        try {
+          const result = await fixture.run.start({
+            inputData: { value: 'ok' },
+            requestContext: fixture.requestContext,
+          });
+          expect(result.status).toBe(suspend ? 'suspended' : 'success');
+          const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id);
+          expect(delivery).toBeDefined();
+          const store = (await fixture.storage.getStore('workflows'))!;
+          const before = await store.loadWorkflowSnapshot({
+            workflowName: fixture.parent.id,
+            runId: fixture.run.runId,
+          });
+          fixture.policy.allowed = false;
+          fixture.fga.require.mockClear();
+          fixture.publish.mockClear();
+          // Model redelivery after the transport's execution lease expires.
+          const lease = fixture.leases.mock.calls.find(
+            ([key]) => key === `workflow-step-run:${delivery!.runId}:${delivery!.id}`,
+          )!;
+          await fixture.pubsub.releaseLease(lease[0], lease[1]);
+          fixture.emitter.emit('workflows', delivery);
+          await fixture.waitForDelivery(delivery!, 2);
+          expect(fixture.fga.require).not.toHaveBeenCalled();
+          expect(fixture.effects()).toBe(suspend ? 0 : 1);
+          const after = await store.loadWorkflowSnapshot({ workflowName: fixture.parent.id, runId: fixture.run.runId });
+          expect(after?.status).toBe(before?.status);
+          expect(after?.context[fixture.child.id]).toEqual(before?.context[fixture.child.id]);
+          expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        } finally {
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
+    it.each([false, true])(
+      'ignores a denial after a concurrent child finishes (suspended=%s)',
+      async suspend => {
+        const effect = Promise.withResolvers<void>();
+        const authorization = Promise.withResolvers<void>();
+        const fixture = await setup({ suspend, beforeEffect: () => effect.promise });
+        try {
+          const starting = fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+          await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(1));
+          fixture.fga.require.mockImplementationOnce(async () => {
+            await authorization.promise;
+            throw new Error('Access revoked during concurrent delivery');
+          });
+          const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+          // Model redelivery after the transport's execution lease expires.
+          const lease = fixture.leases.mock.calls.find(
+            ([key]) => key === `workflow-step-run:${delivery!.runId}:${delivery!.id}`,
+          )!;
+          await fixture.pubsub.releaseLease(lease[0], lease[1]);
+          fixture.emitter.emit('workflows', delivery);
+          await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(2));
+          effect.resolve();
+          const result = await starting;
+          expect(result.status).toBe(suspend ? 'suspended' : 'success');
+          fixture.publish.mockClear();
+          authorization.resolve();
+          await fixture.waitForDelivery(delivery, 2);
+          const store = (await fixture.storage.getStore('workflows'))!;
+          const snapshot = await store.loadWorkflowSnapshot({
+            workflowName: fixture.parent.id,
+            runId: fixture.run.runId,
+          });
+          expect(snapshot?.status).toBe(suspend ? 'suspended' : 'success');
+          expect(fixture.effects()).toBe(suspend ? 0 : 1);
+          expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        } finally {
+          effect.resolve();
+          authorization.resolve();
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
+    it('does not fail an authorized child that is still running after lease expiry', async () => {
+      const effect = Promise.withResolvers<void>();
+      const entered = Promise.withResolvers<void>();
+      const fixture = await setup({
+        beforeEffect: () => {
+          entered.resolve();
+          return effect.promise;
+        },
+      });
+      try {
+        const starting = fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+        await entered.promise;
+        fixture.policy.allowed = false;
+        const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+        const lease = fixture.leases.mock.calls.find(
+          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+        )!;
+        await fixture.pubsub.releaseLease(lease[0], lease[1]);
+        fixture.emitter.emit('workflows', delivery);
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(2));
+        await fixture.waitForDelivery(delivery, 2);
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const snapshot = await store.loadWorkflowSnapshot({
+          workflowName: fixture.parent.id,
+          runId: fixture.run.runId,
+        });
+        expect(snapshot?.status).toBe('running');
+        expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        effect.resolve();
+        await expect(starting).resolves.toMatchObject({ status: 'success' });
+        expect(fixture.effects()).toBe(1);
+      } finally {
+        effect.resolve();
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
+    it('does not dispatch a child after a concurrent delivery has denied the run', async () => {
+      const authorization = Promise.withResolvers<void>();
+      const fixture = await setup();
+      fixture.fga.require.mockImplementationOnce(async () => {
+        await authorization.promise;
+      });
+      try {
+        const starting = fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(1));
+        fixture.policy.allowed = false;
+        const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+        const lease = fixture.leases.mock.calls.find(
+          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+        )!;
+        await fixture.pubsub.releaseLease(lease[0], lease[1]);
+        fixture.emitter.emit('workflows', delivery);
+        await expect(starting).resolves.toMatchObject({ status: 'failed' });
+        authorization.resolve();
+        await fixture.waitForDelivery(delivery, 1);
+        expect(fixture.effects()).toBe(0);
+        expect(
+          fixture.publish.mock.calls.filter(
+            ([, event]) => event.type === 'workflow.start' && event.data.workflowId === fixture.child.id,
+          ),
+        ).toHaveLength(0);
+      } finally {
+        authorization.resolve();
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
+    it('authorizes a nested resume before claiming the suspended parent step', async () => {
+      const fixture = await setup({ suspend: true });
+      try {
+        const initial = await fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+        expect(initial.status).toBe('suspended');
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const before = await store.loadWorkflowSnapshot({ workflowName: fixture.parent.id, runId: fixture.run.runId });
+        let stepAtAuthorization: unknown;
+        fixture.fga.require.mockImplementation(async (_user, { resource }) => {
+          if (resource.id !== fixture.child.id) return;
+          const snapshot = await store.loadWorkflowSnapshot({
+            workflowName: fixture.parent.id,
+            runId: fixture.run.runId,
+          });
+          stepAtAuthorization = snapshot?.context[fixture.child.id];
+          throw new Error(`Denied workflows:execute on ${fixture.child.id}`);
+        });
+        const result = await fixture.run.resume({
+          step: fixture.child.id,
+          resumeData: { approved: true },
+          requestContext: fixture.requestContext,
+        });
+        expect(result.status).toBe('failed');
+        expect(JSON.stringify(result)).toContain(`Denied workflows:execute on ${fixture.child.id}`);
+        expect(stepAtAuthorization).toEqual(before?.context[fixture.child.id]);
+        expect(fixture.effects()).toBe(0);
+      } finally {
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
+    it.each(
+      [false, true].flatMap(replaceResults =>
+        ['automatic resume', 'explicit resume', 'restart', 'time travel'].map(mode => ({ mode, replaceResults })),
+      ),
+    )(
+      'preserves an authorized $mode child after denied redelivery (replaceResults=$replaceResults)',
+      async ({ mode, replaceResults }) => {
+        const entered = Promise.withResolvers<void>();
+        const effect = Promise.withResolvers<void>();
+        let block = false;
+        const resuming = mode.includes('resume');
+        const fixture = await setup({
+          suspend: resuming,
+          fail: mode === 'restart',
+          replaceResults,
+          beforeEffect: async () => {
+            if (block) {
+              entered.resolve();
+              await effect.promise;
+            }
+          },
+        });
+        try {
+          const initial = await fixture.run.start({
+            inputData: { value: 'ok' },
+            requestContext: fixture.requestContext,
+          });
+          expect(initial.status).toBe(resuming ? 'suspended' : mode === 'restart' ? 'failed' : 'success');
+          const previousEffects = fixture.effects();
+          fixture.policy.fail = false;
+          const store = (await fixture.storage.getStore('workflows'))!;
+          if (mode === 'restart') {
+            const children = await store.listWorkflowRuns({ workflowName: fixture.child.id });
+            const childRunId = children.runs[0]!.runId;
+            for (const [workflow, runId, stepId] of [
+              [fixture.parent, fixture.run.runId, fixture.child.id],
+              [fixture.child, childRunId, 'nested-fga-effect'],
+            ] as const) {
+              const snapshot = (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId }))!;
+              await store.persistWorkflowSnapshot({
+                workflowName: workflow.id,
+                runId,
+                resourceId: 'tenant-1',
+                snapshot: {
+                  ...snapshot,
+                  status: 'running',
+                  activePaths: [0],
+                  activeStepsPath: { [stepId]: [0] },
+                  context: {
+                    ...snapshot.context,
+                    [stepId]: {
+                      ...snapshot.context[stepId],
+                      status: 'running',
+                      ...(workflow === fixture.parent ? { metadata: { nestedRunId: childRunId } } : {}),
+                    },
+                  },
+                },
+              });
+            }
+          }
+          fixture.deliveries.length = 0;
+          fixture.publish.mockClear();
+          block = true;
+          const run = await fixture.parent.createRun({ runId: fixture.run.runId });
+          const starting =
+            mode === 'restart'
+              ? run.restart({ requestContext: fixture.requestContext })
+              : mode === 'time travel'
+                ? run.timeTravel({
+                    step: [fixture.child.id, 'nested-fga-effect'],
+                    inputData: { value: 'ok' },
+                    nestedStepsContext: { [fixture.child.id]: { 'nested-fga-effect': { payload: { value: 'ok' } } } },
+                    requestContext: fixture.requestContext,
+                  })
+                : run.resume({
+                    step: mode === 'automatic resume' ? fixture.child.id : [fixture.child.id, 'nested-fga-effect'],
+                    resumeData: { approved: true },
+                    requestContext: fixture.requestContext,
+                  });
+          await entered.promise;
+          fixture.policy.allowed = false;
+          const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+          const lease = fixture.leases.mock.calls.find(
+            ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+          )!;
+          await fixture.pubsub.releaseLease(lease[0], lease[1]);
+          fixture.emitter.emit('workflows', delivery);
+          await fixture.waitForDelivery(delivery, 2);
+          const snapshot = await store.loadWorkflowSnapshot({
+            workflowName: fixture.parent.id,
+            runId: fixture.run.runId,
+          });
+          expect(snapshot?.status).toBe('running');
+          expect(
+            fixture.publish.mock.calls.filter(
+              ([, event]) => event.type === 'workflow.fail' && event.runId === fixture.run.runId,
+            ),
+          ).toHaveLength(0);
+          effect.resolve();
+          await expect(starting).resolves.toMatchObject({ status: 'success' });
+          expect(fixture.effects()).toBe(previousEffects + 1);
+        } finally {
+          effect.resolve();
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
+    it.each([
+      { mode: 'automatic resume', allowed: false },
+      { mode: 'automatic resume', allowed: true },
+      { mode: 'explicit resume', allowed: false },
+      { mode: 'explicit resume', allowed: true },
+      { mode: 'time travel', allowed: false },
+      { mode: 'time travel', allowed: true },
+      { mode: 'restart', allowed: false },
+      { mode: 'restart', allowed: true },
+    ])(
+      'rechecks child access on $mode (allowed=$allowed)',
+      async ({ mode, allowed }) => {
+        const resuming = mode.includes('resume');
+        const fixture = await setup({ suspend: resuming, fail: mode === 'restart' });
+        try {
+          const initial = await fixture.run.start({
+            inputData: { value: 'ok' },
+            requestContext: fixture.requestContext,
+          });
+          expect(initial.status).toBe(resuming ? 'suspended' : mode === 'restart' ? 'failed' : 'success');
+          const previousEffects = fixture.effects();
+          fixture.policy.allowed = allowed;
+          fixture.policy.fail = false;
+          if (mode === 'restart') {
+            // Model a process dying with both runs in flight, using the runtime's persisted snapshots.
+            const store = (await fixture.storage.getStore('workflows'))!;
+            const children = await store.listWorkflowRuns({ workflowName: fixture.child.id });
+            const childRunId = children.runs[0]!.runId;
+            for (const [workflow, runId, stepId] of [
+              [fixture.parent, fixture.run.runId, fixture.child.id],
+              [fixture.child, childRunId, 'nested-fga-effect'],
+            ] as const) {
+              const snapshot = (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId }))!;
+              await store.persistWorkflowSnapshot({
+                workflowName: workflow.id,
+                runId,
+                resourceId: 'tenant-1',
+                snapshot: {
+                  ...snapshot,
+                  status: 'running',
+                  activePaths: [0],
+                  activeStepsPath: { [stepId]: [0] },
+                  context: {
+                    ...snapshot.context,
+                    [stepId]: {
+                      ...snapshot.context[stepId],
+                      status: 'running',
+                      ...(workflow === fixture.parent ? { metadata: { nestedRunId: childRunId } } : {}),
+                    },
+                  },
+                },
+              });
+            }
+          }
+          fixture.fga.require.mockClear();
+          fixture.publish.mockClear();
+          // Recreate the public run handle so re-entry loads the persisted snapshot.
+          const run = await fixture.parent.createRun({ runId: fixture.run.runId });
+          const result =
+            mode === 'restart'
+              ? await run.restart({ requestContext: fixture.requestContext })
+              : mode === 'time travel'
+                ? await run.timeTravel({
+                    step: [fixture.child.id, 'nested-fga-effect'],
+                    inputData: { value: 'ok' },
+                    nestedStepsContext: { [fixture.child.id]: { 'nested-fga-effect': { payload: { value: 'ok' } } } },
+                    requestContext: fixture.requestContext,
+                  })
+                : await run.resume({
+                    step: mode === 'automatic resume' ? fixture.child.id : [fixture.child.id, 'nested-fga-effect'],
+                    resumeData: { approved: true },
+                    requestContext: fixture.requestContext,
+                  });
+          expect(result.status, JSON.stringify(result)).toBe(allowed ? 'success' : 'failed');
+          expect(fixture.effects()).toBe(previousEffects + (allowed ? 1 : 0));
+          expect(fixture.fga.require).toHaveBeenCalledWith(
+            { id: 'user-1' },
+            expect.objectContaining({
+              resource: { type: 'workflow', id: fixture.child.id },
+              permission: 'workflows:execute',
+              context: expect.objectContaining({ resourceId: 'tenant-1' }),
+            }),
+          );
+          const childDispatches = fixture.publish.mock.calls.filter(
+            ([, event]) =>
+              event.data?.workflowId === fixture.child.id && ['workflow.start', 'workflow.resume'].includes(event.type),
+          );
+          expect(childDispatches.length).toBe(allowed ? 1 : 0);
+        } finally {
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
+
+    it.each(['no provider', 'trusted actor', 'internal', 'missing identity'])(
+      'preserves %s semantics',
+      async mode => {
+        const fixture = await setup({ provider: mode !== 'no provider', internal: mode === 'internal' });
+        try {
+          const result = await fixture.run.start({
+            inputData: { value: 'ok' },
+            actor: mode === 'trusted actor' ? { actorKind: 'system', sourceWorkflow: 'agentic-loop' } : undefined,
+            requestContext: mode === 'trusted actor' ? new RequestContext([['organizationId', 'org-1']]) : undefined,
+          });
+          expect(result.status).toBe(mode === 'missing identity' ? 'failed' : 'success');
+          expect(fixture.effects()).toBe(mode === 'missing identity' ? 0 : 1);
+          expect(fixture.fga.require).not.toHaveBeenCalled();
+          if (mode === 'missing identity') expect(JSON.stringify(result)).toContain('authenticated user is required');
+        } finally {
+          await fixture.mastra.stopWorkers();
+        }
+      },
+      15000,
+    );
   });
 
   describe('resume FGA checks', () => {

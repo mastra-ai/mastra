@@ -1,4 +1,5 @@
 import type {
+  AggregateTracesResponse,
   GetObservabilityCapabilitiesResponse,
   GetScoresScorers_Response,
   GetTraceQueryFieldsResponse,
@@ -52,6 +53,12 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
 };
 
+/** A store that records each root's outcome and stop reason and filters trace queries on them. */
+export const outcomeCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceQueryOutcomeFields: true },
+};
+
 export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: {
@@ -76,6 +83,30 @@ export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = 
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, deltaPolling: false },
 };
+
+/** A store that answers `aggregateTraces()` next to the trace query API. */
+export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceAggregate: true },
+};
+
+const HOUR = 60 * 60 * 1000;
+
+const hourBefore = (timeRange: { to: string }, hoursAgo: number) =>
+  new Date((Math.floor(Date.parse(timeRange.to) / HOUR) - hoursAgo) * HOUR).toISOString();
+
+/** Two hourly buckets near the end of the window: 5 traces (1 failed), then 3 traces (1 failed). */
+export function traceCountsAggregate(timeRange: { to: string }): AggregateTracesResponse {
+  return {
+    rows: [
+      { bucket: hourBefore(timeRange, 3), measures: { count: 5, errorCount: 1 } },
+      { bucket: hourBefore(timeRange, 2), measures: { count: 3, errorCount: 1 } },
+    ],
+    truncated: false,
+  };
+}
+
+export const traceAggregateError = { error: 'Trace aggregation failed' };
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
   canonicalFields: [],
@@ -113,6 +144,15 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
       createdAt: '2026-09-15T11:00:00.000Z',
       inputPreview: 'Book a table for two',
     },
+  ],
+  page: { next: null },
+};
+
+/** One root stopped by a step limit, one from a store or SDK that recorded no outcome. */
+export const outcomeTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [
+    { ...weatherTrace, outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps: 5 } },
+    { ...twoTracesPage.traces[1], status: 'error', outcome: null, stopReason: null, stopReasonContext: null },
   ],
   page: { next: null },
 };

@@ -86,7 +86,7 @@ function toWireWorkItem(item: WorkItemRow): WorkItemRow {
 }
 
 /** Session ids of the listed cards that the predicate picks, each once. */
-function sessionIdsWhere(items: WorkItemRow[], predicate: (sessionId: string) => boolean): string[] {
+function sessionIdsWhere(items: readonly WorkItemRow[], predicate: (sessionId: string) => boolean): string[] {
   const picked = new Set<string>();
   for (const item of items) {
     for (const { sessionId } of Object.values(item.sessions)) {
@@ -346,6 +346,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                   ? {
                       role: phase.runner.context,
                       context: phase.runner.context,
+                      ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
                       autoStart: phase.autoStart === true,
                       ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
                       ...(phase.exitTool
@@ -375,7 +376,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const items = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });

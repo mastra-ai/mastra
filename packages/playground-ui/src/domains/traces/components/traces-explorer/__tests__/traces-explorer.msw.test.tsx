@@ -25,6 +25,8 @@ import {
   idleDeltaBatch,
   noDeltaPollingCapabilities,
   noRootDurationCapabilities,
+  outcomeCapabilities,
+  outcomeTracesPage,
   noSpanQueryCapabilities,
   noThreadRowsCapabilities,
   noTimeToFirstChunkCapabilities,
@@ -303,7 +305,7 @@ describe('TracesExplorer', () => {
       renderExplorer();
 
       expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
-      expect(screen.getByText('Status')).toBeTruthy();
+      expect(screen.getByText('Outcome')).toBeTruthy();
       expect(screen.queryByText('Messages')).toBeNull();
     });
   });
@@ -543,6 +545,47 @@ describe('TracesExplorer', () => {
     });
   });
 
+  describe('when the time range differs from the default', () => {
+    const renderWithRange = async (filters: Partial<TracesFilters>) => {
+      setExplorerHandlers();
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
+      const { queryClient } = renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...filters }, onChange });
+      await settle(queryClient);
+      return { onChange };
+    };
+
+    it('resets a custom range to the default preset', async () => {
+      const { onChange } = await renderWithRange({
+        datePreset: 'custom',
+        dateFrom: new Date('2026-01-01T00:00:00Z'),
+        dateTo: new Date('2026-01-02T00:00:00Z'),
+      });
+
+      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Reset time range' }));
+
+      const last = onChange.mock.calls.at(-1)?.[0].filters;
+      expect(last?.datePreset).toBe(DEFAULT_TRACES_FILTERS.datePreset);
+      expect(last?.dateFrom).toBeUndefined();
+      expect(last?.dateTo).toBeUndefined();
+      expect(await within(getFilterChips()[0]).findByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(within(getFilterChips()[0]).queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    });
+
+    it('resets another preset to the default preset', async () => {
+      const { onChange } = await renderWithRange({ datePreset: 'last-24h' });
+
+      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Reset time range' }));
+
+      expect(onChange.mock.calls.at(-1)?.[0].filters.datePreset).toBe(DEFAULT_TRACES_FILTERS.datePreset);
+    });
+
+    it('offers no reset on the default preset', async () => {
+      await renderWithRange({});
+
+      expect(within(getFilterChips()[0]).queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    });
+  });
+
   describe('when a scope is given', () => {
     const renderScoped = async (onChange?: (next: TracesExplorerState) => void) => {
       setExplorerHandlers();
@@ -581,6 +624,72 @@ describe('TracesExplorer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
       expect(onChange.mock.calls.at(-1)?.[0].filters.tokens).toEqual(SCOPE_TOKENS);
+    });
+  });
+
+  describe('when the server records trace outcomes', () => {
+    const lastWhere = () => (onTraceQuery.mock.calls.at(-1)?.[0] as { where?: unknown } | undefined)?.where;
+
+    it('shows each root outcome, and the error status where none was recorded', async () => {
+      setExplorerHandlers(outcomeCapabilities, outcomeTracesPage);
+
+      renderExplorer();
+
+      const limited = await screen.findByRole('button', { name: /What is the weather in Paris\?/ });
+      expect(within(limited).getByText('Limit')).toBeTruthy();
+      expect(within(limited).getByText('max_steps')).toBeTruthy();
+      expect(within(traceRow('Book a table for two')).getByText('ERR')).toBeTruthy();
+    });
+
+    it('sends outcome and missing-stop-reason filters in the trace query', async () => {
+      setExplorerHandlers(outcomeCapabilities, outcomeTracesPage);
+
+      const { queryClient } = renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [
+            { fieldId: 'outcome', value: 'limit' },
+            { fieldId: 'stopReason', operatorId: 'notExists', value: '' },
+          ],
+        },
+      });
+      await settle(queryClient);
+
+      expect(lastWhere()).toEqual({
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+          { op: 'notExists', path: 'stopReason' },
+        ],
+      });
+    });
+
+    it('offers the Outcome filter with a not-recorded operator', async () => {
+      setExplorerHandlers(outcomeCapabilities, outcomeTracesPage);
+      const { queryClient } = renderExplorer();
+      await settle(queryClient);
+      const input = () => screen.getByRole('combobox', { name: 'Add filter' });
+
+      input().focus();
+      fireEvent.change(input(), { target: { value: 'Outcome' } });
+      await screen.findByRole('option', { name: 'Outcome' });
+      fireEvent.keyDown(input(), { key: 'Enter' });
+
+      expect(await screen.findByRole('option', { name: 'is not recorded' })).toBeTruthy();
+    });
+  });
+
+  describe('when the server cannot filter on trace outcomes', () => {
+    it('does not send outcome tokens in the trace query', async () => {
+      setExplorerHandlers(traceQueryCapabilities, outcomeTracesPage);
+
+      const { queryClient } = renderExplorer({
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: [{ fieldId: 'outcome', value: 'limit' }] },
+      });
+      await settle(queryClient);
+
+      expect(onTraceQuery).toHaveBeenCalled();
+      expect(JSON.stringify(onTraceQuery.mock.calls.at(-1)?.[0])).not.toContain('outcome');
     });
   });
 

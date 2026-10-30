@@ -620,6 +620,24 @@ describe('WorkItemsStorage', () => {
     expect(await storage.delete({ orgId: 'org1', id: a.item.id })).toBeNull();
   });
 
+  it('serves the board poll from the list cache without cloning, and keeps it safe from mutating callers', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    const first = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    const second = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(second).toBe(first);
+    expect(second[0]).toBe(first[0]);
+
+    const owned = await storage.list({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(owned[0]).not.toBe(first[0]);
+    owned[0]!.title = 'Mutated by a caller';
+    owned[0]!.stages.push('build');
+    const shared = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(shared[0]?.title).toBe('Fix login');
+    expect(shared[0]?.stages).toEqual(['intake']);
+  });
+
   it('holds list order when a later write touches an older card', async () => {
     const storage = await makeStorage();
     vi.useFakeTimers({ shouldAdvanceTime: true });
