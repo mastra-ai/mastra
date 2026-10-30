@@ -16,7 +16,11 @@ function PageUrl({ page }: { page: SavedViewPage }) {
   const [searchParams, setSearchParams] = useSearchParams();
   // Stands in for the page's column picker.
   const [preferences, setPreferences] = useState(TRACE_COLUMN_CATALOGS[page === 'logs' ? 'traces' : page].defaults);
-  const columns = { preferences, setPreferences };
+  const columns = {
+    preferences,
+    setPreferences,
+    resetColumns: () => setPreferences(TRACE_COLUMN_CATALOGS[page === 'logs' ? 'traces' : page].defaults),
+  };
   return (
     <div className="flex flex-col gap-4">
       <ObservabilitySavedViews

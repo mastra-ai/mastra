@@ -1,9 +1,9 @@
 import type { SavedViewPage, SavedViewState } from '@mastra/core/storage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { applySavedView, savedViewFromSearchParams } from '../saved-view-state';
 import { SavedViewNameTakenError, savedViewsQueryKey } from './saved-views-source';
-import type { SavedViewRecord, SavedViewsSource } from './saved-views-source';
+import type { SavedViewRecord, SavedViewsContextValue } from './saved-views-source';
 import type { TraceColumnPreferences } from '@/domains/traces/trace-list-columns';
 import type { FilterBarItem } from '@/ds/components/FilterBar/types';
 import { savedViewNameSchema } from '@/ds/components/SavedViews/saved-view-schema';
@@ -20,21 +20,24 @@ export const SAVED_VIEW_TOO_LARGE_MESSAGE =
 const SAVE_FAILED_MESSAGE = 'Could not save the view. Try again.';
 const DELETE_FAILED_MESSAGE = 'Could not delete the view. Try again.';
 
-export type HostedSavedViewSettings = Pick<SavedViewRecord, 'state' | 'scope'>;
+/** A view's state, and for a stored view its record. */
+export type HostedSavedViewSettings = { state: SavedViewState; record?: SavedViewRecord };
 
 export type SavedViewColumnsControl = {
   preferences: TraceColumnPreferences;
   setPreferences: (next: TraceColumnPreferences) => void;
+  /** Back to the page's default columns, when the page default is picked. */
+  resetColumns: () => void;
 };
 
-export type UseHostedSavedViewsArgs = {
+export type UseHostedSavedViewsArgs = SavedViewsContextValue & {
   page: SavedViewPage;
-  source: SavedViewsSource;
-  queryKeyScope: readonly unknown[];
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParamsLike;
   /** The page's column picker; omitted on pages with fixed columns. */
   columns?: SavedViewColumnsControl;
+  /** The range the page shows when the URL names none, when the host's differs from the page's own. */
+  defaultDatePreset?: string;
 };
 
 const stateBytes = (state: SavedViewState) => new TextEncoder().encode(JSON.stringify(state)).length;
@@ -58,11 +61,26 @@ function summaryFilters(state: SavedViewState): FilterBarItem[] {
 /** The parts of a view that compare equal when they set the same URL and columns. */
 function comparable(state: SavedViewState, withColumns: boolean): string {
   const { filters, dateRange, sort, options, columns } = state;
-  return JSON.stringify([filters, dateRange ?? null, sort ?? null, options ?? null, withColumns ? columns : null]);
+  return JSON.stringify({ filters, dateRange, sort, options, columns: withColumns ? columns : undefined });
 }
 
 function errorMessage(error: unknown, name: string): string {
   return error instanceof SavedViewNameTakenError ? `A view named "${name}" already exists.` : SAVE_FAILED_MESSAGE;
+}
+
+/** What the user picked: a saved view, or the page default when `id` is undefined. */
+type Picked = { id: string | undefined };
+
+/** The unsaved state shown in the bar: a view being created, or edits to the active view. */
+function draftOf(
+  current: SavedViewState,
+  creatingName: string | undefined,
+  editedRecord: SavedViewRecord | undefined,
+): SavedViewDraft<HostedSavedViewSettings> | undefined {
+  const unsaved = { filters: summaryFilters(current), settings: { state: current } };
+  if (creatingName !== undefined) return { name: creatingName, ...unsaved };
+  if (editedRecord) return { viewId: editedRecord.id, name: editedRecord.name, ...unsaved };
+  return undefined;
 }
 
 const validName = (name: string) => {
@@ -82,65 +100,50 @@ export function useHostedSavedViews({
   searchParams,
   setSearchParams,
   columns,
+  defaultDatePreset,
+  canEdit = () => true,
 }: UseHostedSavedViewsArgs): SavedViewsController<HostedSavedViewSettings> {
   const queryClient = useQueryClient();
   const queryKey = savedViewsQueryKey(queryKeyScope, page);
   const { data: records = [] } = useQuery({ queryKey, queryFn: () => source.list(page) });
 
-  // `undefined`: nothing picked yet, so the view matching the URL (e.g. after a reload) is active.
-  // `null`: the page default was picked.
-  const [pickedId, setPickedId] = useState<string | null>();
+  // Nothing picked yet: the view matching the URL (e.g. after a reload) is active.
+  // `{ id: undefined }`: the page default was picked.
+  const [picked, setPicked] = useState<Picked>();
   const [creatingName, setCreatingName] = useState<string>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
 
-  const columnPreferences = columns?.preferences;
-  const current = useMemo(
-    () => savedViewFromSearchParams(page, searchParams, { columns: columnPreferences }),
-    [page, searchParams, columnPreferences],
-  );
+  const current = savedViewFromSearchParams(page, searchParams, { columns: columns?.preferences });
 
   // A view as the page would hold it once applied, so a view saved by an older page (or with stale
   // parts) still compares equal to the URL it sets.
   const matchesUrl = (state: SavedViewState) => {
-    const applied = applySavedView(state, new URLSearchParams());
+    const applied = applySavedView(state, new URLSearchParams(), { defaultDatePreset });
     const normalized = savedViewFromSearchParams(page, applied.params, { columns: applied.columns });
     const withColumns = applied.columns !== undefined;
     return comparable(normalized, withColumns) === comparable(current, withColumns);
   };
 
-  const activeRecord =
-    pickedId === undefined
-      ? records.find(record => matchesUrl(record.state))
-      : records.find(record => record.id === pickedId);
+  const activeRecord = picked
+    ? records.find(record => record.id === picked.id)
+    : records.find(record => matchesUrl(record.state));
   const activeUnsaved = activeRecord !== undefined && !matchesUrl(activeRecord.state);
 
-  const toView = (
-    record: Pick<SavedViewRecord, 'id' | 'name' | 'state' | 'scope'>,
-  ): SavedView<HostedSavedViewSettings> => ({
+  const toView = (record: SavedViewRecord): SavedView<HostedSavedViewSettings> => ({
     id: record.id,
     name: record.name,
     filters: summaryFilters(record.state),
-    settings: { state: record.state, scope: record.scope },
+    settings: { state: record.state, record },
   });
   const views = records.map(toView);
   const activeView = activeRecord ? toView(activeRecord) : undefined;
 
-  let draft: SavedViewDraft<HostedSavedViewSettings> | undefined;
-  if (creatingName !== undefined) {
-    draft = { name: creatingName, filters: summaryFilters(current), settings: { state: current } };
-  } else if (activeRecord && activeUnsaved) {
-    draft = {
-      viewId: activeRecord.id,
-      name: activeRecord.name,
-      filters: summaryFilters(current),
-      settings: { state: current },
-    };
-  }
+  const draft = draftOf(current, creatingName, activeUnsaved ? activeRecord : undefined);
 
   const applyState = (state: SavedViewState) => {
-    const applied = applySavedView(state, searchParams);
-    setSearchParams(previous => applySavedView(state, previous).params);
+    const applied = applySavedView(state, searchParams, { defaultDatePreset });
+    setSearchParams(previous => applySavedView(state, previous, { defaultDatePreset }).params);
     if (applied.columns && columns) columns.setPreferences(applied.columns);
   };
 
@@ -175,13 +178,14 @@ export function useHostedSavedViews({
     setCreatingName(undefined);
     setError(undefined);
     if (viewId === undefined) {
-      setPickedId(null);
+      setPicked({ id: undefined });
       applyState({ schemaVersion: 1, page, filters: [] });
+      columns?.resetColumns();
       return;
     }
     const record = records.find(item => item.id === viewId);
     if (!record) return;
-    setPickedId(record.id);
+    setPicked({ id: record.id });
     applyState(record.state);
   };
 
@@ -215,10 +219,10 @@ export function useHostedSavedViews({
         if (!record) return;
         storeRecord(record);
         setCreatingName(undefined);
-        setPickedId(record.id);
+        setPicked({ id: record.id });
         return;
       }
-      if (!activeRecord || !activeUnsaved) return;
+      if (!activeRecord || !activeUnsaved || !canEdit(activeRecord)) return;
       const { id, name } = activeRecord;
       const record = await run(
         () => source.update(id, { state: current }),
@@ -234,7 +238,7 @@ export function useHostedSavedViews({
     rename: async (viewId, rawName) => {
       const name = validName(rawName);
       const record = records.find(item => item.id === viewId);
-      if (!name || !record || name === record.name || pending) return;
+      if (!name || !record || name === record.name || pending || !canEdit(record)) return;
       const renamed = await run(
         () => source.update(viewId, { name }),
         cause => errorMessage(cause, name),
@@ -252,11 +256,12 @@ export function useHostedSavedViews({
       if (!copy) return;
       storeRecord(copy);
       setCreatingName(undefined);
-      setPickedId(copy.id);
+      setPicked({ id: copy.id });
       applyState(copy.state);
     },
     remove: async viewId => {
-      if (pending) return;
+      const record = records.find(item => item.id === viewId);
+      if (!record || pending || !canEdit(record)) return;
       const removed = await run(
         async () => {
           await source.remove(viewId);
@@ -267,7 +272,7 @@ export function useHostedSavedViews({
       if (!removed) return;
       queryClient.setQueryData<SavedViewRecord[]>(queryKey, (list = []) => list.filter(item => item.id !== viewId));
       // The page keeps its filters; the default tab is picked so the deleted view is not re-matched.
-      if (activeRecord?.id === viewId) setPickedId(null);
+      if (activeRecord?.id === viewId) setPicked({ id: undefined });
     },
   };
 }

@@ -14,11 +14,25 @@ const source = {
   remove: id => api.deleteSavedView(id),
 };
 
-<SavedViewsProvider source={source} queryKeyScope={['project', projectId]}>
+<SavedViewsProvider
+  source={source}
+  queryKeyScope={['project', projectId]}
+  // Optional: views the user may only apply (no rename, delete or save changes)
+  canEdit={view => view.scope !== 'org'}
+>
   <SpansPage />
 </SavedViewsProvider>;
 ```
 
-Picking a view sets the page URL and columns exactly as setting the same filters, time range and sort by hand would, and saving the page stores what the URL holds. Parts of an older view the page no longer supports are skipped. The Spans and Threads pages show the views above their toolbar; traces hosts place `TracesExplorer.SavedViews` and logs hosts place `LogsSavedViews`.
+A searchable view picker sits at the top right of the page header, next to the Traces / Spans / Threads switch. Picking a view sets the page URL and columns exactly as setting the same filters, time range and sort by hand would; saving stores what the URL holds. Parts of an older view the page no longer supports are skipped. Traces hosts place `TracesExplorer.SavedViews` and logs hosts place `LogsSavedViews`.
+
+Hosts whose list pages open on a range other than the last 7 days pass it as `defaultDatePreset` to `useObservabilityListFilters` and to the saved views, so that range is left out of the URL and a view of the last 7 days reopens on the last 7 days:
+
+```tsx
+const filters = useObservabilityListFilters(urlState, { defaultDatePreset: 'last-24h' });
+<ObservabilitySavedViews page="spans" {...urlState} defaultDatePreset="last-24h" />;
+```
+
+Fixed filter chips that stayed on screen after the page replaced its filters (for example when switching views), and a combobox trigger icon that rendered larger than the trigger text.
 
 `useSavedViews` now reports a failed save as `error` (was `storageError`), and `SavedViewEditor` takes a `saveCaption` for the note shown next to Save view.

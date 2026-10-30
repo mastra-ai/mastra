@@ -6,6 +6,7 @@ import { logsView, pages, spansView, tracesView } from '../../__tests__/fixtures
 import { applySavedView, savedViewFromSearchParams } from '../../saved-view-state';
 import { ObservabilitySavedViews } from '../observability-saved-views';
 import { SavedViewsProvider } from '../saved-views-provider';
+import type { SavedViewRecord } from '../saved-views-source';
 import { SAVED_VIEW_TOO_LARGE_MESSAGE } from '../use-hosted-saved-views';
 import { createInMemorySavedViewsSource } from './fixtures/in-memory-source';
 import type { InMemorySavedViewsSource } from './fixtures/in-memory-source';
@@ -16,13 +17,28 @@ import { renderWithProviders } from '@/test/render';
 import { SearchParamsHost } from '@/test/search-params-host';
 
 /** The bar as a page mounts it, with the traces column picker when the page has columns. */
-function Page({ page, initial, withColumns }: { page: SavedViewPage; initial: string; withColumns: boolean }) {
+function Page({
+  page,
+  initial,
+  withColumns,
+  defaultDatePreset,
+}: {
+  page: SavedViewPage;
+  initial: string;
+  withColumns: boolean;
+  defaultDatePreset?: string;
+}) {
   const columns = useTraceColumnPreferences();
   return (
     <SearchParamsHost initial={initial}>
       {urlState => (
         <>
-          <ObservabilitySavedViews page={page} {...urlState} columns={withColumns ? columns : undefined} />
+          <ObservabilitySavedViews
+            page={page}
+            {...urlState}
+            columns={withColumns ? columns : undefined}
+            defaultDatePreset={defaultDatePreset}
+          />
           <button
             type="button"
             onClick={() =>
@@ -48,35 +64,61 @@ const renderBar = ({
   initial,
   source,
   withColumns = false,
+  canEdit,
+  defaultDatePreset,
 }: {
   page: SavedViewPage;
   initial: string;
   source: InMemorySavedViewsSource;
   withColumns?: boolean;
+  canEdit?: (view: SavedViewRecord) => boolean;
+  defaultDatePreset?: string;
 }) =>
   renderWithProviders(
-    <SavedViewsProvider source={source} queryKeyScope={['project', 'p1']}>
-      <Page page={page} initial={initial} withColumns={withColumns} />
+    <SavedViewsProvider source={source} queryKeyScope={['project', 'p1']} canEdit={canEdit}>
+      <Page page={page} initial={initial} withColumns={withColumns} defaultDatePreset={defaultDatePreset} />
     </SavedViewsProvider>,
   );
 
 const url = () => screen.getByTestId('search-params').textContent ?? '';
 const columnsReadout = () => JSON.parse(screen.getByTestId('columns').textContent ?? '{}');
-const tabs = () => within(screen.getByRole('group', { name: 'Saved views' }));
-const tab = (name: string) => tabs().getByRole('button', { name });
-const pressed = (name: string) => tab(name).getAttribute('aria-pressed') === 'true';
+const picker = () => screen.getByLabelText(/^View: /);
+const activeName = () =>
+  picker()
+    .getAttribute('aria-label')
+    ?.replace(/^View: /, '');
+const pressed = (name: string) => activeName() === name;
+/** The picker's options, once `last` (the last view the host lists) has loaded. */
+const listedViews = async (last: string) => {
+  fireEvent.click(await screen.findByLabelText(/^View: /));
+  await screen.findByRole('option', { name: last });
+  const options = screen.getAllByRole('option');
+  const names = options.map(option => option.textContent);
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+  return names;
+};
+const pickView = async (name: string) => {
+  fireEvent.click(await screen.findByLabelText(/^View: /));
+  // A shared view's option also reads "Shared".
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(`^${name}(Shared)?$`) }));
+  await waitFor(() => expect(activeName()).toBe(name));
+};
 
 const nameNewView = (name: string) => {
-  fireEvent.click(screen.getByRole('button', { name: 'New view' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Rename view' }));
-  const input = screen.getByRole('textbox', { name: 'View name' });
-  fireEvent.change(input, { target: { value: name } });
-  fireEvent.keyDown(input, { key: 'Enter' });
+  fireEvent.click(screen.getByRole('button', { name: 'Save as new view' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'View name' }), { target: { value: name } });
 };
 
 const openViewMenu = async (name: string) => {
-  fireEvent.contextMenu(tab(name));
+  if (!pressed(name)) await pickView(name);
+  fireEvent.click(screen.getByRole('button', { name: 'View actions' }));
   return screen.findByRole('menu');
+};
+
+const renameTo = (name: string) => {
+  fireEvent.change(screen.getByRole('textbox', { name: 'View name' }), { target: { value: name } });
+  fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
 };
 
 describe('ObservabilitySavedViews', () => {
@@ -107,9 +149,7 @@ describe('ObservabilitySavedViews', () => {
       </SavedViewsProvider>,
     );
 
-    expect(await screen.findByRole('button', { name: 'Errors' })).toBeTruthy();
-    expect(tab('All logs')).toBeTruthy();
-    expect(tabs().queryByRole('button', { name: 'Slow spans' })).toBeNull();
+    expect(await listedViews('Errors')).toEqual(['All logs', 'Errors']);
   });
 
   describe.each(pages)('on the $page page', ({ page, url: urlByHand, base, view, ...rest }) => {
@@ -118,7 +158,7 @@ describe('ObservabilitySavedViews', () => {
     it('saves the current URL as the view the page would build from it', async () => {
       const source = createInMemorySavedViewsSource();
       renderBar({ page, initial: urlByHand().toString(), source, withColumns });
-      await screen.findByRole('group', { name: 'Saved views' });
+      await screen.findByLabelText(/^View: /);
 
       nameNewView('Mine');
       fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
@@ -136,7 +176,7 @@ describe('ObservabilitySavedViews', () => {
       const source = createInMemorySavedViewsSource([{ name: 'Mine', state: view }]);
       renderBar({ page, initial: base, source, withColumns });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Mine' }));
+      await pickView('Mine');
 
       await waitFor(() => expect(url()).toBe(urlByHand().toString()));
       expect(pressed('Mine')).toBe(true);
@@ -148,7 +188,7 @@ describe('ObservabilitySavedViews', () => {
     it('after a reload, the view matching the URL is the active tab', async () => {
       const source = createInMemorySavedViewsSource([{ name: 'Mine', state: view }]);
       const first = renderBar({ page, initial: base, source, withColumns });
-      fireEvent.click(await screen.findByRole('button', { name: 'Mine' }));
+      await pickView('Mine');
       await waitFor(() => expect(url()).toBe(urlByHand().toString()));
       first.unmount();
 
@@ -177,7 +217,7 @@ describe('ObservabilitySavedViews', () => {
     const source = createInMemorySavedViewsSource([{ name: 'Old', state: stale }]);
     renderBar({ page: 'traces', initial: '', source, withColumns: true });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Old' }));
+    await pickView('Old');
 
     const byHand = new URLSearchParams();
     applyTracePropertyFilterTokens(byHand, [{ fieldId: 'status', value: 'error' }]);
@@ -190,13 +230,62 @@ describe('ObservabilitySavedViews', () => {
     const source = createInMemorySavedViewsSource([{ name: 'Incident', state: tracesView }]);
     renderBar({ page: 'traces', initial: '', source, withColumns: true });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Incident' }));
+    await pickView('Incident');
 
     await waitFor(() => {
       const params = new URLSearchParams(url());
       expect(params.get('datePreset')).toBe('custom');
       expect(params.get('dateFrom')).toBe('2026-10-01T00:00:00.000Z');
       expect(params.get('dateTo')).toBe('2026-10-02T12:30:00.000Z');
+    });
+  });
+
+  it('applies a read-only view but offers no way to change it', async () => {
+    const source = createInMemorySavedViewsSource([{ name: 'Org errors', state: spansView, scope: 'org' }]);
+    renderBar({ page: 'spans', initial: '', source, canEdit: view => view.scope !== 'org' });
+
+    await pickView('Org errors');
+    await waitFor(() => expect(url()).toBe(applySavedView(spansView, new URLSearchParams()).params.toString()));
+
+    const menu = await openViewMenu('Org errors');
+    expect(within(menu).queryByRole('menuitem', { name: 'Rename' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Delete view' })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'Duplicate' })).toBeTruthy();
+    fireEvent.keyDown(menu, { key: 'Escape' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+    expect(await screen.findByRole('button', { name: 'Reset' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    expect(source.calls.filter(call => call.method !== 'list')).toEqual([]);
+  });
+
+  describe('when the host defaults to another range', () => {
+    const lastWeek: SavedViewState = { schemaVersion: 1, page: 'spans', filters: [], dateRange: { preset: 'last-7d' } };
+
+    it('a view of the last 7 days reopens on the last 7 days', async () => {
+      const source = createInMemorySavedViewsSource([{ name: 'Last week', state: lastWeek }]);
+      renderBar({ page: 'spans', initial: '', source, defaultDatePreset: 'last-24h' });
+
+      await pickView('Last week');
+
+      await waitFor(() => expect(url()).toBe('datePreset=last-7d'));
+      expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    });
+
+    it('saves the last 7 days picked by hand and leaves the host default out', async () => {
+      const source = createInMemorySavedViewsSource([
+        { name: 'Today', state: { ...lastWeek, dateRange: { preset: 'last-24h' } } },
+      ]);
+      renderBar({ page: 'spans', initial: 'datePreset=last-7d', source, defaultDatePreset: 'last-24h' });
+      await screen.findByLabelText(/^View: /);
+
+      nameNewView('Last week');
+      fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+      await waitFor(() => expect(source.records()).toHaveLength(2));
+      expect(source.records().find(record => record.name === 'Last week')?.state).toEqual(lastWeek);
+
+      await pickView('Today');
+      await waitFor(() => expect(url()).toBe(''));
     });
   });
 
@@ -208,14 +297,13 @@ describe('ObservabilitySavedViews', () => {
         { name: 'Slow', state: { ...empty, filters: [{ fieldId: 'durationMs', value: '1000', operatorId: 'gt' }] } },
       ]);
       renderBar({ page: 'spans', initial: '', source });
-      await screen.findByRole('button', { name: 'Errors' });
+      expect(await listedViews('Errors')).toEqual(['All spans', 'Slow', 'Errors']);
       return source;
     };
 
     it('saves changes to the active view', async () => {
       const source = await setup();
-      fireEvent.click(tab('Slow'));
-      await waitFor(() => expect(pressed('Slow')).toBe(true));
+      await pickView('Slow');
 
       fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
@@ -229,8 +317,7 @@ describe('ObservabilitySavedViews', () => {
 
     it('resets the active view to what was saved', async () => {
       await setup();
-      fireEvent.click(tab('Slow'));
-      await waitFor(() => expect(pressed('Slow')).toBe(true));
+      await pickView('Slow');
       const saved = url();
 
       fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
@@ -242,11 +329,9 @@ describe('ObservabilitySavedViews', () => {
     it('renames a view', async () => {
       const source = await setup();
       fireEvent.click(within(await openViewMenu('Errors')).getByRole('menuitem', { name: 'Rename' }));
-      const input = screen.getByRole('textbox', { name: 'View name' });
-      fireEvent.change(input, { target: { value: 'All errors' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
+      renameTo('All errors');
 
-      expect(await screen.findByRole('button', { name: 'All errors' })).toBeTruthy();
+      await waitFor(() => expect(activeName()).toBe('All errors'));
       expect(source.records().map(record => record.name)).toContain('All errors');
     });
 
@@ -255,20 +340,24 @@ describe('ObservabilitySavedViews', () => {
       fireEvent.click(within(await openViewMenu('Errors')).getByRole('menuitem', { name: 'Duplicate' }));
 
       await waitFor(() => expect(pressed('Errors copy')).toBe(true));
+      const original = source.records().find(record => record.name === 'Errors');
       const copy = source.records().find(record => record.name === 'Errors copy');
-      expect(copy?.state).toEqual(source.records().find(record => record.name === 'Errors')?.state);
-      expect(new URLSearchParams(url()).toString()).not.toBe('');
+      expect(copy?.state).toEqual(original?.state);
+      const errorsUrl = applySavedView(
+        { ...empty, filters: [{ fieldId: 'status', value: 'error' }] },
+        new URLSearchParams(),
+      );
+      await waitFor(() => expect(url()).toBe(errorsUrl.params.toString()));
     });
 
     it('deleting the active view goes back to the default tab', async () => {
       const source = await setup();
-      fireEvent.click(tab('Errors'));
-      await waitFor(() => expect(pressed('Errors')).toBe(true));
+      await pickView('Errors');
 
       fireEvent.click(within(await openViewMenu('Errors')).getByRole('menuitem', { name: 'Delete view' }));
 
-      await waitFor(() => expect(tabs().queryByRole('button', { name: 'Errors' })).toBeNull());
-      expect(pressed('All spans')).toBe(true);
+      await waitFor(() => expect(pressed('All spans')).toBe(true));
+      expect(await listedViews('Slow')).toEqual(['All spans', 'Slow']);
       expect(source.records().map(record => record.name)).toEqual(['Slow']);
     });
 
@@ -287,12 +376,10 @@ describe('ObservabilitySavedViews', () => {
     it('shows a name clash on rename and keeps the old name', async () => {
       await setup();
       fireEvent.click(within(await openViewMenu('Slow')).getByRole('menuitem', { name: 'Rename' }));
-      const input = screen.getByRole('textbox', { name: 'View name' });
-      fireEvent.change(input, { target: { value: 'Errors' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
+      renameTo('Errors');
 
       expect((await screen.findByRole('alert')).textContent).toBe('A view named "Errors" already exists.');
-      expect(tab('Slow')).toBeTruthy();
+      expect(activeName()).toBe('Slow');
     });
 
     it('shows a failed save and keeps the draft', async () => {
@@ -313,7 +400,7 @@ describe('ObservabilitySavedViews', () => {
     const huge = new URLSearchParams();
     applyTracePropertyFilterTokens(huge, [{ fieldId: 'metadata.note', value: 'x'.repeat(17 * 1024) }]);
     renderBar({ page: 'traces', initial: huge.toString(), source });
-    await screen.findByRole('group', { name: 'Saved views' });
+    await screen.findByLabelText(/^View: /);
 
     nameNewView('Huge');
     await act(async () => {

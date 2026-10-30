@@ -608,7 +608,7 @@ describe('SpansExplorerBody', () => {
       renderBodyAtUrl(URL_BY_HAND);
       await screen.findByText('agent run: weather');
 
-      expect(screen.queryByRole('group', { name: 'Saved views' })).toBeNull();
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
     });
 
     it('applying a view queries and shows what the user gets by setting it by hand', async () => {
@@ -620,7 +620,8 @@ describe('SpansExplorerBody', () => {
       const { queries } = renderBodyAtUrl('', source);
       await screen.findByText('agent run: weather');
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Weather tools' }));
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Weather tools' }));
 
       await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(URL_BY_HAND));
       await waitFor(() => expect(JSON.stringify(queries.at(-1)?.where)).toContain('"tool: get-weather"'));
@@ -636,7 +637,7 @@ describe('SpansExplorerBody', () => {
       renderBodyAtUrl(URL_BY_HAND, source);
       await screen.findByText('agent run: weather');
 
-      fireEvent.click(await screen.findByRole('button', { name: 'New view' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Save as new view' }));
       fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
 
       await waitFor(() => expect(source.records()).toHaveLength(1));

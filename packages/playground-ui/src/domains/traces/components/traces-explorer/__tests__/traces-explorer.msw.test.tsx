@@ -1621,7 +1621,8 @@ describe('TracesExplorer.Layout', () => {
       );
       await screen.findByText('What is the weather in Paris?');
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Errors' }));
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Errors' }));
 
       await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(byHand.toString()));
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
@@ -1642,7 +1643,7 @@ describe('TracesExplorer.Layout', () => {
       );
       await screen.findByText('What is the weather in Paris?');
 
-      expect(screen.queryByRole('group', { name: 'Saved views' })).toBeNull();
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
     });
   });
 });

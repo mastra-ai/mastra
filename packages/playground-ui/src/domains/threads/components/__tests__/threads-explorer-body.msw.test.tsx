@@ -354,7 +354,7 @@ describe('ThreadsExplorerBody', () => {
       renderBodyAtUrl(URL_BY_HAND);
       await screen.findByText('Weather Agent');
 
-      expect(screen.queryByRole('group', { name: 'Saved views' })).toBeNull();
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
     });
 
     it('applying a view queries what the user gets by setting it by hand', async () => {
@@ -364,7 +364,8 @@ describe('ThreadsExplorerBody', () => {
       const { queries } = renderBodyAtUrl('', source);
       await screen.findByText('Weather Agent');
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Support' }));
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Support' }));
 
       await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(URL_BY_HAND));
       await waitFor(() => expect(JSON.stringify(queries.at(-1)?.where)).toContain('"Support Agent"'));

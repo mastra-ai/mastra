@@ -33,7 +33,11 @@ export class SavedViewNameTakenError extends Error {
   }
 }
 
-export type SavedViewsContextValue = { source: SavedViewsSource; queryKeyScope: readonly unknown[] };
+export type SavedViewsContextValue = {
+  source: SavedViewsSource;
+  queryKeyScope: readonly unknown[];
+  canEdit?: (view: SavedViewRecord) => boolean;
+};
 
 export const SavedViewsContext = createContext<SavedViewsContextValue | undefined>(undefined);
 

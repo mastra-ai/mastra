@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useObservabilityViews } from '../hooks/use-observability-views';
 import type { ObservabilityViewsState } from '../hooks/use-observability-views';
+import { useSavedViewsSource } from '../saved-views/saved-views-source';
+import { ObservabilityHeaderSlotContext } from './observability-header-slot';
 import type { TracesExplorerFeatures } from '@/domains/traces/components/traces-explorer/traces-explorer-context';
 import { TracesSpansSwitch, TracesSpansSwitchSkeleton } from '@/domains/traces/components/traces-spans-switch';
 import type { ObservabilityView } from '@/domains/traces/components/traces-spans-switch';
@@ -31,15 +34,30 @@ export function ObservabilityPageLayout({
   children,
 }: ObservabilityPageLayoutProps) {
   const { views, isLoading, showSwitch } = useObservabilityViews({ current, features });
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+  // Saved views portal into the end of this row, so it exists whenever the host stores them.
+  const savedViews = useSavedViewsSource();
 
   // While loading, hold the switch's place so it does not push the page down when it lands.
-  let actionRow: ReactNode;
-  if (isLoading) actionRow = <TracesSpansSwitchSkeleton />;
-  else if (showSwitch) actionRow = <TracesSpansSwitch current={current} views={views} onViewChange={onViewChange} />;
+  let viewSwitch: ReactNode;
+  if (isLoading) viewSwitch = <TracesSpansSwitchSkeleton />;
+  else if (showSwitch) viewSwitch = <TracesSpansSwitch current={current} views={views} onViewChange={onViewChange} />;
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs({ current, isLoading, showSwitch })} actionRow={actionRow}>
-      {children}
+    <PageLayout
+      breadcrumbs={breadcrumbs({ current, isLoading, showSwitch })}
+      actionRow={
+        (viewSwitch || savedViews) && (
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            {viewSwitch}
+            <div ref={setHeaderSlot} className="flex min-w-0 flex-1 justify-end" />
+          </div>
+        )
+      }
+    >
+      <ObservabilityHeaderSlotContext.Provider value={headerSlot ?? undefined}>
+        {children}
+      </ObservabilityHeaderSlotContext.Provider>
     </PageLayout>
   );
 }
