@@ -6,4 +6,3 @@ Pull requests and merge requests are now reviewed on the Work board. A new pull 
 
 Cards already on the Review board stay there and keep working unchanged, and the Review board is still installed.
 
-**Stored boards:** this changes the built-in Work board definition. An unedited stored Work board picks the change up on restart. A Work board you have edited shows "Code definition changed since this board was edited" and does not review pull requests until you reset it.
