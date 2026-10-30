@@ -6799,10 +6799,18 @@ describe('a skill run that ends in error (#27740)', () => {
     },
   ] as const;
 
+  // Core's run-failed event hands the session the message alone, wrapped when a queued follow-up run fails to start.
+  const runFailedMessages = {
+    'mid-run': (message: string) => message,
+    'behind a busy run': (message: string) =>
+      `failed to start follow-up run for queued message: ${message}; the message was requeued and will deliver on the next turn`,
+  };
+
   it.each(
     tenantFailures.flatMap(failure => [
-      { ...failure, refused: 'at kickoff' },
-      { ...failure, refused: 'mid-run' },
+      { ...failure, refused: 'at kickoff' as const },
+      { ...failure, refused: 'mid-run' as const },
+      { ...failure, refused: 'behind a busy run' as const },
     ]),
   )(
     'fails a start for $who refused $refused once, without retrying it, and says why (#28697)',
@@ -6822,8 +6830,7 @@ describe('a skill run that ends in error (#27740)', () => {
         undefined,
         refused === 'at kickoff'
           ? { signalAccepted: kickoffRefused }
-          : // Core's run-failed event hands the session the message alone.
-            { agentEndReason: 'error', runError: new Error(failure.message) },
+          : { agentEndReason: 'error', runError: new Error(runFailedMessages[refused](failure.message)) },
       );
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,

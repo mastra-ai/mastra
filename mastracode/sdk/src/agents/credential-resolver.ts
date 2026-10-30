@@ -67,10 +67,10 @@ export function credentialTenantFailureReason(error: unknown): CredentialTenantF
   if (error.name === 'CredentialTenantError' && 'reason' in error && isCredentialTenantFailureReason(error.reason)) {
     return error.reason;
   }
-  // A run's error reaches its session through core's run-failed event as the message alone.
+  // A run's error reaches its session through core's run-failed event as the message alone, sometimes wrapped.
   return Object.keys(CREDENTIAL_TENANT_FAILURES)
     .filter(isCredentialTenantFailureReason)
-    .find(reason => CREDENTIAL_TENANT_FAILURES[reason] === error.message);
+    .find(reason => error.message.includes(CREDENTIAL_TENANT_FAILURES[reason]));
 }
 
 const CREDENTIAL_POLICY_KEY = 'mastracode__credentialPolicy';
