@@ -135,6 +135,28 @@ describe('runMC', () => {
     expect(result.threadId).toBeTruthy();
   });
 
+  it('reports cumulative usage across tool and answer steps without including earlier runs', async () => {
+    let calls = 0;
+    const { controller, session } = await makeHarness({
+      withReadFileTool: true,
+      doStream: async () => ({ stream: calls++ === 0 ? toolCallStream() : textStream('Done.') }),
+    });
+
+    const result = await runMC({ controller, session, prompt: 'Read the file and summarize it.' }).result;
+    expect(result.status).toBe('completed');
+    expect(result.toolResults).toHaveLength(1);
+    expect(result.usage).toEqual({ inputTokens: 20, outputTokens: 40, totalTokens: 60 });
+
+    const nextResult = await runMC({
+      controller,
+      session,
+      prompt: 'Anything else?',
+      thread: { id: result.threadId },
+    }).result;
+    expect(nextResult.status).toBe('completed');
+    expect(nextResult.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+  });
+
   it('creates a fresh thread when no thread option is provided', async () => {
     const { controller, session } = await makeHarness({
       doStream: async () => ({ stream: textStream('Fresh answer.') }),
