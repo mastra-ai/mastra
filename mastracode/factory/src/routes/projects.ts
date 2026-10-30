@@ -605,9 +605,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               403,
             );
           }
-          const project = await (
-            await this.#projects()
-          ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });
+          // Plans are approved per board (`exitTool.autoApprove`); the old project switch is ignored.
+          const { autoApprovePlans: _ignored, ...input } = parsedBody.data;
+          const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
       }),

@@ -527,8 +527,8 @@ export interface WorkItemRow {
    */
   autonomyArmedAt: Date | null;
   /**
-   * When a person chose to run this item hands-off: the dispatcher answers its
-   * parked plans even while the project's Auto-approve plans switch is off.
+   * When a person chose to run this item hands-off. Legacy: nothing approves plans
+   * from it; a plan is approved by a person or by its phase's `submit_plan` exit tool.
    */
   plansPreapprovedAt: Date | null;
   /**

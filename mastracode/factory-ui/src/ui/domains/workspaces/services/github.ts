@@ -250,8 +250,6 @@ export interface FactoryProjectPayload {
   defaultThinkingLevel?: ThinkingLevelSetting;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
-  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
-  autoApprovePlans?: boolean;
   /** Whether Review agents publish test results as a commit check. Defaults to off. */
   reviewTestChecksEnabled?: boolean;
   /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
@@ -473,14 +471,11 @@ export async function applyFactoryDefaultModelToSessions(
   return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
 }
 
-/** Toggle a Factory's automation settings: rule-started runs, plan approval. */
+/** Toggle a Factory's automation settings: rule-started runs, self-review, review test checks. */
 export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  patch: Pick<
-    FactoryProjectPayload,
-    'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'
-  >,
+  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'>,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
