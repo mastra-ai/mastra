@@ -1195,7 +1195,7 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     name: 'result',
     type: 'OutputResult',
     description:
-      'Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), and `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.).',
+      "Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.), and an optional `error`. `error` is set only when `finishReason` is `'error'` and the error that ended the run is known. Use it to tell a run that hit its `modelSettings.timeout.totalMs` deadline (a `MastraTimeoutError` with `timeoutType: 'total'`, checked with `isMastraTimeoutError` from `@mastra/core/loop`) apart from a provider failure.",
     isOptional: false,
   },
   {
