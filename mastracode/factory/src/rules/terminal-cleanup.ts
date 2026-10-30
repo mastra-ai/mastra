@@ -1,3 +1,4 @@
+import { currentStageEnteredAt } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 export interface TerminalStageCleanupOptions {
@@ -5,8 +6,9 @@ export interface TerminalStageCleanupOptions {
     WorkItemsStorage,
     | 'get'
     | 'listRunBindings'
+    | 'revokeRunBinding'
     | 'revokeRunBindingsForWorkItem'
-    | 'supersedeTerminalDecisionsForWorkItem'
+    | 'supersedeDecisionsForWorkItem'
     | 'findRunBindingBySession'
   >;
   /** Final ingest of trailing tool results before the binding is revoked. */
@@ -19,7 +21,7 @@ export interface TerminalStageCleanupOptions {
    */
   abortSession?: (binding: FactoryRunBindingRecord) => Promise<void>;
   /** Release the item's session sandboxes back to the reuse pool. */
-  releaseSandboxes?: (args: TerminalStageCleanupArgs) => Promise<unknown>;
+  releaseSandboxes?: (args: TerminalStageCleanupArgs & { preserveSessionIds?: string[] }) => Promise<unknown>;
 }
 
 export interface TerminalStageCleanupArgs {
@@ -28,6 +30,12 @@ export interface TerminalStageCleanupArgs {
   workItemId: string;
   /** Revision produced by the terminal transition that scheduled this cleanup. */
   revision?: number;
+  /**
+   * When the card entered the terminal stage. Seats created at or after it
+   * belong to that stage's own close-out and are left running; cleanup bails
+   * only if the card has since left this entry.
+   */
+  stageEnteredAt?: Date;
   /**
    * The bound agent seat whose own tool call drove this terminal transition, if
    * any. Its run is already returning from the tool call; aborting it would
@@ -61,7 +69,16 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
     // revoke a new binding or retire its workspace if the card has since been
     // re-entered for another pass.
     const item = await options.workItems.get({ orgId: args.orgId, id: args.workItemId }).catch(() => null);
-    if (args.revision !== undefined && item?.revision !== args.revision) return;
+    const cutoff = args.stageEnteredAt;
+    if (cutoff) {
+      // Minting the close-out's own seat bumps the revision, so key on the
+      // terminal entry instead: bail only once the card has left it.
+      if (!item || currentStageEnteredAt(item)?.getTime() !== cutoff.getTime()) return;
+    } else if (args.revision !== undefined && item?.revision !== args.revision) {
+      return;
+    }
+    const retired = (binding: FactoryRunBindingRecord) => !cutoff || binding.createdAt.getTime() < cutoff.getTime();
+    const preserveSessionIds = new Set<string>();
 
     // Stop the live runs still executing on this item's seats before the
     // bindings are revoked, so no model keeps running unbound (and no parked
@@ -70,11 +87,13 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
       try {
         const active = await options.workItems.listRunBindings(args.orgId, args.factoryProjectId, args.workItemId);
         for (const binding of active) {
-          if (binding.status !== 'active') continue;
+          if (binding.status !== 'active' || !retired(binding)) continue;
           // The seat that drove this transition is already ending gracefully.
           if (binding.id === args.initiatingBindingId) continue;
-          // A role handoff or reopen may have rebound this session to a newer
-          // active run for another item; aborting would kill that successor.
+          // A role handoff, reopen, or this stage's own close-out may have
+          // rebound this session to a newer active run since the listing (for
+          // this item or another); aborting the session would kill that
+          // successor. Only abort while this binding still owns the session.
           // If the lookup fails we cannot rule out a successor, so skip the
           // abort — revocation below still severs this seat's authority, and a
           // false abort would kill a live run for a different work item.
@@ -89,7 +108,7 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
           } catch {
             continue;
           }
-          if (current && current.status === 'active' && current.workItemId !== args.workItemId) continue;
+          if (current?.status === 'active' && current.id !== binding.id) continue;
           await options.abortSession(binding).catch(() => {});
         }
       } catch {
@@ -98,17 +117,34 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
     }
 
     try {
-      await options.workItems.revokeRunBindingsForWorkItem({
-        orgId: args.orgId,
-        factoryProjectId: args.factoryProjectId,
-        workItemId: args.workItemId,
-        revokedAt: new Date(),
-      });
+      if (cutoff) {
+        const bindings = await options.workItems.listRunBindings(args.orgId, args.factoryProjectId, args.workItemId);
+        for (const binding of bindings) {
+          if (binding.status !== 'active') continue;
+          if (!retired(binding)) {
+            preserveSessionIds.add(binding.sessionId);
+            continue;
+          }
+          await options.workItems.revokeRunBinding({
+            orgId: args.orgId,
+            factoryProjectId: args.factoryProjectId,
+            bindingId: binding.id,
+            revokedAt: new Date(),
+          });
+        }
+      } else {
+        await options.workItems.revokeRunBindingsForWorkItem({
+          orgId: args.orgId,
+          factoryProjectId: args.factoryProjectId,
+          workItemId: args.workItemId,
+          revokedAt: new Date(),
+        });
+      }
     } catch {
       // Best-effort; the staleness sweep retries later.
     }
     try {
-      await options.workItems.supersedeTerminalDecisionsForWorkItem({
+      await options.workItems.supersedeDecisionsForWorkItem({
         orgId: args.orgId,
         factoryProjectId: args.factoryProjectId,
         workItemId: args.workItemId,
@@ -118,7 +154,9 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
       // Best-effort; legacy rows are repaired at the next startup.
     }
     try {
-      await options.releaseSandboxes?.(args);
+      await options.releaseSandboxes?.(
+        preserveSessionIds.size > 0 ? { ...args, preserveSessionIds: [...preserveSessionIds] } : args,
+      );
     } catch {
       // Best-effort; a leaked sandbox is retired by the next reconcile walk.
     }
