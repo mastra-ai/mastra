@@ -10,6 +10,7 @@ import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
+import { isUsageIncomplete } from '../../observability/usage';
 import type { OutputResult } from '../../processors';
 // Inlined to avoid importing structured-output.ts which pulls in the agent
 // barrel and creates an ESM init-time cycle.
@@ -2788,14 +2789,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const totalUsage = this.#getTotalUsage(this.#getUsageCountWithSuspendedStep());
     const generationReportedUsage = this.#generationReportedUsage;
     this.#generationReportedUsage = totalUsage;
-    const generationStepProviderMetadata = this.#bufferedSteps
-      .slice(this.#generationReportedStepCount)
-      .map(step => step.providerMetadata);
-    // A resumed tool that suspends again in the same step already reported that step.
-    if (this.#generationReportedStepCount <= this.#bufferedSteps.length) {
-      generationStepProviderMetadata.push(chunk.payload.providerMetadata);
+    // A leg with incomplete usage records no tokens, so a later leg records them. Its provider
+    // cost moves with them.
+    const generationStepProviderMetadata: (ProviderMetadata | undefined)[] = [];
+    if (!isUsageIncomplete(totalUsage)) {
+      for (const step of this.#bufferedSteps.slice(this.#generationReportedStepCount)) {
+        generationStepProviderMetadata.push(step.providerMetadata);
+      }
+      // A resumed tool that suspends again in the same step already reported that step.
+      if (this.#generationReportedStepCount <= this.#bufferedSteps.length) {
+        generationStepProviderMetadata.push(chunk.payload.providerMetadata);
+      }
+      this.#generationReportedStepCount = this.#bufferedSteps.length + 1;
     }
-    this.#generationReportedStepCount = this.#bufferedSteps.length + 1;
     return {
       finishReason: 'suspended',
       suspendReason: chunk.type,
@@ -3021,9 +3027,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const generationReportedUsage = recordSuspension
       ? this.#getTotalUsage(this.#getUsageCountWithSuspendedStep(suspendedStepUsage))
       : this.#generationReportedUsage;
-    const generationReportedStepCount = recordSuspension
-      ? this.#bufferedSteps.length + 1
-      : this.#generationReportedStepCount;
+    const generationReportedStepCount =
+      recordSuspension && !isUsageIncomplete(generationReportedUsage)
+        ? this.#bufferedSteps.length + 1
+        : this.#generationReportedStepCount;
     return {
       status: recordSuspension ? 'suspended' : this.#status,
       bufferedSteps: steps,
