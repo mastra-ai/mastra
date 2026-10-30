@@ -1057,7 +1057,8 @@ const sidebars = {
           id: 'vectors/pinecone',
           label: 'Pinecone',
           customProps: {
-            icon: 'https://api.iconify.design/logos/pinecone-icon.svg?height=28',
+            icon: 'https://api.iconify.design/thesvg/pinecone.svg?height=28&color=%23201d1e',
+            iconDark: 'https://api.iconify.design/thesvg/pinecone.svg?height=28&color=%23ffffff',
           },
         },
         {
