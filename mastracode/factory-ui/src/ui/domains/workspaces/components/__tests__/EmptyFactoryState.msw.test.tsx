@@ -732,7 +732,9 @@ describe('Account presets', () => {
   it('starts from the existing personal default when it is available for the selected provider', async () => {
     registerSetup();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-6.1-sol' })),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null }),
+      ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
           models: [

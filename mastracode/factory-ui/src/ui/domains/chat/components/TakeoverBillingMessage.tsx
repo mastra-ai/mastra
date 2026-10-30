@@ -5,7 +5,7 @@ import { Link } from 'react-router';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import type { SessionModelCatalog } from '../../../../hooks/useSessionModelCatalog';
-import { settingsSectionPath } from '../../settings/settingsSections';
+import { MODEL_DEFAULTS_ANCHORS, SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModelScope } from '../context/useChatModelScope';
 
@@ -60,8 +60,11 @@ export function TakeoverBillingMessage({ factoryId, ownerLabel }: { factoryId: s
       <>
         You have no {providerDisplayName(billing.provider)} connection, so {billing.modelName} can’t run for you.
         Connect one in{' '}
-        <Link to={settingsSectionPath(factoryId, 'personal-models')} className="underline underline-offset-2">
-          Your models
+        <Link
+          to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.personal)}
+          className="underline underline-offset-2"
+        >
+          {SETTINGS_SECTION_LABELS.models}
         </Link>
         , or pick another model once it’s yours.
       </>

@@ -7,7 +7,6 @@
  */
 import { z } from 'zod/v4';
 import {
-  digestBinding,
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
   isTraceQuerySortValueFor,
@@ -22,6 +21,7 @@ import {
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
+import { digestBinding } from './trace-query-plan';
 import { isPreviewTruncated } from './tracing';
 
 /**
@@ -131,6 +131,27 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
      * streamed one. Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
      */
     timeToFirstChunkMs: z.number().nullable().optional(),
+    /**
+     * Time from the first model inference's start to its first response chunk; `null` when the
+     * span has none. Absent when the store lacks the `trace-query-time-to-first-token` feature.
+     */
+    timeToFirstTokenMs: z.number().nullable().optional(),
+    /**
+     * How the span ended, for example `success`, `limit` or a custom string. Separate from `status`,
+     * which reflects only `error`. `null` when not recorded (older SDKs or a running span), which
+     * does not mean success. Absent when the store lacks the `span-query-outcome-fields` feature.
+     */
+    outcome: z.string().nullable().optional(),
+    /**
+     * Why the span stopped, for example `max_steps`. `null` when not recorded.
+     * Absent when the store lacks the `span-query-outcome-fields` feature.
+     */
+    stopReason: z.string().nullable().optional(),
+    /**
+     * Details for `stopReason`. Returned only; not filterable.
+     * Absent when the store lacks the `span-query-outcome-fields` feature.
+     */
+    stopReasonContext: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);
@@ -194,7 +215,8 @@ const cursorEnvelopeSchema = z
  * Ordering semantics every store compiler must implement:
  * - Sort by `orderBy.field` in the requested direction, then break ties by
  *   organizationId, resourceId, traceId, and spanId, in that order, all ascending.
- *   Empty `timeToFirstChunkMs` values sort last in both directions and tie with each other.
+ *   Empty `timeToFirstChunkMs` and `timeToFirstTokenMs` values sort last in both directions and tie
+ *   with each other.
  * - Compare non-null IDs lexicographically by UTF-8 bytes, without locale collation.
  *   Null organizationId/resourceId values sort last and compare equal to other nulls.
  * - Resume strictly after the cursor using that same complete ordering. Apply the

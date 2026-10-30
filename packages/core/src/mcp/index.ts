@@ -14,6 +14,8 @@ import type {
   MCPServerIcon,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
+  MCPServerTasksInfo,
+  MCPServerTasksInspector,
   PackageInfo,
   RemoteInfo,
   Repository,
@@ -388,4 +390,18 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @experimental
    */
   public getEventsInspector?(): MCPServerEventsInspector | undefined;
+
+  /**
+   * How this server runs MCP tasks, or `undefined` when it doesn't support them.
+   * Optional: implementations without tasks omit it.
+   * @experimental
+   */
+  public getTasksInfo?(): MCPServerTasksInfo | undefined;
+
+  /**
+   * Lists, cancels and answers this server's MCP tasks in-process (used by Studio), or
+   * `undefined` when tasks are off or the task store can't list them.
+   * @experimental
+   */
+  public getTasksInspector?(): MCPServerTasksInspector | undefined;
 }

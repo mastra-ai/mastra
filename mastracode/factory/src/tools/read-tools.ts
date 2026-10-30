@@ -3,7 +3,10 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
@@ -38,7 +41,8 @@ export interface FactoryReadToolDependencies {
   >;
   comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
   messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
 }
@@ -97,6 +101,17 @@ function activeWorker(bindings: FactoryRunBindingRecord[], itemId: string) {
   return binding ? { role: binding.role, sessionId: binding.sessionId } : null;
 }
 
+/** The card on its Factory board; null when the server has no public URL configured. */
+function workItemUrl(item: WorkItemRow) {
+  return (
+    factoryWorkItemUrl({
+      factoryProjectId: item.factoryProjectId,
+      board: boardForWorkItem(item),
+      workItemId: item.id,
+    }) ?? null
+  );
+}
+
 function summarizeItem(item: WorkItemRow, bindings: FactoryRunBindingRecord[]) {
   return {
     id: item.id,
@@ -104,6 +119,7 @@ function summarizeItem(item: WorkItemRow, bindings: FactoryRunBindingRecord[]) {
     title: truncate(item.title, MAX_TEXT),
     board: boardForWorkItem(item),
     stage: workItemStage(item),
+    url: workItemUrl(item),
     activeWorker: activeWorker(bindings, item.id),
     requestedBy: item.createdBy,
     updatedAt: iso(item.updatedAt),
@@ -223,7 +239,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         const itemDecisions = decisions.slice(-MAX_LIST);
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           itemDecisions.filter(decision => decision.status === 'failed'),
         );
@@ -242,6 +258,12 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             role,
             sessionId: ref.sessionId,
             threadId: ref.threadId,
+            url:
+              factorySessionUrl({
+                factoryProjectId: item.factoryProjectId,
+                sessionId: ref.sessionId,
+                threadId: ref.threadId,
+              }) ?? null,
             startedBy: ref.startedBy,
             active: bindings.some(
               binding => binding.role === role && binding.sessionId === ref.sessionId && binding.status === 'active',
@@ -254,7 +276,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           item: {
             ...summarizeItem(item, bindings),
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
-            url: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
+            sourceUrl: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
             triageType: item.triageType,
             revision: item.revision,
           },
@@ -325,6 +347,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             workItemId,
             number: item ? workItemNumber(item) : null,
             title: item ? truncate(item.title, MAX_TEXT) : null,
+            url: item ? workItemUrl(item) : null,
           };
         };
         const allIncidents = [...groups.values()].sort((a, b) => b.decisions.length - a.decisions.length);
@@ -334,7 +357,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         // Check exactly the decisions this call returns, so every canRetry is real.
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           incidents.flatMap(group => group.shown),
         );

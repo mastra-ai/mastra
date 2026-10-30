@@ -199,7 +199,7 @@ export function AgentPlaygroundVersionBar({
                     <Icon size="xs">
                       <Save />
                     </Icon>
-                    Save New Version
+                    Save new version
                   </>
                 )}
               </Button>
@@ -240,7 +240,7 @@ export function AgentPlaygroundVersionBar({
                   <Icon size="xs">
                     <Check />
                   </Icon>
-                  {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+                  {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
                 </>
               )}
             </Button>
@@ -272,7 +272,7 @@ export function AgentPlaygroundVersionBar({
             </DialogBody>
             <DialogFooter>
               <DialogCancel>Cancel</DialogCancel>
-              <DialogAction onConfirm={handleSaveWithMessage}>Save Version</DialogAction>
+              <DialogAction onConfirm={handleSaveWithMessage}>Save version</DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>

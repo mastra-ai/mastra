@@ -58,9 +58,9 @@ export function parse(input: string | RegExp, loose?: boolean): ParsedPattern {
     } else if (c === ':') {
       o = tmp.indexOf('?', 1);
       ext = tmp.indexOf('.', 1);
-      keys.push(tmp.substring(1, !!~o ? o : !!~ext ? ext : tmp.length));
+      keys.push(tmp.substring(1, ~o ? o : ~ext ? ext : tmp.length));
       pattern += !!~o && !~ext ? '(?:/([^/]+?))?' : '/([^/]+?)';
-      if (!!~ext) pattern += (!!~o ? '?' : '') + '\\' + tmp.substring(ext);
+      if (~ext) pattern += (~o ? '?' : '') + '\\' + tmp.substring(ext);
     } else {
       pattern += '/' + tmp;
     }

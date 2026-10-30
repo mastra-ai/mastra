@@ -9,21 +9,26 @@ import { ChatHeaderSidebarTrigger } from '../domains/chat/components/ChatHeaderS
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { SETTINGS_SECTION_LABELS, isSettingsSection, settingsSectionPath } from '../domains/settings/settingsSections';
+import {
+  SETTINGS_SECTION_LABELS,
+  isSettingsSection,
+  retiredSettingsTarget,
+  settingsSectionPath,
+} from '../domains/settings/settingsSections';
 
-/**
- * Routed settings page (`/settings/:section`). Sections are URL-addressable;
- * unknown sections redirect to the default. The app frame (sidebar swapped to
- * section navigation) is rendered by `AppLayout`.
- */
 export function SettingsPage() {
   const { section, factoryId } = useParams();
   const location = useLocation();
 
-  if (factoryId && section === 'models' && location.hash === '#model-packs') {
+  const retired = retiredSettingsTarget(section, location.hash);
+  if (factoryId && retired) {
     return (
       <Navigate
-        to={`${settingsSectionPath(factoryId, 'personal-models')}${location.search}#default-model`}
+        to={{
+          pathname: settingsSectionPath(factoryId, retired.section),
+          search: location.search,
+          hash: retired.anchor ?? location.hash,
+        }}
         replace
         state={location.state}
       />
@@ -37,7 +42,7 @@ export function SettingsPage() {
     <SettingsPageLayout
       header={
         <PageHeader>
-          <FocusedTitle key={section}>{SETTINGS_SECTION_LABELS[section]}</FocusedTitle>
+          <AnnouncedSectionTitle key={section}>{SETTINGS_SECTION_LABELS[section]}</AnnouncedSectionTitle>
         </PageHeader>
       }
     >
@@ -46,8 +51,7 @@ export function SettingsPage() {
   );
 }
 
-/** Moves focus to the section title on desktop so section switches are announced; mobile focuses its own title. */
-function FocusedTitle({ children }: { children: ReactNode }) {
+function AnnouncedSectionTitle({ children }: { children: ReactNode }) {
   const id = useId();
   const { isMobile } = useSidebar();
   useEffect(() => {
@@ -60,11 +64,6 @@ function FocusedTitle({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Settings body: on mobile the section title lives in the page header row
- * (the desktop title is rendered by the panel itself); with a collapsed
- * desktop sidebar the header row carries the sidebar trigger and search.
- */
 export function SettingsPageLayout({
   children,
   header,

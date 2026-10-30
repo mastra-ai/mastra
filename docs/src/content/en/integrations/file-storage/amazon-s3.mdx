@@ -1,13 +1,13 @@
 ---
 title: "Amazon S3 | File Storage"
-description: "Store Mastra workspace files in Amazon S3 or compatible services such as Cloudflare R2 and MinIO, with credentials, endpoints, and read-only mounts."
+description: "Store Mastra workspace files in Amazon S3 or compatible services such as Cloudflare R2, Neon Object Storage, and MinIO, with credentials, endpoints, and read-only mounts."
 packages:
   - "@mastra/s3"
 ---
 
 # Amazon S3
 
-Stores files in Amazon S3 or S3-compatible storage services like Cloudflare R2, MinIO, DigitalOcean Spaces, and Tigris. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+Stores files in Amazon S3 or S3-compatible storage services like Cloudflare R2, Neon Object Storage, MinIO, DigitalOcean Spaces, and Tigris. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
 ## Installation
 
@@ -96,6 +96,22 @@ const filesystem = new S3Filesystem({
 })
 ```
 
+### Neon Object Storage
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+const filesystem = new S3Filesystem({
+  bucket: 'agent-files',
+  region: process.env.AWS_REGION!,
+  endpoint: process.env.AWS_ENDPOINT_URL_S3,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+})
+```
+
+`neon deploy` and `neon env pull` write these variables for the current Neon branch. Keep the default path-style addressing. Each branch has its own endpoint and its own copy of the files. See [Neon Object Storage](/integrations/file-storage/neon) for bucket setup and branching.
+
 ### MinIO
 
 ```typescript
@@ -172,7 +188,7 @@ Tigris uses virtual-hosted-style addressing, so `forcePathStyle` must be set to 
   {
     name: 'endpoint',
     type: 'string',
-    description: 'Custom endpoint URL for S3-compatible storage (R2, MinIO, Tigris, etc.)',
+    description: 'Custom endpoint URL for S3-compatible storage (R2, Neon, MinIO, Tigris, etc.)',
     isOptional: true,
   },
   {
@@ -325,6 +341,7 @@ See [E2BSandbox reference](/integrations/sandboxes/e2b) for more details on moun
 ## Related
 
 - [WorkspaceFilesystem interface](/reference/workspace/filesystem)
+- [Neon Object Storage](/integrations/file-storage/neon)
 - [ArchilFilesystem reference](/integrations/file-storage/archil)
 - [GCSFilesystem reference](/integrations/file-storage/google-cloud-storage)
 - [AzureBlobFilesystem reference](/integrations/file-storage/azure-blob)

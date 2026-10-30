@@ -135,6 +135,9 @@ For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk
 Message count is a poor proxy for context size: a tool result can be a few tokens or thousands. Use `messageHistory` to keep recent history within a token budget instead:
 
 ```typescript title="src/mastra/agents/test-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
 export const agent = new Agent({
   id: 'test-agent',
   memory: new Memory({

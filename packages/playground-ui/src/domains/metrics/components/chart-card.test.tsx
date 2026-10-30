@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChartCard } from './chart-card';
@@ -13,15 +13,14 @@ describe('ChartCard', () => {
   afterEach(() => cleanup());
 
   describe('compact', () => {
-    it('shows the title and the total on one line, without the description', () => {
+    it('shows the title and the total on one line', () => {
       render(
-        <ChartCard variant="compact" title="Tokens" description="Input and output." total="992K">
+        <ChartCard variant="compact" title="Tokens" total="992K">
           <div />
         </ChartCard>,
       );
       expect(screen.getByRole('heading', { name: 'Tokens' })).toBeTruthy();
       expect(screen.getByText('992K')).toBeTruthy();
-      expect(screen.queryByText('Input and output.')).toBeNull();
     });
 
     it('swaps the total for a skeleton while loading', () => {
@@ -49,22 +48,92 @@ describe('ChartCard', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Spend by model' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'By provider' }));
       expect(onValueChange).toHaveBeenCalledWith('provider');
+      // Picking a view closes the menu.
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     });
-  });
 
-  describe('default with a title menu', () => {
-    it('keeps the description under the menu', () => {
+    it("keeps the title as the top bar's first item, sized to its text, while the menu is open", async () => {
       render(
         <ChartCard
+          variant="compact"
           title="Spend by model"
-          description="Each line is a model."
+          total="$12"
           titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
         >
           <div />
         </ChartCard>,
       );
-      expect(screen.getByRole('button', { name: 'Spend by model' })).toBeTruthy();
-      expect(screen.getByText('Each line is a model.')).toBeTruthy();
+      const trigger = screen.getByRole('button', { name: 'Spend by model' });
+      const topBar = trigger.parentElement?.parentElement;
+      // The top bar stretches its first item; that's the wrapper, so the button keeps its width.
+      expect(topBar?.firstElementChild).toBe(trigger.parentElement);
+      fireEvent.click(trigger);
+      await screen.findByRole('menuitemradio', { name: 'By provider' });
+      expect(topBar?.firstElementChild?.contains(trigger)).toBe(true);
+      expect(topBar?.lastElementChild?.textContent).toBe('$12');
     });
+  });
+
+  it('adds no legend row to a card that passes no toolbar', () => {
+    const { container } = render(
+      <ChartCard title="Requests">
+        <div />
+      </ChartCard>,
+    );
+    expect(container.querySelectorAll('[aria-hidden="true"].min-h-6')).toHaveLength(0);
+  });
+
+  it('keeps an empty legend row when the toolbar is false (nothing to show yet)', () => {
+    const { container } = render(
+      <ChartCard title="Resources and threads" toolbar={false}>
+        <div data-testid="body" />
+      </ChartCard>,
+    );
+    const body = screen.getByTestId('body').parentElement;
+    expect(body?.previousElementSibling?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelectorAll('[aria-hidden="true"].min-h-6')).toHaveLength(1);
+  });
+
+  describe('hero', () => {
+    it('shows the title as a label over the total, with the change against the previous period', () => {
+      render(
+        <ChartCard variant="hero" title="Spend sum" total="$138.92" change="+71.4%" actions={<button>Bucket</button>}>
+          <div />
+        </ChartCard>,
+      );
+      expect(screen.getByRole('heading', { name: 'Spend sum' })).toBeTruthy();
+      expect(screen.getByText('$138.92')).toBeTruthy();
+      expect(screen.getByText('+71.4% vs previous')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Bucket' })).toBeTruthy();
+    });
+
+    it('swaps the total for a skeleton while loading, without the change', () => {
+      render(
+        <ChartCard variant="hero" title="Spend sum" total="$138.92" change="+71.4%" isLoading>
+          <div />
+        </ChartCard>,
+      );
+      expect(screen.queryByText('$138.92')).toBeNull();
+      expect(screen.queryByText('+71.4% vs previous')).toBeNull();
+    });
+  });
+
+  it('makes the title a link to a fuller view, with the given link component', () => {
+    const Link = ({ href, ...props }: { href: string }) => <a href={`/app${href}`} data-router-link {...props} />;
+    const { rerender } = render(
+      <ChartCard variant="compact" title="Spend by model" href="/query?metric=spend" total="$12">
+        <div />
+      </ChartCard>,
+    );
+    const link = screen.getByRole('link', { name: 'Spend by model' });
+    expect(link.getAttribute('href')).toBe('/query?metric=spend');
+    expect(screen.getByRole('heading', { name: 'Spend by model' }).contains(link)).toBe(true);
+
+    rerender(
+      <ChartCard title="Spend by model" href="/query" LinkComponent={Link}>
+        <div />
+      </ChartCard>,
+    );
+    expect(screen.getByRole('link', { name: 'Spend by model' }).getAttribute('href')).toBe('/app/query');
   });
 });

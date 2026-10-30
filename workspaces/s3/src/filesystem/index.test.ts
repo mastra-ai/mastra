@@ -150,6 +150,36 @@ describe('S3Filesystem', () => {
       expect(fs.icon).toBe('minio');
     });
 
+    it('detects neon icon for Neon Object Storage endpoint', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-2',
+        endpoint: 'https://br-cool-sun-a1b2c3d4.storage.c-7.us-east-2.aws.neon.tech',
+      });
+
+      expect(fs.icon).toBe('neon');
+    });
+
+    it('does not treat Neon Postgres hosts as object storage', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-2',
+        endpoint: 'https://ep-cool-sun-a1b2c3d4.us-east-2.aws.neon.tech',
+      });
+
+      expect(fs.icon).toBe('s3');
+    });
+
+    it('does not match look-alike Neon hostnames', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-2',
+        endpoint: 'https://br-x.storage.c-7.us-east-2.aws.neon.tech.example.com',
+      });
+
+      expect(fs.icon).toBe('s3');
+    });
+
     it('uses s3 icon for generic S3-compatible endpoint', () => {
       const fs = new S3Filesystem({
         bucket: 'test',
@@ -207,6 +237,16 @@ describe('S3Filesystem', () => {
       });
 
       expect(fs.displayName).toBe('MinIO');
+    });
+
+    it('derives displayName from icon - neon', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-2',
+        endpoint: 'https://br-cool-sun-a1b2c3d4.storage.c-7.us-east-2.aws.neon.tech',
+      });
+
+      expect(fs.displayName).toBe('Neon Object Storage');
     });
 
     it('uses provided displayName over derived', () => {

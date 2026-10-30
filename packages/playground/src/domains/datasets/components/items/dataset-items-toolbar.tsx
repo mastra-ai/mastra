@@ -112,20 +112,20 @@ export function DatasetItemsToolbar({
         {onCreateDatasetClick && (
           <DropdownMenu.Item onSelect={onCreateDatasetClick}>
             <FolderPlus />
-            <span>Create Dataset from Items</span>
+            <span>Create dataset from items</span>
           </DropdownMenu.Item>
         )}
         {onAddToDatasetClick && (
           <DropdownMenu.Item onSelect={onAddToDatasetClick}>
             <FolderOutput />
-            <span>Copy Items to Dataset</span>
+            <span>Copy items to dataset</span>
           </DropdownMenu.Item>
         )}
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-              <Trash2 /> Delete Items
+              <Trash2 /> Delete items
             </DropdownMenu.Item>
           </>
         )}

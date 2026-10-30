@@ -33,6 +33,9 @@ const TEXT_APPLICATION_TYPES = new Set([
   'application/yaml',
   'application/ld+json',
   'application/sql',
+  'application/jsonl',
+  'application/x-php',
+  'application/dart',
 ]);
 
 function isTextLikeMimeType(mimeType: string | undefined): boolean {

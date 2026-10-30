@@ -21,7 +21,6 @@ import { Agent } from '../../../../agent';
 import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
 import type { DurableAgent } from '../../../../agent/durable/durable-agent';
-import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InMemoryStore } from '../../../../storage';
@@ -185,7 +184,7 @@ async function driveGenerate(engine: ParityEngine) {
 
   let wrapper: DurableAgent<string, any, any> | undefined;
   if (engine === 'durable') {
-    wrapper = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    wrapper = createDurableAgent({ agent });
   } else if (engine === 'evented') {
     wrapper = createEventedAgent({ agent });
   }

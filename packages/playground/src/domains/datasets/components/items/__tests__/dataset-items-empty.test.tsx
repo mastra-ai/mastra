@@ -31,7 +31,7 @@ describe('DatasetItems empty state', () => {
 
     expect(screen.getByText('No items yet')).not.toBeNull();
 
-    const link = screen.getByRole('link', { name: /Datasets Documentation/ });
+    const link = screen.getByRole('link', { name: /Datasets documentation/ });
     expect(link.getAttribute('href')).toBe('https://mastra.ai/docs/evals/datasets');
     expect(link.getAttribute('target')).toBe('_blank');
   });

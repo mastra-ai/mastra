@@ -1,18 +1,21 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { TRACES_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
+import { OBSERVABILITY_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/observability/list-polling';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { useEffect, useImperativeHandle } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SpansPage from '..';
+import ThreadsPage from '../../threads';
 import {
   emptyEntityNames,
   emptyEnvironments,
   emptySpans,
+  emptyThreads,
   noSpanQueryCapabilities,
+  spanAndThreadRowsCapabilities,
   spanDetailById,
   spanQueryCapabilities,
   spanQueryCoreOnlyCapabilities,
@@ -20,6 +23,7 @@ import {
   spansLastPage,
   SPANS_PAGE_TWO_CURSOR,
 } from './fixtures/spans';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -28,6 +32,7 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const CAPABILITIES_URL = `${TEST_BASE_URL}/api/observability/capabilities`;
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
+const THREADS_QUERY_URL = `${TEST_BASE_URL}/api/observability/threads/query`;
 const SPAN_DETAIL_URL = `${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`;
 const ENTITY_NAMES_URL = `${TEST_BASE_URL}/api/observability/discovery/entity-names`;
 const ENVIRONMENTS_URL = `${TEST_BASE_URL}/api/observability/discovery/environments`;
@@ -56,7 +61,17 @@ const renderPage = (initialEntry = '/spans') =>
     <TestLinkProvider>
       <RouteSidePanelProvider>
         <FakeLayoutPanel />
-        <SpansPage />
+        <Routes>
+          <Route
+            element={
+              <ObservabilityLayout>
+                <Outlet />
+              </ObservabilityLayout>
+            }
+          >
+            <Route path="/spans" element={<SpansPage />} />
+          </Route>
+        </Routes>
         <RouteSidePanelSlot data-testid="side-panel" />
         <LocationProbe />
         <BarePageLink />
@@ -111,7 +126,7 @@ function setSpansHandlers(
 describe('Spans page', () => {
   // jsdom has no layout, so the list virtualizer sees a zero-height scroll container and
   // renders no rows. Report a fixed viewport so rows materialize.
-  let layoutStubs: { rect: ReturnType<typeof vi.spyOn>; resizeObserver: typeof ResizeObserver };
+  let layoutStubs: { rects: ReturnType<typeof vi.spyOn>[]; resizeObserver: typeof ResizeObserver };
   beforeEach(() => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class LayoutResizeObserver {
@@ -138,12 +153,17 @@ describe('Spans page', () => {
     }
     globalThis.ResizeObserver = LayoutResizeObserver;
     layoutStubs = {
-      rect: vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+      rects: [
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+        // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800),
+        vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600),
+      ],
       resizeObserver: originalResizeObserver,
     };
   });
   afterEach(() => {
-    layoutStubs.rect.mockRestore();
+    layoutStubs.rects.forEach(stub => stub.mockRestore());
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
     vi.useRealTimers();
     focusManager.setFocused(undefined);
@@ -283,6 +303,62 @@ describe('Spans page', () => {
     });
   });
 
+  describe('when the store does not return thread rows', () => {
+    it('does not offer the Threads view', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      expect(views.queryByRole('tab', { name: 'Threads' })).toBeNull();
+    });
+  });
+
+  describe('when Threads is clicked in the view switch', () => {
+    it('navigates to the threads page', async () => {
+      setSpansHandlers(spanAndThreadRowsCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/threads'));
+    });
+  });
+
+  describe('when the view switch moves from Spans to Threads', () => {
+    it('keeps the same header mounted', async () => {
+      setSpansHandlers(spanAndThreadRowsCapabilities, { first: spansFirstPage });
+      server.use(http.post(THREADS_QUERY_URL, () => HttpResponse.json(emptyThreads)));
+
+      renderWithProviders(
+        <TestLinkProvider>
+          <RouteSidePanelProvider>
+            <Routes>
+              <Route
+                element={
+                  <ObservabilityLayout>
+                    <Outlet />
+                  </ObservabilityLayout>
+                }
+              >
+                <Route path="/spans" element={<SpansPage />} />
+                <Route path="/threads" element={<ThreadsPage />} />
+              </Route>
+            </Routes>
+          </RouteSidePanelProvider>
+        </TestLinkProvider>,
+        { router: { initialEntries: ['/spans'] } },
+      );
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      const header = screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header');
+      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
+
+      await screen.findByPlaceholderText('Filter threads…');
+      expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).toBe(header);
+    });
+  });
+
   describe('when a span row is clicked', () => {
     it('shows the span details in the side panel', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
@@ -313,7 +389,8 @@ describe('Spans page', () => {
       renderPage('/spans?traceId=trace-1&spanId=span-2');
 
       const panel = within(getSidePanel());
-      expect(await panel.findByRole('region', { name: 'Span details' })).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
+      fireEvent.click(panel.getByRole('tab', { name: /^Output/ }));
       expect(await panel.findByText('Weather API timed out')).toBeTruthy();
     });
   });
@@ -324,7 +401,7 @@ describe('Spans page', () => {
 
       renderPage('/spans?traceId=trace-1&spanId=span-2');
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(screen.getByRole('link', { name: 'Open bare spans page' }));
 
       await waitFor(() => expect(panel.queryByRole('region', { name: 'Span details' })).toBeNull());
@@ -339,7 +416,7 @@ describe('Spans page', () => {
       renderPage();
       fireEvent.click(await screen.findByText('tool: get-weather'));
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(panel.getByRole('button', { name: 'Go to trace' }));
 
       expect(screen.getByTestId('location').textContent).toBe('/traces?traceId=trace-1&spanId=span-2');
@@ -396,7 +473,7 @@ describe('Spans page', () => {
       fireEvent.click(panel.getByRole('button', { name: 'Go to next span' }));
 
       await waitFor(() => expect(panel.queryByText('session-weather-42')).toBeNull());
-      expect(await panel.findByText('Weather API timed out')).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
     });
 
     it('moves the URL to the next span', async () => {
@@ -450,7 +527,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       serverDown = false;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS));
 
       expect(await screen.findByText('agent run: weather')).toBeTruthy();
     });
@@ -470,7 +547,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       const requestsAfterFailure = requests.length;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3));
 
       expect(requests).toHaveLength(requestsAfterFailure);
     });

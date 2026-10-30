@@ -25,6 +25,7 @@ constructor({
   timeout?: number;
   typegen?: { outFile: string };
   clientInfo?: { name?: string; version?: string };
+  registerProcessHooks?: boolean;
 }: MCPClientOptions)
 ```
 
@@ -67,6 +68,14 @@ constructor({
     isOptional: true,
     description:
       "Client name and version every server receives on connect and with each request, so servers can attribute traffic to your application. Defaults to the server key as `name` and `'1.0.0'` as `version`. Individual server configs can override either field with their own `clientInfo`. Doesn't change tool name prefixes, which always use the server key.",
+  },
+  {
+    name: 'registerProcessHooks',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Install process exit and signal hooks that disconnect servers and end the process. Set to false when your application handles shutdown, and call disconnect() from that handler. See [Handle shutdown yourself](#handle-shutdown-yourself).',
   },
   {
     name: 'webhook',
@@ -306,6 +315,13 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     isOptional: true,
     description:
       'Answers input requests from this server. When a tool, resource or prompt call ends as `input_required`, the handler is called with each embedded request and the client retries the call with the answers. Without a handler an `input_required` result surfaces as an error. See Answering input requests below.',
+  },
+  {
+    name: 'tasks',
+    type: 'boolean | MCPClientTasksOptions',
+    isOptional: true,
+    description:
+      'Experimental. Lets this server answer tool calls with an MCP task, which the client waits for. `pollIntervalMs` (default `5000`) is used when the server suggests no interval. The client waits at least 100 ms and at most 1 hour between polls, whatever the server suggests. Both values must be at most `2147483647` (about 24.8 days), the longest delay a timer allows. `maxWaitMs` stops waiting and cancels the task after that long; by default only the server TTL applies. See the `tasks` property below.',
   },
   {
     name: 'authProvider',
@@ -1061,9 +1077,9 @@ Notes:
 
 ### `events` Property (experimental)
 
-The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool.
+The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool. Delivery is at least once. After a reconnect or a resume, the server can resend an occurrence, and the client drops repeats by `eventId` within `dedupWindow` of recent ids.
 
-For an end-to-end walkthrough, see the [MCP events guide](/docs/guides/mcp-events).
+For an end-to-end walkthrough, see [MCP events](/docs/connections/mcp#mcp-events).
 
 :::warning
 SEP-3415 is a draft. This API may change in any release.
@@ -1100,7 +1116,7 @@ The client doesn't receive notifications when the server's event list changes ye
 
 #### `events.subscribe(serverName, eventName, args?, options?)`
 
-Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise.
+Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise. A new subscription starts at the point the server accepts it, so occurrences from before that point aren't delivered unless `options.cursor` resumes from an earlier position. Under webhook delivery the promise can resolve after that point: the client answers `503` for a delivery it can't route yet, and the server retries it.
 
 ```typescript oxfmt:false
 async subscribe(
@@ -1284,7 +1300,7 @@ export const mastra = new Mastra({
 ]}
 />
 
-The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
+The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The `cursor` in each webhook delivery only covers occurrences your endpoint has acknowledged, so resuming from a saved cursor can deliver the last handled occurrence again. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
 
 Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
 
@@ -1425,6 +1441,54 @@ for await (const event of subscription) {
   if (subscription.cursor) await saveCursor(subscription.cursor)
 }
 ```
+
+### `tasks` Property (experimental)
+
+Some tools take longer than one HTTP request can stay open. A server that implements the [MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.github.io/ext-tasks/specification/2026-07-28/tasks.html) can answer such a call with a task, and the client fetches the result later. Set `tasks` on a server to accept them:
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    reports: {
+      url: new URL('https://reports.example.com/mcp'),
+      tasks: { maxWaitMs: 30 * 60_000 },
+      inputRequests: async ({ params }) => askUser(params),
+    },
+  },
+})
+```
+
+:::warning
+This API may change in any release.
+:::
+
+With `tasks` set, the client tells the server it accepts tasks. The server decides per call whether to answer directly or with a task. Without `tasks`, the client never receives one and tool calls behave as before.
+
+When a tool call returns a task, the tool keeps its usual shape:
+
+- The client polls the task at the interval the server suggests until it finishes, then returns the tool result.
+- A task that needs input is answered through `inputRequests`, once per request key. The client sends the answers with `tasks/update` and keeps polling the same task. It never sends `tools/call` again. Without a handler the call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
+- Aborting the tool call sends `tasks/cancel`. Reaching `maxWaitMs` sends it too, and fails the call with `MCP_CLIENT_TOOL_TASK_TIMEOUT`. Both end the call right away, even while a poll or your input handler is still running. A late answer from either is dropped.
+- A disconnect while the client polls ends the call with `MCP_CLIENT_TOOL_TASK_POLL_FAILED` and doesn't reconnect.
+- If the server can't be reached while the client polls, for example during a restart or deploy, the client reconnects and keeps polling with growing delays of up to 30 seconds. Refused connections and HTTP 502, 503, and 504 from a proxy count as unreachable. After 5 minutes without an answer, or when `maxWaitMs` or the task's TTL ends first, the call fails with `MCP_CLIENT_TOOL_TASK_POLL_FAILED`. The task may still finish on the server. The TTL counts from the task's `createdAt`. If the client can't read that timestamp, it counts from when it started waiting.
+- The tool call span gets `mcpTaskKey` metadata: a SHA-256 hash of the task id. A Mastra server tags its spans for the task with the same key, so you can match both sides and the task id stays out of both traces.
+- A tool error inside a finished task is handled like a direct tool error, following `onToolError`. A task the server cancelled fails with `MCP_CLIENT_TOOL_TASK_CANCELLED`, and a task the server marked `failed` fails with `MCP_CLIENT_TOOL_TASK_FAILED`.
+- A call that returned a task is never retried, because a retry would start a second task.
+- When the call continues as a task, and whenever the task's status changes, the tool writes an `MCPTaskProgress` entry (`{ type: 'mcp-task', taskId, status, createdAt, serverName }`) to its output stream. Studio's tool-call card uses it to show the task's status, elapsed time and MCP task id while it runs. Tool output isn't saved with the thread. After a reload, the card shows only the result.
+
+On an agent with [background tasks](/docs/harness/background-tasks) enabled, tools from a server with `tasks` set run as deferred background tasks with no retries. The agent keeps working while the remote task runs, and cancelling the background task cancels the remote task. Override this per tool with the agent's `backgroundTasks.tools`.
+
+#### `tasks.get(serverName: string, taskId: string)`
+
+Returns the task's current state (`MCPDetailedTask`), including `result` once it's `completed` and `inputRequests` while it's `input_required`. Fails with `MCP_CLIENT_GET_TASK_FAILED`; an unknown task, or one created by another caller, has `error.cause.code` `-32602`.
+
+#### `tasks.update(serverName: string, taskId: string, inputResponses: MCPTaskInputResponses)`
+
+Answers the `inputRequests` of an `input_required` task, keyed like the requests. The server ignores keys it didn't ask for or that are already answered. Fails with `MCP_CLIENT_UPDATE_TASK_FAILED`.
+
+#### `tasks.cancel(serverName: string, taskId: string)`
+
+Asks the server to stop the task. The server may still finish it. Fails with `MCP_CLIENT_CANCEL_TASK_FAILED`.
 
 ## Answering input requests
 
@@ -1863,6 +1927,31 @@ MCPClient handles server connections gracefully:
 1. Automatic connection management for multiple servers
 1. Graceful server shutdown to prevent error messages during development
 1. Proper cleanup of resources when disconnecting
+
+### Handle shutdown yourself
+
+By default, a connected client installs hooks for `SIGINT`, `SIGTERM`, `SIGHUP`, and `beforeExit` that disconnect its servers and end the process. These hooks can interrupt your application's awaited cleanup, such as draining HTTP requests.
+
+Set `registerProcessHooks: false` to let your application own shutdown. Call `disconnect()` after requests that use the client have finished:
+
+```typescript
+import { MCPClient } from '@mastra/mcp'
+
+const mcp = new MCPClient({
+  servers: { weather: { url: new URL('https://example.com/mcp') } },
+  registerProcessHooks: false,
+})
+
+process.once('SIGTERM', async () => {
+  // Finish your application's cleanup before disconnecting the client.
+  await mcp.disconnect()
+  process.exit(0)
+})
+```
+
+Set the option on every `MCPClient` in the process before connecting. Once any client registers the default hooks, the global `SIGINT` and `SIGTERM` listeners remain until the process exits, even after `disconnect()`.
+
+With hooks disabled, your application is responsible for closing MCP connections. In a Mastra server, coordinate `disconnect()` with your server's shutdown lifecycle so in-flight requests can finish using the client.
 
 ## Using custom fetch for runtime-defined authentication
 

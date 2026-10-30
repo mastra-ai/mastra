@@ -151,6 +151,9 @@ function isDefined(value: unknown): value is number {
  * - Google/Gemini: cachedContentTokenCount, thoughtsTokenCount in providerMetadata.google.usageMetadata
  * - OpenRouter: Uses OpenAI-compatible structure (cache tokens in usage)
  *
+ * Kept in sync with `packages/core/src/observability/usage.ts` (duplicated so exporters do not need a newer core).
+ * Change both copies together; `usage.parity.test.ts` fails if they drift.
+ *
  * @param usage - The LanguageModelV2Usage from AI SDK response
  * @param providerMetadata - Optional provider-specific metadata
  * @returns UsageStats with inputDetails and outputDetails

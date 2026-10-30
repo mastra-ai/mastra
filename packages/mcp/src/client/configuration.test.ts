@@ -715,6 +715,42 @@ describe('MCPClient clientInfo', () => {
   });
 });
 
+describe('MCPClient process hook identity', () => {
+  it('reuses the default explicit-id client when hooks are explicitly enabled', async () => {
+    const options = { id: `hooks-default-${++clientId}`, servers: {} };
+    const original = new MCPClient(options);
+    try {
+      expect(new MCPClient({ ...options, registerProcessHooks: true })).toBe(original);
+    } finally {
+      await original.disconnect();
+    }
+  });
+
+  it('allows independent clients with identical servers and different hook settings', async () => {
+    const servers = { weather: { url: new URL('http://localhost:4324/mcp') } };
+    const original = new MCPClient({ servers });
+    let independent: MCPClient | undefined;
+    try {
+      independent = new MCPClient({ servers, registerProcessHooks: false });
+      expect(independent).not.toBe(original);
+    } finally {
+      await Promise.all([original.disconnect(), independent?.disconnect()]);
+    }
+  });
+
+  it('replaces a cached explicit-id client when process hook ownership changes', async () => {
+    const options = { id: `hooks-changed-${++clientId}`, servers: {} };
+    const original = new MCPClient(options);
+    const replacement = new MCPClient({ ...options, registerProcessHooks: false });
+    try {
+      expect(replacement).not.toBe(original);
+      expect(new MCPClient({ ...options, registerProcessHooks: false })).toBe(replacement);
+    } finally {
+      await Promise.all([original.disconnect(), replacement.disconnect()]);
+    }
+  });
+});
+
 describe('MCPClient clientInfo identity', () => {
   it('keeps auto-generated ids unchanged when clientInfo is not set', async () => {
     const servers = { weather: { url: new URL('http://localhost:4320/mcp') } };

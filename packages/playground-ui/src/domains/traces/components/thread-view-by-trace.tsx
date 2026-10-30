@@ -48,7 +48,7 @@ export function ThreadViewByTrace({
   withFeedback,
   onSelectedSpanChange,
   onOpenScore,
-  pageSize = 10,
+  pageSize = 3,
 }: ThreadViewByTraceProps) {
   const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
   const { rows, isLoading, isPlaceholderData, error, hasNextPage, isFetchingNextPage, fetchNextPage } =

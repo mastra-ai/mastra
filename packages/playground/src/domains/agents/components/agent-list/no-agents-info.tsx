@@ -13,7 +13,7 @@ export const NoAgentsInfo = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        Agents Documentation
+        Agents documentation
       </Button>
     }
     variant="fill"

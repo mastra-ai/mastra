@@ -201,7 +201,7 @@ export default function Scorer() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-48">
         <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
-          <Pencil /> Edit Scorer
+          <Pencil /> Edit scorer
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>

@@ -2,6 +2,7 @@ export {
   useFeedbackAvailable,
   useObservabilityCapabilities,
   useSpanQueryAvailable,
+  useThreadQueryAvailable,
   useTraceQueryAvailable,
   useTraceQueryDeltaPollingAvailable,
   useTraceQueryDiscoveryAvailable,

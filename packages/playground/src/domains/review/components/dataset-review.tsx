@@ -485,7 +485,7 @@ export function DatasetReview({
               <Icon size="xs">
                 <GaugeIcon />
               </Icon>
-              Create Scorer
+              Create scorer
             </Button>
           )}
           {hasSelection && (

@@ -17,24 +17,30 @@ The examples use the `Agent` and thread from the [overview quickstart](/docs/sig
 Pass the thread identifiers to [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) for user input:
 
 ```typescript title="src/mastra/signals.ts"
-await agent.sendMessage('Compare that with the previous option.', {
+const result = agent.sendMessage('Compare that with the previous option.', {
   resourceId: 'user_123',
   threadId: 'thread_456',
 })
+
+await result.accepted
 ```
+
+`sendMessage()` returns right away. Await `result.accepted` to wait for Mastra's routing decision and catch routing failures. [Control when input arrives](#control-when-input-arrives) lists the possible actions.
 
 Mastra checks the thread first. An idle thread starts a run. An active run takes the message, and the model sees it on the next request. With memory, it's stored for later runs and your UI. [When the agent sees your input](#when-the-agent-sees-your-input) covers interruption.
 
 Add `attributes` when several people share a thread:
 
 ```typescript
-await agent.sendMessage(
+const result = agent.sendMessage(
   {
     contents: 'Use the latest customer note too.',
     attributes: { name: 'Jane', sentFrom: 'slack' },
   },
   { resourceId: 'user_123', threadId: 'thread_456' },
 )
+
+await result.accepted
 ```
 
 The model receives `<user name="Jane" sentFrom="slack">Use the latest customer note too.</user>`.
@@ -44,10 +50,12 @@ The model receives `<user name="Jane" sentFrom="slack">Use the latest customer n
 Use [`queueMessage()`](/reference/agents/agent#queuemessagemessage-options) when the current answer should finish before the agent sees the next message:
 
 ```typescript title="src/mastra/signals.ts"
-await agent.queueMessage('Also check whether the tests need updates.', {
+const result = agent.queueMessage('Also check whether the tests need updates.', {
   resourceId: 'user_123',
   threadId: 'thread_456',
 })
+
+await result.accepted
 ```
 
 Queued input waits for the active run to finish, then starts a new run. On an idle thread it starts immediately. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes queued input without stopping the active run. Cancellation is best-effort across processes and doesn't revoke accepted input.
@@ -59,7 +67,7 @@ Queued input waits for the active run to finish, then starts a new run. On an id
 Use [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) to add context from your application, such as a background job result. The signal's type and XML tag identify the context:
 
 ```typescript title="src/mastra/signals.ts"
-await agent.sendSignal(
+const result = agent.sendSignal(
   {
     type: 'reactive',
     tagName: 'ci-result',
@@ -67,6 +75,8 @@ await agent.sendSignal(
   },
   { resourceId: 'user_123', threadId: 'thread_456' },
 )
+
+await result.accepted
 ```
 
 `type` describes the source: `reactive` for context from your system or a processor, `notification` for an external event. `tagName` sets the XML tag; without it Mastra uses the type name, except `reactive` defaults to `system-reminder`.
@@ -104,8 +114,14 @@ const result = agent.sendSignal(
   },
 )
 
-await result.persisted
+const { action } = await result.accepted
+
+if (action === 'persist') {
+  await result.persisted
+}
 ```
+
+Only idle threads persist here. An active thread still delivers to the running run, so `persisted` is set only when the action is `persist`.
 
 Every send returns an `accepted` promise. It resolves when Mastra decides what to do, not when a run finishes:
 

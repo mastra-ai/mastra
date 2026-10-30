@@ -24,7 +24,7 @@ export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () =>
 
           icon={<ExternalLinkIcon />}
         >
-          Experiments Documentation
+          Experiments documentation
         </Button>
       </div>
     }

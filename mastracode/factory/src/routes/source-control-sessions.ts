@@ -33,7 +33,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
-import { canReadSessionResource, canViewSourceControlSession } from './session-access.js';
+import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
@@ -104,7 +104,7 @@ function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean
   return Boolean(options.sessionRetirement) && options.sandboxRecreateSupported === true;
 }
 
-type SessionCapabilities = { recreateSandbox: boolean; takeOwnership: boolean };
+type SessionCapabilities = { recreateSandbox: boolean; takeOwnership: boolean; switchModel: boolean };
 
 function withCapabilities<T extends object>(session: T, capabilities: SessionCapabilities) {
   return { ...session, capabilities };
@@ -486,6 +486,7 @@ function projectSessionRoutes(
               session: withCapabilities(existing, {
                 recreateSandbox: canRecreateSandbox(options),
                 takeOwnership: false,
+                switchModel: true,
               }),
             });
           }
@@ -522,7 +523,11 @@ function projectSessionRoutes(
         await startUserSessionConversation(options.controller, session);
         // The creator owns the session, so no admin check is needed.
         return c.json({
-          session: withCapabilities(session, { recreateSandbox: canRecreateSandbox(options), takeOwnership: false }),
+          session: withCapabilities(session, {
+            recreateSandbox: canRecreateSandbox(options),
+            takeOwnership: false,
+            switchModel: true,
+          }),
         });
       },
     }),
@@ -575,7 +580,11 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           session.userId !== resolved.tenant.userId && (await ownershipRefusal(session, options)) === null;
         return c.json({
           session: {
-            ...withCapabilities(withOwnerProfile(session, owners), { recreateSandbox, takeOwnership }),
+            ...withCapabilities(withOwnerProfile(session, owners), {
+              recreateSandbox,
+              takeOwnership,
+              switchModel: canSwitchSessionModel(session, resolved.tenant),
+            }),
             // The client opens the session by its id and creates it under this resource.
             resourceId,
           },

@@ -10,7 +10,6 @@ import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
 import { testChatSession } from './fixtures/sessionsSection';
-import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -79,11 +78,6 @@ function renderSection() {
   );
 }
 
-async function showAllOwners() {
-  await pickSessionProperty(userEvent.setup(), 'Owner', 'All owners');
-  expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
-}
-
 describe('user session attribution', () => {
   it('marks sessions owned by others', async () => {
     stubSessions(
@@ -108,7 +102,6 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await showAllOwners();
     const user = userEvent.setup();
 
     const mine = await screen.findByRole('link', { name: 'mine' });
@@ -144,7 +137,6 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await showAllOwners();
     const user = userEvent.setup();
 
     const other = await screen.findByRole('link', { name: 'alpha' });

@@ -207,7 +207,7 @@ Each key serves a different purpose:
 - `dedupeKey` identifies the same event. Reuse it when a retry or duplicate webhook should update the existing record.
 - `coalesceKey` groups related events. Use it when several events should become one record, such as multiple failures from the same pipeline.
 
-Both keys use the same matching rules. The difference is intent: a dedupe key represents one event that may arrive twice, while a coalesce key represents a set of related events.
+Both keys use the same matching rules despite their different purposes.
 
 When a notification merges:
 
@@ -312,7 +312,7 @@ The built-in policy is:
 | `medium` | Deliver immediately | Batch into a summary |
 | `low` | Batch into a summary | Batch into a summary |
 
-A custom `decide` function runs at receipt time and again at delivery time for records whose receipt-time decision deferred them or scheduled a summary. At delivery time, the record's persisted schedule already fixes when and how it delivers, so only `streamOptions` and `hold` are honored. Keep the decider side-effect free.
+A custom `decide` function runs at receipt time and again at delivery time for records whose receipt-time decision deferred them or scheduled a summary. The record's persisted schedule fixes when and how it delivers. Only `streamOptions` and `hold` from the delivery-time decision are honored. Keep the decider side-effect free.
 
 ## Dispatch
 

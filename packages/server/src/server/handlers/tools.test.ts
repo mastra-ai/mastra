@@ -358,6 +358,7 @@ describe('Tools Handlers', () => {
       expect(result).toEqual(mockResult);
       expect(mockExecute).toHaveBeenCalledWith(context, {
         mastra: mockMastra,
+        observe: { log: expect.any(Function), span: expect.any(Function) },
         requestContext: expect.any(RequestContext),
         tracingContext: {
           currentSpan: undefined,
@@ -596,6 +597,7 @@ describe('Tools Handlers', () => {
       expect(result).toEqual(mockResult);
       expect(mockExecute).toHaveBeenCalledWith(context, {
         mastra: mockMastra,
+        observe: { log: expect.any(Function), span: expect.any(Function) },
         requestContext: expect.any(RequestContext),
         tracingContext: {
           currentSpan: undefined,

@@ -71,6 +71,13 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
     | void
     | undefined
 
+  /** State lane id for `computeStateSignal`. Defaults to the processor id. */
+  stateId?: string
+
+  computeStateSignal?(
+    args: ComputeStateSignalArgs<TTripwireMetadata>,
+  ): Promise<ComputeStateSignalResult> | ComputeStateSignalResult
+
   processLLMRequest?(
     args: ProcessLLMRequestArgs<TTripwireMetadata>,
   ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult
@@ -680,7 +687,7 @@ Return a state signal to store it, or `undefined` or `void` when nothing changed
 
 #### Deduplication
 
-Mastra stores tracking metadata under `metadata.mastra.stateSignals[stateId]` on the thread. When a returned state signal has the same `cacheKey` and mode as the current state, Mastra skips it instead of storing a duplicate. State signals can't be transient because this tracking is rebuilt from persisted history.
+Mastra stores tracking metadata under `metadata.mastra.stateSignals[stateId]` on the thread. When a returned state signal has the same `cacheKey` and mode as the current state and a copy is still in the active message window, Mastra skips it instead of storing a duplicate. If the matching copy has left the active window, Mastra stores it again so the model keeps seeing the state. State signals can't be transient because this tracking is rebuilt from persisted history.
 
 #### Use cases
 
@@ -1188,7 +1195,7 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     name: 'result',
     type: 'OutputResult',
     description:
-      'Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), and `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.).',
+      "Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.), and an optional `inputAccepted`. `inputAccepted` is set only when `finishReason` is `'error'`, and is `true` when the run accepted the turn's input before it failed. A history processor can use it to keep the input of a failed turn that produced no output.",
     isOptional: false,
   },
   {
@@ -1895,7 +1902,7 @@ await agent.stream('Summarize this', {
 })
 ```
 
-`maxProcessorRetries` passed on the call overrides the agent default. If neither is set, processor-requested retries are treated as aborts.
+`maxProcessorRetries` passed on the call overrides the agent default. If neither is set, retries requested by input and output processors are treated as aborts, while error processors (such as [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor)) are capped at 3 retries.
 
 ## Related
 

@@ -29,50 +29,79 @@ interface OtelExporterConfig {
   timeout?: number
   batchSize?: number
   logLevel?: 'debug' | 'info' | 'warn' | 'error'
+  metadataMapping?: Record<string, string>
 }
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'provider',
     type: 'ProviderConfig',
     description: 'Provider-specific configuration (see below)',
-    required: true,
+    isOptional: false,
   },
   {
     name: 'signals',
     type: '{ traces?: boolean; logs?: boolean }',
     description:
       'Per-signal toggle. Both default to true. Set a value to false to disable that signal. Log export also requires the matching `@opentelemetry/exporter-logs-otlp-*` package to be installed for the chosen protocol.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'timeout',
     type: 'number',
     description: 'Export timeout in milliseconds (default: 30000)',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'batchSize',
     type: 'number',
     description: 'Number of spans/logs per batch (default: 512)',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
     description: "Logger level (default: 'warn')",
-    required: false,
+    isOptional: true,
+  },
+  {
+    name: 'metadataMapping',
+    type: 'Record<string, string>',
+    description:
+      'Maps metadata keys to top-level span attribute names, for example `{ userId: "user.id" }`. Disabled by default. Namespaced metadata is retained. See Metadata mapping below for value conversion and precedence.',
+    isOptional: true,
   },
   {
     name: 'resourceAttributes',
     type: 'DetectedResourceAttributes',
     description: 'Optional OpenTelemetry Resource Attributes (values here override any defaults)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
+
+## Metadata mapping
+
+Use `metadataMapping` when your backend expects metadata such as `userId` under a specific span attribute name:
+
+```typescript
+import { OtelExporter } from '@mastra/otel-exporter'
+
+const exporter = new OtelExporter({
+  provider: {
+    custom: { endpoints: { traces: 'https://collector.example.com/v1/traces' } },
+  },
+  metadataMapping: { userId: 'user.id', tenantId: 'tenant.id' },
+})
+```
+
+A span with metadata `{ userId: 'user-123', tenantId: 'acme' }` exports both `user.id` and `tenant.id`, alongside the existing `mastra.metadata.userId` and `mastra.metadata.tenantId` attributes. Mappings apply to every span that contains the selected metadata keys, including child spans.
+
+Mapped values are strings. Objects and arrays are JSON-encoded. Missing keys, `null`, `undefined`, and empty strings are omitted. `0` and `false` become `"0"` and `"false"`. Keys are matched literally, so a key containing a dot doesn't select a nested property. Empty destination names are ignored.
+
+Explicit mappings overwrite existing attributes with the same destination name. If multiple metadata keys map to the same name, the last mapping with a non-empty value wins. Mapping doesn't affect log records or resource attributes.
 
 ## Provider configurations
 
@@ -87,24 +116,24 @@ interface Dash0Config {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'Dash0 API key. Falls back to DASH0_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description: 'Dash0 ingress endpoint. Falls back to DASH0_ENDPOINT env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'dataset',
     type: 'string',
     description: 'Dataset name. Falls back to DASH0_DATASET env var.',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -120,24 +149,24 @@ interface SignozConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'SigNoz ingestion key. Falls back to SIGNOZ_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'region',
     type: "'us' | 'eu' | 'in'",
     description: "SigNoz cloud region. Falls back to SIGNOZ_REGION env var. (default: 'us')",
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description: 'Custom endpoint. Falls back to SIGNOZ_ENDPOINT env var.',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -152,19 +181,19 @@ interface NewRelicConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'New Relic license key. Falls back to NEW_RELIC_LICENSE_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description:
       'Custom endpoint. Falls back to NEW_RELIC_ENDPOINT env var. (default: https://otlp.nr-data.net:443/v1/traces)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -180,25 +209,25 @@ interface TraceloopConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'Traceloop API key. Falls back to TRACELOOP_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'destinationId',
     type: 'string',
     description: 'Destination identifier. Falls back to TRACELOOP_DESTINATION_ID env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description:
       'Custom endpoint. Falls back to TRACELOOP_ENDPOINT env var. (default: https://api.traceloop.com/v1/traces)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -213,18 +242,18 @@ interface LaminarConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description: 'Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'endpoint',
     type: 'string',
     description: 'Custom endpoint. Falls back to LAMINAR_ENDPOINT env var. (default: https://api.lmnr.ai/v1/traces)',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
@@ -232,35 +261,93 @@ interface LaminarConfig {
 ### `CustomConfig`
 
 ```typescript
-interface CustomConfig {
-  endpoint: string
+type CustomConfig = {
   protocol?: 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'
   headers?: Record<string, string>
-}
+} & (
+  | { endpoint?: string; endpoints?: never }
+  | {
+      endpoint?: never
+      endpoints:
+        | { traces: string | undefined; logs?: string | undefined }
+        | { traces?: string | undefined; logs: string | undefined }
+    }
+)
 ```
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'endpoint',
     type: 'string',
-    description: 'OTEL collector endpoint URL',
-    required: true,
+    description:
+      'Legacy collector endpoint. Cannot be combined with endpoints. Uses the existing signal-path derivation for OTLP.',
+    isOptional: true,
+  },
+  {
+    name: 'endpoints',
+    type: '{ traces: string | undefined; logs?: string | undefined } | { traces?: string | undefined; logs: string | undefined }',
+    description:
+      'Exact per-signal URLs. Supply at least one endpoint. Omitted signals are not exported. Cannot be combined with endpoint.',
+    isOptional: true,
   },
   {
     name: 'protocol',
     type: "'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'",
     description: "Export protocol (default: 'http/json')",
-    required: false,
+    isOptional: true,
   },
   {
     name: 'headers',
     type: 'Record<string, string>',
     description: 'Custom headers for authentication',
-    required: false,
+    isOptional: true,
   },
 ]}
 />
+
+### Custom signal endpoints
+
+Supply either `endpoint` or `endpoints`, never both. TypeScript rejects configurations with both options. Runtime validation also rejects them and disables the exporter with an error message.
+
+Use `endpoints` to supply the exact URL for each signal. URLs are passed to the selected exporter without adding, removing, or replacing path segments. Trace and log endpoints can use different hosts and unrelated paths:
+
+```typescript
+import { OtelExporter } from '@mastra/otel-exporter'
+
+const exporter = new OtelExporter({
+  provider: {
+    custom: {
+      protocol: 'http/protobuf',
+      endpoints: {
+        traces: 'https://traces.example.com/api/ingest/?tenant=acme',
+        logs: 'https://logs.example.com/events',
+      },
+    },
+  },
+})
+```
+
+Supply at least one signal endpoint. Omit `logs` for trace-only export or `traces` for log-only export. The `signals` toggles can still disable a configured signal. Protocol and headers apply to both endpoints. The selected protocol must support the signal. A custom `exporter` instance overrides trace transport as before.
+
+You can pass environment-variable values explicitly:
+
+```typescript
+const exporter = new OtelExporter({
+  provider: {
+    custom: {
+      endpoints: {
+        traces: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+        logs: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+      },
+    },
+  },
+})
+```
+
+The type requires at least one signal key and allows `undefined` values for environment-variable configuration. At runtime, at least one URL must be non-empty. A missing value disables that signal. Mastra doesn't load endpoint environment variables automatically.
+
+The singular `endpoint` option retains its existing behavior for compatibility: OTLP signal paths are derived from the collector URL, and Zipkin uses the configured URL directly. For custom paths, use `endpoints` instead.
 
 ## Methods
 

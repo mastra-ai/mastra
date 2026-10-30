@@ -56,7 +56,8 @@ const thread = {
 
 const subscription = await agent.subscribeToThread(thread)
 
-await agent.sendMessage('Compare that with the previous option.', thread)
+const result = agent.sendMessage('Compare that with the previous option.', thread)
+await result.accepted
 
 for await (const chunk of subscription.stream) {
   console.log(chunk)

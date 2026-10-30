@@ -1,8 +1,8 @@
 import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { ListTreeIcon } from 'lucide-react';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
+import { ReadOnlyToolCallProvider } from './read-only-tool-call-provider';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { MessageRow } from '@/domains/chat/messages/message-row';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { Button } from '@/ds/components/Button';
@@ -15,8 +15,6 @@ export interface TraceThreadItemViewProps {
   onHighlightSpans?: (spanIds: string[]) => void;
   className?: string;
 }
-
-const noop = () => {};
 
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
   const { data, isLoading, error } = useTraceSpans({
@@ -51,17 +49,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
     <div className={cn('min-w-0 p-4', className)}>
       {/* Messages carry their own vertical margins; strip them at the edges so `p-4` is the only outer spacing. */}
       <div className="mx-auto flex w-full max-w-3xl flex-col [&>[data-slot=message]:first-child]:mt-0 [&>[data-slot=message]:last-child]:mb-0">
-        <ToolCallProvider
-          approveToolcall={noop}
-          declineToolcall={noop}
-          approveToolcallGenerate={noop}
-          declineToolcallGenerate={noop}
-          approveNetworkToolcall={noop}
-          declineNetworkToolcall={noop}
-          isRunning={false}
-          toolCallApprovals={{}}
-          networkToolCallApprovals={{}}
-        >
+        <ReadOnlyToolCallProvider>
           {messages.map(message => {
             const action =
               onHighlightSpans && message.traceSpanIds.length > 0 ? (
@@ -91,7 +79,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
 
             return <MessageRow key={message.id} message={message} readOnly footer={action} />;
           })}
-        </ToolCallProvider>
+        </ReadOnlyToolCallProvider>
       </div>
     </div>
   );

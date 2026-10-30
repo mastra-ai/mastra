@@ -41,9 +41,12 @@ export type MetricsGridItemProps = {
   className?: string;
 };
 
-/** A grid cell. The grid owns the width, so each card's own `min-w-*` is neutralised. */
+/**
+ * A grid cell. The grid owns the width, so each card's own `min-w-*` is neutralised, and the card
+ * fills the cell's height, so cards in a row end together.
+ */
 function MetricsGridItem({ children, span = 1, className }: MetricsGridItemProps) {
-  return <div className={cn('min-w-0 *:w-full *:min-w-0!', spanClasses[span], className)}>{children}</div>;
+  return <div className={cn('min-w-0 *:size-full *:min-w-0!', spanClasses[span], className)}>{children}</div>;
 }
 
 MetricsGrid.Item = MetricsGridItem;

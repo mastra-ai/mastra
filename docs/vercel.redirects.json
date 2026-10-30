@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/docs/mastra-platform/connect/end-user-connections",
+      "destination": "/docs/mastra-platform/connect/overview",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes",
+      "destination": "/reference/connect/tools",
+      "permanent": false
+    },
+    {
       "source": "/docs/workspace/overview",
       "destination": "/docs/sandbox/overview",
       "permanent": true
@@ -1082,6 +1092,11 @@
     },
     {
       "source": "/docs/frameworks/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/:path*",
       "destination": "/docs/agents/overview",
       "permanent": true
     },
@@ -2231,6 +2246,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
+      "permanent": true
+    },
+    {
       "source": "/docs/harness/signals",
       "destination": "/docs/signals/overview",
       "permanent": true
@@ -2238,6 +2258,11 @@
     {
       "source": "/docs/harness/signal-providers",
       "destination": "/docs/signals/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/vectors/:path*",
+      "destination": "/integrations/vectors/:path*",
       "permanent": true
     }
   ]

@@ -339,7 +339,7 @@ async function startMastraCodeApp(
   options?: McE2eStartMastraCodeAppOptions,
 ): Promise<McE2eInProcessApp> {
   const [
-    { createMastraCode },
+    { createMastraCode, resolveSubagentsSetting },
     { MastraTUI },
     { createBrowserFromSettings, loadSettings, resolveStagehandModel, toActiveBrowserSettings },
   ] = await Promise.all([
@@ -367,6 +367,7 @@ async function startMastraCodeApp(
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
     ...(isTruthyEnv('MASTRACODE_ENABLE_CROSS_AGENT_SIGNALS') ? { crossAgentSignals: true } : {}),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false } : {}),
+    subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
     cwd: runConfig.cwd,
     ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),
     ...(options?.config ?? {}),

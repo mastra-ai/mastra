@@ -570,6 +570,8 @@ By default, `ResponseCache` looks up `MASTRA_RESOURCE_ID_KEY` on the request con
 Override explicitly when you need a different scope:
 
 ```typescript title="src/mastra/agents/scoped-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 new Agent({
   id: 'processors-agent',
   inputProcessors: [
@@ -721,7 +723,7 @@ Reactive signals default to `tagName: 'system-reminder'`. [When the agent sees y
 
 ### Send context after a tool reads a file
 
-A processor can watch tool results and inject follow-up instructions once, rather than on every step. This example sends the contents of an `AGENTS.md` file after a tool call reads it, and skips the signal if the same file was already sent.
+A processor can watch tool results and inject follow-up instructions once, rather than on every step. This example sends the contents of an `AGENTS.md` file after a tool call reads it, and skips the signal if the same file was already sent. `findAgentsMdPathFromToolCalls()`, `hasAlreadySentAgentsMdReminder()`, and `readAgentsMdInstructions()` are application helpers you write. Mastra doesn't export them.
 
 Signals sent from `processInputStep()` follow the same interrupt and wait rules as any other input. The processor finishes before Mastra cancels the request it prepared; output processors settle before the next request, and processor side effects aren't undone. A processor that sends on every pass can duplicate context when a request is replaced, so inspect history and react to a specific trigger.
 
@@ -972,6 +974,7 @@ Processors can request that the LLM retry its response with feedback. This is us
 
 ```typescript title="src/mastra/processors/quality-checker.ts"
 import type { Processor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export class QualityChecker implements Processor {
   id = 'quality-checker'

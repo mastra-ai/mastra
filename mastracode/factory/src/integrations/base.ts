@@ -18,7 +18,8 @@
  */
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
-import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
+import type { AgentChannels, AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
+import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -220,6 +221,8 @@ export interface FactoryIntegration {
     /** Cross-integration intake selection/binding domain, for per-request authorization. */
     intake: IntakeStorage;
     sourceControl?: SourceControlStorageHandle;
+    /** The controller's chat channels, once it has mounted. */
+    channels?: () => AgentChannels | null | undefined;
   }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
@@ -238,6 +241,13 @@ export interface FactoryIntegration {
    * capability, resolved synchronously per request.
    */
   sessionTools?(args: { requestContext: RequestContext }): IntegrationTools;
+  /**
+   * Processors the integration adds to every session run. Input processors
+   * run before Factory's own state processors and output processors before
+   * the credential stamp, in the order integrations are configured. Each
+   * processor decides per run whether it applies.
+   */
+  processors?: { input?: InputProcessor[]; output?: OutputProcessor[] };
   /**
    * Optional provider-owned observer for successful or failed tool calls.
    * The factory invokes every configured observer independently so one

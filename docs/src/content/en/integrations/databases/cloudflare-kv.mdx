@@ -110,6 +110,14 @@ The storage implementation handles schema creation and updates automatically. It
 
 Cloudflare KV is an eventually consistent store, meaning that data may not be immediately available across all regions after a write.
 
+:::warning[Resuming runs across Workers]
+
+A write to KV can take up to about 60 seconds to reach other locations. If one Worker suspends a workflow or [durable agent](/docs/harness/durable-agents) run and a different Worker resumes it soon after, for example when a user approves a tool call quickly, the resume can read an older snapshot. It then fails with `AGENT_RESUME_NO_SNAPSHOT_FOUND` or `WORKFLOW_RUN_NOT_SUSPENDED`, or resumes from an earlier step.
+
+If runs can be resumed by a different Worker or process than the one that suspended them, use [Cloudflare Durable Objects storage](#cloudflare-durable-objects-storage) instead.
+
+:::
+
 ### Key Structure & Namespacing
 
 Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (e.g., `threads:threadId`).

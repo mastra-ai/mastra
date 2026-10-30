@@ -331,6 +331,11 @@ const sidebars = {
           label: 'Browser',
         },
         {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
+        },
+        {
           type: 'category',
           label: 'Connections',
           link: {
@@ -695,9 +700,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/agent-lifecycle',
               label: 'Agent lifecycle',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -711,14 +713,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'guides/mcp-events',
-              label: 'MCP events',
-              customProps: {
-                tags: ['beta'],
-              },
-            },
-            {
-              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },
@@ -726,9 +720,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/build-an-eval-loop',
               label: 'Build an eval loop',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -789,11 +780,6 @@ const sidebars = {
           id: 'mastra-platform/connect/channels',
           label: 'Channels',
         },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/end-user-connections',
-          label: 'End-user connections',
-        },
       ],
     },
     {
@@ -805,9 +791,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/alerts',
       label: 'Alerts',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

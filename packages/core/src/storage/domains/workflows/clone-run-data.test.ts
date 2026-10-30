@@ -17,7 +17,7 @@ describe('cloneRunData', () => {
   it('returns symbols and bigints unchanged', () => {
     const sym = Symbol('test');
     expect(cloneRunData(sym)).toBe(sym);
-    expect(cloneRunData(BigInt(9007199254740991))).toBe(BigInt(9007199254740991));
+    expect(cloneRunData(9007199254740991n)).toBe(9007199254740991n);
   });
 
   // ── Plain objects ───────────────────────────────────────────────────

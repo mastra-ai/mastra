@@ -2,7 +2,7 @@
 //   mastra/restricted-syntax          ESLint's no-restricted-syntax: options are { selector, message } objects
 //   mastra/test-needs-when-describe   every test()/it() inside a describe('when …') block (BDD test layout)
 //   mastra/import-order               eslint-plugin-import-x's `order` rule, without its module resolver
-//   mastra/icon-button-size           a playground-ui <Button> holding only an icon uses an `icon-*` size
+//   mastra/sentence-case-labels       button, menu item and tab labels in sentence case ("Add credits", not "Add Credits")
 
 import { isBuiltin } from 'node:module';
 import path from 'node:path';
@@ -19,83 +19,6 @@ function restrictedSyntax(context) {
     };
   }
   return handlers;
-}
-
-// --- mastra/icon-button-size ---------------------------------------------------------------------------
-// A text size (`sm`, `md`, `lg`, or none) pads the button for a label, so an icon on its own renders as a
-// pill. `icon-sm|md|lg` is the same height as a square, which the design system rounds into a circle.
-// Only literal sizes are checked: a forwarded `size={size}` is the wrapping component's call to make.
-
-// An icon is a component imported from an icon module (lucide-react, an `icons/` folder), one named
-// `*Icon` (`Icon`, `XIcon`, `TraceIcon`), or a spinner. Anything else may render text, like a badge.
-const iconModulePattern = /^lucide-react$|\/icons?(\/|$)/;
-
-function isIconName(name, iconImports) {
-  return iconImports.has(name) || /Icon$/.test(name) || name === 'Spinner';
-}
-
-function isIconElement(node, iconImports) {
-  if (node.type !== 'JSXElement') return false;
-  const { name } = node.openingElement;
-  return name.type === 'JSXIdentifier' && isIconName(name.name, iconImports);
-}
-
-function isIconExpression(node, iconImports) {
-  if (node.type === 'JSXElement') return isIconElement(node, iconImports);
-  if (node.type === 'ConditionalExpression')
-    return isIconExpression(node.consequent, iconImports) && isIconExpression(node.alternate, iconImports);
-  if (node.type === 'LogicalExpression' && node.operator === '&&') return isIconExpression(node.right, iconImports);
-  return false;
-}
-
-function hasOnlyIconChildren(children, iconImports) {
-  const content = children.filter(child => !(child.type === 'JSXText' && !child.value.trim()));
-  return (
-    content.length > 0 &&
-    content.every(child =>
-      child.type === 'JSXExpressionContainer'
-        ? isIconExpression(child.expression, iconImports)
-        : isIconElement(child, iconImports),
-    )
-  );
-}
-
-function literalAttribute(value) {
-  if (value?.type === 'Literal') return value.value;
-  if (value?.type === 'JSXExpressionContainer' && value.expression.type === 'Literal') return value.expression.value;
-  return undefined;
-}
-
-function iconButtonSize(context) {
-  const { components = ['Button'] } = context.options[0] ?? {};
-  const names = new Set(components);
-  const iconImports = new Set();
-  return {
-    ImportDeclaration(node) {
-      if (!iconModulePattern.test(node.source.value)) return;
-      for (const specifier of node.specifiers) iconImports.add(specifier.local.name);
-    },
-    JSXElement(node) {
-      const { openingElement } = node;
-      if (openingElement.name.type !== 'JSXIdentifier' || !names.has(openingElement.name.name)) return;
-      const attributes = new Map();
-      for (const attribute of openingElement.attributes) {
-        // A spread may carry the size; leave those to the component that builds the props.
-        if (attribute.type === 'JSXSpreadAttribute') return;
-        attributes.set(attribute.name.name, attribute.value);
-      }
-      if (attributes.has('icon') || attributes.has('iconEnd')) return;
-      if (literalAttribute(attributes.get('variant')) === 'link') return;
-      if (attributes.has('size') && literalAttribute(attributes.get('size')) === undefined) return;
-      const size = literalAttribute(attributes.get('size')) ?? 'md';
-      if (typeof size !== 'string' || size.startsWith('icon-')) return;
-      if (!hasOnlyIconChildren(node.children, iconImports)) return;
-      context.report({
-        node: openingElement,
-        message: `This ${openingElement.name.name} holds only an icon: use size="icon-${size}" so it renders as a circle, not a pill.`,
-      });
-    },
-  };
 }
 
 const testFunctionNames = new Set(['test', 'it']);
@@ -397,6 +320,148 @@ function importOrder(context) {
   };
 }
 
+// --- mastra/sentence-case-labels -----------------------------------------------------------------------
+// Action labels use sentence case: only the first word and proper nouns are capitalized ("Create dataset",
+// "Open in Studio"). Checks the static text of buttons, menu items and tabs, and the `aria-label`, `tooltip`
+// and confirm-dialog `*Label` props of any element. Labels built at runtime (variables, ternaries) aren't seen.
+// Options: { elements?: string[], properNouns?: string[] } add label elements and proper nouns to the defaults below.
+
+// Elements whose text is a label: `button`, any component named like a button, dialog action or tab
+// (`Button`, `CopyButton`, `DialogAction`, `AlertDialog.Cancel`, `MetricsCard.Tab`), menu items
+// (`DropdownMenu.Item`, `DropdownMenuItem`), and tooltip content.
+const labelElementPattern =
+  /(?:^button|Button|Action|Cancel|Tab|TooltipContent|Menu\.?(?:Item|CheckboxItem|RadioItem|SubTrigger))$/;
+const labelProps = new Set(['aria-label', 'tooltip', 'confirmLabel', 'cancelLabel', 'submitLabel', 'actionLabel']);
+const properNouns = [
+  'Mastra Cloud',
+  'Mastra Code',
+  'Claude Code',
+  'Mastra Gateway',
+  'Mastra',
+  'Studio',
+  'Trace Intelligence',
+  'Factory',
+  'MastraCode',
+  'GitHub',
+  'GitLab',
+  'Google',
+  'Gemini',
+  'Claude',
+  'Anthropic',
+  'OpenAI',
+  'Slack',
+  'Discord',
+  'Linear',
+  'Jira',
+  'WorkOS',
+  'Vercel',
+  'Cloudflare',
+  'Netlify',
+  'LiveKit',
+  'Langfuse',
+  'Datadog',
+  'Sentry',
+  'Stripe',
+  'Chrome',
+  'Base UI',
+  'Markdown',
+];
+
+function jsxName(name) {
+  if (name.type === 'JSXIdentifier') return name.name;
+  if (name.type === 'JSXMemberExpression') return `${jsxName(name.object)}.${name.property.name}`;
+  return '';
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// The first capitalized word after the first word of a sentence, ignoring proper nouns and acronyms.
+function titleCaseWord(text, properNounPattern) {
+  const words = text.replace(/&\w+;/g, ' ').replace(properNounPattern, 'x').trim().split(/\s+/);
+  let sentenceStart = true;
+  for (const word of words) {
+    // Skip expressions and symbols ("{icon} Decline", "← Back"): they don't start the sentence.
+    if (!/[A-Za-z]/.test(word)) continue;
+    if (!sentenceStart && /^[A-Z][a-z]/.test(word)) return word.replace(/[^A-Za-z]+$/, '');
+    sentenceStart = /[.!?:]$/.test(word);
+  }
+  return null;
+}
+
+// Text runs of a JSX element: a nested element starts a new run (its text is checked on its own), an
+// expression is skipped ("Delete {count} items" checks "Delete items"), and each branch of a conditional
+// (`{open ? 'Hide details' : <>Show details</>}`) is checked as its own run.
+function textRuns(node, runs = ['']) {
+  for (const child of node.children) {
+    if (child.type === 'JSXText') runs[runs.length - 1] += child.value;
+    else if (child.type === 'JSXExpressionContainer') {
+      const text = staticString(child);
+      if (text != null) runs[runs.length - 1] += text;
+      else if (child.expression.type !== 'JSXEmptyExpression') {
+        runs[runs.length - 1] += ' {} ';
+        for (const branch of branches(child.expression)) {
+          runs.push('');
+          if (branch.type === 'JSXElement' || branch.type === 'JSXFragment') textRuns(branch, runs);
+          else runs[runs.length - 1] += staticString(branch) ?? '';
+          runs.push('');
+        }
+      }
+    } else if (child.type === 'JSXElement' || child.type === 'JSXFragment') {
+      runs.push('');
+      textRuns(child, runs);
+      runs.push('');
+    }
+  }
+  return runs;
+}
+
+// The values a JSX expression can render: `a ? b : c` and `a && b` render their branches.
+function branches(expression) {
+  if (expression.type === 'ConditionalExpression')
+    return [...branches(expression.consequent), ...branches(expression.alternate)];
+  if (expression.type === 'LogicalExpression') return branches(expression.right);
+  return [expression];
+}
+
+// A string literal, either bare or in a JSX expression container (`"Save"`, `{'Save'}`, `` {`Save`} ``).
+function staticString(node) {
+  if (node?.type === 'JSXExpressionContainer') return staticString(node.expression);
+  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
+  return null;
+}
+
+function sentenceCaseLabels(context) {
+  const options = context.options[0] ?? {};
+  const elements = new Set(options.elements ?? []);
+  const isLabelElement = name => labelElementPattern.test(name) || elements.has(name);
+  const nouns = [...properNouns, ...(options.properNouns ?? [])].sort((a, b) => b.length - a.length);
+  const properNounPattern = new RegExp(`\\b(?:${nouns.map(escapeRegExp).join('|')})\\b`, 'g');
+  const check = (node, text) => {
+    const word = text && titleCaseWord(text, properNounPattern);
+    if (!word) return;
+    context.report({
+      node,
+      message: `Use sentence case for "${text.trim().replace(/\s+/g, ' ')}": lowercase "${word}" unless it's a proper noun (add it to properNouns).`,
+    });
+  };
+  return {
+    JSXElement(node) {
+      const opening = node.openingElement;
+      const name = jsxName(opening.name);
+      for (const attribute of opening.attributes) {
+        if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
+        const attributeName = attribute.name.name;
+        if (labelProps.has(attributeName)) check(attribute, staticString(attribute.value));
+      }
+      if (!isLabelElement(name)) return;
+      for (const run of textRuns(node)) check(node, run);
+    },
+  };
+}
+
 const plugin = {
   meta: { name: 'mastra' },
   rules: {
@@ -408,9 +473,9 @@ const plugin = {
       meta: { type: 'suggestion', schema: false },
       create: restrictedSyntax,
     },
-    'icon-button-size': {
+    'sentence-case-labels': {
       meta: { type: 'suggestion', schema: false },
-      create: iconButtonSize,
+      create: sentenceCaseLabels,
     },
     'test-needs-when-describe': {
       meta: { type: 'problem', schema: false },

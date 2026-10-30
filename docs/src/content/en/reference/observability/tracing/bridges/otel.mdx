@@ -132,7 +132,7 @@ If no `LoggerProvider` is registered globally, emission is a silent no-op.
 async flush(): Promise<void>
 ```
 
-Force flushes the tracer provider and logger provider if they support `forceFlush`. The global providers are resolved at flush time, so a `LoggerProvider` registered after the bridge was constructed is flushed too. Useful in serverless environments where you need to drain telemetry before the runtime terminates. Your OTEL SDK may still hold a batch it has already started exporting; call `sdk.shutdown()` as well before the process exits; the provider's own `forceFlush()` doesn't wait for that batch either.
+Force flushes the tracer provider and logger provider if they support `forceFlush`. The global providers are resolved at flush time, so a `LoggerProvider` registered after the bridge was constructed is flushed too. Useful in serverless environments where you need to drain telemetry before the runtime terminates. Call `sdk.shutdown()` as well before the process exits to wait for any batch your OTEL SDK has already started exporting. Neither this method nor the provider's own `forceFlush()` waits for that batch.
 
 ### `shutdown`
 

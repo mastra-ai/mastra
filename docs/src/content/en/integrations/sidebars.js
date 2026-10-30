@@ -65,6 +65,15 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'frameworks/angular',
+          label: 'Angular',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/angular/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/angular/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'frameworks/astro',
           label: 'Astro',
           customProps: { icon: 'https://cdn.simpleicons.org/astro?viewbox=auto&size=28' },
@@ -901,11 +910,187 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'file-storage/neon',
+          label: 'Neon Object Storage',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'file-storage/vercel-files',
           label: 'Vercel Files',
           customProps: {
             icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
             iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Vector stores',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'vectors/s3vectors',
+          label: 'Amazon S3 Vectors',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/astra',
+          label: 'Astra',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/datastax?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/azure-ai-search',
+          label: 'Azure AI Search',
+          customProps: {
+            icon: 'https://svgl.app/library/azure.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/chroma',
+          label: 'Chroma',
+          customProps: {
+            icon: 'https://api.iconify.design/logos/chroma.svg?height=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/vectorize',
+          label: 'Cloudflare Vectorize',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/convex',
+          label: 'Convex',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/convex?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/couchbase',
+          label: 'Couchbase',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/couchbase?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/duckdb',
+          label: 'DuckDB',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/duckdb?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/elasticsearch',
+          label: 'Elasticsearch',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/elasticsearch?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/lance',
+          label: 'LanceDB',
+          customProps: {
+            icon: '/img/integrations/lancedb.svg',
+            customCSS: 'dark:invert',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/libsql',
+          label: 'libSQL',
+          customProps: {
+            icon: '/img/integrations/libsql.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/mongodb',
+          label: 'MongoDB',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/mongodb?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/opensearch',
+          label: 'OpenSearch',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/opensearch?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/oracledb',
+          label: 'OracleDB',
+          customProps: {
+            icon: '/img/integrations/oracle.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/pg',
+          label: 'PG',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/postgresql?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/pinecone',
+          label: 'Pinecone',
+          customProps: {
+            icon: 'https://api.iconify.design/thesvg/pinecone.svg?height=28&color=%23201d1e',
+            iconDark: 'https://api.iconify.design/thesvg/pinecone.svg?height=28&color=%23ffffff',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/qdrant',
+          label: 'Qdrant',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/qdrant?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/turbopuffer',
+          label: 'Turbopuffer',
+          customProps: {
+            icon: 'https://turbopuffer.com/logo/logo_square_transparent@2x.png',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/upstash',
+          label: 'Upstash',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/upstash?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/weaviate',
+          label: 'Weaviate',
+          customProps: {
+            icon: 'https://api.iconify.design/logos/weaviate-icon.svg?height=28',
           },
         },
       ],

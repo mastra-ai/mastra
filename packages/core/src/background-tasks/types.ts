@@ -75,6 +75,17 @@ export interface BackgroundTask {
    * so consumers don't have to read the workflow snapshot directly.
    */
   suspendPayload?: unknown;
+
+  /**
+   * Owner-defined retention deadline. When set, `cleanup()` deletes the row once
+   * it is terminal and `expiresAt` has passed, instead of applying the global
+   * `cleanup.completedTtlMs` / `cleanup.failedTtlMs`. Non-terminal rows are never
+   * deleted by cleanup, even after `expiresAt`.
+   */
+  expiresAt?: Date;
+
+  /** Owner-defined JSON metadata persisted with the row. Not interpreted by the manager. */
+  metadata?: Record<string, unknown>;
 }
 
 export type BackgroundTaskOutputChunk = Extract<AgentChunkType, { type: 'tool-output' }>;
@@ -95,11 +106,18 @@ export type UpdateBackgroundTask = Partial<
  * only if the stored row still matches every supplied condition — a
  * compare-and-set that fences writes from superseded owners.
  *
- * `expectedOwnerId` / `expectedLeaseExpiresAt` use `string | null` /
- * `Date | null` because "expect the column to be unset" (null) is a meaningful
- * condition distinct from "don't check it" (undefined).
+ * `expectedOwnerId` / `expectedLeaseExpiresAt` / `expectedSuspendedAt` use
+ * `string | null` / `Date | null` because "expect the column to be unset"
+ * (null) is a meaningful condition distinct from "don't check it" (undefined).
  */
 export interface UpdateBackgroundTaskOptions {
+  /**
+   * Apply only if the stored suspension time equals this value (null = not
+   * suspended / unset). Distinguishes one suspension of a task from the next:
+   * owner and lease are cleared on suspend, so status alone can't tell a stale
+   * write for an earlier suspension from a write for the current one.
+   */
+  expectedSuspendedAt?: Date | null;
   /** Apply only if the stored status equals this value. */
   expectedStatus?: BackgroundTaskStatus;
   /** Apply only if the stored owner equals this value (null = unowned). */
@@ -121,12 +139,65 @@ export interface TaskPayload {
   resourceId?: string;
   timeoutMs?: number;
   maxRetries?: number;
+  /** See `BackgroundTask.expiresAt`. */
+  expiresAt?: Date;
+  /** See `BackgroundTask.metadata`. */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Options for `BackgroundTaskManager.enqueue()`.
+ */
+export interface EnqueueOptions {
+  /**
+   * Pin the `pending` row to this worker. Use it when work for the task is
+   * already in flight on this worker, for example an execution the caller
+   * started before enqueueing that the task's executor adopts. Requires a
+   * `context`.
+   *
+   * The row is written with this worker's owner ID and an execution lease,
+   * which the lease heartbeat renews while the row waits for a local slot.
+   * While the lease is live, other workers' recovery and dispatch skip the row.
+   *
+   * If this worker dies and the lease lapses, the in-flight work is lost, so the
+   * row counts as a lost attempt, like a `running` task whose worker died: it
+   * consumes a retry and is re-dispatched if `retryCount < maxRetries`,
+   * otherwise it fails. It never re-runs on another worker for free, so a task
+   * with `maxRetries: 0` is never run elsewhere. Workers with
+   * `recoverStaleTasksOnStart` check for lapsed pins at startup and then every
+   * `leaseDurationMs`.
+   *
+   * A lapsed lease only proves this worker stopped renewing it, not that the
+   * adopted work stopped (for example, an event loop stalled past the lease).
+   * Pinned work must be idempotent, or fence its side effects, if it can be
+   * retried on another worker.
+   */
+  pinToWorker?: boolean;
+}
+
+/**
+ * Options for `BackgroundTaskManager.resume()`.
+ */
+export interface ResumeOptions {
+  /**
+   * What to do when no concurrency slot is free.
+   * - `'throw'` (default): throw a `Concurrency limit reached` error.
+   * - `'queue'`: keep the task `suspended` and dispatch the resume once a slot
+   *   frees. Slots are rechecked when a task settles and on the lease-heartbeat
+   *   tick, so a slot freed by another process is picked up too.
+   *
+   * The queue is process-local and not durable. If the process exits before
+   * dispatch, the row stays `suspended` and the queued `resumeData` is lost.
+   * Owners that need durability must persist their resume data and call
+   * `resume()` again.
+   */
+  onNoSlot?: 'throw' | 'queue';
 }
 
 /**
  * Filter for querying and managing tasks.
  */
-export type TaskDateColumn = 'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt';
+export type TaskDateColumn = 'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt' | 'expiresAt';
 
 export interface TaskFilter {
   toolCallId?: string;
@@ -142,8 +213,10 @@ export interface TaskFilter {
   toDate?: Date;
   /** Which date column to use for fromDate/toDate filtering. Default: 'createdAt' */
   dateFilterBy?: TaskDateColumn;
-  /** Column to sort by. Default: 'createdAt' */
-  orderBy?: TaskDateColumn;
+  /** `true` matches only rows with `expiresAt` set; `false` only rows without it. */
+  hasExpiresAt?: boolean;
+  /** Column to sort by. Default: 'createdAt'. Sorting by `expiresAt` is not supported. */
+  orderBy?: Exclude<TaskDateColumn, 'expiresAt'>;
   orderDirection?: 'asc' | 'desc';
   /** Page number (0-indexed). Used with perPage for pagination. */
   page?: number;
@@ -206,6 +279,15 @@ export interface BackgroundTaskManagerConfig {
   /** Per-agent concurrency limit. Default: 5 */
   perAgentConcurrency?: number;
   /**
+   * Concurrency limits for specific owners, keyed by the task's `agentId`.
+   * Overrides `perAgentConcurrency` for matching owners. Tasks still count
+   * toward `globalConcurrency`, so raise it if an override exceeds it.
+   *
+   * Non-agent owners (such as MCP servers) should use a namespaced key like
+   * `'mcp-server:<id>'` so they can't collide with an agent ID.
+   */
+  perOwnerConcurrency?: Record<string, number>;
+  /**
    * What happens when concurrency limit is reached.
    * - 'queue': task waits in pending state until a slot opens (default)
    * - 'reject': enqueue() throws an error
@@ -222,7 +304,9 @@ export interface BackgroundTaskManagerConfig {
    * Whether to recover running and pending tasks during manager startup.
    * Recovery is fenced by persisted execution leases: a running task is only
    * reclaimed once its owner's lease has expired, so it is safe when multiple
-   * live managers share storage. Set to false to skip recovery entirely.
+   * live managers share storage. When enabled, the manager also checks every
+   * `leaseDurationMs` for `pinToWorker` tasks whose worker stopped renewing
+   * their lease. Set to false to skip recovery entirely.
    * Default: true.
    */
   recoverStaleTasksOnStart?: boolean;
@@ -534,7 +618,7 @@ export interface BackgroundTaskHandle {
   /** Check if the task is running */
   checkIfRunning(args: CheckIfRunningPayload): Promise<boolean>;
   /** Resume the task */
-  resume(resumeData?: unknown): Promise<BackgroundTask>;
+  resume(resumeData?: unknown, options?: ResumeOptions): Promise<BackgroundTask>;
   /** Restarts a task */
   restart(): Promise<BackgroundTask>;
   /** Cancel this task */

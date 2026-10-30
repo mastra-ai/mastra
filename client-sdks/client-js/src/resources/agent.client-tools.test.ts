@@ -2333,6 +2333,7 @@ describe('Agent stream cancellation', () => {
       return captured.response;
     });
 
+    (global.fetch as any).mockResolvedValueOnce(Response.json({ aborted: true }));
     const ac = new AbortController();
     const resp = await agent.stream('hi', { abortSignal: ac.signal });
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
@@ -2473,6 +2474,7 @@ describe('Agent stream cancellation', () => {
       });
     });
 
+    (global.fetch as any).mockResolvedValueOnce(Response.json({ aborted: true }));
     const resp = await agent.stream('go', { clientTools: { toolA, toolB }, abortSignal: abortDuringFirst.signal });
     const reader = resp.body!.getReader();
     try {
@@ -2486,7 +2488,8 @@ describe('Agent stream cancellation', () => {
 
     expect(firstSpy).toHaveBeenCalledTimes(1);
     expect(secondSpy).not.toHaveBeenCalled();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(global.fetch).mock.calls[1]![0]).toContain('/abort');
   });
 
   it('streamLegacy: body.cancel() aborts the request and suppresses client-tool continuations', async () => {

@@ -82,7 +82,7 @@ Extends `BaseExporterConfig`, which includes:
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Exports a tracing event to Sentry. Handles SPAN\_STARTED, SPAN\_UPDATED, and SPAN\_ENDED events.
+Exports a tracing event to Sentry. Handles SPAN_STARTED, SPAN_UPDATED, and SPAN_ENDED events.
 
 ### flush
 
@@ -176,7 +176,7 @@ Mastra span types are mapped to Sentry operations:
 | `PROCESSOR_RUN` | `ai.processor` |
 | `GENERIC` | `ai.span` |
 
-MODEL\_STEP and MODEL\_CHUNK spans are skipped to simplify trace hierarchy. Their data is aggregated into MODEL\_GENERATION spans.
+MODEL_STEP and MODEL_CHUNK spans are skipped to simplify trace hierarchy. Their data is aggregated into MODEL_GENERATION spans.
 
 ## Environment variables
 
@@ -198,7 +198,7 @@ The exporter sets these standard OpenTelemetry attributes:
 - `ai.span.type`: Mastra span type
 - `gen_ai.conversation.id`: Chat thread identifier, set from `metadata.threadId` to group spans in Sentry's Conversations view
 
-**MODEL\_GENERATION spans:**
+**MODEL_GENERATION spans:**
 
 - `gen_ai.operation.name`: `chat`
 - `gen_ai.system`: Model provider
@@ -214,7 +214,7 @@ The exporter sets these standard OpenTelemetry attributes:
 - `gen_ai.request.temperature`: Temperature parameter
 - `gen_ai.completion_start_time`: First token time
 
-**TOOL\_CALL spans:**
+**TOOL_CALL spans:**
 
 - `gen_ai.operation.name`: `execute_tool`
 - `gen_ai.tool.name`: Tool identifier
@@ -224,7 +224,7 @@ The exporter sets these standard OpenTelemetry attributes:
 - `gen_ai.tool.output`: Tool output
 - `tool.success`: Success flag
 
-**AGENT\_RUN spans:**
+**AGENT_RUN spans:**
 
 - `gen_ai.operation.name`: `invoke_agent`
 - `gen_ai.agent.name`: Agent identifier

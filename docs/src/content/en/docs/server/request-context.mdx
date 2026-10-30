@@ -136,6 +136,8 @@ When you select a preset from the dropdown, the JSON editor populates with that 
 You can access the `requestContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript title="src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export type UserTier = {
   'user-tier': 'enterprise' | 'pro'
 }
@@ -225,6 +227,8 @@ Visit [Agent](/reference/agents/agent) for a full list of configuration options.
 You can access the `requestContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript title="src/mastra/workflows/weather-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+
 export type UserTier = {
   'user-tier': 'enterprise' | 'pro'
 }
@@ -247,6 +251,8 @@ Visit [createStep()](/reference/workflows/step) for a full list of configuration
 You can access the `requestContext` argument from a tool's `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+
 export type UserTier = {
   'user-tier': 'enterprise' | 'pro'
 }

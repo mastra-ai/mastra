@@ -1,4 +1,6 @@
 export { createRouteAdapterTestSuite } from './route-adapter-test-suite';
+export { createStructuredWakeTestSuite, type StructuredWakeTestConfig } from './structured-wake-test-suite';
+export { createDurableDisconnectTestSuite, type DurableDisconnectTestConfig } from './durable-disconnect-test-suite';
 export type {
   AdapterTestSuiteConfig,
   AdapterTestContext,
@@ -11,6 +13,7 @@ export { createMCPTransportTestSuite, type MCPTransportTestConfig } from './mcp-
 export { createMultipartTestSuite, type MultipartTestSuiteConfig } from './multipart-test-suite';
 export { createHttpLoggingTestSuite, type HttpLoggingTestSuiteConfig } from './http-logging-test-suite';
 export { createBodyLimitTestSuite, type BodyLimitTestSuiteConfig } from './body-limit-test-suite';
+export { createCustomRouteFGATestSuite, type CustomRouteFGATestSuiteConfig } from './custom-route-fga-test-suite';
 
 export {
   createDefaultTestContext,

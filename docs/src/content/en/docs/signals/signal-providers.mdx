@@ -104,7 +104,7 @@ export const supportAgent = new Agent({
 ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
 ```
 
-The agent connects it, polls, and sends a notification when the pipeline fails.
+The agent connects it, polls, and sends a notification when the pipeline fails. Register `supportAgent` on your `Mastra` instance so `notify()` can reach its notification storage.
 
 ## Build a provider
 

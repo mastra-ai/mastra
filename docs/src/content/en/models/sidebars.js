@@ -481,6 +481,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hopper',
+          label: 'Hopper',
+        },
+        {
+          type: 'doc',
           id: 'providers/hpc-ai',
           label: 'HPC-AI',
         },
@@ -488,11 +493,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/huggingface',
           label: 'Hugging Face',
-        },
-        {
-          type: 'doc',
-          id: 'providers/iflowcn',
-          label: 'iFlow',
         },
         {
           type: 'doc',
@@ -601,11 +601,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llama',
-          label: 'Llama',
-        },
-        {
-          type: 'doc',
           id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
         },
@@ -711,6 +706,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/modular',
+          label: 'Modular',
+        },
+        {
+          type: 'doc',
           id: 'providers/moonshotai',
           label: 'Moonshot AI',
         },
@@ -723,6 +723,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/morph',
           label: 'Morph',
+        },
+        {
+          type: 'doc',
+          id: 'providers/munito',
+          label: 'Munito AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/munito-eu',
+          label: 'Munito AI (EU)',
         },
         {
           type: 'doc',

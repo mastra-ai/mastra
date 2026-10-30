@@ -103,7 +103,7 @@ export const WithIconSizes: Story = {
       <div className="flex items-center gap-4">
         {(['sm', 'md', 'lg'] as const).map(size => (
           <Button key={size} size={size} icon={<Plus />}>
-            Add Item
+            Add item
           </Button>
         ))}
       </div>

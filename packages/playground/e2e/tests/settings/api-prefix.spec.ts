@@ -54,7 +54,7 @@ test.describe('Settings API prefix persistence', () => {
       await apiPrefixInput.clear();
       await apiPrefixInput.fill('/custom-prefix');
 
-      await page.getByRole('button', { name: 'Save Configuration' }).click();
+      await page.getByRole('button', { name: 'Save configuration' }).click();
 
       await page.reload();
 
@@ -70,7 +70,7 @@ test.describe('Settings API prefix persistence', () => {
       await apiPrefixInput.clear();
       await apiPrefixInput.fill('/mastra');
 
-      await page.getByRole('button', { name: 'Save Configuration' }).click();
+      await page.getByRole('button', { name: 'Save configuration' }).click();
       await page.reload();
 
       // Change another setting (Mastra instance URL) but don't touch apiPrefix
@@ -78,7 +78,7 @@ test.describe('Settings API prefix persistence', () => {
       await urlInput.clear();
       await urlInput.fill('http://localhost:5555');
 
-      await page.getByRole('button', { name: 'Save Configuration' }).click();
+      await page.getByRole('button', { name: 'Save configuration' }).click();
       await page.reload();
 
       // API prefix should still be /mastra
@@ -117,7 +117,7 @@ test.describe('Settings invalid API error state', () => {
       // Unroutable address: connection fails fast, capabilities query errors.
       await urlInput.fill('http://127.0.0.1:1');
 
-      await page.getByRole('button', { name: 'Save Configuration' }).click();
+      await page.getByRole('button', { name: 'Save configuration' }).click();
 
       // Drop the stub so the post-reload capabilities request really hits the dead
       // origin and fails, tripping the gate's error screen.
@@ -125,7 +125,7 @@ test.describe('Settings invalid API error state', () => {
       await page.reload();
 
       await expect(page.getByText('Failed to load studio')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole('button', { name: 'Reset Studio Configuration' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Reset Studio configuration' })).toBeVisible();
     });
   });
 });

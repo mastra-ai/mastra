@@ -97,21 +97,14 @@ Extra tools are merged with the dynamic tool set and are available to the agent 
 
 ## Custom subagents
 
-Override the default Explore/Plan/Execute subagents. Each subagent receives its own set of tools, scoping what it can do:
+Mastra Code registers no subagents by default. Pass the subagents you want with `subagents`. Spread `builtinSubagents` to keep the built-in Explore, Plan and Execute subagents alongside your own. Each subagent receives its own set of tools, scoping what it can do:
 
 ```typescript title="src/custom-subagents.ts"
-import { createMastraCode } from 'mastracode'
-import { createTool } from '@mastra/core/tools'
+import { builtinSubagents, createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
   subagents: [
-    {
-      id: 'explore',
-      name: 'Explore',
-      description: 'Read-only codebase exploration',
-      instructions:
-        'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
-    },
+    ...builtinSubagents,
     {
       id: 'test-writer',
       name: 'Test Writer',

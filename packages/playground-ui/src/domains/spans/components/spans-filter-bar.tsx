@@ -1,36 +1,11 @@
-import { useMastraClient } from '@mastra/react';
-import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
-import { createTraceQueryValuesResolver, useEntityNames, useEnvironments } from '@mastra/react/hooks/traces';
 import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
-import { useMemo } from 'react';
-import {
-  TraceTimeRangeChip,
-  TRACE_TIME_RANGE_FIELD,
-  TRACE_TIME_RANGE_FIELD_ID,
-  TRACE_TIME_RANGE_ITEM,
-} from '../../traces/components/trace-time-range-chip';
-import {
-  filterBarExpressionToTraceFilters,
-  TRACE_FILTER_BAR_OPERATORS,
-  traceFiltersToFilterBarExpression,
-  traceTokensToFilterBarItems,
-} from '../../traces/trace-filters';
+import { TraceTimeRangeChip, TRACE_TIME_RANGE_FIELD_ID } from '../../traces/components/trace-time-range-chip';
+import { DEFAULT_TRACES_FILTERS } from '../../traces/components/traces-explorer/traces-explorer-actions';
+import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
-import { createSpanFilterBarFields } from '../span-filters';
-import { FilterBar, isFilterBarGroup } from '@/ds/components/FilterBar';
-import type { FilterBarExpression } from '@/ds/components/FilterBar';
-
-const TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
-  'last-24h',
-  'last-3d',
-  'last-7d',
-  'last-14d',
-  'last-30d',
-  'custom',
-];
-
-const NO_SUGGESTIONS: string[] = [];
+import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } from '../hooks/use-spans-filter-bar';
+import { FilterBar } from '@/ds/components/FilterBar';
 
 // Items are rebuilt from tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
 // draft that id so the chip survives the round trip without remounting.
@@ -40,6 +15,8 @@ export type SpansFilterBarProps = {
   datePreset: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;
+  /** Earliest date the custom range picker allows. */
+  minDate?: Date;
   /** Window the value suggestions are looked up in. */
   timeRange: TraceQueryDiscoveryTimeRange;
   tokens: TraceFilterToken[];
@@ -47,7 +24,11 @@ export type SpansFilterBarProps = {
   onDatePresetChange: (preset: TraceDatePreset) => void;
   onDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
   onDateRangeChange: (from: Date | undefined, to: Date | undefined) => void;
+  /** Called by the time range chip's × with the default preset, e.g. to undo a histogram zoom first. */
+  onDateReset?: (defaultPreset: TraceDatePreset) => void;
   onFiltersChange: (tokens: TraceFilterToken[], groups: TraceFilterGroup[]) => void;
+  /** Turns a failed value suggestions lookup into the message shown in the option list. */
+  describeSuggestionsError?: (error: unknown) => string | undefined;
   disabled?: boolean;
 };
 
@@ -56,58 +37,29 @@ export function SpansFilterBar({
   datePreset,
   dateFrom,
   dateTo,
+  minDate,
   timeRange,
   tokens,
   groups,
   onDatePresetChange,
   onDateChange,
   onDateRangeChange,
+  onDateReset,
   onFiltersChange,
+  describeSuggestionsError,
   disabled,
 }: SpansFilterBarProps) {
-  const client = useMastraClient();
-  const { data: capabilities } = useObservabilityCapabilities();
-  const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
-  const { data: entityNames = NO_SUGGESTIONS } = useEntityNames();
-  const { data: environments = NO_SUGGESTIONS } = useEnvironments();
-
-  // Memoized for correctness: static suggestion lists become the value editor's Combobox
-  // `items`, which loops if handed a new array on every render.
-  const fields = useMemo(
-    () => [
-      TRACE_TIME_RANGE_FIELD,
-      ...createSpanFilterBarFields({
-        withContextFields,
-        entityNames,
-        environments,
-        valueSuggestions: path => createTraceQueryValuesResolver(client, timeRange, 'spans', path),
-      }),
-    ],
-    [withContextFields, entityNames, environments, client, timeRange],
-  );
-
-  // The time-range chip is a synthetic, always-present item; it never round-trips to tokens.
-  const groupsExpression = traceFiltersToFilterBarExpression([], groups);
-  const value: FilterBarExpression = {
-    ...groupsExpression,
-    nodes: [TRACE_TIME_RANGE_ITEM, ...traceTokensToFilterBarItems(tokens), ...groupsExpression.nodes],
-  };
-
-  const handleValueChange = (expression: FilterBarExpression) => {
-    const next = filterBarExpressionToTraceFilters({
-      ...expression,
-      nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
-    });
-    onFiltersChange(next.tokens, next.groups);
-  };
+  const fields = useSpansFilterBarFields({ timeRange });
+  const { filterBarValue, onFilterBarChange } = useSpansFilterBar({ tokens, groups, onFiltersChange });
 
   return (
     <FilterBar
       fields={fields}
       operators={TRACE_FILTER_BAR_OPERATORS}
-      value={value}
-      onValueChange={handleValueChange}
+      value={filterBarValue}
+      onValueChange={onFilterBarChange}
       createItemId={createItemId}
+      describeSuggestionsError={describeSuggestionsError}
       maxDepth={3}
       aria-label="Span filters"
       className="min-w-64 flex-1"
@@ -120,10 +72,13 @@ export function SpansFilterBar({
               onPresetChange={onDatePresetChange}
               dateFrom={dateFrom}
               dateTo={dateTo}
+              minDate={minDate}
               onDateChange={onDateChange}
               onDateRangeChange={onDateRangeChange}
               disabled={disabled}
-              presets={TIME_RANGE_PRESETS}
+              presets={SPAN_TIME_RANGE_PRESETS}
+              defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
+              onReset={onDateReset && (() => onDateReset(DEFAULT_TRACES_FILTERS.datePreset))}
             />
           ) : (
             <FilterBar.Chip item={item} />

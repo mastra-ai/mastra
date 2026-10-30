@@ -973,9 +973,8 @@ describe('workspace_grep', () => {
     });
 
     it('treats an ENOTDIR target resolution failure as a missing target, not a read error', async () => {
-      const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
-      filesystem.errorCode = 'ENOTDIR';
-      filesystem.failStatFor = p => p.endsWith('missing') || p === 'file.ts/missing';
+      await fs.writeFile(path.join(tempDir, 'file.ts'), 'const needle = 1;');
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
       const tools = await createWorkspaceTools(workspace);
 

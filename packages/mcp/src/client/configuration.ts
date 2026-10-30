@@ -8,6 +8,7 @@ import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
 import type { ProgressNotification, Prompt, Resource, ResourceTemplateType } from '@modelcontextprotocol/client';
 import equal from 'fast-deep-equal';
 import { UnauthorizedError } from '../shared/oauth-types';
+import type { MCPDetailedTask, MCPTaskInputResponses } from '../shared/tasks';
 import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
@@ -76,9 +77,7 @@ function isLoopbackHostname(hostname: string): boolean {
 /**
  * Configuration options for creating an MCPClient instance.
  */
-export interface MCPClientOptions<
-  TServers extends MCPClientServers<TServers> = MCPServerMap,
-> {
+export interface MCPClientOptions<TServers extends MCPClientServers<TServers> = MCPServerMap> {
   /** Optional unique identifier to prevent memory leaks when creating multiple instances with identical configurations */
   id?: string;
   /**
@@ -100,6 +99,12 @@ export interface MCPClientOptions<
    * Per-server `clientInfo` overrides it field-wise. Defaults to the server key and `'1.0.0'`.
    */
   clientInfo?: MCPClientInfo;
+  /**
+   * Install process exit and signal hooks that disconnect servers and end the process (default: true).
+   * Set to false when the host handles shutdown, and call disconnect() from its shutdown handler.
+   * Set this on every client: exit-hook's global signal listeners persist after disconnect().
+   */
+  registerProcessHooks?: boolean;
   /**
    * Webhook delivery for MCP Events. Servers that offer webhook delivery POST occurrences to
    * `webhook.url`, which must route to {@link MCPClient.events}`.handleWebhook()`.
@@ -135,14 +140,13 @@ export interface MCPClientOptions<
  * @see [MCP client documentation](https://mastra.ai/reference/tools/mcp-client)
  * if packaged docs are unavailable.
  */
-export class MCPClient<
-  TServers extends MCPClientServers<TServers> = MCPServerMap,
-> extends MastraBase {
+export class MCPClient<TServers extends MCPClientServers<TServers> = MCPServerMap> extends MastraBase {
   readonly typegen?: Readonly<{ outFile: string }>;
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
   private defaultClientInfo?: MCPClientInfo;
+  private readonly registerProcessHooks: boolean;
   private webhook?: EventsWebhookSetup;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
@@ -188,6 +192,7 @@ export class MCPClient<
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.defaultClientInfo = args.clientInfo && { ...args.clientInfo };
+    this.registerProcessHooks = args.registerProcessHooks ?? true;
     this.serverConfigs = args.servers;
     this.webhook = args.webhook && { options: { ...args.webhook }, receiver: new WebhookReceiver() };
     this.id = args.id ?? this.makeId();
@@ -196,13 +201,13 @@ export class MCPClient<
       this.id = args.id;
       const cached = cachedClient<TServers>(this.id);
 
-      // `typegen` and `clientInfo` belong to the cache identity: an instance must never silently
-      // drop or ignore what a caller asked for, so a mismatch replaces the instance the same way a
-      // server configuration change does.
+      // `typegen`, `clientInfo`, and process hook ownership belong to the cache identity.
+      // A mismatch replaces the instance just like a server configuration change.
       if (
         cached &&
         (!equal(cached.serverConfigs, args.servers) ||
           !equal(cached.defaultClientInfo, args.clientInfo) ||
+          cached.registerProcessHooks !== this.registerProcessHooks ||
           cached.typegen?.outFile !== args.typegen?.outFile)
       ) {
         void cached.disconnect();
@@ -348,6 +353,64 @@ To fix this you have three different options:
        */
       handleWebhook: async (request: Request): Promise<Response> =>
         this.webhook ? this.webhook.receiver.handle(request) : new Response(null, { status: 404 }),
+    };
+  }
+
+  /**
+   * Reads, answers and cancels MCP tasks (SEP-2663) on configured servers. Tool calls to a server
+   * with `tasks` enabled already wait for their tasks; use this to inspect or steer one directly.
+   *
+   * @experimental SEP-2663 extension; this API may change.
+   *
+   * @example
+   * ```typescript
+   * const task = await mcp.tasks.get('reports', taskId);
+   * if (task.status === 'working') await mcp.tasks.cancel('reports', taskId);
+   * ```
+   */
+  public get tasks() {
+    this.addToInstanceCache();
+    const wrap = async <T>(id: Uppercase<string>, details: Record<string, string>, run: () => Promise<T>) => {
+      try {
+        return await run();
+      } catch (error) {
+        throw new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, details }, error);
+      }
+    };
+    return {
+      /**
+       * Returns a task's current state, including its result once completed.
+       *
+       * @throws {MastraError} `MCP_CLIENT_GET_TASK_FAILED`; the cause is a `-32602` protocol error
+       * when the server does not know the task.
+       */
+      get: (serverName: string, taskId: string, options?: { signal?: AbortSignal }): Promise<MCPDetailedTask> =>
+        wrap('MCP_CLIENT_GET_TASK_FAILED', { serverName, taskId }, async () =>
+          (await this.getConnectedClientForServer(serverName)).tasks.get(taskId, options),
+        ),
+      /**
+       * Answers input requests of an `input_required` task, keyed as in its `inputRequests`.
+       *
+       * @throws {MastraError} `MCP_CLIENT_UPDATE_TASK_FAILED`
+       */
+      update: (
+        serverName: string,
+        taskId: string,
+        inputResponses: MCPTaskInputResponses,
+        options?: { signal?: AbortSignal },
+      ): Promise<void> =>
+        wrap('MCP_CLIENT_UPDATE_TASK_FAILED', { serverName, taskId }, async () =>
+          (await this.getConnectedClientForServer(serverName)).tasks.update(taskId, inputResponses, options),
+        ),
+      /**
+       * Asks the server to stop a task. Cancellation is cooperative: the task may still complete.
+       *
+       * @throws {MastraError} `MCP_CLIENT_CANCEL_TASK_FAILED`
+       */
+      cancel: (serverName: string, taskId: string, options?: { signal?: AbortSignal }): Promise<void> =>
+        wrap('MCP_CLIENT_CANCEL_TASK_FAILED', { serverName, taskId }, async () =>
+          (await this.getConnectedClientForServer(serverName)).tasks.cancel(taskId, options),
+        ),
     };
   }
 
@@ -757,10 +820,15 @@ To fix this you have three different options:
   }
 
   private makeId() {
+    // Keep existing ids when process hooks use the default behavior.
     const text = JSON.stringify(
-      this.defaultClientInfo === undefined
+      this.defaultClientInfo === undefined && this.registerProcessHooks
         ? this.serverConfigs
-        : { servers: this.serverConfigs, clientInfo: this.defaultClientInfo },
+        : {
+            servers: this.serverConfigs,
+            ...(this.defaultClientInfo === undefined ? {} : { clientInfo: this.defaultClientInfo }),
+            ...(this.registerProcessHooks ? {} : { registerProcessHooks: false }),
+          },
     ).normalize('NFKC');
     return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
@@ -1633,6 +1701,7 @@ To fix this you have three different options:
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
+      registerProcessHooks: this.registerProcessHooks,
       clientInfo: {
         name: config.clientInfo?.name ?? this.defaultClientInfo?.name,
         version: config.clientInfo?.version ?? this.defaultClientInfo?.version,

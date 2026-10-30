@@ -2,6 +2,10 @@
  * Ported from validation harness case T31 (parallel-tools).
  * Source: 23f640a. Staggered streaming belongs to COR-1344; recovery to COR-1449.
  * Result ordering within a parallel step is recorded, not asserted by the source.
+ * Durable and evented stream a parallel step's results in the order the tools
+ * finish, so each tool finishes `n * STAGGER_MS` after it starts: completion
+ * order is then fixed on any bus instead of depending on scheduler or delivery
+ * timing.
  */
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -9,6 +13,9 @@ import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
 import { chunksOfType, describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
+
+const STAGGER_MS = 30;
+const stagger = (n: number) => new Promise(resolve => setTimeout(resolve, n * STAGGER_MS));
 
 describeParity('parallel-tools parity', target => {
   it.each(['all-ok', 'one-throws'] as const)(
@@ -63,6 +70,7 @@ describeParity('parallel-tools parity', target => {
                 description: 'Commit a step.',
                 inputSchema: z.object({ n: z.number() }),
                 execute: async ({ n }) => {
+                  await stagger(n);
                   committed.push(n);
                   return { done: n };
                 },
@@ -71,7 +79,8 @@ describeParity('parallel-tools parity', target => {
                 id: 'boom',
                 description: 'Fail a step.',
                 inputSchema: z.object({ n: z.number() }),
-                execute: async () => {
+                execute: async ({ n }) => {
+                  await stagger(n);
                   throw new Error('T31 tool failure');
                 },
               }),

@@ -93,7 +93,7 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, or `timeToFirstChunkMs`, ascending or descending, and defaults to descending start time. Spans without a `timeToFirstChunkMs` value sort last in both directions.
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
 
 | Fields | Operators |
 | - | - |
@@ -101,14 +101,33 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 | `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
 | Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
 | `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
-| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | Comparisons, membership and presence |
+| `model`, `provider` | Same string operators |
+| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | Comparisons, membership and presence |
 | `error` | `exists`, `notExists` |
 
 Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
 
-Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
+Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews.
 
 Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
+
+Check `capabilities.spanQueryModelFields` before filtering on `model` or `provider`. These filters read only the span's `model` and `provider` columns. `@mastra/observability` fills the columns only when a span has both a `model` and a `provider`, and versions before it filled them left them empty. Filters treat empty columns as missing, so `eq`, `in` and `exists` don't match those spans while `ne`, `notIn` and `notExists` do. Results still return `model` and `provider` for them from the span's attributes. Trace query `spans.some` filters fall back to the attributes and do match those spans. With an older adapter, requests using these filters return `501`.
+
+Check `capabilities.spanQueryOutcomeFields` before filtering or grouping spans by `outcome` and `stopReason`. Rows then also include `outcome`, `stopReason` and `stopReasonContext`. These record how the span ended, separately from `status`, and are `null` when the span didn't record them. A missing outcome means "not recorded", not success. `stopReasonContext` is returned only. For traces, `capabilities.traceQueryOutcomeFields` enables the same fields on `queryTraces()` and `aggregateTraces()`, where they read the root span. With an older adapter, requests using these fields return `501`:
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanQueryOutcomeFields) {
+  const limited = await mastraClient.querySpans({
+    timeRange: { from: '2026-10-01T00:00:00.000Z', to: '2026-10-02T00:00:00.000Z' },
+    where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+  })
+  console.log(limited.spans.map(span => [span.stopReason, span.stopReasonContext]))
+}
+```
+
+See [Filter by outcome](/reference/observability/tracing/advanced-queries#filter-by-outcome) for trace-scope and `spans.some` semantics.
 
 DuckDB returns `null` for parent/root entity type, ID and name on spans written before `@mastra/duckdb` stored them. Equality filters on these fields don't match those spans.
 
@@ -133,7 +152,7 @@ if (capabilities.spanAggregate) {
 }
 ```
 
-The request and response match `aggregateTraces()`, with span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling.
+The request and response match `aggregateTraces()`, with span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling, and `capabilities.spanAggregateModelDimensions` before grouping or counting distinct values by `model` or `provider`. With an older adapter, those requests return `501`.
 
 See [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) for selection, dimensions, per-span usage, and how to list the spans behind a group.
 
@@ -195,7 +214,7 @@ Use `where` to filter thread rows. Combine predicates with `and`, `or` and `not`
 | `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
 | `entityType`, `entityId`, `entityName`, `entityVersionId` | Same string operators |
 | `status` | `eq`, `ne`, `in`, `notIn`, with values `success` or `error` |
-| `startedAt`, `endedAt`, `timeToFirstChunkMs` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists` |
+| `startedAt`, `endedAt`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists` |
 | `traceCount` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte` |
 
 For example, filter for threads from selected agents with at least three traces:
@@ -236,13 +255,13 @@ The response is `{ threads, page: { next } }`, without a total count. Each entry
 | `inputPreview` | First trace's input preview. |
 | `outputPreview`, `errorPreview` | Last-started trace's previews. |
 | `timeToFirstChunkMs` | First trace's root agent time to first chunk, in milliseconds. `null` when unavailable or the root isn't an agent. |
-| `model`, `provider` | Model/provider from the first completed model generation directly under the first trace's root agent. `null` when unavailable. |
+| `timeToFirstTokenMs` | First trace's root agent time to first token, in milliseconds, with the same `null` rules. Present only when the store supports it. |
 
 An earlier-started trace can finish last. In that case, it supplies `endedAt`, while the last-started trace still supplies status and output/error previews. Missing first-trace values aren't replaced with values from a later trace.
 
 ### Thread ordering and pagination
 
-Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 100 rows and allow at most 1,000. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. A `null` cursor means no more pages are available. Pagination reflects live data, so new traces can move a thread between pages.
+Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 25 rows and allow at most 100. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. A `null` cursor means no more pages are available. Pagination reflects live data, so new traces can move a thread between pages.
 
 To load the traces within a thread, use [`queryTraces()`](#querying-traces) with a `threadId` filter and a time range covering the thread's activity.
 

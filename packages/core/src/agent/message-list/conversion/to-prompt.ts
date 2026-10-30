@@ -266,10 +266,13 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         if (role !== `assistant`) {
           throw new Error(incompatibleMessage);
         }
+        // A call whose arguments could not be parsed is stored without input. OpenAI-compatible
+        // providers send `arguments: JSON.stringify(input)`, which drops the key for undefined,
+        // and the API then rejects every later request on the thread.
         roleContent[role].push({
           ...part,
           toolName: sanitizeToolName(part.toolName),
-          input: sortKeysDeep(part.input),
+          input: sortKeysDeep(part.input ?? {}),
         });
         break;
       }

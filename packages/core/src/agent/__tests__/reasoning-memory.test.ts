@@ -621,7 +621,7 @@ describe('Reasoning + Memory Integration', () => {
               type: 'tool-call' as const,
               toolCallId: 'call_123',
               toolName: 'test_tool',
-              args: {},
+              input: '{}',
             },
           ],
 
@@ -658,7 +658,7 @@ describe('Reasoning + Memory Integration', () => {
             type: 'tool-call',
             toolCallId: 'call_123',
             toolName: 'test_tool',
-            args: {},
+            input: '{}',
           },
           {
             type: 'finish',
@@ -756,7 +756,7 @@ describe('Reasoning + Memory Integration', () => {
               type: 'tool-call' as const,
               toolCallId: 'call_123',
               toolName: 'test_tool',
-              args: {},
+              input: '{}',
             },
           ],
 
@@ -813,7 +813,7 @@ describe('Reasoning + Memory Integration', () => {
             type: 'tool-call',
             toolCallId: 'call_123',
             toolName: 'test_tool',
-            args: {},
+            input: '{}',
           },
           {
             type: 'finish',

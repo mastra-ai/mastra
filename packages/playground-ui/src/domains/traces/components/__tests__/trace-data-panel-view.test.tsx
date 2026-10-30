@@ -3,6 +3,7 @@ import '@/test/inert-resize-observer';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
@@ -483,9 +484,9 @@ describe('TraceDataPanelView — the body', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
 
     expect(screen.getAllByLabelText('Search spans')).toHaveLength(1);
-    // The header owns the search; the tree placeholder starts straight at the legend, not with a second field.
+    // The header owns the search; the tree placeholder is only span rows, not a second field.
     const [placeholder] = screen.getAllByRole('status', { name: 'Loading spans' });
-    expect(placeholder.firstElementChild?.getAttribute('data-slot')).toBe('span-type-legend-skeleton');
+    expect(within(placeholder).queryByLabelText('Search spans')).toBeNull();
   });
 
   it('holds back the side tabs until the spans land, so the first tab does not flip from Feedback to Messages', () => {
@@ -901,27 +902,20 @@ describe('TraceDataPanelView — messages column', () => {
 });
 
 describe('TraceDataPanelView — timeline view', () => {
-  it('offers a tree/timeline button group next to the search field instead of Spans/Timeline tabs', () => {
+  it('offers a tree/timeline toggle next to the search field instead of Spans/Timeline tabs', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Timeline' })).toBeNull();
-    const tree = screen.getByRole('button', { name: 'Span tree' });
-    const timeline = screen.getByRole('button', { name: 'Timeline' });
-    expect(tree.getAttribute('aria-pressed')).toBe('true');
-    expect(tree.getAttribute('data-variant')).toBe('primary');
-    expect(timeline.getAttribute('aria-pressed')).toBe('false');
-    expect(timeline.getAttribute('data-variant')).toBe('default');
-    expect(
-      tree
-        .closest('[data-slot="buttons-group"]')
-        ?.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' })),
-    ).toBe(true);
+    const views = screen.getByRole('group', { name: 'Span view' });
+    expect(views.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' }))).toBe(true);
+    expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('false');
 
-    fireEvent.click(timeline);
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
     expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('data-variant')).toBe('primary');
-    expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('data-variant')).toBe('default');
+    expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByLabelText('Trace time axis')).toBeTruthy();
   });
 
   it('follows a controlled spanView and reports picks to the consumer', () => {
@@ -1291,15 +1285,17 @@ describe('TraceDataPanelView — span search', () => {
     expect(searchField().value).toBe('zzz-nothing');
   });
 
-  it('sits on its own full-width row above the span type legend', () => {
+  it('names a span type when its icon is hovered, instead of listing every type in a legend', async () => {
     renderDeep();
 
-    // The field gets a whole row so it is never squeezed by a wide legend.
-    const legendRow = screen.getByText('Tool').closest('[data-slot="span-type-legend"]');
-    const field = searchField();
+    expect(screen.queryByText('Tool')).toBeNull();
 
-    expect(legendRow?.contains(field)).toBe(false);
-    expect((legendRow?.compareDocumentPosition(field) ?? 0) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    const toolRow = await screen.findByLabelText('View details for span weather tool');
+    const badge = toolRow.querySelector<HTMLElement>('[data-slot="span-type-badge"]');
+    if (!badge) throw new Error('tool row has no span type badge');
+    await userEvent.hover(badge);
+
+    expect(await screen.findByRole('tooltip', { name: 'Tool' })).toBeTruthy();
   });
 
   it('restores the full trace when the query is cleared', async () => {

@@ -20,7 +20,7 @@ export interface DataPanelCloseButtonProps {
 export function DataPanelCloseButton({
   onClick,
   tooltip = 'Close panel',
-  label = 'Close Panel',
+  label = 'Close panel',
   icon = 'arrow',
   className,
   variant = 'ghost',

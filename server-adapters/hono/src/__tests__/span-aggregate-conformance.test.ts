@@ -13,8 +13,14 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import { MastraServer } from '../index';
 
-// `span-aggregate` covers every span query field, so the handler gates only on it and tenant scope.
-const AGGREGATE_STORE_FEATURES = ['span-query', 'span-aggregate', 'trace-query-tenant-scope'];
+// The handler gates model/provider predicates and dimensions separately, on the store's dedicated-column support.
+const AGGREGATE_STORE_FEATURES = [
+  'span-query',
+  'span-aggregate',
+  'trace-query-tenant-scope',
+  'span-query-model-fields',
+  'span-aggregate-model-dimensions',
+];
 
 // `organizationId` is a reserved request-context key, so clients cannot self-assert it. Server
 // middleware sets it here, as an auth layer would in production.
@@ -107,10 +113,10 @@ describe('POST /api/observability/spans/aggregate conformance', () => {
       expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID', issues: [{ path: ['timeRange'] }] });
     });
 
-    it('rejects model as a dimension', async () => {
+    it('rejects traceId as a dimension', async () => {
       const body = await expectStatus(422, {
         timeRange: { from, to: '2025-10-08T00:00:00.000Z' },
-        groupBy: ['model'],
+        groupBy: ['traceId'],
         measures: ['count'],
       });
       expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID' });
@@ -130,6 +136,15 @@ describe('POST /api/observability/spans/aggregate conformance', () => {
         501,
         { timeRange: { from, to: '2025-10-08T00:00:00.000Z' }, measures: ['count'] },
         ['span-query', 'trace-aggregate', 'trace-query-tenant-scope'],
+      );
+      expect(body).toMatchObject({ code: 'SPAN_AGGREGATE_UNSUPPORTED' });
+    });
+
+    it('returns 501 for model grouping when the store does not declare span-aggregate-model-dimensions', async () => {
+      const body = await expectStatus(
+        501,
+        { timeRange: { from, to: '2025-10-08T00:00:00.000Z' }, groupBy: ['model'], measures: ['count'] },
+        AGGREGATE_STORE_FEATURES.filter(feature => feature !== 'span-aggregate-model-dimensions'),
       );
       expect(body).toMatchObject({ code: 'SPAN_AGGREGATE_UNSUPPORTED' });
     });

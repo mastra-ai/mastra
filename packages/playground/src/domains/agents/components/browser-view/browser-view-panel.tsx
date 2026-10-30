@@ -27,9 +27,7 @@ export function BrowserViewPanel() {
       if (url.protocol === 'http:' || url.protocol === 'https:') {
         window.open(url.href, '_blank', 'noopener,noreferrer');
       }
-    } catch {
-      return;
-    }
+    } catch {}
   };
 
   useEffect(() => {

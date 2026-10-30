@@ -174,6 +174,7 @@ The dispatcher reads due records, groups summaries by `agentId`, `resourceId`, a
 | Decision | Result |
 | - | - |
 | `deliver` | Send the full notification immediately |
+| `queue` | Keep the record pending for a later dispatch pass |
 | `summarize` | Send a summary now or at `summaryAt` |
 | `defer` | Keep the record pending until `deliverAt` |
 | `persist` | Store the record without sending a signal |
@@ -218,13 +219,14 @@ import { createNotificationInboxTool } from '@mastra/core/notifications'
 const notificationsStorage = await storage.getStore('notifications')
 
 export const ciAgent = new Agent({
+  // ...id, instructions, model, memory, and notifications from the policy example
   tools: {
     notificationInbox: createNotificationInboxTool({ storage: notificationsStorage }),
   },
 })
 ```
 
-The tool supports `list`, `read`, `search`, `markSeen`, `dismiss`, and `archive`. Listing, reading, and searching mark returned unread records `seen`, including `failed` records so the agent learns delivery gave up. `list` defaults to pending, delivered, and failed records. `search` spans all statuses.
+The tool supports `list`, `read`, `search`, `markSeen`, `dismiss`, and `archive`. Listing and searching mark returned unread records `seen`, including `failed` records so the agent learns delivery gave up. `list` defaults to pending, delivered, and failed records. `search` spans all statuses. `read` only acts on pending and delivered records, so it skips `failed` ones. A record `read` can't deliver, because neither the record nor the calling agent supplies a `resourceId`, stays pending.
 
 `read` matters after a summary. It delivers the selected records' full contents as notification signals rather than ordinary tool output. The agent sees the context on the thread even though the call returned a short status message.
 

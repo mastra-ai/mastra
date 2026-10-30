@@ -1,77 +1,6 @@
+import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
-
-// Typography must come from a DS text role (text-title, text-body, text-label…, or <Txt>).
-// Tailwind's own sizes stay defined as a safety net only; the roles live in playground-ui/theme/typography.css.
-const TYPOGRAPHY_CLASS_PATTERN = '(^|\\s|:)text-(xs|sm|base|lg|xl|\\dxl)(\\s|$)|text-\\[\\d[^\\]]*(px|rem)\\]';
-const TYPOGRAPHY_MESSAGE = 'Use a DS text role (text-title / text-body / text-label / text-caption…) — see Txt.';
-const restrictedTypographySelectors = [
-  { selector: `Literal[value=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
-  { selector: `TemplateElement[value.raw=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
-];
-
-// Ink on a `<Txt>` is the `tone` prop, not a class: three named tones against any
-// colour Tailwind can spell, and omitting tone inherits rather than restating ink.
-const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
-// Anchored at class boundaries: a variant or an alpha (`hover:text-foreground`, `text-foreground/70`)
-// is something `tone` cannot express, so it stays a class.
-const TXT_TONE_PATTERN = '(^|\\s)text-(foreground|muted-foreground|placeholder)(?=\\s|$)';
-// `>` to the attribute: a descendant match would also flag a coloured child rendered inside a `<Txt>`.
-const txtToneSelector = (node, prop) =>
-  `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] ${node}[${prop}=/${TXT_TONE_PATTERN}/]`;
-const restrictedTxtToneSelectors = [
-  { selector: txtToneSelector('Literal', 'value'), message: TXT_TONE_MESSAGE },
-  { selector: txtToneSelector('TemplateElement', 'value.raw'), message: TXT_TONE_MESSAGE },
-];
-
-const MONO_MESSAGE =
-  'Mono comes from the design system: <Txt font="mono"> for identifiers, timestamps, and durations, <InlineCode> or <CodeBlock> for code, tabular-nums for numbers.';
-const MONO_PATTERN = '(^|\\s|:|!)font-mono(?=!|\\s|$)';
-// Native inputs and compound controls keep their existing className escape hatch.
-// Only Txt needs the font prop; do not grow every component API to satisfy lint.
-const restrictedMonoSelectors = [
-  {
-    selector: `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] Literal[value=/${MONO_PATTERN}/]`,
-    message: MONO_MESSAGE,
-  },
-  {
-    selector: `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] TemplateElement[value.raw=/${MONO_PATTERN}/]`,
-    message: MONO_MESSAGE,
-  },
-];
-
-const PLAYGROUND_UI_BROAD_IMPORT_MESSAGE =
-  'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.';
-
-const restrictedPlaygroundUiBroadImportSources = [
-  '@mastra/playground-ui',
-  '@mastra/playground-ui/components',
-  '@mastra/playground-ui/hooks',
-  '@mastra/playground-ui/utils',
-];
-
-const restrictedPlaygroundUiBroadImportSelectors = restrictedPlaygroundUiBroadImportSources.flatMap(source => [
-  {
-    selector: `ImportDeclaration[source.value="${source}"]`,
-    message: PLAYGROUND_UI_BROAD_IMPORT_MESSAGE,
-  },
-  {
-    selector: `ExportNamedDeclaration[source.value="${source}"]`,
-    message: PLAYGROUND_UI_BROAD_IMPORT_MESSAGE,
-  },
-  {
-    selector: `ExportAllDeclaration[source.value="${source}"]`,
-    message: PLAYGROUND_UI_BROAD_IMPORT_MESSAGE,
-  },
-  {
-    selector: `CallExpression[callee.object.name="vi"][callee.property.name="mock"] > Literal[value="${source}"]:first-child`,
-    message: PLAYGROUND_UI_BROAD_IMPORT_MESSAGE,
-  },
-  {
-    selector: `CallExpression[callee.object.name="vi"][callee.property.name="importActual"] > Literal[value="${source}"]:first-child`,
-    message: PLAYGROUND_UI_BROAD_IMPORT_MESSAGE,
-  },
-]);
 
 // Enforce the playground testing contract (packages/playground/AGENTS.md + the
 // `playground-msw-tests` skill): drive the real @mastra/client-js + React Query
@@ -132,6 +61,7 @@ const E2E_BDD_MESSAGE =
 
 export default defineConfig({
   extends: [rootConfig],
+  jsPlugins: ['@mastra/playground-ui/oxlint'],
   ignorePatterns: [
     'e2e/kitchen-sink/**',
     'e2e/scripts/**',
@@ -141,7 +71,8 @@ export default defineConfig({
     'e2e/tests/__utils__/**',
   ],
   rules: {
-    'mastra/icon-button-size': 'error',
+    'playground-ui/icon-button-size': 'error',
+    'playground-ui/no-barrel-imports': 'error',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
     'typescript/no-unnecessary-type-arguments': 'error',
@@ -154,60 +85,25 @@ export default defineConfig({
     ],
     'react/rules-of-hooks': 'error',
     'react/exhaustive-deps': 'warn',
-    'no-restricted-imports': [
-      'error',
-      {
-        paths: [
-          {
-            name: '@mastra/playground-ui',
-            message: 'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.',
-          },
-          {
-            name: '@mastra/playground-ui/components',
-            message: 'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.',
-          },
-          {
-            name: '@mastra/playground-ui/hooks',
-            message: 'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.',
-          },
-          {
-            name: '@mastra/playground-ui/utils',
-            message: 'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.',
-          },
-        ],
-      },
-    ],
+    'mastra/sentence-case-labels': 'error',
   },
   overrides: [
     {
-      files: ['**/*'],
-      rules: { 'mastra/restricted-syntax': ['error', ...restrictedPlaygroundUiBroadImportSelectors] },
-    },
-    {
       files: ['src/**/*.{ts,tsx}'],
-      rules: {
-        'mastra/restricted-syntax': [
-          'error',
-          ...restrictedPlaygroundUiBroadImportSelectors,
-          ...restrictedTypographySelectors,
-          ...restrictedTxtToneSelectors,
-          ...restrictedMonoSelectors,
-        ],
-      },
+      rules: playgroundUiRules,
     },
     {
       files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/restricted-syntax': ['error', ...restrictedPlaygroundUiBroadImportSelectors] },
+      rules: { 'playground-ui/text-role': 'off', 'playground-ui/txt-tone': 'off', 'playground-ui/font-mono': 'off' },
+    },
+    {
+      // Test stubs aren't UI people see.
+      files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
+      rules: { 'mastra/sentence-case-labels': 'off' },
     },
     {
       files: ['src/**/*.{test,spec}.{ts,tsx}'],
-      rules: {
-        'mastra/restricted-syntax': [
-          'error',
-          ...restrictedPlaygroundUiBroadImportSelectors,
-          ...restrictedTestMockSelectors,
-        ],
-      },
+      rules: { 'mastra/restricted-syntax': ['error', ...restrictedTestMockSelectors] },
     },
     {
       // Playwright E2E specs: enforce the BDD structure described in the
@@ -232,7 +128,6 @@ export default defineConfig({
       rules: {
         'typescript/no-misused-promises': 'off',
         'typescript/no-floating-promises': 'off',
-        'mastra/restricted-syntax': 'off',
       },
     },
   ],

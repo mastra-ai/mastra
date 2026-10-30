@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
-import { Workspace } from '@mastra/core/workspace';
+import { Workspace, CompositeFilesystem } from '@mastra/core/workspace';
 import type { WorkspaceFilesystem, FileEntry, FileStat } from '@mastra/core/workspace';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
@@ -341,6 +341,32 @@ describe('Workspace Handlers', () => {
       expect(result.workspaces[0].capabilities.hasSkills).toBe(true);
     });
 
+    it('reports resolver-backed capabilities without resolving providers', async () => {
+      const filesystemResolver = vi.fn(() => createMockFilesystem());
+      const sandboxResolver = vi.fn(() => undefined);
+      const workspace = new Workspace({
+        id: 'lazy-ws',
+        name: 'Lazy Workspace',
+        filesystem: filesystemResolver,
+        sandbox: sandboxResolver,
+      });
+      await workspace.init();
+      const mastra = createMastra(workspace);
+
+      const result = await LIST_WORKSPACES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.workspaces).toHaveLength(1);
+      expect(result.workspaces[0].capabilities).toMatchObject({
+        hasFilesystem: true,
+        hasDynamicFilesystem: true,
+        hasSandbox: true,
+      });
+      expect(filesystemResolver).not.toHaveBeenCalled();
+      expect(sandboxResolver).not.toHaveBeenCalled();
+    });
+
     it('should mark agent workspaces with source agent and populate agentId/agentName', async () => {
       const globalWorkspace = createWorkspace('global-ws', { name: 'Global Workspace' });
       const agentWorkspace = createWorkspace('agent-ws', { name: 'Agent Workspace' });
@@ -430,6 +456,56 @@ describe('Workspace Handlers', () => {
       expect(result).toEqual({ isWorkspaceConfigured: false });
     });
 
+    it('reports resolver-backed capabilities without resolving providers', async () => {
+      const filesystemResolver = vi.fn(() => createMockFilesystem());
+      const sandboxResolver = vi.fn(() => undefined);
+      const workspace = new Workspace({
+        id: 'lazy-ws',
+        filesystem: filesystemResolver,
+        sandbox: sandboxResolver,
+      });
+      const mastra = createMastra(workspace);
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'lazy-ws',
+      });
+
+      expect(result.capabilities).toMatchObject({ hasFilesystem: true, hasDynamicFilesystem: true, hasSandbox: true });
+      expect(filesystemResolver).not.toHaveBeenCalled();
+      expect(sandboxResolver).not.toHaveBeenCalled();
+    });
+
+    it('reports a static filesystem as browsable', async () => {
+      const mastra = createMastra(new Workspace({ id: 'static-ws', filesystem: createMockFilesystem() }));
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'static-ws',
+      });
+
+      expect(result.capabilities).toMatchObject({ hasFilesystem: true, hasDynamicFilesystem: false });
+    });
+
+    it('shows a mount display name instead of its provider class name', async () => {
+      const neonMount = createMockFilesystem();
+      Object.assign(neonMount, { displayName: 'Neon Object Storage', icon: 'neon' });
+      const workspace = new Workspace({
+        id: 'neon-workspace',
+        filesystem: new CompositeFilesystem({ mounts: { '/files': neonMount } }),
+      });
+      const mastra = createMastra(workspace);
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'neon-workspace',
+      });
+
+      expect(result.mounts).toEqual([
+        expect.objectContaining({ path: '/files', displayName: 'Neon Object Storage', name: 'MockFilesystem' }),
+      ]);
+    });
+
     it('should return workspace info with capabilities', async () => {
       const workspace = createWorkspace('test-workspace', { name: 'Test Workspace', bm25: true });
       const mastra = createMastra(workspace);
@@ -446,6 +522,7 @@ describe('Workspace Handlers', () => {
         status: 'pending', // Workspace starts as pending until init() is called
         capabilities: {
           hasFilesystem: true,
+          hasDynamicFilesystem: false,
           hasSandbox: false,
           canBM25: true,
           canVector: false,

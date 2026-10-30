@@ -409,6 +409,115 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
   });
 });
 
+describe('ObservationalMemoryProcessor continuation hint with retrieval', () => {
+  async function runInputStep({ readOnly, observations }: { readOnly: boolean; observations?: string }) {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = `retrieval-hint-${readOnly ? 'read-only' : 'live'}-thread`;
+    const resourceId = `retrieval-hint-${readOnly ? 'read-only' : 'live'}-resource`;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      retrieval: true,
+      model: mockModel as any,
+      // High thresholds: nothing gets observed during the step.
+      observation: { messageTokens: 100_000, bufferTokens: false },
+      reflection: { observationTokens: 100_000 },
+    });
+
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    if (observations) {
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations,
+        tokenCount: 8,
+        lastObservedAt: new Date('2025-01-01T08:30:00Z'),
+      });
+    }
+
+    // No explicit continuation message: this is what getContext returns when the turn starts before
+    // the first observation, so the processor's fallback hint is the only source of om-continuation.
+    const memoryProvider: MemoryContextProvider = {
+      getContext: vi.fn(async () => ({
+        systemMessage: undefined,
+        messages: [],
+        hasObservations: !!observations,
+        omRecord: await om.getRecord(threadId, resourceId),
+        continuationMessage: undefined,
+        otherThreadsContext: undefined,
+      })),
+      persistMessages: vi.fn(async () => {}),
+    };
+
+    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(createTestMessage('Hello there', 'user', 'fresh-user-1'), 'user');
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+      memoryConfig: readOnly ? { readOnly: true } : {},
+    });
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    return {
+      messageIds: messageList.get.all.db().map(m => m.id),
+      omSystemText: messageList
+        .getSystemMessages('observational-memory')
+        .map(m => m.content)
+        .join('\n'),
+    };
+  }
+
+  it.each([
+    ['live', false],
+    ['read-only', true],
+  ])('does not add the hint on a thread with no observations (%s path)', async (_path, readOnly) => {
+    const { messageIds, omSystemText } = await runInputStep({ readOnly });
+
+    // Retrieval guidance still applies before the first observation…
+    expect(omSystemText).not.toEqual('');
+    // …but the continuation hint only makes sense once observations replaced messages.
+    expect(messageIds).not.toContain('om-continuation');
+  });
+
+  it('adds the fallback hint on the live path once the record has observations', async () => {
+    const { messageIds, omSystemText } = await runInputStep({
+      readOnly: false,
+      observations: '- 🔴 User prefers concise answers',
+    });
+
+    expect(omSystemText).toContain('User prefers concise answers');
+    expect(messageIds).toContain('om-continuation');
+  });
+});
+
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
     const originalDoGenerate = config.doGenerate;
@@ -4447,6 +4556,40 @@ User asked about </current-task> parsing and how it works
         expect(result.currentTask).toContain('User asked about </current-task> parsing');
         expect(result.observations).not.toContain('User asked about </current-task> parsing');
       });
+
+      it('should NOT be truncated by a content line that ends with a closing tag', () => {
+        const output = `<observations>
+- 🔴 User asked how to close a block with </observations>
+- 🔴 Important: preserve all content
+</observations>
+
+<current-task>
+Explain the closing tag </current-task>
+Then review the parser
+</current-task>
+
+<suggested-response>
+Mention </suggested-response>
+Then continue
+</suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User asked how to close a block with </observations>');
+        expect(result.observations).toContain('Important: preserve all content');
+        expect(result.currentTask).toContain('Then review the parser');
+        expect(result.suggestedContinuation).toContain('Then continue');
+      });
+
+      it('should parse sections written on one line', () => {
+        const output = `<observations>- 🔴 One-line note</observations>
+<current-task>One-line task</current-task>
+<suggested-response>One-line reply</suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('One-line note');
+        expect(result.currentTask).toBe('One-line task');
+        expect(result.suggestedContinuation).toBe('One-line reply');
+      });
     });
   });
 
@@ -7180,7 +7323,12 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
           usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-          content: [{ type: 'text' as const, text: '<observations>\n- Resource input recovered\n</observations>' }],
+          content: [
+            {
+              type: 'text' as const,
+              text: '<observations>\n<thread id="thread-a">\n- Resource input recovered\n</thread>\n</observations>',
+            },
+          ],
           warnings: [],
         };
       },
@@ -7219,6 +7367,7 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
     expect(recoveredRecord?.observedMessageIds).toEqual(['resource-msg-1', 'resource-msg-2']);
     expect((om as any).getUnobservedMessages(messages, recoveredRecord)).toHaveLength(0);
     expect(recoveredRecord?.activeObservations).toContain('<thread id="thread-a">');
+    expect(recoveredRecord?.activeObservations).toContain('Resource input recovered');
   });
 });
 

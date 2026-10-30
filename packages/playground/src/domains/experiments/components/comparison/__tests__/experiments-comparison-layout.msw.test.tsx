@@ -230,7 +230,7 @@ describe('experiments comparison table', () => {
       // Waits for the loaded item, whose header replaces the loading one.
       await within(panel).findByRole('region', { name: 'Input' });
 
-      fireEvent.click(within(panel).getByRole('button', { name: 'Close Panel' }));
+      fireEvent.click(within(panel).getByRole('button', { name: 'Close panel' }));
 
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Dataset item item-a' })).toBeNull());
     });

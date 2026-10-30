@@ -206,7 +206,7 @@ function CmsScorersEditForm({
               onClick={handlePublishVersion}
               disabled={selectedVersionId === activeVersionId || isSubmitting}
             >
-              {isSubmitting ? 'Publishing...' : 'Publish This Version'}
+              {isSubmitting ? 'Publishing...' : 'Publish this version'}
             </Button>
           </div>
         </Notice>

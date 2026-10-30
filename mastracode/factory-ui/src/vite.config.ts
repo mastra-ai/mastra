@@ -51,6 +51,44 @@ function runtimeConfigPlugin(): Plugin {
   };
 }
 
+/** Green mark while developing Factory itself, so the dev tab is easy to tell apart from a deployed one. */
+function devFaviconPlugin(): Plugin {
+  return {
+    name: 'mastracode-dev-favicon',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace('href="/mastra.svg"', 'href="/mastra-dev.svg"');
+    },
+  };
+}
+
+/**
+ * `@mastra/playground-ui`'s dev task prunes the JS from its `dist` and leaves a marker until its first watch build
+ * lands. Vite caches imports it fails to resolve, so starting before then breaks every playground-ui import until
+ * this server restarts. Mirrors the same wait in `packages/playground/vite.config.ts`.
+ */
+function waitForPlaygroundUiWatchPlugin(): Plugin {
+  return {
+    name: 'wait-for-playground-ui-watch',
+    apply: 'serve',
+    async configureServer() {
+      const pendingFile = resolve(here, '../node_modules/@mastra/playground-ui/node_modules/.cache/dev-watch-pending');
+      const exists = () =>
+        fs.access(pendingFile).then(
+          () => true,
+          () => false,
+        );
+      if (!(await exists())) return;
+
+      console.info('Waiting for the @mastra/playground-ui watch build…');
+      const deadline = Date.now() + 120_000;
+      while ((await exists()) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    },
+  };
+}
+
 /**
  * Emit `routes-manifest.json` alongside the built SPA — a sorted array of the
  * SPA's top-level URL segments (e.g. `factories`, `signin`). Deployers that
@@ -283,7 +321,14 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(here, 'ui'),
     envDir,
-    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
+    plugins: [
+      waitForPlaygroundUiWatchPlugin(),
+      react(),
+      tailwindcss(),
+      runtimeConfigPlugin(),
+      devFaviconPlugin(),
+      routesManifestPlugin(),
+    ],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single

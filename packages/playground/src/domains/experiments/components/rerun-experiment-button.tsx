@@ -5,7 +5,7 @@ import { Play } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
-import type { TargetType } from '@/domains/datasets/components/experiment-trigger/target-selector';
+import type { TargetType } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-options';
 import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
 
 export interface RerunExperimentButtonProps {

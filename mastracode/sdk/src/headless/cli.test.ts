@@ -235,7 +235,10 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     lifecycleMocks.saveSettings.mockClear();
     lifecycleMocks.resolveModelDefaults.mockReset();
     lifecycleMocks.listBuiltinModePacks.mockReset();
-    lifecycleMocks.loadSettings.mockReturnValue({ models: { activeModelPackId: null, modeDefaults: {} } });
+    lifecycleMocks.loadSettings.mockReturnValue({
+      models: { activeModelPackId: null, modeDefaults: {} },
+      preferences: { subagentsEnabled: false },
+    });
     lifecycleMocks.resolveModelDefaults.mockReturnValue({});
     lifecycleMocks.listBuiltinModePacks.mockReturnValue([]);
     process.argv = argv('--prompt', 'do it');
@@ -287,6 +290,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     const settings = {
       models: { activeModelPackId: 'custom:review-pack', modeDefaults: {} },
       customModelPacks: [{ name: 'review-pack', models: { build: 'anthropic/claude-opus-4-6' } }],
+      preferences: { subagentsEnabled: false },
     };
     lifecycleMocks.loadSettings.mockReturnValue(settings);
     lifecycleMocks.resolveModelDefaults.mockReturnValue({ build: 'anthropic/claude-opus-4-6' });
@@ -296,6 +300,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(lifecycleMocks.createMastraCode).toHaveBeenCalledWith({
       settingsPath: undefined,
       coAuthor: { name: 'mastracode' },
+      subagents: [],
     });
     expect(lifecycleMocks.resolveModelDefaults).toHaveBeenCalledWith(settings, []);
     expect(lifecycleMocks.runMC).toHaveBeenCalledWith(
@@ -323,10 +328,36 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(at('claims-release')).toBeLessThan(at('dispatch-stop'));
   });
 
+  it('registers the built-in subagents when the subagentsEnabled setting is on', async () => {
+    lifecycleMocks.loadSettings.mockReturnValue({
+      models: { activeModelPackId: null, modeDefaults: {} },
+      preferences: { subagentsEnabled: true },
+    });
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: {},
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { async close() {} },
+    }));
+    lifecycleMocks.runMC.mockReturnValue({
+      async *[Symbol.asyncIterator]() {},
+      result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+    });
+
+    await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
+
+    const { subagents } = lifecycleMocks.createMastraCode.mock.calls[0]![0];
+    expect(subagents.map((agent: { id: string }) => agent.id)).toEqual(['explore', 'plan', 'execute']);
+  });
+
   it('passes a deferred pack resolver to runMC and activates the pack only once applied', async () => {
     const settings = {
       models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
       customModelPacks: [{ name: 'review-pack', models: { build: 'anthropic/claude-opus-4-6' } }],
+      preferences: { subagentsEnabled: false },
     };
     lifecycleMocks.loadSettings.mockReturnValue(settings);
     lifecycleMocks.createMastraCode.mockImplementation(async () => ({
@@ -368,6 +399,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     lifecycleMocks.loadSettings.mockReturnValue({
       models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
       customModelPacks: [{ name: 'plan-only', models: { plan: 'anthropic/claude-opus-4-6' } }],
+      preferences: { subagentsEnabled: false },
     });
     lifecycleMocks.createMastraCode.mockImplementation(async () => ({
       controller: {

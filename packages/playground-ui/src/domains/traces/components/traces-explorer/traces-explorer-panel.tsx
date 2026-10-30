@@ -4,7 +4,6 @@ import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
-import type { SpanTab } from '../../types';
 import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
@@ -94,7 +93,8 @@ export function TracesExplorerPanel({
   // Only agent traces carry the Messages column, so other traces open the drawer one size
   // smaller, with or without a span open. The listed row knows the entity on click; the root
   // span covers deep-linked traces outside the list.
-  const entityType = rows.find(row => row.traceId === traceId)?.entityType ?? anchorSpan?.entityType;
+  const listedRow = rows.find(row => row.traceId === traceId);
+  const entityType = listedRow?.entityType ?? anchorSpan?.entityType;
   const isAgent = entityType === EntityType.AGENT;
   const panelSize = spanId ? (isAgent ? 'full' : 'wide') : isAgent ? 'wide' : 'half';
 
@@ -108,6 +108,7 @@ export function TracesExplorerPanel({
         anchorSpanId={anchorSpanId}
         entityType={entityType}
         usage={usage}
+        rootStreamingTimings={listedRow}
         isLoadingSpans={isLoadingSpans}
         selectedSpanId={spanId ?? null}
         onClose={() => {
@@ -136,7 +137,7 @@ export function TracesExplorerPanel({
         spanView={selection.spanView}
         onSpanViewChange={setSpanView}
         spanActiveTab={selection.spanTab ?? 'details'}
-        onSpanTabChange={tab => setSpanTab(tab as SpanTab)}
+        onSpanTabChange={setSpanTab}
         spanFeedbackTabBadge={withFeedback ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
         spanFeedbackTabSlot={
           withFeedback

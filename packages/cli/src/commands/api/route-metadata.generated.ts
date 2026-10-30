@@ -242,6 +242,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/runs/:runId/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/runs/:runId/abort",
+    "pathParams": [
+      "agentId",
+      "runId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/threads/abort": {
     "method": "POST",
     "path": "/agents/:agentId/threads/abort",
@@ -3619,6 +3634,75 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /mcp/:serverId/tasks": {
+    "method": "GET",
+    "path": "/mcp/:serverId/tasks",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [
+      "client",
+      "cursor",
+      "key",
+      "limit",
+      "status",
+      "surface"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/tasks/find": {
+    "method": "POST",
+    "path": "/mcp/:serverId/tasks/find",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "taskId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/tasks/:taskKey/cancel": {
+    "method": "POST",
+    "path": "/mcp/:serverId/tasks/:taskKey/cancel",
+    "pathParams": [
+      "serverId",
+      "taskKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/tasks/:taskKey/input": {
+    "method": "POST",
+    "path": "/mcp/:serverId/tasks/:taskKey/input",
+    "pathParams": [
+      "serverId",
+      "taskKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "inputResponses"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents": {
     "method": "GET",
     "path": "/stored/agents",
@@ -5624,6 +5708,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "agentModel",
       "agentVersion",
       "description",
       "grouping",
