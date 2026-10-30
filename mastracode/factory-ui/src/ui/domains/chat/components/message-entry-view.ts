@@ -7,6 +7,7 @@ import type { MessagePart } from './transcript-parts';
 import { isSkillNotificationSignal, notificationMetadata } from './TranscriptNotifications';
 import {
   HIDDEN_REACTIVE_SIGNAL_TAGS,
+  isTemporalGapSignal,
   signalRowView,
   skillSignalActivation,
   SUPPRESSED_STATE_SIGNAL_IDS,
@@ -70,7 +71,7 @@ function signalView(row: SignalRowView): MessageEntryView {
 export function messageEntryView(entry: MessageEntry, parts: readonly MessagePart[]): MessageEntryView {
   const activation = skillActivation(entry, parts);
   if (activation) return { kind: 'skill', activation };
-  if (isSkillNotificationSignal(entry)) return { kind: 'hidden' };
+  if (isSkillNotificationSignal(entry) || isTemporalGapSignal(entry)) return { kind: 'hidden' };
 
   const notifications = notificationMetadata(entry);
   if (notifications.length > 0) return { kind: 'notifications', notifications };

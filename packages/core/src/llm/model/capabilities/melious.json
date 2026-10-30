@@ -32,12 +32,12 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-k2.6": [
+    "kimi-k2.7-code": [
       {
         "type": "toggle"
       }
     ],
-    "kimi-k2.7-code": [
+    "kimi-k2.6": [
       {
         "type": "toggle"
       }
@@ -46,6 +46,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -61,12 +67,6 @@
       }
     ],
     "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

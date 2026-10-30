@@ -392,6 +392,12 @@ function DetailsTab({ traceId, span }: { traceId: string; span: SpanRecord }) {
           <Row label="Started">{formatTimestampPrecise(span.startedAt)}</Row>
           {span.endedAt && <Row label="Ended">{formatTimestampPrecise(span.endedAt)}</Row>}
           {durationMs != null && <Row label="Duration">{formatDurationPrecise(durationMs)}</Row>}
+          {span.timeToFirstChunkMs != null && (
+            <Row label="Time to first chunk">{formatDurationPrecise(span.timeToFirstChunkMs)}</Row>
+          )}
+          {span.timeToFirstTokenMs != null && (
+            <Row label="Time to first token">{formatDurationPrecise(span.timeToFirstTokenMs)}</Row>
+          )}
         </DataKeysAndValues>
       </Section>
 

@@ -34,6 +34,8 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootDuration: true,
     traceQueryTimeToFirstChunk: true,
     traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
@@ -72,6 +74,21 @@ export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesRespons
 export const noTimeToFirstChunkSortCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryTimeToFirstChunkSort: false },
+};
+
+export const noTimeToFirstTokenCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
+  },
+};
+
+/** A store that records when each root's model produced its first token but can't order trace queries by it. */
+export const noTimeToFirstTokenSortCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceQueryTimeToFirstTokenSort: false },
 };
 
 export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
@@ -157,16 +174,22 @@ export const outcomeTracesPage: TraceQueryKeysetTraceResponse = {
   page: { next: null },
 };
 
-/** One root that streamed its first chunk after 412ms, one that never streamed. */
+/** One root that streamed its first chunk after 412ms and its first token after 538ms, one that never streamed. */
 export const streamedTracesPage: TraceQueryKeysetTraceResponse = {
   traces: [
-    { ...weatherTrace, timeToFirstChunkMs: 412 },
-    { ...twoTracesPage.traces[1], timeToFirstChunkMs: null },
+    { ...weatherTrace, timeToFirstChunkMs: 412, timeToFirstTokenMs: 538 },
+    { ...twoTracesPage.traces[1], timeToFirstChunkMs: null, timeToFirstTokenMs: null },
   ],
   page: { next: null },
 };
 
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
+
+/** The weather root's first chunk came 400ms in, from an inference that had started 150ms before it. */
+export const firstChunkTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [{ ...weatherTrace, timeToFirstChunkMs: 400, timeToFirstTokenMs: 150 }],
+  page: { next: null },
+};
 
 export const workflowTracesPage: TraceQueryKeysetTraceResponse = {
   traces: [{ ...weatherTrace, name: 'weather-workflow', entityId: 'weather-workflow', entityType: 'workflow_run' }],

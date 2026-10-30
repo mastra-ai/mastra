@@ -23,10 +23,13 @@ import { SORT_DIR_PARAM, SORT_KEY_PARAM, readUrlSort } from '@/lib/sort/use-url-
  */
 export const OBSERVABILITY_LIST_FILTER_PARAM_PREFIX = 'filter.';
 export const OBSERVABILITY_LIST_SORT_FIELDS = ['startedAt'] as const;
+/** Spans can also be ordered by their streaming timings, where the store supports it. */
+export const SPAN_LIST_SORT_FIELDS = ['startedAt', 'timeToFirstChunkMs', 'timeToFirstTokenMs'] as const;
 export const OBSERVABILITY_LIST_DEFAULT_DATE_PRESET: TraceDatePreset = DEFAULT_TRACES_FILTERS.datePreset;
 
 export type ObservabilityListSortDirection = 'asc' | 'desc';
 export const OBSERVABILITY_LIST_DEFAULT_SORT_DIRECTION: ObservabilityListSortDirection = 'desc';
+export type ObservabilityListSort<F extends string = string> = { field: F; direction: ObservabilityListSortDirection };
 
 export type ObservabilityListDates = { datePreset: TraceDatePreset; dateFrom?: Date; dateTo?: Date };
 export type ObservabilityListFilters = { tokens: TraceFilterToken[]; groups: TraceFilterGroup[] };
@@ -114,12 +117,19 @@ export function writeObservabilityListFilters(params: URLSearchParams, { tokens,
   for (const group of groups) params.append(TRACE_FILTER_GROUP_PARAM, serializeTraceFilterGroup(group));
 }
 
-export function readObservabilityListSort(params: URLSearchParams): ObservabilityListSortDirection {
-  return readUrlSort(params, OBSERVABILITY_LIST_SORT_FIELDS)?.direction ?? OBSERVABILITY_LIST_DEFAULT_SORT_DIRECTION;
+/** The URL's sort when its field is one of `fields`, else start time, newest first. */
+export function readObservabilityListSort<F extends string>(
+  params: URLSearchParams,
+  fields: readonly F[],
+): ObservabilityListSort<F | 'startedAt'> {
+  const sort = readUrlSort(params, fields);
+  return sort
+    ? { field: sort.key, direction: sort.direction }
+    : { field: 'startedAt', direction: OBSERVABILITY_LIST_DEFAULT_SORT_DIRECTION };
 }
 
 /** Mutates `params`. */
-export function writeObservabilityListSort(params: URLSearchParams, direction: ObservabilityListSortDirection) {
-  params.set(SORT_KEY_PARAM, OBSERVABILITY_LIST_SORT_FIELDS[0]);
+export function writeObservabilityListSort(params: URLSearchParams, { field, direction }: ObservabilityListSort) {
+  params.set(SORT_KEY_PARAM, field);
   params.set(SORT_DIR_PARAM, direction);
 }

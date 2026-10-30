@@ -1,19 +1,21 @@
 // @vitest-environment jsdom
-import type { QueryTraceThreadsResult } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, QueryTraceThreadsResult } from '@mastra/client-js';
 import type { ThreadQueryArgs } from '@mastra/react/hooks/traces';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   discoveredEntityNames,
   discoveredEnvironments,
   emptyThreadRows,
+  noStreamingTimingsThreadCapabilities,
   threadHeadPage,
   threadQueryCapabilities,
   threadRowsPage,
 } from '../../__tests__/fixtures/threads';
 import { ThreadsExplorerBody } from '../threads-explorer-body';
 import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
+import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -21,9 +23,12 @@ import { SearchParamsHost } from '@/test/search-params-host';
 
 const THREADS_QUERY_URL = `${TEST_BASE_URL}/api/observability/threads/query`;
 
-const setHandlers = (threads: QueryTraceThreadsResult) =>
+const setHandlers = (
+  threads: QueryTraceThreadsResult,
+  capabilities: GetObservabilityCapabilitiesResponse = threadQueryCapabilities,
+) =>
   server.use(
-    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(threadQueryCapabilities)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () =>
       HttpResponse.json(discoveredEntityNames),
     ),
@@ -36,14 +41,14 @@ const setHandlers = (threads: QueryTraceThreadsResult) =>
 // Rendered with no router: the body only talks to its host through props.
 const renderBody = () => {
   const onSelectedThreadChange = vi.fn<(threadId: string | undefined) => void>();
-  renderWithProviders(
+  const { unmount } = renderWithProviders(
     <ThreadsExplorerBody
       selectedThreadId={undefined}
       onSelectedThreadChange={onSelectedThreadChange}
       onOpenScore={() => {}}
     />,
   );
-  return { onSelectedThreadChange };
+  return { onSelectedThreadChange, unmount };
 };
 
 /** The body inside a stand-in router whose URL starts as `initial`; returns each thread query sent. */
@@ -68,6 +73,28 @@ const renderBodyAtUrl = (initial: string) => {
     </SearchParamsHost>,
   );
   return { queries };
+};
+
+/** The body next to the traces and spans column selections, which live in their own storage. */
+function BodyWithOtherListsColumns() {
+  const traces = useTraceColumnPreferences();
+  const spans = useTraceColumnPreferences({ scope: 'spans' });
+  return (
+    <>
+      <ThreadsExplorerBody selectedThreadId={undefined} onSelectedThreadChange={() => {}} onOpenScore={() => {}} />
+      <output data-testid="traces-columns">{traces.preferences.visibleColumns.join(',')}</output>
+      <output data-testid="spans-columns">{spans.preferences.visibleColumns.join(',')}</output>
+    </>
+  );
+}
+
+const turnOnStreamingColumns = async () => {
+  const button = await screen.findByRole<HTMLButtonElement>('button', { name: 'Columns' });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+  fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+  fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Time to first token' }));
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
 };
 
 describe('ThreadsExplorerBody', () => {
@@ -103,6 +130,58 @@ describe('ThreadsExplorerBody', () => {
           'Messages sent in this thread, counting the whole thread, not just the selected time range',
         ),
       ).toBeTruthy();
+    });
+  });
+
+  describe('when the user turns on the time to first chunk and time to first token columns', () => {
+    beforeEach(() => window.localStorage.clear());
+
+    it('labels them TTFC and TTFT and shows how long each thread took to stream its first chunk and token', async () => {
+      setHandlers(threadRowsPage);
+
+      renderBody();
+      await turnOnStreamingColumns();
+
+      expect(await screen.findByText('TTFC')).toBeTruthy();
+      expect(screen.getByText('TTFT')).toBeTruthy();
+      const weatherRow = screen.getByRole('button', { name: /Weather Agent/ });
+      expect(within(weatherRow).getByText('412ms')).toBeTruthy();
+      expect(within(weatherRow).getByText('538ms')).toBeTruthy();
+    });
+
+    it('keeps the selection for the next visit, apart from the traces and spans lists', async () => {
+      setHandlers(threadRowsPage);
+
+      const { unmount } = renderWithProviders(<BodyWithOtherListsColumns />);
+      await turnOnStreamingColumns();
+      await screen.findByText('412ms');
+      unmount();
+
+      renderWithProviders(<BodyWithOtherListsColumns />);
+
+      expect(await screen.findByText('538ms')).toBeTruthy();
+      expect(screen.getByTestId('traces-columns').textContent).not.toContain('timeToFirst');
+      expect(screen.getByTestId('spans-columns').textContent).not.toContain('timeToFirst');
+    });
+  });
+
+  describe('when the stored columns include time to first chunk and token but the store records neither', () => {
+    beforeEach(() => window.localStorage.clear());
+
+    it('leaves both columns out of the list', async () => {
+      setHandlers(threadRowsPage);
+      const { unmount } = renderBody();
+      await turnOnStreamingColumns();
+      await screen.findByText('412ms');
+      unmount();
+
+      setHandlers(threadRowsPage, noStreamingTimingsThreadCapabilities);
+      renderBody();
+
+      expect(await screen.findByText('Weather Agent')).toBeTruthy();
+      expect(screen.queryByText('TTFC')).toBeNull();
+      expect(screen.queryByText('TTFT')).toBeNull();
+      expect(screen.queryByText('412ms')).toBeNull();
     });
   });
 
@@ -161,6 +240,45 @@ describe('ThreadsExplorerBody', () => {
       });
 
       await waitFor(() => expect(screen.getAllByText('Weather Agent')).toHaveLength(2));
+    });
+  });
+
+  describe('when the URL filters on time to first chunk and time to first token', () => {
+    const STREAMING_FILTERS =
+      'filter.timeToFirstChunkMs=500&filter.timeToFirstChunkMs.op=lte&filter.timeToFirstTokenMs=800&filter.timeToFirstTokenMs.op=gt';
+    const paths = (where: unknown) => JSON.stringify(where ?? null);
+
+    it('sends both conditions when the store records both', async () => {
+      setHandlers(threadRowsPage);
+
+      const { queries } = renderBodyAtUrl(STREAMING_FILTERS);
+      await screen.findByText('Weather Agent');
+
+      await waitFor(() =>
+        expect(queries.map(query => paths(query.where))).toContainEqual(
+          expect.stringMatching(/"timeToFirstChunkMs".*"timeToFirstTokenMs"/),
+        ),
+      );
+    });
+
+    it('leaves both conditions out when the store does not record them', async () => {
+      const onCapabilities = vi.fn();
+      setHandlers(threadRowsPage, noStreamingTimingsThreadCapabilities);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => {
+          onCapabilities();
+          return HttpResponse.json(noStreamingTimingsThreadCapabilities);
+        }),
+      );
+
+      const { queries } = renderBodyAtUrl(STREAMING_FILTERS);
+      await screen.findByText('Weather Agent');
+      await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
+
+      for (const query of queries) {
+        expect(paths(query.where)).not.toContain('timeToFirstChunkMs');
+        expect(paths(query.where)).not.toContain('timeToFirstTokenMs');
+      }
     });
   });
 

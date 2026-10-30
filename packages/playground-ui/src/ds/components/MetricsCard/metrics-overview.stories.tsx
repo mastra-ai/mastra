@@ -10,8 +10,8 @@ import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
 import { ShareBar } from '../ShareBar';
 import type { ShareBarRow } from '../ShareBar';
 import { MetricsCard } from './metrics-card';
+import type { MetricsCardTitleMenuProps } from './metrics-card-title-menu';
 import { agentActivityByHour, count, ms, percent, traceVolume, usageBy, usd } from './metrics-story-data';
-import type { AgentActivityBucket } from './metrics-story-data';
 
 const meta: Meta = {
   title: 'Metrics/Examples/Metrics Overview',
@@ -23,7 +23,6 @@ type Story = StoryObj;
 
 const data = agentActivityByHour;
 const score = (value: number) => value.toFixed(2);
-const mean = (key: keyof AgentActivityBucket) => data.reduce((s, b) => s + Number(b[key]), 0) / data.length;
 
 const kpis = [
   {
@@ -74,54 +73,49 @@ function Kpis({ isLoading }: { isLoading: boolean }) {
 /** A card whose content is a flex column, so `height="fill"` charts end cards in a row on one line. */
 function Card({
   title,
-  description,
-  summary,
+  titleMenu,
+  total,
   isLoading,
   children,
 }: {
   title: string;
-  description: string;
-  summary: { value: string; label: string };
+  /** Makes the title a dropdown of the card's views; `title` is the picked view's label. */
+  titleMenu?: Omit<MetricsCardTitleMenuProps<string>, 'title' | 'className'>;
+  total: string;
   isLoading: boolean;
   children: ReactNode;
 }) {
   return (
     <MetricsCard className="min-h-0! min-w-0!">
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title={title} description={description} />
-        <MetricsCard.Summary value={summary.value} label={summary.label} isLoading={isLoading} />
+        {titleMenu ? (
+          <MetricsCard.TitleMenu title={title} {...titleMenu} />
+        ) : (
+          <MetricsCard.Title>{title}</MetricsCard.Title>
+        )}
+        <MetricsCard.Total value={total} isLoading={isLoading} />
       </MetricsCard.TopBar>
       <MetricsCard.Content className="flex h-full flex-col gap-4 overflow-visible">{children}</MetricsCard.Content>
     </MetricsCard>
   );
 }
 
-/** Small tabs for a card's toolbar row. */
-function CardTabs<T extends string>({
-  value,
-  onChange,
-  tabs,
-}: {
-  value: T;
-  onChange: (value: T) => void;
-  tabs: Array<[T, string]>;
-}) {
-  return (
-    <MetricsCard.Tabs<T> value={value} onValueChange={onChange}>
-      {tabs.map(([v, label]) => (
-        <MetricsCard.Tab key={v} value={v}>
-          {label}
-        </MetricsCard.Tab>
-      ))}
-    </MetricsCard.Tabs>
-  );
+/** The views of a card with a title menu, and the title for the picked one. */
+function views<T extends string>(options: readonly { value: T; label: string }[], value: T) {
+  return { options, title: options.find(o => o.value === value)?.label ?? '' };
 }
 
 type Loadable = { isLoading: boolean };
 
-/** Tokens and cost share one chart: the tabs swap the series, the legend sits in the toolbar. */
+const TOKEN_VIEWS = [
+  { value: 'tokens', label: 'Token usage' },
+  { value: 'cost', label: 'Model cost' },
+] as const;
+
+/** Tokens and cost share one chart: the title menu swaps the series, the legend sits in the toolbar. */
 function TokenUsageCard({ isLoading }: Loadable) {
   const [tab, setTab] = useState<'tokens' | 'cost'>('tokens');
+  const { title, options } = views(TOKEN_VIEWS, tab);
   const series: MetricsLineChartSeries[] =
     tab === 'tokens'
       ? [
@@ -132,21 +126,13 @@ function TokenUsageCard({ isLoading }: Loadable) {
       : [{ dataKey: 'cost', label: 'Cost', color: 'var(--chart-purple)' }];
   return (
     <Card
-      title="Token usage"
-      description={tab === 'tokens' ? 'Input, cache reads and output per hour.' : 'Model spend per hour.'}
-      summary={tab === 'tokens' ? { value: '39.4M', label: 'tokens' } : { value: '$30.02', label: 'cost' }}
+      title={title}
+      titleMenu={{ value: tab, onValueChange: v => setTab(v as typeof tab), options }}
+      total={tab === 'tokens' ? '39.4M' : '$30.02'}
       isLoading={isLoading}
     >
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={series} />
-        <CardTabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            ['tokens', 'Tokens'],
-            ['cost', 'Cost'],
-          ]}
-        />
       </MetricsCard.Toolbar>
       <MetricsStackedBarChart
         data={data}
@@ -165,12 +151,7 @@ const small = { data, height: 'fill', xLabels: 'edges', showYAxis: false } as co
 
 function AgentRunsCard({ isLoading }: Loadable) {
   return (
-    <Card
-      title="Agent runs"
-      description="Completed and failed runs."
-      summary={{ value: '147', label: 'runs' }}
-      isLoading={isLoading}
-    >
+    <Card title="Agent runs" total="147" isLoading={isLoading}>
       <MetricsStackedBarChart
         {...small}
         series={[
@@ -186,12 +167,7 @@ function AgentRunsCard({ isLoading }: Loadable) {
 
 function FailureRateCard({ isLoading }: Loadable) {
   return (
-    <Card
-      title="Failure rate"
-      description="Share of agent runs that failed."
-      summary={{ value: '6.1%', label: 'failed' }}
-      isLoading={isLoading}
-    >
+    <Card title="Failure rate" total="6.1%" isLoading={isLoading}>
       <MetricsLineChart
         {...small}
         series={[{ dataKey: 'failureRate', label: 'Failed runs', color: 'var(--chart-red)' }]}
@@ -208,8 +184,15 @@ const LATENCY_KEYS = {
   tools: ['toolP50', 'toolP95'],
 } as const;
 
+const LATENCY_VIEWS = [
+  { value: 'agents', label: 'Agent latency' },
+  { value: 'workflows', label: 'Workflow latency' },
+  { value: 'tools', label: 'Tool latency' },
+] as const;
+
 function LatencyCard({ isLoading }: Loadable) {
   const [tab, setTab] = useState<keyof typeof LATENCY_KEYS>('agents');
+  const { title, options } = views(LATENCY_VIEWS, tab);
   const [p50, p95] = LATENCY_KEYS[tab];
   const series: MetricsLineChartSeries[] = [
     { dataKey: p50, label: 'P50', color: 'var(--chart-sequential-1)' },
@@ -217,22 +200,13 @@ function LatencyCard({ isLoading }: Loadable) {
   ];
   return (
     <Card
-      title="Latency"
-      description="Duration percentiles."
-      summary={{ value: ms(Math.max(...data.map(b => b[p95]))), label: 'peak P95' }}
+      title={title}
+      titleMenu={{ value: tab, onValueChange: v => setTab(v as typeof tab), options }}
+      total={ms(Math.max(...data.map(b => b[p95])))}
       isLoading={isLoading}
     >
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={series} />
-        <CardTabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            ['agents', 'Agents'],
-            ['workflows', 'Workflows'],
-            ['tools', 'Tools'],
-          ]}
-        />
       </MetricsCard.Toolbar>
       <MetricsLineChart {...small} series={series} showLegend={false} valueFormatter={ms} isLoading={isLoading} />
     </Card>
@@ -241,9 +215,16 @@ function LatencyCard({ isLoading }: Loadable) {
 
 type VolumeTab = keyof typeof traceVolume;
 
+const VOLUME_VIEWS = [
+  { value: 'agents', label: 'Agent runs' },
+  { value: 'workflows', label: 'Workflow runs' },
+  { value: 'tools', label: 'Tool calls' },
+] as const satisfies readonly { value: VolumeTab; label: string }[];
+
 /** Trace volume with an error-rate column, so the failing agent or tool stands out. */
 function TraceVolumeCard({ isLoading }: Loadable) {
   const [tab, setTab] = useState<VolumeTab>('agents');
+  const { title, options } = views(VOLUME_VIEWS, tab);
   const rate = (errors: number, runs: number) => (errors > 0 ? percent(errors / runs) : '0%');
   const rows: ShareBarRow[] = traceVolume[tab].map(r => ({
     key: r.label,
@@ -257,22 +238,11 @@ function TraceVolumeCard({ isLoading }: Loadable) {
   const columns = [{ label: 'Error rate' }];
   return (
     <Card
-      title="Trace volume"
-      description="Runs and calls, with error rate."
-      summary={{ value: count(total), label: 'total runs' }}
+      title={title}
+      titleMenu={{ value: tab, onValueChange: v => setTab(v as VolumeTab), options }}
+      total={count(total)}
       isLoading={isLoading}
     >
-      <MetricsCard.Toolbar>
-        <CardTabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            ['agents', 'Agents'],
-            ['workflows', 'Workflows'],
-            ['tools', 'Tools'],
-          ]}
-        />
-      </MetricsCard.Toolbar>
       <ShareBar
         key={tab}
         rows={rows}
@@ -292,9 +262,16 @@ function TraceVolumeCard({ isLoading }: Loadable) {
 
 type UsageTab = keyof typeof usageBy;
 
-/** Usage by agent, model and thread in one card: every tab ranks by cost share, with tokens. */
+const USAGE_VIEWS = [
+  { value: 'agents', label: 'Usage by agent' },
+  { value: 'models', label: 'Usage by model' },
+  { value: 'threads', label: 'Usage by thread' },
+] as const satisfies readonly { value: UsageTab; label: string }[];
+
+/** Usage by agent, model and thread in one card: every view ranks by cost share, with tokens. */
 function UsageCard({ isLoading }: Loadable) {
   const [tab, setTab] = useState<UsageTab>('agents');
+  const { title, options } = views(USAGE_VIEWS, tab);
   const source = usageBy[tab];
   const tokensOf = new Map(source.map(r => [r.label, r.tokens]));
   const rows: ShareBarRow[] = source.map(r => ({
@@ -307,22 +284,11 @@ function UsageCard({ isLoading }: Loadable) {
   const columns = [{ label: 'Tokens' }];
   return (
     <Card
-      title="Usage"
-      description="Who is spending: cost share, with tokens."
-      summary={{ value: usd(source.reduce((sum, r) => sum + r.cost, 0)), label: 'cost' }}
+      title={title}
+      titleMenu={{ value: tab, onValueChange: v => setTab(v as UsageTab), options }}
+      total={usd(source.reduce((sum, r) => sum + r.cost, 0))}
       isLoading={isLoading}
     >
-      <MetricsCard.Toolbar>
-        <CardTabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            ['agents', 'Agents'],
-            ['models', 'Models'],
-            ['threads', 'Threads'],
-          ]}
-        />
-      </MetricsCard.Toolbar>
       <ShareBar
         key={tab}
         rows={rows}
@@ -339,27 +305,19 @@ function UsageCard({ isLoading }: Loadable) {
   );
 }
 
-/** Eval scores over time: the average per hour, with the window mean in the legend. */
+const SCORE_SERIES: MetricsLineChartSeries[] = [
+  { dataKey: 'relevancy', label: 'Answer relevancy', color: 'var(--chart-green)' },
+  { dataKey: 'faithfulness', label: 'Faithfulness', color: 'var(--chart-blue)' },
+  { dataKey: 'tone', label: 'Tone', color: 'var(--chart-orange)' },
+];
+
+/** Eval scores over time: the average scorer result per hour, 0 to 1. */
 function ScoresCard({ isLoading }: Loadable) {
-  const scorers = [
-    { dataKey: 'relevancy', label: 'Answer relevancy', color: 'var(--chart-green)' },
-    { dataKey: 'faithfulness', label: 'Faithfulness', color: 'var(--chart-blue)' },
-    { dataKey: 'tone', label: 'Tone', color: 'var(--chart-orange)' },
-  ] as const;
-  const series: MetricsLineChartSeries[] = scorers.map(s => ({
-    ...s,
-    aggregate: () => ({ value: score(mean(s.dataKey)) }),
-  }));
   return (
-    <Card
-      title="Scores"
-      description="Average scorer result per hour, 0 to 1."
-      summary={{ value: '3', label: 'scorers' }}
-      isLoading={isLoading}
-    >
+    <Card title="Scores" total="3" isLoading={isLoading}>
       <MetricsLineChart
         data={data}
-        series={series}
+        series={SCORE_SERIES}
         height={200}
         yDomain={[0, 1]}
         showYAxis={false}

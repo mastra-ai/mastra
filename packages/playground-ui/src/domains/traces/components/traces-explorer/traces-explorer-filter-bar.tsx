@@ -93,7 +93,7 @@ export function TracesExplorerTimeRangeChip({
   minDate,
   maxRangeMs,
 }: TracesExplorerTimeRangeChipProps) {
-  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange } = useTracesFilters();
+  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange, resetDateRange } = useTracesFilters();
   const { isLoading } = useTracesList();
 
   return (
@@ -107,6 +107,7 @@ export function TracesExplorerTimeRangeChip({
       disabled={isLoading}
       presets={presets}
       defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
+      onReset={() => resetDateRange(DEFAULT_TRACES_FILTERS.datePreset)}
       minDate={minDate}
       maxRangeMs={maxRangeMs}
     />

@@ -187,24 +187,24 @@ const agent = new Agent({
 
 Each vector store page below includes installation instructions, configuration parameters, and usage examples:
 
-- [Astra](/reference/vectors/astra)
-- [Chroma](/reference/vectors/chroma)
-- [Cloudflare Vectorize](/reference/vectors/vectorize)
-- [Convex](/reference/vectors/convex)
-- [Couchbase](/reference/vectors/couchbase)
-- [DuckDB](/reference/vectors/duckdb)
-- [Elasticsearch](/reference/vectors/elasticsearch)
-- [LanceDB](/reference/vectors/lance)
-- [libSQL](/reference/vectors/libsql)
-- [MongoDB](/reference/vectors/mongodb)
-- [OpenSearch](/reference/vectors/opensearch)
-- [OracleDB](/reference/vectors/oracledb)
-- [Pinecone](/reference/vectors/pinecone)
-- [PostgreSQL](/reference/vectors/pg)
-- [Qdrant](/reference/vectors/qdrant)
-- [S3 Vectors](/reference/vectors/s3vectors)
-- [Turbopuffer](/reference/vectors/turbopuffer)
-- [Upstash](/reference/vectors/upstash)
+- [Astra](/integrations/vectors/astra)
+- [Chroma](/integrations/vectors/chroma)
+- [Cloudflare Vectorize](/integrations/vectors/vectorize)
+- [Convex](/integrations/vectors/convex)
+- [Couchbase](/integrations/vectors/couchbase)
+- [DuckDB](/integrations/vectors/duckdb)
+- [Elasticsearch](/integrations/vectors/elasticsearch)
+- [LanceDB](/integrations/vectors/lance)
+- [libSQL](/integrations/vectors/libsql)
+- [MongoDB](/integrations/vectors/mongodb)
+- [OpenSearch](/integrations/vectors/opensearch)
+- [OracleDB](/integrations/vectors/oracledb)
+- [Pinecone](/integrations/vectors/pinecone)
+- [PostgreSQL](/integrations/vectors/pg)
+- [Qdrant](/integrations/vectors/qdrant)
+- [S3 Vectors](/integrations/vectors/s3vectors)
+- [Turbopuffer](/integrations/vectors/turbopuffer)
+- [Upstash](/integrations/vectors/upstash)
 
 ## Recall configuration
 
@@ -300,7 +300,7 @@ const options = {
 
 Some vector stores generate the embeddings themselves. With one of those, semantic recall runs without an `embedder`: the database embeds each message on write and the search string on arrival. The embedding provider stays out of your application entirely.
 
-MongoDB does this through [Automated Embedding](/reference/vectors/mongodb): name a Voyage AI model on the vector store and leave the `embedder` out.
+MongoDB does this through [Automated Embedding](/integrations/vectors/mongodb): name a Voyage AI model on the vector store and leave the `embedder` out.
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Memory } from '@mastra/memory'
@@ -497,7 +497,7 @@ const agent = new Agent({
 })
 ```
 
-For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/vectors/pg#index-configuration-guide).
+For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/integrations/vectors/pg#index-configuration-guide).
 
 ## Disable semantic recall
 

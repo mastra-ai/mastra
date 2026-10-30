@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import { workLaneForRole } from '../boards/legacy-plan-role.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
@@ -73,7 +75,8 @@ export interface FactorySessionToolDependencies {
     | 'listSessionSubscriptions'
     | 'listWorkItemSubscribers'
   >;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   auditRecorder: AuditRecorder;
   intake?: Pick<IntakeStorage, 'getConfig'>;
   /** The browser Start's coordinator; absent until the Factory runtime is ready. */
@@ -382,7 +385,7 @@ export function createFactorySessionTools(
     const item = await findWorkItem(deps.workItems, scope, workItem);
     if (!item) throw workItemNotFound(workItem);
     const label = workItemLabel(item);
-    const board = deps.boards.get(boardForWorkItem(item));
+    const board = (await toBoardSource(deps.boards).load(scope)).get(boardForWorkItem(item));
     // Work's old `plan` role still names Planning, though no phase runs in a `plan` context any more.
     if (!workLaneForRole(board, role) && !board?.phaseForRole(role)) {
       throw new Error(`${label}'s board has no ${role} role.`);

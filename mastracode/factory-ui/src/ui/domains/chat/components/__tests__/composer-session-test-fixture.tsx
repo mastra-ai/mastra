@@ -258,9 +258,8 @@ function ThreadSurface() {
   return (
     <>
       <Link to="/away">go-away</Link>
-      <Transcript />
+      <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
       <TaskPanel />
-      <ActivityLine />
       <Composer />
     </>
   );

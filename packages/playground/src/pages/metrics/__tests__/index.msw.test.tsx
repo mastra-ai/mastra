@@ -172,7 +172,7 @@ describe('Metrics storage support', () => {
       await act(() => queryClient.invalidateQueries({ queryKey: ['observability-capabilities'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByRole('heading', { name: 'Agent runs' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Token usage' })).toBeTruthy();
       expect(onMetrics).toHaveBeenCalled();
     });
   });
@@ -209,28 +209,7 @@ describe('Metrics storage support', () => {
       expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
-      expect(screen.getByRole('heading', { name: 'Agent runs' })).toBeTruthy();
-    });
-  });
-
-  describe('when a KPI changed from the previous window', () => {
-    it.each([
-      ['/metrics', 'vs previous 24h'],
-      ['/metrics?period=7d', 'vs previous 7d'],
-      ['/metrics?period=custom&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-01-06T00:00:00Z', 'vs previous 5d'],
-      ['/metrics?period=custom&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-01-01T06:00:00Z', 'vs previous 6h'],
-    ])('names the previous window on %s', async (path, comparison) => {
-      observeRequests();
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
-        http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () =>
-          HttpResponse.json({ value: 120, previousValue: 100, changePercent: 20 }),
-        ),
-      );
-
-      renderPage(path);
-
-      expect((await screen.findAllByText(`+20% ${comparison} (100)`)).length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Token usage' })).toBeTruthy();
     });
   });
 
@@ -268,7 +247,7 @@ describe('Metrics storage support', () => {
       expect(await screen.findByText('Resources and threads')).toBeTruthy();
     });
 
-    it('folds Usage into Breakdown, with Models and Threads tabs', async () => {
+    it('folds Usage into Breakdown, with model and thread views', async () => {
       observeRequests();
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
@@ -278,9 +257,10 @@ describe('Metrics storage support', () => {
 
       renderPage('/metrics?period=7d');
 
-      expect(await screen.findByRole('tab', { name: 'Models' })).toBeTruthy();
-      expect(screen.getByRole('tab', { name: 'Threads' })).toBeTruthy();
-      expect(screen.queryByText('Usage')).toBeNull();
+      fireEvent.click(await screen.findByRole('button', { name: 'Breakdown by agent' }));
+      expect(await screen.findByRole('menuitemradio', { name: 'Breakdown by model' })).toBeTruthy();
+      expect(screen.getByRole('menuitemradio', { name: 'Breakdown by thread' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Usage/ })).toBeNull();
     });
 
     it('replaces Trace volume with Breakdown, whose rows open the traces an agent ran in, nested or not', async () => {
@@ -294,7 +274,8 @@ describe('Metrics storage support', () => {
       renderPage('/metrics?period=7d');
 
       fireEvent.click(await screen.findByTitle('Explore Subagent'));
-      expect(screen.queryByText('Trace volume')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Workflow runs' })).toBeNull();
+      expect(screen.getAllByRole('button', { name: 'Agent runs' })).toHaveLength(1);
       await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
       const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
       expect(JSON.parse(url.searchParams.get('filterGroup') ?? '{}')).toMatchObject({
@@ -329,7 +310,7 @@ describe('Metrics storage support', () => {
       renderPage('/metrics?period=7d');
 
       await screen.findAllByRole('button', { name: 'View in traces' });
-      expect(await screen.findByText('Usage')).toBeTruthy();
+      expect(await screen.findByRole('button', { name: 'Usage by agent' })).toBeTruthy();
     });
 
     it('keeps Trace volume and shows no Breakdown', async () => {
@@ -340,8 +321,12 @@ describe('Metrics storage support', () => {
 
       renderPage('/metrics?period=7d');
 
-      expect(await screen.findByText('Trace volume')).toBeTruthy();
-      expect(screen.queryByText('Breakdown')).toBeNull();
+      // Agent runs and Trace volume both open on agent runs; Trace volume's menu also offers tool calls.
+      const [, traceVolume] = await screen.findAllByRole('button', { name: 'Agent runs' });
+      if (!traceVolume) throw new Error('No Trace volume card');
+      fireEvent.click(traceVolume);
+      expect(await screen.findByRole('menuitemradio', { name: 'Tool calls' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Breakdown/ })).toBeNull();
     });
   });
 });

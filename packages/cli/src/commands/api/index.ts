@@ -610,6 +610,17 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'activity', FACTORY_API_ROUTE_CATALOG.workItemActivity, {
+    description: 'Report when Factory work items came in and shipped since a time, without the items',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Cards created and shipped since October 1',
+        command: `mastra api factory work-item activity <project-id> '{"since":"2026-10-01T00:00:00.000Z"}'`,
+      },
+    ],
+  });
   addAction(factoryWorkItem, 'sources', FACTORY_API_ROUTE_CATALOG.workItemSources, {
     description: 'List the external sources Factory work items were created from',
     routePlacement: 'origin',
@@ -676,6 +687,41 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
     description: 'List the boards installed on a Factory project with their phases and transitions',
     routePlacement: 'origin',
+  });
+
+  const factoryBoard = factory
+    .command('board')
+    .description("Manage a Factory project's boards; built-in and app boards are read-only");
+  addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
+    description: "Get a board's definition and, for a board the project stored, its revision",
+    routePlacement: 'origin',
+  });
+  addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
+    description: 'Create a board on a Factory project',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Create a board with a resting, a working and a terminal phase',
+        command: `mastra api factory board create <project-id> '{"key":"bugs","name":"Bugs","phases":[{"key":"reported","name":"Reported","kind":"resting"},{"key":"fixing","name":"Fixing","kind":"working","runner":{"context":"work"}},{"key":"fixed","name":"Fixed","kind":"terminal"}]}'`,
+      },
+    ],
+  });
+  addAction(factoryBoard, 'update', FACTORY_API_ROUTE_CATALOG.boardReplace, {
+    description: "Replace a stored board's definition using its expected revision",
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryBoard, 'delete', FACTORY_API_ROUTE_CATALOG.boardDelete, {
+    description: 'Delete a stored board that has no cards, using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Delete a board at revision 2',
+        command: `mastra api factory board delete <project-id> bugs '{"expectedRevision":2}'`,
+      },
+    ],
   });
 
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {

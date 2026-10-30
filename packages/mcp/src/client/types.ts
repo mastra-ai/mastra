@@ -407,6 +407,21 @@ export type BaseServerOptions = {
 };
 
 /**
+ * Written to a task-backed tool's output stream when its MCP task is created and whenever its
+ * status changes, so UIs (like Studio's tool-call card) can show the remote task while it runs.
+ *
+ * @experimental SEP-2663 extension; this API may change.
+ */
+export interface MCPTaskProgress {
+  type: 'mcp-task';
+  /** The MCP task id issued by the server (not the Mastra background-task id). */
+  taskId: string;
+  status: 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+  createdAt: string;
+  serverName: string;
+}
+
+/**
  * Options for consuming MCP tasks from one server.
  *
  * @experimental SEP-2663 extension; this API may change.

@@ -345,6 +345,8 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Disable persistence of rich scorer results. Default: true. */
+  disableScoreStorage?: boolean;
   /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
@@ -752,11 +754,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   }
 
-  // mastracode's scorers persist every result through the scores domain, but
-  // nothing reads scores back. Accept the writes and keep nothing, so they
-  // neither grow mastra.db nor the process heap.
-  const scoresStorage = new DiscardingScoresStorage();
-
   const storage = new MastraCompositeStore({
     id: 'mastra-code-storage',
     default: storageResult.storage,
@@ -764,7 +761,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // When local tracing is off, disable the observability domain entirely so
       // trace/score/feedback writes never fall through to the default libsql store.
       observability: observabilityDomain ?? false,
-      scores: scoresStorage,
+      // Rich scorer results can retain large prompts, messages, inputs, and outputs.
+      // Discard them by default; hosts may opt into persistence for Studio access.
+      ...((config?.disableScoreStorage ?? true) ? { scores: new DiscardingScoresStorage() } : {}),
     },
   });
 
@@ -2233,6 +2232,7 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    observability: base.observability,
     ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {

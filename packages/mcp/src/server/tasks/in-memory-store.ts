@@ -14,14 +14,27 @@ import type {
   MCPTaskInputResponses,
   MCPTaskStatus,
 } from '../../shared/tasks';
-import { MCPTaskLimitError } from './store';
+import {
+  MCPTaskLimitError,
+  decodeTaskListCursor,
+  isPastTaskListCursor,
+  matchesTaskListOptions,
+  nextTaskListCursor,
+  principalKeyOf,
+  toListing,
+} from './store';
 import type {
   MCPTaskAccess,
+  MCPTaskAdminOutcome,
   MCPTaskAttempt,
   MCPTaskAttemptOutcome,
   MCPTaskCreateParams,
+  MCPTaskListing,
+  MCPTaskListOptions,
+  MCPTaskListPage,
   MCPTaskRunOptions,
   MCPTaskStore,
+  MCPTaskStoreAdmin,
   MCPTaskTrace,
   MCPTaskWork,
 } from './store';
@@ -52,6 +65,13 @@ export interface InMemoryMCPTaskStoreOptions {
   expiredRetentionMs?: number;
   /** Clock, for tests. Default `Date.now`. */
   now?: () => number;
+  /**
+   * Called with a task's context when it is cancelled or expires before finishing, even while no
+   * attempt runs (e.g. while it waits for input). Stops whatever the task stands for outside the
+   * store, such as a suspended workflow run. Not awaited: the cancel answers and expiry goes on
+   * without waiting for it. Errors are ignored; report them from the hook.
+   */
+  onCancel?: (context: Record<string, unknown>) => void | Promise<void>;
 }
 
 interface PendingInput {
@@ -63,7 +83,9 @@ interface PendingInput {
 
 interface TaskRecord {
   taskId: string;
+  taskKey: string;
   principal: string;
+  clientLabel?: string;
   context?: Record<string, unknown>;
   trace?: MCPTaskTrace;
   /** Attempts started so far, for the attempt span. */
@@ -99,8 +121,10 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
  *
  * @experimental SEP-2663 extension; API may change.
  */
-export class InMemoryMCPTaskStore implements MCPTaskStore {
+export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
   readonly #tasks = new Map<string, TaskRecord>();
+  /** The same records, by task key. */
+  readonly #byKey = new Map<string, TaskRecord>();
   /** Open (non-terminal) tasks per principal, and in total. */
   readonly #openByPrincipal = new Map<string, number>();
   #open = 0;
@@ -108,13 +132,15 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
   readonly #retainedByPrincipal = new Map<string, number>();
   readonly #now: () => number;
   readonly #expiredRetentionMs: number;
+  readonly #onCancel: InMemoryMCPTaskStoreOptions['onCancel'];
 
   constructor(options: InMemoryMCPTaskStoreOptions = {}) {
     this.#now = options.now ?? Date.now;
     this.#expiredRetentionMs = options.expiredRetentionMs ?? DEFAULT_EXPIRED_RETENTION_MS;
+    this.#onCancel = options.onCancel;
   }
 
-  async create(params: MCPTaskCreateParams): Promise<MCPTask> {
+  async create(params: MCPTaskCreateParams, { clientLabel }: { clientLabel?: string } = {}): Promise<MCPTask> {
     assertNonNegativeInteger('ttlMs', params.ttlMs);
     assertNonNegativeInteger('pollIntervalMs', params.pollIntervalMs);
     const openForPrincipal = this.#openByPrincipal.get(params.principal) ?? 0;
@@ -131,9 +157,12 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
       }
     }
     const now = this.#now();
+    const taskId = createTaskId();
     const record: TaskRecord = {
-      taskId: createTaskId(),
+      taskId,
+      taskKey: taskKeyOf(taskId),
       principal: params.principal,
+      clientLabel,
       context: params.context,
       ...(params.trace && { trace: params.trace }),
       attempts: 0,
@@ -147,6 +176,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     };
     if (record.ttlMs !== null) this.#arm(record, now + record.ttlMs, () => this.#expire(record));
     this.#tasks.set(record.taskId, record);
+    this.#byKey.set(record.taskKey, record);
     this.#openByPrincipal.set(record.principal, openForPrincipal + 1);
     this.#open++;
     this.#retainedByPrincipal.set(record.principal, retainedForPrincipal + 1);
@@ -154,35 +184,87 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
   }
 
   async get(taskId: string, access: MCPTaskAccess): Promise<MCPDetailedTask | undefined> {
-    const record = this.#lookup(taskId, access);
+    const record = this.#lookup(taskKeyOf(taskId), access);
     return record && this.#detailed(record);
   }
 
   async update(taskId: string, inputResponses: MCPTaskInputResponses, access: MCPTaskAccess): Promise<boolean> {
-    const record = this.#lookup(taskId, access);
-    if (!record) return false;
+    return this.#update(taskKeyOf(taskId), inputResponses, access) !== 'not_found';
+  }
+
+  async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {
+    return this.#cancel(taskKeyOf(taskId), access) !== 'not_found';
+  }
+
+  async list(options: MCPTaskListOptions = {}): Promise<MCPTaskListPage> {
+    const limit = options.limit ?? 50;
+    const cursor = decodeTaskListCursor(options.cursor);
+    const matching: MCPTaskListing[] = [];
+    const now = this.#now();
+    for (const record of [...this.#tasks.values()].reverse()) {
+      // The purge timer may not have fired yet; a record past its retention is already gone.
+      if (record.purgeAt !== undefined && now >= record.purgeAt) {
+        this.#purge(record);
+        continue;
+      }
+      if (options.taskKey && record.taskKey !== options.taskKey) continue;
+      const listing = toListing(
+        record.taskKey,
+        principalKeyOf(record.principal),
+        record.context,
+        this.#detailed(record),
+        record.clientLabel,
+      );
+      if (!isPastTaskListCursor(listing, cursor) || !matchesTaskListOptions(listing, options)) continue;
+      matching.push(listing);
+      if (matching.length > limit) break;
+    }
+    const listings = matching.slice(0, limit);
+    return {
+      listings,
+      ...(matching.length > limit && { nextCursor: nextTaskListCursor(listings, cursor) }),
+    };
+  }
+
+  async updateByKey(taskKey: string, inputResponses: MCPTaskInputResponses): Promise<MCPTaskAdminOutcome> {
+    return this.#update(taskKey, inputResponses);
+  }
+
+  async cancelByKey(taskKey: string): Promise<MCPTaskAdminOutcome> {
+    return this.#cancel(taskKey);
+  }
+
+  #update(taskKey: string, inputResponses: MCPTaskInputResponses, access?: MCPTaskAccess): MCPTaskAdminOutcome {
+    const record = this.#lookup(taskKey, access);
+    if (!record) return 'not_found';
     const pending = record.pendingInput;
-    if (!pending) return true;
+    if (!pending) return 'ignored';
+    let accepted = false;
     for (const [key, response] of Object.entries(inputResponses)) {
-      if (Object.hasOwn(pending.requests, key) && !pending.responses.has(key)) pending.responses.set(key, response);
+      if (Object.hasOwn(pending.requests, key) && !pending.responses.has(key)) {
+        pending.responses.set(key, response);
+        accepted = true;
+      }
     }
     if (Object.keys(pending.requests).every(key => pending.responses.has(key))) {
       record.pendingInput = undefined;
       this.#transition(record, 'working');
       pending.resolve(Object.fromEntries(pending.responses));
     }
-    return true;
+    return accepted ? 'done' : 'ignored';
   }
 
-  async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {
-    const record = this.#lookup(taskId, access);
-    if (!record) return false;
-    if (!isTerminalTaskStatus(record.status)) this.#finish(record, 'cancelled', new Error('Task was cancelled'));
-    return true;
+  #cancel(taskKey: string, access?: MCPTaskAccess): MCPTaskAdminOutcome {
+    const record = this.#lookup(taskKey, access);
+    if (!record) return 'not_found';
+    if (isTerminalTaskStatus(record.status)) return 'ignored';
+    this.#finish(record, 'cancelled', new Error('Task was cancelled'));
+    this.#notifyCancel(record);
+    return 'done';
   }
 
   async traceOf(taskId: string, access: MCPTaskAccess): Promise<MCPTaskTrace | undefined> {
-    return this.#lookup(taskId, access)?.trace;
+    return this.#lookup(taskKeyOf(taskId), access)?.trace;
   }
 
   /** Whether this store holds the task, for any caller. */
@@ -336,14 +418,16 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
       if (!isTerminalTaskStatus(record.status)) this.#finish(record, 'cancelled', new Error('MCP task store closed'));
     }
     this.#tasks.clear();
+    this.#byKey.clear();
     this.#openByPrincipal.clear();
     this.#open = 0;
     this.#retainedByPrincipal.clear();
   }
 
-  #lookup(taskId: string, access: MCPTaskAccess): TaskRecord | undefined {
-    const record = this.#tasks.get(taskId);
-    if (!record || record.principal !== access.principal) return undefined;
+  /** Without `access`, any principal's task (admin). */
+  #lookup(taskKey: string, access?: MCPTaskAccess): TaskRecord | undefined {
+    const record = this.#byKey.get(taskKey);
+    if (!record || (access && record.principal !== access.principal)) return undefined;
     if (record.purgeAt !== undefined && this.#now() >= record.purgeAt) {
       this.#purge(record);
       return undefined;
@@ -356,6 +440,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     if (this.#tasks.get(record.taskId) !== record) return;
     clearTimeout(record.expiryTimer);
     this.#tasks.delete(record.taskId);
+    this.#byKey.delete(record.taskKey);
     const retained = this.#retainedByPrincipal.get(record.principal)! - 1;
     if (retained === 0) this.#retainedByPrincipal.delete(record.principal);
     else this.#retainedByPrincipal.set(record.principal, retained);
@@ -375,9 +460,20 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     if (!isTerminalTaskStatus(record.status)) {
       record.error = { code: TASKS_ERROR_CODES.InternalError, message: 'Task expired before it finished' };
       this.#finish(record, 'failed', new Error('Task expired'));
+      this.#notifyCancel(record);
     }
     record.purgeAt = this.#now() + this.#expiredRetentionMs;
     this.#arm(record, record.purgeAt, () => this.#purge(record));
+  }
+
+  /** Fire and forget: a slow hook must hold up neither the `tasks/cancel` ack nor expiry. */
+  #notifyCancel(record: TaskRecord): void {
+    const onCancel = this.#onCancel;
+    const context = record.context;
+    if (!onCancel || !context) return;
+    void Promise.resolve()
+      .then(() => onCancel(context))
+      .catch(() => {});
   }
 
   #transition(record: TaskRecord, status: MCPTaskStatus): void {

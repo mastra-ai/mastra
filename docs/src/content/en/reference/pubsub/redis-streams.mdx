@@ -125,9 +125,9 @@ const pubsub = new RedisStreamsPubSub({
     name: 'streamIdleTtlMs',
     type: 'number',
     description:
-      'Idle expiry in milliseconds: a sliding TTL refreshed on every write to a stream (publish, subscribe creating its consumer group, nack retry). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically, together with its entries and consumer groups. Only writes refresh the TTL — a consumer slowly draining a backlog does not — so keep it well above the longest expected gap between writes on a live topic, and above the longest a grouped worker may be offline while still expecting to replay its backlog on restart. For topics with a clear end of life (workflow and agent runs), `clearTopic` deletes the stream eagerly and the TTL only covers streams that never reach that call, such as a crashed run. For open-ended topics that are never cleared (for example, per-conversation streams), the TTL is the only mechanism that reclaims their memory — with it disabled they stay in Redis forever, so production deployments should set it (for example, 7 days). Must be a non-negative integer. Defaults to 0 (disabled).',
+      'Idle expiry in milliseconds: a sliding TTL refreshed on every write to a stream (publish, subscribe creating its consumer group, nack retry). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically, together with its entries and consumer groups. Only writes refresh the TTL — a consumer slowly draining a backlog does not — so keep it well above the longest expected gap between writes on a live topic, and above the longest a grouped worker may be offline while still expecting to replay its backlog on restart. For topics with a clear end of life (workflow and agent runs), `clearTopic` deletes the stream eagerly and the TTL only covers streams that never reach that call, such as a crashed run. For open-ended topics that are never cleared (for example, per-conversation streams), the TTL is the only mechanism that reclaims their memory. Set to 0 to disable expiry; streams that never reach `clearTopic` then stay in Redis forever. Must be a non-negative integer.',
     isOptional: true,
-    defaultValue: '0',
+    defaultValue: '604800000 (7 days)',
   },
   {
     name: 'reclaimIntervalMs',
@@ -222,7 +222,7 @@ Deletes a topic's stream and every consumer group on it, freeing the memory a fi
 
 Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
 
-Not every topic reaches a `clearTopic` call. Topics without a defined end of life (per-conversation streams, application feeds) are never cleared, and a stream that misses its cleanup (for example, a crashed run) is never retried. Configure the `streamIdleTtlMs` sliding TTL to reclaim those streams once they go idle.
+Not every topic reaches a `clearTopic` call. Topics without a defined end of life (per-conversation streams, application feeds) are never cleared, and a stream that misses its cleanup (for example, a crashed run) is never retried. The `streamIdleTtlMs` sliding TTL (7 days by default) reclaims those streams once they go idle. Deleting a thread with `Memory.deleteThread()` also clears that thread's stream.
 
 ```typescript
 await pubsub.clearTopic('workflow.events.run-123')
@@ -243,6 +243,49 @@ Closes the Redis connections and stops all subscriptions. Call this during grace
 ```typescript
 await pubsub.close()
 ```
+
+## Redis configuration
+
+Set `maxmemory-policy` to `noeviction` on the Redis instance. Consumer groups, unacknowledged entries, and [lease keys](#distributed-leasing) are live state, not cache. Under any evicting policy, Redis deletes them when it reaches `maxmemory`: lease keys and streams with a TTL are eviction candidates under `volatile-*` policies, and every key is a candidate under `allkeys-*` policies. Lost leases let two processes run the same thread, and evicted streams silently drop events.
+
+With `noeviction`, Redis rejects writes instead of deleting data when memory runs out, so size `maxmemory` for your traffic and rely on `streamIdleTtlMs` to reclaim idle streams. Managed services often default to an evicting policy (Amazon ElastiCache defaults to `volatile-lru`), so check the setting explicitly.
+
+When `maxmemory` is set and the policy isn't `noeviction`, `RedisStreamsPubSub` logs a warning once after it first connects. It reads the policy with `INFO memory`, because many managed services block `CONFIG GET`.
+
+```bash
+redis-server --maxmemory-policy noeviction
+```
+
+### Reclaim streams created without a TTL
+
+Streams written while `streamIdleTtlMs` was `0`, including by versions before the 7-day default, have no TTL. They stay in Redis until a new write gives them one. To reclaim them:
+
+1. Switch the instance to `noeviction` first. Under a `volatile-*` policy, adding a TTL makes a live stream an eviction candidate.
+1. Deploy every process that writes to this Redis with a version that defaults the TTL, or with an explicit `streamIdleTtlMs` greater than `0`. A write with expiry turned off doesn't refresh an existing TTL, so a stream that an old writer still uses would expire mid-use.
+1. Give every stream without a TTL the expiry it would have had: 7 days after its last write. Streams idle for longer than that expire immediately, which frees memory right away. `PEXPIRE` runs even on an instance that's rejecting writes because it's out of memory.
+
+```bash
+# Replace mastra:topic with your keyPrefix, and add your connection flags
+# (-h, -p, -a, --tls) to every redis-cli call. On a cluster, run it against each primary.
+TTL_MS=604800000
+NOW_MS=$(redis-cli time | awk 'NR == 1 { s = $1 } NR == 2 { printf "%.0f", s * 1000 + $1 / 1000 }')
+redis-cli --scan --pattern 'mastra:topic:*' | while read -r key; do
+  [ "$(redis-cli type "$key")" = "stream" ] || continue
+  [ "$(redis-cli pttl "$key")" = "-1" ] || continue
+  last_ms=$(redis-cli --raw xinfo stream "$key" | awk 'prev == "last-generated-id" { split($0, id, "-"); print id[1]; exit } { prev = $0 }')
+  [ -n "$last_ms" ] || continue
+  if [ "$last_ms" = "0" ]; then
+    remaining=$TTL_MS # never written to, only subscribed
+  else
+    remaining=$(( TTL_MS - (NOW_MS - last_ms) ))
+    [ "$remaining" -lt 1 ] && remaining=1
+    [ "$remaining" -gt "$TTL_MS" ] && remaining=$TTL_MS
+  fi
+  redis-cli pexpire "$key" "$remaining" > /dev/null
+done
+```
+
+The loop only touches streams without a TTL, so it's safe to run repeatedly. After step 2, a stream that's still in use keeps its data, because every write refreshes the TTL.
 
 ## Redelivery and reclaim
 

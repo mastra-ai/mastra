@@ -65,6 +65,7 @@ export interface TraceSpanPanelProps {
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
+  rootStreamingTimings?: TraceDataPanelViewProps['rootStreamingTimings'];
   traceHref?: string;
   /** Drawer width; defaults to `wide`. */
   size?: TraceDataPanelViewProps['size'];
@@ -118,6 +119,7 @@ export function TraceSpanPanel({
   scoresTabBadge,
   scoresTabSlot,
   usage,
+  rootStreamingTimings,
   traceHref,
   size,
   depth,
@@ -162,6 +164,7 @@ export function TraceSpanPanel({
         entityType={entityType}
         entityHref={entityHref}
         usage={usage}
+        rootStreamingTimings={rootStreamingTimings}
         isLoading={isLoadingSpans}
         onClose={onClose}
         onSpanSelect={onSpanSelect}
