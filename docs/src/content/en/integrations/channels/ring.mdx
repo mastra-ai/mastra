@@ -1,0 +1,312 @@
+---
+title: 'Ring | Channels'
+description: 'Send Ring doorbell and camera events to Mastra agents as notification signals with @mastra/ring-signals, and fetch snapshots and video clips with agent tools.'
+packages:
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
+  - '@mastra/ring-signals'
+---
+
+# Ring
+
+Ring signals let a Mastra agent receive doorbell presses, motion, and other events from Ring doorbells and cameras. Each event arrives in an agent thread as a [notification signal](/docs/signals/notifications), and the agent can fetch a snapshot or video clip to see who is at the door.
+
+Events and media come from the [Ring Partner API](https://developer.amazon.com/docs/ring/api-documentation.html). The API doesn't expose lights, sirens, locks, or two-way talk.
+
+## Installation
+
+Install the required packages:
+
+```bash npm2yarn
+npm install @mastra/ring-signals @mastra/libsql @mastra/memory
+```
+
+## Prerequisites
+
+Ring Signals requires:
+
+- A Ring device on a paid Ring plan that includes **Person, Package & Vehicle Alerts**, so motion events report what was detected.
+- A developer app in the [Ring Developer Console](https://developer.amazon.com/ring/console/apps), created as a **Private App** with the **Cameras and Doorbells** scope. Save the **Client ID**, **Client Secret**, and **HMAC Signature Key**.
+- A Mastra storage adapter with channels and notifications support. Linked Ring accounts are saved in the channels store, and notification signals use the notifications store.
+- A public HTTPS URL for your Mastra server. Ring calls your server to link accounts and deliver events. For local development, use a tunnel, for example `npx cloudflared tunnel --url http://localhost:4111`.
+
+Add the developer app's credentials to your environment:
+
+```bash title=".env"
+RING_CLIENT_ID=your-client-id
+RING_CLIENT_SECRET=your-client-secret
+RING_HMAC_KEY=your-hmac-signature-key
+MASTRA_ENCRYPTION_KEY=a-long-random-string
+RING_BASE_URL=http://localhost:4111
+```
+
+`MASTRA_ENCRYPTION_KEY` encrypts the stored Ring tokens. Without it, tokens are stored unencrypted and a warning is logged. `RING_BASE_URL` is optional. It's your Mastra server address for snapshot and clip links, explained in [Media links](#media-links).
+
+## Agent configuration
+
+Add `new RingSignals()` to the agent's `signals` array:
+
+```typescript title="src/mastra/agents/home-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { RingSignals } from '@mastra/ring-signals'
+
+export const homeAgent = new Agent({
+  id: 'home-agent',
+  name: 'Home Agent',
+  instructions: 'Watch the front door and say briefly whether each event needs attention.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  signals: [new RingSignals()],
+})
+```
+
+`RING_CLIENT_ID`, `RING_CLIENT_SECRET`, `RING_HMAC_KEY`, and `RING_BASE_URL` are read from the environment by default. To override them, pass `clientId`, `clientSecret`, `hmacKey`, and `baseUrl` in the config. See the [RingSignals reference](/reference/signals/ring-signals) for every option and its default.
+
+Register the agent and a storage adapter on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { homeAgent } from './agents/home-agent'
+
+export const mastra = new Mastra({
+  agents: { homeAgent },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+})
+```
+
+## Account linking
+
+Linking connects a Ring account to your agent. Set it up in two places, in this order:
+
+1. The [Ring Developer Console](https://developer.amazon.com/ring/console/apps) on Amazon's developer site, where you configure your developer app.
+1. [ring.com](https://ring.com), where you link the developer app to the Ring account that owns the device.
+
+### Ring Developer Console
+
+The routes Ring needs are added automatically to your Mastra server under `/ring`:
+
+| Ring setting | Route | What Ring uses it for |
+| - | - | - |
+| Account Link URL | `GET <server URL>/ring/link` | Finishes linking and shows the result |
+| Token Exchange URL | `POST <server URL>/ring/token` | Exchanges an authorization code for tokens |
+| Webhook URL | `POST <server URL>/ring/webhook` | Sends doorbell, motion, and other events |
+| App Homepage URL | `GET <server URL>/ring/home` | Links to your app from its Ring Appstore page |
+
+Ring calls these routes without Mastra authentication. Webhooks are verified with Ring's signature, and account links with Ring's link nonce.
+
+1. Open your developer app's **Account linking** settings and enter the four URLs from the table.
+1. Under **Connect**, select **Connect Ring account** and sign in with the Ring account that owns the device. Private developer apps are only available to accounts you connect here.
+
+### ring.com
+
+1. Sign in to your Ring account on the web.
+1. Open your developer app's page in the Ring Appstore, at `https://ring.com/appstore/<your-app>`.
+1. Link the app. The page shows `Ring account linked` when it's done.
+
+Linked apps are listed under [Integrations](https://account.ring.com/account/integrations) in the Ring account, where you can pause or remove them.
+
+### After linking
+
+The account's tokens are saved in the channels store and refreshed before they expire. Removing the developer app from **Integrations** in the Ring account sends an `app_integration_removed` event, which deletes that account's tokens.
+
+You can link several Ring accounts to one agent. Ring allows up to 10 accounts on a private developer app. Each device is matched to the account that owns it.
+
+### Test the integration
+
+Press the doorbell button. A `button_press` notification arrives in the device's thread, and the agent responds to it. Open the agent in Studio to see the thread. Its thread ID is the device ID.
+
+## Events and priorities
+
+Ring events arrive as notification signals. `button_press` (`high` priority) and `motion_detected` (`medium` priority) are enabled by default. See the [RingSignals reference](/reference/signals/ring-signals#events) for every event type and its defaults.
+
+Use the `events` option to change a default, enable an event, or set an event to `false` to disable it:
+
+```typescript
+new RingSignals({
+  events: {
+    motion_detected: {
+      priority: 'medium',
+      summary: 'Motion was detected at the front door.',
+      attributes: event => ({ ...event.data.attributes, location: 'front door' }),
+    },
+    device_offline: { priority: 'low', summary: 'Device went offline.', coalesce: true },
+  },
+})
+```
+
+The agent sees each notification's `deviceId`, `timestamp`, and `motionType` attributes. Use `attributes` to add your own, for example the device's location.
+
+`coalesce` merges repeats of an event into one pending notification, so a [delivery policy](/docs/signals/notifications) can act on how many arrived. By default, low-priority notifications are batched into a summary.
+
+## Thread routing
+
+By default, each Ring device gets its own thread. The `threadId` is the device ID, and the `resourceId` is the agent ID.
+
+You can provide custom values for both by setting `target.resourceId` and `target.threadId` manually:
+
+```typescript
+new RingSignals({
+  target: { resourceId: 'home', threadId: 'ring-alerts' },
+})
+```
+
+To pick the thread per event, set `target` to a function. The function receives the webhook payload Ring sent for the event and returns the target for that event. The payload includes:
+
+- `event.data.type`: The event type, from [Events and priorities](#events-and-priorities).
+- `event.data.attributes.source`: For device events, the ID of the device that sent the event. For app integration events, the account ID. For subscription events, `subscriptions`.
+- `event.data.attributes.timestamp`: For device events, when the event happened, in epoch milliseconds. Subscription events don't have it.
+- `event.data.attributes.sub_type`: For motion events, what caused the motion: `human`, `vehicle`, `package_delivery`, `other_motion`, or `motion` when Smart Alerts are off. For subscription events, `paid` or `trial`.
+- `event.meta.account_id`: The ID of the Ring account the device belongs to.
+
+This example gives each kind of activity its own thread. Motion caused by a person goes to `ring-human`, vehicles go to `ring-vehicle`, etc. Doorbell presses have no `sub_type`, so they go to `ring-doorbell`:
+
+```typescript
+new RingSignals({
+  target: event => {
+    const activity = event.data.attributes.sub_type ?? 'doorbell'
+    return { resourceId: 'home', threadId: `ring-${activity}` }
+  },
+})
+```
+
+Return `undefined` to drop the event. The function can be `async`. The [RingSignals reference](/reference/signals/ring-signals#ringwebhookevent) documents the full payload type, `RingWebhookEvent`.
+
+## Snapshot and clip tools
+
+The agent gets two tools:
+
+- `ring_snapshot`: Fetches a still image for an event and passes it to the model, so the agent can describe what it sees. If Ring has no image right after the event, it uses the most recent image before it.
+- `ring_clip`: Fetches a video clip that starts at the event. Ring needs time to process a recording, so the tool retries until the clip is ready. By default, the model doesn't receive the video. See [Let the model see media](#let-the-model-see-media).
+
+### Let the model see media
+
+`visibleToModel` controls whether a tool passes the media itself to the model. It defaults to `true` for `ring_snapshot` and `false` for `ring_clip`, because most models accept images but few accept video. Turn it on for clips when the agent uses a model that accepts video, for example `__GATEWAY_GOOGLE_MODEL_FLASH__`:
+
+```typescript
+new RingSignals({
+  tools: {
+    clip: { visibleToModel: true },
+  },
+})
+```
+
+When `visibleToModel` is `false`, the model gets only the tool's text result and link, and can't describe what the media shows.
+
+:::note
+
+Check that your model supports video input before you turn on `visibleToModel` for clips. Gemini models accept video input. Anthropic and OpenAI models don't. Anthropic drops the video with a warning, and other model APIs may reject the request.
+
+Video input counts toward the model's context window for every second of footage. A clip at the default 15 seconds uses a few thousand tokens. A clip at the maximum `durationMs` of 15 minutes can use hundreds of thousands, so keep `durationMs` short when the model watches clips. The video isn't saved in memory, so it only uses context on the step that fetched it.
+
+:::
+
+### Media links
+
+Ring doesn't give out shareable links to its media. Downloading a snapshot or clip needs the Ring account's tokens, so a browser or chat app can't fetch it from Ring directly. When you set `baseUrl`, the tools return a signed link to your own server instead, under `<baseUrl>/ring/media/`. Opening the link makes your server fetch the media from Ring and pass it on. Nothing is stored; recent media is cached in memory for a few minutes.
+
+Set `RING_BASE_URL` to your Mastra server's URL. Use `http://localhost:4111` or a tunnel URL in development, and your deployed URL in production.
+
+Without `RING_BASE_URL` or `baseUrl`, the tools return no links. The agent still sees each snapshot, and chat channels still receive attachments, but apps have no link to display.
+
+### Attach media in chat channels
+
+When the agent also uses a [channel](/docs/channels), for example iMessage or Slack, users can't see tool results in the chat. The tools send the snapshot and clip as file attachments on channel threads instead, so they arrive in the conversation. Studio, web, and API threads don't get attachments, because they read the media from the tool result.
+
+Attachments work on every channel by default, with no configuration. To change that, set these options on each tool:
+
+- `attachment`: `false` turns attachments off. A list of platform names, for example `['imessage', 'slack']`, attaches only on those platforms.
+- `maxAttachmentBytes`: The largest file to attach. Larger files aren't attached.
+
+This example attaches snapshots only in iMessage and Slack, and sets a 10 MB limit for clips in Discord:
+
+```typescript
+new RingSignals({
+  tools: {
+    snapshot: { attachment: ['imessage', 'slack'] },
+    clip: { maxAttachmentBytes: { discord: 10_000_000 } },
+  },
+})
+```
+
+A platform name is the key you gave the adapter in the agent's `channels.adapters` configuration. In this agent, the platform names are `imessage` and `slack`:
+
+```typescript oxfmt:false
+channels: {
+  adapters: {
+    imessage: { adapter: createiMessageAdapter() },
+    slack: { adapter: createSlackAdapter() },
+  },
+},
+```
+
+When media isn't attached on a channel thread, because the platform isn't listed or the file is over the limit, the tool asks the agent to share the link in its reply instead. This needs `baseUrl`, because without it there's no link. Attached files aren't saved in memory.
+
+### Send Ring alerts to a chat
+
+To get Ring alerts in a chat, the channel and Ring need to use the same thread. Give your channel thread a fixed ID with `resolveResourceId` and `resolveThreadId`, and set `target` to the same values. Before you send the first message, set `HOME_OWNER_USER_ID` in `.env` to your user ID on the channel platform (`message.author.userId`). Only your direct messages get the Ring thread. Group conversations and other senders keep their own threads and don't see Ring alerts or media:
+
+```typescript title="src/mastra/agents/home-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { RingSignals } from '@mastra/ring-signals'
+import { createiMessageAdapter } from '@photon-ai/chat-adapter-imessage'
+
+const resourceId = 'home'
+const threadId = 'ring-alerts'
+// Your user ID on the channel platform
+const ownerUserId = process.env.HOME_OWNER_USER_ID
+if (!ownerUserId) {
+  throw new Error('Set HOME_OWNER_USER_ID to your user ID on the channel platform')
+}
+
+export const homeAgent = new Agent({
+  id: 'home-agent',
+  name: 'Home Agent',
+  instructions: 'Watch the front door and say briefly whether each event needs attention.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  channels: {
+    resolveResourceId: ({ thread, message, defaultResourceId }) =>
+      thread.isDM && message.author.userId === ownerUserId ? resourceId : defaultResourceId,
+    resolveThreadId: ctx => (ctx.resourceId === resourceId ? threadId : ctx.defaultThreadId),
+    adapters: {
+      imessage: { adapter: createiMessageAdapter() },
+    },
+  },
+  signals: [
+    new RingSignals({
+      target: { resourceId, threadId },
+    }),
+  ],
+})
+```
+
+The channel creates the `ring-alerts` thread on the first message, and Ring events then go to that same thread. If a Ring event arrives first, Ring creates the thread instead, and the channel can't take over a thread that already exists, so it starts a new one.
+
+:::warning
+
+Send the agent a message from a channel before the first Ring event arrives. Use a new conversation: the resolvers only run when a thread is created, so a conversation you started before adding them keeps its existing thread.
+
+Anyone who can message the agent on a channel can ask it to use the Ring tools. Limit who can reach the agent on that platform.
+
+:::
+
+## Limitations
+
+- Ring expects a webhook response within five seconds. On platforms that sleep idle servers, the first event after a sleep can arrive late.
+- Devices with end-to-end encryption aren't available to the Ring Partner API.
+- Ring adds a watermark to every snapshot and clip.
+- Snapshots and clips are only available for events after the account was linked.
+- Studio shows the snapshot from the tool result but doesn't play clips. Open the clip URL from the tool result instead.
+
+## Related
+
+- [RingSignals reference](/reference/signals/ring-signals)
+- [Signals](/docs/signals/overview)
+- [Notifications](/reference/signals/notifications)
