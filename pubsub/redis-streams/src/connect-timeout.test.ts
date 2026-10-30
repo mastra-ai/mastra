@@ -32,7 +32,7 @@ describe('RedisStreamsPubSub connect timeout', () => {
   let pubsub: RedisStreamsPubSub | undefined;
   let keyPrefix: string;
 
-  async function createPubSub() {
+  async function createPubSub(name?: string) {
     const upstream = new URL(REDIS_URL);
     proxy = makeStallingProxy({ host: upstream.hostname, port: Number(upstream.port) || 6379 });
     const port = await proxy.listening;
@@ -41,7 +41,7 @@ describe('RedisStreamsPubSub connect timeout', () => {
       url: `redis://127.0.0.1:${port}`,
       keyPrefix,
       blockMs: 200,
-      redisOptions: { socket: { connectTimeout: CONNECT_TIMEOUT_MS } },
+      redisOptions: { name, socket: { connectTimeout: CONNECT_TIMEOUT_MS } },
     });
     return pubsub;
   }
@@ -135,6 +135,31 @@ describe('RedisStreamsPubSub connect timeout', () => {
       process.off('uncaughtException', onUncaught);
     }
     expect(uncaught).toEqual([]);
+  }, 15_000);
+
+  it('leaves no connection behind when a retried connect also times out', async () => {
+    const name = `connect-timeout-retry-leak-${randomUUID()}`;
+    const ps = await createPubSub(name);
+    proxy.stall();
+
+    // The retry starts while the first connect's loop is still unwinding.
+    for (let i = 0; i < 2; i++) {
+      expect(await settle(ps.publish('topic', { type: 'test', data: {}, runId: 'r' }), 5_000)).toMatchObject({
+        status: 'rejected',
+      });
+    }
+    await ps.close();
+    // Redis answers late, as after SIGCONT.
+    await proxy.resume({ newestFirst: true, gapMs: 300 });
+    await new Promise(r => setTimeout(r, 1_000));
+
+    const direct = createClient({ url: REDIS_URL });
+    await direct.connect();
+    try {
+      expect((await direct.clientList()).filter(c => c.name === name)).toEqual([]);
+    } finally {
+      await direct.close();
+    }
   }, 15_000);
 
   it('rejects subscribeToThread() instead of hanging when the server is frozen', async () => {

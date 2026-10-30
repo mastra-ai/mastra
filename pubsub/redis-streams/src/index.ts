@@ -97,7 +97,11 @@ function compareStreamIds(a: string, b: string): number {
  */
 const abandonedConnects = new WeakMap<object, Promise<void>>();
 
-async function connectWithin(client: RedisClientType, role: 'write' | 'read'): Promise<void> {
+async function connectWithin(
+  client: RedisClientType,
+  role: 'write' | 'read',
+  isReleased: () => boolean = () => false,
+): Promise<void> {
   const cluster = client as unknown as Partial<Pick<RedisClusterType, '_options'>>;
   const socket = cluster._options ? cluster._options.defaults?.socket : client.options?.socket;
   const timeoutMs = socket?.connectTimeout ?? 5000;
@@ -132,7 +136,11 @@ async function connectWithin(client: RedisClientType, role: 'write' | 'read'): P
   });
   try {
     const abandoned = abandonedConnects.get(client);
-    if (abandoned) await Promise.race([abandoned, timedOut]);
+    if (abandoned) {
+      await Promise.race([abandoned, timedOut]);
+      // close() may have released the client while this call waited.
+      if (isReleased()) throw new Error(`redis-streams: ${role} client closed while connecting`);
+    }
     connecting = client.connect();
     await Promise.race([connecting, timedOut]);
   } finally {
@@ -330,6 +338,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Map<EventCallback, Set<ReturnType<typeof setTimeout>>>> = new Map();
   #closed = false;
+  /** Set once close() has drained publishes and is about to release the writer. */
+  #writerReleased = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
     super();
@@ -456,7 +466,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // second connect().
     if (!this.#writerConnecting && this.#writeClient.isOpen) return;
     if (!this.#writerConnecting) {
-      this.#writerConnecting = connectWithin(this.#writeClient, 'write').finally(() => {
+      this.#writerConnecting = connectWithin(this.#writeClient, 'write', () => this.#writerReleased).finally(() => {
         // Clear so a failed initial connect can be retried on the next call.
         this.#writerConnecting = undefined;
       });
@@ -1217,6 +1227,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // the caller with a ClosingError.
     await this.flush();
 
+    this.#writerReleased = true;
     if (this.#writeClient.isOpen) {
       try {
         await disconnect(this.#writeClient);

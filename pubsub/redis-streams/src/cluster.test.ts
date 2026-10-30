@@ -267,5 +267,47 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
       await ps.publish(topic, makeEvent());
       await waitFor(() => received === 1);
     }, 15_000);
+
+    it('leaves no node connections behind when a retried connect also times out and the first answers last', async () => {
+      const name = `connect-timeout-retry-leak-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+      // Both abandoned connects are held at the root node. Answer the retry
+      // first, so the original connect is the last to open node clients.
+      const [root, ...rest] = proxies;
+      for (const p of rest) void p.resume();
+      await root!.resume({ newestFirst: true, gapMs: 300 });
+      await new Promise(r => setTimeout(r, 1_000));
+      await ps.close();
+
+      expect(await clientsNamed(nodes, name)).toEqual(nodes.map(() => 0));
+    }, 15_000);
+
+    it('does not connect after close() when a retry was waiting on the timed-out connect', async () => {
+      const name = `connect-timeout-close-retry-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+      // The retry waits for the abandoned discovery, which waits on the frozen nodes.
+      // close() does not wait for a lease call, unlike a pending publish.
+      const retry = settle(ps.acquireLease(`lease-${randomUUID()}`, 'owner', 5_000));
+      await ps.close();
+      for (const p of proxies) void p.resume();
+      await retry;
+      await new Promise(r => setTimeout(r, 1_000));
+
+      const leftover: number[] = [];
+      for (const address of nodes) {
+        const node = createClient({ url: `redis://${address}` });
+        await node.connect();
+        leftover.push((await node.clientList()).filter(c => c.name === name).length);
+        await node.close();
+      }
+      expect(leftover).toEqual(nodes.map(() => 0));
+    }, 15_000);
   });
 });

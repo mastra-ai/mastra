@@ -205,10 +205,19 @@ export function makeStallingProxy(target: { host: string; port: number }) {
   return {
     listening,
     stall: () => void (stalled = true),
-    resume() {
+    /**
+     * Forward every held connection. `newestFirst` with `gapMs` answers them
+     * in reverse arrival order, so an earlier connect settles after a later one.
+     */
+    async resume({ newestFirst = false, gapMs = 0 } = {}) {
       stalled = false;
-      for (const client of held) forward(client);
+      const pending = [...held];
       held.clear();
+      if (newestFirst) pending.reverse();
+      for (const [i, client] of pending.entries()) {
+        if (i > 0 && gapMs) await new Promise(r => setTimeout(r, gapMs));
+        forward(client);
+      }
     },
     close() {
       for (const s of sockets) s.destroy();
