@@ -50,7 +50,7 @@ import { z } from 'zod';
 
 import { RESUME_CLAIM_DISPATCH_LEASE_MS } from '../durable-event-payload';
 import { init } from '../index';
-import { agentLoopTermination, generationUsage } from '../observability-compat';
+import { agentLoopTermination, executionFailureTermination, generationUsage } from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
@@ -660,13 +660,15 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             messageId: state.messageId,
             stepResult: tripwire
               ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
-              : state.runAborted
-                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
-                : state.lastStepResult || {
-                    reason: 'stop',
-                    warnings: [],
-                    isContinued: false,
-                  },
+              : deadlineError
+                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'error' as const, isContinued: false }
+                : state.runAborted
+                  ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
+                  : state.lastStepResult || {
+                      reason: 'stop',
+                      warnings: [],
+                      isContinued: false,
+                    },
             output: {
               text: finalText,
               usage: state.accumulatedUsage,
@@ -683,6 +685,10 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           const observability = mastra?.observability?.getSelectedInstance({});
           // Resumed segments carry their own clocks beside their fresh spans.
           const registry = getRunRegistryEntry(state.runId, mastra);
+          // A tripwire keeps its own classification; otherwise a deadline-stopped run ends its spans as
+          // the timeout failure rather than a normal loop finish.
+          const deadlineTermination =
+            deadlineError && !tripwire ? executionFailureTermination(deadlineError) : undefined;
           const completionClock = registry?.resumeModelSpanData
             ? registry.resumeCompletionStartTime
             : state.completionStartTime;
@@ -705,8 +711,9 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 `[InngestDurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
               );
           }
-          const termination =
-            ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+          const termination = deadlineTermination
+            ? deadlineTermination
+            : ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
               ? recordedTermination
               : agentLoopTermination({
                   stopCause,
