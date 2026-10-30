@@ -15,7 +15,6 @@ import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
 import { ChunkFrom } from '../../../stream/types';
-import type { StepFinishPayload } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
 import { markNonRedeliverable } from '../../../workflows/evented/helpers';
@@ -556,7 +555,6 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         .map(
           async ({ inputData }) => {
             const llmOutput = inputData as DurableLLMStepOutput;
-            const stepFinish = llmOutput.deferredStepFinishChunk as { payload?: StepFinishPayload } | undefined;
             return (llmOutput.toolCalls ?? []).map(toolCall => ({
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
@@ -564,7 +562,6 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
-              stepProviderMetadata: stepFinish?.payload?.metadata?.providerMetadata,
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
