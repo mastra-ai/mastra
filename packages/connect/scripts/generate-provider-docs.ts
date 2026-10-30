@@ -88,6 +88,12 @@ const LOGOS: Record<string, Logo> = {
   workos: { src: 'https://svgl.app/library/workos.svg' },
 };
 
+// Account or capability limits shown above a provider's tool table.
+const NOTES: Record<string, string> = {
+  'microsoft-excel':
+    'Workbook operations, such as worksheets, ranges, tables, charts, and named items, require a work or school account. Personal Microsoft accounts can find, create, list, get, and delete workbook files, but Microsoft Graph rejects workbook operations on personal OneDrive.',
+};
+
 function logoJsx(provider: string): string {
   const logo = LOGOS[provider];
   if (!logo) return '';
@@ -146,6 +152,7 @@ for (const provider of providers) {
   tocRows.push(`| ${logoJsx(provider)}[${name}](#${slug}) | \`${provider}\` | ${tools.length} |`);
   out += `\n## ${name}\n\n`;
   out += `Provider ID: \`${provider}\` · ${tools.length} tools\n\n`;
+  if (NOTES[provider]) out += `:::note\n\n${NOTES[provider]}\n\n:::\n\n`;
   out += `| Tool | Description |\n| - | - |\n`;
   for (const t of tools) {
     out += `| \`${t.id}\` | ${t.desc || '—'} |\n`;

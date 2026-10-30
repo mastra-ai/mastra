@@ -157,15 +157,20 @@ export function currentTemplateSha(): string {
   return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkoutRoot, encoding: 'utf8' }).trim();
 }
 
-export function templateProviderDir(providerId: string): string | undefined {
+/**
+ * Resolves a path inside the template checkout, following symlinks. Returns
+ * `undefined` when it does not exist or resolves outside the checkout, since
+ * template content is untrusted.
+ */
+export function templatePath(...segments: string[]): string | undefined {
   if (!existsSync(templatesDir)) return undefined;
 
   try {
     const templateRoot = realpathSync(templatesDir);
-    const providerDir = realpathSync(resolve(templatesDir, providerId));
-    const relativePath = relative(templateRoot, providerDir);
+    const target = realpathSync(resolve(templatesDir, ...segments));
+    const relativePath = relative(templateRoot, target);
     if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) return undefined;
-    return providerDir;
+    return target;
   } catch {
     return undefined;
   }
@@ -174,11 +179,9 @@ export function templateProviderDir(providerId: string): string | undefined {
 export function templateProviderIds(): string[] {
   if (!existsSync(templatesDir)) return [];
   return readdirSync(templatesDir, { withFileTypes: true })
-    .filter(entry => {
-      if (!entry.isDirectory() && !entry.isSymbolicLink()) return false;
-      const providerDir = templateProviderDir(entry.name);
-      return providerDir !== undefined && existsSync(resolve(providerDir, 'actions'));
-    })
+    .filter(
+      entry => (entry.isDirectory() || entry.isSymbolicLink()) && templatePath(entry.name, 'actions') !== undefined,
+    )
     .map(entry => entry.name)
     .sort();
 }

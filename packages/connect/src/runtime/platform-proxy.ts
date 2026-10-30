@@ -364,14 +364,18 @@ async function* paginateRequests<T>(
 
     if (pageConfig.type === 'link') {
       const link = readPath(response.data, pageConfig.link_path_in_response_body);
-      if (typeof link !== 'string' || link === '' || seen.has(link)) return;
+      if (typeof link !== 'string' || link === '') return;
+      if (seen.has(link)) {
+        throw new MastraConnectError('proxy_error', 'Provider repeated a next-page link; the listing is incomplete.');
+      }
       seen.add(link);
       request = nextLinkRequest(base, link, linkOrigin);
       if (linkOrigin === undefined && !link.startsWith('/')) linkOrigin = new URL(link).origin;
     } else if (pageConfig.type === 'cursor') {
       const cursor = readPath(response.data, pageConfig.cursor_path_in_response_body);
-      if ((typeof cursor !== 'string' && typeof cursor !== 'number') || cursor === '' || seen.has(String(cursor))) {
-        return;
+      if ((typeof cursor !== 'string' && typeof cursor !== 'number') || cursor === '') return;
+      if (seen.has(String(cursor))) {
+        throw new MastraConnectError('proxy_error', 'Provider repeated a page cursor; the listing is incomplete.');
       }
       seen.add(String(cursor));
       request = { ...request, params: { ...request.params, [pageConfig.cursor_name_in_request]: cursor } };

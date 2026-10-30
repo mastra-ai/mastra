@@ -457,6 +457,11 @@ describe('maintainer provider commands', () => {
     mkdirSync(outsideActionDir, { recursive: true });
     writeFileSync(resolve(outsideActionDir, 'echo.ts'), actionTemplate);
     symlinkSync(resolve(packageRoot, 'outside-provider'), resolve(integrationsDir, 'outside-provider-alias'), 'dir');
+    mkdirSync(resolve(integrationsDir, 'outside-actions-provider'));
+    symlinkSync(outsideActionDir, resolve(integrationsDir, 'outside-actions-provider', 'actions'), 'dir');
+    const outsideFileActionDir = resolve(integrationsDir, 'outside-file-provider', 'actions');
+    mkdirSync(outsideFileActionDir, { recursive: true });
+    symlinkSync(resolve(outsideActionDir, 'echo.ts'), resolve(outsideFileActionDir, 'echo.ts'));
 
     const microsoftExcelActionDir = resolve(integrationsDir, 'microsoft-excel-oauth2-cc', 'actions');
     mkdirSync(microsoftExcelActionDir, { recursive: true });
@@ -755,6 +760,21 @@ export default action;
         expectedTemplateSha: templateSha,
       }),
     ).rejects.toThrow("Unknown template provider 'outside-provider-alias'");
+  });
+
+  it('rejects template action directories and files that resolve outside the template checkout', async () => {
+    expect(listProviders({ installedOnly: false, search: 'outside-actions-provider' })).toEqual([]);
+    await expect(
+      addProvider({
+        providerId: 'outside-file-provider',
+        localId: 'outside-file-provider',
+        yes: true,
+        expectedTemplateSha: templateSha,
+      }),
+    ).rejects.toThrow(
+      "Action template 'outside-file-provider/actions/echo.ts' resolves outside the template checkout.",
+    );
+    expect(existsSync(resolve(packageRoot, 'src/providers/outside-file-provider'))).toBe(false);
   });
 
   it('adapts shared Office templates for delegated OAuth without changing client-credentials providers', async () => {

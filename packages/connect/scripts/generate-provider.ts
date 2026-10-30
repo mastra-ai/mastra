@@ -16,7 +16,7 @@
  * local to the action module. File isolation prevents collisions without
  * producing names such as `getModelModelSchema`.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,7 +32,7 @@ import {
   providerDir,
   providerRegistrationName,
   providersDir,
-  templateProviderDir,
+  templatePath,
   validateProviderId,
 } from './provider-utils.js';
 import type { ProviderManifest } from './provider-utils.js';
@@ -926,9 +926,8 @@ export async function generateProvider({
   const pin = templatePinFor(providerId);
   const expectedSha = expectedTemplateSha ?? pin.sha;
 
-  const templateDir = templateProviderDir(providerId);
-  const actionDir = templateDir ? resolve(templateDir, 'actions') : undefined;
-  if (!actionDir || !existsSync(actionDir)) {
+  const actionDir = templatePath(providerId, 'actions');
+  if (!actionDir) {
     throw new Error(`Unknown provider '${providerId}'. No actions directory exists in the template checkout.`);
   }
 
@@ -947,10 +946,14 @@ export async function generateProvider({
     .filter(filename => filename.endsWith('.ts'))
     .sort()) {
     const actionSlug = filename.replace(/\.ts$/, '');
+    const file = templatePath(providerId, 'actions', filename);
+    if (!file) {
+      throw new Error(`Action template '${providerId}/actions/${filename}' resolves outside the template checkout.`);
+    }
     const candidate: ActionCandidate = {
       providerId,
       localId,
-      file: resolve(actionDir, filename),
+      file,
       actionSlug,
       toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
     };

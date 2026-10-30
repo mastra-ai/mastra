@@ -341,18 +341,40 @@ describe('platformProxy.paginate', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('stops when the provider repeats a next-link', async () => {
+  it('rejects when the provider repeats a next-link', async () => {
     const body = { value: [{ id: 1 }], next: '/v1.0/items?page=2' };
     const fetchMock = pages(body, body, body);
     const proxy = makeProxy(fetchMock);
 
-    await collect(
-      proxy.paginate({
-        endpoint: '/v1.0/items',
-        paginate: { type: 'link', link_path_in_response_body: 'next', response_path: 'value' },
-      }),
-    );
+    await expect(
+      collect(
+        proxy.paginate({
+          endpoint: '/v1.0/items',
+          paginate: { type: 'link', link_path_in_response_body: 'next', response_path: 'value' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'proxy_error', message: expect.stringContaining('repeated a next-page link') });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 
+  it('rejects when the provider repeats a cursor before requesting the page again', async () => {
+    const body = { data: { items: ['a'] }, meta: { next: 'c2' } };
+    const fetchMock = pages(body, body, body);
+    const proxy = makeProxy(fetchMock);
+
+    await expect(
+      collect(
+        proxy.paginate({
+          endpoint: '/items',
+          paginate: {
+            type: 'cursor',
+            cursor_path_in_response_body: 'meta.next',
+            cursor_name_in_request: 'after',
+            response_path: 'data.items',
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'proxy_error', message: expect.stringContaining('repeated a page cursor') });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
