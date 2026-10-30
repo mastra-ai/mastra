@@ -3066,6 +3066,8 @@ export class AgentThreadStreamRuntime {
     let error: unknown;
     let cancelSource: (() => Promise<void>) | undefined;
     let suspensionBoundaryHandler: (() => Promise<void>) | undefined;
+    let stopSaveListener: (() => void) | undefined;
+    let startSaveListener: () => void;
     // Resolves once the broadcast pump has drained the source stream AND every
     // stream-part publish has completed. Terminal events (`run-completed` /
     // `run-suspended`) must wait on this: publishing the terminal event while
@@ -3085,6 +3087,7 @@ export class AgentThreadStreamRuntime {
 
     let needsStart = resumed;
     const emitPart = async (rawPart: unknown): Promise<void> => {
+      startSaveListener();
       if (needsStart) {
         needsStart = false;
         // A resumed half of a run doesn't emit its own `start`, and the first
@@ -3158,6 +3161,8 @@ export class AgentThreadStreamRuntime {
       wake();
       if (isSuspensionBoundary) {
         await suspensionBoundaryHandler?.().catch(() => {});
+        stopSaveListener?.();
+        stopSaveListener = undefined;
       }
       // An error chunk settles `_waitUntilFinished()` without closing
       // `fullStream` (durable error-recovery keeps consuming), so the pump can
@@ -3298,11 +3303,18 @@ export class AgentThreadStreamRuntime {
       }
     };
     const { threadId: savedThreadId, resourceId: savedResourceId } = runtime.#parseThreadKey(key);
-    const stopSaveListener = onThreadMessagesSaved({ threadId: savedThreadId, resourceId: savedResourceId }, at => {
-      savedAt = Math.max(savedAt ?? at, at);
-      trimSaved();
+    startSaveListener = () => {
+      if (stopSaveListener) return;
+      stopSaveListener = onThreadMessagesSaved({ threadId: savedThreadId, resourceId: savedResourceId }, at => {
+        savedAt = Math.max(savedAt ?? at, at);
+        trimSaved();
+      });
+    };
+    startSaveListener();
+    void broadcastFinished.then(() => {
+      stopSaveListener?.();
+      stopSaveListener = undefined;
     });
-    void broadcastFinished.then(stopSaveListener);
 
     const createStream = () => {
       // A subscriber that joins late starts after parts already dropped as
