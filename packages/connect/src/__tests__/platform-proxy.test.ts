@@ -326,8 +326,12 @@ describe('platformProxy.paginate', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('does not yield an empty page', async () => {
-    const fetchMock = pages({ value: [1], next: '/v1.0/items?p=2' }, { value: [], next: '/v1.0/items?p=3' });
+  it('follows a next-link past an empty page without yielding it', async () => {
+    const fetchMock = pages(
+      { value: [1], next: '/v1.0/items?p=2' },
+      { value: [], next: '/v1.0/items?p=3' },
+      { value: [3] },
+    );
     const proxy = makeProxy(fetchMock);
 
     const result = await collect(
@@ -337,7 +341,27 @@ describe('platformProxy.paginate', () => {
       }),
     );
 
-    expect(result).toEqual([[1]]);
+    expect(result).toEqual([[1], [3]]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops cursor pagination on an empty page even when a cursor is returned', async () => {
+    const fetchMock = pages({ items: ['a'], next: 'c2' }, { items: [], next: 'c3' });
+    const proxy = makeProxy(fetchMock);
+
+    const result = await collect(
+      proxy.paginate({
+        endpoint: '/items',
+        paginate: {
+          type: 'cursor',
+          cursor_path_in_response_body: 'next',
+          cursor_name_in_request: 'after',
+          response_path: 'items',
+        },
+      }),
+    );
+
+    expect(result).toEqual([['a']]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

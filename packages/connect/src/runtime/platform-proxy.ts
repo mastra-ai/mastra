@@ -359,8 +359,10 @@ async function* paginateRequests<T>(
     const response: PlatformProxyResponse<unknown> = await callProxy<unknown>('GET', context, request);
     const raw = readPath(response.data, pageConfig.response_path);
     const items = Array.isArray(raw) ? (raw as T[]) : [];
-    if (items.length === 0) return;
-    yield items;
+    // Link providers such as Graph can return an empty page that still carries
+    // a next link, so only cursor and offset pagination stop on an empty page.
+    if (items.length > 0) yield items;
+    else if (pageConfig.type !== 'link') return;
 
     if (pageConfig.type === 'link') {
       const link = readPath(response.data, pageConfig.link_path_in_response_body);
