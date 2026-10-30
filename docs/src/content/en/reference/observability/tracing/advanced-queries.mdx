@@ -664,7 +664,7 @@ PostgreSQL and ClickHouse stop trace queries after 15 seconds by default and ret
 
 ## Query spans
 
-Use `querySpans()`, `mastra api span query`, or `POST /api/observability/spans/query` to return completed span summaries across traces. It requires a positive ISO timestamp range over span start time and supports cursor pagination:
+Use `querySpans()`, `mastra api span query`, or `POST /api/observability/spans/query` to return completed span summaries across traces. It requires a positive ISO timestamp range over span start time and supports cursor pagination. This example finds tool calls that took at least one second:
 
 ```typescript
 const result = await mastraClient.querySpans({
@@ -675,7 +675,7 @@ const result = await mastraClient.querySpans({
   where: {
     op: 'and',
     args: [
-      { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-123' } },
+      { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
       { op: 'gte', left: { path: 'durationMs' }, right: { literal: 1000 } },
     ],
   },
