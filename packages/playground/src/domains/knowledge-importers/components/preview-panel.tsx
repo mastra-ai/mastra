@@ -5,9 +5,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { runTime } from '../runs';
 import { isRunActive } from '../use-knowledge-importers';
 import { ElapsedTime } from './elapsed-time';
+import { RunLogButton } from './run-log-button';
 import { RunReport } from './run-report';
 
 export interface PreviewPanelProps {
+  importerKey: string;
   /** The run this session started; undefined until its first poll lands. */
   run: KnowledgeImporterRunSummary | undefined;
   /** True once this session started a run (even before the first poll). */
@@ -15,8 +17,8 @@ export interface PreviewPanelProps {
   lastPreview: KnowledgeImporterRunSummary | undefined;
 }
 
-export function PreviewPanel({ run, started, lastPreview }: PreviewPanelProps) {
-  if (started && (!run || isRunActive(run))) return <RunInProgress run={run} />;
+export function PreviewPanel({ importerKey, run, started, lastPreview }: PreviewPanelProps) {
+  if (started && (!run || isRunActive(run))) return <RunInProgress importerKey={importerKey} run={run} />;
   if (run) return <RunReport run={run} />;
   if (lastPreview) {
     const when = runTime(lastPreview);
@@ -36,7 +38,7 @@ export function PreviewPanel({ run, started, lastPreview }: PreviewPanelProps) {
   );
 }
 
-function RunInProgress({ run }: { run: KnowledgeImporterRunSummary | undefined }) {
+function RunInProgress({ importerKey, run }: { importerKey: string; run: KnowledgeImporterRunSummary | undefined }) {
   const importing = run?.kind === 'run';
   return (
     <div role="status" className="flex items-center gap-3" data-testid="run-in-progress">
@@ -48,6 +50,7 @@ function RunInProgress({ run }: { run: KnowledgeImporterRunSummary | undefined }
       <Txt as="span" variant="caption" tone="muted">
         <ElapsedTime since={run?.startedAt ?? undefined} />
       </Txt>
+      {run ? <RunLogButton importerKey={importerKey} run={run} /> : null}
     </div>
   );
 }
