@@ -105,7 +105,7 @@ export class KnowledgeRun {
    * Resolves a page reference through the run's read view: a page id, a scope address,
    * `<scope>#<key>[/<key>…]` (walked key by key), or an exact name (ambiguous names are refused with candidate ids).
    * A scope that hasn't been created yet is not found, unless `createAt` is given and the run's rules give it at
-   * least that role there: reading never creates scope pages.
+   * least that role there: model-supplied references never create scope pages on a read.
    */
   async page(ref: string, createAt?: KnowledgeRole): Promise<KnowledgePage> {
     const byId = await this.storage.getPage({ id: ref, read: this.read });
