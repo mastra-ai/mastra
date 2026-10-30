@@ -185,7 +185,7 @@ const LEGACY_RETAKE_LEASE_MARKER = '\u0000retake\u0000';
 /** Resolves a follow-up address forwarded as a lease owner, in either format, to its run ID. */
 function forwardedSignalRunId(address: string): string {
   if (parseThreadLeaseOwner(address)) return threadLeaseRunId(address);
-  const legacyRetake = address.indexOf(LEGACY_RETAKE_LEASE_MARKER);
+  const legacyRetake = address.lastIndexOf(LEGACY_RETAKE_LEASE_MARKER);
   return legacyRetake > 0 ? address.slice(0, legacyRetake) : address;
 }
 
