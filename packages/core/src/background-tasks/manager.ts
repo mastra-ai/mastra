@@ -230,6 +230,14 @@ export class BackgroundTaskManager {
         }
         return;
       }
+      if (event.type === 'task.cancelled') {
+        try {
+          await this.handleRemoteCancel(event.data.taskId);
+        } finally {
+          await ack?.();
+        }
+        return;
+      }
       await ack?.();
     };
 
@@ -1859,6 +1867,19 @@ export class BackgroundTaskManager {
     } catch {
       //fail silently
     }
+  }
+
+  /**
+   * Another process cancelled a task this one dispatched. Run its execution
+   * hook, so the dispatcher drops an open request it recorded for the task,
+   * and release the task's context. A cancel made here has already done both.
+   */
+  private async handleRemoteCancel(taskId: string): Promise<void> {
+    if (!this.taskContexts.has(taskId)) return;
+    const task = await (await this.getStorage()).getTask(taskId);
+    if (task?.status !== 'cancelled') return;
+    await this.runLocalExecutionHook(task);
+    this.deregisterTaskContext(taskId);
   }
 
   private async handleResult(event: Event): Promise<void> {
