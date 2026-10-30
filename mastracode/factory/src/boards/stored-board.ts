@@ -1,38 +1,10 @@
-import { createHash } from 'node:crypto';
-
 import { z } from 'zod';
 
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
-import type {
-  StoredBoardInput,
-  StoredBoardSeed,
-  StoredBoardSeedSource,
-  StoredPhaseInput,
-} from '../storage/domains/boards/base.js';
-import { BoardDefinitionError, boardDeclaration, compileBoardDefinition } from './define-board.js';
-import type {
-  BoardEventRules,
-  BoardPhase,
-  BoardPhaseDefinition,
-  BoardSourceClosed,
-  BoardToolRules,
-} from './define-board.js';
+import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
+import { BoardDefinitionError, compileBoardDefinition } from './define-board.js';
+import type { BoardPhase, BoardPhaseDefinition } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
-import type { BoardTransitionPolicy } from './transition-policy.js';
-
-/**
- * The parts of a code board that are functions (or tied to them) and so cannot be stored. They
- * attach to a stored board by its key, and per phase by the phase key.
- */
-export interface BoardBehaviors {
-  readonly transitionPolicy?: BoardTransitionPolicy;
-  readonly sourceClosed?: BoardSourceClosed<string>;
-  readonly tools?: BoardToolRules;
-  readonly events?: BoardEventRules;
-  readonly phases: Readonly<
-    Record<string, Readonly<Pick<BoardPhaseDefinition<string>, 'onEnter' | 'onExit' | 'outcomes'>>>
-  >;
-}
 
 const storedRunnerSchema = z
   .object({
@@ -95,10 +67,9 @@ function storedNextPhases(phase: StoredPhaseInput, phases: readonly StoredPhaseI
 
 /**
  * Compiles a stored board through the same validator as `defineBoard()`. Its first phase is where
- * cards start. Code behaviors attach only to phases that still exist, so a phase removed from the
- * stored board drops its handlers, and a phase added to it runs only its stored runner.
+ * cards start.
  */
-export function compileStoredBoard(board: StoredBoardInput, behaviors?: BoardBehaviors): InstalledBoard {
+export function compileStoredBoard(board: StoredBoardInput): InstalledBoard {
   const [initial] = board.phases;
   if (!initial) throw new BoardDefinitionError('A board must define at least one phase.');
   const phases: Record<string, BoardPhaseDefinition<string>> = {};
@@ -106,7 +77,6 @@ export function compileStoredBoard(board: StoredBoardInput, behaviors?: BoardBeh
     if (Object.hasOwn(phases, phase.key)) {
       throw new BoardDefinitionError(`Board "${board.key}" declares phase "${phase.key}" more than once.`);
     }
-    const attached = behaviors && Object.hasOwn(behaviors.phases, phase.key) ? behaviors.phases[phase.key] : undefined;
     const runner = phase.runner ? withoutUndefined(phase.runner) : undefined;
     const exitTool = phase.exitTool ? withoutUndefined(phase.exitTool) : undefined;
     phases[phase.key] = withoutUndefined({
@@ -118,9 +88,6 @@ export function compileStoredBoard(board: StoredBoardInput, behaviors?: BoardBeh
       autoStart: phase.autoStart ? true : undefined,
       autoStartWhen: phase.autoStartWhen ?? undefined,
       exitTool,
-      onEnter: attached?.onEnter,
-      onExit: attached?.onExit,
-      outcomes: attached?.outcomes,
     }) as BoardPhaseDefinition<string>;
   }
   return compileBoardDefinition({
@@ -129,50 +96,21 @@ export function compileStoredBoard(board: StoredBoardInput, behaviors?: BoardBeh
     ...(board.description != null ? { description: board.description } : {}),
     initialPhase: initial.key,
     phases,
-    ...(behaviors?.tools ? { tools: { ...behaviors.tools } } : {}),
-    ...(behaviors?.events ? { events: behaviors.events } : {}),
-    ...(behaviors?.transitionPolicy ? { transitionPolicy: behaviors.transitionPolicy } : {}),
-    ...(behaviors?.sourceClosed ? { sourceClosed: { ...behaviors.sourceClosed } } : {}),
   });
 }
 
-/** A code board as seed input: its storable definition, the hash of that definition, and its behaviors. */
-export interface BoardSeed extends StoredBoardSeed {
-  readonly behaviors: BoardBehaviors;
-}
-
 /**
- * Turns a code board into what is stored for it. The initial phase is placed first, and every
- * phase's resolved `nextPhases` is written out, so the stored board moves cards exactly as the
- * code board does.
+ * A board's storable definition, in the shape the boards API reads and writes. The initial phase
+ * comes first and every phase's resolved `nextPhases` is written out.
  */
-export function seedFromDefinition(board: InstalledBoard, source: StoredBoardSeedSource): BoardSeed {
-  const declared = boardDeclaration(board);
-  if (!declared) {
-    throw new BoardDefinitionError(
-      `Board "${board.id}" was not built by defineBoard(); pass the board defineBoard() returned, not a copy.`,
-    );
-  }
+export function boardDefinitionOf(board: InstalledBoard): StoredBoardInput {
   const order = [board.initialPhase, ...Object.keys(board.phases).filter(key => key !== board.initialPhase)];
-  const input: StoredBoardInput = {
+  return {
     key: board.id,
     name: board.name,
     ...(board.description !== undefined ? { description: board.description } : {}),
     phases: order.map(key => storedPhase(key, board.phases[key]!)),
   };
-  const behaviors: BoardBehaviors = {
-    ...(board.transitionPolicy ? { transitionPolicy: board.transitionPolicy } : {}),
-    ...(board.sourceClosed ? { sourceClosed: board.sourceClosed } : {}),
-    ...(Object.keys(board.tools).length > 0 ? { tools: board.tools } : {}),
-    ...(Object.keys(board.events).length > 0 ? { events: board.events } : {}),
-    phases: Object.fromEntries(
-      Object.entries(declared.phases).flatMap(([key, phase]) => {
-        const attached = withoutUndefined({ onEnter: phase.onEnter, onExit: phase.onExit, outcomes: phase.outcomes });
-        return Object.keys(attached).length > 0 ? [[key, attached]] : [];
-      }),
-    ),
-  };
-  return { key: board.id, source, hash: boardSeedHash(input), input, behaviors };
 }
 
 function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
@@ -201,22 +139,6 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
         }
       : {}),
   });
-}
-
-/** sha256 of the board's storable definition as JSON with sorted keys. */
-export function boardSeedHash(input: StoredBoardInput): string {
-  return createHash('sha256').update(stableJson(input)).digest('hex');
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value)
-      .filter(([, entry]) => entry !== undefined && typeof entry !== 'function')
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
 }
 
 function withoutUndefined<T extends object>(value: T): T {

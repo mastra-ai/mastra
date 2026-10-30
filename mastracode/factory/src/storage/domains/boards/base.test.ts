@@ -8,7 +8,7 @@ import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { StoredBoardError, StoredBoardsStorage } from './base.js';
-import type { StoredBoardInput, StoredBoardScope, StoredBoardSeed } from './base.js';
+import type { StoredBoardInput, StoredBoardScope } from './base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -40,10 +40,6 @@ function board(key: string, overrides: Partial<StoredBoardInput> = {}): StoredBo
     ],
     ...overrides,
   };
-}
-
-function seed(key: string, hash: string, input = board(key), source: 'builtin' | 'app' = 'app'): StoredBoardSeed {
-  return { key, source, hash, input };
 }
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsStorage on %s', backend => {
@@ -84,11 +80,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       name: 'Board release',
       description: 'Ships releases.',
       revision: 1,
-      seedSource: null,
-      seedHash: null,
-      driftHash: null,
-      customized: false,
-      deletedAt: null,
       createdBy: 'user-1',
       updatedBy: 'user-1',
     });
@@ -167,7 +158,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       {
         expectedRevision: 1,
         actor: 'user-1',
-        customized: true,
       },
     );
     expect(edited.revision).toBe(2);
@@ -189,18 +179,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
     expect(await boards.readVersion(scope)).toBe(version);
   });
 
-  it('changes the version on every write and not on a no-op seed pass', async () => {
+  it('changes the version on every write and not on a refused one', async () => {
     const { boards, scope } = await setup();
     const versions = [await boards.readVersion(scope)];
     expect(versions[0]).toBeNull();
-
-    await boards.applySeed(scope, [seed('work', 'h1', board('work'), 'builtin')]);
-    versions.push(await boards.readVersion(scope));
-    expect(await boards.applySeed(scope, [seed('work', 'h1', board('work'), 'builtin')])).toEqual({
-      written: [],
-      drifted: [],
-    });
-    expect(await boards.readVersion(scope)).toBe(versions.at(-1));
 
     await boards.create(scope, board('release'), 'user-1');
     versions.push(await boards.readVersion(scope));
@@ -214,206 +196,52 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       },
     );
     versions.push(await boards.readVersion(scope));
-    await boards.delete(scope, 'release', { expectedRevision: 2 });
-    versions.push(await boards.readVersion(scope));
-    await boards.softDelete(scope, 'work', { expectedRevision: 1, actor: 'user-1' });
-    versions.push(await boards.readVersion(scope));
-    await boards.reset(scope, 'work', seed('work', 'h1', board('work'), 'builtin'), {
-      expectedRevision: 2,
-      actor: 'user-1',
+    await expect(boards.delete(scope, 'release', { expectedRevision: 1 })).rejects.toMatchObject({
+      code: 'revision_mismatch',
     });
+    expect(await boards.readVersion(scope)).toBe(versions.at(-1));
+    await boards.delete(scope, 'release', { expectedRevision: 2 });
     versions.push(await boards.readVersion(scope));
 
     expect(new Set(versions).size).toBe(versions.length);
+    expect(await boards.list(scope)).toEqual([]);
   });
 
-  describe('seeding code boards', () => {
-    it('inserts a code board that has no row', async () => {
-      const { boards, scope } = await setup();
+  it('refuses a stale delete and keeps the board and its phases', async () => {
+    const { boards, scope, secondClient } = await setup();
+    const other = await secondClient();
+    await boards.create(scope, board('release'), 'user-1');
+    const edited = await other.replace(
+      scope,
+      'release',
+      { name: 'Edited elsewhere', phases: board('x').phases },
+      { expectedRevision: 1, actor: 'user-2' },
+    );
 
-      const result = await boards.applySeed(scope, [
-        seed('work', 'work-1', board('work'), 'builtin'),
-        seed('release', 'release-1'),
-      ]);
-
-      expect(result).toEqual({ written: ['work', 'release'], drifted: [] });
-      const stored = await boards.list(scope);
-      expect(stored.map(row => [row.key, row.position, row.seedSource, row.seedHash, row.customized])).toEqual([
-        ['work', 0, 'builtin', 'work-1', false],
-        ['release', 1, 'app', 'release-1', false],
-      ]);
-      expect(stored[0]!.updatedBy).toBe('factory:seed');
-      expect(stored[0]!.phases.map(phase => phase.key)).toEqual(['intake', 'build', 'done']);
+    await expect(boards.delete(scope, 'release', { expectedRevision: 1 })).rejects.toMatchObject({
+      code: 'revision_mismatch',
     });
 
-    it('writes nothing for an unedited board whose code did not change', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('release', 'release-1')]);
-      const before = await boards.get(scope, 'release');
+    expect(await boards.get(scope, 'release')).toEqual(edited);
+    expect(edited.phases).toHaveLength(3);
+  });
 
-      expect(await boards.applySeed(scope, [seed('release', 'release-1')])).toEqual({ written: [], drifted: [] });
+  it('refuses to delete or replace a board that does not exist', async () => {
+    const { boards, scope } = await setup();
 
-      expect(await boards.get(scope, 'release')).toEqual(before);
+    await expect(boards.delete(scope, 'missing', { expectedRevision: 1 })).rejects.toMatchObject({
+      code: 'board_not_found',
     });
-
-    it('overwrites an unedited board with the changed code definition and raises its revision', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('release', 'release-1')]);
-      const changed = board('release', { name: 'Release v2' });
-      changed.phases = [...changed.phases.slice(0, 2), { key: 'shipped', name: 'Shipped', kind: 'terminal' }];
-
-      const result = await boards.applySeed(scope, [seed('release', 'release-2', changed)]);
-
-      expect(result).toEqual({ written: ['release'], drifted: [] });
-      const stored = (await boards.get(scope, 'release'))!;
-      expect(stored).toMatchObject({ name: 'Release v2', seedHash: 'release-2', revision: 2, customized: false });
-      expect(stored.phases.map(phase => phase.key)).toEqual(['intake', 'build', 'shipped']);
-    });
-
-    it('keeps an edited board when the code changed, and records the newer code hash as drift', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('release', 'release-1')]);
-      await boards.replace(
-        scope,
-        'release',
-        { name: 'Edited by a person', phases: board('x').phases },
-        {
-          expectedRevision: 1,
-          actor: 'user-1',
-          customized: true,
-        },
-      );
-
-      const result = await boards.applySeed(scope, [seed('release', 'release-2', board('release', { name: 'v2' }))]);
-
-      expect(result).toEqual({ written: ['release'], drifted: ['release'] });
-      const stored = (await boards.get(scope, 'release'))!;
-      expect(stored).toMatchObject({
-        name: 'Edited by a person',
-        customized: true,
-        seedHash: 'release-1',
-        driftHash: 'release-2',
-      });
-      // Seeding again reports nothing new.
-      expect(await boards.applySeed(scope, [seed('release', 'release-2')])).toEqual({ written: [], drifted: [] });
-    });
-
-    it('writes nothing for an edited board whose code did not change', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('release', 'release-1')]);
-      const edited = await boards.replace(
-        scope,
-        'release',
-        { name: 'Edited', phases: board('x').phases },
-        {
-          expectedRevision: 1,
-          actor: 'user-1',
-          customized: true,
-        },
-      );
-      const version = await boards.readVersion(scope);
-
-      expect(await boards.applySeed(scope, [seed('release', 'release-1')])).toEqual({ written: [], drifted: [] });
-
-      expect(await boards.get(scope, 'release')).toEqual(edited);
-      expect(await boards.readVersion(scope)).toBe(version);
-    });
-
-    it('never overwrites a board created through the API under a code board key', async () => {
-      const { boards, scope } = await setup();
-      await boards.create(scope, board('release', { name: 'Mine' }), 'user-1');
-
-      const result = await boards.applySeed(scope, [seed('release', 'release-1')]);
-
-      expect(result).toEqual({ written: ['release'], drifted: ['release'] });
-      expect(await boards.get(scope, 'release')).toMatchObject({
-        name: 'Mine',
-        seedSource: 'app',
-        customized: true,
-        driftHash: 'release-1',
-      });
-    });
-
-    it('turns a seeded board that left the code into an ordinary board', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('release', 'release-1'), seed('work', 'work-1', board('work'), 'builtin')]);
-
-      const result = await boards.applySeed(scope, [seed('work', 'work-1', board('work'), 'builtin')]);
-
-      expect(result).toEqual({ written: ['release'], drifted: [] });
-      expect(await boards.get(scope, 'release')).toMatchObject({ seedSource: null, driftHash: null });
-      expect((await boards.get(scope, 'release'))!.phases).toHaveLength(3);
-    });
-
-    it('does not bring back a deleted seeded board, and reset restores it with the code definition', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('release', 'release-1')]);
-      await boards.softDelete(scope, 'release', { expectedRevision: 1, actor: 'user-1' });
-
-      expect(await boards.applySeed(scope, [seed('release', 'release-2')])).toEqual({ written: [], drifted: [] });
-      expect(await boards.get(scope, 'release')).toBeNull();
-      expect(await boards.list(scope)).toEqual([]);
-      const tombstone = (await boards.get(scope, 'release', { includeDeleted: true }))!;
-      expect(tombstone.deletedAt).toBeInstanceOf(Date);
-
-      const restored = await boards.reset(scope, 'release', seed('release', 'release-2'), {
-        expectedRevision: tombstone.revision,
-        actor: 'user-1',
-      });
-
-      expect(restored).toMatchObject({ deletedAt: null, seedHash: 'release-2', customized: false });
-      expect(await boards.list(scope)).toHaveLength(1);
-    });
-
-    it('reset adopts the code definition and clears the edit and the drift', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('release', 'release-1')]);
-      await boards.replace(
-        scope,
-        'release',
-        { name: 'Edited', phases: board('x').phases.slice(0, 1) },
-        {
-          expectedRevision: 1,
-          actor: 'user-1',
-          customized: true,
-        },
-      );
-      await boards.applySeed(scope, [seed('release', 'release-2', board('release', { name: 'v2' }))]);
-      const drifted = (await boards.get(scope, 'release'))!;
-
-      const reset = await boards.reset(
-        scope,
-        'release',
-        seed('release', 'release-2', board('release', { name: 'v2' })),
-        {
-          expectedRevision: drifted.revision,
-          actor: 'user-1',
-        },
-      );
-
-      expect(reset).toMatchObject({ name: 'v2', customized: false, driftHash: null, seedHash: 'release-2' });
-      expect(reset.revision).toBe(drifted.revision + 1);
-      expect(reset.phases.map(phase => phase.key)).toEqual(['intake', 'build', 'done']);
-    });
-
-    it('refuses to reset a board to the code definition of another board', async () => {
-      const { boards, scope } = await setup();
-      await boards.applySeed(scope, [seed('work', 'work-1'), seed('review', 'review-1')]);
-      const version = await boards.readVersion(scope);
-
-      await expect(
-        boards.reset(scope, 'work', seed('review', 'review-1'), { expectedRevision: 1, actor: 'user-1' }),
-      ).rejects.toThrow('Cannot reset board "work" to the code definition of board "review".');
-
-      expect(await boards.get(scope, 'work')).toMatchObject({ key: 'work', seedHash: 'work-1', revision: 1 });
-      expect(await boards.readVersion(scope)).toBe(version);
-    });
+    await expect(
+      boards.replace(scope, 'missing', { name: 'x', phases: board('x').phases }, { expectedRevision: 1, actor: 'u' }),
+    ).rejects.toMatchObject({ code: 'board_not_found' });
+    expect(await boards.readVersion(scope)).toBeNull();
   });
 
   it('lets a second client see a write through the version and the rows', async () => {
     const { boards, scope, secondClient } = await setup();
     const other = await secondClient();
-    await boards.applySeed(scope, [seed('release', 'release-1')]);
+    await boards.create(scope, board('release'), 'user-1');
     const seen = await other.snapshot(scope);
 
     await boards.replace(
@@ -423,7 +251,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       {
         expectedRevision: 1,
         actor: 'user-1',
-        customized: true,
       },
     );
 
@@ -432,29 +259,40 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
     expect(after.boards[0]!.name).toBe('Edited');
   });
 
-  it('seeds one row per board when two clients seed the same project at once', async () => {
+  it('keeps one board when two clients create the same key at once', async () => {
     const { boards, scope, secondClient } = await setup();
     const other = await secondClient();
-    const seeds = [seed('work', 'work-1', board('work'), 'builtin'), seed('release', 'release-1')];
 
-    const results = await Promise.all([boards.applySeed(scope, seeds), other.applySeed(scope, seeds)]);
+    const results = await Promise.allSettled([
+      boards.create(scope, board('release'), 'user-1'),
+      other.create(scope, board('release', { name: 'Other release' }), 'user-2'),
+    ]);
 
-    const stored = await boards.list(scope, { includeDeleted: true });
-    expect(stored.map(row => row.key).sort()).toEqual(['release', 'work']);
-    expect(stored.every(row => row.revision === 1 && row.phases.length === 3)).toBe(true);
-    expect(results.flatMap(result => result.written).sort()).toEqual(['release', 'work']);
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    const [refused] = results.filter(result => result.status === 'rejected');
+    expect((refused as PromiseRejectedResult).reason).toMatchObject({ code: 'board_exists' });
+    const stored = await boards.list(scope);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.phases).toHaveLength(3);
   });
 
-  it('seeds many projects at once from two clients, as replicas booting together do', async () => {
+  it('creates boards in many projects at once from two clients, as replicas do side by side', async () => {
     const { boards, scope, secondClient } = await setup();
     const other = await secondClient();
-    const seeds = [seed('work', 'work-1', board('work'), 'builtin'), seed('release', 'release-1')];
     const projects = Array.from({ length: 8 }, (_, index) => ({ ...scope, factoryProjectId: `project-${index}` }));
 
-    await Promise.all(projects.flatMap(project => [boards.applySeed(project, seeds), other.applySeed(project, seeds)]));
+    await Promise.all(
+      projects.flatMap(project => [
+        boards.create(project, board('bugs'), 'user-1'),
+        other.create(project, board('release'), 'user-2'),
+      ]),
+    );
 
     for (const project of projects) {
-      expect((await boards.list(project)).map(row => row.key).sort()).toEqual(['release', 'work']);
+      const stored = await boards.list(project);
+      expect(stored.map(row => row.key).sort()).toEqual(['bugs', 'release']);
+      expect(stored.every(row => row.revision === 1 && row.phases.length === 3)).toBe(true);
+      expect(await boards.readVersion(project)).not.toBeNull();
     }
   });
 });

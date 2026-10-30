@@ -13,15 +13,6 @@ export const FACTORY_BOARDS_SCHEMA: CollectionSchema = {
     position: { type: 'integer' },
     // Rises on every write to the board or its phases; the compare-and-set token for edits.
     revision: { type: 'integer' },
-    // 'builtin' | 'app' when the board is seeded from code; null when created through the API.
-    seed_source: { type: 'text', nullable: true },
-    // Hash of the code definition last written to this row.
-    seed_hash: { type: 'text', nullable: true },
-    // Hash of a newer code definition that was not applied because the board was edited.
-    drift_hash: { type: 'text', nullable: true },
-    customized: { type: 'boolean', default: false },
-    // Tombstone for deleted seeded boards, so seeding does not bring them back.
-    deleted_at: { type: 'timestamp', nullable: true },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
     updated_by: { type: 'text' },

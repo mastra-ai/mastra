@@ -53,8 +53,6 @@ export interface StoredBoardInput {
   phases: StoredPhaseInput[];
 }
 
-export type StoredBoardSeedSource = 'builtin' | 'app';
-
 export interface StoredPhaseRecord {
   key: string;
   position: number;
@@ -77,27 +75,11 @@ export interface StoredBoardRecord {
   description: string | null;
   position: number;
   revision: number;
-  /** Set when the board is seeded from code; null for boards created through the API. */
-  seedSource: StoredBoardSeedSource | null;
-  /** Hash of the code definition last written to this board. */
-  seedHash: string | null;
-  /** Hash of a newer code definition that was not applied because the board was edited. */
-  driftHash: string | null;
-  customized: boolean;
-  deletedAt: Date | null;
   createdBy: string;
   createdAt: Date;
   updatedBy: string;
   updatedAt: Date;
   phases: StoredPhaseRecord[];
-}
-
-/** One code board to seed into a project. */
-export interface StoredBoardSeed {
-  key: string;
-  source: StoredBoardSeedSource;
-  hash: string;
-  input: StoredBoardInput;
 }
 
 export interface StoredBoardSnapshot {
@@ -117,9 +99,6 @@ export class StoredBoardError extends Error {
   }
 }
 
-/** Updated-by for writes Factory makes while seeding code boards. */
-export const BOARD_SEED_ACTOR = 'factory:seed';
-
 interface BoardRow extends Record<string, unknown> {
   id: string;
   org_id: string;
@@ -129,11 +108,6 @@ interface BoardRow extends Record<string, unknown> {
   description: string | null;
   position: number;
   revision: number;
-  seed_source: StoredBoardSeedSource | null;
-  seed_hash: string | null;
-  drift_hash: string | null;
-  customized: boolean;
-  deleted_at: Date | null;
   created_by: string;
   created_at: Date;
   updated_by: string;
@@ -191,82 +165,12 @@ function toRecord(row: BoardRow, phases: PhaseRow[]): StoredBoardRecord {
     description: row.description,
     position: row.position,
     revision: row.revision,
-    seedSource: row.seed_source,
-    seedHash: row.seed_hash,
-    driftHash: row.drift_hash,
-    customized: row.customized,
-    deletedAt: row.deleted_at,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
     phases: phases.sort((left, right) => left.position - right.position).map(toPhaseRecord),
   };
-}
-
-type SeedAction =
-  | { type: 'insert'; seed: StoredBoardSeed }
-  | { type: 'overwrite'; seed: StoredBoardSeed; row: BoardRow }
-  | {
-      type: 'mark';
-      row: BoardRow;
-      set: Pick<BoardRow, 'seed_source' | 'customized' | 'drift_hash'>;
-      drifted: boolean;
-    };
-
-/**
- * What seeding these code boards into a project must write, given its current rows.
- *
- * - No row: insert the code board.
- * - Unedited row: overwrite it when the code definition changed.
- * - Edited row (or a board created through the API under the same key): keep it, and record the
- *   newer code definition in `drift_hash` so it can be reported and adopted with a reset.
- * - Deleted (tombstoned) row: leave it deleted.
- * - Seeded row whose board left the code: it becomes an ordinary board (`seed_source` cleared).
- */
-function planSeed(rows: BoardRow[], seeds: readonly StoredBoardSeed[]): SeedAction[] {
-  const byKey = new Map(rows.map(row => [row.board_key, row]));
-  const actions: SeedAction[] = [];
-  for (const seed of seeds) {
-    const row = byKey.get(seed.key);
-    if (!row) {
-      actions.push({ type: 'insert', seed });
-      continue;
-    }
-    if (row.deleted_at) continue;
-    const edited = row.customized || row.seed_hash === null;
-    if (!edited) {
-      if (row.seed_hash !== seed.hash) actions.push({ type: 'overwrite', seed, row });
-      else if (row.seed_source !== seed.source) {
-        actions.push({
-          type: 'mark',
-          row,
-          set: { seed_source: seed.source, customized: false, drift_hash: null },
-          drifted: false,
-        });
-      }
-      continue;
-    }
-    const driftHash = row.seed_hash === seed.hash ? null : seed.hash;
-    if (row.customized && row.seed_source === seed.source && row.drift_hash === driftHash) continue;
-    actions.push({
-      type: 'mark',
-      row,
-      set: { seed_source: seed.source, customized: true, drift_hash: driftHash },
-      drifted: driftHash !== null && row.drift_hash !== driftHash,
-    });
-  }
-  const seeded = new Set(seeds.map(seed => seed.key));
-  for (const row of rows) {
-    if (row.deleted_at || row.seed_source === null || seeded.has(row.board_key)) continue;
-    actions.push({
-      type: 'mark',
-      row,
-      set: { seed_source: null, customized: row.customized, drift_hash: null },
-      drifted: false,
-    });
-  }
-  return actions;
 }
 
 /** A compare-and-set inside a write lost to a concurrent writer; the write is retried from fresh reads. */
@@ -301,10 +205,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return readVersion(this.ops, scope);
   }
 
-  /** The project's boards in order, without deleted ones unless asked. */
-  async list(scope: StoredBoardScope, options: { includeDeleted?: boolean } = {}): Promise<StoredBoardRecord[]> {
-    const boards = await readBoards(this.ops, scope);
-    return options.includeDeleted ? boards : boards.filter(board => !board.deletedAt);
+  /** The project's boards in order. */
+  async list(scope: StoredBoardScope): Promise<StoredBoardRecord[]> {
+    return readBoards(this.ops, scope);
   }
 
   /**
@@ -317,26 +220,23 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return { version, boards: await this.list(scope) };
   }
 
-  async get(scope: StoredBoardScope, key: string, options: { includeDeleted?: boolean } = {}) {
+  async get(scope: StoredBoardScope, key: string): Promise<StoredBoardRecord | null> {
     const row = await this.ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
-    if (!row || (row.deleted_at && !options.includeDeleted)) return null;
+    if (!row) return null;
     const phases = await this.ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: key });
     return toRecord(row, phases);
   }
 
   /** Creates a board through the API. */
   async create(scope: StoredBoardScope, input: StoredBoardInput, actor: string): Promise<StoredBoardRecord> {
+    await ensureVersionRow(this.ops, scope);
     try {
       return await this.#write(scope, async ops => {
         const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
         if (rows.some(row => row.board_key === input.key)) {
           throw new StoredBoardError('board_exists', `Board "${input.key}" already exists in this project.`);
         }
-        await insertBoard(ops, scope, input, {
-          position: nextPosition(rows),
-          actor,
-          seed: null,
-        });
+        await insertBoard(ops, scope, input, { position: nextPosition(rows), actor });
         return { result: undefined, changed: true };
       }).then(async () => (await this.get(scope, input.key))!);
     } catch (error) {
@@ -347,48 +247,26 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     }
   }
 
-  /**
-   * Replaces a board's name, description and phases. The board key never changes. `customized`
-   * marks a seeded board as edited, so seeding keeps the edit.
-   */
+  /** Replaces a board's name, description and phases. The board key never changes. */
   async replace(
     scope: StoredBoardScope,
     key: string,
     input: Omit<StoredBoardInput, 'key'>,
-    options: { expectedRevision: number; actor: string; customized?: boolean },
+    options: { expectedRevision: number; actor: string },
   ): Promise<StoredBoardRecord> {
     await this.#write(scope, async ops => {
-      const row = await findLive(ops, scope, key);
+      const row = await findBoard(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
-      await writeBoard(ops, scope, row, { key, ...input }, options.actor, {
-        customized: options.customized ?? row.customized,
-      });
+      await writeBoard(ops, scope, row, { key, ...input }, options.actor);
       return { result: undefined, changed: true };
     });
     return (await this.get(scope, key))!;
   }
 
-  /** Deletes a seeded board, keeping a tombstone so seeding does not recreate it. */
-  async softDelete(
-    scope: StoredBoardScope,
-    key: string,
-    options: { expectedRevision: number; actor: string },
-  ): Promise<void> {
-    await this.#write(scope, async ops => {
-      const row = await findLive(ops, scope, key);
-      checkRevision(row, key, options.expectedRevision);
-      await updateRow(ops, row, {
-        deleted_at: new Date(),
-        updated_by: options.actor,
-      });
-      return { result: undefined, changed: true };
-    });
-  }
-
   /** Deletes a board and its phases. */
   async delete(scope: StoredBoardScope, key: string, options: { expectedRevision: number }): Promise<void> {
     await this.#write(scope, async ops => {
-      const row = await findLive(ops, scope, key);
+      const row = await findBoard(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
       if ((await ops.deleteMany(BOARDS, { id: row.id, revision: row.revision })) === 0)
         throw new ConcurrentBoardWrite();
@@ -398,93 +276,26 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Writes the code boards into the project per the seeding rules (see `planSeed`). A pass with
-   * nothing to change writes nothing, not even the version.
-   */
-  async applySeed(
-    scope: StoredBoardScope,
-    seeds: readonly StoredBoardSeed[],
-  ): Promise<{ written: string[]; drifted: string[] }> {
-    const current = await this.ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
-    if (planSeed(current, seeds).length === 0) return { written: [], drifted: [] };
-    return this.#write(
-      scope,
-      async ops => {
-        const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
-        const actions = planSeed(rows, seeds);
-        let position = nextPosition(rows);
-        for (const action of actions) {
-          if (action.type === 'insert') {
-            await insertBoard(ops, scope, action.seed.input, {
-              position: position++,
-              actor: BOARD_SEED_ACTOR,
-              seed: action.seed,
-            });
-          } else if (action.type === 'overwrite') {
-            await writeBoard(ops, scope, action.row, action.seed.input, BOARD_SEED_ACTOR, {
-              customized: false,
-              seed: action.seed,
-            });
-          } else {
-            await updateRow(ops, action.row, { ...action.set, updated_by: BOARD_SEED_ACTOR });
-          }
-        }
-        return {
-          result: {
-            written: actions.map(action => (action.type === 'insert' ? action.seed.key : action.row.board_key)),
-            drifted: actions.flatMap(action =>
-              action.type === 'mark' && action.drifted ? [action.row.board_key] : [],
-            ),
-          },
-          changed: actions.length > 0,
-        };
-      },
-      { retryInsertRace: true },
-    );
-  }
-
-  /** Writes the current code definition over a seeded board, restoring it if deleted. */
-  async reset(
-    scope: StoredBoardScope,
-    key: string,
-    seed: StoredBoardSeed,
-    options: { expectedRevision: number; actor: string },
-  ): Promise<StoredBoardRecord> {
-    if (seed.key !== key) {
-      throw new Error(`Cannot reset board "${key}" to the code definition of board "${seed.key}".`);
-    }
-    await this.#write(scope, async ops => {
-      const row = await ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
-      if (!row) throw new StoredBoardError('board_not_found', `Board "${key}" does not exist in this project.`);
-      checkRevision(row, key, options.expectedRevision);
-      await writeBoard(ops, scope, row, seed.input, options.actor, { customized: false, seed, restore: true });
-      return { result: undefined, changed: true };
-    });
-    return (await this.get(scope, key))!;
-  }
-
-  /**
    * Runs `fn` in a transaction and replaces the project's version when it changed anything.
-   * Lost races (a concurrent insert of the same key, a compare-and-set miss) retry from fresh reads.
+   * Lost races (a compare-and-set miss, or a concurrent write that inserted the same board or the
+   * project's first version row) retry from fresh reads.
    */
   async #write<T>(
     scope: StoredBoardScope,
     fn: (ops: FactoryStorageOps) => Promise<{ result: T; changed: boolean }>,
-    options: { retryInsertRace?: boolean } = {},
   ): Promise<T> {
     for (let attempt = 1; ; attempt++) {
       try {
         // Read committed is enough: every row change is a compare-and-set on `revision` and every
-        // insert meets the unique index, both retried below. Serializable isolation would also
-        // fail seeding of unrelated projects that replicas run side by side.
+        // insert meets the unique index. Serializable isolation would also fail writes to
+        // unrelated projects that replicas run side by side.
         return await this.storage.withTransaction(async ops => {
           const { result, changed } = await fn(ops);
           if (changed) await bumpVersion(ops, scope);
           return result;
         });
       } catch (error) {
-        const retryable =
-          error instanceof ConcurrentBoardWrite || (options.retryInsertRace && error instanceof UniqueViolationError);
+        const retryable = error instanceof ConcurrentBoardWrite || error instanceof UniqueViolationError;
         if (!retryable || attempt >= MAX_WRITE_ATTEMPTS) throw error;
       }
     }
@@ -512,6 +323,20 @@ async function readBoards(ops: FactoryStorageOps, scope: StoredBoardScope): Prom
     .map(row => toRecord(row, byBoard.get(row.board_key) ?? []));
 }
 
+/**
+ * Inserts the project's version row if it has none. This runs outside the write transaction: on
+ * Postgres, two transactions racing to insert it would leave the loser's transaction aborted, so
+ * the version bump inside a write must always be an update.
+ */
+async function ensureVersionRow(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<void> {
+  if (await ops.findOne(VERSIONS, scopeWhere(scope))) return;
+  try {
+    await ops.insertOne(VERSIONS, { ...scopeWhere(scope), version: randomUUID(), updated_at: new Date() });
+  } catch (error) {
+    if (!(error instanceof UniqueViolationError)) throw error;
+  }
+}
+
 async function bumpVersion(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<void> {
   await ops.upsertOne(VERSIONS, ['org_id', 'factory_project_id'], {
     ...scopeWhere(scope),
@@ -520,9 +345,9 @@ async function bumpVersion(ops: FactoryStorageOps, scope: StoredBoardScope): Pro
   });
 }
 
-async function findLive(ops: FactoryStorageOps, scope: StoredBoardScope, key: string): Promise<BoardRow> {
+async function findBoard(ops: FactoryStorageOps, scope: StoredBoardScope, key: string): Promise<BoardRow> {
   const row = await ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
-  if (!row || row.deleted_at) {
+  if (!row) {
     throw new StoredBoardError('board_not_found', `Board "${key}" does not exist in this project.`);
   }
   return row;
@@ -574,7 +399,7 @@ async function insertBoard(
   ops: FactoryStorageOps,
   scope: StoredBoardScope,
   input: StoredBoardInput,
-  options: { position: number; actor: string; seed: StoredBoardSeed | null },
+  options: { position: number; actor: string },
 ): Promise<void> {
   const now = new Date();
   await ops.insertOne<BoardRow>(BOARDS, {
@@ -584,11 +409,6 @@ async function insertBoard(
     description: input.description ?? null,
     position: options.position,
     revision: 1,
-    seed_source: options.seed?.source ?? null,
-    seed_hash: options.seed?.hash ?? null,
-    drift_hash: null,
-    customized: false,
-    deleted_at: null,
     created_by: options.actor,
     created_at: now,
     updated_by: options.actor,
@@ -604,16 +424,8 @@ async function writeBoard(
   row: BoardRow,
   input: StoredBoardInput,
   actor: string,
-  options: { customized: boolean; seed?: StoredBoardSeed; restore?: boolean },
 ): Promise<void> {
-  await updateRow(ops, row, {
-    name: input.name,
-    description: input.description ?? null,
-    customized: options.customized,
-    updated_by: actor,
-    ...(options.seed ? { seed_source: options.seed.source, seed_hash: options.seed.hash, drift_hash: null } : {}),
-    ...(options.restore ? { deleted_at: null } : {}),
-  });
+  await updateRow(ops, row, { name: input.name, description: input.description ?? null, updated_by: actor });
   await ops.deleteMany(PHASES, { ...scopeWhere(scope), board_key: row.board_key });
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }

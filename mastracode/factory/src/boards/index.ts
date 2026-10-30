@@ -5,8 +5,7 @@ export {
   defineBoard,
   FACTORY_AGENT_ID,
 } from './define-board.js';
-export { boardSeedHash, compileStoredBoard, seedFromDefinition, storedBoardInputSchema } from './stored-board.js';
-export type { BoardBehaviors, BoardSeed } from './stored-board.js';
+export { boardDefinitionOf, compileStoredBoard, storedBoardInputSchema } from './stored-board.js';
 export { cardRuleFacts } from './card-facts.js';
 export type {
   BoardDefinition,

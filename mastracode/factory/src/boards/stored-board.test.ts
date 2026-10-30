@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveFactoryStageRules } from '../rules/resolve.js';
-import { FACTORY_RULE_SOURCES } from '../rules/types.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
-import { createBoardRegistry } from './registry.js';
-import type { InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
-import { boardSeedHash, compileStoredBoard, seedFromDefinition, storedBoardInputSchema } from './stored-board.js';
+import { boardDefinitionOf, compileStoredBoard, storedBoardInputSchema } from './stored-board.js';
 import { workBoard } from './work.js';
 
 const GO = {
@@ -16,215 +12,62 @@ const GO = {
   conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'go' }],
 };
 
-/** The `release` board from `rules/custom-board-runtime.test.ts`: deprecated fields, `next`, a policy and handlers. */
-const release = defineBoard({
-  id: 'release',
-  title: 'Release',
-  initialPhase: 'queued',
-  transitionPolicy: context =>
-    context.toStage === 'preparing' && !context.isHumanTransition
-      ? { type: 'reject', code: 'approval_required', reason: 'A maintainer must approve.' }
-      : undefined,
-  tools: { execute_command: { onResult: () => undefined } },
-  phases: {
-    queued: {
-      title: 'Queued',
-      kind: 'resting',
-      next: 'preparing',
-      onEnter: { issue: () => undefined },
-    },
-    preparing: {
-      title: 'Preparing',
-      kind: 'working',
-      role: 'release-preparer',
-      next: 'shipping',
-      onEnter: { issue: () => undefined },
-    },
-    shipping: {
-      title: 'Shipping',
-      kind: 'working',
-      role: 'release-publisher',
-      next: 'shipped',
-      onEnter: { issue: () => undefined },
-    },
-    shipped: { title: 'Shipped', kind: 'terminal' },
-  },
-});
+describe('boardDefinitionOf', () => {
+  it.each([
+    ['Work', workBoard],
+    ['Review', reviewBoard],
+  ])('describes the built-in %s board as a valid stored definition with the same phases', (_name, board) => {
+    const definition = boardDefinitionOf(board);
 
-function roundTrip(board: InstalledBoard): InstalledBoard {
-  const seed = seedFromDefinition(board, 'builtin');
-  return compileStoredBoard(seed.input, seed.behaviors);
-}
-
-/** Asserts two compiled boards move cards, run phases and fire rules the same way. */
-function expectSameBehavior(actual: InstalledBoard, expected: InstalledBoard) {
-  expect(actual.id).toBe(expected.id);
-  expect(actual.name).toBe(expected.name);
-  expect(actual.description).toBe(expected.description);
-  expect(actual.initialPhase).toBe(expected.initialPhase);
-  const phases = Object.keys(expected.phases);
-  expect(Object.keys(actual.phases).sort()).toEqual([...phases].sort());
-  for (const key of phases) {
-    const want = expected.phases[key]!;
-    const got = actual.phases[key]!;
-    expect({ key, name: got.name, description: got.description, kind: got.kind }).toEqual({
-      key,
-      name: want.name,
-      description: want.description,
-      kind: want.kind,
-    });
-    expect([...got.nextPhases].sort()).toEqual([...want.nextPhases].sort());
-    expect(actual.phaseKind(key)).toBe(expected.phaseKind(key));
-    expect(actual.roleForPhase(key)).toBe(expected.roleForPhase(key));
-    expect(actual.startsAutomatically(key)).toBe(expected.startsAutomatically(key));
-    if (want.kind === 'working' && got.kind === 'working') {
-      expect(got.runner).toEqual(want.runner);
-      expect(got.exitTool).toEqual(want.exitTool);
-      expect(got.autoStartWhen).toEqual(want.autoStartWhen);
-      expect(actual.phaseForRole(want.runner.context)).toBe(expected.phaseForRole(want.runner.context));
+    expect(storedBoardInputSchema.safeParse(definition).error?.issues).toBeUndefined();
+    expect(definition).toMatchObject({ key: board.id, name: board.name });
+    expect(definition.phases[0]!.key).toBe(board.initialPhase);
+    expect(definition.phases.map(phase => phase.key).sort()).toEqual(Object.keys(board.phases).sort());
+    for (const phase of definition.phases) {
+      const code = board.phases[phase.key]!;
+      expect({ key: phase.key, name: phase.name, kind: phase.kind, nextPhases: phase.nextPhases }).toEqual({
+        key: phase.key,
+        name: code.name,
+        kind: code.kind,
+        nextPhases: [...code.nextPhases],
+      });
+      if (code.kind === 'working') expect(code.runner).toMatchObject(phase.runner!);
     }
-    expect(actual.transitions[key]!.map(transition => transition.to).sort(), `transitions from ${key}`).toEqual(
-      expected.transitions[key]!.map(transition => transition.to).sort(),
-    );
-    for (const to of phases) expect(actual.allowsTransition(key, to)).toBe(expected.allowsTransition(key, to));
-  }
-  expect(actual.transitionPolicy).toBe(expected.transitionPolicy);
-  expect(actual.sourceClosed).toEqual(expected.sourceClosed);
-  expect(Object.keys(actual.tools).sort()).toEqual(Object.keys(expected.tools).sort());
-  for (const [tool, rule] of Object.entries(expected.tools)) expect(actual.tools[tool]!.onResult).toBe(rule.onResult);
-  expect(actual.events).toEqual(expected.events);
-
-  const actualRegistry = createBoardRegistry({ boards: [actual], includeDefaultBoards: false });
-  const expectedRegistry = createBoardRegistry({ boards: [expected], includeDefaultBoards: false });
-  for (const source of FACTORY_RULE_SOURCES) {
-    for (const fromStage of phases) {
-      for (const toStage of phases) {
-        const input = { board: expected.id, source, fromStage, toStage };
-        const want = resolveFactoryStageRules(expectedRegistry, input).map(rule => rule.phase);
-        const got = resolveFactoryStageRules(actualRegistry, input).map(rule => rule.phase);
-        expect(got, `${source} ${fromStage} -> ${toStage}`).toEqual(want);
-      }
-      const entry = { board: expected.id, source, fromStage, toStage: fromStage, initialEntry: true };
-      expect(resolveFactoryStageRules(actualRegistry, entry).length).toBe(
-        resolveFactoryStageRules(expectedRegistry, entry).length,
-      );
-    }
-  }
-}
-
-describe('stored boards compiled with their code behaviors', () => {
-  it('behave exactly like the built-in Work board', () => {
-    const stored = roundTrip(workBoard);
-
-    expectSameBehavior(stored, workBoard);
-    // Handlers Work declares in code attach unchanged, not as copies.
-    expect(stored.rules.triage!.issue!.onEnter).toBe(workBoard.rules.triage!.issue!.onEnter);
-    expect(stored.rules.done!.issue!.onEnter).toBe(workBoard.rules.done!.issue!.onEnter);
   });
 
-  it('behave exactly like the built-in Review board', () => {
-    expectSameBehavior(roundTrip(reviewBoard), reviewBoard);
-  });
-
-  it('behave exactly like an app board written with deprecated fields and `next`', () => {
-    expectSameBehavior(roundTrip(release), release);
-  });
-
-  it('drop only the handlers of a phase removed from the stored board', () => {
-    const seed = seedFromDefinition(workBoard, 'builtin');
-    const input: StoredBoardInput = {
-      ...seed.input,
-      phases: seed.input.phases
-        .filter(phase => phase.key !== 'review')
-        .map(phase => ({ ...phase, nextPhases: phase.nextPhases!.filter(key => key !== 'review') })),
-    };
-
-    const stored = compileStoredBoard(input, seed.behaviors);
-
-    expect(stored.rules.review).toBeUndefined();
-    expect(stored.rules.planning!.issue!.onEnter).toBe(workBoard.rules.planning!.issue!.onEnter);
-    expect(stored.rules.execute!.issue!.onEnter).toBe(workBoard.rules.execute!.issue!.onEnter);
-    expect(stored.transitionPolicy).toBe(workBoard.transitionPolicy);
-  });
-
-  it('run only the stored runner of a phase added to a seeded board', () => {
-    const seed = seedFromDefinition(workBoard, 'builtin');
-    const added: StoredPhaseInput = {
-      key: 'qa',
-      name: 'QA',
-      kind: 'working',
-      runner: { skill: 'qa-check', context: 'work' },
-      nextPhases: ['done'],
-    };
-
-    const stored = compileStoredBoard({ ...seed.input, phases: [...seed.input.phases, added] }, seed.behaviors);
-
-    for (const source of FACTORY_RULE_SOURCES) expect(stored.rules.qa![source]!.onEnter).toBeTypeOf('function');
-    expect(stored.rules.qa!.issue!.onExit).toBeUndefined();
-  });
-
-  it('refuse an edit that leaves a code behavior pointing at a removed phase', () => {
-    const seed = seedFromDefinition(workBoard, 'builtin');
-    const input: StoredBoardInput = {
-      ...seed.input,
-      phases: seed.input.phases
-        .filter(phase => phase.key !== 'canceled')
-        .map(phase => ({ ...phase, nextPhases: phase.nextPhases!.filter(key => key !== 'canceled') })),
-    };
-
-    expect(() => compileStoredBoard(input, seed.behaviors)).toThrow(BoardDefinitionError);
-    expect(() => compileStoredBoard(input, seed.behaviors)).toThrow(/sourceClosed.canceled "canceled"/);
-    expect(() => compileStoredBoard(input)).not.toThrow();
-  });
-});
-
-describe('seedFromDefinition', () => {
-  it('refuses a board that was copied instead of passed as defineBoard() returned it', () => {
-    const copy = { ...release } as InstalledBoard;
-
-    expect(() => seedFromDefinition(copy, 'app')).toThrow(BoardDefinitionError);
-    expect(() => seedFromDefinition(copy, 'app')).toThrow(
-      'Board "release" was not built by defineBoard(); pass the board defineBoard() returned, not a copy.',
-    );
-  });
-
-  it('lets an edit to a stored runner replace the skill the code board started', async () => {
+  it('lets a stored copy of a board with outcomes move cards only where its stored next phases allow', () => {
     const board = defineBoard({
-      id: 'runner-edit',
-      name: 'Runner edit',
+      id: 'outcomes',
+      name: 'Outcomes',
       initialPhase: 'inbox',
       phases: {
         inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['doing'] },
         doing: {
           name: 'Doing',
           kind: 'working',
-          runner: { skill: 'old-skill', instructions: 'Old text.' },
-          nextPhases: ['done'],
+          runner: { context: 'work' },
+          outcomes: { shipped: 'done', dropped: 'canceled' },
         },
         done: { name: 'Done', kind: 'terminal' },
+        canceled: { name: 'Canceled', kind: 'terminal' },
       },
     });
-    const seed = seedFromDefinition(board, 'app');
-    const edited: StoredBoardInput = {
-      ...seed.input,
-      phases: seed.input.phases.map(phase =>
-        phase.key === 'doing' ? { ...phase, runner: { skill: 'new-skill', instructions: 'New text.' } } : phase,
-      ),
-    };
+    const definition = boardDefinitionOf(board);
+    expect(definition.phases.find(phase => phase.key === 'doing')!.nextPhases).toEqual(['done', 'canceled']);
+    expect(compileStoredBoard(definition).allowsTransition('doing', 'canceled')).toBe(true);
 
-    const action = await compileStoredBoard(edited, seed.behaviors).rules.doing?.issue?.onEnter?.({
-      ingress: { id: 'ingress-1' },
-      item: { title: 'A card' },
-      fromStage: 'inbox',
-      stage: 'doing',
-    } as never);
+    const edited = compileStoredBoard({
+      ...definition,
+      phases: definition.phases.map(phase => (phase.key === 'doing' ? { ...phase, nextPhases: ['done'] } : phase)),
+    });
 
-    expect(JSON.stringify(action)).toContain('new-skill');
-    expect(JSON.stringify(action)).toContain('New text.');
-    expect(JSON.stringify(action)).not.toContain('old-skill');
+    expect(edited.allowsTransition('doing', 'done')).toBe(true);
+    expect(edited.allowsTransition('doing', 'canceled')).toBe(false);
+    expect(edited.phases.doing!.outcomes).toBeUndefined();
+    expect(edited.transitions.doing!.map(transition => transition.to)).toEqual(['done']);
   });
 
-  it('places the initial phase first and stores every phase’s next phases explicitly', () => {
+  it('places the initial phase first and writes every phase’s next phases out', () => {
     const board = defineBoard({
       id: 'late-start',
       name: 'Late start',
@@ -236,52 +79,17 @@ describe('seedFromDefinition', () => {
       },
     });
 
-    const seed = seedFromDefinition(board, 'app');
+    const definition = boardDefinitionOf(board);
 
-    expect(seed.input.phases.map(phase => [phase.key, phase.nextPhases])).toEqual([
+    expect(definition.phases.map(phase => [phase.key, phase.nextPhases])).toEqual([
       ['inbox', ['doing']],
       ['doing', ['done']],
       ['done', []],
     ]);
-    const stored = compileStoredBoard(seed.input, seed.behaviors);
+    const stored = compileStoredBoard(definition);
     expect(stored.initialPhase).toBe('inbox');
     expect(stored.allowsTransition('done', 'inbox')).toBe(false);
     expect(stored.roleForPhase('doing')).toBe('work');
-  });
-
-  it('hashes only the storable definition, independent of key order', () => {
-    const one = seedFromDefinition(release, 'app');
-    const reordered = reverseKeys(one.input) as StoredBoardInput;
-    const sameDataOtherHandlers = defineBoard({
-      id: 'release',
-      name: 'Release',
-      initialPhase: 'queued',
-      phases: {
-        queued: { name: 'Queued', kind: 'resting', nextPhases: ['preparing'] },
-        preparing: {
-          name: 'Preparing',
-          kind: 'working',
-          runner: { context: 'release-preparer' },
-          nextPhases: ['shipping'],
-          onEnter: { manual: () => undefined },
-        },
-        shipping: {
-          name: 'Shipping',
-          kind: 'working',
-          runner: { context: 'release-publisher' },
-          nextPhases: ['shipped'],
-        },
-        shipped: { name: 'Shipped', kind: 'terminal' },
-      },
-    });
-    const renamed = {
-      ...one.input,
-      phases: one.input.phases.map(p => (p.key === 'shipped' ? { ...p, name: 'Out' } : p)),
-    };
-
-    expect(boardSeedHash(reordered)).toBe(one.hash);
-    expect(seedFromDefinition(sameDataOtherHandlers, 'app').hash).toBe(one.hash);
-    expect(boardSeedHash(renamed)).not.toBe(one.hash);
   });
 });
 
@@ -416,16 +224,6 @@ describe('boards authored through the API', () => {
     expect(result.error!.issues.map(issue => issue.message)).toEqual([expected]);
   });
 });
-
-function reverseKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(reverseKeys);
-  if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value)
-      .reverse()
-      .map(([key, entry]) => [key, reverseKeys(entry)]),
-  );
-}
 
 /** The same board written with `defineBoard()`, as an app would in code. */
 function asCodeBoard(input: StoredBoardInput) {

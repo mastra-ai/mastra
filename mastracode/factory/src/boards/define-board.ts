@@ -521,23 +521,6 @@ export function defineBoard<
   return compileBoardDefinition(config);
 }
 
-/** What a board declared, before `compileBoardDefinition()` resolved it. */
-export type BoardDeclaration = Readonly<{
-  id: string;
-  initialPhase: string;
-  phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
-}>;
-
-const boardDeclarations = new WeakMap<object, BoardDeclaration>();
-
-/**
- * The declaration a compiled board came from, so its code behaviors can be attached again as
- * declared (before runner skills and instructions were merged into its handlers).
- */
-export function boardDeclaration(board: object): BoardDeclaration | undefined {
-  return boardDeclarations.get(board);
-}
-
 /** Validates and resolves a board declaration. Factory's own boards use this directly. */
 export function compileBoardDefinition<
   const BoardId extends string,
@@ -674,7 +657,7 @@ export function compileBoardDefinition<
     if (!phaseByRole.has(phase.runner.context)) phaseByRole.set(phase.runner.context, phaseId);
   }
 
-  const board = Object.freeze({
+  return Object.freeze({
     id: config.id,
     name: boardName,
     ...(boardDescription !== undefined ? { description: boardDescription } : {}),
@@ -701,6 +684,4 @@ export function compileBoardDefinition<
       return facts !== undefined && evaluateRuleGroup(definition.autoStartWhen, facts);
     },
   });
-  boardDeclarations.set(board, config);
-  return board;
 }
