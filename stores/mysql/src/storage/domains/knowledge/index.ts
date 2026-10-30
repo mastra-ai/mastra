@@ -9,7 +9,7 @@ import type { KnowledgePageStore } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
-import { KNOWLEDGE_PAGE_DDL, MySQLKnowledgePages } from './pages';
+import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_UPGRADES, MySQLKnowledgePages } from './pages';
 
 export class KnowledgeMySQL extends KnowledgeStorage {
   static getExportDDL(): string[] {
@@ -73,6 +73,10 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     const inspection = await this.#inspectPages();
     if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
     for (const statement of KNOWLEDGE_PAGE_DDL) await this.#pool.query(statement);
+    for (const upgrade of KNOWLEDGE_PAGE_UPGRADES) {
+      const [rows] = await this.#pool.query<RowDataPacket[]>(upgrade.needed, upgrade.args);
+      if (rows.length > 0) for (const statement of upgrade.apply) await this.#pool.query(statement);
+    }
     await this.#pool.query(
       `INSERT IGNORE INTO \`${TABLE_KNOWLEDGE_PAGES_STATE}\` (id, schemaVersion) VALUES ('knowledge', ?)`,
       [KNOWLEDGE_PAGES_SCHEMA_VERSION],

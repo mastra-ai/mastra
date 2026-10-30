@@ -61,6 +61,42 @@ const WHEN = '`when`';
 const BIN = 'CHARACTER SET utf8mb4 COLLATE utf8mb4_bin';
 const JV = `(SELECT jv.v FROM JSON_TABLE(?, '$[*]' COLUMNS (v VARCHAR(512) ${BIN} PATH '$')) jv)`;
 
+/** Live sibling keys are unique per parent; NULL for deleted pages and pages without a key. */
+const LIVE_KEY_COLUMN = `VARCHAR(768) ${BIN} AS (IF(deletedAt IS NULL AND \`key\` IS NOT NULL, CONCAT(parentId, '#', \`key\`), NULL)) STORED`;
+
+const MISSING_PAGE_INDEX = `SELECT 1 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pages' AND index_name = ?)`;
+
+/** Upgrades for Knowledge databases created by an earlier alpha build; `needed` returns a row when `apply` must run. */
+export const KNOWLEDGE_PAGE_UPGRADES: ReadonlyArray<{ needed: string; args: string[]; apply: string[] }> = [
+  {
+    // Earlier alpha builds keyed liveKey on scopeId, which refuses sibling keys under different parents.
+    needed: `SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pages' AND column_name = 'liveKey' AND generation_expression LIKE '%scopeId%'`,
+    args: [],
+    apply: [
+      'ALTER TABLE `mastra_knowledge_pages` DROP INDEX idx_kpages_live_key, DROP COLUMN liveKey',
+      `ALTER TABLE \`mastra_knowledge_pages\` ADD COLUMN liveKey ${LIVE_KEY_COLUMN}, ADD UNIQUE KEY idx_kpages_live_key (liveKey)`,
+    ],
+  },
+  {
+    needed: MISSING_PAGE_INDEX,
+    args: ['idx_kpages_path'],
+    apply: ['ALTER TABLE `mastra_knowledge_pages` ADD KEY idx_kpages_path (path(255))'],
+  },
+  {
+    needed: MISSING_PAGE_INDEX,
+    args: ['idx_kpages_declaration_parent'],
+    apply: ['ALTER TABLE `mastra_knowledge_pages` ADD KEY idx_kpages_declaration_parent (declaration, parentId)'],
+  },
+  {
+    // Pins created before the audience index existed.
+    needed: `SELECT 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM mastra_knowledge_pins pin, JSON_TABLE(pin.audience, '$[*]' COLUMNS (v VARCHAR(255) ${BIN} PATH '$')) jv WHERE NOT EXISTS (SELECT 1 FROM mastra_knowledge_pin_audiences pa WHERE pa.pinId = pin.id AND pa.audience = jv.v))`,
+    args: [],
+    apply: [
+      `INSERT IGNORE INTO mastra_knowledge_pin_audiences (audience, pinId) SELECT jv.v, pin.id FROM mastra_knowledge_pins pin, JSON_TABLE(pin.audience, '$[*]' COLUMNS (v VARCHAR(255) ${BIN} PATH '$')) jv`,
+    ],
+  },
+];
+
 /** DDL for the schema-4 page tables, in creation order. Every statement is idempotent. */
 export const KNOWLEDGE_PAGE_DDL: string[] = [
   `CREATE TABLE IF NOT EXISTS \`mastra_knowledge_access_state\` (
@@ -90,7 +126,7 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     updatedAt VARCHAR(32) NOT NULL,
     deletedAt VARCHAR(32) NULL,
     deletedBy VARCHAR(255) NULL,
-    liveKey VARCHAR(768) ${BIN} AS (IF(deletedAt IS NULL AND \`key\` IS NOT NULL, CONCAT(parentId, '#', \`key\`), NULL)) STORED,
+    liveKey ${LIVE_KEY_COLUMN},
     UNIQUE KEY idx_kpages_address (address),
     UNIQUE KEY idx_kpages_live_key (liveKey),
     KEY idx_kpages_scope (scopeId),

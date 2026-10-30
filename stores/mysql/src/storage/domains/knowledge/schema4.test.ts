@@ -181,4 +181,36 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     expect(await listed(['r:1', 'r:3'])).toEqual([]);
     await store.dangerouslyReset();
   });
+
+  it('upgrades a database from an earlier alpha: sibling keys under different parents, missing indexes, unindexed pins', async () => {
+    const store = await makeStore();
+    const { scope } = await store.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'Acme',
+      provenance: who,
+    });
+    const p1 = await store.createPage({ parentId: scope.id, key: 'one', name: 'One', body: 'x', provenance: who });
+    await store.addPinAudience({ pageId: p1.id, audience: ['r:1'], createdBy: 'host' });
+    // Recreate the earlier layout: per-scope live key, no path index, no audience rows.
+    await pool.query('ALTER TABLE `mastra_knowledge_pages` DROP INDEX idx_kpages_live_key, DROP COLUMN liveKey');
+    await pool.query(
+      "ALTER TABLE `mastra_knowledge_pages` ADD COLUMN liveKey VARCHAR(768) COLLATE utf8mb4_bin AS (IF(deletedAt IS NULL AND `key` IS NOT NULL, CONCAT(scopeId, '#', `key`), NULL)) STORED, ADD UNIQUE KEY idx_kpages_live_key (liveKey)",
+    );
+    await pool.query('ALTER TABLE `mastra_knowledge_pages` DROP INDEX idx_kpages_path');
+    await pool.query('DELETE FROM `mastra_knowledge_pin_audiences`');
+    const child = async (parentId: string, key: string) =>
+      store.createPage({ parentId, key, name: `${key} under ${parentId}`, provenance: who });
+    await expect(child(p1.id, 'one')).rejects.toThrow();
+    await store.init();
+    await expect(child(p1.id, 'one')).resolves.toBeDefined();
+    const [indexes] = (await pool.query(
+      "SHOW INDEX FROM `mastra_knowledge_pages` WHERE Key_name = 'idx_kpages_path'",
+    )) as any;
+    expect(indexes.length).toBeGreaterThan(0);
+    expect((await store.listPins({ audience: ['r:1'], read: 'all', limit: 10 })).pins.map(pin => pin.pageName)).toEqual(
+      ['One'],
+    );
+    await store.dangerouslyReset();
+  });
 });

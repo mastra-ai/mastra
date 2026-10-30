@@ -131,6 +131,8 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     PRIMARY KEY (audience, pinId)
   ) WITHOUT ROWID`,
   `CREATE INDEX IF NOT EXISTS idx_kpin_audiences_pin ON "${T.pinAudiences}" (pinId)`,
+  // Pins created before the audience index existed.
+  `INSERT OR IGNORE INTO "${T.pinAudiences}" (audience, pinId) SELECT j.value, pin.id FROM "${T.pins}" pin, json_each(pin.audience) j`,
   `CREATE TABLE IF NOT EXISTS "${T.activity}" (
     id TEXT PRIMARY KEY,
     action TEXT NOT NULL,
