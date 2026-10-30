@@ -247,6 +247,31 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           { declaration: 'axyc', scopes: 1 },
         ]);
       });
+
+      it('renames keys with characters outside the BMP exactly as the check saw them', async () => {
+        await scope('astral:1', 'a\u{1F600}:$id');
+        await scope('astral:1/internal', 'a\u{1F600}:$id/internal');
+        const seen: unknown[] = [];
+        expect(
+          await store.renameScopeDeclaration({
+            from: 'a\u{1F600}:$id',
+            to: 'b:$id',
+            check: scopes => {
+              seen.push(...scopes);
+            },
+          }),
+        ).toBe(2);
+        expect(seen).toEqual(
+          expect.arrayContaining([
+            { address: 'astral:1', from: 'a\u{1F600}:$id', to: 'b:$id' },
+            { address: 'astral:1/internal', from: 'a\u{1F600}:$id/internal', to: 'b:$id/internal' },
+          ]),
+        );
+        expect(await store.listScopeDeclarations()).toEqual([
+          { declaration: 'b:$id', scopes: 1 },
+          { declaration: 'b:$id/internal', scopes: 1 },
+        ]);
+      });
     });
 
     describe('key paths', () => {

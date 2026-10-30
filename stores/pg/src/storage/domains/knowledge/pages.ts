@@ -723,17 +723,16 @@ export class PgKnowledgePages implements KnowledgePageStore {
         [input.from, `${input.from}/`],
       );
       if (rows.length === 0) return 0;
-      input.check(
-        rows.map(row => ({
-          address: String(row.address),
-          from: String(row.declaration),
-          to: input.to + String(row.declaration).slice(input.from.length),
-        })),
-      );
+      const renames = rows.map(row => ({
+        address: String(row.address),
+        from: String(row.declaration),
+        to: input.to + String(row.declaration).slice(input.from.length),
+      }));
+      input.check(renames);
       await tx.query(
-        `UPDATE ${this.#pages} SET "declaration" = $2 || substr("declaration", $3)
-         WHERE "id" = ANY($1::text[])`,
-        [rows.map(row => String(row.id)), input.to, input.from.length + 1],
+        `UPDATE ${this.#pages} p SET "declaration" = r."to"
+         FROM unnest($1::text[], $2::text[]) AS r("id", "to") WHERE p."id" = r."id"`,
+        [rows.map(row => String(row.id)), renames.map(rename => rename.to)],
       );
       return rows.length;
     });

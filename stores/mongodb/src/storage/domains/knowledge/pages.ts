@@ -675,9 +675,14 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         to: input.to + String(row.declaration).slice(input.from.length),
       }));
       input.check(renames);
-      const targets = new Map(renames.map(rename => [rename.from, rename.to]));
-      for (const [from, to] of targets) {
-        await pages.updateMany({ isScope: true, declaration: from }, { $set: { declaration: to } }, { session });
+      const result = await pages.bulkWrite(
+        rows.map((row, index) => ({
+          updateOne: { filter: { id: row.id, isScope: true }, update: { $set: { declaration: renames[index]!.to } } },
+        })),
+        { session },
+      );
+      if (result.matchedCount < rows.length) {
+        throw new KnowledgeConflictError('Knowledge scope declarations changed while renaming; retry the rename');
       }
       return rows.length;
     });
