@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
@@ -486,15 +488,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('copies an old replica claim handoff even when the new owner is migrated first', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const oldId = cards.get('github issue')!;
-    await workItems.update({ orgId: ORG, id: oldId, userId: USER, patch: { stages: ['done'] } });
-    const { item: newOwner } = await workItems.upsert({
-      orgId: ORG,
-      userId: USER,
-      factoryProjectId: 'aaa-project',
-      input: { title: 'New owner', claimKey: 'github:issue:10:42' },
-    });
+    const legacy = await storage.ops.findOne('work_items', { id: oldId });
+    await storage.ops.updateMany('work_items', { id: oldId }, { claim_key: null, stages: ['done'] });
+    const newOwner = {
+      ...legacy!,
+      id: randomUUID(),
+      factory_project_id: 'aaa-project',
+      title: 'New owner',
+      source_key: null,
+      external_source: null,
+      stages: ['triage'],
+    };
+    await storage.ops.insertOne('work_items', newOwner);
 
     expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 2, recopied: 1, skipped: [] });
     const split = await readSplit(storage);

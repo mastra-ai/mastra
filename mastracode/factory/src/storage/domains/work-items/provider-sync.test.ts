@@ -110,6 +110,105 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
   });
 
   it.skipIf(backend !== 'postgres')(
+    'finishes a legacy child-to-parent claim handoff while another replica deletes the parent',
+    async () => {
+      const { storage, workItems, scope, item: parent } = await setup();
+      const claimKey = 'child-to-parent';
+      const { item: child } = await workItems.upsert({
+        ...scope,
+        input: { title: 'Child', parentWorkItemId: parent.id, claimKey },
+      });
+      for (const card of await new Cards(storage.ops).findMany({ org_id: scope.orgId })) {
+        delete card.work_item;
+        delete card.work_item_sources;
+        await storage.ops.insertOne('work_items', card);
+      }
+      await storage.ops.deleteMany('factory_board_items', { org_id: scope.orgId });
+      await storage.ops.deleteMany('factory_work_items', { org_id: scope.orgId });
+      await storage.ops.deleteMany('factory_work_item_sources', { org_id: scope.orgId });
+      await migrateWorkItemSplit(storage);
+      const replica = await separateReplica(storage);
+      await storage.ops.updateMany('work_items', { id: child.id }, { claim_key: null });
+      await storage.ops.updateMany('work_items', { id: parent.id }, { claim_key: claimKey });
+      let parentDeleted!: () => void;
+      const afterParentDelete = new Promise<void>(resolve => {
+        parentDeleted = resolve;
+      });
+      let childLocked!: () => void;
+      const afterChildLock = new Promise<void>(resolve => {
+        childLocked = resolve;
+      });
+      let detachAttempted!: () => void;
+      const afterDetachAttempt = new Promise<void>(resolve => {
+        detachAttempted = resolve;
+      });
+      const deletionTransaction = storage.withTransaction.bind(storage);
+      vi.spyOn(storage, 'withTransaction').mockImplementation((fn, options) =>
+        deletionTransaction(
+          ops =>
+            fn(
+              new Proxy(ops, {
+                get(target, property) {
+                  if (property === 'upsertOne')
+                    return async (...args: Parameters<typeof ops.upsertOne>) => {
+                      const row = await target.upsertOne(...args);
+                      if (args[0] === 'factory_board_item_tombstones' && args[2].id === parent.id) {
+                        parentDeleted();
+                        await afterChildLock;
+                      }
+                      return row;
+                    };
+                  if (property === 'updateAtomic')
+                    return async (...args: Parameters<typeof ops.updateAtomic>) => {
+                      if (args[0] === 'factory_board_items' && args[1].id === child.id) detachAttempted();
+                      return target.updateAtomic(...args);
+                    };
+                  const value = Reflect.get(target, property);
+                  return typeof value === 'function' ? value.bind(target) : value;
+                },
+              }),
+            ),
+          options,
+        ),
+      );
+      const migrationTransaction = replica.storage.withTransaction.bind(replica.storage);
+      vi.spyOn(replica.storage, 'withTransaction').mockImplementation((fn, options) =>
+        migrationTransaction(
+          ops =>
+            fn(
+              new Proxy(ops, {
+                get(target, property) {
+                  if (property === 'updateAtomic')
+                    return async (...args: Parameters<typeof ops.updateAtomic>) => {
+                      const row = await target.updateAtomic(...args);
+                      if (args[0] === 'factory_board_items' && args[1].id === child.id) {
+                        childLocked();
+                        await afterDetachAttempt;
+                      }
+                      return row;
+                    };
+                  const value = Reflect.get(target, property);
+                  return typeof value === 'function' ? value.bind(target) : value;
+                },
+              }),
+            ),
+          options,
+        ),
+      );
+      const deletion = workItems.delete({ orgId: scope.orgId, id: parent.id });
+      await afterParentDelete;
+      const outcomes = await Promise.allSettled([deletion, migrateWorkItemSplit(replica.storage)]);
+      expect(outcomes.filter(outcome => outcome.status === 'rejected')).toEqual([]);
+      expect(await workItems.get({ orgId: scope.orgId, id: parent.id })).toBeNull();
+      expect(await workItems.get({ orgId: scope.orgId, id: child.id })).toMatchObject({
+        parentWorkItemId: null,
+        claimKey: null,
+      });
+      expect(await workItems.getByClaimKey({ orgId: scope.orgId, claimKey })).toBeNull();
+    },
+  );
+
+  it.skipIf(backend !== 'postgres')(
     'lets separate replicas delete a parent and child concurrently without deadlocks',
     async () => {
       const { storage, workItems, scope, item: parent } = await setup();
@@ -261,24 +360,37 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     });
   });
 
-  it('deduplicates sources per project without persisting or enforcing legacy cross-project claims', async () => {
+  it('deduplicates sources per project while preserving org-wide claim ownership on placements', async () => {
     const { storage, workItems, scope, item } = await setup();
-    const input = { title: item.title, externalSource: item.externalSource!, claimKey: 'retired-shared-claim' };
+    const input = { title: item.title, externalSource: item.externalSource!, claimKey: 'shared-claim' };
     const reused = await workItems.upsert({ ...scope, input });
-    const second = await workItems.upsert({ ...scope, factoryProjectId: 'another-project', input });
-    expect(reused).toMatchObject({ created: false, item: { id: item.id, claimKey: null } });
+    expect(reused).toMatchObject({ created: false, item: { id: item.id, claimKey: input.claimKey } });
+    await expect(workItems.upsert({ ...scope, factoryProjectId: 'another-project', input })).rejects.toMatchObject({
+      code: 'work_item_claim_conflict',
+    });
+    const second = await workItems.upsert({
+      ...scope,
+      factoryProjectId: 'another-project',
+      input: { ...input, claimKey: null },
+    });
     expect(second).toMatchObject({ created: true, item: { claimKey: null } });
     expect(second.item.id).not.toBe(item.id);
-    expect(await workItems.getByClaimKey({ orgId: scope.orgId, claimKey: input.claimKey })).toBeNull();
+    expect(await workItems.getByClaimKey({ orgId: scope.orgId, claimKey: input.claimKey })).toMatchObject({
+      id: item.id,
+    });
+    expect(await storage.ops.findOne('factory_board_items', { id: item.id })).toHaveProperty(
+      'claim_key',
+      input.claimKey,
+    );
     for (const card of [item, reused.item, second.item]) {
       expect(card.workItem).not.toHaveProperty('kind');
       for (const source of card.workItem.sources) expect(source).not.toHaveProperty('kind');
     }
     for (const table of ['factory_work_items', 'factory_work_item_sources', 'factory_board_items']) {
       for (const row of await storage.ops.findMany(table, { org_id: scope.orgId })) {
+        if (table !== 'factory_board_items') expect(row).not.toHaveProperty('claim_key');
         for (const column of [
           'kind',
-          'claim_key',
           'triage_type',
           'accepted_at',
           'plans_preapproved_at',

@@ -18,7 +18,7 @@ const BOARD_ITEMS = FACTORY_BOARD_ITEMS_SCHEMA.name;
 const WORK_ITEMS = FACTORY_WORK_ITEMS_SCHEMA.name;
 const SOURCES = FACTORY_WORK_ITEM_SOURCES_SCHEMA.name;
 const BOARD_COLUMNS = new Set(Object.keys(FACTORY_BOARD_ITEMS_SCHEMA.columns));
-const RETIRED_COLUMNS = new Set(['claim_key', 'triage_type', 'accepted_at', 'plans_preapproved_at']);
+const RETIRED_COLUMNS = new Set(['triage_type', 'accepted_at', 'plans_preapproved_at']);
 const PROJECTED_COLUMNS = new Set([
   'work_item',
   'work_item_sources',
@@ -84,7 +84,7 @@ function joinCard(
     board: board.board,
     external_source: externalSourceOf(source),
     source_key: source?.source_key ?? null,
-    claim_key: null,
+    claim_key: board.claim_key ?? null,
     parent_work_item_id: board.parent_board_item_id,
     title: work.title,
     stages: board.stages,
@@ -129,8 +129,7 @@ export class Cards {
   ) {}
 
   async #where(where: CollectionWhere): Promise<CollectionWhere | null> {
-    const { source_key: sourceKey, claim_key: claimKey, ...rest } = where;
-    if (claimKey !== undefined && claimKey !== null) return null;
+    const { source_key: sourceKey, ...rest } = where;
     const boardWhere = boardColumns(rest as Partial<WorkItemDbRow>, { filter: true }) as CollectionWhere;
     if (sourceKey === undefined) return boardWhere;
     const scope: CollectionWhere = {};
