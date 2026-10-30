@@ -152,7 +152,7 @@ if (capabilities.spanAggregate) {
 }
 ```
 
-The request and response match `aggregateTraces()`, with span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling.
+The request and response match `aggregateTraces()`, with span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling, and `capabilities.spanAggregateModelDimensions` before grouping or counting distinct values by `model` or `provider`. With an older adapter, those requests return `501`.
 
 See [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) for selection, dimensions, per-span usage, and how to list the spans behind a group.
 
