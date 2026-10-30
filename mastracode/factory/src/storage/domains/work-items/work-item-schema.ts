@@ -141,7 +141,6 @@ export interface WorkItemSourceRow {
   id: string;
   workItemId: string;
   provider: WorkItemProvider;
-  kind: WorkItemKind;
   integrationId: string;
   sourceType: string;
   workspaceId: string | null;
@@ -169,7 +168,6 @@ export interface WorkItemRow {
   orgId: string;
   factoryProjectId: string;
   provider: WorkItemProvider;
-  kind: WorkItemKind;
   externalId: string;
   key: string | null;
   url: string | null;
