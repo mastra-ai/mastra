@@ -104,14 +104,16 @@ export class KnowledgeRun {
   /**
    * Resolves a page reference through the run's read view: a page id, a scope address,
    * `<scope>#<key>[/<key>…]` (walked key by key), or an exact name (ambiguous names are refused with candidate ids).
+   * A scope that hasn't been created yet is not found, unless `createAt` is given and the run's rules give it at
+   * least that role there: reading never creates scope pages.
    */
-  async page(ref: string): Promise<KnowledgePage> {
+  async page(ref: string, createAt?: KnowledgeRole): Promise<KnowledgePage> {
     const byId = await this.storage.getPage({ id: ref, read: this.read });
     if (byId && !byId.deletedAt) return byId;
 
     if (ref.indexOf('#') > 0) {
       const parsed = parseKnowledgePageRef(ref);
-      const scope = parsed ? await this.#readableScope(parsed.scope) : undefined;
+      const scope = parsed ? await this.#readableScope(parsed.scope, createAt) : undefined;
       const page =
         parsed && scope
           ? await this.storage.getPageByPath({ scopeId: scope.id, path: parsed.path, read: this.read })
@@ -121,7 +123,7 @@ export class KnowledgeRun {
     }
 
     if (this.runtime.compiled.match(ref)) {
-      const scope = await this.#readableScope(ref);
+      const scope = await this.#readableScope(ref, createAt);
       if (scope) return scope;
     }
 
@@ -137,10 +139,14 @@ export class KnowledgeRun {
     throw new KnowledgeNotFoundError(ref);
   }
 
-  async #readableScope(address: string): Promise<KnowledgePage | null> {
+  async #readableScope(address: string, createAt: KnowledgeRole | undefined): Promise<KnowledgePage | null> {
     let [scope] = await this.storage.getScopesByAddress([address]);
-    // A declared scope the run's rules reach materializes on first use, with its template pages.
-    if (!scope && knowledgeRoleOn(this.runtime.compiled, this.principals, { address })) {
+    // A write materializes a declared scope, with its template pages, when the run's rules let it write there.
+    if (
+      !scope &&
+      createAt &&
+      knowledgeRoleAtLeast(knowledgeRoleOn(this.runtime.compiled, this.principals, { address }), createAt)
+    ) {
       scope = await this.runtime.materializeScope(address, this.principals, this.provenance);
     }
     return scope && knowledgeScopeReadable(scope, this.read) ? scope : null;

@@ -359,7 +359,7 @@ function pageTool(host: KnowledgePageToolHost) {
           if (args.name === undefined && args.description === undefined && args.body === undefined) {
             throw new Error('Editing a page needs at least one of name, description or body.');
           }
-          const page = await run.page(args.page);
+          const page = await run.page(args.page, 'editor');
           await run.require(await run.scopeOf(page), 'editor', 'Editing a page');
           const updated = await storage.updatePage({
             id: page.id,
@@ -422,7 +422,7 @@ function pageTool(host: KnowledgePageToolHost) {
       }
 
       if (!args.into) throw new Error('Merging needs into: the page that remains.');
-      const target = await run.page(args.into);
+      const target = await run.page(args.into, 'editor');
       await run.require(home, 'owner', 'Merging a page away');
       const targetHome = await run.scopeOf(target);
       // Merging carries the source's child pages into the target's scope, so across scopes it is a move.
@@ -496,7 +496,7 @@ function noteTool(host: KnowledgePageToolHost) {
         if (!args.page || !args.text) throw new Error('Adding a note needs page and text.');
         const when = args.when ? new Date(args.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error(`Invalid when: "${args.when}".`);
-        const page = await run.page(args.page);
+        const page = await run.page(args.page, 'contributor');
         await run.require(await run.scopeOf(page), 'contributor', 'Adding a note');
         const stampScopeIds = await stamps('Adding a note');
         const note = await storage.addNote({
@@ -553,7 +553,7 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
     execute: async (input, context) => {
       const { op, page: ref, audience } = input as { op: 'pin' | 'unpin'; page: string; audience: string[] };
       const run = await start(host, context);
-      const page = await run.page(ref);
+      const page = await run.page(ref, 'editor');
       await run.require(await run.scopeOf(page), 'editor', op === 'pin' ? 'Pinning a page' : 'Unpinning a page');
       await requireAudienceAuthority(run, audience);
       const author = run.provenance.author;
