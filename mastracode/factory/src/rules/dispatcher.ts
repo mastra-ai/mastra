@@ -4,7 +4,7 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { boardForWorkItem, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
+import { boardForWorkItem, resolvePhaseSemantics, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -39,7 +39,7 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES, workItemSource } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -523,11 +523,16 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
-  item: { metadata: Record<string, unknown> | null },
+  item: Pick<WorkItemRow, 'metadata' | 'externalSource'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
-  if (decision.type === 'transition') return decision.board === 'review' && decision.stage === 'review';
+  if (decision.type === 'transition') {
+    return (
+      decision.stage === 'review' &&
+      reviewsPullRequest({ board: decision.board, item: { source: workItemSource(item.externalSource) } })
+    );
+  }
   return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 

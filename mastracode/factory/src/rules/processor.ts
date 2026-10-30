@@ -11,7 +11,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
-import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '../boards/index.js';
+import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -421,17 +421,19 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       role: binding.role,
       configVersion: this.options.configVersion,
     };
-    const value: ActivePhaseSnapshotValue =
-      board === 'review'
-        ? {
-            ...baseValue,
-            board,
-            ...reviewRuntimeFromRequestContext(
-              args.requestContext,
-              await this.options.defaultThinkingLevel?.(args.requestContext),
-            ),
-          }
-        : { ...baseValue, board };
+    const value: ActivePhaseSnapshotValue = reviewsPullRequest({
+      board,
+      item: { source: workItemSource(item.externalSource) },
+    })
+      ? {
+          ...baseValue,
+          board,
+          ...reviewRuntimeFromRequestContext(
+            args.requestContext,
+            await this.options.defaultThinkingLevel?.(args.requestContext),
+          ),
+        }
+      : { ...baseValue, board };
     const cacheKey = await phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;

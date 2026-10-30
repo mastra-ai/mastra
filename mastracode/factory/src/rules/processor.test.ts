@@ -1003,6 +1003,29 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(reasoningChanged?.contents).toContain('Runtime: model=openai/gpt-5.6-sol, reasoning-setting=xhigh');
   });
 
+  it('gives a pull request card reviewed on the Work board the review runtime, but not an issue card in Review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'review', 'pull-request', { id: 'work', stage: 'review' });
+    const boards = createBoardRegistry();
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
+
+    const signal = await processor.computeStateSignal(stateArgs(requestContext({ modelId: 'openai/gpt-5.5' })));
+
+    expect(signal).toMatchObject({
+      attributes: { status: 'active', board: 'work', stage: 'review', role: 'review', modelId: 'openai/gpt-5.5' },
+    });
+    expect(signal?.contents).toContain('Runtime: model=openai/gpt-5.5');
+
+    const issueStorage = (await createFactoryStorageForTests()).workItems;
+    await prepare(issueStorage, 'review', 'issue', { id: 'work', stage: 'review' });
+    const issueSignal = await new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage: issueStorage,
+    }).computeStateSignal(stateArgs(requestContext({ modelId: 'openai/gpt-5.5' })));
+    expect(issueSignal?.attributes).not.toHaveProperty('modelId');
+  });
+
   it('rejects review phase state without a selected model', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
