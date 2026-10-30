@@ -28,6 +28,7 @@ export type { FetchWithRetryOptions } from './utils/fetchWithRetry';
 
 export { boundedStringify, ensureSerializable, isBoundedSerializable, safeStringify } from './utils/safe-stringify';
 export { deepEqual } from './utils/deep-equal';
+export { getRequestUser, resolveDynamicArgument } from './utils/dynamic-argument';
 
 /** Resolves after `ms`, or as soon as `signal` aborts. */
 export const delay = (ms: number, signal?: AbortSignal) =>

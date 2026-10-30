@@ -17,6 +17,14 @@ export const MASTRA_SCOPES_KEY = 'mastra__scopes';
 
 export const MASTRA_USER_KEY = 'mastra__user';
 
+/**
+ * Authenticated user normalized to the stable `MastraUser` shape via the auth
+ * provider's `toMastraUser()`. Surfaced to `DynamicArgument` callbacks as the
+ * optional `user` argument. The raw provider-specific user stays at
+ * {@link MASTRA_USER_KEY}.
+ */
+export const MASTRA_NORMALIZED_USER_KEY = 'mastra__normalizedUser';
+
 export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
 
 export const MASTRA_USER_ROLES_KEY = 'mastra__userRoles';
@@ -67,6 +75,7 @@ export const RESERVED_REQUEST_CONTEXT_KEYS = [
   // server middleware may set them.
   MASTRA_SCOPES_KEY,
   MASTRA_USER_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,

@@ -33,6 +33,7 @@ export type {
 } from './types';
 export {
   MastraAuthProvider,
+  normalizeMastraUser,
   isSSOProvider,
   isSessionProvider,
   isUserProvider,

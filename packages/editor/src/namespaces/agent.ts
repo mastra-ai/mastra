@@ -1289,11 +1289,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // Dynamic code instructions: resolve the original at request time (same
     // pattern as the tools merge above) and re-attach whatever envelope it produced.
     const getOriginal = agent.getInstructions.bind(agent);
-    return async ({ requestContext, mastra }) => {
-      const text = typeof stored === 'string' ? stored : await stored({ requestContext, mastra });
+    return async args => {
+      const text = typeof stored === 'string' ? stored : await stored(args);
       let original: unknown;
       try {
-        original = await getOriginal({ requestContext });
+        original = await getOriginal({ requestContext: args.requestContext });
       } catch {
         // Dynamic instructions may require context this request can't provide;
         // fall back to the stored text rather than failing the run.

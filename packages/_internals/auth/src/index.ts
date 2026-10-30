@@ -15,7 +15,23 @@ export interface User {
   name?: string;
   /** Avatar URL */
   avatarUrl?: string;
+  /**
+   * Primary role, when the auth provider or a configured RBAC provider
+   * supplies one. `undefined` means the auth setup has no role concept —
+   * not that the user lacks permissions.
+   */
+  role?: string;
 }
+
+/**
+ * Authenticated end user, normalized to a stable shape.
+ *
+ * Produced by `MastraAuthProvider.toMastraUser()` at authentication time and
+ * surfaced to `DynamicArgument` callbacks as the optional `user` argument.
+ * The raw provider-specific user object remains available on the request
+ * context under the `mastra__user` key.
+ */
+export type MastraUser = User;
 
 /**
  * Provider interface for user awareness in Studio.
