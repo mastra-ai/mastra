@@ -1,72 +1,62 @@
 ---
-title: "Reference: Turbopuffer vector store | Vectors"
-description: "The TurbopufferVector class provides vector search using Turbopuffer, a high-performance vector database optimized for RAG applications."
+title: "Reference: Pinecone vector store | Vectors"
+description: "Configure PineconeVector to create indexes, store embeddings, run similarity searches, filter metadata, and manage vectors in Pinecone."
 packages:
-  - "@mastra/turbopuffer"
+  - "@mastra/pinecone"
 ---
 
-# Turbopuffer vector store
+# Pinecone vector store
 
-The TurbopufferVector class provides vector search using [Turbopuffer](https://turbopuffer.com/), a high-performance vector database optimized for RAG applications. Turbopuffer offers fast vector similarity search with advanced filtering capabilities and efficient storage management.
+The PineconeVector class provides an interface to [Pinecone](https://www.pinecone.io/)'s vector database.
+It provides real-time vector search, with features like hybrid search, metadata filtering, and namespace management.
 
 ## Constructor options
+
+The constructor accepts all [Pinecone configuration options](https://docs.pinecone.io/reference/typescript-sdk) plus Mastra-specific fields.
 
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'apiKey',
     type: 'string',
-    description: 'The API key to authenticate with Turbopuffer',
+    description: 'Pinecone API key',
   },
   {
-    name: 'baseUrl',
+    name: 'controllerHostUrl',
     type: 'string',
     isOptional: true,
-    defaultValue: 'https://api.turbopuffer.com',
-    description: 'The base URL for the Turbopuffer API',
+    description: 'Custom Pinecone controller host URL',
   },
   {
-    name: 'connectTimeout',
-    type: 'number',
+    name: 'additionalHeaders',
+    type: 'Record<string, string>',
     isOptional: true,
-    defaultValue: '10000',
-    description: 'The timeout to establish a connection, in ms. Only applicable in Node and Deno.',
+    description: 'Additional HTTP headers to include in requests',
   },
   {
-    name: 'connectionIdleTimeout',
-    type: 'number',
+    name: 'sourceTag',
+    type: 'string',
     isOptional: true,
-    defaultValue: '60000',
-    description: 'The socket idle timeout, in ms. Only applicable in Node and Deno.',
+    description: 'Source tag for request tracking',
   },
   {
-    name: 'warmConnections',
-    type: 'number',
+    name: 'cloud',
+    type: "'aws' | 'gcp' | 'azure'",
     isOptional: true,
-    defaultValue: '0',
-    description: 'The number of connections to open initially when creating a new client.',
+    defaultValue: 'aws',
+    description: 'Cloud provider for new index creation',
   },
   {
-    name: 'compression',
-    type: 'boolean',
+    name: 'region',
+    type: 'string',
     isOptional: true,
-    defaultValue: 'true',
-    description: 'Whether to compress requests and accept compressed responses.',
-  },
-  {
-    name: 'consistency',
-    type: "'strong' | 'eventual'",
-    isOptional: true,
-    defaultValue: 'strong',
-    description:
-      'The default consistency level for queries. Can be overridden per query. "strong" guarantees queries see all data written before the query started, at the cost of higher latency. "eventual" offers lower latency, but recently written data may not be visible yet.',
-  },
-  {
-    name: 'schemaConfigForIndex',
-    type: 'function',
-    isOptional: true,
-    description:
-      'A callback function that takes an index name and returns a config object for that index. You can define explicit schemas per index.',
+    defaultValue: 'us-east-1',
+    description: 'Region for new index creation',
   },
 ]}
 />
@@ -74,8 +64,6 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ## Methods
 
 ### `createIndex()`
-
-Turbopuffer has no explicit create-index operation. `createIndex()` validates the arguments and records the dimension and metric locally. The first `upsert()` creates the namespace in Turbopuffer.
 
 <PropertiesTable
   content={[
@@ -91,10 +79,10 @@ Turbopuffer has no explicit create-index operation. `createIndex()` validates th
   },
   {
     name: 'metric',
-    type: "'cosine' | 'euclidean'",
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
     isOptional: true,
     defaultValue: 'cosine',
-    description: "Distance metric for similarity search. 'dotproduct' isn't supported and throws an error.",
+    description: "Distance metric for similarity search. Use 'dotproduct' if you plan to use hybrid search.",
   },
 ]}
 />
@@ -104,9 +92,20 @@ Turbopuffer has no explicit create-index operation. `createIndex()` validates th
 <PropertiesTable
   content={[
   {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of your Pinecone index',
+  },
+  {
     name: 'vectors',
     type: 'number[][]',
-    description: 'Array of embedding vectors',
+    description: 'Array of dense embedding vectors',
+  },
+  {
+    name: 'sparseVectors',
+    type: '{ indices: number[], values: number[] }[]',
+    isOptional: true,
+    description: 'Array of sparse vectors for hybrid search. Each vector must have matching indices and values arrays.',
   },
   {
     name: 'metadata',
@@ -119,6 +118,13 @@ Turbopuffer has no explicit create-index operation. `createIndex()` validates th
     type: 'string[]',
     isOptional: true,
     description: 'Optional vector IDs (auto-generated if not provided)',
+  },
+  {
+    name: 'namespace',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Optional namespace to store vectors in. Vectors in different namespaces are isolated from each other.',
   },
 ]}
 />
@@ -135,7 +141,13 @@ Turbopuffer has no explicit create-index operation. `createIndex()` validates th
   {
     name: 'queryVector',
     type: 'number[]',
-    description: 'Query vector to find similar vectors',
+    description: 'Dense query vector to find similar vectors',
+  },
+  {
+    name: 'sparseVector',
+    type: '{ indices: number[], values: number[] }',
+    isOptional: true,
+    description: 'Optional sparse vector for hybrid search. Must have matching indices and values arrays.',
   },
   {
     name: 'topK',
@@ -155,14 +167,13 @@ Turbopuffer has no explicit create-index operation. `createIndex()` validates th
     type: 'boolean',
     isOptional: true,
     defaultValue: 'false',
-    description: 'Whether to include vectors in the results',
+    description: 'Whether to include the vector in the result',
   },
   {
-    name: 'consistency',
-    type: "'strong' | 'eventual'",
+    name: 'namespace',
+    type: 'string',
     isOptional: true,
-    description:
-      'The consistency level for this query. Overrides the consistency level set in the constructor. Defaults to "strong".',
+    description: 'Optional namespace to query vectors from. Only returns results from the specified namespace.',
   },
 ]}
 />
@@ -189,7 +200,7 @@ Returns:
 interface IndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric?: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -207,7 +218,7 @@ interface IndexStats {
 
 ### `updateVector()`
 
-Update a single vector by ID, or every vector that matches a metadata filter. Either `id` or `filter` must be provided, but not both.
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
@@ -229,9 +240,27 @@ Update a single vector by ID, or every vector that matches a metadata filter. Ei
     description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
   },
   {
+    name: 'namespace',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional namespace for the update operation',
+  },
+  {
     name: 'update',
-    type: '{ vector?: number[]; metadata?: Record<string, any>; }',
-    description: 'Object containing the vector and/or metadata to update',
+    type: 'object',
+    description: 'Update parameters',
+  },
+  {
+    name: 'update.vector',
+    type: 'number[]',
+    isOptional: true,
+    description: 'New vector values to update',
+  },
+  {
+    name: 'update.metadata',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'New metadata to update',
   },
 ]}
 />
@@ -276,6 +305,12 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
     isOptional: true,
     description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
   },
+  {
+    name: 'namespace',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional namespace for the deletion operation',
+  },
 ]}
 />
 
@@ -289,29 +324,6 @@ interface QueryResult {
   score: number
   metadata?: Record<string, any>
   vector?: number[] // Only included if includeVector is true
-}
-```
-
-## Schema configuration
-
-The `schemaConfigForIndex` option allows you to define explicit schemas for different indexes:
-
-```typescript
-schemaConfigForIndex: (indexName: string) => {
-  // Mastra's default embedding model and index for memory messages:
-  if (indexName === 'memory_messages_384') {
-    return {
-      dimensions: 384,
-      schema: {
-        thread_id: {
-          type: 'string',
-          filterable: true,
-        },
-      },
-    }
-  } else {
-    throw new Error(`TODO: add schema for index: ${indexName}`)
-  }
 }
 ```
 
@@ -329,7 +341,7 @@ try {
   })
 } catch (error) {
   if (error instanceof MastraError) {
-    console.log(error.id) // 'MASTRA_VECTOR_TURBOPUFFER_QUERY_FAILED'
+    console.log(error.id) // 'MASTRA_VECTOR_PINECONE_QUERY_FAILED'
     console.log(error.domain) // 'STORAGE'
     console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context
@@ -337,6 +349,20 @@ try {
 }
 ```
 
+### Environment variables
+
+Required environment variables:
+
+- `PINECONE_API_KEY`: Your Pinecone API key
+
+## Hybrid search
+
+Pinecone supports hybrid search by combining dense and sparse vectors. To use hybrid search:
+
+1. Create an index with `metric: 'dotproduct'`
+1. During upsert, provide sparse vectors using the `sparseVectors` parameter
+1. During query, provide a sparse vector using the `sparseVector` parameter
+
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)

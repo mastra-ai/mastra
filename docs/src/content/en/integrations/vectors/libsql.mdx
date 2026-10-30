@@ -1,45 +1,48 @@
 ---
-title: "Reference: DuckDB vector store | Vectors"
-description: "The DuckDB storage implementation provides an embedded high-performance vector search solution using DuckDB, an in-process analytical database."
+title: "Reference: libSQL vector store | Vectors"
+description: "Configure LibSQLVector for similarity search and metadata filtering with local libSQL, SQLite-compatible vector extensions, or Turso databases."
 packages:
-  - "@mastra/duckdb"
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
-# DuckDB vector store
+# libSQL vector store
 
-The DuckDB storage implementation provides an embedded high-performance vector search solution using [DuckDB](https://duckdb.org/), an in-process analytical database. It uses the VSS extension for vector similarity search with HNSW indexing, offering a lightweight and efficient vector database that requires no external server.
-
-It's part of the `@mastra/duckdb` package and offers efficient vector similarity search with metadata filtering.
+The libSQL storage implementation provides a SQLite-compatible vector search [libSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+It's part of the `@mastra/libsql` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
 
 ```bash npm2yarn
-npm install @mastra/duckdb@latest
+npm install @mastra/libsql@latest
 ```
 
 ## Usage
 
 ```typescript oxfmt:false
-import { DuckDBVector } from "@mastra/duckdb";
+import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
-const store = new DuckDBVector({
-  id: "duckdb-vector",
-  path: ":memory:", // or './vectors.duckdb' for file persistence
+const store = new LibSQLVector({
+  id: 'libsql-vector',
+  url: process.env.DATABASE_URL,
+  // Optional: for Turso cloud databases
+  authToken: process.env.DATABASE_AUTH_TOKEN,
 });
 
 // Create an index
 await store.createIndex({
   indexName: "myCollection",
   dimension: 1536,
-  metric: "cosine",
 });
 
 // Add vectors with metadata
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
 const metadata = [
   { text: "first document", category: "A" },
-  { text: "second document", category: "B" },
+  { text: "second document", category: "B" }
 ];
 await store.upsert({
   indexName: "myCollection",
@@ -52,12 +55,9 @@ const queryVector = [0.1, 0.2, ...];
 const results = await store.query({
   indexName: "myCollection",
   queryVector,
-  topK: 10,
-  filter: { category: "A" },
+  topK: 10, // top K results
+  filter: { category: "A" } // optional metadata filter
 });
-
-// Clean up
-await store.close();
 ```
 
 ## Constructor options
@@ -65,31 +65,28 @@ await store.close();
 <PropertiesTable
   content={[
   {
-    name: 'id',
+    name: 'url',
     type: 'string',
-    description: 'Unique identifier for the vector store instance',
+    description:
+      "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
   },
   {
-    name: 'path',
+    name: 'authToken',
     type: 'string',
     isOptional: true,
-    defaultValue: "':memory:'",
-    description:
-      "Database file path. Use ':memory:' for in-memory database, or a file path like './vectors.duckdb' for persistence.",
+    description: 'Authentication token for Turso cloud databases',
   },
   {
-    name: 'dimensions',
+    name: 'syncUrl',
+    type: 'string',
+    isOptional: true,
+    description: 'URL for database replication (Turso specific)',
+  },
+  {
+    name: 'syncInterval',
     type: 'number',
     isOptional: true,
-    defaultValue: '1536',
-    description: 'Default dimension for vector embeddings',
-  },
-  {
-    name: 'metric',
-    type: "'cosine' | 'euclidean' | 'dotproduct'",
-    isOptional: true,
-    defaultValue: 'cosine',
-    description: 'Default distance metric for similarity search',
+    description: 'Interval in milliseconds for database sync (Turso specific)',
   },
 ]}
 />
@@ -98,7 +95,7 @@ await store.close();
 
 ### `createIndex()`
 
-Creates a new vector collection with optional HNSW index for fast approximate nearest neighbor search.
+Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscore characters. The dimension must be a positive integer.
 
 <PropertiesTable
   content={[
@@ -117,14 +114,15 @@ Creates a new vector collection with optional HNSW index for fast approximate ne
     type: "'cosine' | 'euclidean' | 'dotproduct'",
     isOptional: true,
     defaultValue: 'cosine',
-    description: 'Distance metric for similarity search',
+    description:
+      'Distance metric for similarity search. Note: Currently only cosine similarity is supported by libSQL.',
   },
 ]}
 />
 
 ### `upsert()`
 
-Adds or updates vectors and their metadata in the index.
+Adds or updates vectors and their metadata in the index. Uses a transaction to ensure all vectors are inserted atomically - if any insert fails, the entire operation is rolled back.
 
 <PropertiesTable
   content={[
@@ -148,7 +146,7 @@ Adds or updates vectors and their metadata in the index.
     name: 'ids',
     type: 'string[]',
     isOptional: true,
-    description: 'Optional vector IDs (auto-generated UUIDs if not provided)',
+    description: 'Optional vector IDs (auto-generated if not provided)',
   },
 ]}
 />
@@ -180,7 +178,7 @@ Searches for similar vectors with optional metadata filtering.
     name: 'filter',
     type: 'Filter',
     isOptional: true,
-    description: 'Metadata filters using MongoDB-like query syntax',
+    description: 'Metadata filters',
   },
   {
     name: 'includeVector',
@@ -188,6 +186,13 @@ Searches for similar vectors with optional metadata filtering.
     isOptional: true,
     defaultValue: 'false',
     description: 'Whether to include vector data in results',
+  },
+  {
+    name: 'minScore',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '-1',
+    description: 'Minimum similarity score threshold (cosine similarity ranges from -1 to 1)',
   },
 ]}
 />
@@ -235,6 +240,20 @@ Deletes an index and all its data.
 Lists all vector indexes in the database.
 
 Returns: `Promise<string[]>`
+
+### `truncateIndex()`
+
+Removes all vectors from an index while keeping the index structure.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to truncate',
+  },
+]}
+/>
 
 ### `updateVector()`
 
@@ -324,14 +343,6 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-### `close()`
-
-Closes the database connection and releases resources.
-
-```typescript
-await store.close()
-```
-
 ## Response types
 
 Query results are returned in this format:
@@ -345,49 +356,6 @@ interface QueryResult {
 }
 ```
 
-## Filter operators
-
-DuckDB vector store supports MongoDB-like filter operators:
-
-| Category | Operators |
-| - | - |
-| Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` |
-| Logical | `$and`, `$or`, `$not`, `$nor` |
-| Array | `$in`, `$nin`, `$all` |
-| Element | `$exists` |
-| Text | `$contains` |
-
-### Filter Examples
-
-```typescript oxfmt:false
-// Allegato operators
-const results = await store.query({
-  indexName: "docs",
-  queryVector: [...],
-  filter: {
-    $and: [
-      { category: "electronics" },
-      { price: { $gte: 100, $lte: 500 } },
-    ],
-  },
-});
-
-// Nested field access
-const results = await store.query({
-  indexName: "docs",
-  queryVector: [...],
-  filter: { "user.profile.tier": "premium" },
-});
-```
-
-## Distance metrics
-
-| Metric | Description | Score Interpretation | Best For |
-| - | - | - | - |
-| `cosine` | Cosine similarity | -1 to 1, computed as `1 - cosine distance` (1 = most similar) | Text embeddings, normalized vectors |
-| `euclidean` | L2 distance | 0-1, computed as `1 / (1 + distance)` (1 = most similar) | Image embeddings, spatial data |
-| `dotproduct` | Inner product | Higher = more similar | When vector magnitude matters |
-
 ## Error handling
 
 The store throws specific errors for different failure cases:
@@ -399,10 +367,13 @@ try {
     queryVector: queryVector,
   })
 } catch (error) {
-  if (error.message.includes('not found')) {
+  // Handle specific error cases
+  if (error.message.includes('Invalid index name format')) {
+    console.error(
+      'Index name must start with a letter/underscore and contain only alphanumeric characters',
+    )
+  } else if (error.message.includes('Table not found')) {
     console.error('The specified index does not exist')
-  } else if (error.message.includes('Invalid identifier')) {
-    console.error('Index name contains invalid characters')
   } else {
     console.error('Vector store error:', error.message)
   }
@@ -412,48 +383,59 @@ try {
 Common error cases include:
 
 - Invalid index name format
-- Index/table not found
-- Dimension mismatch between query vector and index
-- Empty filter or ids array in delete/update operations
-- Mutual exclusivity violations (providing both `id` and `filter`)
+- Invalid vector dimensions
+- Table/index not found
+- Database connection issues
+- Transaction failures during upsert
 
-## Use cases
+## Usage example
 
-### Embedded Semantic Search
+### Local embeddings with fastembed
 
-Build offline-capable AI applications with semantic search that runs entirely in-process:
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
 
-```typescript
-const store = new DuckDBVector({
-  id: 'offline-search',
-  path: './search.duckdb',
-})
+Install `fastembed` to get started:
+
+```bash npm2yarn
+npm install @mastra/fastembed@latest
 ```
 
-### Local RAG Pipelines
+Add the following to your agent:
 
-Process sensitive documents locally without sending data to cloud vector databases:
+```typescript title="src/mastra/agents/example-libsql-agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
+import { fastembed } from '@mastra/fastembed'
 
-```typescript
-const store = new DuckDBVector({
-  id: 'private-rag',
-  path: './confidential.duckdb',
-  dimensions: 1536,
-})
-```
-
-### Development and Testing
-
-Rapidly prototype vector search features with zero infrastructure:
-
-```typescript
-const store = new DuckDBVector({
-  id: 'dev-store',
-  path: ':memory:', // Fast in-memory for tests
+export const libsqlAgent = new Agent({
+  id: 'libsql-agent',
+  name: 'libSQL Agent',
+  instructions:
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
+      url: 'file:libsql-agent.db',
+    }),
+    vector: new LibSQLVector({
+      id: 'libsql-agent-vector',
+      url: 'file:libsql-agent.db',
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      generateTitle: true, // Explicitly enable automatic title generation
+    },
+  }),
 })
 ```
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
-- [DuckDB Documentation](https://duckdb.org/docs/)
+- [Metadata Filters](/reference/rag/metadata-filters)
