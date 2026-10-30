@@ -2,7 +2,7 @@ import { externalSourceKey } from '../../storage/domains/work-items/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import type { WorkItemKind, WorkItemProvider } from '../../storage/domains/work-items/work-item-schema.js';
 import { SHARED_PROVIDER_METADATA_KEYS, splitCardMetadata, stringList, stringValue } from './metadata-keys.js';
-import type { ProviderWorkItem, ProviderWorkItemContext, WorkItemProviderAdapter } from './types.js';
+import type { ProviderWorkItemSource, WorkItemProviderAdapter } from './types.js';
 
 export interface ExternalAdapterSpec {
   /** Take the provider from the source's integration id (chat adapters, custom integrations). */
@@ -35,11 +35,7 @@ export function externalAdapter(provider: WorkItemProvider, spec: ExternalAdapte
   return {
     provider,
     providerMetadataKeys,
-    toWorkItem(
-      source: ExternalWorkItemSource | null,
-      metadata: Record<string, unknown> | null,
-      context: ProviderWorkItemContext,
-    ): ProviderWorkItem {
+    toSource(source: ExternalWorkItemSource | null, metadata: Record<string, unknown> | null): ProviderWorkItemSource {
       if (!source) throw new Error(`A ${provider} work item needs an external source.`);
       const facts = metadata ?? {};
       return {
@@ -52,7 +48,6 @@ export function externalAdapter(provider: WorkItemProvider, spec: ExternalAdapte
         sourceKey: externalSourceKey(source),
         url: source.url ?? null,
         key: spec.key(source, facts),
-        title: context.title,
         state: spec.state ? spec.state(source, facts) : stringValue(facts.state),
         labels: stringList(facts.labels),
         author: spec.author ? spec.author(facts) : stringValue(facts.author),

@@ -27,7 +27,11 @@ import {
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
-import { FACTORY_BOARD_ITEMS_SCHEMA, FACTORY_WORK_ITEMS_SCHEMA } from './work-item-schema.js';
+import {
+  FACTORY_BOARD_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+} from './work-item-schema.js';
 
 export type WorkItemStage = string;
 
@@ -1354,6 +1358,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await this.ensureCollections([
       WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEMS_SCHEMA,
+      FACTORY_WORK_ITEM_SOURCES_SCHEMA,
       FACTORY_BOARD_ITEMS_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
       ...FACTORY_GOVERNANCE_SCHEMAS,
