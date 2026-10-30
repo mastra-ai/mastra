@@ -46,10 +46,6 @@ export class MastraGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    if (!this.shouldEnable()) {
-      return {};
-    }
-
     const openrouterConfig = PROVIDER_REGISTRY['openrouter'];
     const models = openrouterConfig?.models ?? [];
 
