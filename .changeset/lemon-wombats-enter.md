@@ -10,6 +10,8 @@ Added time to first token (TTFT) to the Traces, Spans and Threads lists in Studi
 
 **Threads**: the list now has a column picker (messages, TTFC, TTFT and more), saved per project and in saved views. Both timings can be used as filters.
 
+**Span details**: the Timing section now shows the span's time to first chunk and time to first token when it streamed, so the root span shows the same values as the lists.
+
 Each timing is only offered when the observability store records it.
 
 `useObservabilityListFilters` now returns the sort as a field and a direction, and takes the fields a list can sort by:
