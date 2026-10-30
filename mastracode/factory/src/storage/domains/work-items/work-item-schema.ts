@@ -10,9 +10,6 @@ export type WorkItemProvider =
   | 'factory'
   | (string & {});
 
-export const WORK_ITEM_KINDS = ['issue', 'pull_request', 'merge_request', 'thread', 'incident', 'follow_up'] as const;
-export type WorkItemKind = (typeof WORK_ITEM_KINDS)[number];
-
 /** The work itself; external identities and facts belong to its sources. */
 export const FACTORY_WORK_ITEMS_SCHEMA: CollectionSchema = {
   name: 'factory_work_items',
@@ -38,7 +35,6 @@ export const FACTORY_WORK_ITEM_SOURCES_SCHEMA: CollectionSchema = {
     factory_project_id: { type: 'text' },
     work_item_id: { type: 'text' },
     provider: { type: 'text' },
-    kind: { type: 'text' },
     integration_id: { type: 'text' },
     source_type: { type: 'text' },
     workspace_id: { type: 'text', nullable: true },
@@ -118,7 +114,6 @@ export interface WorkItemSourceDbRecord extends Record<string, unknown> {
   factory_project_id: string;
   work_item_id: string;
   provider: string;
-  kind: string;
   integration_id: string;
   source_type: string;
   workspace_id: string | null;

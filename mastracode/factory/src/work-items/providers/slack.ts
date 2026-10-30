@@ -7,7 +7,6 @@ import { externalAdapter } from './base.js';
 export const slackWorkItemAdapter = externalAdapter('slack', {
   providerFromSource: true,
   providerMetadataKeys: [],
-  kind: () => 'thread',
   key: () => null,
   state: () => null,
 });

@@ -1,6 +1,6 @@
 import { externalSourceKey } from '../../storage/domains/work-items/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
-import type { WorkItemKind, WorkItemProvider } from '../../storage/domains/work-items/work-item-schema.js';
+import type { WorkItemProvider } from '../../storage/domains/work-items/work-item-schema.js';
 import { SHARED_PROVIDER_METADATA_KEYS, splitCardMetadata, stringList, stringValue } from './metadata-keys.js';
 import type { ProviderWorkItemSource, WorkItemProviderAdapter } from './types.js';
 
@@ -9,7 +9,6 @@ export interface ExternalAdapterSpec {
   providerFromSource?: boolean;
   /** Keys this provider owns beyond {@link SHARED_PROVIDER_METADATA_KEYS}. */
   providerMetadataKeys: readonly string[];
-  kind(source: ExternalWorkItemSource, metadata: Record<string, unknown>): WorkItemKind;
   key(source: ExternalWorkItemSource, metadata: Record<string, unknown>): string | null;
   state?(source: ExternalWorkItemSource, metadata: Record<string, unknown>): string | null;
   author?(metadata: Record<string, unknown>): string | null;
@@ -40,7 +39,6 @@ export function externalAdapter(provider: WorkItemProvider, spec: ExternalAdapte
       const facts = metadata ?? {};
       return {
         provider: spec.providerFromSource ? source.integrationId : provider,
-        kind: spec.kind(source, facts),
         integrationId: source.integrationId,
         sourceType: source.type,
         workspaceId: source.workspaceId ?? null,

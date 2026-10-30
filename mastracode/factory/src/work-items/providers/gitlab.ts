@@ -17,7 +17,6 @@ export const gitlabWorkItemAdapter = externalAdapter('gitlab', {
     'baseBranch',
     'requestedReviewers',
   ],
-  kind: source => (source.type === 'pull-request' ? 'merge_request' : 'issue'),
   key: (source, metadata) => {
     if (source.type === 'pull-request') {
       const match = source.url ? MERGE_REQUEST_URL.exec(source.url) : null;
