@@ -246,20 +246,25 @@ describe('mtime check follows requireReadBeforeWrite', () => {
 
   it.each([
     ['unset', undefined],
-    ['false', { [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: false } }],
-  ])('edit_file and write_file succeed after an external change when requireReadBeforeWrite is %s', async (_n, cfg) => {
-    const { workspace, tools } = await viewThenChangeExternally(
-      cfg && { ...cfg, [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireReadBeforeWrite: false } },
-    );
-    await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
-      { path: 'target.txt', old_string: 'hello', new_string: 'bye' },
-      { workspace },
-    );
-    expect(await fs.readFile(path.join(tempDir, 'target.txt'), 'utf-8')).toBe('bye shell\n');
-
-    await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({ path: 'target.txt', content: 'x\n' }, { workspace });
-    expect(await fs.readFile(path.join(tempDir, 'target.txt'), 'utf-8')).toBe('x\n');
-  });
+    ['false', false],
+  ])(
+    'edit_file and write_file succeed after an external change when requireReadBeforeWrite is %s',
+    async (_n, value) => {
+      for (const toolName of [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]) {
+        const { workspace, tools } = await viewThenChangeExternally(
+          value === undefined ? undefined : { [toolName]: { requireReadBeforeWrite: value } },
+        );
+        const input =
+          toolName === WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE
+            ? { path: 'target.txt', old_string: 'hello', new_string: 'bye' }
+            : { path: 'target.txt', content: 'x\n' };
+        await tools[toolName].execute(input, { workspace });
+        expect(await fs.readFile(path.join(tempDir, 'target.txt'), 'utf-8')).toBe(
+          toolName === WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE ? 'bye shell\n' : 'x\n',
+        );
+      }
+    },
+  );
 
   it('still rejects edits after an external change when requireReadBeforeWrite is true', async () => {
     const { workspace, tools } = await viewThenChangeExternally({

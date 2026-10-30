@@ -37,20 +37,22 @@ describe('Mastra Code edit tools after the file was read some other way', () => 
     expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe('x\n');
   });
 
-  it('edits a file that changed outside the tools after it was viewed', async () => {
-    await writeFile(join(dir, 'a.txt'), 'hello world\n');
-    const { workspace, tools } = await setup();
-    await tools['view'].execute({ path: 'a.txt' }, { workspace });
+  for (const [name, call, expected] of [
+    ['string_replace_lsp', { path: 'a.txt', old_string: 'hello', new_string: 'bye' }, 'bye shell\n'],
+    ['write_file', { path: 'a.txt', content: 'x\n' }, 'x\n'],
+  ] as const) {
+    it(`${name} works on a file that changed outside the tools after it was viewed`, async () => {
+      await writeFile(join(dir, 'a.txt'), 'hello world\n');
+      const { workspace, tools } = await setup();
+      await tools['view'].execute({ path: 'a.txt' }, { workspace });
 
-    // What `sed -i`, git or a formatter does between the view and the edit.
-    await writeFile(join(dir, 'a.txt'), 'hello shell\n');
-    const later = new Date(Date.now() + 5000);
-    await utimes(join(dir, 'a.txt'), later, later);
+      // What `sed -i`, git or a formatter does between the view and the edit.
+      await writeFile(join(dir, 'a.txt'), 'hello shell\n');
+      const later = new Date(Date.now() + 5000);
+      await utimes(join(dir, 'a.txt'), later, later);
 
-    await tools['string_replace_lsp'].execute({ path: 'a.txt', old_string: 'hello', new_string: 'bye' }, { workspace });
-    expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe('bye shell\n');
-
-    await tools['write_file'].execute({ path: 'a.txt', content: 'x\n' }, { workspace });
-    expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe('x\n');
-  });
+      await tools[name].execute(call, { workspace });
+      expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe(expected);
+    });
+  }
 });
