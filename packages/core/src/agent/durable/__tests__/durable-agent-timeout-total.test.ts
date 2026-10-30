@@ -21,6 +21,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
@@ -371,6 +372,52 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
         const { messages } = await memory.recall({ threadId: 'timeout-memory-parity-thread' });
         expect(JSON.stringify(messages).includes('Found NYC')).toBe(true);
       });
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('does not save a raw late tool result that a processToolResult hook would have seen', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-late-redaction',
+        name: 'Timeout late redaction',
+        instructions: 'Look up the city.',
+        memory,
+        model: toolCallingModel('lookup'),
+        outputProcessors: [{ id: 'redact', processToolResult: () => '[redacted]' } as any],
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            // Ignores the abort for a moment, then returns inside the grace window.
+            execute: async (_input, { abortSignal }) => {
+              await new Promise<void>(resolve => abortSignal?.addEventListener('abort', () => resolve()));
+              await new Promise(resolve => setTimeout(resolve, 50));
+              return 'SECRET-TOKEN';
+            },
+          }),
+        },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const result = await agent.stream('hello', {
+      memory: { thread: 'timeout-late-redaction-thread', resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 500 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'timeout-late-redaction-thread' });
+        expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+      });
+      const { messages } = await memory.recall({ threadId: 'timeout-late-redaction-thread' });
+      expect(JSON.stringify(messages)).not.toContain('SECRET-TOKEN');
     } finally {
       result.cleanup();
     }

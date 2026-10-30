@@ -26,6 +26,7 @@ import type { ExportedSpan, ObservabilityContext } from '../../../../observabili
 import { compactStopReasonContext } from '../../../../observability/outcome-schema';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
+import { isProcessorWorkflow } from '../../../../processors/is-processor-workflow';
 import { ProcessorRunner } from '../../../../processors/runner';
 import type { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
@@ -2041,6 +2042,11 @@ export function createDurableToolCallStep() {
             // The total deadline ended the run while this call ran, so the call's own commit is rejected
             // below. Leave the result where the deadline save looks for it, before the call reads as settled.
             if (registryEntry?.executionFence?.deadlineError) {
+              // processToolResult hooks can redact or block a result, and they do not run past the deadline.
+              // When one could apply, save only the abort notice so the raw value never reaches memory.
+              const resultProcessed = registryEntry.outputProcessors?.some(
+                processor => isProcessorWorkflow(processor) || typeof processor.processToolResult === 'function',
+              );
               (registryEntry.lateToolResults ??= []).push({
                 toolCallId,
                 toolName,
@@ -2051,7 +2057,10 @@ export function createDurableToolCallStep() {
                         kind: 'error',
                         errorText: settled.error instanceof Error ? settled.error.message : String(settled.error),
                       }
-                    : { kind: 'result', result: settled.status === 'aborted' ? TOOL_ABORT_NOTICE : settled.result },
+                    : {
+                        kind: 'result',
+                        result: settled.status === 'aborted' || resultProcessed ? TOOL_ABORT_NOTICE : settled.result,
+                      },
               });
             }
             return settled;
