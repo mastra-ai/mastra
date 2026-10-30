@@ -600,21 +600,25 @@ describe('built-in board and integration handlers', () => {
     expect(decision).not.toHaveProperty('skillName');
   });
 
-  it('investigates an accepted issue whose needs-approval label has not caught up yet', async () => {
+  it('lets the label, not a legacy acceptance stamp, decide whether triage investigates', async () => {
     const rule = workBoard.rules.triage?.issue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
-      item: {
-        ...item,
-        acceptedAt: new Date('2026-08-30T00:00:00.000Z'),
-        metadata: { githubIssueNumber: 42, labels: ['Status: Needs Approval'] },
-      },
-      stage: 'triage',
-      fromStage: 'intake',
-      toStage: 'triage',
-    } as FactoryStageRuleContext;
+    const context = (labels: string[]) =>
+      ({
+        ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+        item: {
+          ...item,
+          acceptedAt: new Date('2026-08-30T00:00:00.000Z'),
+          metadata: { githubIssueNumber: 42, labels },
+        },
+        stage: 'triage',
+        fromStage: 'intake',
+        toStage: 'triage',
+      }) as FactoryStageRuleContext;
 
-    expect(await rule?.(context)).toMatchObject({ skillName: 'factory-triage' });
+    expect(await rule?.(context(['Status: Needs Approval']))).toMatchObject({
+      prompt: expect.stringContaining('Prepare approval'),
+    });
+    expect(await rule?.(context([]))).toMatchObject({ skillName: 'factory-triage' });
   });
 
   it('cleans up triage labels whenever a GitHub issue moves to Done', async () => {
