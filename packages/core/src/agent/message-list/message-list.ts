@@ -1105,6 +1105,8 @@ export class MessageList {
 
   /** Response parts per message as of the last completed step; undefined until a step completes. */
   #completedStepParts: Map<string, number> | undefined;
+  /** Structured output per message as of the last completed step. */
+  #completedStepStructuredOutput: Map<string, unknown> | undefined;
 
   /**
    * Record the response as it stands now as the end of a completed step. Called by the loop when a
@@ -1114,6 +1116,15 @@ export class MessageList {
   public markStepCompleted(): void {
     this.#completedStepParts = new Map(
       this.get.response.db().map(message => [message.id, message.content.parts?.length ?? 0]),
+    );
+    this.#completedStepStructuredOutput = new Map(
+      this.get.response
+        .db()
+        .flatMap(message =>
+          message.content.metadata?.structuredOutput !== undefined
+            ? [[message.id, message.content.metadata.structuredOutput] as const]
+            : [],
+        ),
     );
   }
 
@@ -1144,6 +1155,11 @@ export class MessageList {
           ...(message.content.metadata ? { metadata: { ...message.content.metadata } } : {}),
         };
         clone.#truncateParts(message, length);
+        // #truncateParts drops structuredOutput for rollback; a completed step keeps the object it produced.
+        const structuredOutput = this.#completedStepStructuredOutput?.get(message.id);
+        if (structuredOutput !== undefined) {
+          message.content.metadata = { ...message.content.metadata, structuredOutput };
+        }
       }
     }
     return clone;

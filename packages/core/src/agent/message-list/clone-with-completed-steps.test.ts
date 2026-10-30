@@ -53,4 +53,33 @@ describe('MessageList.cloneWithCompletedSteps', () => {
     expect(live.content.content).toBe('pending');
     expect(live.content.metadata).toEqual({ structuredOutput: { answer: 1 } });
   });
+
+  it('keeps the structured output of a completed step when it cuts a later step', () => {
+    const list = new MessageList({ threadId: 't' });
+    list.add(
+      [
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' }, { type: 'text', text: 'done' }],
+            metadata: { structuredOutput: { answer: 1 } },
+          },
+          createdAt: new Date(),
+        } as MastraDBMessage,
+      ],
+      'response',
+    );
+    list.markStepCompleted();
+
+    const live = list.get.response.db().find(m => m.id === 'a1')!;
+    live.content.parts.push({ type: 'step-start' }, { type: 'text', text: 'pending' });
+
+    const clone = list.cloneWithCompletedSteps();
+
+    expect(clone.get.response.db().find(m => m.id === 'a1')!.content.metadata).toEqual({
+      structuredOutput: { answer: 1 },
+    });
+  });
 });
