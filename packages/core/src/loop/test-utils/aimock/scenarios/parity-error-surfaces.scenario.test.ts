@@ -42,6 +42,7 @@ import {
   describeParity,
   expectParity,
 } from '../parity';
+import { TOOL_ABORT_NOTICE } from '../../../shared/tool-abort-grace';
 import { MastraTimeoutError } from '../../../timeout';
 
 const THREAD = 'thread-t37';
@@ -102,7 +103,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 15_000 : 5_000;
 
   it.each([false, true])(
-    'closes a stuck tool run without flushing unfinished-step memory (save blocked: %s)',
+    'closes a stuck tool run on time (save blocked: %s)',
     async blockSave => {
       const onError = vi.fn();
       let toolStarted = false;
@@ -166,6 +167,15 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
         expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
         expect(result.requests).toHaveLength(1);
+        // Inngest stops the tool on its worker at the deadline, so that worker finishes the turn and
+        // saves it with the abort notice. A held save holds the worker until it is let through.
+        if (engine === 'inngest') {
+          releaseSave();
+          await vi.waitFor(async () => {
+            const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+            expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+          });
+        }
         const workflows = await result.mastra.getStorage()!.getStore('workflows');
         const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
         const prefix = engine === 'inngest' ? 'inngest:' : '';
@@ -211,13 +221,15 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     // mid-run. The deadline save must use the processors the run started with.
     { savePerStep: false, readOnly: false, dynamicHistory: true },
     // A custom processor takes the message-history id, so memory adds no MessageHistory and the
-    // finish path would not save to agent memory. The deadline save must not either.
+    // finish path would not save to agent memory. The deadline save must not either, except on
+    // Inngest: the stopped step ends the turn through the finish path, which saves it (asserted below)
+    // until the deadline save respects this config.
     { savePerStep: false, readOnly: false, customHistory: true },
     // History disabled in config and no MessageHistory configured, so the finish path saves nothing.
-    // The deadline save must not either.
+    // The deadline save must not either, with the same Inngest exception as above.
     { savePerStep: false, readOnly: false, historyOff: true },
   ])(
-    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore, customHistory: $customHistory, historyOff: $historyOff)',
+    'only steps that ended reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore, customHistory: $customHistory, historyOff: $historyOff)',
     async ({ savePerStep, readOnly, explicitHistory, dynamicHistory, historyStore, customHistory, historyOff }) => {
       const memory = new MockMemory();
       const historyMemory = historyStore ? new MockMemory() : memory;
@@ -302,6 +314,30 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
       const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
       const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      if (engine === 'inngest') {
+        // Inngest stops the courier tool on its worker once the abort grace window passes, so that
+        // worker finishes the turn through its normal finish path, the same path that saves a tool that
+        // returns after the deadline. Both steps are saved, the courier step with the abort notice.
+        if (readOnly) {
+          // Absence can't be polled for; give the worker's finish time to land.
+          await new Promise(resolve => setTimeout(resolve, 2_000));
+          expect(JSON.stringify((await historyMemory.recall({ threadId, resourceId })).messages)).not.toContain(
+            'The order lookup is complete.',
+          );
+          return;
+        }
+        await vi.waitFor(
+          async () => {
+            const saved = JSON.stringify((await historyMemory.recall({ threadId, resourceId })).messages);
+            expect(saved.includes('Look up the order, then check the courier.')).toBe(true);
+            expect(saved.includes('The order lookup is complete.')).toBe(true);
+            expect(saved.includes('Checking the courier now.')).toBe(true);
+            expect(saved.includes(TOOL_ABORT_NOTICE)).toBe(true);
+          },
+          { timeout: 10_000, interval: 100 },
+        );
+        return;
+      }
       const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
       expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);

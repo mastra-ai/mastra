@@ -15,6 +15,12 @@ export function agentLoopTermination(
   return coreFeatures.has('execution-outcomes') ? (coreObservability.agentLoopTermination?.(...args) ?? {}) : {};
 }
 
+export function executionFailureTermination(
+  ...args: Parameters<typeof coreObservability.executionFailureTermination>
+): SpanOutcomeFields {
+  return coreFeatures.has('execution-outcomes') ? (coreObservability.executionFailureTermination?.(...args) ?? {}) : {};
+}
+
 /** Keep completed-request usage when a failed request makes the total incomplete. */
 export function generationUsage(usage: LanguageModelUsage, steps: Array<{ usage?: LanguageModelUsage }>) {
   const usageIncomplete = coreFeatures.has('execution-outcomes') && coreObservability.isUsageIncomplete?.(usage);

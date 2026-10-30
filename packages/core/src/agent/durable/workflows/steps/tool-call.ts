@@ -16,6 +16,7 @@ import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/s
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
+import { isMastraTimeoutError } from '../../../../loop/timeout';
 import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
@@ -49,6 +50,7 @@ import { startRunStep } from '../../../run-lease-fence';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
+import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import {
   assertExecutionNotSuperseded,
@@ -178,7 +180,34 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // the evented engine rehydrates a fresh RequestContext per step, so the
   // wrapper's by-reference flag write never reaches the mapping step there.
   delegationBailed: z.boolean().optional(),
+  // Set when the total deadline aborted this tool call. Carried on the step
+  // output so a later step on another worker, which may never have received
+  // the abort request, still ends the run as the deadline.
+  deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  // Set when abort() stopped this tool call; carried for the same reason.
+  runAborted: z.boolean().optional(),
 });
+
+/**
+ * Marks a tool call the run was stopped during, however the tool settled: the total deadline or
+ * abort(). The next step may run on a worker that never received the abort request, so the mark
+ * travels on the step output. An abort only this execution saw (lost ownership) is not the run's.
+ */
+function runStopOf(
+  signal: AbortSignal | undefined,
+  runSignal: AbortSignal | undefined,
+): { deadlineTimeout?: DurableToolDeadlineTimeout; runAborted?: true } {
+  if (!signal?.aborted || !runSignal?.aborted) return {};
+  const reason: unknown = runSignal.reason;
+  if (isMastraTimeoutError(reason)) {
+    return reason.timeoutType === 'total'
+      ? { deadlineTimeout: { timeoutType: 'total', timeoutMs: reason.timeoutMs } }
+      : {};
+  }
+  return { runAborted: true };
+}
+
+type DurableToolDeadlineTimeout = { timeoutType: 'total'; timeoutMs: number };
 
 /**
  * Flush messages to memory before suspending.
@@ -1400,6 +1429,29 @@ export function createDurableToolCallStep() {
       // so execution continues past the suspend call).
       let wasSuspended = false;
 
+      // A tool step can run on a worker whose LLM step ran elsewhere, so it subscribes to abort
+      // requests too. Otherwise a deadline or abort() published while the tool runs never reaches it.
+      // Only a real entry: a cold worker without one keeps no registry state. Called on every tool
+      // step rather than keyed on the signal: a step whose subscribe failed earlier retries it, and a
+      // warm worker re-arms the deadline this segment carries. The listener reuses the entry's
+      // controller; a signal with no controller behind it would be replaced, so leave it alone.
+      if (
+        pubsub &&
+        registryEntry &&
+        !registryEntry.isPlaceholder &&
+        (!registryEntry.abortSignal || registryEntry.abortController)
+      ) {
+        try {
+          await ensureRemoteAbortListener(pubsub, runId, mastra as Mastra | undefined, readRunDeadline(requestContext));
+          registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined) ?? registryEntry;
+        } catch (error) {
+          logger?.warn?.('Failed to subscribe to cross-process abort requests', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       // Forward abort signal from the run registry so tools can observe
       // cancellation (mirrors the non-durable tool-call-step).
       const toolAbortSignal = ownership?.composeSignal(registryEntry?.abortSignal) ?? registryEntry?.abortSignal;
@@ -2240,6 +2292,7 @@ export function createDurableToolCallStep() {
           providerMetadata,
           result,
           ...(outcome.status === 'aborted' ? { aborted: true } : {}),
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           modelOutputComputed,
           ...(resultHidden ? { resultHidden: true } : {}),
           ...(approvalGrant ?? {}),
@@ -2314,6 +2367,7 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           // A hook may bail on a FAILED delegation too (success: false).
           ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };

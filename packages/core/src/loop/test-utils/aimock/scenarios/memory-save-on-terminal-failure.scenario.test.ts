@@ -83,10 +83,25 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'durable', 'evented', 'inngest'];
+  // Inngest saves it: the deadline stops the stuck tool step and the turn ends through the finish path.
+  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'durable', 'evented'];
   const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
-  // Inngest already keeps the user message when the deadline lands during the input save.
-  const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
+
+  // On Inngest the caller reports the timeout at the deadline and the worker saves the stopped step shortly after.
+  async function settleDeadlineSave(memory: MastraMemory, threadId: string) {
+    if (engine !== 'inngest') {
+      // Let any late, fire-and-forget save land before reading memory.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return;
+    }
+    await vi.waitFor(
+      async () => {
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(toolResultIds(messages)).toContain('call_hang');
+      },
+      { timeout: 5_000, interval: 100 },
+    );
+  }
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -164,8 +179,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           },
         });
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
-        // Let any late, fire-and-forget save land before reading memory.
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await settleDeadlineSave(memory, threadId);
 
         // The deadline aborts the hanging call; its step is saved with the abort notice, like a tool that returns late.
         await expectTurnSavedAndRecalled(memory, 'total-timeout', threadId, undefined, ['call_echo', 'call_hang']);
@@ -221,7 +235,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
   // Durable engines save the input before the run starts; a deadline during that save must not lose it.
   // On normal/fs the held save is the deadline pass's own write.
-  itInFlightSave(
+  itDeadline(
     'total-timeout while the input save is still in flight keeps the user message once',
     async () => {
       const memory = new MockMemory();
@@ -343,7 +357,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           },
         });
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await settleDeadlineSave(memory, threadId);
 
         await expectTurnSavedAndRecalled(memory, 'total-timeout-om', threadId, { observationalMemory: true }, [
           'call_echo',

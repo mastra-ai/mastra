@@ -633,11 +633,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       else pendingRejection = error;
     } else {
       // Ordinary durable failures remain deferred error chunks so the stream
-      // closes normally even when no finish event follows.
-      safeEnqueue(controller, {
-        type: 'error',
-        payload: { error },
-      } as ChunkType<OUTPUT>);
+      // closes normally even when no finish event follows. A step may already
+      // have streamed this error as a chunk (a total timeout seen by the step
+      // and then reported by the run), so the caller sees it once.
+      if (lastErrorName !== error.name || lastErrorMessage !== error.message) {
+        safeEnqueue(controller, {
+          type: 'error',
+          payload: { error },
+        } as ChunkType<OUTPUT>);
+      }
       safeClose(controller);
     }
     markTerminated();

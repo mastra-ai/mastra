@@ -10,6 +10,7 @@ import {
   DurableAgentDefaults,
   DurableStepIds,
   emitChunkEvent,
+  emitErrorEvent,
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
@@ -23,6 +24,7 @@ import {
   loadRunStoredMessages,
   takeRunScorerInstances,
   pruneAgentLoopSnapshot,
+  readRunDeadline,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -34,6 +36,7 @@ import type {
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
+import { isMastraTimeoutError, MastraTimeoutError } from '@mastra/core/loop';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -42,7 +45,7 @@ import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
-import { agentLoopTermination, generationUsage } from '../observability-compat';
+import { agentLoopTermination, executionFailureTermination, generationUsage } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
@@ -391,6 +394,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           }
         };
 
+        // A tool the total deadline or abort() stopped ends the run. The flag travels on iteration state
+        // because this predicate can run on a worker that never received the abort request.
+        if (state.deadlineTimeout || state.runAborted) {
+          if (tracingRegistry) tracingRegistry.tracingStopCause = 'model_finished';
+          await emitStepFinish(false);
+          return false;
+        }
+
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
@@ -468,6 +479,24 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Access pubsub via symbol to emit finish event
           const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
+          // A run its total deadline aborted ends as the deadline error, not an abort. The abort
+          // reaches this worker either through the caller's composed signal (same process) or as a
+          // timeout abort request over pubsub (another worker). A worker that saw neither still has the
+          // deadline carried on request context: past it, the caller has already reported the timeout.
+          // A run the caller aborted first stays an abort: the caller's deadline stopped with it.
+          const resolveDeadlineError = () => {
+            const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
+            const carriedDeadline = readRunDeadline(requestContext);
+            return isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total'
+              ? abortReason
+              : state.deadlineTimeout
+                ? new MastraTimeoutError(state.deadlineTimeout)
+                : !state.runAborted && carriedDeadline && Date.now() >= carriedDeadline.at
+                  ? new MastraTimeoutError({ timeoutType: 'total', timeoutMs: carriedDeadline.timeoutMs })
+                  : undefined;
+          };
+          const sideEffectsDeadlineError = resolveDeadlineError();
+
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           let finalText = lastStep?.text;
@@ -489,7 +518,11 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
-              finishReason: state.lastStepResult?.reason ?? 'unknown',
+              finishReason: sideEffectsDeadlineError
+                ? 'error'
+                : state.runAborted
+                  ? 'abort'
+                  : (state.lastStepResult?.reason ?? 'unknown'),
               steps: state.accumulatedSteps,
             },
           });
@@ -526,16 +559,24 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             }
           }
 
+          // The deadline can expire while the side effects or the title generation run; the caller
+          // has then already reported the timeout, so the run must end as it here too.
+          const deadlineError = sideEffectsDeadlineError ?? resolveDeadlineError();
+
           const finalOutput = {
             messageListState: finishResult.messageListState,
             messageId: state.messageId,
             stepResult: tripwire
               ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
-              : state.lastStepResult || {
-                  reason: 'stop',
-                  warnings: [],
-                  isContinued: false,
-                },
+              : deadlineError
+                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'error' as const, isContinued: false }
+                : state.runAborted
+                  ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
+                  : state.lastStepResult || {
+                      reason: 'stop',
+                      warnings: [],
+                      isContinued: false,
+                    },
             output: {
               text: finalText,
               usage: state.accumulatedUsage,
@@ -552,6 +593,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const observability = mastra?.observability?.getSelectedInstance({});
           // Resumed segments carry their own clocks beside their fresh spans.
           const registry = getRunRegistryEntry(state.runId, mastra);
+          // A tripwire keeps its own classification; otherwise a deadline-stopped run ends its spans as
+          // the timeout failure rather than a normal loop finish.
+          const deadlineTermination =
+            deadlineError && !tripwire ? executionFailureTermination(deadlineError) : undefined;
           const completionClock = registry?.resumeModelSpanData
             ? registry.resumeCompletionStartTime
             : state.completionStartTime;
@@ -578,15 +623,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             );
             const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...(deadlineTermination
+                ? deadlineTermination
+                : ['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                  ? registry.tracingTermination
+                  : agentLoopTermination({
+                      stopCause: registry?.tracingStopCause,
+                      delegationFailure: registry?.tracingDelegationFailure,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: state.options?.maxSteps ?? maxSteps,
+                    })),
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
@@ -604,22 +651,27 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               registry?.agentSpan ??
               observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...(deadlineTermination
+                ? deadlineTermination
+                : ['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                  ? registry.tracingTermination
+                  : agentLoopTermination({
+                      stopCause: registry?.tracingStopCause,
+                      delegationFailure: registry?.tracingDelegationFailure,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: state.options?.maxSteps ?? maxSteps,
+                    })),
               output: { text: finalText },
               ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });
           }
 
-          // Emit finish event via pubsub
-          if (pubsub) {
+          // Memory is saved above, so the deadline error goes out after the turn is stored. The caller's
+          // process reports the same error at the deadline; its stream keeps one of them.
+          if (pubsub && deadlineError) {
+            await emitErrorEvent(pubsub, state.runId, deadlineError);
+          } else if (pubsub) {
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,

@@ -200,6 +200,10 @@ export const baseIterationStateSchema = z.object({
   backgroundTaskPending: z.boolean().optional(),
   // Set when a delegation hook calls ctx.bail() — signals the loop to stop
   delegationBailed: z.boolean().optional(),
+  // Set when the total deadline aborted a tool call — the loop stops and the run ends as the deadline
+  deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  // Set when abort() stopped a tool call — the loop stops and the run ends as aborted
+  runAborted: z.boolean().optional(),
   // Set when onIterationComplete returns { continue: false, feedback } — allows
   // one more LLM turn with the feedback, then stops on the next predicate eval.
   pendingFeedbackStop: z.boolean().optional(),
