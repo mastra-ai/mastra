@@ -1,5 +1,5 @@
 import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
-import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useParkedSessions, useWorkItemsWithHistory } from '../../../../hooks/useWorkItems';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { liveSessionCounts, periodActivity } from '../periodActivity';
 import type { ActivityPeriod, RunStarts } from '../periodActivity';
@@ -13,7 +13,8 @@ export interface RunsState {
 const NO_RUN_STARTS: RunStarts = { starts: [], completeAfter: Number.NEGATIVE_INFINITY };
 
 export function useFactoryActivity(factoryId: string, period: ActivityPeriod) {
-  const workItems = useWorkItemsQuery(factoryId);
+  // The board keeps a week of finished cards; a month of activity needs the rest.
+  const workItems = useWorkItemsWithHistory(factoryId, period === 'month');
   const runs = useRunStarts(factoryId, period);
   const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
   const parked = useParkedSessions(factoryId);

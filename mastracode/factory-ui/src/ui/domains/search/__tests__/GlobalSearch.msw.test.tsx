@@ -9,9 +9,13 @@ import { server } from '../../../../../e2e/ui/msw-server';
 import { releaseBoard } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../api/keys';
+import {
+  boardQueryOptions,
+  workItemHistoryQueryOptions,
+  workItemSourcesQueryOptions,
+} from '../../../../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
-import { listWorkItems } from '../../factory/services/workItems';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { createAppRoutes } from '../../../router';
@@ -304,10 +308,9 @@ function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/setti
 async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryClient>) {
   await Promise.all([
     client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.prefetchQuery({
-      queryKey: queryKeys.workItems(ACTIVE_FACTORY_ID),
-      queryFn: ({ signal }) => listWorkItems(TEST_BASE_URL, ACTIVE_FACTORY_ID, signal),
-    }),
+    client.prefetchQuery(boardQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.prefetchQuery(workItemHistoryQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.prefetchQuery(workItemSourcesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
   ]);
 }
 
@@ -577,13 +580,13 @@ describe('Global search', () => {
 
     await warmSessionsAndWorkItems(client);
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    expect(requests.workItemRequests).toBe(1);
+    const warmWorkItemRequests = requests.workItemRequests;
 
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    expect(requests.workItemRequests).toBe(1);
+    expect(requests.workItemRequests).toBe(warmWorkItemRequests);
   });
 
   it('keeps search open while choosing a repository for an unattributed work item', async () => {

@@ -6,7 +6,12 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
-import { useDeleteWorkItemMutation, useParkedSessions, useTransitionWorkItemMutation } from '../useWorkItems';
+import {
+  useDeleteWorkItemMutation,
+  useParkedSessions,
+  useTransitionWorkItemMutation,
+  useWorkItemsQuery,
+} from '../useWorkItems';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
 
@@ -202,5 +207,50 @@ describe('useDeleteWorkItemMutation', () => {
     await waitForMutationsIdle(client);
 
     await waitFor(() => expect(result.current.parked.has('session-1')).toBe(false));
+  });
+});
+
+describe('board sync', () => {
+  it('loads open cards once, then merges only the changes the next sync sends', async () => {
+    const seen: (string | null)[] = [];
+    const keep = { ...item(1, 'intake'), id: 'keep', title: 'Keep' };
+    const edit = { ...item(1, 'intake'), id: 'edit', title: 'Before' };
+    const doomed = { ...item(1, 'intake'), id: 'doomed', title: 'Doomed' };
+    const fresh = { ...item(1, 'intake'), id: 'fresh', title: 'Fresh' };
+    const counts = (total: number) => ({ total, boards: { work: { intake: total } } });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/sync`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        seen.push(cursor);
+        const sessions = { runningSessionIds: [], parkedSessionIds: [] };
+        if (!cursor) {
+          return HttpResponse.json({
+            cursor: 'c1',
+            reset: true,
+            workItems: [keep, edit, doomed],
+            deletedIds: [],
+            counts: counts(3),
+            ...sessions,
+          });
+        }
+        return HttpResponse.json({
+          cursor: 'c2',
+          reset: false,
+          workItems: [{ ...edit, title: 'After', revision: 2 }, fresh],
+          deletedIds: ['doomed'],
+          counts: counts(3),
+          ...sessions,
+        });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(result.current.data?.map(card => card.id)).toEqual(['keep', 'edit', 'doomed']));
+
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) }));
+    await waitFor(() => expect(result.current.data?.map(card => card.title)).toEqual(['Fresh', 'Keep', 'After']));
+
+    expect(seen).toEqual([null, 'c1']);
+    expect(client.getQueryData<BoardSnapshot>(queryKeys.workItems(PROJECT_ID))?.cursor).toBe('c2');
   });
 });

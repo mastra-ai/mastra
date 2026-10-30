@@ -3,6 +3,25 @@ import { setupServer } from 'msw/node';
 
 import { builtinBoardCatalog } from './board-catalog';
 
+interface StubbedCard {
+  id: string;
+  board?: string | null;
+  externalSource?: unknown;
+  metadata?: Record<string, unknown> | null;
+}
+
+/** The plain `/work-items` list the running test stubbed, read through MSW so its handler answers. */
+async function readStubbedList(url: string): Promise<{
+  workItems: StubbedCard[];
+  runningSessionIds?: string[];
+  parkedSessionIds?: string[];
+}> {
+  const listUrl = url.replace(/\/work-items\/.*$/, '/work-items');
+  const response = await fetch(listUrl);
+  if (!response.ok) throw HttpResponse.json(await response.json().catch(() => ({})), { status: response.status });
+  return response.json();
+}
+
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
  * (`vitest.setup.ts`) starts it with `onUnhandledRequest: 'error'` so any
@@ -53,6 +72,37 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
+  // The board reads its cards through `/work-items/sync`, card sources and single cards through their own
+  // routes. Tests stub the plain list, so these answer from it: every sync is a full one carrying all of
+  // the test's cards, sources are those cards' sources, and a single card is looked up in the list.
+  http.get('*/web/factory/projects/:id/work-items/sync', async ({ request }) => {
+    const list = await readStubbedList(request.url);
+    return HttpResponse.json({
+      cursor: 'test-cursor',
+      reset: true,
+      workItems: list.workItems,
+      deletedIds: [],
+      counts: { total: list.workItems.length, boards: {} },
+      runningSessionIds: list.runningSessionIds ?? [],
+      parkedSessionIds: list.parkedSessionIds ?? [],
+    });
+  }),
+  http.get('*/web/factory/projects/:id/work-items/sources', async ({ request }) => {
+    const list = await readStubbedList(request.url);
+    return HttpResponse.json({
+      sources: list.workItems.flatMap(item =>
+        item.externalSource ? [{ board: item.board ?? 'work', externalSource: item.externalSource, metadata: item.metadata ?? {} }] : [],
+      ),
+    });
+  }),
+  http.get('*/web/factory/projects/:id/work-items/counts', () => HttpResponse.json({ total: 0, boards: {} })),
+  http.get('*/web/factory/projects/:id/work-items/:workItemId', async ({ request, params }) => {
+    const list = await readStubbedList(request.url);
+    const workItem = list.workItems.find(item => item.id === params.workItemId);
+    return workItem
+      ? HttpResponse.json({ workItem })
+      : HttpResponse.json({ error: 'Work item not found' }, { status: 404 });
+  }),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),
   // Ambient feed stream: `FactoryLayout` mounts it on every routed surface. It

@@ -134,7 +134,7 @@ export function githubSourceKey(kind: 'issue' | 'pull-request', itemNumber: numb
  * repository match only that repository's candidate, even when the card
  * itself still carries a bare-number key from before keys were scoped.
  */
-export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
+export function candidateSourceKeyForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   const itemNumber = githubNumberForItem(item);
   if (itemNumber === undefined) return;
   const repositoryId =
@@ -219,7 +219,9 @@ export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>):
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */
-export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<string> {
+export function persistedSourceKeys(
+  items: readonly Pick<WorkItem, 'source' | 'sourceKey' | 'url' | 'metadata'>[],
+): ReadonlySet<string> {
   const keys = new Set<string>();
   for (const item of items) {
     if (item.sourceKey) keys.add(item.sourceKey);

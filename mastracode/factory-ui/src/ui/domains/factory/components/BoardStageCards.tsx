@@ -7,7 +7,9 @@ import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
 import { IntakeColumnExtras } from './IntakeColumnExtras';
 import { IntakeFeedNotice } from './IntakeFeedNotice';
+import type { ArchiveColumn } from '../hooks/useBoardArchive';
 import { BoardItemsSkeleton } from './BoardItemsSkeleton';
+import { LoadMoreSentinel } from './LoadMoreSentinel';
 
 export function BoardStageCards({
   stage,
@@ -23,6 +25,7 @@ export function BoardStageCards({
   alreadyMaterialized,
   composer,
   emptyStateActions,
+  archive,
   children,
 }: {
   stage: { id: BoardStageId; label: string };
@@ -38,6 +41,8 @@ export function BoardStageCards({
   alreadyMaterialized: number;
   composer?: ReactNode;
   emptyStateActions?: ReactNode;
+  /** A Done or Canceled column: its older cards load as it scrolls. */
+  archive?: ArchiveColumn;
   children: ReactNode;
 }) {
   const showEmptyState = !loading && !composer && taskCount === 0 && !feed?.error;
@@ -60,6 +65,17 @@ export function BoardStageCards({
       )}
       {feed && <IntakeFeedNotice source={intakeSource} feed={feed} />}
       {feed && <IntakeColumnExtras feed={feed} currentColumnLength={taskCount} layout={layout} />}
+      {archive && (
+        <LoadMoreSentinel
+          hasNextPage={archive.hasNextPage}
+          isFetchingNextPage={archive.isFetchingNextPage}
+          onLoadMore={archive.loadMore}
+          label={`Load more ${stage.label} cards`}
+          loadingIndicator={
+            <BoardItemsSkeleton label={`Loading more ${stage.label} cards`} rows={1} layout={layout} />
+          }
+        />
+      )}
     </>
   );
 }

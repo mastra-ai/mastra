@@ -10,7 +10,7 @@ export interface FeedEvent {
 export async function streamFeedEvents(
   baseUrl: string,
   factoryProjectId: string,
-  handlers: { onEvent: (event: FeedEvent) => void; onConnected: () => void },
+  handlers: { onEvent: (event: FeedEvent) => void; onBoard: () => void; onConnected: () => void },
   signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/feed-events`, {
@@ -23,6 +23,8 @@ export async function streamFeedEvents(
   }
   handlers.onConnected();
   await readSSE(response.body, (event, data) => {
+    // A card on the project was written or deleted; the board syncs just the changes.
+    if (event === 'board') return handlers.onBoard();
     if (event !== 'feed') return;
     const parsed: unknown = JSON.parse(data);
     if (!isRecord(parsed)) return;

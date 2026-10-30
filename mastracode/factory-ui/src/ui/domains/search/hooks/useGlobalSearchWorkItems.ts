@@ -1,8 +1,9 @@
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useWorkItemsWithHistory } from '../../../../hooks/useWorkItems';
 
 /** Board cards: they title the session results and are searchable on their own before a session exists. */
 export function useGlobalSearchWorkItems(factoryId: string | undefined) {
-  const query = useWorkItemsQuery(factoryId);
+  // Search reaches every card, not just the board's recent ones.
+  const query = useWorkItemsWithHistory(factoryId, true);
 
   return {
     items: query.data ?? [],

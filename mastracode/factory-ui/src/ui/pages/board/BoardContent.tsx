@@ -22,7 +22,9 @@ import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStag
 import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntake } from '../../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
+import { useBoardArchive } from '../../domains/factory/hooks/useBoardArchive';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
+import { useBoardCounts, useWorkItemsQuery } from '../../../hooks/useWorkItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
 import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
 import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from '../../domains/factory/boardLabels';
@@ -94,7 +96,20 @@ export function BoardContent({
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
-  const items = useBoardItems({ factoryProjectId, kind, currentUserId });
+  // Done and Canceled are paged in per column; the board sync carries only the open cards.
+  const terminalStages = stages.filter(stage => stage.kind === 'terminal').map(stage => stage.id);
+  const synced = useWorkItemsQuery(factoryProjectId);
+  const archive = useBoardArchive({
+    factoryProjectId,
+    board: kind,
+    stages: terminalStages,
+    sort,
+    search: view.search,
+    targetItemId,
+    enabled: synced.isSuccess,
+  });
+  const items = useBoardItems({ factoryProjectId, kind, currentUserId, archived: archive.items });
+  const serverCounts = useBoardCounts(factoryProjectId)?.boards[kind];
   const repositoryChoice = useRepositoryChoice(factory, definition);
   const cardForDrop = (payload: DragPayload) => {
     if (payload.kind === 'candidate') return payload.candidate;
@@ -236,10 +251,15 @@ export function BoardContent({
 
   const stageViews = stages.map(stage => {
     const isInitialPhase = stage.id === definition.initialPhase;
-    const loading = loadingStages.has(stage.id);
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
-    const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
+    const archiveColumn = archive.columns[stage.id];
+    const loading = loadingStages.has(stage.id) || (archiveColumn !== undefined && archive.isPending && stageWorkItems.length === 0);
+    const loadedCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
+    // A Done column shows only its first page, so its header counts what the server holds; a filter
+    // runs over the loaded cards only, so then the header counts those.
+    const taskCount =
+      archiveColumn && !anyFilterActive ? Math.max(loadedCount, serverCounts?.[stage.id] ?? 0) : loadedCount;
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
@@ -254,6 +274,7 @@ export function BoardContent({
       !composerOpen &&
       !feedFailed &&
       !columnFeed?.hasNextPage &&
+      !archiveColumn?.hasNextPage &&
       taskCount === 0;
     return {
       stage,
@@ -287,6 +308,7 @@ export function BoardContent({
           hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
+          archive={archiveColumn}
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions
