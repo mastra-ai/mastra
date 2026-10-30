@@ -1,67 +1,88 @@
 import type { KnowledgeImporterRunSummary } from '@mastra/client-js';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
-import { Table } from '@mastra/playground-ui/components/Table';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { RUN_KIND_LABEL, describeCounts, describeDuration } from '../runs';
+import { ChevronRight } from 'lucide-react';
+import { RUN_KIND_LABEL, describeDuration, describeOutcome, runTime } from '../runs';
 import { readApiError } from '../settings';
-import { useImporterRuns } from '../use-knowledge-importers';
+import { isRunActive, useImporterRuns } from '../use-knowledge-importers';
+import { RunReport } from './run-report';
 import { RunStatusBadge } from './status-badges';
 
 const SKELETON_ROWS = [0, 1, 2];
 
 export function RunHistory({ importerId }: { importerId: string }) {
-  const { data: runs, isLoading, error } = useImporterRuns(importerId);
+  const runs = useImporterRuns(importerId);
 
-  if (error) {
+  if (runs.isPending) {
     return (
-      <Notice variant="destructive" title="Couldn't load run history">
-        <Notice.Message>{readApiError(error).message}</Notice.Message>
+      <div role="status" aria-label="Loading activity" className="flex flex-col gap-3">
+        {SKELETON_ROWS.map(row => (
+          <SkeletonText key={row} />
+        ))}
+      </div>
+    );
+  }
+  if (runs.isError) {
+    return (
+      <Notice variant="destructive" title="Couldn't load activity">
+        <Notice.Message>{readApiError(runs.error).message}</Notice.Message>
       </Notice>
     );
   }
-
+  if (runs.data.length === 0) {
+    return (
+      <Txt variant="body-sm" tone="muted">
+        No runs yet.
+      </Txt>
+    );
+  }
   return (
-    <Table variant="inset" size="small">
-      <Table.Header>
-        <Table.Head>Kind</Table.Head>
-        <Table.Head>Status</Table.Head>
-        <Table.Head>Started</Table.Head>
-        <Table.Head>Duration</Table.Head>
-        <Table.Head>Result</Table.Head>
-      </Table.Header>
-      <Table.Body aria-label="Run history">
-        {isLoading
-          ? SKELETON_ROWS.map(row => (
-              <Table.Row key={row}>
-                <Table.Cell colSpan={5}>
-                  <SkeletonText />
-                </Table.Cell>
-              </Table.Row>
-            ))
-          : null}
-        {runs?.length === 0 ? (
-          <Table.Row>
-            <Table.Cell colSpan={5}>
-              <Txt variant="body-sm" tone="muted">
-                No runs yet.
-              </Txt>
-            </Table.Cell>
-          </Table.Row>
-        ) : null}
-        {runs?.map(run => (
-          <Table.Row key={run.id}>
-            <Table.Cell>{RUN_KIND_LABEL[run.kind]}</Table.Cell>
-            <Table.Cell>
-              <RunStatusBadge status={run.status} />
-            </Table.Cell>
-            <Table.Cell tone="muted">{run.startedAt ? <RelativeTimestamp value={run.startedAt} /> : '—'}</Table.Cell>
-            <Table.Cell tone="muted">{describeDuration(run)}</Table.Cell>
-            <Table.Cell tone="muted">{run.error ?? describeCounts(run.counts)}</Table.Cell>
-          </Table.Row>
-        ))}
-      </Table.Body>
-    </Table>
+    <ul aria-label="Activity" className="flex flex-col divide-y divide-border">
+      {runs.data.map(run => (
+        <RunHistoryItem key={run.id} run={run} />
+      ))}
+    </ul>
+  );
+}
+
+function RunHistoryItem({ run }: { run: KnowledgeImporterRunSummary }) {
+  const when = runTime(run);
+  return (
+    <li>
+      <Collapsible>
+        <CollapsibleTrigger
+          disabled={isRunActive(run)}
+          className="group flex w-full items-center gap-3 py-2.5 text-left hover:bg-fill-subtle"
+        >
+          <ChevronRight
+            aria-hidden
+            className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]:rotate-90"
+          />
+          <span className="flex w-28 shrink-0 flex-col">
+            <Txt as="span" variant="label">
+              {RUN_KIND_LABEL[run.kind]}
+            </Txt>
+            <Txt as="span" variant="caption" tone="muted">
+              {when ? <RelativeTimestamp value={when} /> : 'Not started'}
+            </Txt>
+          </span>
+          <RunStatusBadge status={run.status} />
+          <Txt as="span" variant="body-sm" tone="muted" className="min-w-0 flex-1 truncate">
+            {isRunActive(run) ? 'In progress…' : describeOutcome(run)}
+          </Txt>
+          <Txt as="span" variant="caption" tone="muted" className="shrink-0 tabular-nums">
+            {describeDuration(run)}
+          </Txt>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="pt-1 pb-4 pl-6.5">
+            <RunReport run={run} />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </li>
   );
 }
