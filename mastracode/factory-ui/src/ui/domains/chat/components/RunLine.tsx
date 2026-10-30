@@ -11,7 +11,6 @@ import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator'
 import type { AgentIndicatorState } from '@mastra/playground-ui/components/AgentIndicator';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useState } from 'react';
 
 import { LABELS, STATUS } from '../services/run-activity';
 import type { LineState } from '../services/run-activity';
@@ -29,19 +28,19 @@ function lineLook(state: LineState): LineLook {
   return { pose: callPose(state.toolName), label, detail, status: 'running' };
 }
 
-/** A run already over when the line mounts, or whose exit has faded, draws nothing until another run starts. */
-export function RunLine({ state, live, run }: { state: LineState; live: boolean; run: number }) {
-  const [settledRun, setSettledRun] = useState(live ? undefined : run);
-  if (!live && settledRun === run) return null;
+export function RunLine({ state, live, onSettled }: { state: LineState; live: boolean; onSettled: () => void }) {
   const { pose, label, detail, status } = lineLook(state);
 
   return (
     <Arriving>
       <div
         aria-hidden
-        className={cn('transition-opacity duration-300 motion-reduce:duration-0', !live && 'opacity-0 delay-1100')}
+        className={cn(
+          'transition-opacity duration-300 motion-reduce:duration-0',
+          !live && 'opacity-0 delay-1100 starting:opacity-100',
+        )}
         onTransitionEnd={event => {
-          if (event.target === event.currentTarget && !live) setSettledRun(run);
+          if (event.target === event.currentTarget && !live) onSettled();
         }}
       >
         <Activity foldable={false} status={status} appearance="inline">

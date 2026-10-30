@@ -238,6 +238,48 @@ describe('ActivityLine', () => {
     expect(await screen.findByText('Done')).toBeInTheDocument();
   });
 
+  it('lands on Done after a run that only called tools', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+    await session.emit({
+      type: 'tool_start',
+      toolCallId: 'call-web',
+      toolName: 'web_search',
+      args: { query: 'oauth' },
+    });
+    await screen.findByRole('group', { name: /oauth/ }, { timeout: 3000 });
+    await session.emit({ type: 'tool_end', toolCallId: 'call-web', result: 'ok', isError: false });
+
+    await session.emit({ type: 'agent_end' });
+
+    expect(await screen.findByText('Done')).toBeInTheDocument();
+  });
+
+  it('opens a run the agent starts after an answer on Thinking', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+    await session.emit({ type: 'message_start', message: assistantText('') });
+    await session.emit({
+      type: 'message_update',
+      id: 'assistant-1',
+      event: { type: 'text-delta', delta: 'Auth starts at the composer' },
+    });
+    await session.emit({ type: 'agent_end' });
+    await screen.findByRole('button', { name: 'Copy message' }, { timeout: 3000 });
+
+    await session.emit({ type: 'agent_start' });
+
+    expect(await screen.findByText('Thinking')).toBeInTheDocument();
+  });
+
   it('ends quietly after an answer, which already said the run is over', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();

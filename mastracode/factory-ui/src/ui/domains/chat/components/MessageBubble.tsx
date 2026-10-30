@@ -70,7 +70,7 @@ function withLiveHost(entryId: string, written: MessagePart[], paced: MessagePar
   const host = written.findIndex(
     (part, index) => index >= paced.length && activity.hosts.get(activityPartKey(entryId, part, index))?.live,
   );
-  return host === -1 ? paced : [...paced, ...written.slice(paced.length, host + 1)];
+  return host === -1 ? paced : [...paced, written[host]];
 }
 
 export function MessageBubble({
@@ -108,7 +108,9 @@ export function MessageBubble({
   const revealed = new Map<string, MessagePart>(
     paced.map((part, index) => [activityPartKey(entry.id, part, index), part]),
   );
-  const keyOfPart = new Map<object, string>(parts.map((part, index) => [part, activityPartKey(entry.id, part, index)]));
+  const keyed = (list: MessagePart[]) =>
+    list.map((part, index) => [part, activityPartKey(entry.id, part, index)] as const);
+  const keyOfPart = new Map<object, string>([...keyed(written), ...keyed(paced)]);
 
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);

@@ -83,12 +83,12 @@ function assistantMessage(
   };
 }
 
-function environmentSignal(workingDirectory: string): TimelineEntry {
+function environmentSignal(workingDirectory: string, id = 'environment'): TimelineEntry {
   return {
     kind: 'message',
-    id: 'environment',
+    id,
     message: {
-      id: 'environment',
+      id,
       role: 'signal',
       createdAt: CREATED_AT,
       content: {
@@ -245,6 +245,21 @@ describe('TranscriptEntries tool rows', () => {
 
     expect(screen.getByText('packages/core/package.json')).toBeInTheDocument();
     expect(screen.queryByText('/sandboxes/7b45/mastra/packages/core/package.json')).not.toBeInTheDocument();
+  });
+
+  it('reads each turn relative to the working directory it had, after an environment edit moves it', () => {
+    renderEntries([
+      environmentSignal('/sandboxes/7b45/mastra', 'environment-1'),
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view', { path: '/sandboxes/7b45/mastra/packages/core/package.json' }),
+      ]),
+      userMessage('user-2', 'now the docs repo too'),
+      environmentSignal('/sandboxes/7b45', 'environment-2'),
+      assistantMessage('msg-2', [doneTool('call-2', 'view', { path: '/sandboxes/7b45/docs/README.md' })]),
+    ]);
+
+    expect(screen.getByText('packages/core/package.json')).toBeInTheDocument();
+    expect(screen.getByText('docs/README.md')).toBeInTheDocument();
   });
 
   it("reads a running shell command's description alone, and shows the command when expanded", async () => {

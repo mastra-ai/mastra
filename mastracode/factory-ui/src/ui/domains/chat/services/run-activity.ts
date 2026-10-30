@@ -64,12 +64,13 @@ function partActivity(part: MastraMessagePart): RunActivity {
 }
 
 /**
- * What the run is doing, read from the newest thing it put on screen since the user spoke. A prompt
- * lands after the message holding its call, so walking back meets the prompt first.
+ * What the run is doing, read from the newest thing it put on screen since it started or the user
+ * spoke. A prompt lands after the message holding its call, so walking back meets the prompt first.
  */
-export function runActivity(entries: TimelineEntry[]): RunActivity {
+export function runActivity(entries: TimelineEntry[], lastEntryBeforeRun?: string): RunActivity {
   for (let index = entries.length - 1; index >= 0; index--) {
     const entry = entries[index];
+    if (entry.id === lastEntryBeforeRun) return 'thinking';
     if (entry.kind === 'approval' || entry.kind === 'suspension') return 'waiting';
     if (entry.kind === 'notice' && entry.level === 'error') return 'error';
     if (entry.kind !== 'message') continue;
@@ -83,9 +84,9 @@ export function runActivity(entries: TimelineEntry[]): RunActivity {
   return 'thinking';
 }
 
+/** An answer already says the run is over, so a run that ends on one stays writing. */
 export function lineState(activity: RunActivity, busy: boolean, savingMemory: boolean): RunActivity {
-  if (activity === 'waiting' || activity === 'error') return activity;
+  if (activity === 'waiting' || activity === 'error' || activity === 'writing') return activity;
   if (!busy) return 'done';
-  if (activity === 'writing' || !savingMemory) return activity;
-  return 'memory';
+  return savingMemory ? 'memory' : activity;
 }

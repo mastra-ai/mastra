@@ -146,30 +146,34 @@ export function TranscriptEntries({
   const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
   const gaps = turnGaps(entries, opensTurn);
+  const directories = turnGroups.reduce<(string | undefined)[]>(
+    (held, group) => [...held, agentWorkingDirectory(group.entries) ?? held.at(-1)],
+    [],
+  );
 
   return (
     <ActivityDisclosureProvider>
-      <ActivityWorkingDirectory path={agentWorkingDirectory(entries)}>
-        {turnGroups.map((group, index) => {
-          const isLiveTurn = index === turnGroups.length - 1;
-          const runningTurn = isLiveTurn && running;
-          // The first turn opens at the top of the transcript already, so room under it
-          // would buy no travel — only empty scroll below a fresh thread.
-          const holdsRoom =
-            runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
+      {turnGroups.map((group, index) => {
+        const isLiveTurn = index === turnGroups.length - 1;
+        const runningTurn = isLiveTurn && running;
+        // The first turn opens at the top of the transcript already, so room under it
+        // would buy no travel — only empty scroll below a fresh thread.
+        const holdsRoom =
+          runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
 
-          const steps = replySteps(group);
-          const replyEnd = steps.at(-1);
-          const reply = turnReply(steps, runningTurn);
-          const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
+        const steps = replySteps(group);
+        const replyEnd = steps.at(-1);
+        const reply = turnReply(steps, runningTurn);
+        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
 
-          return (
-            <ChatShell.Turn
-              key={group.key}
-              opensTurn={group.opensTurn}
-              holdsRoom={holdsRoom}
-              restored={group.key === restoredTurnKey}
-            >
+        return (
+          <ChatShell.Turn
+            key={group.key}
+            opensTurn={group.opensTurn}
+            holdsRoom={holdsRoom}
+            restored={group.key === restoredTurnKey}
+          >
+            <ActivityWorkingDirectory path={directories[index]}>
               <TurnRevealScope>
                 {group.entries.map(entry => {
                   const gap = gaps.get(entry.id);
@@ -197,11 +201,11 @@ export function TranscriptEntries({
                 })}
               </TurnRevealScope>
               {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
-            </ChatShell.Turn>
-          );
-        })}
-        {turnGroups.length === 0 && tail?.(false)}
-      </ActivityWorkingDirectory>
+            </ActivityWorkingDirectory>
+          </ChatShell.Turn>
+        );
+      })}
+      {turnGroups.length === 0 && tail?.(false)}
     </ActivityDisclosureProvider>
   );
 }
