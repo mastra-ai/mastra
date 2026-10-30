@@ -133,9 +133,9 @@ export async function createFactoryWorkItem({
       board: boardId,
       stage: placement.phase,
       expectedRevision: entered.revision,
-      actor: { type: 'human', id: userId },
-      ...origin,
-      ingress: { type: 'human', identity: `work-item:${created.id}:intake-route` },
+      // The route moves the card, not the person: a run it starts still needs their consent.
+      actor: { type: 'system', id: 'factory-intake-route' },
+      ingress: { type: 'rule', identity: `work-item:${created.id}:intake-route` },
       cause: 'work_item_created',
     });
     if (moved.status === 'rejected') {

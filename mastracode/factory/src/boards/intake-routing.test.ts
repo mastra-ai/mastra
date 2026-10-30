@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { RuleGroup } from '../rules/rule-group.js';
 import { cardRuleFacts } from './card-facts.js';
-import { intakeHold, resolveIntakePlacement } from './intake-routing.js';
+import { defineBoard } from './define-board.js';
+import { intakeHold, intakeTargetProblem, resolveIntakePlacement } from './intake-routing.js';
 import { createBoardRegistry } from './registry.js';
 import { createTestBoard } from './test-utils.js';
 
@@ -36,7 +37,41 @@ const pullRequest = cardRuleFacts({
   externalSource: { integrationId: 'github', type: 'pull-request', externalId: '2' },
 });
 
+/** A board whose first phase can't reach `fixing` directly: cards go through `triaged`. */
+const stepwise = createBoardRegistry({
+  boards: [
+    defineBoard({
+      id: 'stepwise',
+      name: 'Stepwise',
+      initialPhase: 'reported',
+      phases: {
+        reported: { name: 'Reported', kind: 'resting', nextPhases: ['triaged'] },
+        triaged: { name: 'Triaged', kind: 'resting', nextPhases: ['fixing'] },
+        fixing: { name: 'Fixing', kind: 'working', nextPhases: ['fixed'] },
+        fixed: { name: 'Fixed', kind: 'terminal' },
+      },
+    }),
+  ],
+  includeDefaultBoards: false,
+});
+
 describe('resolveIntakePlacement', () => {
+  it("lands a card in the first phase when the route's phase can't be reached from it", () => {
+    const target = (phaseKey: string) => [route({ target: { boardKey: 'stepwise', phaseKey } })];
+    expect(resolveIntakePlacement(target('triaged'), issue(), stepwise)).toEqual({
+      board: 'stepwise',
+      phase: 'triaged',
+    });
+    expect(resolveIntakePlacement(target('fixing'), issue(), stepwise)).toEqual({
+      board: 'stepwise',
+      phase: 'reported',
+    });
+    expect(intakeTargetProblem(stepwise, { boardKey: 'stepwise', phaseKey: 'fixing' })).toMatchObject({
+      code: 'unreachable_phase',
+    });
+    expect(intakeTargetProblem(stepwise, { boardKey: 'stepwise', phaseKey: 'triaged' })).toBeUndefined();
+  });
+
   it('places nothing without routes', () => {
     expect(resolveIntakePlacement([], issue(), registry)).toBeUndefined();
   });

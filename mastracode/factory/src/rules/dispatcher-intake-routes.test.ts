@@ -33,7 +33,7 @@ const docsBoard = {
 };
 
 /** A real dispatcher over real storage, with the project's stored boards and intake routes. */
-async function setup(options: { withRoutesReader?: boolean } = {}) {
+async function setup(options: { withRoutesReader?: boolean; autoRun?: boolean } = {}) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Routes' } });
   const scope = { orgId: 'org-1', factoryProjectId: project.id };
@@ -42,12 +42,17 @@ async function setup(options: { withRoutesReader?: boolean } = {}) {
   const workItems = seeded.workItems;
   const dispatcher = new FactoryDecisionDispatcher({
     controller: {} as never,
-    transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
+    transitionService: new FactoryTransitionService({
+      storage: workItems,
+      configVersion,
+      boards,
+      ...(options.withRoutesReader === false ? {} : { intakeRoutes: seeded.boards }),
+    }),
     storage: workItems,
     boards,
     ...(options.withRoutesReader === false ? {} : { intakeRoutes: seeded.boards }),
-    // Keeps any run a phase proposes parked, so these tests only see placement.
-    isAutoRunEnabled: async () => false,
+    // Off unless a test asks: keeps any run a phase proposes parked, so most tests only see placement.
+    isAutoRunEnabled: async () => options.autoRun === true,
     ownerId: 'worker-routes',
   });
   let deliveries = 0;
@@ -88,7 +93,14 @@ async function setup(options: { withRoutesReader?: boolean } = {}) {
     const card = (await workItems.list(scope)).find(item => item.externalSource?.externalId === decision.sourceKey);
     return card;
   };
-  return { ...seeded, scope, project, route, deliver };
+  /** The runs the card's phases asked for, after the dispatcher had a turn at them. */
+  const runs = async (cardId: string) => {
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+    return (await workItems.listDeferredDecisions('org-1', project.id))
+      .filter(decision => decision.workItemId === cardId && decision.decision.type === 'invokeSkill')
+      .map(decision => decision.status);
+  };
+  return { ...seeded, scope, project, route, deliver, runs };
 }
 
 function placed(card: { board?: string | null; stages: string[] } | undefined) {
@@ -119,6 +131,37 @@ describe('intake routes placing linked cards', () => {
 
     const untrusted = await deliver({ sourceKey: 'github-issue:2', metadata: { authorTrusted: false } });
     expect(placed(untrusted)).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it("doesn't start an outsider's card a route sends into a working phase, even with auto-run on", async () => {
+    const { route, deliver, runs } = await setup({ autoRun: true });
+    await route({ name: 'Everything to triage', when: null, target: { boardKey: 'work', phaseKey: 'triage' } });
+
+    const outsider = await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: false } });
+    expect(placed(outsider)).toEqual({ board: 'work', stages: ['triage'] });
+    expect(await runs(outsider!.id)).toEqual(['proposed']);
+
+    const unstamped = await deliver({ sourceKey: 'github-issue:2', metadata: {} });
+    expect(placed(unstamped)).toEqual({ board: 'work', stages: ['triage'] });
+    expect(await runs(unstamped!.id)).toEqual(['proposed']);
+  });
+
+  it("starts an outsider's routed card only under a route that says hold: 'never'", async () => {
+    const { route, deliver, runs } = await setup({ autoRun: true });
+    await route({
+      name: 'Docs need no person',
+      when: DOCS,
+      target: { boardKey: 'work', phaseKey: 'triage' },
+      hold: 'never',
+    });
+
+    const released = await deliver({
+      sourceKey: 'github-issue:1',
+      metadata: { authorTrusted: false, labels: ['docs'] },
+    });
+    expect(placed(released)).toEqual({ board: 'work', stages: ['triage'] });
+    // Not held: the dispatcher tries to start it (and retries, as this harness has no sessions).
+    expect(await runs(released!.id)).toEqual(['retry']);
   });
 
   it('files a labelled issue on a stored board at its initial phase', async () => {

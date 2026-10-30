@@ -22,7 +22,10 @@ export const UNTRUSTED_AUTHOR_WHEN: RuleGroup = {
   ],
 };
 
-export type IntakeTargetProblem = { code: 'unknown_board' | 'unknown_phase' | 'terminal_phase'; message: string };
+export type IntakeTargetProblem = {
+  code: 'unknown_board' | 'unknown_phase' | 'terminal_phase' | 'unreachable_phase';
+  message: string;
+};
 
 /** Why a route's target can't take cards in this project, or undefined when it can. */
 export function intakeTargetProblem(
@@ -42,6 +45,12 @@ export function intakeTargetProblem(
     return {
       code: 'terminal_phase',
       message: `Phase "${target.phaseKey}" on board "${target.boardKey}" is terminal; new cards can't land there.`,
+    };
+  }
+  if (!board.allowsTransition(board.initialPhase, target.phaseKey)) {
+    return {
+      code: 'unreachable_phase',
+      message: `Board "${target.boardKey}" doesn't allow moving a card from its first phase "${board.initialPhase}" to "${target.phaseKey}".`,
     };
   }
   return undefined;
@@ -73,7 +82,11 @@ export function resolveIntakePlacement(
     const board = registry.get(route.target.boardKey);
     if (!board || !boardTakesCard(board.id, facts)) continue;
     const phase = route.target.phaseKey;
-    const usable = phase && board.phaseKind(phase) !== undefined && !board.isTerminal(phase);
+    const usable =
+      phase &&
+      board.phaseKind(phase) !== undefined &&
+      !board.isTerminal(phase) &&
+      board.allowsTransition(board.initialPhase, phase);
     return { board: board.id, phase: usable ? phase : board.initialPhase };
   }
   return undefined;
