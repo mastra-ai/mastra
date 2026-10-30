@@ -155,6 +155,10 @@ export interface OutputResult {
   finishReason: string;
   /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
   steps: LLMStepResult[];
+  /**
+   * @deprecated No longer set. Message history now keeps every turn; check `finishReason === 'error'` to detect failed runs.
+   */
+  inputAccepted?: boolean;
 }
 
 /**

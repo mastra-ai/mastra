@@ -149,6 +149,10 @@ export type SerializableOutputResult = {
   usage: Record<string, unknown>;
   finishReason: string;
   steps: unknown[];
+  /**
+   * @deprecated No longer set. Message history now keeps every turn; check `finishReason === 'error'` to detect failed runs.
+   */
+  inputAccepted?: boolean;
 };
 
 export type ProcessorOutputResultPhaseType = {
@@ -602,6 +606,10 @@ const outputResultSchema = z.object({
   usage: z.record(z.string(), z.unknown()).describe('Token usage (cumulative across all steps)'),
   finishReason: z.string().describe('Why the generation finished'),
   steps: z.array(z.unknown()).describe('All LLM step results'),
+  inputAccepted: z
+    .boolean()
+    .optional()
+    .describe("Deprecated. No longer set. Check finishReason === 'error' to detect failed runs"),
 });
 
 export const ProcessorOutputResultPhaseSchema = z.object({
