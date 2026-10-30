@@ -1,5 +1,105 @@
 # @mastra/factory
 
+## 0.26.0-alpha.3
+
+### Minor Changes
+
+- Organization admins can now create, edit and delete a project's own boards through the API. Saved boards pass the same checks as `defineBoard()`, and every change sends back the revision it read, so two people can't overwrite each other's edits. ([#28878](https://github.com/mastra-ai/mastra/pull/28878))
+
+  ```bash
+  curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards" \
+    -H 'content-type: application/json' \
+    -d '{ "key": "bugs", "name": "Bugs", "phases": [{ "key": "reported", "name": "Reported", "kind": "resting" }, { "key": "fixed", "name": "Fixed", "kind": "terminal" }] }'
+  ```
+
+  `GET /web/factory/projects/:id/boards/:boardKey` returns a board's definition, `PATCH …/boards/:boardKey` replaces it with `expectedRevision`, and `DELETE …/boards/:boardKey?expectedRevision=n` deletes it. Factory refuses edits that would strand cards (`409 phase_in_use`, `409 board_in_use`) and runner skills that don't exist (`422 unknown_skill`).
+
+  The built-in Work and Review boards and boards passed to `new MastraFactory({ boards })` are read-only here: creating, editing or deleting one returns `409 code_board`, and the catalog and `GET` report them with `editable: false`.
+
+  `defineBoard()` and the `boards` and `includeDefaultBoards` options of `MastraFactory` are deprecated. They keep working, their boards are not stored, and Factory logs one deprecation warning per process. Apps that use only the built-in boards see no warning. See the "Stored boards" and "Migrating from `defineBoard()`" sections of the README.
+
+- Each project's boards are now the built-in Work and Review boards and the boards you pass to `new MastraFactory({ boards })`, followed by any boards the project created for itself, which are stored in its database. Code boards are served exactly as your code defines them, are never written to the database, and are read-only. When a stored board has the same key as a code board, the code board wins. ([#28877](https://github.com/mastra-ai/mastra/pull/28877))
+
+  Existing apps need no change, and Factory writes nothing to the database at startup.
+
+  The board catalog (`GET /web/factory/projects/:id/boards`) now reports each board's `source` (`builtin`, `app` or `stored`), whether it is `editable` (`false` for code boards) and any `problems`, such as a runner skill that does not exist.
+
+- Added opt-in rich score persistence for Factory deployments so trace scores can appear in Mastra Studio. Storage remains disabled by default to avoid unbounded score growth. ([#28873](https://github.com/mastra-ai/mastra/pull/28873))
+
+  ```ts
+  new MastraFactory({ storage, disableScoreStorage: false });
+  ```
+
+- Added label filters to Jira intake routing, so one Jira project can feed several factories. Each factory's binding takes either all issues or only issues carrying its labels. Label filters take precedence over the all-issues binding; an issue carrying labels from two filters goes to the binding created first. Each issue is filed in exactly one factory. ([#28605](https://github.com/mastra-ai/mastra/pull/28605))
+
+  ```http
+  PUT /web/intake/bindings
+  { "integrationId": "jira", "sourceId": "10000", "factoryProjectId": "<payments factory>", "board": "work", "labels": ["payments"] }
+
+  DELETE /web/intake/bindings?integrationId=jira&sourceId=10000&factoryProjectId=<payments factory>
+  ```
+
+  Overlapping labels, or a second all-issues binding, are rejected with `409 binding_conflict`. Labels decide placement only when an issue is first filed; relabelling an issue does not move its card. Linear, GitHub, GitLab and incident.io bindings are unchanged: a source still feeds one factory.
+
+  **Upgrading:** existing bindings move to new storage on first start and keep taking all issues, so nothing changes until you add a label filter. If you roll back to an earlier version, bindings return to how they were when you upgraded; changes made since, including label filters, are not carried back.
+
+### Patch Changes
+
+- Made the work board's polling cheaper on large projects. Each poll used to copy every card of the project out of the server's list cache; it now reads the cached cards directly. ([#28889](https://github.com/mastra-ai/mastra/pull/28889))
+
+- Restored `title`, `role` and `next` on boards returned by `defineBoard()`. Apps that extended a built-in board with `title: workBoard.title` crashed at boot with `Board "work" must declare a name.` They are deprecated read-only copies of the new fields: ([#28914](https://github.com/mastra-ai/mastra/pull/28914))
+
+  ```ts
+  const relaxed = defineBoard({
+    id: workBoard.id,
+    name: workBoard.name, // workBoard.title still works, but is deprecated
+    initialPhase: workBoard.initialPhase,
+    phases: workBoard.phases,
+  });
+  ```
+
+- Fixed three Jira intake routing problems when factories share a Jira project: ([#28870](https://github.com/mastra-ai/mastra/pull/28870))
+
+  - Deleting a factory now releases the Jira projects routed to it, so another factory can take all their issues, including issues the deleted factory had already filed. Routes left behind by factories deleted earlier can now be removed in Settings.
+  - A filed Jira card keeps loading its description after another factory's label filter starts taking its issue, or after the issue is relabelled.
+  - Label filters now reject labels containing spaces, which Jira labels cannot have.
+
+- The activity line under the transcript now follows the whole run instead of disappearing at the first output. It shows the agent indicator and says what the run is doing (thinking, reading a file, running a command, using a skill, updating memory, waiting for you), then lands on done or on the failure before it fades out. It steps aside while the answer streams, since the words arriving already say it, and the run then ends quietly instead of showing "Updating memory" or "Done" under the answer. ([#28834](https://github.com/mastra-ai/mastra/pull/28834))
+
+  When the agent starts calling tools, the indicator moves onto the activity row for those calls without flickering, and that row names the call in progress from the moment it starts instead of reading "Thinking" until the first result lands.
+
+- A reply's footer (model, copy button and time) now appears once the last word of the whole reply is on screen, including earlier steps of a reply split across several messages. Before, it landed as soon as the stream ended, under a reply still being written in. Its model name and time read a little larger, level with the copy button beside them. ([#28834](https://github.com/mastra-ai/mastra/pull/28834))
+
+- Signal, system reminder and skill rows in the transcript now read like the agent's activity lines: same left edge, same type and weight, a readable name instead of the signal's id, and the message as prose instead of monospace. Activity lines no longer draw a rule under each group of tool calls, so thoughts, tool calls and signals keep one even rhythm. A finished group of tool calls shows the agent icon instead of the first tool's icon. ([#28834](https://github.com/mastra-ai/mastra/pull/28834))
+
+  Paths in activity rows read relative to the agent's working directory, such as `packages/core/package.json` instead of the sandbox's absolute path, and details read in the body font rather than monospace. The live activity line writes itself in from the left and rolls to each new call instead of swapping its words at once.
+
+  A message sent after a pause of ten minutes or more now shows its "51 minutes later" divider the moment it is sent, above the message. Before, the divider landed after the agent had already started thinking and pushed the reply down.
+
+  After sending a message, "Thinking" stays on screen until the reply shows something. Before, the run's thinking line vanished for a few seconds once the model opened a thought with no text yet, then came back.
+
+- Factory triage now handles Jira, incident.io, and GitLab cards. It reads each card with that source's own tool and posts its findings where it can. Jira issues get a short plain-text summary as a comment, without file paths or code, because the Jira audience may not have access to the repository. incident.io follow-ups and GitLab issues have no tool to write back to, so their handoff stays in the session. incident.io cards now pass the follow-up reference that the fetch tool needs. Triage and planning also treat content from these sources as untrusted. ([#28775](https://github.com/mastra-ai/mastra/pull/28775))
+
+- Fixed Factory intake losing or reviving routing in edge cases: ([#28971](https://github.com/mastra-ai/mastra/pull/28971))
+
+  - Issues queued by a factory that was then deleted are now filed by the factory that takes over its source, instead of being lost.
+  - An issue still claimed by a deleted factory's card is freed when another factory files it.
+  - Two servers starting at the same time during an upgrade can no longer bring back a source routing that was removed in between.
+  - Deleting a factory removes it and its intake routing together, so a failed delete keeps both and retrying finishes the job.
+  - Saving a source routing for a factory while it is being deleted now fails with `factory_project_not_found`, instead of leaving a routing that blocks the factory taking over that source.
+
+- Fixed Factory sessions failing with a sign-in error when a provider such as OpenAI Codex or Anthropic rejects a personal OAuth token before its saved expiry. ([#28904](https://github.com/mastra-ai/mastra/pull/28904))
+
+  - The session now refreshes the stored credential once and retries the request, so you don't need to sign in again.
+  - Later and resumed sessions use the new token.
+  - Sessions that hit the rejection at the same time share a single refresh.
+
+- Updated dependencies [[`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`9b37834`](https://github.com/mastra-ai/mastra/commit/9b3783420945114ad28c5cf18a06859603ff7f85), [`fcfb773`](https://github.com/mastra-ai/mastra/commit/fcfb773428c7ded1188414ba9faa01df3fa8ccc3), [`4c56da4`](https://github.com/mastra-ai/mastra/commit/4c56da456f13d104adfb5bb69ed0937a8c1ba59a), [`7b3f759`](https://github.com/mastra-ai/mastra/commit/7b3f759e080364820f785ed6c6b422db1a4a6366), [`cf4c4b6`](https://github.com/mastra-ai/mastra/commit/cf4c4b6e8b66b13696c9217f62aa42f38a9b873c), [`e57fc08`](https://github.com/mastra-ai/mastra/commit/e57fc08fd839a1683115a247fefb4bb40ff0e451), [`52265cb`](https://github.com/mastra-ai/mastra/commit/52265cba91aecebdcc45b2d95ef7b18b6d738d8b), [`3ee0f7b`](https://github.com/mastra-ai/mastra/commit/3ee0f7bddde204dc87e0e2351a750d54428ef70c), [`f548c12`](https://github.com/mastra-ai/mastra/commit/f548c12cfbb69526a785ca69bd88bb0553a9f047), [`b79e61a`](https://github.com/mastra-ai/mastra/commit/b79e61a92d0982ba2daa25629576656d211753f8), [`292dd6c`](https://github.com/mastra-ai/mastra/commit/292dd6cd973f5821f943eb01ad081eefcb1285af), [`e80dd64`](https://github.com/mastra-ai/mastra/commit/e80dd64c83b89fb4c320ce5584ad047a73ea6044), [`ba8b955`](https://github.com/mastra-ai/mastra/commit/ba8b955b1ad6022089feec253c111035e9e7b9b6), [`db7306f`](https://github.com/mastra-ai/mastra/commit/db7306fc1710942cc421e651121569ac8be804fe), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`5480e7b`](https://github.com/mastra-ai/mastra/commit/5480e7b7caa5d8f8018d22f79e36a9a19697af4b), [`d4cd4cd`](https://github.com/mastra-ai/mastra/commit/d4cd4cde06300a2ceb79b9e1d32c053e33bbfe50), [`744aaab`](https://github.com/mastra-ai/mastra/commit/744aaab6ceebe03829e8851d6ac95dca671edd2b), [`91428b2`](https://github.com/mastra-ai/mastra/commit/91428b2f43199db6901d9dc3fa0a17e50f482507), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`fbd5957`](https://github.com/mastra-ai/mastra/commit/fbd5957959481ffc030faa3ab2e3df35e085bc2d), [`e30d29b`](https://github.com/mastra-ai/mastra/commit/e30d29bb8f88d94a3d513cbdd7a4f567e7a97254), [`39edcee`](https://github.com/mastra-ai/mastra/commit/39edceea4f109db8cc02897e6e8ff5350aa9aec5), [`ea26a4b`](https://github.com/mastra-ai/mastra/commit/ea26a4b1cc7cdd25f47dc3b798627194755616ac), [`0443fd5`](https://github.com/mastra-ai/mastra/commit/0443fd5137071cc64b0d2730d57bfb9398527410), [`6a2b35f`](https://github.com/mastra-ai/mastra/commit/6a2b35fd4bc81071b0b6be755a9e3ec0b317db18), [`1966af4`](https://github.com/mastra-ai/mastra/commit/1966af4a622641b9172141a988aff5922f7221b0), [`49080fa`](https://github.com/mastra-ai/mastra/commit/49080fabe7a86b7fac94cdab2596b2d2b320e189), [`76f4110`](https://github.com/mastra-ai/mastra/commit/76f4110887dd6d28f1bb07c4360992ef53303a01), [`14290e1`](https://github.com/mastra-ai/mastra/commit/14290e18078712a02270ac45e50f49806624c4ce), [`b89557e`](https://github.com/mastra-ai/mastra/commit/b89557e0cc0db19922e391eff817505e36684ff9), [`69c79cf`](https://github.com/mastra-ai/mastra/commit/69c79cf07b6fc1ffe6f2f547729f1cb05bd54eca), [`2b05803`](https://github.com/mastra-ai/mastra/commit/2b05803437af081cc4fdea2d81e3980b5f52d897), [`8b781d0`](https://github.com/mastra-ai/mastra/commit/8b781d0308eec018e84b59809cc24b2953300300), [`bc4b9ff`](https://github.com/mastra-ai/mastra/commit/bc4b9ff82638b7e25b29087d1e36d3df763a54f7), [`c0918c0`](https://github.com/mastra-ai/mastra/commit/c0918c01b337947eeb54d5d1b3ab9ed0719bb4b7), [`690bd1b`](https://github.com/mastra-ai/mastra/commit/690bd1baee178d56a75994549c318e0089debdee), [`930f604`](https://github.com/mastra-ai/mastra/commit/930f604c30de2eb7fc94437e4208d0a2ec8dee58), [`e77a7d9`](https://github.com/mastra-ai/mastra/commit/e77a7d910b7943368b4df6688e7645fffb6a8891), [`d102756`](https://github.com/mastra-ai/mastra/commit/d102756c708797722d95ee73ab11ba614f2f9ec8), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`e9fc83e`](https://github.com/mastra-ai/mastra/commit/e9fc83e5d4427f49af147aec86eb3f7fcb6fb8ee), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`51e837a`](https://github.com/mastra-ai/mastra/commit/51e837a4b8f44a442c3e06a672c9f6b3dd294cc3), [`d9e26f4`](https://github.com/mastra-ai/mastra/commit/d9e26f485d2658a9dc84c0f20804e9a89a57d3a0)]:
+  - @mastra/code-sdk@1.17.0-alpha.2
+  - @mastra/core@1.81.0-alpha.2
+  - @mastra/mcp@2.7.0-alpha.0
+  - @mastra/platform-workspace@1.11.0-alpha.1
+
 ## 0.26.0-alpha.2
 
 ### Minor Changes
