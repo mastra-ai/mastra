@@ -590,11 +590,12 @@ describe('ModelCredentialsStorage account priority', () => {
         label: 'ignored on a match',
         activate: true,
       });
-      expect(again).toEqual({ ...first, active: false });
+      // Same id, label and priority; activate: true makes the matched account active again.
+      expect(again).toEqual({ ...first, active: true });
       expect(await store.getAccountCredential(org, first.id)).toMatchObject({ access: 'at-new', refresh: 'r-1b' });
       expect((await store.listAccounts(org, 'openai-codex')).map(a => [a.id, a.active])).toEqual([
-        [first.id, false],
-        [second.id, true],
+        [first.id, true],
+        [second.id, false],
       ]);
     });
 
@@ -612,7 +613,16 @@ describe('ModelCredentialsStorage account priority', () => {
       expect(await store.getAccountCredential(org, legacyId)).toMatchObject({ access: 'at-fresh' });
     });
 
-    it('matches an identity-less provider on the same refresh token, keeping id, label and active state', async () => {
+    it('leaves the active account alone when a match is re-added without activate', async () => {
+      const { store } = await makeBackend();
+      const first = await store.addAccount(org, 'openai-codex', { credential: signIn('r-1'), identity: 'acct-1' });
+      await store.addAccount(org, 'openai-codex', { credential: signIn('r-2'), identity: 'acct-2', activate: true });
+
+      const again = await store.addAccount(org, 'openai-codex', { credential: signIn('r-1b'), identity: 'acct-1' });
+      expect(again).toEqual({ ...first, active: false });
+    });
+
+    it('matches an identity-less provider on the same refresh token, keeping id, label and priority', async () => {
       const { store } = await makeBackend();
       const first = await store.addAccount(org, 'anthropic', {
         credential: signIn('r-1'),
@@ -629,7 +639,7 @@ describe('ModelCredentialsStorage account priority', () => {
         providerName: 'Anthropic',
         activate: true,
       });
-      expect(again).toEqual({ ...first, active: false });
+      expect(again).toEqual({ ...first, active: true });
       expect(await store.getAccountCredential(org, first.id)).toMatchObject({ access: 'at-reissued' });
       expect(await store.listAccounts(org, 'anthropic')).toHaveLength(2);
     });

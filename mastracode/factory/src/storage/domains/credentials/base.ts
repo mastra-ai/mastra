@@ -101,7 +101,10 @@ export interface AddAccountInput {
    * named "<providerName> account N", as mastracode's AuthStorage names them.
    */
   providerName?: string;
-  /** Make a newly added account active even when the pool already has an active account. */
+  /**
+   * Make the account active even when the pool already has an active account.
+   * Applies to a matched account too, as mastracode's AuthStorage does on re-login.
+   */
   activate?: boolean;
 }
 
@@ -656,7 +659,6 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     const encrypted = await this.encryption.encrypt(input.credential);
     const type = accountType(input.credential);
     let accountId: string | undefined;
-    let added = false;
 
     for (let attempt = 0; attempt < 2 && !accountId; attempt++) {
       const pool = await this.#listPool(tenant, provider);
@@ -689,7 +691,6 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
           identity: input.identity ?? null,
           data: encrypted,
         });
-        added = true;
       } catch (error) {
         // A concurrent add with the same identity won the insert; update it on the retry.
         if (!(error instanceof UniqueViolationError) || !input.identity || attempt > 0) throw error;
@@ -697,7 +698,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     }
 
     const id = accountId!;
-    if (added && input.activate) await this.#setActive(tenant, provider, id);
+    if (input.activate) await this.#setActive(tenant, provider, id);
     else await this.#ensureActive(tenant, provider);
     return (await this.listAccounts(tenant, provider)).find(row => row.id === id)!;
   }

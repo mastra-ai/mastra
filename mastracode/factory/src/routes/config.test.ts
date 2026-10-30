@@ -449,8 +449,8 @@ describe('provider key routes with a tenant', () => {
 
     const accounts = await seed.credentials.listAccounts({ orgId: 'org1', userId: 'user-a' }, 'anthropic');
     expect(accounts).toHaveLength(2);
-    // The re-saved key keeps its place and state; the second key stays active.
-    expect(accounts.map(a => a.active)).toEqual([false, true]);
+    // The re-saved key keeps its id, label and place, and becomes active again.
+    expect(accounts.map(a => a.active)).toEqual([true, false]);
   });
 
   it('stores a Kimi key under the credential id model resolution reads', async () => {
@@ -566,6 +566,19 @@ describe('provider key routes with a tenant', () => {
         credential: { type: 'oauth', access: `a-${refresh}`, refresh, expires: Date.now() + 60_000 },
         activate,
       });
+
+    it('re-saving a key while an OAuth account is active switches back to that key', async () => {
+      await putKey(buildApp(userA), { key: 'sk-mine' });
+      const oauth = await addOAuth('r-1');
+      const [key] = await seed.credentials.listAccounts(userPool, 'anthropic');
+
+      expect((await putKey(buildApp(userA), { key: 'sk-mine' })).status).toBe(200);
+      const accounts = await seed.credentials.listAccounts(userPool, 'anthropic');
+      expect(accounts.map(a => [a.id, a.type, a.active])).toEqual([
+        [key!.id, 'api-key', true],
+        [oauth.id, 'oauth', false],
+      ]);
+    });
 
     it('removes the key and leaves an active OAuth account in place', async () => {
       await putKey(buildApp(userA), { key: 'sk-mine' });

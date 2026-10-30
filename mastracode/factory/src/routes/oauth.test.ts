@@ -573,8 +573,11 @@ describe('sign-in appends to the account pool', () => {
     await signInCodex(app, { ...CODEX_CREDS, access: 'a-new', refresh: 'r-new', accountId: 'acct-1' });
 
     const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
-    // Same ids, labels and active state: the re-auth replaced only the tokens.
-    expect(accounts).toEqual(before);
+    // Same ids, labels and order; the re-authed account becomes active, as in mastracode's login().
+    expect(accounts).toEqual([
+      { ...before[0], active: true },
+      { ...before[1], active: false },
+    ]);
     expect(await seed.credentials.getAccountCredential(TENANT_A, before[0]!.id)).toMatchObject({ access: 'a-new' });
   });
 
@@ -609,14 +612,17 @@ describe('sign-in appends to the account pool', () => {
       expect(res.status).toBe(200);
     }
 
-    it('updates the account holding the same refresh token in place', async () => {
+    it('updates the account holding the same refresh token in place and activates it', async () => {
       const app = buildApp(userA);
       await signInAnthropic(app, ANTHROPIC_CREDS);
       await signInAnthropic(app, { ...ANTHROPIC_CREDS, refresh: 'r-2', access: 'a-2' });
       const before = await seed.credentials.listAccounts(TENANT_A, 'anthropic');
       await signInAnthropic(app, { ...ANTHROPIC_CREDS, access: 'a-reissued' });
 
-      expect(await seed.credentials.listAccounts(TENANT_A, 'anthropic')).toEqual(before);
+      expect(await seed.credentials.listAccounts(TENANT_A, 'anthropic')).toEqual([
+        { ...before[0], active: true },
+        { ...before[1], active: false },
+      ]);
       expect(await seed.credentials.getAccountCredential(TENANT_A, before[0]!.id)).toMatchObject({
         access: 'a-reissued',
       });
