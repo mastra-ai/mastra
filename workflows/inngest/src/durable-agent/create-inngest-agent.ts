@@ -1445,12 +1445,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Save the accepted request before the run starts, as DurableAgent does,
           // so a run that times out or fails still keeps it (#28659).
           await persistDurableRunInput(runId, workflowInput, mastra);
+          // A caller abort reaches the run signal with the controller's own reason, so a
+          // timeout reason the controller does not share is this run's deadline.
+          const deadlineFired = () => {
+            const reason = registryEntry.abortSignal?.reason;
+            return isMastraTimeoutError(reason) && reason !== abortController.signal.reason;
+          };
           // The deadline already reported the timeout and cleared the run's rows; don't start it.
-          if (isMastraTimeoutError(registryEntry.abortSignal?.reason)) return;
+          if (deadlineFired()) return;
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
           // The deadline can also fire while that row is being written; its cleanup may have run first.
-          if (isMastraTimeoutError(registryEntry.abortSignal?.reason)) {
+          if (deadlineFired()) {
             if (persistedRunning) await deleteRunSnapshots(runId);
             return;
           }

@@ -42,6 +42,7 @@ import {
   describeParity,
   expectParity,
 } from '../parity';
+import { MastraTimeoutError } from '../../../timeout';
 
 const THREAD = 'thread-t37';
 const RESOURCE = 'resource-t37';
@@ -457,7 +458,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         if (args.snapshot.status !== 'running') return persistSnapshot(args);
         // Land the row only after the deadline has fired and cleared the run's rows.
         const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => persistSnapshot(args));
-        heldWrites.push(held.catch(() => {}));
+        heldWrites.push(held);
         return held;
       });
       try {
@@ -478,6 +479,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         const errors = result.chunks!.filter(chunk => chunk.type === 'error');
         expect(errors).toHaveLength(1);
         expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        // The running row write must have been held, or the post-write cleanup was never exercised.
+        expect(heldWrites).toHaveLength(1);
         await Promise.all(heldWrites);
         // Give a run started after the deadline time to reach the model and write its rows.
         await new Promise(resolve => setTimeout(resolve, 3_000));
@@ -499,6 +502,50 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       }
     },
     TEST_TIMEOUT_MS + 10_000,
+  );
+
+  // Only the run's own deadline may skip startup: the guard returns without reporting anything, because
+  // the deadline already did. A caller abort carrying a `MastraTimeoutError` is not reported by the
+  // deadline, so skipping startup on it would leave the stream open.
+  it.skipIf(engine !== 'inngest')(
+    'a caller abort with a timeout reason during the input save still closes the stream',
+    async () => {
+      const memory = new MockMemory();
+      const caller = new AbortController();
+      const saveMessages = memory.saveMessages.bind(memory);
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
+        if (args.messages.some(message => message.role === 'user')) {
+          caller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 1 }));
+        }
+        return saveMessages(args);
+      });
+      try {
+        const settled = await Promise.race([
+          runLoopScenario({
+            engine,
+            llm: getMock(),
+            memory,
+            threadId: `caller-timeout-abort-${engine}`,
+            resourceId: RESOURCE,
+            prompt: 'Abort me while saving.',
+            abortSignal: caller.signal,
+            collectChunks: true,
+            fixtures: llm => {
+              llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+            },
+          }).then(
+            () => 'settled',
+            () => 'settled',
+          ),
+          new Promise(resolve => setTimeout(() => resolve('open'), 10_000)),
+        ]);
+        expect(caller.signal.aborted).toBe(true);
+        expect(settled).toBe('settled');
+      } finally {
+        saveSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 15_000,
   );
 
   it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(
