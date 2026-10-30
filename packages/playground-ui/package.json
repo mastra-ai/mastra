@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "66.1.0-alpha.2",
+  "version": "67.0.0",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -209,7 +209,7 @@
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-markdown": "^2.2.0",
     "nanoid": "^5.1.16",
-    "prettier": "^3.9.5",
+    "prettier": "^3.9.10",
     "prism-react-renderer": "^2.4.1",
     "react-day-picker": "^8.10.2",
     "react-hook-form": "^7.91.0",

@@ -9,6 +9,7 @@ import { useFeedbackAvailable, useTraceQueryAvailable } from '@/domains/capabili
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
+import { ObservabilitySavedViews } from '@/domains/observability/saved-views';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
@@ -84,23 +85,26 @@ export function ThreadsExplorerBody({
       <h1 className="sr-only">Threads</h1>
       <ObservabilityListBody
         toolbar={
-          <ActionRow>
-            <ActionRow.Start>
-              <ColumnsMenu scope="threads" value={columns.preferences} onChange={columns.setPreferences} />
-              <ThreadsFilterBar
-                datePreset={filters.datePreset}
-                dateFrom={filters.dateFrom}
-                dateTo={filters.dateTo}
-                tokens={tokens}
-                groups={groups}
-                onDatePresetChange={filters.onDatePresetChange}
-                onDateChange={filters.onDateChange}
-                onDateRangeChange={filters.onDateRangeChange}
-                onFiltersChange={filters.onFiltersChange}
-                disabled={isLoading}
-              />
-            </ActionRow.Start>
-          </ActionRow>
+          <>
+            {urlState && <ObservabilitySavedViews page="threads" {...urlState} columns={columns} />}
+            <ActionRow>
+              <ActionRow.Start>
+                <ColumnsMenu scope="threads" value={columns.preferences} onChange={columns.setPreferences} />
+                <ThreadsFilterBar
+                  datePreset={filters.datePreset}
+                  dateFrom={filters.dateFrom}
+                  dateTo={filters.dateTo}
+                  tokens={tokens}
+                  groups={groups}
+                  onDatePresetChange={filters.onDatePresetChange}
+                  onDateChange={filters.onDateChange}
+                  onDateRangeChange={filters.onDateRangeChange}
+                  onFiltersChange={filters.onFiltersChange}
+                  disabled={isLoading}
+                />
+              </ActionRow.Start>
+            </ActionRow>
+          </>
         }
         error={
           isError ? (

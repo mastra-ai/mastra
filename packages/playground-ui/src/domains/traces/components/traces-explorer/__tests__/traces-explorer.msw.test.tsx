@@ -5,7 +5,11 @@ import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
+import {
+  TRACE_DATE_PRESET_PARAM,
+  TRACE_FILTER_BAR_OPERATORS,
+  applyTracePropertyFilterTokens,
+} from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
@@ -47,11 +51,15 @@ import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
 } from '@/domains/observability/list-polling';
+import { savedViewFromSearchParams } from '@/domains/observability/saved-view-state';
+import { SavedViewsProvider } from '@/domains/observability/saved-views';
+import { createInMemorySavedViewsSource } from '@/domains/observability/saved-views/__tests__/fixtures/in-memory-source';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField } from '@/ds/components/FilterBar';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { SearchParamsHost } from '@/test/search-params-host';
 
 const TRACE_COLUMN_STORAGE_KEY = `mastra:traces:columns:${TEST_BASE_URL}:/api`;
 const SCOPE_TOKENS: TracesFilters['tokens'] = [
@@ -140,6 +148,8 @@ const setExplorerHandlers = (
 };
 
 type HarnessProps = {
+  /** Shown next to the view links in the layout's tabs row. */
+  tabs?: ReactNode;
   initialSelection?: TracesSelection;
   initialFilters?: TracesFilters;
   scope?: { entityId: string; entityType?: 'agent' };
@@ -182,6 +192,7 @@ function Harness({
   traceHref,
   renderError,
   panelProps,
+  tabs,
 }: HarnessProps) {
   const [selection, setSelection] = useState(initialSelection);
   const [filters, setFilters] = useState(initialFilters);
@@ -208,7 +219,12 @@ function Harness({
     >
       <TracesExplorer.Layout
         renderError={renderError}
-        tabs={<ViewLinks />}
+        tabs={
+          <>
+            <ViewLinks />
+            {tabs}
+          </>
+        }
         actionRow={
           <div>
             {filterBar}
@@ -1580,6 +1596,54 @@ describe('TracesExplorer.Layout', () => {
 
       expect(await screen.findByText('Failed to load traces')).toBeTruthy();
       expect(screen.getByRole('toolbar', { name: 'Trace filters' })).toBeTruthy();
+    });
+  });
+
+  describe('saved views', () => {
+    it('applies a view to the URL and the explorer columns', async () => {
+      localStorage.clear();
+      setExplorerHandlers();
+      const byHand = new URLSearchParams();
+      applyTracePropertyFilterTokens(byHand, [{ fieldId: 'status', value: 'error' }]);
+      byHand.set(TRACE_DATE_PRESET_PARAM, 'last-24h');
+      const state = savedViewFromSearchParams('traces', byHand, {
+        columns: { visibleColumns: ['type', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+      });
+      const source = createInMemorySavedViewsSource([{ name: 'Errors', state }]);
+      renderWithProviders(
+        <SavedViewsProvider source={source} queryKeyScope={['test']}>
+          <TestLinkProvider>
+            <SearchParamsHost initial="">
+              {urlState => <Harness tabs={<TracesExplorer.SavedViews {...urlState} />} />}
+            </SearchParamsHost>
+          </TestLinkProvider>
+        </SavedViewsProvider>,
+      );
+      await screen.findByText('What is the weather in Paris?');
+
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Errors' }));
+
+      await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(byHand.toString()));
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      expect((await screen.findByRole('menuitemcheckbox', { name: 'Input' })).getAttribute('aria-checked')).toBe(
+        'false',
+      );
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Output' }).getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('shows no saved views when the host does not store them', async () => {
+      setExplorerHandlers();
+      renderWithProviders(
+        <TestLinkProvider>
+          <SearchParamsHost initial="">
+            {urlState => <Harness tabs={<TracesExplorer.SavedViews {...urlState} />} />}
+          </SearchParamsHost>
+        </TestLinkProvider>,
+      );
+      await screen.findByText('What is the weather in Paris?');
+
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
     });
   });
 });

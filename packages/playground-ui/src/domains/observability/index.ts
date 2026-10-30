@@ -33,3 +33,11 @@ export {
   withThreadSelection,
 } from './observability-selection-params';
 export type { ObservabilityView } from '@/domains/traces/components/traces-spans-switch';
+export { ObservabilitySavedViews, SavedViewNameTakenError, SavedViewsProvider } from './saved-views';
+export type {
+  ObservabilitySavedViewsProps,
+  SavedViewColumnsControl,
+  SavedViewRecord,
+  SavedViewsProviderProps,
+  SavedViewsSource,
+} from './saved-views';

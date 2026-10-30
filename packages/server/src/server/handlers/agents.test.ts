@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
@@ -15,6 +18,7 @@ import {
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
@@ -414,6 +418,47 @@ describe('getProvidersHandler', () => {
     const customProvider = result.providers.find(p => p.id === 'test-gateway/custom-llm');
     expect(customProvider).toBeDefined();
     expect(customProvider?.name).toBe('Custom LLM');
+  });
+
+  describe('Mastra gateway listing', () => {
+    beforeEach(() => {
+      // The default Netlify gateway fetches its catalog over the network; keep these tests offline.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ providers: {} })),
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('lists the Mastra gateway as disconnected when MASTRA_GATEWAY_API_KEY is not set', async () => {
+      delete process.env.MASTRA_GATEWAY_API_KEY;
+
+      const mastra = new Mastra({});
+      const requestContext = new RequestContext();
+      const abortSignal = new AbortController().signal;
+
+      const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+      const gateway = result.providers.find(p => p.id === 'mastra');
+      expect(gateway).toBeDefined();
+      expect(gateway?.envVar).toBe('MASTRA_GATEWAY_API_KEY');
+      expect(gateway?.connected).toBe(false);
+    });
+
+    it('lists the Mastra gateway as connected when MASTRA_GATEWAY_API_KEY is set', async () => {
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+
+      const mastra = new Mastra({});
+      const requestContext = new RequestContext();
+      const abortSignal = new AbortController().signal;
+
+      const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+      expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
+    });
   });
 
   it('should return no providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set and no custom gateway is registered', async () => {
@@ -872,6 +917,52 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result.metadata).toEqual({ type: 'support' });
+    });
+  });
+
+  describe('workspace skills from a filesystem resolver', () => {
+    let skillsDir: string;
+
+    beforeEach(async () => {
+      skillsDir = await mkdtemp(join(tmpdir(), 'agent-skills-'));
+      await mkdir(join(skillsDir, 'skills', 'greet'), { recursive: true });
+      await writeFile(
+        join(skillsDir, 'skills', 'greet', 'SKILL.md'),
+        '---\nname: greet\ndescription: Say hello\n---\n\nSay hello.\n',
+      );
+    });
+
+    afterEach(async () => {
+      await rm(skillsDir, { recursive: true, force: true });
+    });
+
+    it('lists the resolved filesystem skills on agent metadata routes', async () => {
+      const agent = new Agent({
+        id: 'resolver-skills-agent',
+        name: 'resolver-skills-agent',
+        instructions: 'test-instructions',
+        model: 'openai/gpt-4o-mini',
+        workspace: new Workspace({
+          id: 'resolver-ws',
+          filesystem: () => new LocalFilesystem({ basePath: skillsDir }),
+          skills: ['skills'],
+        }),
+      });
+      mastra = new Mastra({ agents: { 'resolver-skills-agent': agent }, logger: false });
+      const abortSignal = new AbortController().signal;
+
+      const agentById = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'resolver-skills-agent',
+        requestContext: new RequestContext(),
+        abortSignal,
+      });
+      const agents = await LIST_AGENTS_ROUTE.handler({ mastra, requestContext: new RequestContext(), abortSignal });
+
+      expect(agentById.skills).toEqual([expect.objectContaining({ name: 'greet', description: 'Say hello' })]);
+      expect(agents['resolver-skills-agent']?.skills).toEqual([
+        expect.objectContaining({ name: 'greet', description: 'Say hello' }),
+      ]);
     });
   });
 

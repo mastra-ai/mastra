@@ -41,6 +41,13 @@ import { runInRunFenceScope } from './run-fence-scope';
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 export const EXECUTION_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
+/**
+ * How long past its local lease deadline a storage-backed execution waits for a renewal still in flight. A renewal
+ * queued behind other writes can still extend the lease; one that never returns must not keep the execution going.
+ */
+const STORAGE_RENEWAL_GRACE_MS = EXECUTION_LEASE_TTL_MS;
+/** Allowance for the store's clock running ahead of this process when reading a renewed lease's expiry. */
+const STORE_CLOCK_SKEW_MS = EXECUTION_LEASE_RENEW_INTERVAL_MS;
 const VERIFY_RETRY_DELAY_MS = 250;
 const TAKEOVER_ATTEMPTS = 3;
 const EXECUTION_CLAIM_WAIT_MS = 5_000;
@@ -302,8 +309,11 @@ interface OwnershipBackend {
   verify(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<void>;
   /** Read-only active ownership observation by a worker, never a renewal. */
   observe(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<void>;
-  /** Extend `claim`. `false` once another execution owns the run; throws on backend errors. */
-  renew(claim: DurableExecutionClaim): Promise<boolean>;
+  /**
+   * Extend `claim`. `renewed: false` once another execution owns the run; throws on backend errors.
+   * `leaseExpiresAt` is the new expiry on the store's clock, when the backend reports one.
+   */
+  renew(claim: DurableExecutionClaim): Promise<{ renewed: boolean; leaseExpiresAt?: Date | null }>;
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
   release(claim: DurableExecutionClaim): Promise<void>;
@@ -361,7 +371,7 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
         );
       }
     },
-    renew: claim => provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS),
+    renew: async claim => ({ renewed: await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS) }),
     async isSuperseded(claim) {
       const owner = await provider.getLeaseOwner(key);
       return owner !== undefined && owner !== claim.executionId;
@@ -445,7 +455,8 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       if (!record?.live) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
     },
     async renew(claim) {
-      return (await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS })).renewed;
+      const { renewed, record } = await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS });
+      return { renewed, leaseExpiresAt: record?.leaseExpiresAt };
     },
     // Release keeps the record, so a missing one means the store lost it:
     // the holder is unknown.
@@ -943,7 +954,12 @@ export class ExecutionFence implements RunFenceScope {
   #startHeartbeat(): void {
     this.#heartbeat = setInterval(() => {
       if (this.#settlement || this.#lossError) return;
-      if (Date.now() >= this.#leaseExpiresAt) {
+      const now = Date.now();
+      // A storage renewal queued behind other writes can still extend this generation's lease, and a takeover
+      // makes it return false. Wait for its result, but only for a grace period past the deadline.
+      const awaitingRenewal = this.#renewalInFlight && this.generation !== undefined;
+      if (awaitingRenewal && now < this.#leaseExpiresAt + STORAGE_RENEWAL_GRACE_MS) return;
+      if (now >= this.#leaseExpiresAt) {
         this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
       }
@@ -952,9 +968,14 @@ export class ExecutionFence implements RunFenceScope {
       const startedAt = Date.now();
       void this.#backend
         .renew(this.claim)
-        .then(renewed => {
+        .then(({ renewed, leaseExpiresAt }) => {
           if (renewed) {
-            this.#leaseExpiresAt = startedAt + EXECUTION_LEASE_TTL_MS;
+            // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
+            // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
+            const reported = leaseExpiresAt
+              ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
+              : 0;
+            this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
             return;
           }
           this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));

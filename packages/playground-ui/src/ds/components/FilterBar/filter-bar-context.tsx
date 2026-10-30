@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   clearRemovable,
@@ -280,13 +280,22 @@ export function FilterBarProvider({
   // Until the consumer reflects the commit in `value`, the committed item is ours to show;
   // nodes on their way out keep their place in the previously rendered tree.
   const renderedTreeRef = useRef<FilterBarNode[]>(expression.nodes);
+  // Once `value` holds the committed item it's the consumer's: if they later drop it (e.g. a
+  // saved view replaces the filters) it must go, not come back as our pending commit.
+  const reflectedCommitIdRef = useRef<string | undefined>(undefined);
+  // Recorded once a render showing the reflected item commits, so a discarded render can't mark it.
+  useLayoutEffect(() => {
+    if (lastCommit && idsOf(expression.nodes).has(lastCommit.item.id)) {
+      reflectedCommitIdRef.current = lastCommit.item.id;
+    }
+  }, [lastCommit, expression]);
   const { rendered, items, leaving, rootGroupOf } = useMemo(() => {
     const present = idsOf(expression.nodes);
     let rendered: FilterBarExpression =
       leavingIds.size === 0
         ? expression
         : { ...expression, nodes: mergeNodes(renderedTreeRef.current, expression.nodes, leavingIds) };
-    if (lastCommit && !present.has(lastCommit.item.id)) {
+    if (lastCommit && !present.has(lastCommit.item.id) && reflectedCommitIdRef.current !== lastCommit.item.id) {
       rendered = insertItem(rendered, lastCommit.groupId, lastCommit.item);
     }
     renderedTreeRef.current = rendered.nodes;
@@ -356,12 +365,14 @@ export function FilterBarProvider({
         const condition = mergeCondition(existing, { operatorId, value }, field ? getFieldOperators(field) : []);
         const item = { ...existing, ...condition };
         emit(updateTreeItem(exprRef.current, existing.id, condition));
+        reflectedCommitIdRef.current = undefined;
         setLastCommit({ item, from, glint: true });
         announce('Filter updated');
         return;
       }
       const item = { id, fieldId, operatorId, value };
       emit(insertItem(exprRef.current, groupId, item));
+      reflectedCommitIdRef.current = undefined;
       setLastCommit({ item, from, glint: true, groupId });
       announce('Filter added');
     },

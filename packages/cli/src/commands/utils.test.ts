@@ -161,3 +161,14 @@ describe('gitInit', () => {
     );
   });
 });
+
+describe('getSourceMapNodeArgs', () => {
+  // A CLI flag would override `--no-enable-source-maps` set in NODE_OPTIONS.
+  test('leaves the choice to NODE_OPTIONS when it already sets the flag', async () => {
+    const { getSourceMapNodeArgs } = await import('./utils');
+
+    expect(getSourceMapNodeArgs(true, '--max-old-space-size=4096 --no-enable-source-maps')).toEqual([]);
+    expect(getSourceMapNodeArgs(true, '--no-enable_source_maps')).toEqual([]);
+    expect(getSourceMapNodeArgs(true, '--max-old-space-size=4096')).toEqual(['--enable-source-maps']);
+  });
+});
