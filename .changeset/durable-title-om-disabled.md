@@ -2,4 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed durable and evented agents skipping thread title generation when observational memory is configured but switched off with `observationalMemory: { enabled: false }`. These runs now title the thread, and `savePerStep` saves each step, the same as runs with no observational memory configured.
+Fixed agents treating `observationalMemory: { enabled: false }` as if observational memory were on. This now behaves the same as having no observational memory configured, on every engine:
+
+- `agent.stream()` and `agent.generate()` with `savePerStep` save each step before the next one runs.
+- Durable and evented agents title the thread, save each step with `savePerStep`, and save the turn when the run finishes.

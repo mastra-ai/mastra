@@ -1,7 +1,13 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
+import { noopLogger } from '../../../../logger/noop-logger';
 import { MockMemory } from '../../../../memory/mock';
-import type { InputProcessor } from '../../../../processors';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import type { InputProcessor, OutputProcessor } from '../../../../processors';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 /**
  * Regression class: what a run writes to the memory thread.
@@ -67,6 +73,58 @@ describeForAllEngines('AIMock loop scenario: memory save rules', engine => {
     expect(JSON.stringify(messages)).toContain('OM_DISABLED_PROMPT');
     expect(JSON.stringify(messages)).toContain('OM_DISABLED_REPLY');
   });
+
+  // The regular agent fails the run with PROCESSOR_WORKFLOW_FAILED whether or not
+  // observational memory is on, so only the durable finish path is checked here.
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'saves the turn when an output processor fails and observational memory is switched off',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = 'om-disabled-output-error-thread';
+      const resourceId = 'om-disabled-output-error-resource';
+      await newThread(memory, threadId, resourceId);
+      const failing: OutputProcessor = {
+        id: 'failing-output-processor',
+        processOutputResult: async () => {
+          throw new Error('OUTPUT_PROCESSOR_FAILURE');
+        },
+      };
+      const warn = vi.spyOn(noopLogger, 'warn');
+
+      try {
+        const { output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'OUTPUT_ERROR_PROMPT',
+          memory,
+          threadId,
+          resourceId,
+          outputProcessors: [failing],
+          memoryOptions: { observationalMemory: { enabled: false } },
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'OUTPUT_ERROR_REPLY' });
+          },
+        });
+        await output.consumeStream();
+
+        await expect
+          .poll(async () => (await memory.recall({ threadId, resourceId })).messages.map(m => m.role))
+          .toEqual(['user', 'assistant']);
+        const { messages } = await memory.recall({ threadId, resourceId });
+        expect(JSON.stringify(messages[0]?.content)).toContain('OUTPUT_ERROR_PROMPT');
+        expect(JSON.stringify(messages[1]?.content)).toContain('OUTPUT_ERROR_REPLY');
+        // Inngest finishes the run on its shared Mastra, which logs to the default console logger.
+        if (engine !== 'inngest') {
+          expect(warn).toHaveBeenCalledWith(
+            '[DurableAgent] Error running output processors',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'OUTPUT_PROCESSOR_FAILURE' }) }),
+          );
+        }
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
 
   it('saves the user message and the error when an input processor throws', async () => {
     for (const rotate of [false, true]) {
