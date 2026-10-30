@@ -116,6 +116,7 @@ import type {
   RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
+import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
@@ -133,6 +134,7 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 }
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
@@ -1705,7 +1707,16 @@ export class DurableAgent<
     }
     executionFence.throwIfLost();
 
+    const restoredCompletion = await restoreCompletionPolicy({
+      agent: wrapped,
+      persisted: workflowInput.options?.isTaskComplete,
+      requestContext,
+      runId,
+      logger: this.#mastra?.getLogger?.(),
+    });
+
     const registryEntry = {
+      isTaskComplete: restoredCompletion,
       // Call-time toolset tools died with the original process. Mark the entry
       // as a placeholder so the first step rebuilds tools and fails loudly
       // (DURABLE_AGENT_TOOLSETS_UNAVAILABLE) instead of running without them.
@@ -1998,6 +2009,7 @@ export class DurableAgent<
     });
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    Object.defineProperty(scopedOptions, RESOLVED_DEFAULT_OPTIONS, { value: defaultOptions, enumerable: true });
     return scopedOptions;
   }
 
@@ -3128,6 +3140,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         durableAgentId: this.id,
@@ -4760,6 +4773,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         methodType: 'generate',
