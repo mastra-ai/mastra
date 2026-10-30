@@ -537,8 +537,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if ('response' in resolved) return resolved.response;
           const query = FACTORY_ROUTE_CONTRACTS.workItemSync.querySchema.safeParse({
             cursor: loose(c).req.query('cursor'),
+            cards: loose(c).req.query('cards'),
           });
-          if (!query.success) return c.json({ error: 'invalid_cursor' }, 400);
+          if (!query.success) return c.json({ error: 'invalid_work_item_sync_query' }, 400);
           await workItems.ensureReady();
           const scope = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
           const now = new Date();
@@ -555,6 +556,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             deleted,
             isTerminal: item => isTerminalWorkItem(boards, item),
             oldestDelta,
+            openCards: query.data.cards !== 'changed',
           });
           return c.json({
             cursor: encodeWorkItemSyncCursor(sync.at),

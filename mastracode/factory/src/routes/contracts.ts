@@ -761,9 +761,11 @@ export const FACTORY_ROUTE_CONTRACTS = {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items/sync',
     description:
-      'Keep a board current. Without a cursor (or with one older than deletes are kept), returns every open card with `reset`; with one, only cards written or deleted since. Feed events named `board` say when to ask again.',
+      'Keep a board current. Without a cursor (or with one older than deletes are kept), returns every open card with `reset`; with one, only cards written or deleted since. With `cards=changed` a reset carries no cards, for a board that pages its columns itself. Feed events named `board` say when to ask again.',
     pathSchema: projectPathSchema,
     querySchema: z.object({
+      /** `changed`: a reset carries no cards, only the cursor, counts and sessions. */
+      cards: z.enum(['open', 'changed']).optional(),
       cursor: z
         .string()
         .optional()

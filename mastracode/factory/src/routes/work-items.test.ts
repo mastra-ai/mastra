@@ -783,6 +783,14 @@ describe('work item read wire', () => {
       vi.setSystemTime(new Date(t0.getTime() + 8 * 24 * 60 * 60 * 1000));
       expect((await sync(changed.cursor)).reset).toBe(true);
       expect((await json('GET', `${base}?cursor=nope`)).status).toBe(400);
+
+      // A board that pages its own columns starts from the counts and cursor alone.
+      const lean = await (await json('GET', `${base}?cards=changed`)).json();
+      expect(lean).toMatchObject({ reset: true, workItems: [], counts: { total: 2 } });
+      expect((await json('PATCH', `/web/factory/work-items/${open.id}`, { title: 'Again' })).status).toBe(200);
+      const leanDelta = await (await json('GET', `${base}?cards=changed&cursor=${lean.cursor}`)).json();
+      expect(leanDelta.workItems.map((item: { title: string }) => item.title)).toEqual(['Again']);
+      expect((await json('GET', `${base}?cards=all`)).status).toBe(400);
     } finally {
       vi.useRealTimers();
     }

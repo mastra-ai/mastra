@@ -335,17 +335,21 @@ export function syncWorkItems(
     deleted,
     isTerminal,
     oldestDelta,
+    openCards = true,
   }: {
     since?: Date;
     now: Date;
     deleted: readonly { id: string; deletedAt: Date }[];
     isTerminal: (item: WorkItemRow) => boolean;
     oldestDelta: Date;
+    /** False for a board that pages its own columns: a reset then carries no cards. */
+    openCards?: boolean;
   },
 ): WorkItemSync {
   const behind = new Date(now.getTime() - WORK_ITEM_SYNC_OVERLAP_MS);
   if (!since || since < oldestDelta) {
-    return { reset: true, items: all.filter(item => !isTerminal(item)), deletedIds: [], at: behind };
+    const items = openCards ? all.filter(item => !isTerminal(item)) : [];
+    return { reset: true, items, deletedIds: [], at: behind };
   }
   return {
     reset: false,
