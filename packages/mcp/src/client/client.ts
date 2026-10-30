@@ -57,7 +57,7 @@ import { JSON_SCHEMA_2020_12, jsonSchemaComplexity, toJsonSchema2020 } from '../
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
 import { DEFAULT_TASK_TTL_MS, taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
-import type { MCPTask } from '../shared/tasks';
+import type { MCPTask, MCPTaskInputResponses } from '../shared/tasks';
 import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
 import { EventClientActions } from './actions/events';
 import { ProgressClientActions } from './actions/progress';
@@ -72,8 +72,10 @@ import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schem
 import { interceptTaskResults, takeTaskHandle } from './tasks/intercept';
 import { resolveTasksOptions } from './tasks/options';
 import { TaskRequester } from './tasks/requester';
+import { MCP_INPUT_REQUEST_SUSPEND_TYPE, readInputRequestResume } from './tasks/suspend';
+import type { ToolSuspendHost } from './tasks/suspend';
 import { TaskWaitError, waitForTask } from './tasks/wait';
-import type { MCPTerminalTask } from './tasks/wait';
+import type { MCPInputRequiredTask, MCPTerminalTask } from './tasks/wait';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -1712,6 +1714,8 @@ export class InternalMastraMCPClient extends MastraBase {
             _meta?: Record<string, unknown>;
             tracingContext?: TracingContext;
             writer?: { write(data: unknown): Promise<void> };
+            agent?: ToolSuspendHost;
+            workflow?: ToolSuspendHost;
           },
         ) => {
           // A hydrated tool was rebuilt from cache without ever opening a connection, so the
@@ -1723,7 +1727,44 @@ export class InternalMastraMCPClient extends MastraBase {
           const operationContext = context?.requestContext ?? null;
 
           return this.operationContextStore.run(operationContext, async () => {
+            const suspendHost = context?.agent ?? context?.workflow;
+            const toolCallSpan = context?.tracingContext?.currentSpan;
+
             const executeToolCall = async () => {
+              // A call that suspended on MCP task input resumes on that task: never call the tool again.
+              const resume = this.taskOptions
+                ? readInputRequestResume(suspendHost, { serverName: this.name, toolName: tool.name })
+                : undefined;
+              if (resume) {
+                if (!resume.ok) {
+                  throw new MastraError({
+                    id: 'MCP_CLIENT_TOOL_TASK_RESUME_INVALID',
+                    domain: ErrorDomain.MCP,
+                    category: ErrorCategory.USER,
+                    text: `Can't resume MCP tool ${tool.name}: ${resume.reason}`,
+                    details: { toolName: tool.name, serverName: this.name },
+                  });
+                }
+                const { payload, inputResponses } = resume;
+                this.log('debug', `Resuming tool ${tool.name} on MCP task ${payload.taskId}`);
+                toolCallSpan?.update({ metadata: { mcpTaskKey: taskKeyOf(payload.taskId) } });
+                const waiting: MCPInputRequiredTask = {
+                  taskId: payload.taskId,
+                  status: 'input_required',
+                  createdAt: payload.createdAt,
+                  lastUpdatedAt: payload.createdAt,
+                  ttlMs: null,
+                  inputRequests: payload.requests,
+                };
+                const res = await this.awaitToolTask(tool.name, waiting, {
+                  signal: context?.abortSignal,
+                  writer: context?.writer,
+                  suspend: suspendHost?.suspend,
+                  inputResponses,
+                });
+                return res && finishToolCall(res);
+              }
+
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
               // progressToken spreads last so the Mastra-managed token takes precedence.
               const progressMeta = this.enableProgressTracking
@@ -1742,7 +1783,6 @@ export class InternalMastraMCPClient extends MastraBase {
               );
               // A Mastra server names the span that served the call. The tool call span ends
               // after this returns, and its end export carries the link.
-              const toolCallSpan = context?.tracingContext?.currentSpan;
               if (toolCallSpan && serverSpan) toolCallSpan.links = [...(toolCallSpan.links ?? []), serverSpan];
 
               const task = this.taskOptions ? takeTaskHandle(res) : undefined;
@@ -1754,7 +1794,12 @@ export class InternalMastraMCPClient extends MastraBase {
               toolCallSpan?.update({ metadata: { mcpTaskKey: taskKeyOf(task.taskId) } });
               // Agents with background tasks run this executor off the agent loop (see
               // `taskToolBackgroundConfig`), so waiting here doesn't block the agent.
-              return finishToolCall(await this.awaitToolTask(tool.name, task, context?.abortSignal, context?.writer));
+              const taskResult = await this.awaitToolTask(tool.name, task, {
+                signal: context?.abortSignal,
+                writer: context?.writer,
+                suspend: suspendHost?.suspend,
+              });
+              return taskResult && finishToolCall(taskResult);
             };
 
             const finishToolCall = async (res: CallToolResult) => {
@@ -1881,13 +1926,27 @@ export class InternalMastraMCPClient extends MastraBase {
     };
   }
 
-  /** Waits for a remote task created by a tool call and returns its `CallToolResult`. */
+  /**
+   * Waits for a remote task created by a tool call and returns its `CallToolResult`.
+   *
+   * When the task needs input that no `inputRequests` handler answers and the caller can `suspend`,
+   * suspends with the requests and returns `undefined`, leaving the task open for the answers.
+   */
   private async awaitToolTask(
     toolName: string,
     task: MCPTask,
-    signal: AbortSignal | undefined,
-    writer?: { write(data: unknown): Promise<void> },
-  ): Promise<CallToolResult> {
+    {
+      signal,
+      writer,
+      suspend,
+      inputResponses,
+    }: {
+      signal?: AbortSignal;
+      writer?: { write(data: unknown): Promise<void> };
+      suspend?: ToolSuspendHost['suspend'];
+      inputResponses?: MCPTaskInputResponses;
+    },
+  ): Promise<CallToolResult | undefined> {
     const details = { toolName, serverName: this.name, taskId: task.taskId };
     // Studio's tool-call card shows the MCP task (id, status, elapsed time) from these progress
     // writes. They are live only: tool progress isn't saved with the conversation.
@@ -1908,7 +1967,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // recovery must compare against the transport the failed poll used, not whatever is current.
     const lifecycleGeneration = this.lifecycleGeneration;
     let polledTransport: Transport | undefined;
-    let terminal: MCPTerminalTask;
+    let terminal: MCPTerminalTask | MCPInputRequiredTask;
     try {
       terminal = await waitForTask(
         {
@@ -1925,6 +1984,8 @@ export class InternalMastraMCPClient extends MastraBase {
         {
           signal,
           inputRequests: this.serverConfig.inputRequests,
+          stopAtInput: !this.serverConfig.inputRequests && suspend !== undefined,
+          inputResponses,
           pollIntervalMs: this.taskOptions?.pollIntervalMs,
           maxWaitMs: this.taskOptions?.maxWaitMs,
           onStatus,
@@ -1938,6 +1999,17 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     switch (terminal.status) {
+      case 'input_required':
+        // The remote task stays open; resuming the call answers it (see `readInputRequestResume`).
+        await suspend!({
+          type: MCP_INPUT_REQUEST_SUSPEND_TYPE,
+          serverName: this.name,
+          toolName,
+          taskId: terminal.taskId,
+          createdAt: terminal.createdAt,
+          requests: terminal.inputRequests,
+        });
+        return undefined;
       case 'completed':
         return terminal.result as CallToolResult;
       case 'cancelled':
