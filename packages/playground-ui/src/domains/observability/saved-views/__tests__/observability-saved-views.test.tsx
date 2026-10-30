@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { SavedViewPage, SavedViewState } from '@mastra/core/storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { logsView, pages, spansView, tracesView } from '../../__tests__/fixtures/saved-view-pages';
 import { applySavedView, savedViewFromSearchParams } from '../../saved-view-state';
@@ -13,6 +14,7 @@ import type { InMemorySavedViewsSource } from './fixtures/in-memory-source';
 import { LogsSavedViews } from '@/domains/logs/components/logs-saved-views';
 import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
 import { applyTracePropertyFilterTokens } from '@/domains/traces/trace-filters';
+import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 import { renderWithProviders } from '@/test/render';
 import { SearchParamsHost } from '@/test/search-params-host';
 
@@ -225,6 +227,46 @@ describe('ObservabilitySavedViews', () => {
     await waitFor(() => expect(url()).toBe(byHand.toString()));
     expect(columnsReadout().visibleColumns).toContain('input');
     expect(columnsReadout().visibleColumns).not.toContain('removedColumn');
+  });
+
+  it('picking a view never shows it as unsaved while the host catches up with the URL', async () => {
+    // Like a data router (Studio's), this host renders a new URL a moment after the navigation that set it.
+    function LateUrlPage() {
+      const [searchParams, setParams] = useState(() => new URLSearchParams());
+      const columns = useTraceColumnPreferences();
+      const setSearchParams: SetURLSearchParamsLike = next => {
+        setTimeout(() => setParams(previous => (typeof next === 'function' ? next(previous) : next)), 50);
+      };
+      return (
+        <>
+          <ObservabilitySavedViews
+            page="traces"
+            searchParams={searchParams}
+            setSearchParams={setSearchParams}
+            columns={columns}
+          />
+          <output data-testid="search-params">{searchParams.toString()}</output>
+        </>
+      );
+    }
+    const source = createInMemorySavedViewsSource([{ name: 'Incident', state: tracesView }]);
+    renderWithProviders(
+      <SavedViewsProvider source={source} queryKeyScope={['project', 'p1']}>
+        <LateUrlPage />
+      </SavedViewsProvider>,
+    );
+    const trigger = await screen.findByLabelText(/^View: /);
+    const labels: string[] = [];
+    const observer = new MutationObserver(() => labels.push(trigger.getAttribute('aria-label') ?? ''));
+    observer.observe(trigger, { attributes: true, attributeFilter: ['aria-label'] });
+
+    await pickView('Incident');
+    await waitFor(() => expect(url()).toBe(applySavedView(tracesView, new URLSearchParams()).params.toString()));
+    observer.disconnect();
+
+    expect(labels).toContain('View: Incident');
+    expect(labels.filter(label => label.includes('unsaved'))).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
   });
 
   it('applies a fixed date range as saved', async () => {

@@ -116,6 +116,10 @@ export function useHostedSavedViews({
   // Bumped whenever the user picks or leaves a view, so a request that settles afterwards does not
   // switch the page back to the view it created.
   const choiceRef = useRef(0);
+  // The search params a view was applied over. A host can render the new URL a render after the
+  // navigation that set it (a data router does), so until it does the old URL says nothing about
+  // whether the view has unsaved changes.
+  const [appliedOver, setAppliedOver] = useState<URLSearchParams>();
 
   const current = savedViewFromSearchParams(page, searchParams, { columns: columns?.preferences });
 
@@ -131,7 +135,10 @@ export function useHostedSavedViews({
   const activeRecord = picked
     ? records.find(record => record.id === picked.id)
     : records.find(record => matchesUrl(record.state));
-  const activeUnsaved = activeRecord !== undefined && !matchesUrl(activeRecord.state);
+  const activeMatches = activeRecord !== undefined && matchesUrl(activeRecord.state);
+  const awaitingUrl = appliedOver !== undefined && appliedOver === searchParams && !activeMatches;
+  if (appliedOver !== undefined && !awaitingUrl) setAppliedOver(undefined);
+  const activeUnsaved = activeRecord !== undefined && !activeMatches && !awaitingUrl;
 
   const toView = (record: SavedViewRecord): SavedView<HostedSavedViewSettings> => ({
     id: record.id,
@@ -146,6 +153,7 @@ export function useHostedSavedViews({
 
   const applyState = (state: SavedViewState) => {
     const applied = applySavedView(state, searchParams, { defaultDatePreset });
+    setAppliedOver(searchParams);
     setSearchParams(previous => applySavedView(state, previous, { defaultDatePreset }).params);
     if (applied.columns && columns) columns.setPreferences(applied.columns);
   };
