@@ -243,6 +243,13 @@ describe('KnowledgePageExplorer page view', () => {
       expect(row.textContent).toContain('Escalation Process');
     });
 
+    it('pins the view to the graph when it was opened in the default view', async () => {
+      renderWithProviders(<Host initialView="tree" />);
+      fireEvent.click(await escalationNode());
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+    });
+
     it('clears the selection on a click on empty canvas', async () => {
       const { container } = renderWithProviders(<Host />);
       fireEvent.click(await escalationNode());
