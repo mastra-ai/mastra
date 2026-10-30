@@ -119,7 +119,7 @@ Moving within a scope needs `editor`. Moving to another scope needs `owner` on b
 Moving a page across scopes needs owner on "org:acme"; this run has editor there.
 ```
 
-`op: "merge"` merges `page` into `into`, keeping both pages' notes. It needs `owner` on the page that goes away and `editor` on the one that stays:
+`op: "merge"` merges `page` into `into`, keeping both pages' notes. It needs `owner` on the scope of the page that goes away. On the scope of the page that stays it needs `editor` when both pages share a scope, and `owner` when they don't, because the merged page's children move into that scope:
 
 ```json
 { "op": "merge", "page": "Dana prefs", "into": "Ticket notes" }
@@ -178,7 +178,8 @@ Removing a note and adding it again creates a new note with a new ID.
 | Move within a scope | `editor` | The page's scope |
 | Move to another scope | `owner` | Both scopes |
 | Merge | `owner` | The page that goes away |
-| | `editor` | The page that stays |
+| | `editor` | The page that stays, in the same scope |
+| | `owner` | The page that stays, in another scope |
 | Add a note | `contributor` | The page's scope and each stamp |
 | Restamp, remove a note | `editor` | The page's scope (and `contributor` on each new stamp) |
 | Pin, unpin | `editor` | The page's scope, plus authority over each audience |

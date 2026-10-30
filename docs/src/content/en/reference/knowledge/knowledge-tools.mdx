@@ -140,7 +140,7 @@ Creates, edits, moves and merges pages. `scope` only names the destination: the 
 | Edit (`write` with `page`) | `editor` on the page's scope |
 | Move within a scope | `editor` on the page's scope |
 | Move to another scope | `owner` on the page's scope and on `scope` |
-| Merge | `owner` on the merged page's scope, `editor` on the scope of `into` |
+| Merge | `owner` on the merged page's scope; on the scope of `into`, `editor` if it's the same scope and `owner` if it's another, since the merged page's children move there |
 
 Template pages, declared in a scope's `pages`, can be edited, annotated with notes and merged into, but not moved or merged away, whatever the run's role.
 
@@ -160,6 +160,7 @@ Knowledge page key "escalation" already exists under page aa8f6099-6111-4952-b9c
 Editing a page needs editor on "team:acme:support"; this run has viewer there.
 Moving a page across scopes needs owner on "org:acme"; this run has editor there.
 Merging a page away needs owner on "team:acme:support"; this run has editor there.
+Merging a page across scopes needs owner on "team-public:acme:support"; this run has editor there.
 Knowledge page description exceeds the 100 token limit; put long-form text in the page body
 Knowledge record version conflict: 37c1e879-b328-47a9-9d3c-5788ad35ca2d
 ```
