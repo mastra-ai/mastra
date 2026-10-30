@@ -48,6 +48,15 @@ describe('writing a scope page', () => {
     expect((await call('knowledge_read', { page: page.id })).page.body).toBe('How Acme works.');
   });
 
+  it('treats a null name or description as no change', async () => {
+    const { call } = setup();
+    const { page: scope } = await call('knowledge_read', { page: 'org:acme' });
+    await call('knowledge_page', { op: 'write', page: 'org:acme', name: null, description: null, body: 'b' });
+    const { page: after } = await call('knowledge_read', { page: scope.id });
+    expect(after.name).toBe(scope.name);
+    expect(after.description).toBe(scope.description);
+  });
+
   it('leaves other pages renameable', async () => {
     const { call } = setup();
     const { page } = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Refunds', body: 'x' });
