@@ -86,11 +86,20 @@ function compareStreamIds(a: string, b: string): number {
  * proxy that stopped forwarding) makes `connect()` hang forever. The same
  * budget therefore bounds the whole connect here. On expiry the client is
  * destroyed, which stops its retry loop and lets a later call connect again.
+ *
+ * destroy() does not stop a cluster's slot discovery: once the nodes answer it
+ * still connects node clients that nothing would close. So when the abandoned
+ * connect settles, the client is destroyed again, unless a newer connect has
+ * started on it since.
  */
+const connectAttempts = new WeakMap<object, number>();
+
 async function connectWithin(client: RedisClientType, role: 'write' | 'read'): Promise<void> {
   const cluster = client as unknown as Partial<Pick<RedisClusterType, '_options'>>;
   const socket = cluster._options ? cluster._options.defaults?.socket : client.options?.socket;
   const timeoutMs = socket?.connectTimeout ?? 5000;
+  const attempt = (connectAttempts.get(client) ?? 0) + 1;
+  connectAttempts.set(client, attempt);
   const connecting = client.connect();
   if (!timeoutMs) {
     await connecting;
@@ -99,8 +108,16 @@ async function connectWithin(client: RedisClientType, role: 'write' | 'read'): P
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      // destroy() makes the abandoned connect() reject; nothing awaits it now.
-      connecting.catch(() => {});
+      void connecting
+        .catch(() => {})
+        .then(() => {
+          if (connectAttempts.get(client) !== attempt || client.isOpen) return;
+          try {
+            client.destroy();
+          } catch {
+            // A standalone client's destroy() throws ClientClosedError once closed.
+          }
+        });
       // close() may already have destroyed this client, and a standalone
       // client's destroy() throws ClientClosedError when called twice.
       if (client.isOpen) client.destroy();

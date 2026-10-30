@@ -109,7 +109,7 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
      * discovery through them with nodeAddressMap, so a test can freeze new
      * connections to the whole cluster without touching the shared server.
      */
-    async function createProxiedPubSub() {
+    async function createProxiedPubSub(name?: string) {
       const probe = createClient({ url: CLUSTER_URL });
       await probe.connect();
       const slots = (await probe.sendCommand(['CLUSTER', 'SLOTS'])) as Array<Array<unknown>>;
@@ -128,13 +128,13 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
         cluster: {
           rootNodes: [{ url: `redis://${root.host}:${root.port}` }],
           nodeAddressMap: (address: string) => routes.get(address)!,
-          defaults: { socket: { connectTimeout: CONNECT_TIMEOUT_MS } },
+          defaults: { name, socket: { connectTimeout: CONNECT_TIMEOUT_MS } },
         },
         keyPrefix: `cluster-connect-timeout-${randomUUID()}`,
         blockMs: 200,
       });
       pubsubs.push(ps);
-      return ps;
+      return { ps, nodes: [...routes.keys()] };
     }
 
     function settle(promise: Promise<unknown>, ms = 5_000) {
@@ -148,7 +148,7 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
     }
 
     it('rejects subscribe() when the cluster freezes before the first connect, then recovers', async () => {
-      const ps = await createProxiedPubSub();
+      const { ps } = await createProxiedPubSub();
       for (const p of proxies) p.stall();
 
       const started = Date.now();
@@ -171,7 +171,7 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
     }, 15_000);
 
     it("rejects subscribe() when the cluster freezes before the subscription's reader connects", async () => {
-      const ps = await createProxiedPubSub();
+      const { ps } = await createProxiedPubSub();
       // Connect the writer first, so only the reader's connection is stalled.
       await ps.publish(`warmup-${randomUUID()}`, makeEvent());
       for (const p of proxies) p.stall();
@@ -180,6 +180,28 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
         status: 'rejected',
         message: expect.stringContaining(`read client did not connect to Redis within ${CONNECT_TIMEOUT_MS}ms`),
       });
+    }, 15_000);
+
+    it("leaves no node connections behind when a timed-out connect's nodes answer after close()", async () => {
+      const name = `connect-timeout-leak-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.subscribe(`t-${randomUUID()}`, () => {}))).toMatchObject({ status: 'rejected' });
+      await ps.close();
+      // The cluster answers late, as after SIGCONT: the abandoned connect's
+      // held sockets now complete their handshake.
+      for (const p of proxies) p.resume();
+      await new Promise(r => setTimeout(r, 1_000));
+
+      const leftover: number[] = [];
+      for (const address of nodes) {
+        const node = createClient({ url: `redis://${address}` });
+        await node.connect();
+        leftover.push((await node.clientList()).filter(c => c.name === name).length);
+        await node.close();
+      }
+      expect(leftover).toEqual(nodes.map(() => 0));
     }, 15_000);
   });
 });
