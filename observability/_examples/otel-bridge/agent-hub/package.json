@@ -39,7 +39,7 @@
     "pino": "10.1.1",
     "specifier-resolution-node": "1.1.4",
     "uri-template": "2.0.0",
-    "zod": "3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "20.19.30",

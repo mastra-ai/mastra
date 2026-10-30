@@ -11,6 +11,11 @@ export const lodashTitleCase = (str: string): string => {
     .trim();
 };
 
+export function humanize(name: string): string {
+  const words = name.replace(/[-_]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : name;
+}
+
 const pluralRules = new Intl.PluralRules('en-US');
 const count = new Intl.NumberFormat('en-US');
 

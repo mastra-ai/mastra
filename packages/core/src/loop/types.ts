@@ -43,6 +43,7 @@ import type {
   MastraOnStepFinishCallback,
   MastraStreamTransformOptions,
   ModelManagerModelConfig,
+  ProviderMetadata,
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
@@ -139,6 +140,8 @@ export type StreamInternal = {
   toolApprovalVerdicts?: Map<string, boolean>;
   /** @deprecated Use `runScope.get(STEP_USAGE_KEY)` from `loop/run-scope-keys`. */
   stepUsage?: LanguageModelUsage;
+  /** @deprecated Use `runScope.get(STEP_PROVIDER_METADATA_KEY)` from `loop/run-scope-keys`. */
+  stepProviderMetadata?: ProviderMetadata;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
   /** @deprecated Use `runScope.get(STEP_RESPONSE_MESSAGE_ID_KEY)` from `loop/run-scope-keys`. */
