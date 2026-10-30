@@ -39,7 +39,12 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { decisionOvertaken } from './decision-applicability.js';
-import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import {
+  credentialTenantFailureCode,
+  FactoryDispatchError,
+  factoryDispatchFailureCode,
+  factoryDispatchFailureMetadata,
+} from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
@@ -94,11 +99,6 @@ class FactoryDecisionSuperseded extends Error {}
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
 
-// The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
-const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
-// The resolver's reason when the request context has no user; it recurs on every retry of the same start.
-const NO_AUTHENTICATED_USER = 'the request has no authenticated user';
-
 function httpStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   if ('statusCode' in error && typeof error.statusCode === 'number') return error.statusCode;
@@ -115,26 +115,28 @@ function isProviderCallError(error: unknown): boolean {
   return 'statusCode' in error || 'responseBody' in error;
 }
 
-function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
-  const lower = message.toLowerCase();
-  if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
-    return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
-  }
+function runErrorCode(error: unknown): FactoryDispatchFailureCode {
+  const tenantFailure = credentialTenantFailureCode(error);
+  if (tenantFailure) return tenantFailure;
   const status = httpStatus(error) ?? httpStatus(causeOf(error));
   if (status === 401 || status === 403) return 'run_credentials_unavailable';
   const providerCall = isProviderCallError(error) || isProviderCallError(causeOf(error));
-  return providerCall && classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
+  if (!providerCall) return 'run_failed';
+  const kind = classifyProviderError(error);
+  if (kind === 'auth') return 'run_credentials_unavailable';
+  return kind === 'rate_limited' || kind === 'quota' ? 'run_provider_limited' : 'run_failed';
 }
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {
   const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
   if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
-  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
+  return new RunEndedInError(runErrorCode(error), `${label} ended in error: ${cause}`);
 }
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
+  const { canRetry, manualRetryOnly = false } = factoryDispatchFailureMetadata(failureCode);
+  return attempts >= MAX_ATTEMPTS || !canRetry || manualRetryOnly;
 }
 
 /**
@@ -706,8 +708,8 @@ export class FactoryDecisionDispatcher {
             })
           : [];
       dispatches.push(
-        ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start, now))),
-        ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision, now))),
+        ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start))),
+        ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision))),
       );
     }
     const bookkeepingCapacity = BOOKKEEPING_MAX_IN_FLIGHT - this.#bookkeepingInFlight.size;
@@ -720,7 +722,7 @@ export class FactoryDecisionDispatcher {
         decisionFilter: isBookkeepingDecision,
       });
       dispatches.push(
-        ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision, now))),
+        ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision))),
       );
     }
     return dispatches;
@@ -806,7 +808,7 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
+  async #dispatchDecision(record: FactoryDeferredDecisionRecord): Promise<void> {
     let executionCompleted = false;
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
@@ -832,10 +834,11 @@ export class FactoryDecisionDispatcher {
       }
       const failureCode = factoryDispatchFailureCode(error);
       const terminal = isTerminalFailure(record.attempts, failureCode);
+      const failedAt = new Date();
       const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
-        now: new Date(),
-        availableAt: retryAt(now, record.attempts),
+        now: failedAt,
+        availableAt: retryAt(failedAt, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
         terminal,
@@ -1765,7 +1768,7 @@ export class FactoryDecisionDispatcher {
     });
   }
 
-  async #dispatchPendingStart(record: FactoryPendingStartRecord, now: Date): Promise<void> {
+  async #dispatchPendingStart(record: FactoryPendingStartRecord): Promise<void> {
     try {
       await this.#withLease(
         async leaseExpiresAt =>
@@ -1862,10 +1865,11 @@ export class FactoryDecisionDispatcher {
       if (!completed) throw new Error('Factory kickoff lease was lost before completion.');
     } catch (error) {
       const failureCode = factoryDispatchFailureCode(error);
+      const failedAt = new Date();
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),
-        now: new Date(),
-        availableAt: retryAt(now, record.attempts),
+        now: failedAt,
+        availableAt: retryAt(failedAt, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
         terminal: isTerminalFailure(record.attempts, failureCode),

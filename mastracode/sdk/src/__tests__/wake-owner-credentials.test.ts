@@ -7,7 +7,11 @@ import { dispatchDueNotifications } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolveAuthenticatedCredentialTenant, setCredentialStoreProvider } from '../agents/credential-resolver.js';
+import {
+  credentialTenantFailureReason,
+  resolveAuthenticatedCredentialTenant,
+  setCredentialStoreProvider,
+} from '../agents/credential-resolver.js';
 import type { CredentialTenant } from '../agents/credential-resolver.js';
 import type { CredentialStore } from '../auth/types.js';
 import { createMastraCode } from '../index.js';
@@ -332,4 +336,39 @@ describe("a schedule firing into another project's thread on this session's reso
     expect(result.status === 'failed' ? result.error.message : '').toMatch(/No claimed thread owner responded/);
     expect(mock.getRequests()).toEqual([]);
   });
+});
+
+/** A Factory dispatcher starts work on a live session with a kickoff signal that carries the starter's identity. */
+describe('a run started for a user the request cannot bill to (#28697)', () => {
+  it.each([
+    ['a numeric organization id', { workosId: SENDER.workosId, organizationId: 42 }, 'invalid-organization-id'],
+    ['no user', undefined, 'missing-user-context'],
+  ])(
+    'names %s as the reason on the kickoff and on the run error, before any model call',
+    async (_case, user, reason) => {
+      const { code, ownerContext } = await start({ resume: 'owner' });
+      const session = await code.controller.createSession({
+        id: SESSION_ID,
+        resourceId: SESSION_ID,
+        ownerId: OWNER.workosId,
+        requestContext: ownerContext(),
+      });
+      const errors: unknown[] = [];
+      const ended = Promise.withResolvers<void>();
+      session.subscribe(event => {
+        if (event.type === 'error') errors.push(event.error);
+        if (event.type === 'agent_end') ended.resolve();
+      });
+
+      const kickoff = session.sendSignal(
+        { id: 'kickoff-1', type: 'user', tagName: 'user', contents: 'Start the work.' },
+        { requestContext: new RequestContext(user ? [['user', user]] : []), requireDelivery: true },
+      ).accepted;
+
+      await expect(kickoff.catch(credentialTenantFailureReason)).resolves.toBe(reason);
+      await ended.promise;
+      expect(errors.map(credentialTenantFailureReason)).toEqual([reason]);
+      expect(mock.getRequests()).toEqual([]);
+    },
+  );
 });

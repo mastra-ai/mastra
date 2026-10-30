@@ -1,3 +1,5 @@
+import { credentialTenantFailureReason } from '@mastra/code-sdk/agents/credential-resolver';
+import type { CredentialTenantFailureReason } from '@mastra/code-sdk/agents/credential-resolver';
 import type {
   FactoryDispatchFailureCode,
   StoredFactoryDispatchFailureCode,
@@ -5,6 +7,7 @@ import type {
 
 interface FactoryDispatchFailureMetadata {
   canRetry: boolean;
+  manualRetryOnly?: true;
   label: string;
 }
 
@@ -29,8 +32,12 @@ const FAILURE_METADATA = {
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
   run_configuration_invalid: { canRetry: false, label: 'Run configuration rejected by provider' },
   run_credentials_unavailable: { canRetry: true, label: 'Model credentials unavailable for the run' },
+  // The run's user names an organization id that is not a string; every retry reads the same user.
+  run_user_organization_invalid: { canRetry: false, label: 'Run started with an unusable organization id' },
   // The run's request carries no user, so every retry fails the same way; a person has to start it.
   run_user_unauthenticated: { canRetry: false, label: 'Run started without an authenticated user' },
+  // A rerun on its own lands on the same account and its limit; a person picks the remedy, then retries.
+  run_provider_limited: { canRetry: true, manualRetryOnly: true, label: 'Provider rate limit or quota reached' },
   run_failed: { canRetry: true, label: 'Agent run ended in error' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
@@ -49,8 +56,20 @@ export class FactoryDispatchError extends Error {
   }
 }
 
+const CREDENTIAL_TENANT_FAILURE_CODES = {
+  'missing-user-context': 'run_user_unauthenticated',
+  'invalid-organization-id': 'run_user_organization_invalid',
+  'no-policy-for-principal': 'run_credentials_unavailable',
+} satisfies Record<CredentialTenantFailureReason, FactoryDispatchFailureCode>;
+
+export function credentialTenantFailureCode(error: unknown): FactoryDispatchFailureCode | undefined {
+  const reason = credentialTenantFailureReason(error);
+  return reason && CREDENTIAL_TENANT_FAILURE_CODES[reason];
+}
+
 export function factoryDispatchFailureCode(error: unknown): FactoryDispatchFailureCode {
-  return error instanceof FactoryDispatchError ? error.code : 'unknown';
+  if (error instanceof FactoryDispatchError) return error.code;
+  return credentialTenantFailureCode(error) ?? 'unknown';
 }
 
 export function factoryDispatchFailureMetadata(

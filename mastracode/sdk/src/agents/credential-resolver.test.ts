@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthCredential, CredentialStore } from '../auth/types.js';
 import {
+  credentialTenantFailureReason,
   hasCredentialStoreProvider,
   prepareCredentialTenant,
   withCredentialTenantPreparation,
@@ -289,6 +290,50 @@ describe('credential store provider registry', () => {
       warn.mockRestore();
     }
   });
+
+  it.each([
+    ['no user', undefined, 'missing-user-context', 'the request has no authenticated user.'],
+    [
+      'a user whose organization id is a number',
+      { workosId: 'user_1', organizationId: 42 },
+      'invalid-organization-id',
+      "the authenticated user's organization id is not a string.",
+    ],
+    [
+      'a signed-in session whose active organization id is not a string',
+      { user: { id: 'user_1' }, session: { activeOrganizationId: { id: 'org_1' } } },
+      'invalid-organization-id',
+      "the authenticated user's organization id is not a string.",
+    ],
+    [
+      'a valid user no credential policy covers',
+      { id: 'user_1', organizationId: 'org_1' },
+      'no-policy-for-principal',
+      'no credential policy applies to this request.',
+    ],
+  ])(
+    'tells the user and the host why a request with %s gets no credentials (#28697)',
+    async (_case, user, reason, sentence) => {
+      const logged = vi.fn();
+      setCredentialLogger({ error: logged });
+      try {
+        setCredentialStoreProvider(
+          () => fakeStore({}),
+          async () => undefined,
+        );
+        const ctx = new RequestContext();
+        if (user) ctx.set('user', user);
+
+        const error = await prepareCredentialTenant(ctx).catch((thrown: unknown) => thrown);
+
+        expect(error).toMatchObject({ message: `Tenant model credential policy could not be resolved: ${sentence}` });
+        expect(credentialTenantFailureReason(error)).toBe(reason);
+        expect(logged).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ reason }));
+      } finally {
+        setCredentialLogger(undefined);
+      }
+    },
+  );
 
   it('ignores the removed principal precedence flag', () => {
     const ctx = new RequestContext();

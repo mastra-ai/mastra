@@ -129,6 +129,22 @@ describe('describeRunError', () => {
     ).toEqual({ title: 'Run stopped', message: 'Database connection refused', recoveries: [] });
   });
 
+  it.each([
+    ['as the run error', new Error("OOM command not allowed when used memory > 'maxmemory'.")],
+    [
+      'as the cause of the run error',
+      new Error('Failed to publish event', {
+        cause: new Error("OOM command not allowed when used memory > 'maxmemory'."),
+      }),
+    ],
+  ])('tells the user Factory itself ran out of memory, with the Redis reply %s', (_, error) => {
+    const description = describeRunError(error);
+
+    expect(description).toMatchObject({ title: 'Factory is unavailable', recoveries: ['continue'] });
+    expect(description.message).toContain('Your request and the model provider are fine.');
+    expect(description.message).not.toContain('maxmemory');
+  });
+
   it('leaves an unrelated error unclassified', () => {
     expect(describeRunError({ name: 'Error', message: 'Something unexpected happened' })).toEqual({
       title: 'Run stopped',
