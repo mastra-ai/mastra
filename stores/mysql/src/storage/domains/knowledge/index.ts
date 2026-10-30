@@ -9,7 +9,7 @@ import type { KnowledgePageStore } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
-import { KNOWLEDGE_PAGE_DDL, MySQLKnowledgePages } from './pages';
+import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_UPGRADES, MySQLKnowledgePages } from './pages';
 
 export class KnowledgeMySQL extends KnowledgeStorage {
   static getExportDDL(): string[] {
@@ -69,10 +69,26 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return this.#inspectPages();
   }
 
+  /** Runs the earlier-alpha upgrades under a named lock so processes starting together don't race their ALTERs. */
+  async #upgrade(): Promise<void> {
+    const connection = await this.#pool.getConnection();
+    try {
+      await connection.query("SELECT GET_LOCK('mastra_knowledge_upgrade', 60)");
+      for (const upgrade of KNOWLEDGE_PAGE_UPGRADES) {
+        const [rows] = await connection.query<RowDataPacket[]>(upgrade.needed, upgrade.args);
+        if (rows.length > 0) for (const statement of upgrade.apply) await connection.query(statement);
+      }
+    } finally {
+      await connection.query("SELECT RELEASE_LOCK('mastra_knowledge_upgrade')").catch(() => {});
+      connection.release();
+    }
+  }
+
   override async init(): Promise<void> {
     const inspection = await this.#inspectPages();
     if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
     for (const statement of KNOWLEDGE_PAGE_DDL) await this.#pool.query(statement);
+    await this.#upgrade();
     await this.#pool.query(
       `INSERT IGNORE INTO \`${TABLE_KNOWLEDGE_PAGES_STATE}\` (id, schemaVersion) VALUES ('knowledge', ?)`,
       [KNOWLEDGE_PAGES_SCHEMA_VERSION],
@@ -80,7 +96,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
-    for (const table of KNOWLEDGE_RESETTABLE_TABLE_NAMES) await this.#pool.query(`DROP TABLE IF EXISTS \`${table}\``);
+    for (const table of [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, 'mastra_knowledge_pin_audiences'])
+      await this.#pool.query(`DROP TABLE IF EXISTS \`${table}\``);
     await this.init();
   }
 
@@ -218,6 +235,10 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['removePinAudience']>[0],
   ): ReturnType<KnowledgePageStore['removePinAudience']> {
     return this.#pages.removePinAudience(input);
+  }
+
+  override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
+    return this.#pages.getPages(input);
   }
 
   override listPins(input: Parameters<KnowledgePageStore['listPins']>[0]): ReturnType<KnowledgePageStore['listPins']> {

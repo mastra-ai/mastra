@@ -367,6 +367,105 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
       });
     });
 
+    describe('read filters agree across methods', () => {
+      it('lists and finds a page exactly when getPage returns it, for every read scope shape', async () => {
+        const PROJECT = 'project:$projectId';
+        const INTERNAL = 'account:$orgId:$accountId/internal';
+        const made = new Map<string, string>();
+        const make = async (address: string, declaration: string, parent?: string) => {
+          const created = await scope(address, declaration, parent ? made.get(parent) : undefined);
+          made.set(address, created.id);
+        };
+        await make('org:acme', ORG);
+        await make('org:globex', ORG);
+        await make('team:acme:eng', TEAM, 'org:acme');
+        await make('team:acme:sales', TEAM, 'org:acme');
+        await make('team:globex:eng', TEAM, 'org:globex');
+        await make('team:acme:unlinked', TEAM);
+        await make('policy:acme', 'policy:$orgId');
+        await make('policy:globex', 'policy:$orgId');
+        await make('account:acme:1', ACCOUNT);
+        await make('account:acme:1/internal', INTERNAL, 'account:acme:1');
+        await make('project:p1', PROJECT, 'team:acme:eng');
+        await make('project:p2', PROJECT, 'team:acme:sales');
+        await make('project:p3', PROJECT, 'team:globex:eng');
+        await make('project:orphan', PROJECT);
+        await make('feature:acme:a', 'feature:$orgId:$featureId');
+        await make('resource:u-1', RESOURCE);
+        await make('thread:t-1', 'thread:$threadId');
+        // One page per scope, each with a word no other page has.
+        const word = new Map<string, string>();
+        for (const [address, scopeId] of made) {
+          const unique = `zq${word.size}x${word.size}zq`;
+          const created = await page(scopeId, `Page in ${address}`, { body: `About ${unique}.` });
+          word.set(created.id, unique);
+        }
+        const team = (prefix: string) => ({ declaration: TEAM, prefix });
+        const internal = (prefix: string) => ({ declaration: INTERNAL, prefix });
+        const projects = (parent: string) => ({ declaration: PROJECT, parentId: made.get(parent)! });
+        // The read scopes knowledgeReadScopeFor builds for the one-hop access suite's 13 principal sets.
+        const reads: Record<string, KnowledgeReadScope> = {
+          none: read([]),
+          'org:acme': read(['org:acme', 'policy:acme'], [team('team:acme:')]),
+          'org:globex': read(['org:globex', 'policy:globex'], [team('team:globex:')]),
+          'team:acme:eng': read(['team:acme:eng', 'feature:acme:a'], [], [projects('team:acme:eng')]),
+          'team:acme:sales': read(['team:acme:sales'], [], [projects('team:acme:sales')]),
+          'team:globex:eng': read(['team:globex:eng'], [], [projects('team:globex:eng')]),
+          'role:acme:admin': read(['policy:acme', 'feature:acme:a'], [internal('account:acme:')]),
+          'role:globex:admin': read(['policy:globex'], [internal('account:globex:')]),
+          'account:acme:1': read(['account:acme:1']),
+          'org+admin+eng': read(
+            ['org:acme', 'policy:acme', 'feature:acme:a', 'team:acme:eng'],
+            [team('team:acme:'), internal('account:acme:')],
+            [projects('team:acme:eng')],
+          ),
+          'org+globex team+memory': read(
+            ['org:acme', 'policy:acme', 'team:globex:eng', 'resource:u-1', 'thread:t-1'],
+            [team('team:acme:')],
+            [projects('team:globex:eng')],
+          ),
+          'resource:u-1': read(['resource:u-1']),
+          'thread:t-1': read(['thread:t-1']),
+        };
+        const seen: number[] = [];
+        for (const [name, r] of Object.entries(reads)) {
+          const gettable = new Set<string>();
+          for (const id of word.keys()) if (await store.getPage({ id, read: r })) gettable.add(id);
+          const listed = new Set<string>();
+          let cursor: string | undefined;
+          do {
+            const out = await store.listPages({ read: r, cursor, limit: 7 });
+            for (const p of out.pages) if (word.has(p.id)) listed.add(p.id);
+            cursor = out.nextCursor;
+          } while (cursor);
+          seen.push(gettable.size);
+          expect({ name, listed: [...listed].sort() }).toEqual({ name, listed: [...gettable].sort() });
+          for (const [id, unique] of word) {
+            const found = (await store.searchPages({ query: unique, read: r })).some(hit => hit.page.id === id);
+            expect({ name, id, found }).toEqual({ name, id, found: gettable.has(id) });
+          }
+        }
+        // Not vacuous: nothing for no principals, and every read scope sees some pages but not all.
+        expect(seen[0]).toBe(0);
+        expect(seen.slice(1).every(n => n > 0 && n < word.size)).toBe(true);
+      });
+
+      it('reaches addresses whose next character sorts below a space by prefix', async () => {
+        const bare = await scope('team:acme:', TEAM);
+        const tab = await scope('team:acme:\teng', TEAM);
+        const control = await scope('team:acme:\u0001ops', TEAM);
+        const space = await scope('team:acme: sales', TEAM);
+        const other = await scope('team:acmf:eng', TEAM);
+        const r = read([], [{ declaration: TEAM, prefix: 'team:acme:' }]);
+        const reached = [];
+        for (const s of [bare, tab, control, space, other])
+          if (await store.getPage({ id: s.id, read: r })) reached.push(s.id);
+        expect(reached.sort()).toEqual([bare.id, tab.id, control.id, space.id].sort());
+        const listed = (await store.listPages({ read: r, limit: 100 })).pages.map(p => p.id);
+        expect(listed).not.toContain(other.id);
+      });
+    });
+
     describe('pages', () => {
       it('creates pages in their home scope, ordered by position, with name order for listPages', async () => {
         const acme = await scope('org:acme', ORG);
@@ -1001,6 +1100,97 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           await store.removePinAudience({ pageId: p.id, audience: ['team:acme:eng'], removedBy: 'agent:alex' }),
         ).toBeNull();
         expect(await listed('all')).toEqual([]);
+      });
+
+      it('lists pins with page names, newest first, filtered by body and excluded pages, with a total', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const pinned: Array<{ id: string }> = [];
+        for (const [name, body] of [
+          ['Empty', ''],
+          ['Blank', '  \n '],
+          ['Refunds', 'Refund within 30 days.'],
+          ['Shipping', 'Ships in 2 days.'],
+          ['Returns', 'Return with a label.'],
+        ] as const) {
+          const p = await page(acme.id, name, { body });
+          await store.addPinAudience({ pageId: p.id, audience: ['org:acme'], createdBy: 'agent:alex' });
+          pinned.push(p);
+          await new Promise(resolve => setTimeout(resolve, 15));
+        }
+        const hidden = await page(secret.id, 'Hidden', { body: 'Secret.' });
+        await store.addPinAudience({ pageId: hidden.id, audience: ['org:acme'], createdBy: 'agent:alex' });
+        const [, , refunds, shipping, returns] = pinned;
+        const acmeRead = read(['org:acme']);
+
+        const all = await store.listPins({ audience: ['org:acme'], read: acmeRead, withBody: true, count: true });
+        expect(all.pins.map(pin => [pin.pageId, pin.pageName])).toEqual([
+          [returns!.id, 'Returns'],
+          [shipping!.id, 'Shipping'],
+          [refunds!.id, 'Refunds'],
+        ]);
+        expect(all.total).toBe(3);
+
+        const first = await store.listPins({
+          audience: ['org:acme'],
+          read: acmeRead,
+          withBody: true,
+          excludePageIds: [returns!.id],
+          limit: 1,
+          count: true,
+        });
+        expect(first.pins.map(pin => pin.pageId)).toEqual([shipping!.id]);
+        expect(first.total).toBe(2);
+        expect(first.nextCursor).toBeDefined();
+        const rest = await store.listPins({
+          audience: ['org:acme'],
+          read: acmeRead,
+          withBody: true,
+          excludePageIds: [returns!.id],
+          cursor: first.nextCursor,
+        });
+        expect(rest.pins.map(pin => pin.pageId)).toEqual([refunds!.id]);
+
+        const both = await page(acme.id, 'Both', { body: 'Pinned for two audiences.' });
+        await store.addPinAudience({
+          pageId: both.id,
+          audience: ['org:acme', 'team:acme:eng'],
+          createdBy: 'agent:alex',
+        });
+        const twice = await store.listPins({
+          audience: ['org:acme', 'team:acme:eng'],
+          read: acmeRead,
+          pageIds: [both.id],
+          count: true,
+        });
+        expect(twice.pins.map(pin => pin.pageId)).toEqual([both.id]);
+        expect(twice.total).toBe(1);
+        await store.removePinAudience({
+          pageId: both.id,
+          audience: ['org:acme', 'team:acme:eng'],
+          removedBy: 'agent:alex',
+        });
+
+        const plain = await store.listPins({ audience: ['org:acme'], read: acmeRead });
+        expect(plain.pins).toHaveLength(5);
+        expect(plain.total).toBeUndefined();
+      });
+
+      it('gets readable live pages by id in one call', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const a = await page(acme.id, 'a', { body: 'A' });
+        const b = await page(acme.id, 'b');
+        const gone = await page(acme.id, 'gone');
+        await store.deletePage({ id: gone.id, expectedVersion: gone.version, deletedBy: 'agent:alex' });
+        const hidden = await page(secret.id, 'hidden');
+        const got = await store.getPages({
+          ids: [a.id, b.id, a.id, gone.id, hidden.id, 'missing'],
+          read: read(['org:acme']),
+        });
+        expect(got.map(p => p.id).sort()).toEqual([a.id, b.id].sort());
+        expect(got.find(p => p.id === a.id)?.body).toBe('A');
+        expect(await store.getPages({ ids: [], read: read(['org:acme']) })).toEqual([]);
       });
     });
   });

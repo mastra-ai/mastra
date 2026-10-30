@@ -16,6 +16,7 @@ import type {
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
   KnowledgePageStore,
+  KnowledgeListedPin,
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
@@ -47,6 +48,7 @@ export const KNOWLEDGE_PAGE_TABLES = {
   stamps: 'mastra_knowledge_note_stamps',
   mentions: 'mastra_knowledge_mentions',
   pins: 'mastra_knowledge_pins',
+  pinAudiences: 'mastra_knowledge_pin_audiences',
   activity: 'mastra_knowledge_activity',
 } as const;
 
@@ -88,6 +90,7 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_kpages_scope ON "${T.pages}" (scopeId)`,
   `CREATE INDEX IF NOT EXISTS idx_kpages_parent ON "${T.pages}" (parentId, position, id)`,
   `CREATE INDEX IF NOT EXISTS idx_kpages_path ON "${T.pages}" (path)`,
+  `CREATE INDEX IF NOT EXISTS idx_kpages_declaration_parent ON "${T.pages}" (declaration, parentId) WHERE isScope = 1`,
   `CREATE INDEX IF NOT EXISTS idx_kpages_canonical ON "${T.pages}" (canonicalName)`,
   `CREATE TABLE IF NOT EXISTS "${T.notes}" (
     id TEXT PRIMARY KEY,
@@ -122,6 +125,14 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     createdAt TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS "${T.pinAudiences}" (
+    pinId TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    PRIMARY KEY (audience, pinId)
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS idx_kpin_audiences_pin ON "${T.pinAudiences}" (pinId)`,
+  // Pins created before the audience index existed.
+  `INSERT OR IGNORE INTO "${T.pinAudiences}" (audience, pinId) SELECT j.value, pin.id FROM "${T.pins}" pin, json_each(pin.audience) j`,
   `CREATE TABLE IF NOT EXISTS "${T.activity}" (
     id TEXT PRIMARY KEY,
     action TEXT NOT NULL,
@@ -201,6 +212,10 @@ function toPin(row: Row): KnowledgePin {
   };
 }
 
+function toListedPin(row: Row): KnowledgeListedPin {
+  return { ...toPin(row), pageName: String(row.pageName) };
+}
+
 function limitOf(limit: number | undefined, max: number): number {
   return Math.max(1, Math.min(limit ?? max, max));
 }
@@ -232,35 +247,66 @@ interface Fragment {
 }
 
 /**
+ * A string above every string that starts with `prefix`, comparing by code point (which is also
+ * UTF-8 byte order, so it matches SQLite's BINARY collation). `column >= prefix AND column < bound`
+ * is an exact, case-sensitive prefix match that an index range scan can serve, where
+ * `substr(column, 1, length(prefix)) = prefix` cannot. When the last code point cannot be raised
+ * (an empty prefix, or one made only of U+10FFFF), the bound is the prefix plus more U+10FFFF than
+ * any stored column can hold.
+ */
+function prefixUpperBound(prefix: string): string {
+  const points = Array.from(prefix);
+  while (points.length > 0) {
+    const last = points.pop()!.codePointAt(0)!;
+    if (last < 0x10ffff) {
+      const next = last === 0xd7ff ? 0xe000 : last + 1;
+      return points.join('') + String.fromCodePoint(next);
+    }
+  }
+  return prefix + '\u{10FFFF}'.repeat(4096);
+}
+
+/** `column` starts with `prefix`, as an index-friendly range. */
+function prefixRange(column: string, prefix: string): Fragment {
+  return { sql: `(${column} >= ? AND ${column} < ?)`, args: [prefix, prefixUpperBound(prefix)] };
+}
+
+/**
  * The readable scope page ids as a subquery. The caller's addresses, prefixes and children go in as
- * JSON arrays so a large read scope never hits a bind-parameter limit, and prefixes compare with
- * `substr` (exact, case-sensitive), never `LIKE`.
+ * JSON arrays so a large read scope never hits a bind-parameter limit. Each kind is its own index
+ * lookup (address equality, address range for a prefix, `(declaration, parentId)` for children),
+ * unioned, so the cost follows the caller's reach rather than the number of scopes in the store.
  */
 function readableScopes(read: KnowledgeReadScope): Fragment {
   if (read === 'all') return { sql: `SELECT id FROM "${T.pages}" WHERE isScope = 1`, args: [] };
-  const conditions: string[] = [];
+  const parts: string[] = [];
   const args: InValue[] = [];
   if (read.addresses.length > 0) {
-    conditions.push(`address IN (SELECT value FROM json_each(?))`);
+    parts.push(`SELECT id FROM "${T.pages}" WHERE isScope = 1 AND address IN (SELECT value FROM json_each(?))`);
     args.push(JSON.stringify(read.addresses));
   }
   if (read.prefixes.length > 0) {
-    conditions.push(
-      `EXISTS (SELECT 1 FROM json_each(?) j WHERE declaration = json_extract(j.value, '$.declaration') AND substr(address, 1, length(json_extract(j.value, '$.prefix'))) = json_extract(j.value, '$.prefix'))`,
+    parts.push(
+      `SELECT sp.id FROM json_each(?) j CROSS JOIN "${T.pages}" sp ON sp.isScope = 1 AND sp.address >= json_extract(j.value, '$.lo') AND sp.address < json_extract(j.value, '$.hi') AND +sp.declaration = json_extract(j.value, '$.declaration')`,
     );
-    args.push(JSON.stringify(read.prefixes));
+    args.push(
+      JSON.stringify(
+        read.prefixes.map(entry => ({
+          declaration: entry.declaration,
+          lo: entry.prefix,
+          hi: prefixUpperBound(entry.prefix),
+        })),
+      ),
+    );
   }
   if (read.children.length > 0) {
-    conditions.push(
-      `EXISTS (SELECT 1 FROM json_each(?) j WHERE declaration = json_extract(j.value, '$.declaration') AND parentId IS json_extract(j.value, '$.parentId'))`,
+    parts.push(
+      `SELECT sp.id FROM json_each(?) j CROSS JOIN "${T.pages}" sp ON sp.isScope = 1 AND sp.declaration = json_extract(j.value, '$.declaration') AND sp.parentId IS json_extract(j.value, '$.parentId')`,
     );
     args.push(JSON.stringify(read.children));
   }
-  if (conditions.length === 0) return { sql: `SELECT id FROM "${T.pages}" WHERE 0`, args: [] };
-  return {
-    sql: `SELECT id FROM "${T.pages}" WHERE isScope = 1 AND address IS NOT NULL AND (${conditions.join(' OR ')})`,
-    args,
-  };
+  if (parts.length === 0) return { sql: `SELECT id FROM "${T.pages}" WHERE 0`, args: [] };
+  return { sql: parts.join(' UNION '), args };
 }
 
 /** `alias.scopeId` is readable. */
@@ -299,7 +345,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   /** Deletes every row from the page tables (scopes, pages, notes, pins, activity). */
   async clearAll(): Promise<void> {
     await this.#transaction(async tx => {
-      for (const table of [T.activity, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
+      for (const table of [T.activity, T.pinAudiences, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
         await tx.execute({ sql: `DELETE FROM ${table}`, args: [] });
       }
     });
@@ -511,6 +557,18 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     return rows[0] ? toPage(rows[0]) : null;
   }
 
+  async getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    const ids = [...new Set(input.ids)];
+    if (ids.length === 0) return [];
+    const readable = pageReadable('p', input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT p.* FROM "${T.pages}" p WHERE p.deletedAt IS NULL AND p.id IN (SELECT value FROM json_each(?)) AND ${readable.sql}`,
+      [jsonList(ids), ...readable.args],
+    );
+    return rows.map(toPage);
+  }
+
   async getPageByPath(input: {
     scopeId: string;
     path: string[];
@@ -716,10 +774,11 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const newScopeId = isScopeParent ? String(parent.id) : String(parent.scopeId);
     const newDepth = isScopeParent ? 1 : Number(parent.depth) + 1;
     const oldPath = String(root.path);
+    const within = prefixRange('path', oldPath);
     const subtree = await this.#query(
       tx,
-      `SELECT id, key, depth, deletedAt FROM "${T.pages}" WHERE substr(path, 1, length(?)) = ?`,
-      [oldPath, oldPath],
+      `SELECT id, key, depth, deletedAt FROM "${T.pages}" WHERE ${within.sql}`,
+      within.args,
     );
     const live = subtree.filter(row => !row.deletedAt);
     if (live.length > core.MAX_KNOWLEDGE_MOVE_PAGES)
@@ -739,8 +798,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const position =
       options.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
     await tx.execute({
-      sql: `UPDATE "${T.pages}" SET path = ? || substr(path, length(?) + 1), depth = depth + ?, scopeId = ? WHERE substr(path, 1, length(?)) = ?`,
-      args: [newPath, oldPath, shift, newScopeId, oldPath, oldPath],
+      sql: `UPDATE "${T.pages}" SET path = ? || substr(path, length(?) + 1), depth = depth + ?, scopeId = ? WHERE ${within.sql}`,
+      args: [newPath, oldPath, shift, newScopeId, ...within.args],
     });
     await tx.execute({
       sql: `UPDATE "${T.pages}" SET parentId = ?, position = ? WHERE id = ?`,
@@ -788,10 +847,11 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           `Page ${input.targetId} is inside page ${input.sourceId}; it cannot be the merge target (subtree)`,
         );
       }
+      const within = prefixRange('path', sourcePath);
       const carried = await this.#query(
         tx,
-        `SELECT COUNT(*) AS n FROM "${T.pages}" WHERE substr(path, 1, length(?)) = ? AND id <> ? AND deletedAt IS NULL`,
-        [sourcePath, sourcePath, input.sourceId],
+        `SELECT COUNT(*) AS n FROM "${T.pages}" WHERE ${within.sql} AND id <> ? AND deletedAt IS NULL`,
+        [...within.args, input.sourceId],
       );
       if (Number(carried[0]!.n) > core.MAX_KNOWLEDGE_MOVE_PAGES) {
         throw new core.KnowledgeMoveTooLargeError(input.sourceId, Number(carried[0]!.n));
@@ -842,6 +902,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
             sql: `UPDATE "${T.pins}" SET audience = ?, updatedAt = ? WHERE id = ?`,
             args: [JSON.stringify(merged), now, String(targetPin.id)],
           });
+          await this.#indexAudience(tx, String(targetPin.id), merged);
+          await this.#indexAudience(tx, String(sourcePin.id), []);
           await tx.execute({ sql: `DELETE FROM "${T.pins}" WHERE id = ?`, args: [String(sourcePin.id)] });
         } else {
           await tx.execute({
@@ -876,6 +938,10 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       await tx.execute({
         sql: `UPDATE "${T.pages}" SET deletedAt = ?, deletedBy = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
         args: [now, input.deletedBy, JSON.stringify({ author: input.deletedBy }), now, input.id],
+      });
+      await tx.execute({
+        sql: `DELETE FROM "${T.pinAudiences}" WHERE pinId IN (SELECT id FROM "${T.pins}" WHERE pageId = ?)`,
+        args: [input.id],
       });
       await tx.execute({ sql: `DELETE FROM "${T.pins}" WHERE pageId = ?`, args: [input.id] });
       await this.#logActivity(
@@ -1209,6 +1275,17 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     };
   }
 
+  /** Rewrites the audience index rows of one pin to match `audience`. */
+  async #indexAudience(tx: PageExecutor, pinId: string, audience: string[]): Promise<void> {
+    await tx.execute({ sql: `DELETE FROM "${T.pinAudiences}" WHERE pinId = ?`, args: [pinId] });
+    for (const entry of audience) {
+      await tx.execute({
+        sql: `INSERT OR IGNORE INTO "${T.pinAudiences}" (pinId, audience) VALUES (?, ?)`,
+        args: [pinId, entry],
+      });
+    }
+  }
+
   // Pins
 
   addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
@@ -1222,6 +1299,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           sql: `INSERT INTO "${T.pins}" (id, pageId, audience, createdBy, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
           args: [id, input.pageId, JSON.stringify([...new Set(input.audience)]), input.createdBy, now, now],
         });
+        await this.#indexAudience(tx, id, [...new Set(input.audience)]);
         await this.#logActivity(
           tx,
           'pin-added',
@@ -1237,6 +1315,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           sql: `UPDATE "${T.pins}" SET audience = ?, updatedAt = ? WHERE id = ?`,
           args: [JSON.stringify(merged), now, String(existing.id)],
         });
+        await this.#indexAudience(tx, String(existing.id), merged);
         await this.#logActivity(
           tx,
           'pin-added',
@@ -1267,6 +1346,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         );
       }
       if (remaining.length === 0) {
+        await this.#indexAudience(tx, String(existing.id), []);
         await tx.execute({ sql: `DELETE FROM "${T.pins}" WHERE id = ?`, args: [String(existing.id)] });
         return null;
       }
@@ -1274,6 +1354,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         sql: `UPDATE "${T.pins}" SET audience = ?, updatedAt = ? WHERE id = ?`,
         args: [JSON.stringify(remaining), now, String(existing.id)],
       });
+      await this.#indexAudience(tx, String(existing.id), remaining);
       return toPin((await this.#query(tx, `SELECT * FROM "${T.pins}" WHERE id = ?`, [String(existing.id)]))[0]!);
     });
   }
@@ -1282,9 +1363,12 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
     pageIds?: string[];
+    excludePageIds?: string[];
+    withBody?: boolean;
+    count?: boolean;
     cursor?: string;
     limit?: number;
-  }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
+  }): Promise<{ pins: KnowledgeListedPin[]; nextCursor?: string; total?: number }> {
     const core = await loadPagesCore();
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
@@ -1292,29 +1376,44 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const args: InValue[] = [...readable.args];
     let filters = '';
     if (input.audience !== 'all') {
-      filters += ` AND EXISTS (SELECT 1 FROM json_each(pin.audience) a WHERE a.value IN (SELECT value FROM json_each(?)))`;
+      filters += ` AND pin.id IN (SELECT pa.pinId FROM json_each(?) a JOIN "${T.pinAudiences}" pa ON pa.audience = a.value)`;
       args.push(jsonList(input.audience));
     }
     if (input.pageIds) {
       filters += ` AND pin.pageId IN (SELECT value FROM json_each(?))`;
       args.push(jsonList(input.pageIds));
     }
-    if (cursor) {
-      filters += ` AND (pin.createdAt < ? OR (pin.createdAt = ? AND pin.id < ?))`;
-      args.push(cursor[0]!, cursor[0]!, cursor[1]!);
+    if (input.excludePageIds?.length) {
+      filters += ` AND pin.pageId NOT IN (SELECT value FROM json_each(?))`;
+      args.push(jsonList(input.excludePageIds));
     }
-    args.push(limit + 1);
+    if (input.withBody) {
+      filters += ` AND p.body IS NOT NULL AND trim(p.body, char(32, 9, 10, 11, 12, 13)) <> ''`;
+    }
+    const from = `FROM "${T.pins}" pin JOIN "${T.pages}" p ON p.id = pin.pageId WHERE p.deletedAt IS NULL AND ${readable.sql}${filters}`;
+    let total: number | undefined;
+    if (input.count) {
+      total = Number((await this.#query(this.#read, `SELECT COUNT(*) AS n ${from}`, args))[0]!.n);
+    }
+    const pageArgs = [...args];
+    let cursorFilter = '';
+    if (cursor) {
+      cursorFilter = ` AND (pin.createdAt < ? OR (pin.createdAt = ? AND pin.id < ?))`;
+      pageArgs.push(cursor[0]!, cursor[0]!, cursor[1]!);
+    }
+    pageArgs.push(limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT pin.* FROM "${T.pins}" pin JOIN "${T.pages}" p ON p.id = pin.pageId WHERE p.deletedAt IS NULL AND ${readable.sql}${filters} ORDER BY pin.createdAt DESC, pin.id DESC LIMIT ?`,
-      args,
+      `SELECT pin.*, p.name AS pageName ${from}${cursorFilter} ORDER BY pin.createdAt DESC, pin.id DESC LIMIT ?`,
+      pageArgs,
     );
     const page = rows.slice(0, limit);
     return {
-      pins: page.map(toPin),
+      pins: page.map(toListedPin),
       ...(rows.length > limit
         ? { nextCursor: encodeCursor([String(page[page.length - 1]!.createdAt), String(page[page.length - 1]!.id)]) }
         : {}),
+      ...(total === undefined ? {} : { total }),
     };
   }
 }

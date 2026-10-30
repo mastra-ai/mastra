@@ -296,6 +296,22 @@ describe('PgKnowledgePages (schema 4)', () => {
     ).resolves.toMatchObject({ scopeId: y.id });
   });
 
+  it('drops the per-scope key index an earlier alpha database kept, so sibling keys work', async () => {
+    await pool.query(`DROP SCHEMA IF EXISTS stale_key_test CASCADE`);
+    await pool.query(`CREATE SCHEMA stale_key_test`);
+    await initPgKnowledgePagesSchema(client, 'stale_key_test');
+    await pool.query(
+      `CREATE UNIQUE INDEX "mastra_knowledge_pages_key_uq" ON stale_key_test.mastra_knowledge_pages ("scopeId", key) WHERE key IS NOT NULL AND "deletedAt" IS NULL`,
+    );
+    await initPgKnowledgePagesSchema(client, 'stale_key_test');
+    const indexes = (await pool.query(`SELECT indexname FROM pg_indexes WHERE schemaname = 'stale_key_test'`)).rows.map(
+      r => r.indexname,
+    );
+    expect(indexes).not.toContain('mastra_knowledge_pages_key_uq');
+    expect(indexes).toContain('mastra_knowledge_pages_parent_key_uq');
+    await pool.query(`DROP SCHEMA stale_key_test CASCADE`);
+  });
+
   it('requires a reset over legacy tables and resets only Knowledge tables', async () => {
     await pool.query(`CREATE SCHEMA IF NOT EXISTS legacy_test`);
     await pool.query(`CREATE TABLE legacy_test.mastra_knowledge_nodes (id text)`);
@@ -311,5 +327,39 @@ describe('PgKnowledgePages (schema 4)', () => {
     expect(tables).not.toContain('mastra_knowledge_nodes');
     expect(tables).toContain('mastra_knowledge_pages');
     await pool.query(`DROP SCHEMA legacy_test CASCADE`);
+  });
+
+  it('lists pages across every scope a prefix read reaches, in name order, and nothing else', async () => {
+    const decl = 'reach:$o/thread:$t';
+    const mk = async (address: string) =>
+      (await store.materializeScope({ address, declaration: decl, name: address, provenance })).scope;
+    const a = await mk('reach:p1/thread:a');
+    const b = await mk('reach:p1/thread:b');
+    const other = await mk('reach:p2/thread:a');
+    const decoy = await mk('reach:p1_thread:x');
+    for (const [scope, names] of [
+      [a, ['n1', 'n3', 'n5']],
+      [b, ['n2', 'n4', 'n6']],
+      [other, ['n0']],
+      [decoy, ['nd']],
+    ] as const) {
+      for (const name of names) await store.createPage({ parentId: scope.id, name, provenance });
+    }
+    const read = (prefix: string): KnowledgeReadScope => ({
+      addresses: [],
+      prefixes: [{ declaration: decl, prefix }],
+      children: [],
+    });
+    const names: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const result = await store.listPages({ read: read('reach:p1/'), limit: 2, cursor });
+      names.push(...result.pages.map(page => page.name));
+      cursor = result.nextCursor;
+    } while (cursor);
+    expect(names).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6']);
+    expect((await store.listPages({ read: read('reach:p_/') })).pages).toEqual([]);
+    expect((await store.listPages({ read: read('REACH:P1/') })).pages).toEqual([]);
+    expect((await store.listPages({ read: read('reach:p1/'), scopeId: other.id })).pages).toEqual([]);
   });
 });

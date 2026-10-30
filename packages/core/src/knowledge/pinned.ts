@@ -1,6 +1,6 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import { parseKnowledgePageRef } from '../storage/domains/knowledge';
-import type { KnowledgePage, KnowledgePin } from '../storage/domains/knowledge';
+import type { KnowledgeListedPin, KnowledgePage } from '../storage/domains/knowledge';
 import { knowledgeScopeAddress } from './declarations';
 import type { CompiledKnowledgeScopes } from './declarations';
 import type { KnowledgeRun } from './run';
@@ -17,7 +17,8 @@ export const MAX_PINNED_MAX_TOKENS = 2_000;
 export const PIN_TRUNCATION_MARKER = '[truncated — knowledge_read for the rest]';
 /** Entry id of the line listing stored pins that didn't fit the budget. */
 export const PIN_OVERFLOW_ID = 'overflow';
-const STORED_PIN_PAGE = 100;
+/** Most stored pins the overflow line names; the rest are counted. */
+export const OVERFLOW_NAMES = 10;
 
 export interface PinEntry {
   id: string;
@@ -47,60 +48,102 @@ function render(page: KnowledgePage, maxTokens: number): string {
   return `${sliceByTokens(text, 0, room).trimEnd()} ${PIN_TRUNCATION_MARKER}`;
 }
 
-/** Highest `pinPriority` among the run's principals in a pin's audience. */
-function priorityOf(compiled: CompiledKnowledgeScopes, pin: KnowledgePin, held: Set<string>): number {
-  let best = Number.NEGATIVE_INFINITY;
-  for (const address of pin.audience) {
-    if (!held.has(address)) continue;
+/** The run's principals grouped by `pinPriority`, highest first. */
+function priorityTiers(compiled: CompiledKnowledgeScopes, principals: string[]): string[][] {
+  const tiers = new Map<number, string[]>();
+  for (const address of principals) {
     const match = compiled.match(address);
-    best = Math.max(best, match?.concrete?.pinPriority ?? match?.compiled.declaration.pinPriority ?? 0);
+    if (!match) continue;
+    const priority = match.concrete?.pinPriority ?? match.compiled.declaration.pinPriority ?? 0;
+    tiers.set(priority, [...(tiers.get(priority) ?? []), address]);
   }
-  return best;
+  return [...tiers.entries()].sort(([a], [b]) => b - a).map(([, addresses]) => addresses);
 }
 
 async function configPinPages(run: KnowledgeRun): Promise<KnowledgePage[]> {
-  const pages = new Map<string, KnowledgePage>();
+  const bound: { address: string; path: string[] }[] = [];
   for (const principal of run.principals) {
     const match = run.runtime.compiled.match(principal);
     if (!match) continue;
     for (const ref of [...(match.compiled.declaration.pins ?? []), ...(match.concrete?.pins ?? [])]) {
-      const bound = bindConfigPin(ref, match.params);
-      if (!bound) continue;
-      const [scope] = await run.storage.getScopesByAddress([bound.address]);
-      if (!scope) continue;
-      // Resolved by path every run: a path with no page (not created yet, moved, deleted) delivers nothing.
-      const page = await run.storage.getPageByPath({ scopeId: scope.id, path: bound.path, read: run.read });
-      if (page && !page.deletedAt) pages.set(page.id, page);
+      const pin = bindConfigPin(ref, match.params);
+      if (pin) bound.push(pin);
     }
+  }
+  if (bound.length === 0) return [];
+  const scopes = await run.storage.getScopesByAddress([...new Set(bound.map(pin => pin.address))]);
+  const pages = new Map<string, KnowledgePage>();
+  for (const pin of bound) {
+    const scope = scopes.find(candidate => candidate.address === pin.address);
+    if (!scope) continue;
+    // Resolved by path every run: a path with no page (not created yet, moved, deleted) delivers nothing.
+    const page = await run.storage.getPageByPath({ scopeId: scope.id, path: pin.path, read: run.read });
+    if (page && !page.deletedAt) pages.set(page.id, page);
   }
   return [...pages.values()];
 }
 
-async function storedPins(run: KnowledgeRun): Promise<KnowledgePin[]> {
-  const pins: KnowledgePin[] = [];
-  let cursor: string | undefined;
-  do {
-    const result = await run.storage.listPins({
-      audience: run.principals,
-      read: run.read,
-      cursor,
-      limit: STORED_PIN_PAGE,
-    });
-    pins.push(...result.pins);
-    cursor = result.nextCursor;
-  } while (cursor);
-  return pins;
+/**
+ * Stored pins in delivery order, at most `want`: the run's principals tier by tier from the highest
+ * `pinPriority` (a pin ranks by its best audience entry), newest first within a tier. Also returns how
+ * many stored pins the run could receive in all.
+ */
+async function rankedStoredPins(
+  run: KnowledgeRun,
+  excludePageIds: string[],
+  want: number,
+): Promise<{ pins: KnowledgeListedPin[]; total: number }> {
+  const tiers = priorityTiers(run.runtime.compiled, run.principals);
+  const base = { read: run.read, withBody: true, excludePageIds } as const;
+  const pins: KnowledgeListedPin[] = [];
+  const seen = new Set<string>();
+  let total: number | undefined;
+  for (const audience of tiers) {
+    let cursor: string | undefined;
+    do {
+      const result = await run.storage.listPins({
+        ...base,
+        audience,
+        cursor,
+        limit: want - pins.length,
+        count: tiers.length === 1 && cursor === undefined,
+      });
+      if (result.total !== undefined) total = result.total;
+      for (const pin of result.pins) {
+        if (seen.has(pin.id)) continue;
+        seen.add(pin.id);
+        pins.push(pin);
+      }
+      cursor = result.nextCursor;
+    } while (cursor && pins.length < want);
+    if (pins.length >= want) break;
+  }
+  if (total === undefined) {
+    total =
+      tiers.length === 0
+        ? 0
+        : ((await run.storage.listPins({ ...base, audience: run.principals, limit: 1, count: true })).total ?? 0);
+  }
+  return { pins, total };
+}
+
+function overflowLine(names: string[], more: number): string {
+  const listed = names.join(', ');
+  const rest = more > 0 ? `${listed ? `${listed}, ` : ''}…and ${more} more` : listed;
+  return `Also pinned (open with knowledge_read): ${rest}`;
 }
 
 /**
  * The pinned pages a run receives, rendered: config pins first (always delivered; an equal share each
  * when they alone exceed the token budget), then stored pins by `pinPriority` and recency while the
- * pin and token budgets last, then one line naming the stored pins that didn't fit. Only pages the
- * run can read and that have a body are delivered.
+ * pin and token budgets last, then one line naming up to ten stored pins that didn't fit and counting
+ * the rest. The line counts against the token budget. Only pages the run can read and that have a body
+ * are delivered. A run costs a fixed handful of store calls however many pins exist.
  */
 export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget): Promise<PinEntry[]> {
+  // Store calls per turn: (pinPriority tiers the run holds) + 2 (one count, one getPages), plus the
+  // config-pin lookups; never one per pin.
   const configured = (await configPinPages(run)).filter(page => page.body?.trim());
-  const configIds = new Set(configured.map(page => page.id));
   const entries: PinEntry[] = [];
 
   const full = configured.map(page => render(page, Number.POSITIVE_INFINITY));
@@ -111,29 +154,47 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
     configured.forEach((page, i) => entries.push({ id: page.id, text: full[i]! }));
   }
 
-  const held = new Set(run.principals);
-  const ranked = (await storedPins(run))
-    .filter(pin => !configIds.has(pin.pageId))
-    .map(pin => ({ pin, priority: priorityOf(run.runtime.compiled, pin, held) }))
-    .sort((a, b) => b.priority - a.priority || b.pin.createdAt.getTime() - a.pin.createdAt.getTime());
+  const slots = Math.max(budget.maxPins - entries.length, 0);
+  const { pins, total } = await rankedStoredPins(
+    run,
+    configured.map(page => page.id),
+    slots + OVERFLOW_NAMES,
+  );
+  const pages = new Map(
+    (await run.storage.getPages({ ids: pins.slice(0, slots).map(pin => pin.pageId), read: run.read })).map(page => [
+      page.id,
+      page,
+    ]),
+  );
 
   const minimum = estimateTokenCount(PIN_TRUNCATION_MARKER) + 8;
   let used = entries.reduce((sum, entry) => sum + estimateTokenCount(entry.text), 0);
-  const overflow: string[] = [];
-  for (const { pin } of ranked) {
-    const page = await run.storage.getPage({ id: pin.pageId, read: run.read });
-    if (!page || page.deletedAt || !page.body?.trim()) continue;
+  const delivered: PinEntry[] = [];
+  const left: KnowledgeListedPin[] = [];
+  for (const [i, pin] of pins.entries()) {
+    const page = i < slots ? pages.get(pin.pageId) : undefined;
     const remaining = budget.maxTokens - used;
-    if (entries.length >= budget.maxPins || remaining < minimum) {
-      overflow.push(page.name);
+    if (!page || remaining < minimum) {
+      left.push(pin);
       continue;
     }
     const text = render(page, remaining);
     used += estimateTokenCount(text);
-    entries.push({ id: page.id, text });
+    delivered.push({ id: page.id, text });
   }
-  if (overflow.length > 0) {
-    entries.push({ id: PIN_OVERFLOW_ID, text: `Also pinned (open with knowledge_read): ${overflow.join(', ')}` });
+
+  // The overflow line must fit too: give back the lowest-ranked delivered pins until it does.
+  const line = () =>
+    overflowLine(
+      left.slice(0, OVERFLOW_NAMES).map(pin => pin.pageName),
+      total - delivered.length - Math.min(left.length, OVERFLOW_NAMES),
+    );
+  while (total > delivered.length && delivered.length > 0 && used + estimateTokenCount(line()) > budget.maxTokens) {
+    const dropped = delivered.pop()!;
+    used -= estimateTokenCount(dropped.text);
+    left.unshift(pins.find(pin => pin.pageId === dropped.id)!);
   }
+  entries.push(...delivered);
+  if (total > delivered.length) entries.push({ id: PIN_OVERFLOW_ID, text: line() });
   return entries;
 }

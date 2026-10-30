@@ -167,6 +167,11 @@ export interface KnowledgePin {
   updatedAt: Date;
 }
 
+/** A pin as listed, with its page's name. */
+export interface KnowledgeListedPin extends KnowledgePin {
+  pageName: string;
+}
+
 /**
  * Most levels an ordinary page may sit below its home scope page: a page directly under its scope
  * is depth 1. Scope pages (including scopes nested under scopes by `belongsTo` or as template
@@ -564,6 +569,8 @@ export interface KnowledgePageStore {
 
   // Pages
   getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null>;
+  /** Readable live pages among `ids`, in no particular order; missing, deleted or unreadable ids are left out. */
+  getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]>;
   /**
    * Walks the scope's page tree key by key: `path[0]` is a live child of the scope page with that key,
    * `path[1]` a live child of that page, and so on. Returns the last page, or null when any step is
@@ -676,15 +683,21 @@ export interface KnowledgePageStore {
   /** Removes audience entries; the pin is deleted when none remain. Returns null when no pin is left. */
   removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null>;
   /**
-   * Pins on readable live pages, newest first: those whose audience intersects `audience`, or every
-   * pin for `'all'`. `'all'` is for host surfaces behind their own auth (Studio); runs always pass
-   * their own scopes. `pageIds` narrows to those pages.
+   * Pins on readable live pages, newest first (`createdAt` desc, then `id` desc): those whose audience
+   * intersects `audience`, or every pin for `'all'`. `'all'` is for host surfaces behind their own auth
+   * (Studio); runs always pass their own scopes. `pageIds` narrows to those pages and `excludePageIds`
+   * leaves those out; `withBody` keeps only pins whose page body has a non-whitespace character. Each
+   * pin carries its page's name. `count` adds `total`, the number of matching pins across all pages of
+   * the listing.
    */
   listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
     pageIds?: string[];
+    excludePageIds?: string[];
+    withBody?: boolean;
+    count?: boolean;
     cursor?: string;
     limit?: number;
-  }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }>;
+  }): Promise<{ pins: KnowledgeListedPin[]; nextCursor?: string; total?: number }>;
 }

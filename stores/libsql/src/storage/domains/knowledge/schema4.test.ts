@@ -88,4 +88,59 @@ describe('KnowledgeLibSQL schema 4 wiring', () => {
     expect(again.scope.parentId).toBe(p1.id);
     expect(again.parentConflict).toEqual({ existingParentId: p1.id, requestedParentId: p2.id });
   });
+
+  it('reads a prefix as an exact code-point range, including the highest code points', async () => {
+    const store = await makeStore();
+    const addresses = ['p:\u{10FFFF}x', 'p:\u{1F600}x', 'p:ax', 'p:Ax', 'q:ax'];
+    const pageByAddress: Record<string, string> = {};
+    for (const address of addresses) {
+      const { scope } = await store.materializeScope({ address, declaration: 'p:$id', name: address, provenance: who });
+      const page = await store.createPage({ parentId: scope.id, name: `in ${address}`, provenance: who });
+      pageByAddress[address] = page.name;
+    }
+    const names = async (prefix: string) =>
+      (
+        await store.listPages({
+          read: { addresses: [], prefixes: [{ declaration: 'p:$id', prefix }], children: [] },
+          limit: 50,
+        })
+      ).pages
+        .map(page => page.name)
+        .sort();
+    expect(await names('p:')).toEqual(['in p:\u{10FFFF}x', 'in p:\u{1F600}x', 'in p:Ax', 'in p:ax'].sort());
+    expect(await names('p:\u{10FFFF}')).toEqual(['in p:\u{10FFFF}x']);
+    expect(await names('p:\u{1F600}')).toEqual(['in p:\u{1F600}x']);
+    expect(await names('p:a')).toEqual(['in p:ax']);
+    expect(await names('')).toHaveLength(5);
+    await store.dangerouslyReset();
+  });
+
+  it('keeps the pin audience index in step with add, remove, merge and delete', async () => {
+    const store = await makeStore();
+    const { scope } = await store.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'Acme',
+      provenance: who,
+    });
+    const a = await store.createPage({ parentId: scope.id, name: 'A', body: 'x', provenance: who });
+    const b = await store.createPage({ parentId: scope.id, name: 'B', body: 'y', provenance: who });
+    const c = await store.createPage({ parentId: scope.id, name: 'C', body: 'z', provenance: who });
+    const listed = async (audience: string[]) =>
+      (await store.listPins({ audience, read: 'all', limit: 50 })).pins.map(pin => pin.pageName).sort();
+    await store.addPinAudience({ pageId: a.id, audience: ['r:1', 'r:2'], createdBy: 'host' });
+    await store.addPinAudience({ pageId: b.id, audience: ['r:3'], createdBy: 'host' });
+    await store.addPinAudience({ pageId: c.id, audience: ['r:2'], createdBy: 'host' });
+    expect(await listed(['r:2'])).toEqual(['A', 'C']);
+    await store.removePinAudience({ pageId: a.id, audience: ['r:2'], removedBy: 'host' });
+    expect(await listed(['r:2'])).toEqual(['C']);
+    expect(await listed(['r:1', 'r:3'])).toEqual(['A', 'B']);
+    await store.mergePages({ sourceId: b.id, targetId: a.id, sourceVersion: b.version, provenance: who });
+    expect(await listed(['r:3'])).toEqual(['A']);
+    await store.deletePage({ id: c.id, expectedVersion: c.version, deletedBy: 'host' });
+    expect(await listed(['r:2'])).toEqual([]);
+    await store.removePinAudience({ pageId: a.id, audience: ['r:1', 'r:3'], removedBy: 'host' });
+    expect(await listed(['r:1', 'r:3'])).toEqual([]);
+    await store.dangerouslyReset();
+  });
 });
