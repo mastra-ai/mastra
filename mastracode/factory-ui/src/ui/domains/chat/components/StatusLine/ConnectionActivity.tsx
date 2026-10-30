@@ -4,7 +4,6 @@ import { useChatConnection } from '../../context/useChatConnection';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { usePreparingThreadId } from '../../hooks/usePreparingThreadId';
-import { useComposerConnectionNotice } from '../../hooks/useComposerConnectionNotice';
 
 const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
@@ -13,16 +12,8 @@ export function ConnectionActivity() {
   const { workspacePending } = useChatSessionContext();
   const { phase } = useChatTranscript();
   const preparingThreadId = usePreparingThreadId();
-  const notice = useComposerConnectionNotice(status);
 
-  // A reconnect that outlasts its delay is a quiet status-line hint; a failure owns the composer header.
-  if (notice === 'reconnecting')
-    return (
-      <span className={statusItem} role="status" aria-live="polite">
-        <Circle size={10} className="animate-pulse" /> Reconnecting…
-      </span>
-    );
-  // Other activity is stale until the stream is back.
+  // The notice above the composer owns connection failures; other activity is stale until recovery.
   if (status === 'reconnecting' || status === 'error') return null;
   // preparing message sets busy; preparation status takes precedence
   if (preparingThreadId)

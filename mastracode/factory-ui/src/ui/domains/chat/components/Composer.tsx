@@ -247,8 +247,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerHeader open={connectionNotice === 'error'}>
-        <ComposerConnectionNotice />
+      <ComposerHeader open={connectionNotice !== undefined}>
+        {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
       </ComposerHeader>
       <ComposerRing busy={(busy || chatPreparing) && !connectionLost}>
         <ComposerBox>

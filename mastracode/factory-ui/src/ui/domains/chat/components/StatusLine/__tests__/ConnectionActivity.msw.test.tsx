@@ -49,8 +49,8 @@ function ActivityFixture({ status, busy }: { status: ChatConnectionApi['status']
       <ChatSessionContext.Provider value={session}>
         <ChatConnectionContext.Provider value={{ status }}>
           <ChatTranscriptContext.Provider value={transcript}>
-            <ComposerHeader open={notice === 'error'}>
-              <ComposerConnectionNotice />
+            <ComposerHeader open={notice !== undefined}>
+              {notice && <ComposerConnectionNotice notice={notice} />}
             </ComposerHeader>
             <ConnectionActivity />
           </ChatTranscriptContext.Provider>
