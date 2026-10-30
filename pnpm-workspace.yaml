@@ -336,6 +336,11 @@ trustPolicyExclude:
   # pnpm reports it without the trust evidence older modal versions had.
   - 'modal@0.10.1'
 overrides:
+  # The Lance adapter supplies vectors; its optional embedding providers are unused here.
+  '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
+  '@lancedb/lancedb@0.31.0>openai': '-'
+  # Share Wrangler's runtime with the Cloudflare storage test fixtures.
+  'miniflare@4.20260730.0>workerd': 1.20261023.1
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
   '@types/node': 22.19.15
@@ -420,7 +425,8 @@ overrides:
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.4
-  mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
+  # Keep the security floor aligned with docs' Mermaid to avoid a second diagram runtime.
+  mermaid@>=11.0.0-alpha.1 <11.17.2: 11.17.2
   sharp@<0.35.5: 0.35.5
   # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
   proxy-addr@<2.0.8: 2.0.8

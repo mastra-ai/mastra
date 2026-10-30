@@ -11,7 +11,7 @@ const FILTER_NAMES: Record<string, string> = {
   experimentId: 'experiment',
 };
 
-export type TraceAggregateCardProps = Pick<ChartCardProps, 'title' | 'description' | 'className'> & {
+export type TraceAggregateCardProps = Pick<ChartCardProps, 'title' | 'className'> & {
   /** The card groups or filters on the root span's type, which needs `traceQueryRootSpanFields`. */
   requiresRootSpanFields?: boolean;
   /** The loaded card, rendered once the server can answer it and the page filters apply to traces. */
@@ -27,7 +27,8 @@ export function TraceAggregateCard({ requiresRootSpanFields, children, ...layout
   if (gate.status === 'unavailable') return null;
   if (gate.status === 'ready') return children(gate.scope);
   return (
-    <ChartCard {...layout}>
+    // Keeps the legend row its loaded chart will have, so the card doesn't shift when it loads.
+    <ChartCard {...layout} toolbar={null}>
       {gate.status === 'loading' ? (
         <MetricsCard.Loading />
       ) : (

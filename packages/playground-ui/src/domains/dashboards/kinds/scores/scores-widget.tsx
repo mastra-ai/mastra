@@ -8,14 +8,12 @@ import { bucketPlan, intervalHours } from '../../../metrics/lib/metrics-buckets'
 import { ViewGate } from '../../components/view-gate';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { useScorers } from '../../hooks/use-scorers';
-import { viewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeScores, withScorer } from '../../lib/scores';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import type { ScoresOptions } from './options';
-import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
 
@@ -32,17 +30,17 @@ export function ScoresWidget({ widget, views }: WidgetKindProps<ScoresOptions>) 
   const [view] = views;
   return (
     <ViewGate queries={view.queries} pending={() => null}>
-      {page => <ScoresView heading={viewHeading(widget, view)} view={view} page={page} />}
+      {page => <ScoresView title={widget.title ?? ''} view={view} page={page} />}
     </ViewGate>
   );
 }
 
 function ScoresView({
-  heading,
+  title,
   view,
   page,
 }: {
-  heading: ReturnType<typeof viewHeading>;
+  title: string;
   view: ResolvedView<ScoresOptions>;
   page: DashboardPageContext;
 }) {
@@ -64,7 +62,7 @@ function ScoresView({
   const failed = all.filter(r => r.isError);
   if (failed.length > 0) {
     return (
-      <ChartCard {...heading}>
+      <ChartCard title={title}>
         <ChartCardError error={failed[0]?.error} onRetry={() => failed.forEach(r => void r.refetch())} />
       </ChartCard>
     );
@@ -78,25 +76,14 @@ function ScoresView({
     page.window,
     stepHours,
   );
-  const series: MetricsLineChartSeries[] = lines.map(({ scorerId, name, mean }, i) => ({
+  const series: MetricsLineChartSeries[] = lines.map(({ scorerId, name }, i) => ({
     dataKey: scorerId,
     label: name,
     color: SCORER_COLORS[i % SCORER_COLORS.length] ?? CHART_COLORS.neutral,
-    aggregate: () => ({ value: FORMATTERS.score.value(mean) }),
   }));
 
   return (
-    <ChartCard
-      {...heading}
-      summary={
-        <MetricsCard.Summary
-          value={String(lines.length)}
-          label={lines.length === 1 ? 'scorer' : 'scorers'}
-          isLoading={isLoading}
-        />
-      }
-      isUpdating={all.some(r => r.isRefetching)}
-    >
+    <ChartCard title={title} isUpdating={all.some(r => r.isRefetching)}>
       <ChartArea isEmpty={!isLoading && lines.length === 0} emptyMessage={options.emptyMessage}>
         <MetricsLineChart
           data={isLoading ? [] : buckets}

@@ -17,11 +17,16 @@ export function spanToListRow(span: SpanRow): TracesListViewTrace {
     model: span.model,
     provider: span.provider,
     status: span.status,
+    outcome: span.outcome,
+    stopReason: span.stopReason,
+    stopReasonContext: span.stopReasonContext,
     inputPreview: span.inputPreview,
     outputPreview: span.outputPreview ?? undefined,
     errorPreview: span.errorPreview ?? undefined,
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     createdAt: span.startedAt,
+    timeToFirstChunkMs: span.timeToFirstChunkMs,
+    timeToFirstTokenMs: span.timeToFirstTokenMs,
   };
 }

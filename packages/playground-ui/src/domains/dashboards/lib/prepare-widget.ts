@@ -1,9 +1,9 @@
 import type { DashboardDefinitionEnvelope, DashboardWidget } from '@mastra/client-js';
 import { dashboardWidgetSchema } from '@mastra/core/storage/dashboards';
 import type { AnyWidgetKind, ResolvedView } from '../widget-kind';
+import { viewValue } from './chrome';
 import { inScope } from './definition';
 import type { DashboardScope } from './definition';
-import { tabValue } from './tabs';
 
 type Issue = { path: PropertyKey[]; message: string };
 export const describeIssue = (issue: Issue | undefined) =>
@@ -46,7 +46,7 @@ export function prepareWidget(
   if (!kind) return { ok: false, message: 'This widget needs a newer version.' };
 
   const views: ResolvedView<unknown>[] = [];
-  const tabs = new Set<string>();
+  const values = new Set<string>();
   for (const [index, view] of widget.views.entries()) {
     if (!inScope(view, scope)) continue;
     const options = kind.optionsSchema.safeParse(view.options ?? {});
@@ -58,11 +58,11 @@ export function prepareWidget(
     const resolved = { ...view, columns: view.columns?.filter(c => inScope(c, scope)), options: options.data };
     const issue = kind.issues?.(resolved)[0];
     if (issue) return { ok: false, message: `views.${index}: ${issue}` };
-    // Each view at the scope is a tab, chosen by its value; two with one value would leave one unreachable.
-    const tab = tabValue(view.label, views.length);
-    if (tabs.has(tab))
-      return { ok: false, message: `views.${index}: another view is already labelled '${view.label ?? tab}'` };
-    tabs.add(tab);
+    // Each view at the scope is an option in the card's menu, picked by its value; two with one value would leave one unreachable.
+    const value = viewValue(view.label, views.length);
+    if (values.has(value))
+      return { ok: false, message: `views.${index}: another view is already labelled '${view.label ?? value}'` };
+    values.add(value);
     views.push(resolved);
   }
   const [first, ...rest] = views;

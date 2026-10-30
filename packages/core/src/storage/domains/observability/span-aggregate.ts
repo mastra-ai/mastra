@@ -73,6 +73,8 @@ export const SPAN_AGGREGATE_DIMENSION_REGISTRY = {
   rootEntityName: stringDimension(),
   environment: stringDimension(),
   status: stringDimension(),
+  outcome: stringDimension(),
+  stopReason: stringDimension(),
   serviceName: stringDimension(),
   executionSource: stringDimension(),
   threadId: stringDimension(),

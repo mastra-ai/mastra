@@ -110,11 +110,11 @@ await vectorStore.hybridQuery({
 });
 ```
 
-See the [documentation](https://mastra.ai/reference/vectors/azure-ai-search) for the full API, including `advancedQuery` and `multiVectorQuery`.
+See the [documentation](https://mastra.ai/integrations/vectors/azure-ai-search) for the full API, including `advancedQuery` and `multiVectorQuery`.
 
 ## Documentation
 
-- [Reference: Azure AI Search vector store](https://mastra.ai/reference/vectors/azure-ai-search)
+- [Reference: Azure AI Search vector store](https://mastra.ai/integrations/vectors/azure-ai-search)
 
 A public end-to-end demo is available at [valdepeace/mastra-azure-aisearch-demo](https://github.com/valdepeace/mastra-azure-aisearch-demo).
 

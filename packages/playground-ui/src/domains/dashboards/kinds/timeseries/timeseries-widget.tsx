@@ -5,10 +5,10 @@ import { BUCKET_AXIS, EDGE_BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { bucketPlan, bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { ViewGate } from '../../components/view-gate';
 import { PendingChartCard } from '../../components/widget-chrome';
-import { DrilldownAction, ViewTabs } from '../../components/widget-controls';
+import { DrilldownAction } from '../../components/widget-controls';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
-import { hasDrilldownAction, useDrilldown, useViewTabs } from '../../hooks/use-widget-views';
-import { viewHeading } from '../../lib/chrome';
+import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
+import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
@@ -24,22 +24,20 @@ import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
 type Props = WidgetKindProps<TimeseriesOptions>;
 type ViewProps = Props & {
   view: ResolvedView<TimeseriesOptions>;
-  index: number;
-  onChoose: (index: number) => void;
+  heading: ViewHeading;
   page: DashboardPageContext;
 };
 
 export function TimeseriesWidget(props: Props) {
-  const { view, index, choose } = useViewTabs(props.views);
-  const heading = viewHeading(props.widget, view);
+  const { view, heading } = useViewMenu(props.widget, props.views);
   return (
-    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} {...heading} />}>
-      {page => <TimeseriesView {...props} view={view} index={index} onChoose={choose} page={page} />}
+    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
+      {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}
     </ViewGate>
   );
 }
 
-function TimeseriesView({ widget, views, view, index, onChoose, page, onDrilldown }: ViewProps) {
+function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps) {
   const { options } = view;
   const { interval } = bucketPlan(page.window.start, page.window.end);
   const totals = new Set(options.totals ?? []);
@@ -68,21 +66,25 @@ function TimeseriesView({ widget, views, view, index, onChoose, page, onDrilldow
     label: s.label,
     color: chartColor(s.color),
     emphasis: s.emphasis,
-    aggregate: s.legend === undefined ? undefined : () => ({ value: format.value(s.legend ?? 0) }),
   }));
-  const withLegendValues = shaped.series.some(s => s.legend !== undefined);
+  // Series with a range total each show theirs, marked like their line: they count different things.
+  const rangeTotals = shaped.series.flatMap(s =>
+    s.rangeTotal === undefined
+      ? []
+      : [{ label: s.label, value: format.value(s.rangeTotal), color: chartColor(s.color) }],
+  );
+  const withRangeTotals = options.series.some(s => s.rangeTotal !== undefined);
 
   const layout = {
-    ...viewHeading(widget, view),
+    ...heading,
     actions: hasDrilldownAction(widget, view, onDrilldown) ? (
       <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
     ) : undefined,
-    toolbar: (lines.length > 0 || views.length > 1) && (
+    total: withRangeTotals ? rangeTotals : undefined,
+    isLoading,
+    toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
-        {lines.length > 0 && (
-          <MetricsLineChartLegend series={lines} data={withLegendValues ? shaped.data : undefined} />
-        )}
-        <ViewTabs views={views} index={index} onChoose={onChoose} />
+        <MetricsLineChartLegend series={lines} />
       </MetricsCard.Toolbar>
     ),
   };
@@ -100,18 +102,12 @@ function TimeseriesView({ widget, views, view, index, onChoose, page, onDrilldow
     );
   }
 
-  const summaryFormat = FORMATTERS[options.summary?.format ?? options.format];
-  const summary = options.summary && (
-    <MetricsCard.Summary
-      value={
-        typeof options.summary.value === 'object' && 'peak' in options.summary.value && !shaped.summary
-          ? '—'
-          : summaryFormat.value(shaped.summary ?? 0)
-      }
-      label={options.summary.label}
-      isLoading={isLoading}
-    />
-  );
+  const totalFormat = FORMATTERS[options.total?.format ?? options.format];
+  const total =
+    options.total &&
+    (typeof options.total.value === 'object' && 'peak' in options.total.value && !shaped.total
+      ? '—'
+      : totalFormat.value(shaped.total ?? 0));
 
   const chart = {
     data: shaped.data,
@@ -130,7 +126,7 @@ function TimeseriesView({ widget, views, view, index, onChoose, page, onDrilldow
   const yDomain = shaped.flat && options.flatYDomain ? options.flatYDomain : options.yDomain;
 
   return (
-    <ChartCard {...layout} summary={summary || undefined} isUpdating={sent.some(r => r.isRefetching)}>
+    <ChartCard {...layout} total={layout.total ?? total} isUpdating={sent.some(r => r.isRefetching)}>
       <ChartArea isEmpty={!isLoading && shaped.empty} emptyMessage={options.emptyMessage}>
         {options.chart === 'stackedBar' ? (
           <MetricsStackedBarChart {...chart} />

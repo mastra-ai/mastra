@@ -130,12 +130,13 @@ export const tokenUsageWidget: DashboardWidget = {
   drilldown: { action: { page: 'traces' }, click: { page: 'traces' } },
   views: [
     {
-      label: 'Tokens',
+      label: 'Token usage',
       description: 'Input, cache reads and output.',
       queries: [sumSeries('input', INPUT), sumSeries('output', OUTPUT), sumSeries('cacheRead', CACHE_READ)],
       options: {
         chart: 'stackedBar',
         format: 'count',
+        xLabels: 'edges',
         series: [
           {
             dataKey: 'input',
@@ -146,17 +147,18 @@ export const tokenUsageWidget: DashboardWidget = {
           { dataKey: 'cacheRead', label: 'Cache read', color: 'violet', value: { query: 'cacheRead' } },
           { dataKey: 'output', label: 'Output', color: 'sky', value: { query: 'output' } },
         ],
-        summary: { label: 'tokens', value: 'total' },
+        total: { value: 'total' },
         emptyMessage: 'No model calls in this range.',
       },
     },
     {
-      label: 'Cost',
+      label: 'Model cost',
       description: 'Estimated model spend.',
       queries: [sumSeries('input', INPUT), sumSeries('output', OUTPUT)],
       options: {
         chart: 'stackedBar',
         format: 'usd',
+        xLabels: 'edges',
         series: [
           {
             dataKey: 'cost',
@@ -170,22 +172,29 @@ export const tokenUsageWidget: DashboardWidget = {
             },
           },
         ],
-        summary: { label: 'cost', value: 'total' },
+        total: { value: 'total' },
         emptyMessage: 'No model calls in this range.',
       },
     },
   ],
 };
 
+const failedAgentRuns = [
+  { fieldId: 'rootEntityType', value: 'agent' },
+  { fieldId: 'status', value: 'error' },
+];
+
+/** Agent runs, with Failure rate in its title menu, as the Agent runs card. */
 export const agentRunsWidget: DashboardWidget = {
   id: 'agent-runs',
   span: 6,
   kind: 'timeseries',
   title: 'Agent runs',
-  description: 'Completed and failed runs.',
-  drilldown: { click: agentRunsTraces },
   views: [
     {
+      label: 'Agent runs',
+      description: 'Completed and failed runs.',
+      drilldown: { click: agentRunsTraces },
       queries: [agentRunsByStatus],
       options: {
         chart: 'stackedBar',
@@ -196,37 +205,17 @@ export const agentRunsWidget: DashboardWidget = {
           { dataKey: 'completed', label: 'Completed', color: 'green', value: completedRuns },
           { dataKey: 'failed', label: 'Failed', color: 'error', value: failedRuns },
         ],
-        summary: { label: 'runs', value: 'total' },
+        total: { value: 'total' },
         emptyMessage: 'No agent runs in this range.',
       },
     },
-  ],
-};
-
-export const failureRateWidget: DashboardWidget = {
-  id: 'failure-rate',
-  span: 6,
-  kind: 'timeseries',
-  title: 'Failure rate',
-  description: 'Share of agent runs that failed.',
-  drilldown: {
-    action: {
-      page: 'logs',
-      filters: [
-        { fieldId: 'rootEntityType', value: 'agent' },
-        { fieldId: 'status', value: 'error' },
-      ],
-    },
-    click: {
-      page: 'traces',
-      filters: [
-        { fieldId: 'rootEntityType', value: 'agent' },
-        { fieldId: 'status', value: 'error' },
-      ],
-    },
-  },
-  views: [
     {
+      label: 'Failure rate',
+      description: 'Share of agent runs that failed.',
+      drilldown: {
+        action: { page: 'logs', filters: failedAgentRuns },
+        click: { page: 'traces', filters: failedAgentRuns },
+      },
       queries: [agentRunsByStatus],
       options: {
         chart: 'line',
@@ -243,8 +232,7 @@ export const failureRateWidget: DashboardWidget = {
             },
           },
         ],
-        summary: {
-          label: 'failed',
+        total: {
           value: {
             coalesce: [{ ratio: { of: failedRuns, over: { sum: [completedRuns, failedRuns] } } }, { const: 0 }],
           },
@@ -285,7 +273,7 @@ const latencyView = (label: string, metric: string, rootEntityType: string, noun
       },
       { dataKey: 'p99', label: 'P99', color: 'violet', value: { query: 'latency', percentile: 0.99 }, round: true },
     ],
-    summary: { label: 'peak P95', value: { peak: 'p95' } },
+    total: { value: { peak: 'p95' } },
     emptyMessage: `No ${noun} in this range.`,
   },
 });
@@ -298,9 +286,9 @@ export const latencyWidget: DashboardWidget = {
   description: 'Duration percentiles.',
   drilldown: { click: { page: 'traces' } },
   views: [
-    latencyView('Agents', 'mastra_agent_duration_ms', 'agent', 'agent runs'),
-    latencyView('Workflows', 'mastra_workflow_duration_ms', 'workflow_run', 'workflow runs'),
-    latencyView('Tools', 'mastra_tool_duration_ms', 'tool', 'tool calls'),
+    latencyView('Agent latency', 'mastra_agent_duration_ms', 'agent', 'agent runs'),
+    latencyView('Workflow latency', 'mastra_workflow_duration_ms', 'workflow_run', 'workflow runs'),
+    latencyView('Tool latency', 'mastra_tool_duration_ms', 'tool', 'tool calls'),
   ],
 };
 
@@ -337,7 +325,7 @@ export const distinctIdsWidget: DashboardWidget = {
           label,
           color,
           value: { query: 'buckets', measure },
-          legendValue: { query: 'totals', measure },
+          rangeTotal: { query: 'totals', measure },
         })),
         emptyMessage: 'No traces in this range set a resource, thread, user or session id.',
       },
@@ -502,7 +490,7 @@ const entityView = (
   const usage = label === 'Agents';
   const traces = label !== 'Tools';
   return {
-    label,
+    label: `Breakdown by ${name.toLowerCase()}`,
     scope,
     description,
     queries: [
@@ -558,7 +546,7 @@ const traceColumns = (
 const environmentsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'environment');
   return {
-    label: 'Environments',
+    label: 'Breakdown by environment',
     scope,
     description: 'Traces, errors, latency and spend per environment.',
     queries: [
@@ -614,7 +602,7 @@ const threadsView = (scope: 'org' | 'project'): DashboardWidgetView => {
     },
   };
   return {
-    label: 'Threads',
+    label: 'Breakdown by thread',
     scope,
     description: 'Traces, errors, latency and spend per thread.',
     queries: [threads, usageTotals(groupBy), ...(scope === 'org' ? [resources] : [])],
@@ -630,7 +618,7 @@ const threadsView = (scope: 'org' | 'project'): DashboardWidgetView => {
 const modelsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'provider').concat('model');
   return {
-    label: 'Models',
+    label: 'Breakdown by model',
     scope,
     description: 'Model calls, tokens and spend per model.',
     queries: [
@@ -690,7 +678,7 @@ export const breakdownWidget: DashboardWidget = {
   drilldown: { click: { page: 'traces' } },
   views: [
     {
-      label: 'Projects',
+      label: 'Breakdown by project',
       scope: 'org',
       description: 'Traces, errors, latency and spend per project.',
       queries: [

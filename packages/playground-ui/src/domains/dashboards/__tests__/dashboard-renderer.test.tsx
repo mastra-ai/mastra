@@ -11,13 +11,20 @@ import {
   distinctIdsTotalsFixture,
   traceAggregateCapabilities,
 } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
-import { seedMetrics, serveCapabilities, serveTraceAggregate } from '../../metrics/components/__tests__/metrics-msw';
+import {
+  openViewMenu,
+  pickView,
+  seedMetrics,
+  serveCapabilities,
+  serveTraceAggregate,
+} from '../../metrics/components/__tests__/metrics-msw';
 import type { TraceAggregateRequest } from '../../metrics/components/__tests__/metrics-msw';
+import { ChartCard } from '../../metrics/components/chart-card';
 import { MetricsProvider, useMetrics } from '../../metrics/hooks/use-metrics';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
-import { DrilldownAction, ViewTabs } from '../components/widget-controls';
-import { useViewTabs } from '../hooks/use-widget-views';
+import { DrilldownAction } from '../components/widget-controls';
+import { useViewMenu } from '../hooks/use-widget-views';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
 import type { AnyWidgetKind } from '../widget-kind';
@@ -55,17 +62,16 @@ const unfilteredFailsKind = defineWidgetKind({
   },
 });
 
-/** A kind built on the shared controls: its tabs and its action button. */
+/** A kind built on the shared controls: its view menu and its action button. */
 const controlsKind = defineWidgetKind({
   kind: 'controls',
   optionsSchema: z.object({}),
   component: function Controls({ widget, views, onDrilldown }) {
-    const { view, index, choose } = useViewTabs(views);
+    const { view, heading } = useViewMenu(widget, views);
     return (
-      <div>
-        <ViewTabs views={views} index={index} onChoose={choose} />
-        <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
-      </div>
+      <ChartCard {...heading} actions={<DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />}>
+        <p>{view.label ?? widget.title}</p>
+      </ChartCard>
     );
   },
 });
@@ -200,7 +206,9 @@ describe('DashboardRenderer', () => {
       );
       const { container } = renderDashboard(definition(kpisWidget, agentRunsWidget));
       await waitFor(() => expect(within(cell(container, 'kpis')).getAllByText("Couldn't load")).toHaveLength(4));
-      expect(await within(cell(container, 'agent-runs')).findByText('runs')).toBeDefined();
+      const runs = cell(container, 'agent-runs');
+      expect(await within(runs).findByText('Completed')).toBeDefined();
+      expect(within(runs).queryByText("Couldn't load")).toBeNull();
     });
 
     it('loads a trace chart after Retry once its requests succeed', async () => {
@@ -216,7 +224,8 @@ describe('DashboardRenderer', () => {
       expect(await within(widget).findByText(LOAD_ERROR, undefined, { timeout: 5000 })).toBeDefined();
       failing = false;
       fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
-      expect(await within(widget).findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
+      expect(await within(widget).findAllByText('Resources', undefined, { timeout: 5000 })).not.toHaveLength(0);
+      expect(within(widget).queryByText(LOAD_ERROR)).toBeNull();
     }, 15_000);
 
     it('loads a table after Retry once its requests succeed', async () => {
@@ -314,7 +323,7 @@ describe('DashboardRenderer', () => {
       ...extra,
     });
 
-    it('names a tab whose label is blank by its position', () => {
+    it('names a view whose label is blank by its position', async () => {
       renderDashboard(
         definition(
           controls({
@@ -326,8 +335,29 @@ describe('DashboardRenderer', () => {
         ),
         { kinds: [controlsKind] },
       );
-      expect(screen.getByRole('tab', { name: 'Agents' })).toBeDefined();
-      expect(screen.getByRole('tab', { name: 'View 2' })).toBeDefined();
+      expect(await openViewMenu('Agents')).toEqual(['Agents', 'View 2']);
+    });
+
+    it('titles a single view with the widget title, and several with the open view, switched from the menu', async () => {
+      renderDashboard(
+        definition(
+          controls({ id: 'one', title: 'Runs' }),
+          controls({
+            id: 'two',
+            title: 'Latency',
+            views: [
+              { label: 'Agents', queries: [unused] },
+              { label: 'Tools', queries: [unused] },
+            ],
+          }),
+        ),
+        { kinds: [controlsKind] },
+      );
+      expect(screen.getByText('Runs', { selector: 'h2, h3, span, div' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Runs' })).toBeNull();
+      await pickView('Agents', 'Tools');
+      expect(screen.getByRole('button', { name: 'Tools' })).toBeDefined();
+      expect(screen.getByText('Tools', { selector: 'p' })).toBeDefined();
     });
 
     it('offers errors in Logs only when the target keeps to errors', () => {

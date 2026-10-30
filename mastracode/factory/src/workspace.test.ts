@@ -440,7 +440,7 @@ describe('bundled Factory skill assets', () => {
 
     expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
     expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
-    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    expect(phase1).toContain('For Linear, GitLab, Jira, and incident.io issues, skip this GitHub-only label mutation.');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
   });
 
@@ -555,7 +555,7 @@ describe('bundled Factory skill assets', () => {
     );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
-      'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
+      'For non-GitHub sources, use the same structured handoff without attempting GitHub publication or label mutations:',
     );
 
     const plan = await read('factory-plan');

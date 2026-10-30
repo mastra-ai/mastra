@@ -1,5 +1,6 @@
-import { EyeIcon, ListTreeIcon, LogsIcon, MessagesSquareIcon } from 'lucide-react';
+import { ListTreeIcon, LogsIcon, MessagesSquareIcon } from 'lucide-react';
 import { Button } from '../../../ds/components/Button/Button';
+import { TraceIcon } from '../../../ds/icons/TraceIcon';
 
 type CardActionButtonProps = {
   onClick: () => void;
@@ -9,8 +10,8 @@ type CardActionButtonProps = {
  *  to whatever dimensions the card knows about. */
 export function OpenInTracesButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in traces" aria-label="View in traces">
-      <EyeIcon />
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in traces" aria-label="View in traces">
+      <TraceIcon />
     </Button>
   );
 }
@@ -22,7 +23,7 @@ export function OpenErrorsInLogsButton({ onClick }: CardActionButtonProps) {
     <Button
       onClick={onClick}
       variant="ghost"
-      size="icon-md"
+      size="icon-sm"
       tooltip="View errors in logs"
       aria-label="View errors in logs"
     >
@@ -35,7 +36,7 @@ export function OpenErrorsInLogsButton({ onClick }: CardActionButtonProps) {
  *  the card's current dimensions, whatever their status. */
 export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in logs" aria-label="View in logs">
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in logs" aria-label="View in logs">
       <LogsIcon />
     </Button>
   );
@@ -45,7 +46,7 @@ export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
  *  the card's current dimensions. */
 export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in spans" aria-label="View in spans">
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in spans" aria-label="View in spans">
       <ListTreeIcon />
     </Button>
   );
@@ -55,7 +56,7 @@ export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
  *  the card's current dimensions. */
 export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in threads" aria-label="View in threads">
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in threads" aria-label="View in threads">
       <MessagesSquareIcon />
     </Button>
   );

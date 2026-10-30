@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { DashboardQuery, DashboardWidget } from '@mastra/client-js';
+import type { DashboardQuery, DashboardWidget, MastraClient } from '@mastra/client-js';
 import { act, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -45,6 +45,8 @@ const runsWidget: DashboardWidget = {
 };
 
 type AggregateBody = { filters: { timestamp: { start: string; end: string }; environment?: string } };
+type AggregateResponse = Awaited<ReturnType<MastraClient['getMetricAggregate']>>;
+type ScoreAggregateResponse = Awaited<ReturnType<MastraClient['getScoreAggregate']>>;
 
 /** Agent runs per window length and environment, e.g. `24h` or `24h:prod`; a held key answers once released. */
 function serveRuns() {
@@ -58,7 +60,7 @@ function serveRuns() {
       const key = environment ? `${hours}h:${environment}` : `${hours}h`;
       sent.push(key);
       await gates.get(key);
-      return HttpResponse.json({ value: values[key] ?? 0, previousValue: 10, changePercent: 1 });
+      return HttpResponse.json<AggregateResponse>({ value: values[key] ?? 0, previousValue: 10, changePercent: 1 });
     }),
   );
   return {
@@ -205,7 +207,7 @@ describe('A request slot whose request moves to another scorer', () => {
           const { scorerId } = await request.json();
           sent.push(scorerId);
           if (scorerId === 'beta') await beta;
-          return HttpResponse.json({
+          return HttpResponse.json<ScoreAggregateResponse>({
             value: scorerId === 'alpha' ? 0.9 : 0.1,
             previousValue: null,
             changePercent: null,

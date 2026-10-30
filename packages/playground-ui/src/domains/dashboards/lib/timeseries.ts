@@ -27,8 +27,8 @@ export const timeseriesSeriesSchema = z
     emphasis: z.boolean().optional(),
     /** The series' value per bucket. */
     value: valueExprSchema,
-    /** Shown beside the series in the legend, over the whole range (e.g. a range total). */
-    legendValue: valueExprSchema.optional(),
+    /** The series' value over the whole range, shown beside the card's title marked with the series' color. */
+    rangeTotal: valueExprSchema.optional(),
     /** Rounds each bucket's value to a whole number. */
     round: z.boolean().optional(),
   })
@@ -48,7 +48,7 @@ export const timeseriesOptionsSchema = z
     buckets: z.enum(['chart', 'api']).optional(),
     /** Ids of queries sent over the whole range, without an interval (e.g. distinct counts, which can't be summed). */
     totals: z.array(queryRefSchema).optional(),
-    /** Hides a series whose legend value (or range total) is zero. */
+    /** Hides a series whose range total (or, without one, sum of buckets) is zero. */
     hideEmpty: z.boolean().optional(),
     /** Emphasizes the first series shown. */
     emphasizeFirst: z.boolean().optional(),
@@ -56,9 +56,9 @@ export const timeseriesOptionsSchema = z
     /** The y-axis range when every plotted value is zero. */
     flatYDomain: z.tuple([z.number(), z.number()]).optional(),
     yDomain: z.tuple([z.number(), z.number()]).optional(),
-    summary: z
+    /** The card's total, beside its title. Ignored when a series has a `rangeTotal`. */
+    total: z
       .object({
-        label: z.string().min(1),
         /** `total`: every series summed over the range; `peak`: one series' highest bucket; or an expression over range totals. */
         value: z.union([z.literal('total'), z.object({ peak: z.string().min(1) }).strict(), valueExprSchema]),
         format: formatSchema.optional(),
@@ -80,11 +80,12 @@ export type ChartBucket = BucketLabels & Record<string, number | string | undefi
 
 export type ShapedTimeseries = {
   data: ChartBucket[];
-  /** The series shown, with their legend values. */
-  series: (TimeseriesSeries & { legend?: number })[];
+  /** The series shown, each with its range total when it has one. */
+  series: (Omit<TimeseriesSeries, 'rangeTotal'> & { rangeTotal?: number })[];
   /** Hours per bucket, for a clicked bucket's window. */
   stepHours: number;
-  summary?: number;
+  /** The card's total, from `options.total`. */
+  total?: number;
   /** Every plotted value is zero (or missing). */
   flat: boolean;
   /** Nothing to show in the range. */
@@ -158,9 +159,9 @@ export function shapeTimeseries({
     cache.set(key, values);
     return values;
   };
-  const total = (ref: ValueRef) =>
+  const rangeOf = (ref: ValueRef) =>
     rangeValue(responses.get(ref.query), ref, totals.has(ref.query) ? undefined : bucketed(ref)) ?? 0;
-  const overRange = (expr: ValueExpr) => evaluate(expr, total) ?? 0;
+  const overRange = (expr: ValueExpr) => evaluate(expr, rangeOf) ?? 0;
 
   const perSeries = options.series.map(s => {
     const values = grid.map((_, i) => {
@@ -168,10 +169,10 @@ export function shapeTimeseries({
       return v === undefined ? undefined : s.round ? Math.round(v) : v;
     });
     const sum = values.reduce<number>((a, v) => a + (v ?? 0), 0);
-    return { s, values, legend: s.legendValue ? overRange(s.legendValue) : undefined, sum };
+    return { s, values, rangeTotal: s.rangeTotal ? overRange(s.rangeTotal) : undefined, sum };
   });
 
-  const shown = perSeries.filter(p => !options.hideEmpty || (p.legend ?? p.sum) > 0);
+  const shown = perSeries.filter(p => !options.hideEmpty || (p.rangeTotal ?? p.sum) > 0);
   const data: ChartBucket[] = grid.map((labels, i) => {
     const bucket: ChartBucket = { ...labels };
     for (const p of shown) {
@@ -181,13 +182,13 @@ export function shapeTimeseries({
     return bucket;
   });
 
-  let summary: number | undefined;
-  const spec = options.summary?.value;
-  if (spec === 'total') summary = shown.reduce((a, p) => a + p.sum, 0);
+  let total: number | undefined;
+  const spec = options.total?.value;
+  if (spec === 'total') total = shown.reduce((a, p) => a + p.sum, 0);
   else if (spec && 'peak' in spec) {
     const peak = perSeries.find(p => p.s.dataKey === spec.peak);
-    summary = Math.max(0, ...(peak?.values ?? []).map(v => v ?? 0));
-  } else if (spec) summary = overRange(spec);
+    total = Math.max(0, ...(peak?.values ?? []).map(v => v ?? 0));
+  } else if (spec) total = overRange(spec);
 
   const flat = shown.every(p => p.values.every(v => !v));
   return {
@@ -195,10 +196,10 @@ export function shapeTimeseries({
     series: shown.map((p, i) => ({
       ...p.s,
       emphasis: options.emphasizeFirst ? i === 0 : p.s.emphasis,
-      legend: p.legend,
+      rangeTotal: p.rangeTotal,
     })),
     stepHours,
-    summary,
+    total,
     flat,
     empty: options.emptyWhenZero ? overRange(options.emptyWhenZero) === 0 : flat,
   };
@@ -213,9 +214,9 @@ const ADDITIVE = new Set<string>(['sum', 'count']);
  * of a grouped aggregation that can't be added up.
  */
 export function timeseriesIssues(options: TimeseriesOptions, queries: readonly DashboardQuery[]): string[] {
-  const exprs = options.series.flatMap(s => (s.legendValue ? [s.value, s.legendValue] : [s.value]));
-  const summary = options.summary?.value;
-  if (summary && summary !== 'total' && !('peak' in summary)) exprs.push(summary);
+  const exprs = options.series.flatMap(s => (s.rangeTotal ? [s.value, s.rangeTotal] : [s.value]));
+  const total = options.total?.value;
+  if (total && total !== 'total' && !('peak' in total)) exprs.push(total);
   if (options.emptyWhenZero) exprs.push(options.emptyWhenZero);
   const refs = exprs.flatMap(exprRefs);
   const totals = new Set(options.totals ?? []);

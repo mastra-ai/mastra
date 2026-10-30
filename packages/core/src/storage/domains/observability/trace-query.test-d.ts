@@ -5,6 +5,7 @@ import type {
   TrustedTraceQueryGroupsPlan,
   TrustedTraceQueryKeysetTracesPlan,
   TrustedTraceQueryPaginatedTracesPlan,
+  TraceQueryTrace,
 } from './trace-query';
 import type { encodeTraceQueryDeltaCursor } from './trace-query-plan';
 
@@ -14,4 +15,10 @@ test('delta cursors accept only numbered-page and delta trace plans', () => {
   expectTypeOf<TrustedTraceQueryKeysetTracesPlan>().not.toExtend<CursorPlan>();
   expectTypeOf<TrustedTraceQueryGroupsPlan>().not.toExtend<CursorPlan>();
   expectTypeOf<TrustedThreadQueryPlan>().not.toExtend<CursorPlan>();
+});
+
+test('trace rows expose the root span outcome fields as optional and nullable', () => {
+  expectTypeOf<TraceQueryTrace['outcome']>().toEqualTypeOf<string | null | undefined>();
+  expectTypeOf<TraceQueryTrace['stopReason']>().toEqualTypeOf<string | null | undefined>();
+  expectTypeOf<TraceQueryTrace['stopReasonContext']>().toEqualTypeOf<Record<string, unknown> | null | undefined>();
 });

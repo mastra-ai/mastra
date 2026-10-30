@@ -30,8 +30,40 @@ export const spanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     threadQuery: true,
     spanQuery: true,
     spanQueryContextFields: true,
+    traceQueryTimeToFirstChunk: true,
+    traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     feedback: true,
   },
+};
+
+/** A store that runs span queries but records neither time to first chunk nor time to first token. */
+export const noStreamingTimingsSpanCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: {
+    ...spanQueryCapabilities.capabilities,
+    traceQueryTimeToFirstChunk: false,
+    traceQueryTimeToFirstChunkSort: false,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
+  },
+};
+
+/** A store that records both timings on spans but cannot order a span query by them. */
+export const noStreamingTimingsSortSpanCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: {
+    ...spanQueryCapabilities.capabilities,
+    traceQueryTimeToFirstChunkSort: false,
+    traceQueryTimeToFirstTokenSort: false,
+  },
+};
+
+/** A store that records span outcomes and stop reasons and filters span queries on them. */
+export const spanOutcomeCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanQueryOutcomeFields: true },
 };
 
 export const spanQueryCoreOnlyCapabilities: GetObservabilityCapabilitiesResponse = {
@@ -159,6 +191,8 @@ export const spanRowsPage: QuerySpansResult = {
       name: 'agent run: weather',
       model: 'gpt-5.6',
       provider: 'openai',
+      timeToFirstChunkMs: 412,
+      timeToFirstTokenMs: 538,
     }),
     makeSpan({
       traceId: 'trace-1',
@@ -169,6 +203,21 @@ export const spanRowsPage: QuerySpansResult = {
       entityType: 'tool',
       entityId: 'get-weather',
       entityName: 'Get Weather Tool',
+    }),
+  ],
+  page: { next: null },
+};
+
+/** An agent run stopped by its step limit. */
+export const limitedSpanPage: QuerySpansResult = {
+  spans: [
+    makeSpan({
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      name: 'agent run: weather',
+      outcome: 'limit',
+      stopReason: 'max_steps',
+      stopReasonContext: { maxSteps: 5 },
     }),
   ],
   page: { next: null },

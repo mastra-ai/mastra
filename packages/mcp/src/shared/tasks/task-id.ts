@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   DEFAULT_TASK_INITIAL_POLL_INTERVAL_MS,
   DEFAULT_TASK_INITIAL_POLL_WINDOW_MS,
@@ -13,6 +13,17 @@ import {
  */
 export function createTaskId(): string {
   return randomBytes(24).toString('base64url');
+}
+
+/**
+ * A stable key for a task that is safe to store and show: the SHA-256 of the task id, base64url.
+ * Client and server compute the same key, so traces on both sides can be matched without
+ * recording the task id itself.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export function taskKeyOf(taskId: string): string {
+  return createHash('sha256').update(taskId).digest('base64url');
 }
 
 /**

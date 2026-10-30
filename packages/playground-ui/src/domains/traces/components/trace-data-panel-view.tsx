@@ -22,6 +22,7 @@ import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceSpanTimeline } from './trace-span-timeline';
+import type { TraceStreamingTimings } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
 import { TraceEntityMeta, TraceStatusMeta, TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
@@ -78,6 +79,11 @@ export interface TraceDataPanelViewProps {
   entityHref?: string;
   /** Token and estimated-cost totals shown in the compact trace summary. */
   usage?: TraceUsageSummary;
+  /**
+   * Time to first chunk and first token of the trace root, marked on the timeline. Left off when
+   * `anchorSpanId` shows a branch, whose spans don't count from the root.
+   */
+  rootStreamingTimings?: Omit<TraceStreamingTimings, 'startedAt'>;
   /**
    * Span treated as the displayed root of the timeline. Required for branch
    * subtrees from `getBranch` where the anchor has a real parent that's outside
@@ -159,6 +165,7 @@ export function TraceDataPanelView({
   traceHref,
   entityHref,
   usage,
+  rootStreamingTimings,
   anchorSpanId,
   entityType,
   showUnavailableFeaturesMsg = true,
@@ -557,6 +564,10 @@ export function TraceDataPanelView({
                   revealSpanId: featuredSpanIds?.at(-1),
                   isLoading,
                 };
+                const streamingTimings =
+                  rootStreamingTimings && rootSpan && !anchorSpanId
+                    ? { ...rootStreamingTimings, startedAt: rootSpan.startedAt }
+                    : undefined;
 
                 return (
                   <>
@@ -594,7 +605,11 @@ export function TraceDataPanelView({
                       {/* Both views share selection + expansion state, and stay mounted with no
                     results because they host the search field: unmounting would strand the
                     user with a query they can no longer clear. */}
-                      {isTimeline ? <TraceSpanTimeline {...viewProps} /> : <TraceSpanTree {...viewProps} />}
+                      {isTimeline ? (
+                        <TraceSpanTimeline {...viewProps} streamingTimings={streamingTimings} />
+                      ) : (
+                        <TraceSpanTree {...viewProps} />
+                      )}
                       {noSearchResults}
                     </DataPanel.Content>
                   </>

@@ -37,10 +37,16 @@ export type TracesConfigContextValue = {
   /** The thread rows API is on, so the host can offer a threads view next to the traces list. */
   withThreadQuery: boolean;
   withRootDuration: boolean;
+  /** The server filters trace queries on the root span's `outcome` and `stopReason`. */
+  withOutcomeFields: boolean;
   /** Trace rows carry the root span's time to first chunk, so the TTFC column can be shown. */
   withTimeToFirstChunk: boolean;
   /** Trace queries can be ordered by the root span's time to first chunk. */
   withTimeToFirstChunkSort: boolean;
+  /** Trace rows carry the root span's time to first token, so the TTFT column can be shown. */
+  withTimeToFirstToken: boolean;
+  /** Trace queries can be ordered by the root span's time to first token. */
+  withTimeToFirstTokenSort: boolean;
   /** The server supports delta polling, so auto-refresh merges new traces instead of reloading pages. */
   withDeltaPolling: boolean;
   /** Whether field discovery should run: the server supports it and the trace query API is on. */
@@ -57,6 +63,10 @@ export type TracesFiltersActions = {
   setDatePreset: (preset: TraceDatePreset) => void;
   setDate: (value: Date | undefined, end: 'from' | 'to') => void;
   setDateRange: (from: Date | undefined, to: Date | undefined) => void;
+  /** Narrows the range to a histogram selection, remembering the range to return to on reset. */
+  zoomDateRange: (from: Date, to: Date) => void;
+  /** Undoes the last histogram zoom, or switches to `defaultPreset` when there is none to undo. */
+  resetDateRange: (defaultPreset: TraceDatePreset) => void;
 };
 
 export type TracesFiltersContextValue = TracesFiltersActions & {
@@ -134,7 +144,7 @@ export const CHECKING_USAGE_REASON = 'Checking whether this storage supports usa
 export const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
 
 export type TraceUsageColumns = {
-  /** Column preferences without the columns the store can't serve (usage, time to first chunk). */
+  /** Column preferences without the columns the store can't serve (usage, time to first chunk/token). */
   displayedPreferences: TraceColumnPreferences;
   /** Whether usage should be fetched: metrics are supported and a usage column is visible. */
   usageEnabled: boolean;
@@ -143,17 +153,19 @@ export type TraceUsageColumns = {
 
 export const useTraceUsageColumns = (): TraceUsageColumns => {
   const { preferences } = useTracesColumns();
-  const { metricsSupport, withTimeToFirstChunk, isCapabilitiesLoading } = useTracesConfig();
+  const { metricsSupport, withTimeToFirstChunk, withTimeToFirstToken, isCapabilitiesLoading } = useTracesConfig();
   const unavailable = !metricsSupport.isLoading && !metricsSupport.supported;
   const timeToFirstChunkUnavailable = !isCapabilitiesLoading && !withTimeToFirstChunk;
+  const timeToFirstTokenUnavailable = !isCapabilitiesLoading && !withTimeToFirstToken;
   const displayedPreferences =
-    unavailable || timeToFirstChunkUnavailable
+    unavailable || timeToFirstChunkUnavailable || timeToFirstTokenUnavailable
       ? {
           ...preferences,
           visibleColumns: preferences.visibleColumns.filter(
             column =>
               !(unavailable && isTraceUsageColumn(column)) &&
-              !(timeToFirstChunkUnavailable && column === 'timeToFirstChunk'),
+              !(timeToFirstChunkUnavailable && column === 'timeToFirstChunk') &&
+              !(timeToFirstTokenUnavailable && column === 'timeToFirstToken'),
           ),
         }
       : preferences;

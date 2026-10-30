@@ -4,6 +4,7 @@ import { EntityType } from '@mastra/core/observability';
 import { describe, expect, it } from 'vitest';
 import { kpisIssues } from '../kinds/kpis/options';
 import type { KpisOptions } from '../kinds/kpis/options';
+import { scoresIssues } from '../kinds/scores/options';
 import type { ResolvedView } from '../widget-kind';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
@@ -461,9 +462,28 @@ describe('table rows', () => {
     const zero = spans([
       { dimensions: { projectId: 'p2', entityName: 'Idle' }, measures: { 'countDistinct.traceId': 0 } },
     ]);
-    expect(countRows(options, count, figures, undefined)).toBe('loading');
-    expect(countRows(options, count, figures, aggregate)).toBe(1);
-    expect(countRows(options, count, figures, zero)).toBe(0);
+    expect(countRows(options, count, [figures], [undefined])).toBe('loading');
+    expect(countRows(options, count, [figures], [aggregate])).toBe(1);
+    expect(countRows(options, count, [figures], [zero])).toBe(0);
+  });
+
+  it('counts a column that reads several queries only once every one answers', () => {
+    const ratio: ValueColumn = {
+      id: 'tokensPerTrace',
+      label: 'Tokens per trace',
+      options: {
+        type: 'value',
+        value: {
+          ratio: {
+            of: { query: 'usage', field: 'value' },
+            over: { query: 'figures', measure: 'countDistinct.traceId' },
+          },
+        },
+        format: 'count',
+      },
+    };
+    expect(countRows(options, ratio, queries, [aggregate, undefined])).toBe('loading');
+    expect(countRows(options, ratio, queries, [aggregate, usage])).toBe(1);
   });
 
   it('compares totals as New and percents in points', () => {
@@ -696,5 +716,28 @@ describe('kpisIssues', () => {
     const scores: DashboardQuery = { id: 'runs', source: 'scores', request: 'aggregate', aggregation: 'avg' };
     expect(kpisIssues(kpi([scores]))).toEqual(["KPI 'Runs' reads scores query 'runs', which must name a scorer"]);
     expect(kpisIssues(kpi([{ ...scores, scorerId: 'relevance' }]))).toEqual([]);
+  });
+});
+
+describe('scoresIssues', () => {
+  const scores = (averageScorer?: string, seriesScorer?: string) =>
+    scoresIssues({
+      queries: [
+        { id: 'average', source: 'scores', request: 'aggregate', aggregation: 'avg', scorerId: averageScorer },
+        { id: 'series', source: 'scores', request: 'timeSeries', aggregation: 'avg', scorerId: seriesScorer },
+      ],
+      options: { average: 'average', series: 'series' },
+    });
+
+  it('takes queries naming the same scorer, or leaving one or both out', () => {
+    expect(scores('relevance', 'relevance')).toEqual([]);
+    expect(scores('relevance', undefined)).toEqual([]);
+    expect(scores(undefined, undefined)).toEqual([]);
+  });
+
+  it('reports an average and a series naming different scorers', () => {
+    expect(scores('relevance', 'toxicity')).toEqual([
+      "options.average names scorer 'relevance' but options.series names 'toxicity'; they must match",
+    ]);
   });
 });

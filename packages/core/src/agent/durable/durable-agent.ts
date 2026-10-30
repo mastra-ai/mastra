@@ -56,7 +56,7 @@ import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } fro
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
-import { publishAbortRequest } from './abort-transport';
+import { publishAbortRequest, requestAcknowledgedAbort } from './abort-transport';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -2849,6 +2849,35 @@ export class DurableAgent<
     return aborted || this.#isRunExecuting(runId);
   }
 
+  /**
+   * Abort `runId` and resolve whether the abort was confirmed.
+   *
+   * Only a close this process performs itself counts as local confirmation. A
+   * run-registry entry does not: an evented run keeps one here while another
+   * process executes its steps, possibly a dead one. Every other run gets a
+   * single correlated request, and only the executor's answer confirms it.
+   * The local controller is flipped after that answer, so an executor in this
+   * process cannot unwind and drop its listener before the request reaches it.
+   *
+   * @internal Used by the server's run abort route.
+   */
+  async __abortRunAcknowledged(runId: string): Promise<boolean> {
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+    if (super.abortRunStream(runId)) {
+      this.#abortDurableRun(runId);
+      return true;
+    }
+    try {
+      return await requestAcknowledgedAbort(this.pubsub, runId);
+    } finally {
+      this.#abortLocalController(runId);
+    }
+  }
+
   /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
   #isRunExecuting(runId: string): boolean {
     return (
@@ -2894,13 +2923,18 @@ export class DurableAgent<
    * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
+    this.#abortLocalController(runId);
+    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
+    // abort synchronously and a failed publish is logged, not thrown.
+    void this.requestRemoteAbort(runId);
+  }
+
+  /** Flip the controller this process holds for `runId`, if it holds one. */
+  #abortLocalController(runId: string): void {
     const controller = (this.#runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
-    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
-    // abort synchronously and a failed publish is logged, not thrown.
-    void this.requestRemoteAbort(runId);
   }
 
   /**

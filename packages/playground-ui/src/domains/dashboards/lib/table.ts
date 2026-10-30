@@ -414,16 +414,19 @@ export function tableContent(
   };
 }
 
-/** Groups whose value in `column` is above zero, once `query`'s request answers. */
+/**
+ * Groups whose value in `column` is above zero, once the requests of every query it reads answer.
+ * `answers` holds one answer per query, in order.
+ */
 export function countRows(
   options: TableOptions,
   column: ValueColumn,
-  query: DashboardQuery,
-  answer: DashboardAnswer | undefined,
+  queries: readonly DashboardQuery[],
+  answers: readonly (DashboardAnswer | undefined)[],
 ): OpenerRows {
-  if (!answer || query.id === undefined) return 'loading';
-  const answers = new Map([[query.id, answer]]);
-  return buildTableRows(options, [column], [query], answers).filter(r => (r.values[column.id] ?? 0) > 0).length;
+  if (answers.length < queries.length || answers.some(a => a === undefined)) return 'loading';
+  const rows = buildTableRows(options, [column], queries, answersById(queries, answers));
+  return rows.filter(r => (r.values[column.id] ?? 0) > 0).length;
 }
 
 export type Change = {

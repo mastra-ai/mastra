@@ -157,6 +157,12 @@ console.log('Braintrust row and span ID:', result.spanId)
 
 The same applies to `agent.generate()` and workflow run results (`run.start()`, `run.stream()` final state, `run.resume()`).
 
+## Cost tracking
+
+When the model provider reports the cost of a request, as OpenRouter and Vercel AI Gateway do, the exporter sends that cost to Braintrust. Braintrust then shows the amount the provider charged instead of an estimate from its own model prices. Generations without a reported cost keep Braintrust's estimate.
+
+See the [`BraintrustExporter` reference](/reference/observability/tracing/exporters/braintrust#cost-tracking) for the exact rules.
+
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)

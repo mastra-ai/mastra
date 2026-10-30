@@ -1366,6 +1366,13 @@ export interface DurableAgentLike {
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
   /**
+   * Abort `runId` and resolve whether the abort was confirmed: by a local close
+   * in this process, or by the process executing the run answering over
+   * `pubsub`. Used by the server's run abort route.
+   * @internal
+   */
+  __abortRunAcknowledged?(runId: string): Promise<boolean>;
+  /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.
    */

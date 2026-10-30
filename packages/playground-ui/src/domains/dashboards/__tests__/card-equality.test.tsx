@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { AggregateTracesResponse, DashboardWidget } from '@mastra/client-js';
-import { act, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,9 +37,7 @@ import {
 import { AgentRunsCard } from '../../metrics/components/agent-runs-card';
 import { BreakdownCard } from '../../metrics/components/breakdown-card';
 import { DistinctIdsCard } from '../../metrics/components/distinct-ids-card';
-import { FailureRateCard } from '../../metrics/components/failure-rate-card';
 import { LatencyCard } from '../../metrics/components/latency-card';
-import { MetricsKpis } from '../../metrics/components/metrics-kpis';
 import { ScoresCard } from '../../metrics/components/scores-card';
 import { TokenUsageCard } from '../../metrics/components/token-usage-card';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
@@ -49,7 +47,6 @@ import {
   agentRunsWidget,
   breakdownWidget,
   distinctIdsWidget,
-  failureRateWidget,
   kpisWidget,
   latencyWidget,
   scoresWidget,
@@ -231,16 +228,43 @@ function expectSame(card: Rendered, widget: Rendered) {
   expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
 }
 
-/** Opens a tab in both, then compares the requests that tab sent and the markup it shows. */
-async function expectSameTab(card: Rendered, widget: Rendered, tab: string) {
+/** Picks a view from the card's title menu. The menu portals out, but only one is open at a time. */
+function pickIn(root: HTMLElement, view: string) {
+  const trigger = within(root)
+    .getAllByRole('button')
+    .find(b => b.getAttribute('aria-haspopup') === 'menu');
+  if (!trigger) throw new Error('No title menu');
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole('menuitemradio', { name: view }));
+}
+
+/** Opens a view in both, then compares the requests that view sent and the markup it shows. */
+async function expectSameView(card: Rendered, widget: Rendered, view: string) {
   for (const side of [card, widget]) {
     const recorder = recordRequests();
-    fireEvent.click(within(side.root).getByRole('tab', { name: tab }));
+    pickIn(side.root, view);
     await settle(recorder);
     recorder.stop();
     side.sent = recorder.sent;
   }
   expectSame(card, widget);
+}
+
+/**
+ * As `expectSameView`, for a view reading the requests the open one already answered: the card
+ * mounts the view's own chart, which refetches them; the widget keeps them and sends none.
+ */
+async function expectSameViewFromCache(card: Rendered, widget: Rendered, view: string) {
+  for (const side of [card, widget]) {
+    const recorder = recordRequests();
+    pickIn(side.root, view);
+    await settle(recorder);
+    recorder.stop();
+    side.sent = recorder.sent;
+  }
+  expect(card.sent.length).toBeGreaterThan(0);
+  expect(widget.sent).toEqual([]);
+  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
 }
 
 const noop = () => {};
@@ -335,9 +359,9 @@ async function clickBoth(card: Rendered, widget: Rendered, role: 'button', name:
   expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
 }
 
-const BREAKDOWN_TABS = {
-  project: ['Workflows', 'Tools', 'Models', 'Threads', 'Environments', 'Agents'],
-  org: ['Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments', 'Projects'],
+const BREAKDOWN_VIEWS = {
+  project: ['workflow', 'tool', 'model', 'thread', 'environment', 'agent'],
+  org: ['agent', 'workflow', 'tool', 'model', 'thread', 'environment', 'project'],
 };
 
 beforeEach(() => {
@@ -355,36 +379,25 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
   });
 
   describe('KPIs', () => {
-    const both = async () => ({
-      card: await renderCard(<MetricsKpis />, scope),
-      widget: await renderWidget(kpisWidget, scope),
-    });
-
-    it('matches the card', async () => {
-      const { card, widget } = await both();
-      expectSame(card, widget);
-    });
-
     it('shows the run count', async () => {
       const widget = await renderWidget(kpisWidget, scope);
       expect(within(widget.root).getByText('693')).toBeDefined();
     });
   });
 
-  // Token usage, Agent runs and Failure rate share one set of requests (`useMetricsActivity`), so a
-  // card alone sends all four; compare them as the page shows them, together.
-  describe('Token usage, Agent runs and Failure rate', () => {
-    const ACTIVITY = ['token-usage', 'agent-runs', 'failure-rate'];
+  // Token usage and Agent runs (with its Failure rate view) share one set of requests
+  // (`useMetricsActivity`), so a card alone sends all four; compare them as the page shows them, together.
+  describe('Token usage and Agent runs', () => {
+    const ACTIVITY = ['token-usage', 'agent-runs'];
     const cardsPage = () =>
       renderCards(
         {
           'token-usage': <TokenUsageCard onViewTraces={noop} onTimeRangeClick={noop} />,
-          'agent-runs': <AgentRunsCard onTimeRangeClick={noop} />,
-          'failure-rate': <FailureRateCard onViewErrors={noop} onTimeRangeClick={noop} />,
+          'agent-runs': <AgentRunsCard onViewErrors={noop} onTimeRangeClick={noop} onFailureTimeRangeClick={noop} />,
         },
         scope,
       );
-    const widgetsPage = () => renderWidgets([tokenUsageWidget, agentRunsWidget, failureRateWidget], scope);
+    const widgetsPage = () => renderWidgets([tokenUsageWidget, agentRunsWidget], scope);
 
     it('sends the cards’ four requests between them', async () => {
       const cards = await cardsPage();
@@ -399,21 +412,27 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       expectSame(rootOf(cards, id), rootOf(widgets, id));
     });
 
-    it('matches the Token usage card on the Cost tab', async () => {
+    it('matches the Token usage card on the Model cost view', async () => {
       const cards = await cardsPage();
       const widgets = await widgetsPage();
-      await expectSameTab(rootOf(cards, 'token-usage'), rootOf(widgets, 'token-usage'), 'Cost');
+      await expectSameView(rootOf(cards, 'token-usage'), rootOf(widgets, 'token-usage'), 'Model cost');
     });
 
-    it('totals tokens on the Tokens tab', async () => {
+    it('matches the Agent runs card on the Failure rate view', async () => {
+      const cards = await cardsPage();
+      const widgets = await widgetsPage();
+      await expectSameViewFromCache(rootOf(cards, 'agent-runs'), rootOf(widgets, 'agent-runs'), 'Failure rate');
+    });
+
+    it('totals tokens on the Token usage view', async () => {
       const widgets = await widgetsPage();
       expect(within(rootOf(widgets, 'token-usage').root).getByText('1.30K')).toBeDefined();
     });
 
-    it('totals spend on the Cost tab', async () => {
+    it('totals spend on the Model cost view', async () => {
       const widgets = await widgetsPage();
       const tokens = rootOf(widgets, 'token-usage');
-      fireEvent.click(within(tokens.root).getByRole('tab', { name: 'Cost' }));
+      pickIn(tokens.root, 'Model cost');
       expect(await within(tokens.root).findByText('$0.75')).toBeDefined();
     });
   });
@@ -429,9 +448,9 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       expectSame(card, widget);
     });
 
-    it.each(['Workflows', 'Tools'])('matches the card on the %s tab', async tab => {
+    it.each(['Workflow latency', 'Tool latency'])('matches the card on the %s view', async tab => {
       const { card, widget } = await both();
-      await expectSameTab(card, widget, tab);
+      await expectSameView(card, widget, tab);
     });
 
     it('labels the P95 line', async () => {
@@ -439,10 +458,10 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       expect(within(widget.root).getByText('P95')).toBeDefined();
     });
 
-    it('sends one request for a tab and says when it has no runs', async () => {
+    it('sends one request for a view and says when it has no runs', async () => {
       const widget = await renderWidget(latencyWidget, scope);
       const recorder = recordRequests();
-      fireEvent.click(within(widget.root).getByRole('tab', { name: 'Workflows' }));
+      pickIn(widget.root, 'Workflow latency');
       expect(await within(widget.root).findByText('No workflow runs in this range.')).toBeDefined();
       await settle(recorder);
       recorder.stop();
@@ -465,7 +484,7 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
 
     it('names the resources line', async () => {
       const widget = await renderWidget(distinctIdsWidget, scope);
-      expect(within(widget.root).getByText('Resources')).toBeDefined();
+      expect(within(widget.root).getAllByText('Resources').length).toBeGreaterThan(0);
     });
   });
 
@@ -478,36 +497,37 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       widget: await renderWidget(breakdownWidget, scope, onDrilldown),
     });
 
-    it('matches the card on the tab it opens on', async () => {
+    it('matches the card on the view it opens on', async () => {
       const { card, widget } = await both();
       expectSame(card, widget);
     });
 
     // Org-wide it opens on Projects, with two to compare; a project opens on Agents.
-    it(`opens on ${scope ? 'Projects' : 'Agents'}`, async () => {
+    it(`opens on ${scope ? 'projects' : 'agents'}`, async () => {
       const widget = await renderWidget(breakdownWidget, scope);
-      expect(within(widget.root).getByRole('tab', { selected: true }).textContent).toBe(scope ? 'Projects' : 'Agents');
+      const opened = `Breakdown by ${scope ? 'project' : 'agent'}`;
+      expect(within(widget.root).getByRole('button', { name: opened })).toBeDefined();
     });
 
-    it.each(BREAKDOWN_TABS[scope ? 'org' : 'project'])('matches the card on the %s tab', async tab => {
+    it.each(BREAKDOWN_VIEWS[scope ? 'org' : 'project'])('matches the card on the breakdown by %s', async by => {
       const { card, widget } = await both();
-      await expectSameTab(card, widget, tab);
+      await expectSameView(card, widget, `Breakdown by ${by}`);
     });
 
-    it.each(['Agents', 'Tools', 'Models', 'Threads', 'Environments', ...(scope ? ['Projects'] : [])])(
+    it.each(['agent', 'tool', 'model', 'thread', 'environment', ...(scope ? ['project'] : [])])(
       'drills into the clicked %s row as the card does',
-      async tab => {
+      async by => {
         const onRowClick = vi.fn();
         const onDrilldown = vi.fn();
         const { card, widget } = await both(onRowClick, onDrilldown);
         for (const side of [card, widget]) {
           const recorder = recordRequests();
-          fireEvent.click(within(side.root).getByRole('tab', { name: tab }));
+          pickIn(side.root, `Breakdown by ${by}`);
           await settle(recorder);
           recorder.stop();
           // The first row under the header.
           const first = within(side.root).getAllByRole('row')[1];
-          if (!first) throw new Error(`No rows on ${tab}`);
+          if (!first) throw new Error(`No rows by ${by}`);
           fireEvent.click(first);
         }
         expect(onRowClick).toHaveBeenCalledTimes(1);
@@ -531,23 +551,23 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       beforeEach(() => {
         serveManyTools();
       });
-      const toolsTab = async () => {
+      const toolsView = async () => {
         const { card, widget } = await both();
-        await expectSameTab(card, widget, 'Tools');
+        await expectSameView(card, widget, 'Breakdown by tool');
         return { card, widget };
       };
 
       it('matches the card', async () => {
-        await toolsTab();
+        await toolsView();
       });
 
       it('says sorting covers only the busiest', async () => {
-        const { widget } = await toolsTab();
+        const { widget } = await toolsView();
         expect(within(widget.root).getByText('Showing the 500 busiest; sorting covers only these.')).toBeDefined();
       });
 
       it('pages the rows', async () => {
-        const { widget } = await toolsTab();
+        const { widget } = await toolsView();
         expect(within(widget.root).getAllByRole('row')).toHaveLength(14);
         expect(within(widget.root).getByRole('button', { name: 'Next' })).toBeDefined();
       });
@@ -555,20 +575,20 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       // Each header cycles first direction, the other, then back to the default; % Change follows
       // the column sorted last.
       it('sorts as the card does', async () => {
-        const { card, widget } = await toolsTab();
+        const { card, widget } = await toolsView();
         for (const header of ['Errors', 'Errors', 'Errors', '% Change', 'P95 latency', '% Change', 'Spans', 'Spans']) {
           await clickBoth(card, widget, 'button', header);
         }
       });
 
       it('pages as the card does', async () => {
-        const { card, widget } = await toolsTab();
+        const { card, widget } = await toolsView();
         await clickBoth(card, widget, 'button', 'Next');
         await clickBoth(card, widget, 'button', '% Change');
       });
 
       it('sorts by a column on the first click, the other way on the second', async () => {
-        const { widget } = await toolsTab();
+        const { widget } = await toolsView();
         const errors = within(widget.root).getByRole('button', { name: 'Errors' });
         fireEvent.click(errors);
         expect(errors.closest('[aria-sort]')?.getAttribute('aria-sort')).toBe('descending');
@@ -591,7 +611,7 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
   });
 });
 
-/** A tab's requests held until released, to compare what each shows while the tab loads. */
+/** A view's requests held until released, to compare what each shows while the view loads. */
 function holdPercentiles(metric: string) {
   let release = () => {};
   const held = new Promise<void>(resolve => (release = resolve));
@@ -606,11 +626,11 @@ function holdPercentiles(metric: string) {
   return release;
 }
 
-/** Clicks a tab in both and returns their markup once each has sent its requests, before answers. */
-async function switchWhileLoading(card: Rendered, widget: Rendered, tab: string) {
+/** Picks a view in both and returns once each has sent its requests, before answers. */
+async function switchWhileLoading(card: Rendered, widget: Rendered, view: string) {
   for (const side of [card, widget]) {
     const recorder = recordRequests();
-    fireEvent.click(within(side.root).getByRole('tab', { name: tab }));
+    pickIn(side.root, view);
     await waitFor(() => expect(recorder.sent.length).toBeGreaterThan(0));
     recorder.stop();
     side.sent = recorder.sent;
@@ -648,29 +668,36 @@ describe('Charts drawn at real size', () => {
     seedMetrics();
   });
 
-  describe('Token usage, Agent runs and Failure rate', () => {
+  describe('Token usage and Agent runs', () => {
     const pages = async () => ({
       cards: await renderCards(
         {
           'token-usage': <TokenUsageCard onViewTraces={noop} onTimeRangeClick={noop} />,
-          'agent-runs': <AgentRunsCard onTimeRangeClick={noop} />,
-          'failure-rate': <FailureRateCard onViewErrors={noop} onTimeRangeClick={noop} />,
+          'agent-runs': <AgentRunsCard onViewErrors={noop} onTimeRangeClick={noop} onFailureTimeRangeClick={noop} />,
         },
         undefined,
       ),
-      widgets: await renderWidgets([tokenUsageWidget, agentRunsWidget, failureRateWidget], undefined),
+      widgets: await renderWidgets([tokenUsageWidget, agentRunsWidget], undefined),
     });
 
-    it.each(['token-usage', 'agent-runs', 'failure-rate'])('draws %s as the card does', async id => {
+    it.each(['token-usage', 'agent-runs'])('draws %s as the card does', async id => {
       const { cards, widgets } = await pages();
       await expectSameDrawn(rootOf(cards, id), rootOf(widgets, id));
     });
 
-    it('draws the Token usage Cost tab as the card does', async () => {
+    it('draws the Token usage card’s Model cost view as the card does', async () => {
       const { cards, widgets } = await pages();
       const card = rootOf(cards, 'token-usage');
       const widget = rootOf(widgets, 'token-usage');
-      await expectSameTab(card, widget, 'Cost');
+      await expectSameView(card, widget, 'Model cost');
+      await expectSameDrawn(card, widget);
+    });
+
+    it('draws the Agent runs card’s Failure rate view as the card does', async () => {
+      const { cards, widgets } = await pages();
+      const card = rootOf(cards, 'agent-runs');
+      const widget = rootOf(widgets, 'agent-runs');
+      await expectSameViewFromCache(card, widget, 'Failure rate');
       await expectSameDrawn(card, widget);
     });
   });
@@ -704,7 +731,7 @@ describe('Charts drawn at real size', () => {
   });
 });
 
-describe('Latency switching tabs, drawn at real size', () => {
+describe('Latency switching views, drawn at real size', () => {
   useFixedChartSize(800, 300);
 
   beforeEach(() => {
@@ -716,33 +743,33 @@ describe('Latency switching tabs, drawn at real size', () => {
     widget: await renderWidget(latencyWidget, undefined),
   });
 
-  // Unlike the card, which keeps the last tab's chart dimmed: that chart reads as the next tab's.
-  it('shows a skeleton, not the last tab’s chart, while the next loads', async () => {
+  // Unlike the card, which keeps the last view's chart dimmed: that chart reads as the next view's.
+  it('shows a skeleton, not the last view’s chart, while the next loads', async () => {
     holdPercentiles('mastra_workflow_duration_ms');
     const { card, widget } = await both();
-    await switchWhileLoading(card, widget, 'Workflows');
+    await switchWhileLoading(card, widget, 'Workflow latency');
     expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
     expect(within(widget.root).getByRole('status', { name: 'Loading chart' })).toBeTruthy();
     expect(widget.root.querySelector('.recharts-surface')).toBeNull();
   });
 
-  it('shows the next tab once it loads, as the card does', async () => {
+  it('shows the next view once it loads, as the card does', async () => {
     const release = holdPercentiles('mastra_workflow_duration_ms');
     const { card, widget } = await both();
-    await switchWhileLoading(card, widget, 'Workflows');
+    await switchWhileLoading(card, widget, 'Workflow latency');
     release();
     await act(() => new Promise(resolve => setTimeout(resolve, 50)));
     expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
   });
 
-  it('refetches a tab opened again, as the card does', async () => {
+  it('refetches a view opened again, as the card does', async () => {
     const { card, widget } = await both();
-    // Workflows has no runs. The card's chart stays mounted from Agents and keeps that tab's
+    // Workflows have no runs. The card's chart stays mounted from Agents and keeps that view's
     // y-axis under the empty message; the widget's mounts fresh after its skeleton. Same message,
     // different leftover markup, so this step compares requests and what the reader sees.
     for (const side of [card, widget]) {
       const recorder = recordRequests();
-      fireEvent.click(within(side.root).getByRole('tab', { name: 'Workflows' }));
+      pickIn(side.root, 'Workflow latency');
       await settle(recorder);
       recorder.stop();
       side.sent = recorder.sent;
@@ -750,7 +777,7 @@ describe('Latency switching tabs, drawn at real size', () => {
     expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
     expect(within(widget.root).getByText('No workflow runs in this range.')).toBeTruthy();
     expect(within(card.root).getByText('No workflow runs in this range.')).toBeTruthy();
-    await expectSameTab(card, widget, 'Agents');
+    await expectSameView(card, widget, 'Agent latency');
     expect(widget.sent).toHaveLength(1);
   });
 });

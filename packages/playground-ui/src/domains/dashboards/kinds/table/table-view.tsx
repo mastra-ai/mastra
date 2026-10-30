@@ -47,7 +47,10 @@ export function TableView(props: TableTabProps & { page: DashboardPageContext })
   if (waited.some(r => r.isError)) {
     return (
       <TableFrame {...props}>
-        <ChartCardError onRetry={() => waited.forEach(r => r.isError && void r.refetch())} />
+        <ChartCardError
+          error={waited.find(r => r.isError)?.error}
+          onRetry={() => waited.forEach(r => r.isError && void r.refetch())}
+        />
       </TableFrame>
     );
   }

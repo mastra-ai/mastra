@@ -56,6 +56,7 @@ import {
   getRunRegistryEntry,
   deleteRunRegistryEntry,
   publishAbortRequest,
+  requestAcknowledgedAbort,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -667,6 +668,12 @@ export interface InngestAgent<TOutput = undefined> {
   /** Abort a run by id, including on the Inngest worker executing it. */
   abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
+   * Abort a run by id and resolve whether the abort was confirmed, locally or
+   * by the Inngest worker executing it. Used by the server's run abort route.
+   * @internal
+   */
+  __abortRunAcknowledged(runId: string): Promise<boolean>;
+  /**
    * Resume a suspended durable run and return its streaming output. Routes
    * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
    */
@@ -1194,11 +1201,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * worker. Mirrors the `abort()` handed out with a stream result.
    */
   function abortDurableRun(runId: string): void {
+    abortLocalController(runId);
+    void requestRemoteAbort(runId);
+  }
+
+  function abortLocalController(runId: string): void {
     const controller = getRunRegistryEntry(runId, mastra)?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
-    void requestRemoteAbort(runId);
   }
 
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
@@ -1229,6 +1240,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
     | 'abortRunStream'
+    | '__abortRunAcknowledged'
     | '__fork'
     | 'getDurableWorkflows'
     | 'durableLoopWorkflowName'
@@ -1433,8 +1445,21 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Save the accepted request before the run starts, as DurableAgent does,
           // so a run that times out or fails still keeps it (#28659).
           await persistDurableRunInput(runId, workflowInput, mastra);
+          // A caller abort reaches the run signal with the controller's own reason, so a
+          // timeout reason the controller does not share is this run's deadline.
+          const deadlineFired = () => {
+            const reason = registryEntry.abortSignal?.reason;
+            return isMastraTimeoutError(reason) && reason !== abortController.signal.reason;
+          };
+          // The deadline already reported the timeout and cleared the run's rows; don't start it.
+          if (deadlineFired()) return;
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
+          // The deadline can also fire while that row is being written; its cleanup may have run first.
+          if (deadlineFired()) {
+            if (persistedRunning) await deleteRunSnapshots(runId);
+            return;
+          }
           try {
             await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
           } catch (error) {
@@ -2455,6 +2480,25 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // on an Inngest worker this process cannot see.
       abortDurableRun(runId);
       return aborted || getRunRegistryEntry(runId, mastra) !== undefined;
+    },
+
+    // Mirrors DurableAgent.__abortRunAcknowledged: a registry entry is not
+    // confirmation, the run normally executes on an Inngest worker.
+    async __abortRunAcknowledged(runId) {
+      const wrapperClose = getRunStreamSlot(activeStreamUntilIdle, runId);
+      if (wrapperClose) {
+        wrapperClose();
+        return true;
+      }
+      if (agent.abortRunStream(runId)) {
+        abortDurableRun(runId);
+        return true;
+      }
+      try {
+        return await requestAcknowledgedAbort(getPubsub(), runId);
+      } finally {
+        abortLocalController(runId);
+      }
     },
 
     __fork() {
