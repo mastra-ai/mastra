@@ -42,18 +42,53 @@ export interface KnowledgeImporterRunSummary {
     recordsWritten?: number;
     skipped?: number;
   };
-  skipped?: { reason: string; count: number }[];
+  /** `label` is the plain-English reason, e.g. "Private Slack channels are never imported". */
+  skipped?: { reason: string; label?: string; count: number }[];
   error?: string | null;
+  /** Where the run's items land; present on dry runs. */
+  preview?: KnowledgeImporterRunPreview;
+}
+
+/**
+ * Where the sink placed an item: the shared org-wide area, or a container of its own.
+ * Placement only — importers don't read provider ACLs, so this is never an access claim.
+ */
+export type KnowledgeImporterPlacement = 'org-wide' | 'container';
+
+export interface KnowledgeImporterPreviewDestination {
+  /** The scope/container identity the items land in. */
+  scope: string;
+  /** Human name, e.g. "Linear · Engineering". */
+  label: string;
+  placement: KnowledgeImporterPlacement;
+  nodes: number;
+  records: number;
+  /** Up to five page titles. */
+  sampleTitles: string[];
+}
+
+export interface KnowledgeImporterRunPreview {
+  destinations: KnowledgeImporterPreviewDestination[];
+  /** Reserved. The preview lists every destination today, so this is always false. */
+  truncated: boolean;
 }
 
 export interface KnowledgeImporterSummary {
   importerId: string;
   label: string;
+  /** One plain sentence: what this importer brings in and where it lands. */
+  description?: string;
   settings: KnowledgeImporterSettings;
   optionsSchema: KnowledgeImporterOptionField[];
   /** What the scheduler will actually use; null when disabled. */
   effectiveSchedule: string | null;
-  connection: { status: KnowledgeImporterConnectionStatus; connectionId: string | null; message?: string };
+  connection: {
+    status: KnowledgeImporterConnectionStatus;
+    connectionId: string | null;
+    message?: string;
+    /** The linked account/workspace label, for display. */
+    accountName?: string;
+  };
   lastRun: KnowledgeImporterRunSummary | null;
 }
 

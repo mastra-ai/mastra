@@ -8,6 +8,7 @@ import type {
 export const buildNotionSummary = (overrides: Partial<KnowledgeImporterSummary> = {}): KnowledgeImporterSummary => ({
   importerId: 'notion',
   label: 'Notion',
+  description: 'Pages from each teamspace; each teamspace lands in its own container.',
   settings: {
     importerId: 'notion',
     enabled: true,
@@ -83,3 +84,33 @@ export const buildRun = (overrides: Partial<KnowledgeImporterRunSummary> = {}): 
   completedAt: null,
   ...overrides,
 });
+
+export const buildNotionPreview = (overrides: Partial<KnowledgeImporterRunSummary> = {}): KnowledgeImporterRunSummary =>
+  buildRun({
+    status: 'succeeded',
+    completedAt: '2026-10-29T13:00:05.000Z',
+    counts: { nodesCreated: 12, recordsWritten: 30, skipped: 3 },
+    skipped: [{ reason: 'notion-private-page', label: 'Private Notion pages are never imported', count: 3 }],
+    preview: {
+      destinations: [
+        {
+          scope: 'notion:org',
+          label: 'Notion · Wiki',
+          placement: 'org-wide',
+          nodes: 5,
+          records: 9,
+          sampleTitles: ['Onboarding'],
+        },
+        {
+          scope: 'notion:teamspace:engineering',
+          label: 'Engineering',
+          placement: 'container',
+          nodes: 7,
+          records: 21,
+          sampleTitles: ['Release checklist', 'On-call runbook'],
+        },
+      ],
+      truncated: false,
+    },
+    ...overrides,
+  });

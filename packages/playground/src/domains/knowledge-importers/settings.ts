@@ -52,8 +52,8 @@ export const isForbiddenError = (error: unknown) => {
   return code === 'forbidden' || status === 403;
 };
 
-export function describeAllowlist(values: readonly string[]): string {
-  if (values.length === 0) return 'Empty — imports nothing. Add at least one entry.';
+export function describeAllowlist(values: readonly string[], label: string): string {
+  if (values.length === 0) return `Imports nothing until you add ${label.toLowerCase()}.`;
   return values.length === 1 ? 'Imports only this one.' : `Imports only these ${values.length}.`;
 }
 
