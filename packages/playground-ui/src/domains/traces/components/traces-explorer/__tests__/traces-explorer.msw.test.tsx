@@ -23,6 +23,7 @@ import {
   emptyScores,
   emptyTraceQueryFields,
   emptyTracesPage,
+  firstChunkTracesPage,
   idleDeltaBatch,
   noDeltaPollingCapabilities,
   noRootDurationCapabilities,
@@ -411,6 +412,33 @@ describe('TracesExplorer', () => {
       const dialog = await openTrace();
 
       expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
+    });
+  });
+
+  describe('when a streamed trace is open on the timeline', () => {
+    const openTimeline = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer({
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather', spanView: 'timeline' },
+      });
+      await settle(queryClient);
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      await within(dialog).findByLabelText('View details for span weather-agent');
+      return dialog;
+    };
+
+    it('marks when the first chunk arrived and how long the model took to send it, from the listed row', async () => {
+      const dialog = await openTimeline(firstChunkTracesPage);
+
+      expect(within(dialog).getByTitle('Time to first chunk').textContent).toBe('TTFC 400 ms');
+      expect(within(dialog).getByTitle('Time to first token').textContent).toBe('TTFT 150 ms');
+    });
+
+    it('marks nothing when the trace is not in the list', async () => {
+      const dialog = await openTimeline({ traces: [twoTracesPage.traces[1]], page: { next: null } });
+
+      expect(within(dialog).queryByTitle('Time to first chunk')).toBeNull();
+      expect(within(dialog).queryByTitle('Time to first token')).toBeNull();
     });
   });
 

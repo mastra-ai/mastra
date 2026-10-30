@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSpanTimingLayout } from '../../utils/span-timing';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
+import type { TraceStreamingTimings } from '../trace-span-timeline';
 import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
 import { formatDuration } from '@/utils/duration';
 
@@ -30,11 +31,13 @@ function Harness({
   onSpanClick = () => {},
   revealSpanId,
   featuredSpanIds,
+  streamingTimings,
 }: {
   initialExpanded?: string[];
   onSpanClick?: (id: string) => void;
   revealSpanId?: string;
   featuredSpanIds?: string[];
+  streamingTimings?: TraceStreamingTimings;
 }) {
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>(initialExpanded);
   return (
@@ -45,6 +48,7 @@ function Harness({
       setExpandedSpanIds={setExpandedSpanIds}
       revealSpanId={revealSpanId}
       featuredSpanIds={featuredSpanIds}
+      streamingTimings={streamingTimings}
     />
   );
 }
@@ -147,5 +151,49 @@ describe('TraceSpanTimeline', () => {
     render(<Harness />);
     const axis = screen.getByLabelText('Trace time axis');
     expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.00 s');
+  });
+
+  describe('when the trace streamed', () => {
+    // The root runs for 1s, so each millisecond is a tenth of a percent of the axis.
+    const startedAt = '2026-06-01T10:00:00.000Z';
+    const firstChunkLines = () => screen.queryAllByTestId('time-to-first-chunk-line');
+    const firstTokenSpan = () => screen.queryByTestId('time-to-first-token-span');
+
+    it('marks the first chunk on every row, with the time to first token ending on it', () => {
+      render(
+        <Harness
+          initialExpanded={['root']}
+          streamingTimings={{ startedAt, timeToFirstChunkMs: 400, timeToFirstTokenMs: 150 }}
+        />,
+      );
+
+      expect(screen.getByTitle('Time to first chunk').textContent).toBe('TTFC 400 ms');
+      expect(screen.getByTitle('Time to first token').textContent).toBe('TTFT 150 ms');
+      expect(firstChunkLines().map(line => line.style.left)).toEqual(['40%', '40%', '40%']);
+      expect([firstTokenSpan()?.style.left, firstTokenSpan()?.style.width]).toEqual(['25%', '15%']);
+    });
+
+    it('marks only the first chunk when no time to first token was recorded', () => {
+      render(<Harness streamingTimings={{ startedAt, timeToFirstChunkMs: 400, timeToFirstTokenMs: null }} />);
+
+      expect(screen.getByTitle('Time to first chunk').textContent).toBe('TTFC 400 ms');
+      expect(screen.queryByTitle('Time to first token')).toBeNull();
+      expect(firstTokenSpan()).toBeNull();
+    });
+
+    it('marks nothing when the trace has no time to first chunk', () => {
+      render(<Harness streamingTimings={{ startedAt, timeToFirstChunkMs: null, timeToFirstTokenMs: null }} />);
+
+      expect(screen.queryByTitle('Time to first chunk')).toBeNull();
+      expect(firstChunkLines()).toHaveLength(0);
+      expect(firstTokenSpan()).toBeNull();
+    });
+  });
+
+  it('marks nothing without streaming timings', () => {
+    render(<Harness initialExpanded={['root']} />);
+
+    expect(screen.queryByTitle('Time to first chunk')).toBeNull();
+    expect(screen.queryAllByTestId('time-to-first-chunk-line')).toHaveLength(0);
   });
 });

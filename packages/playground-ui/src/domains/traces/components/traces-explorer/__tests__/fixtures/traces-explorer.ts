@@ -185,6 +185,12 @@ export const streamedTracesPage: TraceQueryKeysetTraceResponse = {
 
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
 
+/** The weather root's first chunk came 400ms in, from an inference that had started 150ms before it. */
+export const firstChunkTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [{ ...weatherTrace, timeToFirstChunkMs: 400, timeToFirstTokenMs: 150 }],
+  page: { next: null },
+};
+
 export const workflowTracesPage: TraceQueryKeysetTraceResponse = {
   traces: [{ ...weatherTrace, name: 'weather-workflow', entityId: 'weather-workflow', entityType: 'workflow_run' }],
   page: { next: null },
