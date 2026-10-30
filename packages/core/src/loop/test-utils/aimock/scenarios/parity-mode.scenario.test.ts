@@ -33,6 +33,7 @@ import {
   expectEngineParity,
   expectParity,
   lastUserText,
+  runOnEngine,
   staleKnownDifferences,
   textOnlyTape,
   toolCallTape,
@@ -772,6 +773,29 @@ describeParity('parity mode', target => {
       expect(turn.text).toBe('Done.');
       expect(turn.toolResults).toEqual([{ toolCallId: 'parity-call-1', toolName: 'gate', result: 'ran' }]);
       expect(results[engine]!.requests.length).toBe(2);
+    }
+  });
+
+  it('carries the suspended step provider metadata on the approval chunk', async () => {
+    const tape = toolCallTape('gate', {});
+    const finish = tape.find(part => part.type === 'finish');
+    if (finish?.type === 'finish') finish.providerMetadata = { gateway: { cost: '0.25' } };
+    const scenario = approvalScenario({
+      model: { tapes: [tape, textOnlyTape('Done.')] },
+      options: {
+        maxSteps: 3,
+        requireToolApproval: true,
+        memory: { thread: 'parity-approval-cost-thread', resource: 'parity-approval-cost-resource' },
+        resume: { approve: true },
+      },
+    });
+
+    for (const engine of ['plain', target] as const) {
+      const turn = (await runOnEngine(engine, scenario)).turns[0]!;
+      const payload = turn.chunkPayloads[turn.chunkTypes.indexOf('tool-call-approval')] as {
+        providerMetadata?: unknown;
+      };
+      expect(payload.providerMetadata).toEqual({ gateway: { cost: '0.25' } });
     }
   });
 });

@@ -103,6 +103,8 @@ const durableToolCallInputSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
+  // Provider metadata of the same step, reported the same way
+  stepProviderMetadata: z.any().optional(),
 });
 
 /**
@@ -1143,6 +1145,7 @@ export function createDurableToolCallStep() {
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
                 usage: typedInput.stepUsage,
+                ...(typedInput.stepProviderMetadata && { providerMetadata: typedInput.stepProviderMetadata }),
               },
             },
             {
@@ -1495,6 +1498,7 @@ export function createDurableToolCallStep() {
                     resumeSchema: approvalResumeSchema,
                     updatedAt: Date.now(),
                     usage: typedInput.stepUsage,
+                    ...(typedInput.stepProviderMetadata && { providerMetadata: typedInput.stepProviderMetadata }),
                   },
                 },
                 {
@@ -1565,6 +1569,7 @@ export function createDurableToolCallStep() {
                   args,
                   resumeSchema: suspendOptions?.resumeSchema,
                   usage: typedInput.stepUsage,
+                  ...(typedInput.stepProviderMetadata && { providerMetadata: typedInput.stepProviderMetadata }),
                 },
               },
               {

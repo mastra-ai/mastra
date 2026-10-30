@@ -838,6 +838,8 @@ interface ToolCallApprovalPayload {
   updatedAt?: number;
   /** Token usage of the model step that produced this tool call. */
   usage?: LanguageModelUsage;
+  /** Provider metadata of the model step that produced this tool call. */
+  providerMetadata?: ProviderMetadata;
 }
 
 interface ToolCallSuspendedPayload {
@@ -848,6 +850,8 @@ interface ToolCallSuspendedPayload {
   resumeSchema: string;
   /** Token usage of the model step that produced this tool call. */
   usage?: LanguageModelUsage;
+  /** Provider metadata of the model step that produced this tool call. */
+  providerMetadata?: ProviderMetadata;
 }
 
 interface ToolCallResumedPayload {
@@ -1228,6 +1232,12 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
    * MODEL_GENERATION span of a resumed leg records only its own share.
    */
   generationReportedUsage?: LanguageModelUsage;
+  /**
+   * @internal Provider metadata of each model step this leg of the run ran, so the
+   * MODEL_GENERATION span of a suspended or resumed leg records only its own provider cost.
+   * Absent when no earlier leg reported any step, so every step in `steps` belongs to this leg.
+   */
+  generationStepProviderMetadata?: (ProviderMetadata | undefined)[];
 };
 
 /**

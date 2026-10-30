@@ -669,6 +669,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * keep token metrics counted once. Serialized with the run state.
    */
   #generationReportedUsage: LanguageModelUsage | undefined = undefined;
+  /**
+   * How many `#bufferedSteps` entries the MODEL_GENERATION spans of earlier suspended legs
+   * already reported provider cost for. It counts the suspended step, which a resumed leg
+   * replays into `#bufferedSteps`. Serialized with the run state.
+   */
+  #generationReportedStepCount = 0;
   #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
@@ -1983,6 +1989,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
                   ...(self.#generationReportedUsage && { generationReportedUsage: self.#generationReportedUsage }),
+                  ...(self.#generationReportedStepCount > 0 && {
+                    generationStepProviderMetadata: self.#bufferedSteps
+                      .slice(self.#generationReportedStepCount)
+                      .map(step => step.providerMetadata),
+                  }),
                   toolCalls: self.#toolCalls,
                   toolResults: self.#toolResults,
                   staticToolCalls: self.#toolCalls.filter(toolCall => toolCall?.payload?.dynamic === false),
@@ -2777,6 +2788,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const totalUsage = this.#getTotalUsage(this.#getUsageCountWithSuspendedStep());
     const generationReportedUsage = this.#generationReportedUsage;
     this.#generationReportedUsage = totalUsage;
+    const generationStepProviderMetadata = this.#bufferedSteps
+      .slice(this.#generationReportedStepCount)
+      .map(step => step.providerMetadata);
+    // A resumed tool that suspends again in the same step already reported that step.
+    if (this.#generationReportedStepCount <= this.#bufferedSteps.length) {
+      generationStepProviderMetadata.push(chunk.payload.providerMetadata);
+    }
+    this.#generationReportedStepCount = this.#bufferedSteps.length + 1;
     return {
       finishReason: 'suspended',
       suspendReason: chunk.type,
@@ -2803,6 +2822,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       steps: [],
       totalUsage,
       ...(generationReportedUsage && { generationReportedUsage }),
+      generationStepProviderMetadata,
       object: undefined as OUTPUT,
     };
   }
@@ -2877,6 +2897,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #truncateRunBuffers() {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
+    this.#generationReportedStepCount = 0;
     this.#bufferedText.length = 0;
     this.#resumedPriorText = '';
     this.#bufferedTextAtStepStart = 0;
@@ -3000,6 +3021,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const generationReportedUsage = recordSuspension
       ? this.#getTotalUsage(this.#getUsageCountWithSuspendedStep(suspendedStepUsage))
       : this.#generationReportedUsage;
+    const generationReportedStepCount = recordSuspension
+      ? this.#bufferedSteps.length + 1
+      : this.#generationReportedStepCount;
     return {
       status: recordSuspension ? 'suspended' : this.#status,
       bufferedSteps: steps,
@@ -3029,6 +3053,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       lastStepUsage: this.#lastStepUsage,
       suspendedStepUsage,
       generationReportedUsage,
+      generationReportedStepCount,
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended || recordSuspension,
       messageList: this.messageList.serialize(),
@@ -3081,6 +3106,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#lastStepUsage = state.lastStepUsage ?? state.bufferedSteps?.at(-1)?.usage;
     this.#suspendedStepUsage = state.suspendedStepUsage;
     this.#generationReportedUsage = state.generationReportedUsage;
+    this.#generationReportedStepCount = state.generationReportedStepCount ?? 0;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
     // Buffered steps hold only the IDs of the response messages they had seen;

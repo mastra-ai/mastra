@@ -463,6 +463,8 @@ export interface DurableToolCallInput {
   stepSpanData?: unknown;
   /** Model usage of the step that produced this call, reported on its suspension chunk */
   stepUsage?: LanguageModelUsage;
+  /** Provider metadata of the step that produced this call, reported on its suspension chunk */
+  stepProviderMetadata?: SharedV2ProviderMetadata;
 }
 
 /**
