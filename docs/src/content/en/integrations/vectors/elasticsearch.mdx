@@ -1,14 +1,13 @@
 ---
-title: "Reference: Elasticsearch vector store | Vectors"
-description: "The ElasticSearchVector class provides vector search using Elasticsearch with its densevector field type and k-NN search capabilities."
+title: "Elasticsearch | Vector Stores"
+description: "Run k-NN similarity search on Elasticsearch dense_vector fields from Mastra with metadata filtering and index management."
 packages:
   - "@mastra/elasticsearch"
 ---
 
 # Elasticsearch vector store
 
-The `ElasticSearchVector` class provides vector search using [Elasticsearch](https://www.elastic.co/elasticsearch/) with its `dense_vector` field type and k-NN search capabilities.
-It's part of the `@mastra/elasticsearch` package.
+The `ElasticSearchVector` class provides vector search using [Elasticsearch](https://www.elastic.co/elasticsearch/) with its `dense_vector` field type and k-NN search capabilities. It's part of the `@mastra/elasticsearch` package.
 
 ## Installation
 
@@ -65,7 +64,22 @@ const results = await store.query({
   {
     name: 'url',
     type: 'string',
-    description: "Elasticsearch connection URL (e.g., 'http://localhost:9200')",
+    isOptional: true,
+    description: "Elasticsearch connection URL (e.g., 'http://localhost:9200'). Provide either `url` or `client`.",
+  },
+  {
+    name: 'client',
+    type: 'ElasticSearchClient',
+    isOptional: true,
+    description:
+      'A pre-configured Elasticsearch client. Use it instead of `url` to control connection settings yourself.',
+  },
+  {
+    name: 'auth',
+    type: 'ElasticSearchAuth',
+    isOptional: true,
+    description:
+      'Authentication for the `url` form: `{ apiKey }`, `{ username, password }`, or `{ bearer }`. Not used with `client`.',
   },
 ]}
 />
@@ -315,4 +329,4 @@ interface QueryResult {
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)

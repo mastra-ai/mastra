@@ -1,6 +1,6 @@
 ---
-title: "Reference: Lance vector store | Vectors"
-description: "The LanceVectorStore class provides vector search using LanceDB, an embedded vector database built on the Lance columnar format."
+title: "Lance | Vector Stores"
+description: "Store embeddings in LanceDB through Mastra's LanceVectorStore with embedded similarity search for local, S3, and managed cloud deployments."
 packages:
   - "@mastra/lance"
 ---
@@ -22,8 +22,9 @@ The LanceVectorStore uses a factory pattern for creation. You should use the sta
   },
   {
     name: 'options',
-    type: 'ConnectionOptions',
-    description: 'Additional connection options for LanceDB',
+    type: 'ConnectionOptions & { id?: string }',
+    description:
+      'Additional connection options for LanceDB. Pass `id` to name the store; otherwise a random UUID is used.',
     isOptional: true,
   },
 ]}
@@ -549,4 +550,4 @@ try {
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)

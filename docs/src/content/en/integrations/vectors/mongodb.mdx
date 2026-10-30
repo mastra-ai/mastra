@@ -1,10 +1,7 @@
 ---
-title: "Reference: MongoDB vector store | Vectors"
-description: "The MongoDBVector class provides vector search using MongoDB Vector Search. It enables efficient similarity search and metadata filtering within your MongoDB collections."
+title: "MongoDB | Vector Stores"
+description: "Run MongoDB Vector Search from Mastra with automatic or manual embedding, metadata filtering, hybrid search, and indexing of existing collections."
 packages:
-  - "@mastra/core"
-  - "@mastra/fastembed"
-  - "@mastra/memory"
   - "@mastra/mongodb"
   - "@mastra/voyageai"
 ---
@@ -78,6 +75,13 @@ const store = new MongoDBVector({
     defaultValue: 'embedding',
     description:
       "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
+  },
+  {
+    name: 'autoEmbed',
+    type: 'MongoDBAutoEmbedConfig',
+    isOptional: true,
+    description:
+      "Automated Embedding defaults for indexes this store creates, such as `{ model: 'voyage-4' }`. An index created without its own `autoEmbed` or `dimension` uses these settings, which makes the store embed text server-side instead of receiving vectors.",
   },
 ]}
 />
@@ -1012,5 +1016,5 @@ For detailed VoyageAI embedding examples including specialized models, multimoda
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)
 - [VoyageAI Embeddings Documentation](/models/embeddings#voyageai)

@@ -1,6 +1,6 @@
 ---
-title: "Reference: Convex vector store | Vectors"
-description: "The ConvexVector class provides vector storage and similarity search using Convex. It stores embeddings inside Convex and performs cosine similarity search in the Mastra adapter."
+title: "Convex | Vector Stores"
+description: "Store embeddings in Convex and query them from Mastra with cosine similarity and metadata filtering, for development-scale search."
 packages:
   - "@mastra/convex"
 ---
@@ -31,6 +31,11 @@ Before using `ConvexVector`, you need to set up the Convex schema and storage ha
 
 <PropertiesTable
   content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
   {
     name: 'deploymentUrl',
     type: 'string',
@@ -352,6 +357,24 @@ Deletes the index and all its vectors.
 await vectorStore.deleteIndex({ indexName: 'my_vectors' })
 ```
 
+### `truncateIndex()`
+
+Deletes every vector in an index while keeping the index itself. Rows are removed in batches so each mutation stays within Convex's per-mutation time limit. This method is available on `ConvexVector`; `ConvexNativeVector` uses Convex's own table operations instead.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to clear',
+  },
+]}
+/>
+
+```typescript
+await vectorStore.truncateIndex({ indexName: 'my_vectors' })
+```
+
 ### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
@@ -547,5 +570,5 @@ Use an external vector database when you need runtime-defined index creation at 
 ## Related
 
 - [Convex Storage](/integrations/databases/convex)
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)
 - [Convex Documentation](https://docs.convex.dev/)

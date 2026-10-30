@@ -1,6 +1,6 @@
 ---
-title: "Reference: Turbopuffer vector store | Vectors"
-description: "The TurbopufferVector class provides vector search using Turbopuffer, a high-performance vector database optimized for RAG applications."
+title: "Turbopuffer | Vector Stores"
+description: "Run fast similarity search against Turbopuffer from Mastra with schema-based configuration and advanced metadata filtering."
 packages:
   - "@mastra/turbopuffer"
 ---
@@ -13,6 +13,11 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 
 <PropertiesTable
   content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
   {
     name: 'apiKey',
     type: 'string',
@@ -339,4 +344,4 @@ try {
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)

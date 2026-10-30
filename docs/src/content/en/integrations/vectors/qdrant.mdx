@@ -1,6 +1,6 @@
 ---
-title: "Reference: Qdrant vector store | Vectors"
-description: "The QdrantVector class provides vector search using Qdrant, a vector similarity search engine."
+title: "Qdrant | Vector Stores"
+description: "Run vector similarity search in Qdrant from Mastra with payload-based metadata filtering and index management."
 packages:
   - "@mastra/qdrant"
 ---
@@ -15,6 +15,11 @@ It provides a production-ready service with a convenient API to store, search, a
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'url',
     type: 'string',
     description: 'REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333',
@@ -23,11 +28,13 @@ It provides a production-ready service with a convenient API to store, search, a
     name: 'apiKey',
     type: 'string',
     description: 'Optional Qdrant API key',
+    isOptional: true,
   },
   {
     name: 'https',
     type: 'boolean',
     description: 'Whether to use TLS when setting up the connection. Recommended.',
+    isOptional: true,
   },
 ]}
 />
@@ -416,4 +423,4 @@ try {
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)

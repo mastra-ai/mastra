@@ -1,10 +1,7 @@
 ---
-title: "Reference: Upstash vector store | Vectors"
-description: "Configure UpstashVector for serverless similarity and hybrid search, metadata filtering, index management, and vector operations with Upstash Vector."
+title: "Upstash | Vector Stores"
+description: "Run serverless vector and hybrid search from Mastra with Upstash Vector, including metadata filtering and automatic index creation."
 packages:
-  - "@mastra/core"
-  - "@mastra/fastembed"
-  - "@mastra/memory"
   - "@mastra/upstash"
 ---
 
@@ -248,6 +245,35 @@ The `update` object can have the following properties:
 
 Attempts to delete an item by its ID from the specified index. Logs an error message if the deletion fails.
 
+### `deleteVectors()`
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both, and neither can be empty.
+
+Filter deletion runs one approximate query with `topK: 1000` and deletes the returned IDs. `deleteVectors()` returns `Promise<void>` and does not report how many vectors it deleted, so repeating the call cannot guarantee complete deletion. Use [Upstash's filter-delete API](https://upstash.com/docs/vector/api/endpoints/delete) when complete filter deletion is required. Deleting by `ids` isn't subject to this query limit.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Namespace to delete from',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description:
+      'Metadata filter to identify vectors to delete (mutually exclusive with ids). Only the first 1,000 matches are deleted',
+  },
+]}
+/>
+
 ## Hybrid vector search
 
 Upstash Vector supports hybrid search that combines semantic search (dense vectors) with keyword-based search (sparse vectors) for improved relevance and accuracy.
@@ -429,4 +455,4 @@ export const upstashAgent = new Agent({
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)

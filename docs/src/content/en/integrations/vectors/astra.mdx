@@ -1,14 +1,13 @@
 ---
-title: "Reference: Astra vector store | Vectors"
-description: "The AstraVector class provides vector search using DataStax Astra DB, a cloud-native, serverless database built on Apache Cassandra."
+title: "Astra | Vector Stores"
+description: "Store embeddings in DataStax Astra DB and run similarity search from Mastra on a serverless, Cassandra-backed database with metadata filtering."
 packages:
   - "@mastra/astra"
 ---
 
 # Astra vector store
 
-The AstraVector class provides vector search using [DataStax Astra DB](https://www.datastax.com/products/datastax-astra), a cloud-native, serverless database built on Apache Cassandra.
-It provides vector search capabilities with enterprise-grade capacity and high availability.
+The AstraVector class provides vector search using [DataStax Astra DB](https://www.datastax.com/products/datastax-astra), a cloud-native, serverless database built on Apache Cassandra. It provides vector search capabilities with enterprise-grade capacity and high availability.
 
 ## Constructor options
 
@@ -221,6 +220,10 @@ interface IndexStats {
 ]}
 />
 
+### `deleteVectors()`
+
+Not implemented for Astra. Calling it throws a `MastraError` with the ID `MASTRA_VECTOR_ASTRA_DELETE_VECTORS_NOT_SUPPORTED`. Delete vectors one at a time with `deleteVector()` instead.
+
 ## Response types
 
 Query results are returned in this format:
@@ -266,4 +269,4 @@ Required environment variables:
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)

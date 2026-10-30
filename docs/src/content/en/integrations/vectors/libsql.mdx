@@ -1,17 +1,13 @@
 ---
-title: "Reference: libSQL vector store | Vectors"
-description: "Configure LibSQLVector for similarity search and metadata filtering with local libSQL, SQLite-compatible vector extensions, or Turso databases."
+title: "libSQL | Vector Stores"
+description: "Store embeddings in a local libSQL database or Turso and run similarity search with metadata filtering from Mastra."
 packages:
-  - "@mastra/core"
-  - "@mastra/fastembed"
   - "@mastra/libsql"
-  - "@mastra/memory"
 ---
 
 # libSQL vector store
 
-The libSQL storage implementation provides a SQLite-compatible vector search [libSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
-It's part of the `@mastra/libsql` package and offers efficient vector similarity search with metadata filtering.
+The libSQL storage implementation provides a SQLite-compatible vector search [libSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution. It's part of the `@mastra/libsql` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
 
@@ -65,6 +61,11 @@ const results = await store.query({
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'url',
     type: 'string',
     description:
@@ -87,6 +88,29 @@ const results = await store.query({
     type: 'number',
     isOptional: true,
     description: 'Interval in milliseconds for database sync (Turso specific)',
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 5,
+    description:
+      'Total attempts allowed for a write that hits a database lock (`SQLITE_BUSY`, `SQLITE_LOCKED`, or a "database is locked" error). The default of 5 means one attempt plus at most four retries. Use at least 1: with 0 the write is never attempted and the call throws',
+  },
+  {
+    name: 'initialBackoffMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 100,
+    description: 'Backoff before the first retry, in milliseconds. Each later retry waits twice as long',
+  },
+  {
+    name: 'vectorTopKOverFetchMultiplier',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 10,
+    description:
+      'Over-fetch multiplier for `vector_top_k` queries that have metadata filters. Higher values improve recall at the cost of scanning more rows. Must be a positive integer, or the constructor throws',
   },
 ]}
 />
@@ -343,6 +367,14 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
+### `close()`
+
+Closes the underlying libSQL client and releases the file handles this vector store holds. Calling it more than once is a no-op.
+
+```typescript
+await store.close()
+```
+
 ## Response types
 
 Query results are returned in this format:
@@ -438,4 +470,4 @@ export const libsqlAgent = new Agent({
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](/reference/rag/metadata-filters)
