@@ -6,6 +6,7 @@ import {
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   knowledgePageKeyProblem,
   knowledgePagesResetMessage,
+  legacyKnowledgeTablesToDrop,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgePagesSchemaInspection } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
@@ -210,24 +211,37 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   // Schema ---------------------------------------------------------------------------------------
 
   async inspectSchema(): Promise<KnowledgePagesSchemaInspection> {
-    const names: string[] = [];
-    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) {
-      if (await this.#connector.collectionExists(name)) names.push(name);
-    }
-    return this.#inspectNames(names);
+    return inspectKnowledgePagesSchema(await this.#snapshot());
   }
 
-  async #inspectNames(collectionNames: string[]): Promise<KnowledgePagesSchemaInspection> {
-    const tableNames = collectionNames.filter(name => name.startsWith('mastra_knowledge_'));
+  async #snapshot(): Promise<{ tableNames: string[]; schemaVersion?: number }> {
+    const tableNames: string[] = [];
+    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) {
+      if (await this.#connector.collectionExists(name)) tableNames.push(name);
+    }
     let schemaVersion: number | undefined;
     if (tableNames.includes(MONGO_KNOWLEDGE_PAGES_COLLECTIONS.state)) {
       const state = await (await this.#c('state')).findOne({ id: 'knowledge' });
       schemaVersion = typeof state?.schemaVersion === 'number' ? state.schemaVersion : undefined;
     }
-    return inspectKnowledgePagesSchema({ tableNames, schemaVersion });
+    return { tableNames, schemaVersion };
+  }
+
+  async #drop(name: string): Promise<void> {
+    const collection = (await this.#connector.getCollection(name)) as Collection<Document>;
+    try {
+      await collection.drop();
+    } catch (error) {
+      if ((error as { codeName?: string }).codeName !== 'NamespaceNotFound') throw error;
+    }
   }
 
   async init(): Promise<void> {
+    // Knowledge before schema 4 was experimental and is not migrated: drop its collections, documents
+    // included. Mongo has no DDL lock; two processes upgrading the same old layout at once can both
+    // drop the reused activity and state collections, which only loses activity written in that
+    // window. Pages, notes and pins are never dropped.
+    for (const name of legacyKnowledgeTablesToDrop(await this.#snapshot())) await this.#drop(name);
     const inspection = await this.inspectSchema();
     if (inspection.status === 'incompatible-reset-required') throw new MongoKnowledgeResetRequiredError(inspection);
     const [pages, notes, pins, activity, state] = await Promise.all([
@@ -269,14 +283,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   /** Drops exactly the Knowledge collections (never Memory's) and recreates schema 4. */
   async reset(): Promise<void> {
-    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) {
-      const collection = (await this.#connector.getCollection(name)) as Collection<Document>;
-      try {
-        await collection.drop();
-      } catch (error) {
-        if ((error as { codeName?: string }).codeName !== 'NamespaceNotFound') throw error;
-      }
-    }
+    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) await this.#drop(name);
     await this.init();
   }
 

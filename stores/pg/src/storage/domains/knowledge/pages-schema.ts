@@ -3,6 +3,7 @@ import {
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   knowledgePagesResetMessage,
+  legacyKnowledgeTablesToDrop,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgePagesSchemaInspection } from '@internal/core/knowledge-compat';
 
@@ -30,27 +31,19 @@ export async function inspectPgKnowledgePagesSchema(
   db: Queryable,
   schemaName?: string,
 ): Promise<KnowledgePagesSchemaInspection> {
-  const tables = await db.query(
-    `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE($1, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
-    [schemaName ?? null],
-  );
-  const tableNames = tables.rows.map(row => String(row.table_name));
-  let schemaVersion: number | undefined;
-  if (tableNames.includes(PG_KNOWLEDGE_PAGES_TABLES.state)) {
-    const state = await db.query(
-      `SELECT "schemaVersion" FROM ${qualify(schemaName, PG_KNOWLEDGE_PAGES_TABLES.state)} WHERE "id" = 'knowledge'`,
-    );
-    // The state table name is reused from schema 2, whose rows have a different shape.
-    schemaVersion = state.rows[0] ? Number(state.rows[0].schemaVersion) : undefined;
-  }
-  return inspectKnowledgePagesSchema({ tableNames, schemaVersion });
+  return inspectKnowledgePagesSchema(await pgKnowledgeSnapshot(db, schemaName));
 }
 
 /** Creates the schema-4 tables, refusing (with the reset message) over anything older. */
 export async function initPgKnowledgePagesSchema(client: DbClient, schemaName?: string): Promise<void> {
   await client.tx(async tx => {
     await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`mastra-knowledge-schema:${schemaName ?? ''}`]);
-    const inspection = await inspectPgKnowledgePagesSchemaSafe(tx, schemaName);
+    // Knowledge before schema 4 was experimental and is not migrated: drop its tables, rows included.
+    const drop = legacyKnowledgeTablesToDrop(await pgKnowledgeSnapshot(tx, schemaName));
+    if (drop.length > 0) {
+      await tx.query(`DROP TABLE IF EXISTS ${drop.map(table => qualify(schemaName, table)).join(', ')} CASCADE`);
+    }
+    const inspection = await inspectPgKnowledgePagesSchema(tx, schemaName);
     if (inspection.status === 'incompatible-reset-required') throw new PgKnowledgeResetRequiredError(inspection);
     for (const statement of pgKnowledgePagesDDL(schemaName)) await tx.query(statement);
     await tx.query(
@@ -61,18 +54,25 @@ export async function initPgKnowledgePagesSchema(client: DbClient, schemaName?: 
 }
 
 /**
- * A schema-2 state table has no `schemaVersion` column under that name's schema-4 meaning; reading
- * it can fail on the missing `knowledge` row shape. Any failure there means the tables are legacy.
+ * Every `mastra_knowledge_*` table and the schema-4 version, if any. The state table is read as
+ * whole rows because schema 2 used the same name with a different shape, and a failed query would
+ * abort the init transaction.
  */
-async function inspectPgKnowledgePagesSchemaSafe(
+async function pgKnowledgeSnapshot(
   db: Queryable,
   schemaName?: string,
-): Promise<KnowledgePagesSchemaInspection> {
-  try {
-    return await inspectPgKnowledgePagesSchema(db, schemaName);
-  } catch {
-    return inspectKnowledgePagesSchema({ tableNames: [PG_KNOWLEDGE_PAGES_TABLES.state, 'mastra_knowledge_nodes'] });
-  }
+): Promise<{ tableNames: string[]; schemaVersion?: number }> {
+  const tables = await db.query(
+    `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE($1, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
+    [schemaName ?? null],
+  );
+  const tableNames = tables.rows.map(row => String(row.table_name));
+  if (!tableNames.includes(PG_KNOWLEDGE_PAGES_TABLES.state)) return { tableNames };
+  const state = await db.query(
+    `SELECT to_jsonb(s) AS row FROM ${qualify(schemaName, PG_KNOWLEDGE_PAGES_TABLES.state)} s`,
+  );
+  const row = state.rows.map(r => r.row as Record<string, unknown>).find(r => r.id === 'knowledge');
+  return { tableNames, schemaVersion: typeof row?.schemaVersion === 'number' ? row.schemaVersion : undefined };
 }
 
 /** Drops exactly the Knowledge tables (never Memory's) and recreates schema 4. */
