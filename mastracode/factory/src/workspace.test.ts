@@ -6,7 +6,7 @@ import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-i
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   /** Whether the mock VM already carries a matching setup marker (warm template image). */
@@ -1540,6 +1540,43 @@ describe('GitHub session workspace preparation', () => {
       const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
       await workspace.skills?.maybeRefresh();
       expect(await workspace.skills?.get('removed-app-skill')).toBeFalsy();
+    });
+
+    it('serves the original skills while edits cannot be read, and the edit once they can', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addSession({ id: 'session-a' });
+      await save(skillOverrides, 'project-1', 'factory-plan', editedPlan('Edited plan'));
+      // The skill-overrides table is missing, as when its domain failed to initialize.
+      let unreadable = true;
+      const missingTable = () => new Error("unknown collection 'factory_skill_overrides'");
+      for (const method of ['revision', 'snapshot'] as const) {
+        const read = skillOverrides[method].bind(skillOverrides) as (...args: never[]) => Promise<unknown>;
+        vi.spyOn(skillOverrides, method).mockImplementation(((...args: never[]) =>
+          unreadable ? Promise.reject(missingTable()) : read(...args)) as never);
+      }
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      mocks.runBindingRole = 'review';
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = (await resolver({ requestContext }))!;
+      await workspace.skills?.maybeRefresh();
+      expect((await workspace.skills?.get('factory-triage'))?.instructions).toContain('# Factory Triage');
+      expect(await planOf(workspace)).toContain('# Factory Plan');
+      expect((await workspace.skills?.get('factory-review'))?.instructions).toContain('# Factory Review');
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Could not read project skill edits; serving the original skills',
+        expect.objectContaining({ factoryProjectId: 'project-1' }),
+      );
+
+      expect(await resolver({ requestContext })).toBe(workspace);
+      expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+
+      unreadable = false;
+      expect(await resolver({ requestContext })).toBe(workspace);
+      expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Edited plan');
     });
   });
 

@@ -463,7 +463,7 @@ export interface CreateWorkspaceFactoryOptions {
   /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
   skills?: readonly InlineSkill[];
   /** Per-project SKILL.md edits served over the Factory skills of each session's project. */
-  skillOverrides?: Pick<SkillOverridesStorage, 'revision' | 'snapshot'>;
+  skillOverrides?: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'snapshot'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -708,6 +708,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     string,
     Promise<{ revision: number; overrides: ReadonlyMap<string, FactorySkillOverride> }>
   >();
+  // The revision recorded when skill edits could not be read. No stored
+  // revision equals it, so the next reuse that reads one rescans and retries.
+  const UNREAD_SKILL_OVERRIDES = -1;
   const skillCacheKey = (isReview: boolean, revision: number) => `${isReview ? 'review' : 'work'}@${revision}`;
 
   const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
@@ -1080,11 +1083,29 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // A caller-supplied skill extension owns its own skills, so edits only apply to Factory's.
     const overrideScope =
       skillOverrides && !skillExtension ? { orgId: session.orgId, projectId: connection.factoryProjectId } : undefined;
-    const currentOverrideRevision = async () => (overrideScope ? skillOverrides!.revision(overrideScope) : 0);
+    // Edits are optional: like `isReviewSession`, a storage failure degrades to
+    // the original skills instead of failing the workspace or hiding skills.
+    const readOverrides = async <T>(read: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        await skillOverrides!.ensureReady();
+        return await read();
+      } catch (error) {
+        console.warn('[Mastra Factory] Could not read project skill edits; serving the original skills', {
+          factoryProjectId: connection.factoryProjectId,
+          error,
+        });
+        return undefined;
+      }
+    };
+    const currentOverrideRevision = async () =>
+      overrideScope
+        ? ((await readOverrides(() => skillOverrides!.revision(overrideScope))) ?? UNREAD_SKILL_OVERRIDES)
+        : 0;
     const loadSkillOverrides = () => {
       const loading = (async () => {
         if (!overrideScope) return { revision: 0, overrides: NO_SKILL_OVERRIDES };
-        const snapshot = await skillOverrides!.snapshot(overrideScope);
+        const snapshot = await readOverrides(() => skillOverrides!.snapshot(overrideScope));
+        if (!snapshot) return { revision: UNREAD_SKILL_OVERRIDES, overrides: NO_SKILL_OVERRIDES };
         return {
           revision: snapshot.revision,
           overrides: new Map(
@@ -1093,14 +1114,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         };
       })();
       skillOverrideStates.set(workspaceId, loading);
-      // A failed read is retried by the next skill access instead of being served forever.
-      loading.catch(() => {
-        if (skillOverrideStates.get(workspaceId) === loading) skillOverrideStates.delete(workspaceId);
-      });
       return loading;
     };
-    const loadedOverrideRevision = async () =>
-      (await skillOverrideStates.get(workspaceId)?.catch(() => undefined))?.revision;
+    const loadedOverrideRevision = async () => (await skillOverrideStates.get(workspaceId))?.revision;
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
