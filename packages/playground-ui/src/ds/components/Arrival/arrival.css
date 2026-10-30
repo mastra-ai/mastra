@@ -11,10 +11,6 @@
   animation: mastra-arriving 800ms var(--ease-out-custom, ease-out) backwards;
 }
 
-.mastra-arriving:has([data-arrival='continuing']) {
-  animation-duration: 0s;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .mastra-arriving {
     animation: none;

@@ -1,8 +1,24 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { SettledContext, useArriving } from './use-watched';
+import { ARRIVING_CLASS } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
+
+const ARRIVING_HOST = `.${ARRIVING_CLASS}`;
+
+function finishEntrancesAround(marker: HTMLElement) {
+  for (
+    let host = marker.parentElement?.closest(ARRIVING_HOST);
+    host;
+    host = host.parentElement?.closest(ARRIVING_HOST)
+  ) {
+    if (typeof host.getAnimations !== 'function') return;
+    for (const animation of host.getAnimations()) {
+      if ('animationName' in animation && animation.animationName === ARRIVING_CLASS) animation.finish();
+    }
+  }
+}
 
 /**
  * Marks what the reader was handed. Whatever mounts with a scope is already there and
@@ -32,8 +48,13 @@ export function ArrivalScope({ children }: { children: ReactNode }) {
  * that now describes it. It mounts without fading in, and takes the entrance off any element around it.
  */
 export function Continuing({ children }: { children: ReactNode }) {
+  const marker = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (marker.current) finishEntrancesAround(marker.current);
+  }, []);
+
   return (
-    <div data-arrival="continuing" className="contents">
+    <div ref={marker} className="contents">
       <ArrivalScope>{children}</ArrivalScope>
     </div>
   );
