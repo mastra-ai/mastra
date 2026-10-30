@@ -211,6 +211,10 @@ export type LoopConfig<OUTPUT = undefined> = {
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;
+  /**
+   * @internal Runs before the total-deadline output pass saves the turn. Throwing skips that save.
+   */
+  beforeDeadlineSave?: () => Promise<void>;
 };
 
 /**

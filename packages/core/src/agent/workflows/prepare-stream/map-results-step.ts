@@ -343,6 +343,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
       hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
+        // The deadline pass saves the turn through MessageHistory, so it needs write access.
+        beforeDeadlineSave: async () => {
+          const threadId = memoryData.thread?.id;
+          if (memory && threadId && !memoryConfig?.readOnly) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
+          }
+        },
         onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;

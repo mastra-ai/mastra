@@ -2091,6 +2091,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               ) {
                 let streamOpen = true;
                 const deadlinePass = (async () => {
+                  await self.#options.beforeDeadlineSave?.();
                   await self.processorRunner!.runOutputProcessors(
                     self.messageList.cloneWithCompletedSteps(),
                     resolveObservabilityContext(options),

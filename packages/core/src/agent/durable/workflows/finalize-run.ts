@@ -487,6 +487,20 @@ export async function runDurableDeadlineOutputPass({
     resourceId: durableState?.resourceId,
   }).deserialize(messageListState);
 
+  // The output processors save the turn (MessageHistory), so the caller needs write access first.
+  if (entry.memory && durableState?.threadId && durableState.resourceId && !durableState.memoryConfig?.readOnly) {
+    await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
+      mastra,
+      user: requestContext.get('user'),
+      threadId: durableState.threadId,
+      resourceId: durableState.resourceId,
+      agentId: initData.agentId,
+      requestContext,
+      permission: MastraFGAPermissions.MEMORY_WRITE,
+      actor: initData.options?.actor,
+    });
+  }
+
   if (entry.outputProcessors?.length) {
     const runner = new ProcessorRunner({
       inputProcessors: entry.inputProcessors ?? [],
@@ -526,16 +540,6 @@ export async function runDurableDeadlineOutputPass({
   ) {
     return;
   }
-  await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
-    mastra,
-    user: requestContext.get('user'),
-    threadId: durableState.threadId,
-    resourceId: durableState.resourceId,
-    agentId: initData.agentId,
-    requestContext,
-    permission: MastraFGAPermissions.MEMORY_WRITE,
-    actor: initData.options?.actor,
-  });
   await entry.saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
     throwOnError: true,
   });
