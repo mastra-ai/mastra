@@ -267,9 +267,18 @@ function prefixUpperBound(prefix: string): string {
   return prefix + '\u{10FFFF}'.repeat(600);
 }
 
+/**
+ * `utf8mb4_bin` is PAD SPACE: a value compares as if padded with spaces, so `p:a\t` sorts below `p:a`.
+ * Starting the range at the prefix plus U+0000 keeps every value that begins with the prefix, whatever
+ * code point follows. (Values equal to the prefix plus trailing spaces still match, as they always have.)
+ */
+function prefixLowerBound(prefix: string): string {
+  return prefix + '\u0000';
+}
+
 /** `column` starts with `prefix`, as an index-friendly range. */
 function prefixRange(column: string, prefix: string): Fragment {
-  return { sql: `(${column} >= ? AND ${column} < ?)`, args: [prefix, prefixUpperBound(prefix)] };
+  return { sql: `(${column} >= ? AND ${column} < ?)`, args: [prefixLowerBound(prefix), prefixUpperBound(prefix)] };
 }
 
 /**
@@ -294,7 +303,7 @@ function readableScopes(read: KnowledgeReadScope): Fragment {
       JSON.stringify(
         read.prefixes.map(entry => ({
           declaration: entry.declaration,
-          lo: entry.prefix,
+          lo: prefixLowerBound(entry.prefix),
           hi: prefixUpperBound(entry.prefix),
         })),
       ),
