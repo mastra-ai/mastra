@@ -272,7 +272,7 @@ const deliveryBoard = defineBoard({
 });
 ```
 
-A board handler runs only for events bound to a card on that board. Events without a card yet — issue intake and filing a pull request's own Review card — always use the integration's handlers.
+A board handler runs only for events bound to a card on that board. Events without a card yet — issue intake and filing a pull request's own card — always use the integration's handlers.
 
 For each event, Factory picks the handler in this order:
 
@@ -364,6 +364,8 @@ const releaseBoard = defineBoard({
 ```
 
 Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `work`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+
+New pull requests and merge requests get their own card in Work Intake. The card's Review action moves it into Work's Review phase, where an independent reviewer runs `factory-review` (`factory-gitlab-review` for GitLab) in the card's own `review` session, or the re-review skill once a verdict is recorded. A pull request card only enters Intake, Review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled, and an agent cannot move it to Done. Cards filed on the Review board before pull requests moved to Work stay there and keep working as before.
 
 Planning and Building on Work share the `work` session, so the builder keeps the planner's reasoning, branch and sandbox. Self-review still runs in its own `review` session. When the planner moves the card to Building, the build prompt is queued onto its own run, and the planner's run binding ends at that point: Factory tools it calls later in the same turn are rejected. When the builder moves a card back from Building to Planning, no new planning run starts; the builder keeps working in its run. When a person moves it back, Planning starts again, in the same `work` session. The old `plan` role still names Planning: a run requested or queued for `plan` starts Planning in a `plan` session, and the build then continues in that session. Cards planned before this change do the same.
 
@@ -713,7 +715,7 @@ A decision _without_ the flag that reaches a card which already exists keeps the
 
 Reconciliation re-applies label-derived placement. The issue sweep replays an open issue through the rules ingress whenever the issue's live labels differ from the card's stored ones — the `labeled`/`unlabeled` webhook may never have arrived (Factory was down, or the label was applied by something else). The deployment rule decides placement, exactly as at arrival, and the context carries the existing card on `item`, so one handler answers for both: a card still resting on the board's initial phase is landed the normal way, and a card that has already left it is re-placed with `skipRules` and no phase rule run. Cards parked by hand are untouched while an issue's labels are unchanged.
 
-A delivery that concerns two cards is evaluated once per card, each under its own ingress identity: every decision is committed against one card, at that card's revision. A merged pull request is the standard case — its Review card closes, and the built-in `pullRequestMerged` rule moves the Work item that wrote the code to Done. If that Work item has another pull request open, it stays where it is and its session is told which pull request is still out. An opening pull request is evaluated the same way. Its own Review card is filed by the arrival, the evaluation flagged `pullRequestIntake`, which is committed against the Work item that authored the pull request when provenance or a matching session branch names one; that binding is what links the new card to its item. The authoring item is then answered in a second evaluation of its own (`pullRequestIntake` unset), which is where a handler places the item that is now out for review. The built-in `pullRequestOpened` files the card only on the arrival and returns nothing for the authoring item.
+A delivery that concerns two cards is evaluated once per card, each under its own ingress identity: every decision is committed against one card, at that card's revision. A merged pull request is the standard case — its own card closes, and the built-in `pullRequestMerged` rule moves the Work item that wrote the code to Done. If that Work item has another pull request open, it stays where it is and its session is told which pull request is still out. An opening pull request is evaluated the same way. Its own card is filed in Work Intake by the arrival, the evaluation flagged `pullRequestIntake`, which is committed against the Work item that authored the pull request when provenance or a matching session branch names one; that binding is what links the new card to its item. The authoring item is then answered in a second evaluation of its own (`pullRequestIntake` unset), which is where a handler places the item that is now out for review. The built-in `pullRequestOpened` files the card only on the arrival and returns nothing for the authoring item.
 
 ### GitHub CLI authentication in Factory sessions
 
@@ -824,7 +826,7 @@ A repository maintainer with write or admin access can start a Factory review fr
 @<factory-app> review
 ```
 
-`@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first Review pass for a missing or Intake card, restarts a completed card with `factory-rereview`, and is a no-op while the card is already Reviewing. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
+`@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first review pass for a missing or Intake card (new cards are filed on Work), restarts a completed card with `factory-rereview`, and is a no-op while the card is already Reviewing. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
 
 ### Factory tools in user sessions
 
