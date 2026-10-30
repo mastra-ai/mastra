@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
+import { matchesPermission } from '@mastra/core/auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
@@ -17,6 +18,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
+import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
@@ -31,6 +33,7 @@ import {
   subscribeAgentThreadBodySchema,
   sendToolApprovalBodySchema,
 } from '../schemas/agents';
+import { getEffectivePermission } from '../server-adapter/routes';
 import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
   GET_PROVIDERS_ROUTE,
@@ -821,9 +824,73 @@ describe('Agent Routes Authorization', () => {
   }
 
   describe('Editor-owned model list persistence', () => {
-    it('requires stored-agent write permission for persistent model-list mutations', () => {
-      expect(REORDER_AGENT_MODEL_LIST_ROUTE.requiresPermission).toBe('stored-agents:write');
-      expect(UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.requiresPermission).toBe('stored-agents:write');
+    it('keeps the agents write permission on model-list mutation routes', () => {
+      const reorderPermission = getEffectivePermission(REORDER_AGENT_MODEL_LIST_ROUTE);
+      const updatePermission = getEffectivePermission(UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE);
+
+      expect(reorderPermission).toBe('agents:write');
+      expect(updatePermission).toBe('agents:write');
+      expect(matchesPermission('stored-agents:write', reorderPermission as string)).toBe(false);
+      expect(matchesPermission('stored-agents:write', updatePermission as string)).toBe(false);
+    });
+
+    it('rejects Editor-owned persistence without stored-agent write permission', async () => {
+      const modelOwnedAgent = new Agent({
+        id: 'model-owned-agent',
+        name: 'Model Owned Agent',
+        instructions: 'Code-owned instructions',
+        model: [
+          { id: 'primary', model: 'openai/gpt-5.1' },
+          { id: 'fallback', model: 'openai/gpt-5.4-pro' },
+        ],
+        editor: { model: true },
+      });
+      const create = vi.fn();
+      mastra = new Mastra({
+        agents: { 'model-owned-agent': modelOwnedAgent },
+        storage,
+        logger: false,
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({
+        agent: { applyStoredOverrides: vi.fn(async (agent: Agent) => agent), create },
+      } as any);
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['agents:write']);
+
+      await expect(
+        REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+          mastra,
+          agentId: 'model-owned-agent',
+          reorderedModelIds: ['fallback', 'primary'],
+          requestContext,
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('allows agents write permission to mutate a non-owned model list in memory', async () => {
+      const codeOwnedAgent = new Agent({
+        id: 'code-owned-agent',
+        name: 'Code Owned Agent',
+        instructions: 'Code-owned instructions',
+        model: [
+          { id: 'primary', model: 'openai/gpt-5.1' },
+          { id: 'fallback', model: 'openai/gpt-5.4-pro' },
+        ],
+      });
+      mastra = new Mastra({ agents: { 'code-owned-agent': codeOwnedAgent }, logger: false });
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['agents:write']);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        mastra,
+        agentId: 'code-owned-agent',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext,
+      });
+
+      expect(await codeOwnedAgent.getModelList()).toMatchObject([{ id: 'fallback' }, { id: 'primary' }]);
     });
 
     it('creates a sparse initial override when the legacy reorder route persists an Editor-owned model list', async () => {

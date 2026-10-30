@@ -9,6 +9,7 @@ import type {
 } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
+import { matchesPermission } from '@mastra/core/auth/ee';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -29,7 +30,13 @@ import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
-import { MASTRA_IS_STUDIO_KEY, MASTRA_RESOURCE_ID_KEY, WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
+import {
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  WORKSPACE_TOOLS,
+  resolveToolConfig,
+} from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 
@@ -1120,6 +1127,16 @@ async function getAgentForModelListMutation({
   const editorConfig = publishedAgent.__getEditorConfig?.();
   if (editorConfig === false || editorConfig?.model !== true) {
     return publishedAgent;
+  }
+
+  const callerPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY);
+  if (
+    Array.isArray(callerPermissions) &&
+    !callerPermissions.some(permission =>
+      typeof permission === 'string' ? matchesPermission(permission, 'stored-agents:write') : false,
+    )
+  ) {
+    throw new HTTPException(403, { message: 'Missing required permission: stored-agents:write' });
   }
 
   const agentsStore = await mastra.getStorage?.()?.getStore('agents');
@@ -3885,7 +3902,6 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  requiresPermission: 'stored-agents:write',
   handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
       const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
@@ -3934,7 +3950,6 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  requiresPermission: 'stored-agents:write',
   handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
       const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
