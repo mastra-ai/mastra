@@ -35,7 +35,15 @@ export function saveComposerImages(scope: string, next: PendingImage[]): void {
   else images.delete(scope);
 }
 
-/** Test hook: the image store outlives a rendered tree. */
-export function clearComposerImages(): void {
+/** Forget every chat's unsent content, e.g. on sign-out so the next user in this tab never sees it. */
+export function clearComposerDrafts(): void {
   images.clear();
+  try {
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(TEXT_KEY_PREFIX)) sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Storage blocked: nothing was saved.
+  }
 }

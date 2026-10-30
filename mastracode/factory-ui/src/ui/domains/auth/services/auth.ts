@@ -15,6 +15,8 @@
  * API client and `use-fs`.
  */
 
+import { clearComposerDrafts } from '../../chat/services/composerDrafts';
+
 export interface FactoryAuthState {
   /** Whether the server has web auth configured (any provider). */
   authEnabled: boolean;
@@ -59,6 +61,7 @@ export function logoutUrl(baseUrl: string): string {
 }
 
 export function clearMastraCodeStorage(): void {
+  clearComposerDrafts();
   for (let index = localStorage.length - 1; index >= 0; index -= 1) {
     const key = localStorage.key(index);
     if (key?.startsWith('mastracode')) localStorage.removeItem(key);

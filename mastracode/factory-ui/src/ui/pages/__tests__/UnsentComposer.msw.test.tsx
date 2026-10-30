@@ -5,7 +5,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { clearComposerImages } from '../../domains/chat/services/composerDrafts';
+import { clearMastraCodeStorage } from '../../domains/auth/services/auth';
+import { clearComposerDrafts } from '../../domains/chat/services/composerDrafts';
 import { renderWithProviders } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
@@ -69,8 +70,10 @@ describe('unsent composer content', () => {
     expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
     first.unmount();
 
-    // A reload drops in-memory state; simulate it by forgetting the image store as the page would.
-    clearComposerImages();
+    // A reload drops in-memory state but keeps the tab's sessionStorage.
+    const kept = Object.entries(sessionStorage);
+    clearComposerDrafts();
+    for (const [key, value] of kept) sessionStorage.setItem(key, value);
     renderAt(draftPath(OTHER_DRAFT_ID));
 
     expect(await readyComposer()).toHaveValue('half-written idea');
@@ -107,5 +110,24 @@ describe('unsent composer content', () => {
 
     await act(() => router.navigate(threadPath));
     expect(await readyComposer()).toHaveValue('follow-up for this thread');
+  });
+
+  it('is forgotten on sign-out, so the next user in this tab starts empty', async () => {
+    stubRoutes();
+    const user = userEvent.setup();
+    const first = renderAt(draftPath(DRAFT_SESSION_ID));
+
+    await user.type(await readyComposer(), 'pasted secret');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeEnabled());
+    await user.upload(screen.getByLabelText('Attach images'), screenshot());
+    expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
+    first.unmount();
+
+    // What the "Sign out" menu item and account settings run before leaving for the logout page.
+    clearMastraCodeStorage();
+    renderAt(draftPath(OTHER_DRAFT_ID));
+
+    expect(await readyComposer()).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
   });
 });
