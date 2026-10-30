@@ -175,7 +175,12 @@ export async function subscribeToAbortRequests(
  * calls this. The subscription is torn down with the registry entry, whether
  * that happens on explicit cleanup or TTL eviction.
  */
-export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, mastra?: Mastra): Promise<void> {
+export async function ensureRemoteAbortListener(
+  pubsub: PubSub,
+  runId: string,
+  mastra?: Mastra,
+  deadline?: RunDeadline,
+): Promise<void> {
   let entry = getRunRegistryEntry(runId, mastra);
 
   if (!entry) {
@@ -223,12 +228,51 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, m
   // Chain onto the entry's existing cleanup rather than replacing it: the
   // registry's dispose hook only calls `cleanup()`, and other owners of the
   // entry have their own teardown registered there.
+  // The deadline's abort request is published once, live. A worker that subscribes after it went
+  // out never hears it, so the run's deadline also travels with the run and is armed here.
+  const deadlineTimer = deadline ? armRunDeadline(entry, deadline) : undefined;
+
   const previousCleanup = entry.cleanup;
   entry.cleanup = () => {
     try {
       previousCleanup?.();
     } finally {
+      clearTimeout(deadlineTimer);
       void unsubscribe();
     }
   };
+}
+
+/**
+ * Request-context key the caller sets to the run's absolute total deadline for one execution
+ * segment (stream or resume), so every worker can stop at it on its own clock.
+ */
+export const RUN_DEADLINE_KEY = '__mastra_runDeadline';
+
+/** The run's total deadline: when it fires (epoch ms) and the budget it enforces. */
+export type RunDeadline = { at: number; timeoutMs: number };
+
+/** The run deadline a step's request context carries, if any. */
+export function readRunDeadline(requestContext?: { get(key: string): unknown }): RunDeadline | undefined {
+  const value = requestContext?.get(RUN_DEADLINE_KEY) as Partial<RunDeadline> | undefined;
+  if (typeof value?.at !== 'number' || typeof value.timeoutMs !== 'number') return undefined;
+  return { at: value.at, timeoutMs: value.timeoutMs };
+}
+
+/** Abort the entry's controller with the deadline's timeout error now, or when the deadline arrives. */
+function armRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline): ReturnType<typeof setTimeout> | undefined {
+  const expire = () => {
+    const controller = entry.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: deadline.timeoutMs }));
+    }
+  };
+  const remaining = deadline.at - Date.now();
+  if (remaining <= 0) {
+    expire();
+    return undefined;
+  }
+  const timer = setTimeout(expire, remaining);
+  timer.unref?.();
+  return timer;
 }

@@ -2,6 +2,7 @@ import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import { commitToolResult } from '../../../loop/shared/steps/tool-result-commit-core';
+import { DEADLINE_SAVE_WAIT_MS, settledOrElapsed } from '../../../loop/timeout';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { createObservabilityContext } from '../../../observability';
@@ -543,6 +544,44 @@ export async function runDurableDeadlineOutputPass({
   await entry.saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
     throwOnError: true,
   });
+}
+
+/**
+ * The deadline save for a caller that reports the deadline itself because no worker did: the
+ * output pass over what this process knows of the run (its completed steps, or the accepted
+ * request). Resolves once the save lands or `DEADLINE_SAVE_WAIT_MS` passes, so a hung store cannot
+ * hold the timeout error back. Failures are logged; the deadline still surfaces.
+ */
+export async function saveDurableRunAtDeadline({
+  runId,
+  runInput,
+  error,
+  mastra,
+  logger,
+}: {
+  runId: string;
+  runInput: Pick<
+    DurableAgenticWorkflowInput,
+    'agentId' | 'agentName' | 'state' | 'options' | 'requestContextEntries' | 'messageListState'
+  >;
+  error: Error;
+  mastra?: Mastra;
+  logger: IMastraLogger;
+}): Promise<void> {
+  const entry = getRunRegistryEntry(runId, mastra);
+  if (!entry || entry.tripwire) return;
+  const save = runDurableDeadlineOutputPass({
+    runId,
+    initData: runInput,
+    messageListState: deadlineMessageListState(entry) ?? runInput.messageListState,
+    entry,
+    error,
+    mastra,
+    logger,
+  }).catch(saveError => {
+    logger.warn('[DurableAgent] Failed to save the run at its total deadline', { runId, error: saveError });
+  });
+  await settledOrElapsed(save, DEADLINE_SAVE_WAIT_MS);
 }
 
 class StructuringPassError extends Error {

@@ -78,7 +78,7 @@ import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
-import { ensureRemoteAbortListener } from '../../abort-transport';
+import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
@@ -364,7 +364,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra);
+          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(requestContext));
         } catch (error) {
           ownership?.throwIfLost();
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {

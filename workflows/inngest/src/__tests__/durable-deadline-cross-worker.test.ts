@@ -6,6 +6,10 @@
  * the caller publishes an abort request carrying the timeout, the worker running the slow tool
  * stops it as a timeout, saves the step through memory, and the caller sees one timeout error.
  *
+ * The deadline's abort request goes out once, live, so the tests also cover a worker that first
+ * sees the run after it went out (a step held at the proxy, then served by a worker that never
+ * saw the run), and a run no worker picks up at all, where the caller saves the turn itself.
+ *
  * Runs against a real Inngest dev server with the model served by aimock.
  */
 import { spawn } from 'node:child_process';
@@ -33,12 +37,15 @@ const EVENTS = path.join(OUT_DIR, 'events.jsonl');
 const WORKER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'deadline-cross-worker-worker.ts');
 const DEADLINE_MS = 4_000;
 
-type ToolEvent = { worker: string; event: 'tool-started' | 'tool-aborted'; reason?: string };
+type ToolEvent = { worker: string; event: 'tool-started' | 'tool-aborted' | 'output-pass'; reason?: string };
 
 let mock: LLMock;
 let devServer: ChildProcess | null = null;
 let proxy: Server;
 const workers: ChildProcess[] = [];
+let ports: { a: number; b: number; c: number };
+/** Where the proxy sends requests. `hold`, while set, delays every request until it resolves. */
+const routing: { targets: number[]; hold?: Promise<void> } = { targets: [] };
 let driver: ReturnType<typeof buildDeadlineCrossWorkerAgent>;
 
 function freePort(): Promise<number> {
@@ -92,10 +99,12 @@ function startWorker(port: number, name: string): Promise<ChildProcess> {
 }
 
 /** Forward each request to the next worker in turn, keeping the Host header so the app registers the proxy URL. */
-function startRoundRobinProxy(port: number, targets: number[]): Promise<Server> {
+function startRoundRobinProxy(port: number): Promise<Server> {
   let next = 0;
-  const server = createServer((req, res) => {
-    const target = targets[next++ % targets.length]!;
+  const server = createServer(async (req, res) => {
+    req.pause();
+    await routing.hold;
+    const target = routing.targets[next++ % routing.targets.length]!;
     const upstream = request(
       { host: '127.0.0.1', port: target, path: req.url, method: req.method, headers: req.headers },
       upstreamRes => {
@@ -110,6 +119,20 @@ function startRoundRobinProxy(port: number, targets: number[]): Promise<Server> 
     req.pipe(upstream);
   });
   return new Promise(resolve => server.listen(port, () => resolve(server)));
+}
+
+async function drain(res: Awaited<ReturnType<typeof driver.durableAgent.stream>>) {
+  const chunks: { type: string; payload?: any }[] = [];
+  try {
+    for await (const chunk of res.output.fullStream as AsyncIterable<{ type: string; payload?: any }>) {
+      chunks.push(chunk);
+    }
+  } catch {
+    // The run ends with the timeout error.
+  } finally {
+    res.cleanup?.();
+  }
+  return chunks;
 }
 
 const modelCalls = () => mock.getRequests().filter(entry => entry.path.includes('/chat/completions')).length;
@@ -127,10 +150,14 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
     mock = new LLMock({ port: 0 });
     await mock.start();
 
-    const [proxyPort, portA, portB] = [await freePort(), await freePort(), await freePort()];
-    workers.push(await startWorker(portA, 'a'));
-    workers.push(await startWorker(portB, 'b'));
-    proxy = await startRoundRobinProxy(proxyPort, [portA, portB]);
+    const proxyPort = await freePort();
+    ports = { a: await freePort(), b: await freePort(), c: await freePort() };
+    workers.push(await startWorker(ports.a, 'a'));
+    workers.push(await startWorker(ports.b, 'b'));
+    // Serves no step until a test routes one to it, so it first sees a run when that step arrives.
+    workers.push(await startWorker(ports.c, 'c'));
+    routing.targets = [ports.a, ports.b];
+    proxy = await startRoundRobinProxy(proxyPort);
     devServer = await startServeInngestDevServer(`http://localhost:${proxyPort}/inngest/api`);
     await vi.waitFor(
       async () => {
@@ -155,6 +182,8 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
   });
 
   beforeEach(() => {
+    routing.targets = [ports.a, ports.b];
+    routing.hold = undefined;
     rmSync(EVENTS, { force: true });
     mock.clearFixtures();
     mock.clearRequests();
@@ -252,5 +281,67 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
     expect(aborted[0]!.reason).not.toBe('MastraTimeoutError');
     await new Promise(r => setTimeout(r, DEADLINE_TOOL_MS + 2_000));
     expect(modelCalls()).toBe(1);
+  });
+
+  it('stops a step that first reaches a worker after the deadline was published', async () => {
+    const threadId = `thread-${crypto.randomUUID()}`;
+    const resourceId = 'user-a';
+    // Hold the run's first step past the deadline, then send it to worker c, which has never seen the
+    // run: it subscribes to the run's abort requests after the deadline's went out. Released before the
+    // caller's fallback, so the worker is the one that reports the timeout.
+    routing.targets = [ports.c];
+    routing.hold = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 1_000));
+    const res = await driver.durableAgent.stream([{ role: 'user', content: 'Do the slow work.' }], {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 3,
+      modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+    });
+    const chunks = await drain(res);
+
+    const errors = chunks.filter(chunk => chunk.type === 'error');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+
+    // Worker c stopped the step as a timeout and saved the turn; the caller's fallback did not.
+    const events = toolEvents();
+    expect(events).toContainEqual({ worker: 'c', event: 'output-pass' });
+    expect(events).not.toContainEqual({ worker: 'driver', event: 'output-pass' });
+    expect(events.filter(event => event.event === 'tool-started')).toEqual([]);
+    const { messages } = await driver.memory.recall({ threadId, resourceId, perPage: false });
+    expect(messages.map(message => message.role)).toEqual(['user']);
+
+    // A worker that missed the deadline would call the model and run the tool.
+    await new Promise(r => setTimeout(r, DEADLINE_TOOL_MS + 2_000));
+    expect(modelCalls()).toBe(0);
+  });
+
+  it('saves the turn itself when no worker picks the run up before the deadline', async () => {
+    const threadId = `thread-${crypto.randomUUID()}`;
+    const resourceId = 'user-a';
+    let release!: () => void;
+    routing.hold = new Promise(resolve => (release = resolve));
+    try {
+      const res = await driver.durableAgent.stream([{ role: 'user', content: 'Do the slow work.' }], {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 3,
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+      });
+      const chunks = await drain(res);
+
+      const errors = chunks.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+
+      // The caller ran the turn's output pass, so output processors (and memory) saw the turn.
+      expect(toolEvents()).toContainEqual({ worker: 'driver', event: 'output-pass' });
+      const { messages } = await driver.memory.recall({ threadId, resourceId, perPage: false });
+      expect(messages.map(message => message.role)).toEqual(['user']);
+    } finally {
+      release();
+    }
+
+    // Steps that reach a worker after the deadline stop there instead of calling the model.
+    await new Promise(r => setTimeout(r, 3_000));
+    expect(modelCalls()).toBe(0);
   });
 });

@@ -4,7 +4,10 @@
  * The model (served by aimock) asks for `slow`, a tool that records which worker started it and,
  * when its abort signal fires, the abort reason. It stops early when aborted.
  *
- * The driver and both serve() workers build the SAME agent from this factory.
+ * An output processor records each process that runs the turn's output pass (`output-pass`), so a test
+ * can tell which process saved the turn.
+ *
+ * The driver and every serve() worker build the SAME agent from this factory.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -72,6 +75,15 @@ export function buildDeadlineCrossWorkerAgent({
     model: provider.chat('deadline-cross-worker-model'),
     tools: { slow },
     memory,
+    outputProcessors: [
+      {
+        id: 'output-pass-probe',
+        processOutputResult: ({ messages }) => {
+          log({ event: 'output-pass' });
+          return messages;
+        },
+      },
+    ],
   });
 
   const durableAgent = createInngestAgent({ agent, inngest });

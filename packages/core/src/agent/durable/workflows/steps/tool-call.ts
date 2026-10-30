@@ -51,7 +51,7 @@ import { startRunStep } from '../../../run-lease-fence';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
-import { ensureRemoteAbortListener } from '../../abort-transport';
+import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import {
   assertExecutionNotSuperseded,
@@ -1425,7 +1425,7 @@ export function createDurableToolCallStep() {
       // no registry state, and a signal already set on the entry stays the one tools see.
       if (pubsub && registryEntry && !registryEntry.isPlaceholder && !registryEntry.abortSignal) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra as Mastra | undefined);
+          await ensureRemoteAbortListener(pubsub, runId, mastra as Mastra | undefined, readRunDeadline(requestContext));
           registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined) ?? registryEntry;
         } catch (error) {
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {

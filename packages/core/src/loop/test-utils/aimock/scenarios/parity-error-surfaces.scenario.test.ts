@@ -482,10 +482,13 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         const errors = result.chunks!.filter(chunk => chunk.type === 'error');
         expect(errors).toHaveLength(1);
         expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
-        expect(heldSaves).toHaveLength(1);
+        // The up-front input save, and the caller's deadline save since no worker ran the run.
+        expect(heldSaves.length).toBeGreaterThanOrEqual(1);
         await Promise.all(heldSaves);
         // Give the startup chain time to continue past the input save.
         await new Promise(resolve => setTimeout(resolve, 1_000));
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE, perPage: false });
+        expect(messages.map(message => message.role)).toEqual(['user']);
         for (const [args] of persistSpy.mock.calls) {
           if (args.runId === result.output.runId && args.snapshot.status === 'running') {
             runningWrites.push(args.workflowName);

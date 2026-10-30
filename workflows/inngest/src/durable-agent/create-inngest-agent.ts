@@ -57,6 +57,8 @@ import {
   deleteRunRegistryEntry,
   publishAbortRequest,
   requestAcknowledgedAbort,
+  RUN_DEADLINE_KEY,
+  saveDurableRunAtDeadline,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -65,6 +67,7 @@ import type {
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableToolCallInput,
+  RunDeadline,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
@@ -73,6 +76,7 @@ import type { MastraServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+import { noopLogger } from '@mastra/core/logger';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { MastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
@@ -935,6 +939,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     abortController: AbortController,
     runId: string,
     timeoutMs: number | undefined,
+    runInput: () => Promise<any> | any,
   ): () => void {
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
@@ -944,16 +949,52 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       detachParentOnCleanup: false,
     });
     entry.abortSignal = totalTimeout.signal;
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      runDeadlines.set(runId, { at: Date.now() + timeoutMs, timeoutMs });
+    } else {
+      runDeadlines.delete(runId);
+    }
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
       // The worker owns span finalization and accumulated usage/output (OBS-754).
       // Ending caller copies here races that finalization.
       const workerReported = waitForWorkerError(runId);
       await requestRemoteAbort(runId, error);
-      if (!(await workerReported)) await emitError(runId, error);
+      if (!(await workerReported)) {
+        // No worker saved the turn, so save what this process knows of it before the run is torn down.
+        const input = await Promise.resolve()
+          .then(runInput)
+          .catch(() => undefined);
+        if (input) {
+          await saveDurableRunAtDeadline({
+            runId,
+            runInput: input,
+            error,
+            mastra,
+            logger: mastra?.getLogger?.() ?? noopLogger,
+          });
+        }
+        await emitError(runId, error);
+      }
       await deleteRunSnapshots(runId);
     });
-    return totalTimeout.cleanup;
+    return () => {
+      runDeadlines.delete(runId);
+      totalTimeout.cleanup();
+    };
+  }
+
+  /**
+   * Absolute deadline of each run's current execution segment. Sent with the segment's event so
+   * a worker that subscribes after the deadline's abort request went out still stops at it.
+   */
+  const runDeadlines = new Map<string, RunDeadline>();
+
+  /** The request context a segment's event carries: the caller's, plus this segment's deadline (or none). */
+  function withSegmentDeadline(runId: string, requestContext: Record<string, any>): Record<string, any> {
+    const { [RUN_DEADLINE_KEY]: _stale, ...rest } = requestContext;
+    const deadline = runDeadlines.get(runId);
+    return deadline ? { ...rest, [RUN_DEADLINE_KEY]: deadline } : rest;
   }
 
   /**
@@ -1159,7 +1200,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: workflowInput.requestContextEntries ?? {},
+        requestContext: withSegmentDeadline(runId, workflowInput.requestContextEntries ?? {}),
         tracingOptions,
         actor,
       }),
@@ -1372,6 +1413,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         abortController,
         runId,
         callbackOptions.modelSettings?.timeout?.totalMs,
+        () => workflowInput,
       );
 
       // 1b. Register non-serializable state on the global run registry so
@@ -1755,6 +1797,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           existingRegistryEntry?.timeoutTotalMs ??
           (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input?.options?.modelSettings?.timeout
             ?.totalMs,
+        async () => (await resumableSnapshot)?.snapshot?.context?.input,
       );
 
       // A warm resume reuses the tools built for the first request, which close
@@ -1942,7 +1985,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             inputData: resumeData,
             runId,
             resourceId: resumeOptions?.resourceId,
-            requestContext,
+            requestContext: withSegmentDeadline(runId, requestContext),
             tracingOptions,
             actor: resumeOptions?.actor,
             resume: {
