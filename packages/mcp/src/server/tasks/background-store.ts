@@ -93,8 +93,8 @@ const TERMINAL_ROW_STATUSES = new Set<BackgroundTask['status']>(['completed', 'f
 const OPEN_ROW_STATUSES: BackgroundTask['status'][] = ['pending', 'running', 'suspended'];
 const UPDATE_ATTEMPTS = 3;
 /** How long an aborted attempt's row is watched for core to record why: 20 reads, 50ms apart. */
-const ABORT_SETTLE_READS = 20;
-const ABORT_SETTLE_READ_MS = 50;
+const ABORT_SETTLE_FIRST_READ_MS = 50;
+const ABORT_SETTLE_MAX_READ_MS = 1_000;
 /** The most rows one sweep reads, in each of its two listings. */
 const SWEEP_BATCH = 100;
 
@@ -485,19 +485,20 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * An attempt here was aborted. The abort says why only in core's message, so read the row: if
    * another instance cancelled or expired the task, or core timed the attempt out, run `onCancel`
    * here as well, where the work may be executing (a workflow run, say). Core records a timeout only
-   * once the aborted attempt settles, so a row still running under this worker is read again for a
-   * moment. A shutdown releases the lease and a lost lease changes the owner: either leaves the row
-   * running without this worker, and the work alone.
+   * once the aborted attempt settles, so a row still running under this worker is read again, less
+   * often each time, until core records how the attempt ended. A shutdown releases the lease and a
+   * lost lease changes the owner: either leaves the row running without this worker, and the work
+   * alone.
    */
   #notifyIfCancelled(taskKey: string): void {
     const check = async () => {
-      for (let i = 0; i < ABORT_SETTLE_READS && !this.#closed; i++) {
+      for (let wait = ABORT_SETTLE_FIRST_READ_MS; !this.#closed; wait = Math.min(wait * 2, ABORT_SETTLE_MAX_READ_MS)) {
         const { tasks } = await this.#manager.listTasks({ agentId: this.#owner, toolCallId: taskKey, perPage: 1 });
         const row = tasks[0];
         if (!row) return;
         if (wasStopped(row, Date.now())) return this.#notifyCancel(row);
         if (row.status !== 'running' || row.ownerId !== this.#manager.ownerId) return;
-        await new Promise(resolve => setTimeout(resolve, ABORT_SETTLE_READ_MS));
+        await new Promise(resolve => setTimeout(resolve, wait));
       }
     };
     check().catch(error => this.#getLogger?.().warn('Could not check why an MCP task attempt was aborted', { error }));

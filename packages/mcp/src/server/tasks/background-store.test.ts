@@ -176,6 +176,32 @@ describe('BackgroundTaskMCPTaskStore', () => {
     await store.close();
   });
 
+  it('calls onCancel when core takes longer than a second to record a timeout', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const storage = await manager.getStorage();
+    const updateTask = storage.updateTask.bind(storage);
+    vi.spyOn(storage, 'updateTask').mockImplementation(async (id, update, options) => {
+      if (update.status === 'timed_out') await sleep(1_500);
+      return updateTask(id, update, options);
+    });
+    const contexts: unknown[] = [];
+    const work: MCPTaskWork = () => new Promise(() => {});
+    const store = new BackgroundTaskMCPTaskStore({
+      manager,
+      serverId: 's',
+      workFor: () => work,
+      recoverFor: () => false,
+      onCancel: context => void contexts.push(context),
+    });
+    store.registerTool('tool');
+    const task = await store.create({ ttlMs: 300, principal: 'alice', context: { toolName: 'tool', id: 3 } });
+    store.run(task.taskId, work);
+
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 3 }]), { timeout: 4_000 });
+    await store.close();
+  }, 10_000);
+
   async function setup(work: MCPTaskWork, recover = false, backgroundTasks: Record<string, unknown> = {}) {
     mastra = new Mastra({
       logger: false,
