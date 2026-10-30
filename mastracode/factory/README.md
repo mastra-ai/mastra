@@ -37,7 +37,7 @@ Factory stores provider facts separately from board activity:
 - A **source** stores provider identity, key, URL, state, labels, and author in `factory_work_item_sources`. A work item can have several sources; Factory-native work items have none.
 - A **board item** tracks Factory's board, stages, sessions, claim, revision, and process metadata in `factory_board_items`. Trust stamps such as `authorTrusted` and `factoryAuthored` stay here, not on the source.
 
-Storage returns a `Card` that joins these records. Read sources from `card.workItem.sources`; read Factory process state from `card.metadata`. A provider-only refresh updates the source's revision without changing the board item's revision, so it doesn't invalidate a pending stage move. Changes to any of these records invalidate the board list cache.
+Storage returns a `Card` that joins these records. Read sources from `card.workItem.sources`; read Factory process state from placement fields such as `card.acceptedAt`, `card.plansPreapprovedAt`, and `card.metadata`. A provider-only refresh updates the source's revision without changing the board item's revision, so it doesn't invalidate a pending stage move. Changes to any of these records invalidate the board list cache.
 
 ```typescript
 import type { Card } from '@mastra/factory';
