@@ -5,11 +5,12 @@ import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeReadScope, KnowledgeStorage } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
+import { knowledgeAccessGrants } from './access';
 import { emitKnowledgeChanges } from './changes';
 import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
-import { KnowledgeDeclarationError } from './declarations';
-import type { KnowledgeScopeDeclarationInfo } from './declarations';
+import { KnowledgeDeclarationError, strongerKnowledgeRole } from './declarations';
+import type { KnowledgeRole, KnowledgeScopeDeclarationInfo } from './declarations';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { buildKnowledgePageTools } from './page-tools';
@@ -135,6 +136,23 @@ export class Knowledge extends MastraBase {
     target: { scope: string } | { page: string },
   ): Promise<KnowledgeAccessExplanation> {
     return this.#runtime.explainAccess(runScopes, target);
+  }
+
+  /**
+   * Who the declared rules give a role on one scope: each principal scope address (bound for this
+   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the address of
+   * the scope page's tree parent, needed for rules that bind through `belongsTo`. Declared config
+   * only; it reads no storage. For browsing UIs that draw access between scopes.
+   *
+   * @experimental
+   */
+  scopeGrants(scope: { address: string; parentAddress?: string | null }): KnowledgeScopeGrant[] {
+    const strongest = new Map<string, KnowledgeRole>();
+    for (const grant of knowledgeAccessGrants(this.#runtime.compiled, 'any', scope)) {
+      if (grant.via === 'self') continue;
+      strongest.set(grant.principal, strongerKnowledgeRole(strongest.get(grant.principal) ?? null, grant.role));
+    }
+    return [...strongest].map(([principal, role]) => ({ principal, role }));
   }
 
   /**
@@ -355,9 +373,11 @@ export {
   readKnowledgePage,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
+  readKnowledgeScopeGrants,
   searchKnowledgeExplorerPages,
 } from './explorer-pages';
 export type {
+  KnowledgeGraphScopeGrant,
   KnowledgePageGraph,
   KnowledgePageGraphEdge,
   KnowledgePageGraphLimits,
@@ -377,4 +397,11 @@ export type {
 import { KnowledgeSemanticIndex } from './semantic';
 export type { KnowledgeAccessExplanation } from './scope-runtime';
 export type { KnowledgeAccessGrant } from './access';
+
+/** One principal scope's strongest declared role on a scope. See {@link Knowledge.scopeGrants}. @experimental */
+export interface KnowledgeScopeGrant {
+  /** The principal scope address, e.g. `role:acme:support`. */
+  principal: string;
+  role: KnowledgeRole;
+}
 export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';

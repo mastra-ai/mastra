@@ -8,6 +8,7 @@ import type {
   KnowledgeReadScope,
 } from '../storage';
 import { knowledgeScopeReadable, MAX_KNOWLEDGE_PAGE_LIST_LIMIT } from '../storage';
+import type { KnowledgeRole } from './declarations';
 
 /**
  * Read-only views over the schema-4 page store for browsing UIs (Mastra Studio, Factory).
@@ -356,4 +357,64 @@ export function readKnowledgePageActivity(
   input: { read: KnowledgeReadScope; scopeId?: string; pageId?: string; cursor?: string; limit?: number },
 ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
   return store.listPageActivity({ ...input, limit: input.limit ?? DEFAULT_KNOWLEDGE_PAGE_ACTIVITY_LIMIT });
+}
+
+/** An access grant drawn between scopes in a browsing graph. @experimental */
+export interface KnowledgeGraphScopeGrant {
+  /** The principal scope address, e.g. `role:acme:support`. */
+  principal: string;
+  /** Its scope page id, when it has one; absent for a declared principal nothing was written to yet. */
+  principalId?: string;
+  /** The granted scope's page id. */
+  target: string;
+  role: KnowledgeRole;
+}
+
+/**
+ * The declared grants onto the scope pages in `pages`, for drawing who can reach what. `grantsFor` is
+ * `knowledge.scopeGrants`. A principal is kept only when `read` can read its scope page; with `'all'`,
+ * a declared principal with no scope page yet comes back without `principalId`.
+ */
+export async function readKnowledgeScopeGrants(
+  store: KnowledgePageStore,
+  input: {
+    pages: readonly KnowledgePage[];
+    read: KnowledgeReadScope;
+    grantsFor: (scope: { address: string; parentAddress?: string | null }) => Array<{
+      principal: string;
+      role: KnowledgeRole;
+    }>;
+  },
+): Promise<KnowledgeGraphScopeGrant[]> {
+  const { pages, read } = input;
+  const byId = new Map(pages.map(page => [page.id, page]));
+  const wanted: Array<{ principal: string; target: string; role: KnowledgeRole }> = [];
+  for (const page of pages) {
+    if (!page.isScope || !page.address || page.deletedAt || page.mergedInto) continue;
+    const parentAddress = page.parentId ? (byId.get(page.parentId)?.address ?? null) : null;
+    for (const grant of input.grantsFor({ address: page.address, parentAddress })) {
+      if (grant.principal !== page.address) wanted.push({ ...grant, target: page.id });
+    }
+  }
+  if (!wanted.length) return [];
+
+  const principals = [...new Set(wanted.map(grant => grant.principal))];
+  const scopes = new Map<string, KnowledgePage>();
+  for (let start = 0; start < principals.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+    for (const scope of await store.getScopesByAddress(
+      principals.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT),
+    )) {
+      if (scope.address) scopes.set(scope.address, scope);
+    }
+  }
+  const grants: KnowledgeGraphScopeGrant[] = [];
+  for (const grant of wanted) {
+    const scope = scopes.get(grant.principal);
+    if (scope) {
+      if (knowledgeScopeReadable(scope, read)) grants.push({ ...grant, principalId: scope.id });
+    } else if (read === 'all') {
+      grants.push(grant);
+    }
+  }
+  return grants;
 }
