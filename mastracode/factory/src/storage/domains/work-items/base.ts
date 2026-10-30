@@ -1442,10 +1442,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               : {
                   ...current.metadata,
                   ...metadata,
-                  ...(next.labels !== undefined && !Object.hasOwn(metadata ?? {}, 'labels') ? { labels: next.labels } : {}),
+                  ...(next.labels !== undefined && !Object.hasOwn(metadata ?? {}, 'labels')
+                    ? { labels: next.labels }
+                    : {}),
                   ...(next.state !== undefined && !Object.hasOwn(metadata ?? {}, 'state') ? { state: next.state } : {}),
-                  ...(next.author !== undefined && !Object.hasOwn(metadata ?? {}, 'author') ? { author: next.author } : {}),
-                  ...(next.key !== undefined && !Object.hasOwn(metadata ?? {}, 'identifier') ? { identifier: next.key } : {}),
+                  ...(next.author !== undefined && !Object.hasOwn(metadata ?? {}, 'author')
+                    ? { author: next.author }
+                    : {}),
+                  ...(next.key !== undefined && !Object.hasOwn(metadata ?? {}, 'identifier')
+                    ? { identifier: next.key }
+                    : {}),
                 };
           return {
             ...facts,
@@ -1465,39 +1471,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     id,
     userId,
     patch,
-    expectedWorkItemRevision,
+    expectedSourceRevision,
   }: {
     orgId: string;
     id: string;
     userId: string;
     patch: { title?: string; metadata?: Record<string, unknown> | null };
-    expectedWorkItemRevision?: number;
+    expectedSourceRevision?: number;
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
-    if (process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run') {
+    if (this.#legacyMode) {
       return this.update({ orgId, id, userId, patch });
     }
     const item = await this.get({ orgId, id });
     if (!item) return null;
+    const source = primarySource(item);
+    if (!source) return this.update({ orgId, id, userId, patch });
     const adapter = workItemProviderAdapter(item.externalSource);
     const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
-    if (patch.title !== undefined || Object.keys(split.provider ?? {}).length > 0) {
-      await this.syncWorkItem({
+    if (Object.keys(split.provider ?? {}).length > 0) {
+      await this.syncWorkItemSource({
         orgId,
         factoryProjectId: item.factoryProjectId,
-        provider: item.workItem.provider,
-        externalId: item.workItem.externalId,
-        expectedRevision: expectedWorkItemRevision,
+        provider: source.provider,
+        externalId: source.externalId,
+        expectedRevision: expectedSourceRevision,
         patch: current => {
-          const facts = adapter.toWorkItem(
-            item.externalSource,
-            {
-              ...current.metadata,
-              ...split.provider,
-            },
-            { title: patch.title ?? current.title, boardItemId: item.id },
-          );
+          const facts = adapter.toSource(item.externalSource, { ...current.metadata, ...split.provider });
+          if (!facts) throw new Error('An external source must produce provider facts.');
           return {
-            title: facts.title,
             key: facts.key,
             url: facts.url,
             state: facts.state,
@@ -1513,8 +1514,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         ([key, value]) => JSON.stringify(item.metadata?.[key]) !== JSON.stringify(value),
       ),
     );
-    if (Object.keys(boardPatch).length > 0) {
-      return this.update({ orgId, id, userId, patch: { metadata: boardPatch } });
+    if (patch.title !== undefined || Object.keys(boardPatch).length > 0) {
+      return this.update({
+        orgId,
+        id,
+        userId,
+        patch: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
+      });
     }
     const refreshed = await this.get({ orgId, id });
     return refreshed

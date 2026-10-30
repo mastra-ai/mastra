@@ -274,24 +274,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card?.workItem).toMatchObject({
-      provider: 'github', kind: 'issue', key: 'acme/repo#42', title: 'Issue 42', state: 'open',
+      provider: 'github', key: 'acme/repo#42', title: 'Issue 42', state: 'open',
       labels: ['bug'], author: 'reporter',
     });
     const [board] = await storage.ops.findMany('factory_board_items', {});
     const [work] = await storage.ops.findMany('factory_work_items', {});
+    const [source] = await storage.ops.findMany('factory_work_item_sources', {});
     expect(board).toMatchObject({ id: card!.id, work_item_id: card!.workItem.id, metadata: { authorTrusted: true } });
-    expect(work).toMatchObject({
-      id: card!.workItem.id, provider: 'github', kind: 'issue', key: 'acme/repo#42', title: 'Issue 42',
+    expect(work).toMatchObject({ id: card!.workItem.id, title: 'Issue 42' });
+    expect(source).toMatchObject({
+      work_item_id: card!.workItem.id, provider: 'github', key: 'acme/repo#42',
       state: 'open', labels: ['bug'], author: 'reporter',
     });
+    expect(card!.workItem.sources).toHaveLength(1);
+    expect(card!.workItem.sources[0]).toMatchObject({ id: source!.id, workItemId: work!.id });
+    for (const key of ['provider', 'kind', 'key', 'state', 'labels', 'author', 'metadata']) {
+      expect(work).not.toHaveProperty(key);
+    }
     for (const key of ['githubRepositoryId', 'githubIssueNumber', 'state', 'labels', 'author', 'sourceCreatedAt']) {
       expect(board!.metadata).not.toHaveProperty(key);
     }
-    expect(work!.metadata).not.toHaveProperty('authorTrusted');
+    expect(source!.metadata).not.toHaveProperty('authorTrusted');
     await expect(service.ingest(delivery)).resolves.toEqual({ status: 'replayed' });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     expect(await storage.ops.findMany('factory_board_items', {})).toHaveLength(1);
     expect(await storage.ops.findMany('factory_work_items', {})).toHaveLength(1);
+    expect(await storage.ops.findMany('factory_work_item_sources', {})).toEqual([source]);
     expect((await workItems.get({ orgId: 'org-1', id: card!.id }))?.revision).toBe(card!.revision);
   });
 });

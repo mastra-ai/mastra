@@ -32,6 +32,7 @@ import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
+import { primarySource } from '../../storage/domains/work-items/work-item-schema.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
@@ -428,7 +429,7 @@ export class GithubRules {
           id: item.id,
           userId: LABEL_ROUTE_USER_ID,
           patch: { metadata: { labels } },
-          expectedWorkItemRevision: item.workItem.revision,
+          expectedSourceRevision: primarySource(item)?.revision,
         });
       } catch (error) {
         // The card changed under us (a run wrote it, or a concurrent delivery won). The next
@@ -499,7 +500,7 @@ export class GithubRules {
             ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
           },
         },
-        expectedWorkItemRevision: item.workItem.revision,
+        expectedSourceRevision: primarySource(item)?.revision,
       });
       return { status: updated ? 'committed' : 'ignored' };
     } catch (error) {

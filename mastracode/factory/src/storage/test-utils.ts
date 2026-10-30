@@ -24,7 +24,7 @@ import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
 import type { ExternalWorkItemSource } from './domains/work-items/base.js';
-import type { WorkItemRow } from './domains/work-items/work-item-schema.js';
+import type { WorkItemRow, WorkItemSourceRow } from './domains/work-items/work-item-schema.js';
 
 export function createProviderWorkItemForTests(input: {
   id: string;
@@ -32,11 +32,31 @@ export function createProviderWorkItemForTests(input: {
   source: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
 }): WorkItemRow {
+  const source = workItemProviderAdapter(input.source).toSource(input.source, input.metadata);
+  const sources: WorkItemSourceRow[] = source
+    ? [
+        {
+          ...source,
+          id: `source-${input.id}`,
+          workItemId: `work-${input.id}`,
+          revision: 1,
+          syncedAt: null,
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        },
+      ]
+    : [];
   return {
-    ...workItemProviderAdapter(input.source).toWorkItem(input.source, input.metadata, {
-      title: input.title,
-      boardItemId: input.id,
-    }),
+    sources,
+    title: input.title,
+    provider: source?.provider ?? 'factory',
+    externalId: source?.externalId ?? input.id,
+    key: source ? source.key : input.id.slice(0, 8),
+    url: source?.url ?? null,
+    state: source?.state ?? null,
+    labels: source?.labels ?? [],
+    author: source?.author ?? null,
+    metadata: source?.metadata ?? null,
     id: `work-${input.id}`,
     orgId: 'org-1',
     factoryProjectId: 'project-1',
