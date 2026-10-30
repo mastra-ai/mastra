@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '../agent';
-import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadStreamRuntime, THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL_ERROR_ID } from '../thread-stream-runtime';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
 function registerRun(
@@ -784,6 +784,11 @@ describe('thread ownership (#24878)', () => {
     it('rejects without starting a second run when the live run never acknowledges', async () => {
       const { agent, run, result, cleanup } = await setup(Number.POSITIVE_INFINITY);
       await expect(result.accepted).rejects.toThrow(/Thread owner did not accept signal/);
+      await expect(result.accepted).rejects.toMatchObject({
+        id: THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL_ERROR_ID,
+        domain: 'AGENT',
+        details: { threadId: 'lost-ack-thread-Infinity', resourceId: 'lost-ack-user', retryable: true },
+      });
       expect((agent as any).stream).not.toHaveBeenCalled();
       run.complete();
       cleanup();

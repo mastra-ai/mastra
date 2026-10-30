@@ -1,4 +1,4 @@
-import { getErrorFromUnknown } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../error';
 import { withAck } from '../events/acking-callback';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
@@ -114,6 +114,31 @@ function describeThreadKey(key: string): string {
   const resourceId = key.slice(0, separator);
   const threadId = key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length);
   return resourceId ? `thread ${threadId} (resource ${resourceId})` : `thread ${threadId}`;
+}
+
+/**
+ * Error id thrown when a thread owner in another process never acknowledges a
+ * signal within its acceptance window. No run consumed the signal, so the send
+ * is safe to retry.
+ */
+export const THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL_ERROR_ID = 'AGENT_THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL';
+
+function threadOwnerDidNotAcceptSignalError(key: string, text: string): MastraError {
+  const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
+  const ambiguous = separator === -1 || key.lastIndexOf(AGENT_THREAD_KEY_SEPARATOR) !== separator;
+  return new MastraError({
+    id: THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL_ERROR_ID,
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.SYSTEM,
+    text,
+    details: {
+      threadId: ambiguous
+        ? key.replaceAll(AGENT_THREAD_KEY_SEPARATOR, '\\0')
+        : key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length),
+      resourceId: ambiguous ? null : key.slice(0, separator),
+      retryable: true,
+    },
+  });
 }
 
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
@@ -2974,7 +2999,13 @@ export class AgentThreadStreamRuntime {
       // this caller has already reported as timed out.
       const expiresAt = Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS;
       const timeout = setTimeout(
-        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${describeThreadKey(key)}`) }),
+        () =>
+          finish({
+            error: threadOwnerDidNotAcceptSignalError(
+              key,
+              `Claimed thread owner did not accept signal for ${describeThreadKey(key)}`,
+            ),
+          }),
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
       );
 
@@ -7710,7 +7741,10 @@ export class AgentThreadStreamRuntime {
           return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: winnerRunId };
         }
 
-        throw new Error(`Thread owner did not accept signal for ${describeThreadKey(reservedKey)}`);
+        throw threadOwnerDidNotAcceptSignalError(
+          reservedKey,
+          `Thread owner did not accept signal for ${describeThreadKey(reservedKey)}`,
+        );
       }
 
       // We own the lease. Start the renewal timer so it survives runs
