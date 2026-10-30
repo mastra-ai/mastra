@@ -377,6 +377,17 @@ describe('factory_list_attention', () => {
       item({ id: 'untriaged', stages: ['intake'] }),
       item({ id: 'triaging', stages: ['triage'], sessions: TRIAGED }),
       item({ id: 'moved-on', stages: ['planning'], sessions: TRIAGED }),
+      // Self-review parked this card after it was built: it resumes, it is not waiting on triage.
+      item({
+        id: 'parked',
+        stages: ['intake'],
+        sessions: TRIAGED,
+        stageHistory: ['intake', 'triage', 'planning', 'execute', 'review', 'intake'].map(stage => ({
+          stage,
+          enteredAt: '2026-10-01T00:00:00Z',
+          by: 'agent:binding-1',
+        })),
+      }),
       item({
         id: 'review-board',
         board: 'review',

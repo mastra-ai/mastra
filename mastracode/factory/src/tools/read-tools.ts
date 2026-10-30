@@ -146,13 +146,17 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-/** Held: a Work card resting in Intake after triage looked at it (or its source asks for approval), until a person moves it on. */
+const PAST_TRIAGE = new Set(['planning', 'execute', 'review']);
+
+/**
+ * Held: a Work card triage left in Intake (or whose source asks for approval), until a person
+ * moves it on. A card that has been past Triage since (parked by self-review, or dragged back)
+ * resumes instead, matching the board's held state.
+ */
 function isHeld(item: WorkItemRow): boolean {
-  return (
-    boardForWorkItem(item) === 'work' &&
-    item.stages[0] === 'intake' &&
-    (item.sessions.triage !== undefined || needsApproval(item))
-  );
+  if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
+  if (needsApproval(item)) return true;
+  return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));
 }
 
 const listInputSchema = z
