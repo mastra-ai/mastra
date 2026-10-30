@@ -2,8 +2,8 @@
 '@mastra/factory': minor
 ---
 
-Factory boards are now stored per project in the database. On startup, and when a project is first loaded, Factory writes the built-in Work and Review boards and the boards you pass to `new MastraFactory({ boards })` into each project. From then on Factory reads every project's boards from the database, so each project can have its own version of a board.
+Each project's boards are now the built-in Work and Review boards and the boards you pass to `new MastraFactory({ boards })`, followed by any boards the project created for itself, which are stored in its database. Code boards are served exactly as your code defines them, are never written to the database, and are read-only. When a stored board has the same key as a code board, the code board wins.
 
-Existing apps need no change: a project's stored boards match your code until someone edits them. When you change a board in code, projects whose copy nobody edited pick up the new version on the next start. A project whose copy was edited keeps the edit, and the board catalog (`GET /web/factory/projects/:id/boards`) reports that the code changed. The catalog now also says where each board came from (`builtin`, `app` or `stored`) and whether it was edited.
+Existing apps need no change, and Factory writes nothing to the database at startup.
 
-Pass each board exactly as `defineBoard()` returned it. A copy such as `{ ...board }` no longer carries the definition Factory seeds from, so startup refuses it with an error naming the board.
+The board catalog (`GET /web/factory/projects/:id/boards`) now reports each board's `source` (`builtin`, `app` or `stored`), whether it is `editable` (`false` for code boards) and any `problems`, such as a runner skill that does not exist.
