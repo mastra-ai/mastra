@@ -204,82 +204,24 @@ describe('synchronous observation indexing delta (#27930)', () => {
     expect(embedded[1]).not.toContain('Observed fact 1.');
   });
 
-  it('retries a committed group whose vector write failed on the next cycle', async () => {
+  it('keeps the cycle successful, warns, and does not retry when a group vector write fails', async () => {
     const { memory, observe, vector, headGroups } = await setup();
     vector.failNextUpsert = true;
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // The observations committed, so the failed write does not fail the cycle, but it is reported.
     expect((await observe(memory, 1)).observed).toBe(true);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('Storing observation vectors failed (vector store unavailable)'),
-    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Storing observation vectors failed'));
     warn.mockRestore();
     expect((await headGroups()).groups).toHaveLength(1);
     expect(vector.writes).toHaveLength(0);
     await observe(memory, 2);
     const { groups } = await headGroups();
     expect(groups).toHaveLength(2);
-    expect(vector.writes.map(row => row.group_id).sort()).toEqual(groups.map(group => group.id).sort());
-    await observe(memory, 3);
-    expect(vector.writes).toHaveLength(3);
+    // Only the second cycle's own group is written; the failed one is not replayed.
+    expect(vector.writes.map(row => row.group_id)).toEqual([groups[1]?.id]);
   });
 
-  it('retries a failed group write after a reflection rolls the generation over', async () => {
-    const { memory, observe, vector, headGroups } = await setup();
-    vector.failNextUpsert = true;
-    expect((await observe(memory, 1)).observed).toBe(true);
-    const { head, store, groups } = await headGroups();
-    await store.createReflectionGeneration({
-      currentRecord: head,
-      reflection: head.activeObservations,
-      tokenCount: 10,
-    });
-    await observe(memory, 2);
-    // The retried write keeps naming the generation its group was committed to.
-    expect(vector.writes.find(row => row.group_id === groups[0]?.id)?.record_id).toBe(head.id);
-    expect(vector.writes).toHaveLength(2);
-  });
-
-  it('does not retry a failed group write after its observational memory was cleared', async () => {
-    const { memory, observe, vector, headGroups } = await setup();
-    vector.failNextUpsert = true;
-    expect((await observe(memory, 1)).observed).toBe(true);
-    const { head, groups } = await headGroups();
-    const engine = await memory.omEngine;
-    await engine!.clear(head.threadId!, head.resourceId);
-    await observe(memory, 2);
-    expect(vector.writes.map(row => row.group_id)).not.toContain(groups[0]?.id);
-    expect(vector.writes).toHaveLength(1);
-    expect(engine!.unindexedObservations.size).toBe(0);
-  });
-
-  it('keeps both groups indexable when the lineage check for a retried group fails once', async () => {
-    const { memory, observe, vector, headGroups } = await setup();
-    vector.failNextUpsert = true;
-    expect((await observe(memory, 1)).observed).toBe(true);
-    const { head, store, groups } = await headGroups();
-    await store.createReflectionGeneration({
-      currentRecord: head,
-      reflection: head.activeObservations,
-      tokenCount: 10,
-    });
-    const readHistory = store.getObservationalMemoryHistory.bind(store);
-    let failHistoryRead = true;
-    store.getObservationalMemoryHistory = async (...args) => {
-      if (failHistoryRead) {
-        failHistoryRead = false;
-        throw new Error('storage unavailable');
-      }
-      return readHistory(...args);
-    };
-    await observe(memory, 2);
-    expect(vector.writes.map(row => row.text)).toEqual([expect.stringContaining('Observed fact 2.')]);
-    await observe(memory, 3);
-    expect(vector.writes.map(row => row.group_id)).toContain(groups[0]?.id);
-    expect(vector.writes).toHaveLength(3);
-  });
-
-  it('indexes a committed group on the next cycle when the thread update after the commit fails', async () => {
+  it('indexes the committed group even when the thread update after the commit fails', async () => {
     const { memory, observe, vector, headGroups } = await setup();
     await observe(memory, 1);
     const { store } = await headGroups();

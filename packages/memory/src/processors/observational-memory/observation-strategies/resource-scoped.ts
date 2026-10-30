@@ -474,14 +474,14 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       return { status: 'not-committed', reason: 'the observational memory head kept changing during the commit' };
     }
     processed = committed.processed;
-    // Queue only the groups this commit added, before anything below can fail the cycle. A covered
+    // Index only the groups this commit added, before anything below can fail the cycle. A covered
     // cycle added nothing.
     if (!committed.alreadyCovered) {
       const added = this.observationResults.flatMap(({ threadId, threadMessages }) => {
         const group = this.newGroups.get(threadId);
         return group ? [{ group, threadId, observedAt: this.getMaxMessageTimestamp(threadMessages) }] : [];
       });
-      this.queueObservationGroups(added, resourceId, committed.record);
+      await this.indexNewObservationGroups(added, resourceId, committed.record.id);
     }
 
     const threadUpdateMarkers: Array<ReturnType<typeof createThreadUpdateMarker>> = [];
@@ -535,9 +535,6 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const marker of threadUpdateMarkers) {
       await this.streamMarker(marker);
     }
-
-    // Write the queued groups, including earlier ones of this lineage whose write failed.
-    await this.indexQueuedObservationGroups(committed.record);
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }

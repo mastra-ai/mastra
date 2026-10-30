@@ -256,14 +256,14 @@ export class SyncObservationStrategy extends ObservationStrategy {
       return { status: 'not-committed', reason: 'the observational memory head kept changing during the commit' };
     }
     processed = committed.processed;
-    // Queue only the group this commit added, before anything below can fail the cycle. Earlier
+    // Index only the group this commit added, before anything below can fail the cycle. Earlier
     // groups were indexed by the cycle that added them, and reflected groups are not observation
     // output. A covered cycle added nothing.
     if (!committed.alreadyCovered && processed.newObservationGroup) {
-      this.queueObservationGroups(
+      await this.indexNewObservationGroups(
         [{ group: processed.newObservationGroup, threadId, observedAt: processed.lastObservedAt }],
         resourceId,
-        committed.record,
+        committed.record.id,
       );
     }
 
@@ -307,9 +307,6 @@ export class SyncObservationStrategy extends ObservationStrategy {
         );
       }
     }
-
-    // Write the queued group, including earlier ones of this lineage whose write failed.
-    await this.indexQueuedObservationGroups(committed.record);
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }

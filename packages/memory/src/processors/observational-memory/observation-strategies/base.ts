@@ -30,14 +30,12 @@ import type {
 } from '../types';
 
 import type {
-  ObservationIndexRecord,
   ObservationIndexWrite,
   ObservationPersistOutcome,
   ObservationRunOpts,
   ObservationRunResult,
   ObserverOutput,
   ProcessedObservation,
-  UnindexedObservation,
 } from './types';
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
@@ -45,9 +43,6 @@ const hasherPromise = xxhash();
 
 /** Recompose-and-retry rounds for an observation commit that hit a retired or changed head. */
 const MAX_HEAD_COMMIT_RETRIES = 3;
-
-/** Failed observation-group vector writes kept in process for a later cycle to retry. */
-const MAX_UNINDEXED_OBSERVATIONS = 100;
 
 const OBSERVATION_LIFECYCLE_MARKERS = new Set([
   'data-om-observation-start',
@@ -105,11 +100,6 @@ export interface StrategyDeps {
   observedMessageIds: Set<string>;
   obscureThreadIds: boolean;
   onIndexObservations?: (observation: ObservationIndexWrite) => Promise<void>;
-  /**
-   * Committed groups whose vector write failed, keyed by group ID. The next cycle that commits to
-   * the same lineage retries them, so one failed write does not leave a group unsearchable.
-   */
-  unindexedObservations: Map<string, UnindexedObservation>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
   /** Applies `observation.previousObserverTokens` to the previous observations the Observer sees. */
   prepareObserverContext: (
@@ -557,130 +547,56 @@ export abstract class ObservationStrategy {
     );
   }
 
+  /** Index every group parsed out of `observations` (used for buffered chunks, which carry no producer group). */
   protected async indexObservationGroups(
     observations: string,
     threadId: string,
     resourceId: string | undefined,
     observedAt: Date | undefined,
-    record: ObservationIndexRecord,
+    recordId: string,
   ): Promise<void> {
     const groups = parseObservationGroups(observations).map(group => ({ group, threadId, observedAt }));
-    this.queueObservationGroups(groups, resourceId, record);
-    await this.indexQueuedObservationGroups(record);
+    await this.indexNewObservationGroups(groups, resourceId, recordId);
   }
 
   /**
-   * Queue the observation groups a commit to `record` added for indexing. Call this right after
-   * the commit, so a later failure in the cycle cannot lose them; the next index pass writes them.
+   * Write the vectors for the groups a commit added, once. Call this right after the commit. The
+   * observations are already committed, so a failed write is logged and must not fail the cycle:
+   * that would skip its end markers and reflection.
    */
-  protected queueObservationGroups(
+  protected async indexNewObservationGroups(
     groups: Array<{ group: ObservationGroup; threadId: string; observedAt?: Date }>,
     resourceId: string | undefined,
-    record: ObservationIndexRecord,
-  ): void {
-    if (!resourceId || !this.deps.onIndexObservations) {
-      return;
-    }
-    // Only the identity fields, so the queue does not hold the record's observation text.
-    const { id, threadId: recordThreadId, resourceId: recordResourceId, generationCount } = record;
-    for (const { group, threadId, observedAt } of groups) {
-      this.deps.unindexedObservations.set(group.id, {
-        write: {
-          text: group.content,
-          groupId: group.id,
-          range: group.range,
-          threadId,
-          resourceId,
-          observedAt,
-          recordId: id,
-        },
-        record: { id, threadId: recordThreadId, resourceId: recordResourceId, generationCount },
-      });
-    }
-    const dropped = this.trimUnindexedObservations();
-    if (dropped > 0) {
-      console.warn(
-        `[observational-memory] ${dropped} observation group(s) were dropped from the vector retry backlog because it is full.`,
-      );
-    }
-  }
-
-  /** Drop the oldest queued writes beyond the backlog bound, keeping writes in flight. */
-  private trimUnindexedObservations(): number {
-    const pending = this.deps.unindexedObservations;
-    let dropped = 0;
-    for (const [groupId, entry] of pending) {
-      if (pending.size <= MAX_UNINDEXED_OBSERVATIONS) break;
-      if (entry.writing) continue;
-      pending.delete(groupId);
-      dropped++;
-    }
-    return dropped;
-  }
-
-  /**
-   * Write the queued observation groups of `record`'s lineage, retrying each write. Groups of an
-   * earlier generation keep naming the generation they were committed to; those of a cleared
-   * lineage are dropped. A write that still fails is logged and stays queued for a later cycle.
-   */
-  protected async indexQueuedObservationGroups(record: ObservationIndexRecord): Promise<void> {
-    const pending = this.deps.unindexedObservations;
-    if (!this.deps.onIndexObservations || pending.size === 0) {
-      return;
-    }
-
-    const entries: UnindexedObservation[] = [];
-    for (const entry of [...pending.values()]) {
-      // Another cycle is writing or has written it; that cycle decides whether it stays queued.
-      const isUnclaimed = () => !entry.writing && pending.get(entry.write.groupId) === entry;
-      if (!isUnclaimed()) continue;
-      if (entry.record.threadId !== record.threadId || entry.record.resourceId !== record.resourceId) continue;
-      // Claim each entry as soon as it is chosen; the lookup below yields to other cycles.
-      if (entry.record.id === record.id) {
-        entry.writing = true;
-        entries.push(entry);
-        continue;
-      }
-      const lineageHead = await getLineageHead(this.storage, entry.record).catch(() => undefined);
-      if (!isUnclaimed()) continue;
-      // undefined: the lookup failed, so keep the entry for a later cycle.
-      if (lineageHead) {
-        entry.writing = true;
-        entries.push(entry);
-      } else if (lineageHead === null) {
-        pending.delete(entry.write.groupId);
-      }
-    }
-    if (entries.length === 0) {
+    recordId: string,
+  ): Promise<void> {
+    const onIndexObservations = this.deps.onIndexObservations;
+    if (!resourceId || !onIndexObservations || groups.length === 0) {
       return;
     }
 
     const results = await Promise.allSettled(
-      entries.map(({ write }) =>
-        withRetry(() => this.deps.onIndexObservations!(write), {
-          label: 'index-observations',
-          abortSignal: this.opts.abortSignal,
-        }),
+      groups.map(({ group, threadId, observedAt }) =>
+        withRetry(
+          () =>
+            onIndexObservations({
+              text: group.content,
+              groupId: group.id,
+              range: group.range,
+              threadId,
+              resourceId,
+              observedAt,
+              recordId,
+            }),
+          { label: 'index-observations', abortSignal: this.opts.abortSignal },
+        ),
       ),
     );
-    let failure: unknown;
-    results.forEach((result, index) => {
-      const entry = entries[index]!;
-      entry.writing = false;
-      pending.delete(entry.write.groupId);
-      if (result.status === 'fulfilled') return;
-      failure ??= result.reason;
-      pending.set(entry.write.groupId, entry);
-    });
-    const dropped = this.trimUnindexedObservations();
-    // The observations are committed, so a failed write must not fail the cycle: that would skip
-    // its end markers and reflection. The write stays queued for the next cycle.
-    if (failure !== undefined) {
-      omError('[OM] Indexing committed observation groups failed', failure);
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failures.length > 0) {
+      const reason = failures[0]!.reason;
+      omError('[OM] Indexing committed observation groups failed', reason);
       console.warn(
-        `[observational-memory] Storing observation vectors failed (${failure instanceof Error ? failure.message : String(failure)}); ` +
-          `${pending.size} observation group(s) will be retried on the next observation cycle` +
-          (dropped > 0 ? `, and ${dropped} older group(s) were dropped from the retry backlog.` : '.'),
+        `[observational-memory] Storing observation vectors failed for ${failures.length} of ${groups.length} group(s) (${reason instanceof Error ? reason.message : String(reason)}).`,
       );
     }
   }
