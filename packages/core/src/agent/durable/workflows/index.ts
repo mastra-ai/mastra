@@ -1,6 +1,8 @@
 export { createDurableAgenticWorkflow, type DurableAgenticWorkflowOptions } from './create-durable-agentic-workflow';
 export {
   runDurableFinishSideEffects,
+  saveDurableRunAtDeadline,
+  claimDurableDeadlineSave,
   type DurableFinishSideEffectsOptions,
   type DurableFinishSideEffectsResult,
 } from './finalize-run';

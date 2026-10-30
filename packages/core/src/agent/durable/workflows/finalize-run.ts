@@ -1,6 +1,9 @@
 import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
+import { commitToolResult } from '../../../loop/shared/steps/tool-result-commit-core';
+import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
+import { DEADLINE_SAVE_WAIT_MS, settledOrElapsed } from '../../../loop/timeout';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { createObservabilityContext } from '../../../observability';
@@ -15,6 +18,7 @@ import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
@@ -420,6 +424,219 @@ export async function runDurableFinishSideEffects({
     titleForStream,
     structuredOutputChunks,
   };
+}
+
+/**
+ * The message list a total deadline saves: the steps that completed in time, plus the step in flight
+ * with the tool results that came back during the deadline's grace window and any call still running
+ * saved as aborted.
+ */
+export function deadlineMessageListState(entry: RunRegistryEntry): SerializedMessageListState | undefined {
+  const late = entry.lateToolResults;
+  if (late?.length && entry.messageList) {
+    // JSON round-trip: the live list keeps mutating, and its metadata can hold functions.
+    const inFlight = new MessageList().deserialize(JSON.parse(JSON.stringify(entry.messageList.serialize())));
+    for (const result of late) {
+      commitToolResult({
+        messageList: inFlight,
+        outcome: result.outcome,
+        toolCallId: result.toolCallId,
+        toolName: result.toolName,
+        toolArgs: result.args,
+      });
+    }
+    // A sibling call still running past the grace window is saved as aborted, so the late results
+    // that did come back are not dropped with it.
+    const unsettled = inFlight.get.response
+      .db()
+      .flatMap(message => message.content.parts ?? [])
+      .filter(part => part.type === 'tool-invocation' && !isTerminalToolInvocationState(part.toolInvocation.state));
+    for (const part of unsettled) {
+      if (part.type !== 'tool-invocation') continue;
+      commitToolResult({
+        messageList: inFlight,
+        outcome: { kind: 'result', result: TOOL_ABORT_NOTICE },
+        toolCallId: part.toolInvocation.toolCallId,
+        toolName: part.toolInvocation.toolName,
+        toolArgs: part.toolInvocation.args,
+      });
+    }
+    return inFlight.serialize();
+  }
+  return entry.completedStepsState;
+}
+
+/**
+ * Give the output processors (and with them memory) their one pass when a total deadline ends a
+ * durable run. The run never reaches its finish step, so this runs over the message list as of the
+ * last completed step, the same input a provider error's finish pass would see.
+ */
+export async function runDurableDeadlineOutputPass({
+  runId,
+  initData,
+  messageListState,
+  entry,
+  mastra,
+  logger,
+}: {
+  runId: string;
+  initData: Pick<DurableAgenticWorkflowInput, 'agentId' | 'agentName' | 'state' | 'options' | 'requestContextEntries'>;
+  messageListState: SerializedMessageListState;
+  entry: RunRegistryEntry;
+  mastra?: Mastra;
+  logger: IMastraLogger;
+}): Promise<void> {
+  const durableState = initData.state;
+  const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
+  if (!requestContext.has('MastraMemory') && durableState?.threadId) {
+    requestContext.set('MastraMemory', {
+      thread: { id: durableState.threadId },
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
+  const messageList = new MessageList({
+    threadId: durableState?.threadId,
+    resourceId: durableState?.resourceId,
+  }).deserialize(messageListState);
+
+  // The output processors save the turn (MessageHistory), so the caller needs write access first.
+  if (entry.memory && durableState?.threadId && durableState.resourceId && !durableState.memoryConfig?.readOnly) {
+    await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
+      mastra,
+      user: requestContext.get('user'),
+      threadId: durableState.threadId,
+      resourceId: durableState.resourceId,
+      agentId: initData.agentId,
+      requestContext,
+      permission: MastraFGAPermissions.MEMORY_WRITE,
+      actor: initData.options?.actor,
+    });
+  }
+
+  if (entry.outputProcessors?.length) {
+    const runner = new ProcessorRunner({
+      inputProcessors: entry.inputProcessors ?? [],
+      outputProcessors: entry.outputProcessors,
+      errorProcessors: entry.errorProcessors ?? [],
+      logger,
+      agentName: initData.agentName ?? initData.agentId,
+      agent: entry.agent,
+      processorStates: entry.processorStates,
+    });
+    try {
+      await runner.runOutputProcessors(messageList, createObservabilityContext(), requestContext, 0, undefined, {
+        text: resolveOutputText(messageList),
+        usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+        finishReason: 'error',
+        steps: [],
+        inputAccepted: true,
+      });
+    } catch (processorError) {
+      // A tripwire rejects the turn, as it does at finish: remove response messages already saved.
+      if (processorError instanceof TripWire) {
+        await undoSavedResponseMessages({
+          memory: entry.memory,
+          threadId: durableState?.threadId,
+          memoryConfig: durableState?.memoryConfig,
+          messageList,
+          saveQueueManager: entry.saveQueueManager,
+          logger,
+          runId,
+        });
+        return;
+      }
+      logger.warn('[DurableAgent] Error running output processors at the total deadline', {
+        runId,
+        error: processorError,
+      });
+      if (durableState?.observationalMemory) return;
+    }
+  }
+
+  if (
+    !entry.saveQueueManager ||
+    !entry.memory ||
+    !durableState?.threadId ||
+    !durableState.resourceId ||
+    durableState.observationalMemory ||
+    durableState.memoryConfig?.readOnly
+  ) {
+    return;
+  }
+  await entry.saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
+    throwOnError: true,
+  });
+}
+
+/** Long enough that a step reaching a worker hours after the caller saved still loses the claim. */
+const DEADLINE_SAVE_OWNER_LEASE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Claim the one deadline save of a run's segment across processes. On Inngest the caller saves
+ * when no worker reported within its wait, and a worker the run reaches later still sees the
+ * expired deadline; only the first of them may run the output pass. The claim is keyed by the
+ * segment's deadline, so a resumed segment with its own deadline gets its own save. Stores without
+ * run ownership cannot arbitrate, so every claimant saves there (message saves upsert by id).
+ */
+export async function claimDurableDeadlineSave({
+  runId,
+  deadlineAt,
+  ownerId,
+  mastra,
+}: {
+  runId: string;
+  deadlineAt: number;
+  ownerId: string;
+  mastra?: Mastra;
+}): Promise<boolean> {
+  try {
+    const store = await mastra?.getStorage()?.getStore('workflows');
+    if (!store) return true;
+    const { acquired } = await store.claimRunOwnership({
+      runId: `${runId}:deadline-save:${deadlineAt}`,
+      ownerId,
+      leaseMs: DEADLINE_SAVE_OWNER_LEASE_MS,
+    });
+    return acquired;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The deadline save for a caller that reports the deadline itself because no worker did: the
+ * output pass over what this process knows of the run (its completed steps, or the accepted
+ * request). Resolves once the save lands or `DEADLINE_SAVE_WAIT_MS` passes, so a hung store cannot
+ * hold the timeout error back. Failures are logged; the deadline still surfaces.
+ */
+export async function saveDurableRunAtDeadline({
+  runId,
+  runInput,
+  mastra,
+  logger,
+}: {
+  runId: string;
+  runInput: Pick<
+    DurableAgenticWorkflowInput,
+    'agentId' | 'agentName' | 'state' | 'options' | 'requestContextEntries' | 'messageListState'
+  >;
+  mastra?: Mastra;
+  logger: IMastraLogger;
+}): Promise<void> {
+  const entry = getRunRegistryEntry(runId, mastra);
+  if (!entry || entry.tripwire) return;
+  const save = runDurableDeadlineOutputPass({
+    runId,
+    initData: runInput,
+    messageListState: deadlineMessageListState(entry) ?? runInput.messageListState,
+    entry,
+    mastra,
+    logger,
+  }).catch(saveError => {
+    logger.warn('[DurableAgent] Failed to save the run at its total deadline', { runId, error: saveError });
+  });
+  await settledOrElapsed(save, DEADLINE_SAVE_WAIT_MS);
 }
 
 class StructuringPassError extends Error {

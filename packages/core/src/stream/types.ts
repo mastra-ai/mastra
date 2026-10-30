@@ -1326,6 +1326,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** The agent producing this output, passed to output processors as `agent`. */
   agent?: Agent<any, any, any, any>;
   requestContext?: RequestContext;
+  /** @internal Runs before the total-deadline output pass saves the turn. Throwing skips that save. */
+  beforeDeadlineSave?: () => Promise<void>;
   /** The run's abort signal, forwarded to output processors. */
   abortSignal?: AbortSignal;
   transportRef?: StreamTransportRef;

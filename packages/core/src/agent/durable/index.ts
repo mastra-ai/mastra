@@ -155,7 +155,10 @@ export {
   requestAcknowledgedAbort,
   subscribeToAbortRequests,
   ensureRemoteAbortListener,
+  readRunDeadline,
+  RUN_DEADLINE_KEY,
 } from './abort-transport';
+export type { RunDeadline } from './abort-transport';
 
 // Types
 export type {
@@ -212,6 +215,8 @@ export {
 export {
   createDurableAgenticWorkflow,
   runDurableFinishSideEffects,
+  saveDurableRunAtDeadline,
+  claimDurableDeadlineSave,
   type DurableAgenticWorkflowOptions,
   type DurableFinishSideEffectsOptions,
   type DurableFinishSideEffectsResult,

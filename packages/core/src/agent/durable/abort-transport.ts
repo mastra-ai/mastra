@@ -13,6 +13,7 @@
  * event is ever published, leaving stream consumers hanging forever.
  */
 import type { PubSub } from '../../events';
+import { MastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
@@ -25,12 +26,23 @@ import type { RunRegistryEntry } from './types';
  * when nobody is listening — an unheard request is a no-op, exactly like
  * aborting a run that already finished.
  */
-export async function publishAbortRequest(pubsub: PubSub, runId: string): Promise<void> {
+export async function publishAbortRequest(pubsub: PubSub, runId: string, reason?: MastraTimeoutError): Promise<void> {
   await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
     type: AgentControlEventTypes.ABORT_REQUEST,
     runId,
-    data: {},
+    data: reason ? { timeout: { timeoutType: reason.timeoutType, timeoutMs: reason.timeoutMs } } : {},
   });
+}
+
+type AbortRequestData = {
+  requestId?: string;
+  /** Set when a run deadline, not a caller, stopped the run. */
+  timeout?: { timeoutType: MastraTimeoutError['timeoutType']; timeoutMs: number };
+};
+
+/** The reason the executing process aborts with: the deadline's timeout error, or a plain abort. */
+function abortReason(data?: AbortRequestData): Error {
+  return data?.timeout ? new MastraTimeoutError(data.timeout) : new Error('Aborted');
 }
 
 /**
@@ -118,15 +130,15 @@ export async function requestAcknowledgedAbort(
 export async function subscribeToAbortRequests(
   pubsub: PubSub,
   runId: string,
-  onAbortRequested: () => void,
+  onAbortRequested: (reason: Error) => void,
 ): Promise<() => Promise<void>> {
   const topic = AGENT_CONTROL_TOPIC(runId);
   // Every delivery is acknowledged, including control events this listener
   // ignores. An ignored delivery is still a delivery, and a durable transport
   // keeps unacknowledged entries pending for the life of the subscription.
-  const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
+  const handler = async (event: { type?: string; data?: AbortRequestData }, ack?: () => Promise<void>) => {
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
-      onAbortRequested();
+      onAbortRequested(abortReason(event.data));
       const requestId = event.data?.requestId;
       if (requestId) {
         // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
@@ -163,7 +175,12 @@ export async function subscribeToAbortRequests(
  * calls this. The subscription is torn down with the registry entry, whether
  * that happens on explicit cleanup or TTL eviction.
  */
-export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, mastra?: Mastra): Promise<void> {
+export async function ensureRemoteAbortListener(
+  pubsub: PubSub,
+  runId: string,
+  mastra?: Mastra,
+  deadline?: RunDeadline,
+): Promise<void> {
   let entry = getRunRegistryEntry(runId, mastra);
 
   if (!entry) {
@@ -194,10 +211,10 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, m
 
   let unsubscribe: () => Promise<void>;
   try {
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
+    unsubscribe = await subscribeToAbortRequests(pubsub, runId, reason => {
       const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
       if (controller && !controller.signal.aborted) {
-        controller.abort(new Error('Aborted'));
+        controller.abort(reason);
       }
     });
   } catch (error) {
@@ -211,12 +228,51 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, m
   // Chain onto the entry's existing cleanup rather than replacing it: the
   // registry's dispose hook only calls `cleanup()`, and other owners of the
   // entry have their own teardown registered there.
+  // The deadline's abort request is published once, live. A worker that subscribes after it went
+  // out never hears it, so the run's deadline also travels with the run and is armed here.
+  const deadlineTimer = deadline ? armRunDeadline(entry, deadline) : undefined;
+
   const previousCleanup = entry.cleanup;
   entry.cleanup = () => {
     try {
       previousCleanup?.();
     } finally {
+      clearTimeout(deadlineTimer);
       void unsubscribe();
     }
   };
+}
+
+/**
+ * Request-context key the caller sets to the run's absolute total deadline for one execution
+ * segment (stream or resume), so every worker can stop at it on its own clock.
+ */
+export const RUN_DEADLINE_KEY = '__mastra_runDeadline';
+
+/** The run's total deadline: when it fires (epoch ms) and the budget it enforces. */
+export type RunDeadline = { at: number; timeoutMs: number };
+
+/** The run deadline a step's request context carries, if any. */
+export function readRunDeadline(requestContext?: { get(key: string): unknown }): RunDeadline | undefined {
+  const value = requestContext?.get(RUN_DEADLINE_KEY) as Partial<RunDeadline> | undefined;
+  if (typeof value?.at !== 'number' || typeof value.timeoutMs !== 'number') return undefined;
+  return { at: value.at, timeoutMs: value.timeoutMs };
+}
+
+/** Abort the entry's controller with the deadline's timeout error now, or when the deadline arrives. */
+function armRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline): ReturnType<typeof setTimeout> | undefined {
+  const expire = () => {
+    const controller = entry.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: deadline.timeoutMs }));
+    }
+  };
+  const remaining = deadline.at - Date.now();
+  if (remaining <= 0) {
+    expire();
+    return undefined;
+  }
+  const timer = setTimeout(expire, remaining);
+  timer.unref?.();
+  return timer;
 }

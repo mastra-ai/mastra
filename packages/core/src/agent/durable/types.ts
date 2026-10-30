@@ -15,6 +15,7 @@ import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
+import type { ToolResultCommitOutcome } from '../../loop/shared/steps/tool-result-commit-core';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { RunScope } from '../../mastra/run-scope';
@@ -531,6 +532,10 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * the same iteration on every engine (G3).
    */
   delegationBailed?: boolean;
+  /** Set when the total deadline aborted this tool call; carried so any worker ends the run as the deadline */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped this tool call; carried so any worker ends the run as aborted */
+  runAborted?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -584,6 +589,10 @@ export interface DurableAgenticExecutionOutput {
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Set when the total deadline aborted a tool call this iteration */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped a tool call this iteration */
+  runAborted?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
@@ -825,6 +834,10 @@ export interface RunRegistryEntry {
   runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Message list as of the last completed step; memory saves this when a total deadline ends the run */
+  completedStepsState?: SerializedMessageListState;
+  /** Tool calls that settled after a total deadline ended the run; the deadline save records their step */
+  lateToolResults?: Array<{ toolCallId: string; toolName: string; args: unknown; outcome: ToolResultCommitOutcome }>;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**

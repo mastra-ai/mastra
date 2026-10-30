@@ -15,7 +15,6 @@ import { RequestContext } from '../../../../request-context';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
-import type { EngineVariant } from '../types';
 
 /**
  * A run that ends without a finish chunk must still save the turn.
@@ -82,11 +81,6 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   // Every Inngest step is a round trip through the dev server.
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
-  // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'durable', 'evented', 'inngest'];
-  const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
-  // Inngest already keeps the user message when the deadline lands during the input save.
-  const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -123,7 +117,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     expect(sent, `${label}: follow-up sees the tool result`).toContain('call_echo');
   }
 
-  itDeadline(
+  it(
     'total-timeout after a completed tool step',
     async () => {
       const memory = new MockMemory();
@@ -221,7 +215,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
   // Durable engines save the input before the run starts; a deadline during that save must not lose it.
   // On normal/fs the held save is the deadline pass's own write.
-  itInFlightSave(
+  it(
     'total-timeout while the input save is still in flight keeps the user message once',
     async () => {
       const memory = new MockMemory();
@@ -285,7 +279,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   );
 
   // With observational memory on, its processor owns history writes instead of MessageHistory.
-  itDeadline(
+  it(
     'total-timeout after a completed tool step, observational memory',
     async () => {
       const memory = new Memory({
