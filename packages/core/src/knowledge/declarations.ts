@@ -51,7 +51,7 @@ export interface KnowledgeScopeDeclaration {
   children?: Array<{ name: string; description?: string; displayLabel?: string; access?: KnowledgeAccessRule[] }>;
   /** Keyed pages created with this scope; they may nest (`pages` inside a page, same scope). */
   pages?: KnowledgePageTemplate[];
-  /** Pages (refs) pinned into the context of runs holding this scope; delivered to runs holding this scope. */
+  /** Pages (refs) pinned into the context of every run holding this scope. */
   pinnedContext?: string[];
   /** Ordering of stored pins delivered through this scope; higher first. Default 0. */
   pinnedContextPriority?: number;

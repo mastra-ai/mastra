@@ -1260,6 +1260,23 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.pageIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const readable = await this.#readable(input.read);
+    const rows = await (
+      await this.#c('notes')
+    )
+      .aggregate([
+        { $match: { pageId: { $in: ids }, ...live, ...this.#visibleNotes(readable) } },
+        { $group: { _id: '$pageId', count: { $sum: 1 } } },
+      ])
+      .toArray();
+    for (const row of rows) counts[row._id as string] = row.count as number;
+    return counts;
+  }
+
   async listNotesMentioning(input: {
     pageId: string;
     read: KnowledgeReadScope;
