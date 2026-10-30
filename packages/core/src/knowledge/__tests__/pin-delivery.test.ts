@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
+import { KnowledgeUnsupportedCapabilityError } from '../../storage/domains/knowledge';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
@@ -155,5 +156,47 @@ describe('Knowledge pin delivery cost', () => {
       `Loose (${loose.id}, no notes): No key here.`,
       'Refund Policy (org:acme#policies/refund, 2 notes): Full refund within 30 days.',
     ]);
+  });
+  // An adapter older than countNotes must not cost the pins; nor may a failed count while the tree walk
+  // is still waiting on the store (that rejection used to go unhandled).
+  it.each([
+    ['is not supported by the adapter', () => new KnowledgeUnsupportedCapabilityError('countNotes')],
+    ['fails', () => new Error('count failed')],
+  ])('delivers pins without a note count when counting notes %s', async (_, error) => {
+    const { knowledge, storage, context } = await seed(0);
+    const org = (await storage.getScopesByAddress(['org:acme']))[0]!;
+    const policies = await storage.createPage({
+      parentId: org.id,
+      key: 'policies',
+      name: 'Policies',
+      provenance: host,
+    });
+    const refund = await storage.createPage({
+      parentId: policies.id,
+      key: 'refund',
+      name: 'Refund Policy',
+      body: 'Full refund within 30 days.',
+      provenance: host,
+    });
+    await storage.addPinAudience({ pageId: refund.id, audience: ['org:acme'], createdBy: 'host' });
+    vi.spyOn(storage, 'countNotes').mockImplementation(() => Promise.reject(error()));
+    const getPages = storage.getPages.bind(storage);
+    vi.spyOn(storage, 'getPages').mockImplementation(async args => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      return getPages(args);
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const pins = await knowledge.__deliveredPins(context as never);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(pins.map(pin => pin.text)).toEqual([
+        'Refund Policy (org:acme#policies/refund): Full refund within 30 days.',
+      ]);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });

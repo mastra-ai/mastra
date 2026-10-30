@@ -50,12 +50,20 @@ function bindConfigPin(ref: string, params: Record<string, string>): { address: 
 interface PinLabel {
   /** `<scope>#<key path>` when every page on the way up has a key, else the page id. */
   ref: string;
-  notes: number;
+  /** Undefined when the adapter can't count notes; the entry then goes out without a count. */
+  notes?: number;
 }
 
 function render(page: KnowledgePage, label: PinLabel, maxTokens: number): string {
-  const notes = label.notes === 0 ? 'no notes' : label.notes === 1 ? '1 note' : `${label.notes} notes`;
-  const text = `${page.name} (${label.ref}, ${notes}): ${page.body!.trim()}`;
+  const notes =
+    label.notes === undefined
+      ? ''
+      : label.notes === 0
+        ? ', no notes'
+        : label.notes === 1
+          ? ', 1 note'
+          : `, ${label.notes} notes`;
+  const text = `${page.name} (${label.ref}${notes}): ${page.body!.trim()}`;
   if (estimateTokenCount(text) <= maxTokens) return text;
   const room = Math.max(maxTokens - estimateTokenCount(PIN_TRUNCATION_MARKER) - 1, 1);
   return `${sliceByTokens(text, 0, room).trimEnd()} ${PIN_TRUNCATION_MARKER}`;
@@ -235,22 +243,27 @@ async function pinLabels(
   const scopes = new Map<string, string>();
   if (pages.length === 0) return { labels, scopes };
   const known = new Map(pages.map(page => [page.id, page]));
-  const counts = run.storage.countNotes({ pageIds: [...known.keys()], read: run.read });
-  for (let level = 0; level <= MAX_KNOWLEDGE_PAGE_DEPTH; level++) {
-    const missing = [
-      ...new Set(
-        [...known.values()]
-          .filter(page => !page.isScope && page.parentId && !known.has(page.parentId))
-          .map(page => page.parentId!),
-      ),
-    ];
-    if (missing.length === 0) break;
-    const found = await run.storage.getPages({ ids: missing, read: run.read });
-    if (found.length === 0) break;
-    for (const page of found) known.set(page.id, page);
-  }
+  // An adapter older than countNotes (or a failing count) must not cost the pins themselves.
+  const counts = run.storage
+    .countNotes({ pageIds: [...known.keys()], read: run.read })
+    .catch((): Record<string, number> | undefined => undefined);
+  const walk = async () => {
+    for (let level = 0; level <= MAX_KNOWLEDGE_PAGE_DEPTH; level++) {
+      const missing = [
+        ...new Set(
+          [...known.values()]
+            .filter(page => !page.isScope && page.parentId && !known.has(page.parentId))
+            .map(page => page.parentId!),
+        ),
+      ];
+      if (missing.length === 0) break;
+      const found = await run.storage.getPages({ ids: missing, read: run.read });
+      if (found.length === 0) break;
+      for (const page of found) known.set(page.id, page);
+    }
+  };
+  const [noteCounts] = await Promise.all([counts, walk()]);
   for (const page of known.values()) if (page.isScope && page.address) scopes.set(page.id, page.address);
-  const noteCounts = await counts;
   for (const page of pages) {
     const path: string[] = [];
     let current: KnowledgePage | undefined = page;
@@ -260,7 +273,7 @@ async function pinLabels(
     }
     const address = current?.isScope ? current.address : undefined;
     const ref = address ? (path.length > 0 ? `${address}#${path.join('/')}` : address) : page.id;
-    labels.set(page.id, { ref, notes: noteCounts[page.id] ?? 0 });
+    labels.set(page.id, { ref, notes: noteCounts ? (noteCounts[page.id] ?? 0) : undefined });
   }
   return { labels, scopes };
 }
