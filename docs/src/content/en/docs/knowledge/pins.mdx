@@ -43,7 +43,7 @@ A pinned page reaches a run only when the run holds one of the pin's audience sc
 
 ## Pinned context in config
 
-A scope declaration's `pinnedContext` lists pages that every run holding a scope of that type gets. Use them for pages a role must always see, such as the refund policy for support agents:
+A scope declaration's `pinnedContext` lists pages that every run holding a scope of that type gets. It's separate from the `pinnedContext` option on `Knowledge`, which turns pinning on and sets the per-turn budget; these pages count toward that budget. Use them for pages a role must always see, such as the refund policy for support agents:
 
 ```typescript title="src/mastra/knowledge.ts"
 const knowledge = new Knowledge({
