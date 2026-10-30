@@ -41,8 +41,102 @@ describe('thread stream remote-run liveness', () => {
     pubsub.owners.delete(key);
     await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
 
+    // One empty lease read is not enough: the producer's terminal event may still be in flight.
+    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta']);
+
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+
     expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'error']);
     expect(collected[2].payload.error).toEqual(new AgentThreadLeaseLostError(harness.runId));
+
+    subscription.unsubscribe();
+    await consumed;
+  });
+
+  it('does not report a finished remote run as lease loss when its terminal events arrive after the lease was released (#28224)', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('liveness-late-terminal');
+    const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    pubsub.owners.set(key, harness.runId);
+
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
+      pubsub,
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await streamPart({ type: 'start', payload: {} });
+    await streamPart({ type: 'text-delta', payload: { text: 'done' } });
+    await flush();
+
+    // The producer finished and released the lease, but its last part and
+    // run-completed are still in flight when this subscriber's lease check fires.
+    pubsub.owners.delete(key);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+
+    await streamPart({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+    await emit({
+      type: 'run-completed',
+      runId: harness.runId,
+      streamId: harness.streamId,
+      persisted: true,
+      status: 'success',
+    });
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
+
+    expect(collected.some(part => part.type === 'error')).toBe(false);
+    expect(collected.filter(part => part.type !== 'thread-run-status').map(part => part.type)).toEqual([
+      'start',
+      'text-delta',
+      'finish',
+    ]);
+    expect(collected.find(part => part.type === 'thread-run-status')?.payload.status).toBe('success');
+
+    subscription.unsubscribe();
+    await consumed;
+  });
+
+  it('keeps watching a remote run whose lease is back under its own id on the next check', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('liveness-lease-back');
+    const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    pubsub.owners.set(key, harness.runId);
+
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
+      pubsub,
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await streamPart({ type: 'start', payload: {} });
+    await flush();
+
+    // A stalled producer's lease lapses for one check, then it reclaims it.
+    pubsub.owners.delete(key);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    pubsub.owners.set(key, harness.runId);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+
+    // Losing it again later needs two consecutive empty reads before it counts.
+    pubsub.owners.delete(key);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    expect(collected.map(part => part.type)).toEqual(['start']);
+
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    expect(collected.map(part => part.type)).toEqual(['start', 'error']);
+    expect(collected[1].payload.error).toEqual(new AgentThreadLeaseLostError(harness.runId));
 
     subscription.unsubscribe();
     await consumed;
@@ -190,7 +284,7 @@ describe('thread stream remote-run liveness', () => {
     expect(collected.map(part => part.type)).toEqual(['start', 'start', 'text-delta']);
 
     pubsub.owners.delete(key);
-    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
 
     expect(collected.map(part => part.type)).toEqual(['start', 'start', 'text-delta', 'error']);
     expect(collected[3].payload.error).toEqual(new AgentThreadLeaseLostError(harness.runId));
@@ -256,7 +350,7 @@ describe('thread stream remote-run liveness', () => {
     expect(collected.map(part => part.type)).toEqual(['tool-call-suspended', 'start', 'text-delta']);
 
     pubsub.owners.delete(key);
-    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
 
     expect(collected.map(part => part.type)).toEqual(['tool-call-suspended', 'start', 'text-delta', 'error']);
     expect(collected[3].payload.error).toEqual(new AgentThreadLeaseLostError(harness.runId));
@@ -328,7 +422,7 @@ describe('thread stream remote-run liveness', () => {
     await flush();
 
     pubsub.owners.delete(key);
-    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
 
     expect(collected.filter(part => part.type === 'error').map(part => part.payload.error.message)).toEqual(
       expectedErrors,
@@ -439,7 +533,7 @@ describe('thread stream remote-run liveness', () => {
     await flush();
 
     pubsub.owners.delete(key);
-    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
 
     expect(collected.map(part => part.type)).toEqual(['tool-call-suspended', 'text-delta', 'error']);
     expect(collected[2].payload.error).toEqual(new AgentThreadLeaseLostError(harness.runId));
@@ -552,7 +646,7 @@ describe('thread stream remote-run liveness', () => {
     expect(subscription.activeRunId()).toBe(harness.runId);
 
     pubsub.owners.delete(key);
-    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
     expect(collected.map(part => part.type)).toEqual(['start', 'error']);
 
     subscription.unsubscribe();
