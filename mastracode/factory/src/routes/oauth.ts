@@ -199,9 +199,10 @@ async function loadOwnedSession({
 
 /**
  * Persist completed OAuth credentials — user-scoped unless the flow was
- * started org-wide. Signing in adds an account to the scope's pool and makes
- * it active; signing in again to a subscription the pool already holds (same
- * provider identity) refreshes that account instead of duplicating it.
+ * started org-wide. Signing in to a new subscription adds an account to the
+ * scope's pool and makes it active. Signing in to one the pool already holds
+ * (same provider identity, or the same refresh token for providers without
+ * one) updates that account in place, as mastracode's AuthStorage does.
  */
 async function persistOAuthCredential({
   ctx,
@@ -221,9 +222,13 @@ async function persistOAuthCredential({
   const authProviderId = getAuthProviderId(provider);
   if (ctx.mode === 'tenant') {
     const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
+    const oauthProvider = getOAuthProvider(authProviderId);
+    const label = await accountLabel(authProviderId, credentials);
     await ctx.storage.addAccount(tenant, authProviderId, {
       credential: { type: 'oauth', ...credentials },
       identity: accountIdentity(authProviderId, credentials),
+      ...(label ? { label } : {}),
+      providerName: oauthProvider?.name ?? authProviderId,
       activate: true,
     });
     onCredentialsChanged(tenant);
@@ -238,6 +243,15 @@ function accountIdentity(authProviderId: string, credentials: OAuthCredentials):
   try {
     const identity = getOAuthProvider(authProviderId)?.getAccountIdentity?.(credentials);
     return identity || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The provider's display label for the account (an email), when it exposes one. */
+async function accountLabel(authProviderId: string, credentials: OAuthCredentials): Promise<string | undefined> {
+  try {
+    return (await getOAuthProvider(authProviderId)?.getAccountLabel?.(credentials)) || undefined;
   } catch {
     return undefined;
   }

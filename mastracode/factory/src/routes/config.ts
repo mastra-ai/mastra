@@ -1056,7 +1056,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
-              await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
+              // Only API keys are removed here — OAuth accounts in the same pool
+              // stay. The active account when it is a key, otherwise the first
+              // key in pool order; removeAccount promotes the next account when
+              // the removed one was active.
+              const accounts = await ctx.storage.listAccounts(tenant, getAuthProviderId(provider));
+              const apiKeys = accounts.filter(account => account.type === 'api-key');
+              const target = apiKeys.find(account => account.active) ?? apiKeys[0];
+              if (!target) return c.json({ error: 'api_key_not_found' }, 404);
+              await ctx.storage.removeAccount(tenant, target.id);
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
               const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });

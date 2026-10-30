@@ -514,8 +514,8 @@ describe('sign-in appends to the account pool', () => {
 
   it('signing in to a second subscription adds an account and keeps the first', async () => {
     const app = buildApp(userA);
-    await signInCodex(app, { ...CODEX_CREDS, access: 'a-first', accountId: 'acct-1' });
-    await signInCodex(app, { ...CODEX_CREDS, access: 'a-second', accountId: 'acct-2' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-first', refresh: 'r-first', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-second', refresh: 'r-second', accountId: 'acct-2' });
 
     const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
     expect(accounts).toHaveLength(2);
@@ -526,26 +526,74 @@ describe('sign-in appends to the account pool', () => {
     });
   });
 
-  it('signing in again to the same subscription refreshes its account instead of duplicating it', async () => {
+  it('signing in again with the same identity updates that account in place', async () => {
     const app = buildApp(userA);
-    await signInCodex(app, { ...CODEX_CREDS, access: 'a-old', accountId: 'acct-1' });
-    await signInCodex(app, { ...CODEX_CREDS, access: 'a-other', accountId: 'acct-2' });
-    await signInCodex(app, { ...CODEX_CREDS, access: 'a-new', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-old', refresh: 'r-old', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-other', refresh: 'r-other', accountId: 'acct-2' });
+    const before = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-new', refresh: 'r-new', accountId: 'acct-1' });
 
     const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
-    expect(accounts).toHaveLength(2);
-    const [first] = accounts;
-    expect(first!.active).toBe(true);
-    expect(await seed.credentials.getAccountCredential(TENANT_A, first!.id)).toMatchObject({ access: 'a-new' });
+    // Same ids, labels and active state: the re-auth replaced only the tokens.
+    expect(accounts).toEqual(before);
+    expect(await seed.credentials.getAccountCredential(TENANT_A, before[0]!.id)).toMatchObject({ access: 'a-new' });
+  });
+
+  it('labels new accounts "<Provider name> account N" when the provider has no label', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-1', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-2', accountId: 'acct-2' });
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-3', accountId: 'acct-3', email: 'me@example.com' });
+
+    const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    expect(accounts.map(a => a.label)).toEqual([
+      'ChatGPT Plus/Pro (Codex Subscription) account 1',
+      'ChatGPT Plus/Pro (Codex Subscription) account 2',
+      'me@example.com',
+    ]);
   });
 
   it('org-scoped sign-in appends to the org pool', async () => {
     const app = buildApp(userA);
-    await signInCodex(app, { ...CODEX_CREDS, accountId: 'acct-1' }, 'org');
-    await signInCodex(app, { ...CODEX_CREDS, accountId: 'acct-2' }, 'org');
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-1', accountId: 'acct-1' }, 'org');
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-2', accountId: 'acct-2' }, 'org');
 
     expect(await seed.credentials.listAccounts({ orgId: 'org1' }, 'openai-codex')).toHaveLength(2);
     expect(await seed.credentials.listAccounts(TENANT_A, 'openai-codex')).toHaveLength(0);
+  });
+
+  describe('Anthropic, which exposes no account identity', () => {
+    async function signInAnthropic(app: Hono, credentials: typeof ANTHROPIC_CREDS) {
+      completeAnthropicLogin.mockResolvedValue(credentials);
+      const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+      const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c#s' });
+      expect(res.status).toBe(200);
+    }
+
+    it('updates the account holding the same refresh token in place', async () => {
+      const app = buildApp(userA);
+      await signInAnthropic(app, ANTHROPIC_CREDS);
+      await signInAnthropic(app, { ...ANTHROPIC_CREDS, refresh: 'r-2', access: 'a-2' });
+      const before = await seed.credentials.listAccounts(TENANT_A, 'anthropic');
+      await signInAnthropic(app, { ...ANTHROPIC_CREDS, access: 'a-reissued' });
+
+      expect(await seed.credentials.listAccounts(TENANT_A, 'anthropic')).toEqual(before);
+      expect(await seed.credentials.getAccountCredential(TENANT_A, before[0]!.id)).toMatchObject({
+        access: 'a-reissued',
+      });
+    });
+
+    it('adds a new, active account for a different refresh token', async () => {
+      const app = buildApp(userA);
+      await signInAnthropic(app, ANTHROPIC_CREDS);
+      await signInAnthropic(app, { ...ANTHROPIC_CREDS, refresh: 'r-2' });
+
+      const accounts = await seed.credentials.listAccounts(TENANT_A, 'anthropic');
+      expect(accounts.map(a => [a.label, a.active])).toEqual([
+        ['Anthropic (Claude Pro/Max) account 1', false],
+        ['Anthropic (Claude Pro/Max) account 2', true],
+      ]);
+    });
   });
 });
 
