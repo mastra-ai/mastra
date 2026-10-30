@@ -5581,6 +5581,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15

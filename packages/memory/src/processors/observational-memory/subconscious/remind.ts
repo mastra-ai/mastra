@@ -177,6 +177,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
               ifIdle: {
                 behavior: 'wake',
                 streamOptions: {
+                  ...context.observabilityContext,
                   memory: { thread: remindThread.id, resource: resourceId },
                   requestContext: withOwnThreadIds(context.requestContext, remindThread.id, resourceId),
                   abortSignal: context.abortSignal,

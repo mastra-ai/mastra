@@ -551,7 +551,7 @@ const memory = new Memory({
     name: 'onExtracted',
     type: '(context) => T | void | Promise<T | void>',
     description:
-      'Optional hook called after a custom extractor returns a value and before metadata is persisted. Returning a value replaces the extracted value. Throwing records an extraction failure.',
+      'Optional hook called after a custom extractor returns a value and before metadata is persisted. Returning a value replaces the extracted value. Throwing records an extraction failure. The context includes `observabilityContext`, the tracing context of the Observer or Reflector run; spread it into agent call options to trace hook work under that run.',
     isOptional: true,
   },
 ]}

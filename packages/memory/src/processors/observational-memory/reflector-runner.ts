@@ -460,6 +460,7 @@ export class ReflectorRunner {
     let attemptNumber = 0;
     /** True when the latest attempt returned an empty block for non-empty input. */
     let emptyOutput = false;
+    let spanObservabilityContext = observabilityContext;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -497,8 +498,9 @@ export class ReflectorRunner {
               ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
               ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
             },
-            callback: childObservabilityContext =>
-              withAbortCheck(async () => {
+            callback: childObservabilityContext => {
+              spanObservabilityContext = childObservabilityContext;
+              return withAbortCheck(async () => {
                 // Reset chunk counter per attempt so retry-after-transient-error
                 // doesn't get tagged with the previous attempt's chunk count.
                 chunkCount = 0;
@@ -560,7 +562,8 @@ export class ReflectorRunner {
                     childObservabilityContext.tracingContext?.currentSpan,
                   );
                 }
-              }, abortSignal),
+              }, abortSignal);
+            },
           }),
         {
           label: 'reflector',
@@ -676,7 +679,7 @@ export class ReflectorRunner {
       memory: attemptMemory,
       priorExtractedValues,
       requestContext: internalRequestContext,
-      observabilityContext,
+      observabilityContext: spanObservabilityContext,
       abortSignal,
     });
     const parsedExtractedValues = mergeExtractedValues(parsed.extractedValues, structuredExtraction.values);
@@ -695,6 +698,7 @@ export class ReflectorRunner {
       writer: streamContext?.writer,
       abortSignal,
       requestContext,
+      observabilityContext: spanObservabilityContext,
     });
     const extractedValues = hookedValues.values;
     const extractionFailures = hookedValues.failures;
