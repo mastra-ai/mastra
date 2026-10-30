@@ -652,7 +652,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
           ),
         }),
       ),
-      /** Stored boards that could not be loaded, and why. */
+      /** Stored boards that could not be loaded or are hidden by a code board with the same key, and why. */
       problems: z.array(z.string()).optional(),
     }),
   },

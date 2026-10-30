@@ -186,11 +186,42 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(await replicaA.send('DELETE', `${base}/work?expectedRevision=1`)).toEqual(refused('work'));
     expect(await replicaA.send('DELETE', `${base}/release?expectedRevision=1`)).toEqual(refused('release'));
     expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'release' })).toEqual(refused('release'));
+    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'work' })).toEqual(refused('work'));
+    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual(refused('review'));
+    expect(
+      await replicaA.send('PATCH', `${base}/release`, {
+        name: 'Renamed',
+        phases: bugsBoard.phases,
+        expectedRevision: 1,
+      }),
+    ).toEqual(refused('release'));
 
     expect(await a.boards.list(scope)).toEqual([]);
     expect(await a.boards.readVersion(scope)).toBeNull();
     expect((await catalogBoard(replicaA.send, base, 'work'))!.name).toBe('Work');
     expect((await catalogBoard(replicaA.send, base, 'release'))!.name).toBe('Release');
+  });
+
+  it('keeps serving the code board over a stored board with the same key, and leaves that row alone', async () => {
+    const { a, scope, base, replicaA } = await setup();
+    await a.boards.create(scope, { ...bugsBoard, key: 'release', name: 'Old release' }, ADMIN);
+    replicaA.cache.invalidate(scope);
+    const version = await a.boards.readVersion(scope);
+
+    expect(await getBoard(replicaA.send, base, 'release')).toMatchObject({
+      name: 'Release',
+      revision: null,
+      source: 'app',
+      editable: false,
+    });
+    expect(await replicaA.send('DELETE', `${base}/release?expectedRevision=1`)).toMatchObject({
+      status: 409,
+      body: { error: 'code_board' },
+    });
+    const catalog = await replicaA.send('GET', base);
+    expect(catalog.body.problems).toEqual(['Stored board "release" is hidden by the code board with the same key.']);
+    expect((await a.boards.get(scope, 'release'))?.name).toBe('Old release');
+    expect(await a.boards.readVersion(scope)).toBe(version);
   });
 
   it('lists code boards as read-only and boards the project created as editable', async () => {
@@ -219,6 +250,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       editable: false,
       problems: [],
     });
+    expect(work.phases.map(phase => [phase.key, phase.name, phase.kind])).toEqual(
+      Object.entries(workBoard.phases).map(([key, phase]) => [key, phase.name, phase.kind]),
+    );
     expect(work.phases.map(phase => [phase.key, phase.nextPhases])).toEqual(
       Object.keys(workBoard.phases).map(key => [
         key,

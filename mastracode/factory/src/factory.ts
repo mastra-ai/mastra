@@ -326,8 +326,8 @@ export interface MastraFactoryConfig {
   /**
    * Whether every project gets the built-in Work and Review boards, read-only. Default: true.
    *
-   * @deprecated Will be replaced by installing the built-in boards once per project, with an action
-   * to restore them (README § Stored boards). It still decides whether projects get them until then.
+   * @deprecated Will be replaced by a one-time copy of the built-in boards into each project's
+   * database (mastra-ai/mastra#28920). It still decides whether projects get them until then.
    */
   includeDefaultBoards?: boolean;
 
