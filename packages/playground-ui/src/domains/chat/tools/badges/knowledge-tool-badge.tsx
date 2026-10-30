@@ -1,5 +1,6 @@
 import { BookOpen } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { KnowledgePageLink } from '../../knowledge/knowledge-links';
 import { isRecord } from '../../messages/signal-data';
 import type { MessageMetadata } from '@/domains/chat';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
@@ -7,7 +8,6 @@ import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-bad
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
-import { useLinkComponent } from '@/lib/framework';
 
 /** The tools `Knowledge.createTools()` gives an agent. */
 export const KNOWLEDGE_TOOLS = new Set([
@@ -49,21 +49,10 @@ function asNotes(value: unknown): NoteSummary[] {
     : [];
 }
 
-/** The Studio Knowledge page for a page id; Studio opens it in Page view. */
-export const knowledgePageHref = (pageId: string) => `/knowledge?page=${encodeURIComponent(pageId)}&view=page`;
-
 const where = (page: PageSummary) => page.address ?? page.scope;
 
 function PageLink({ page }: { page: PageSummary }) {
-  const { Link } = useLinkComponent();
-  return (
-    <Link
-      href={knowledgePageHref(page.id)}
-      className="min-w-0 truncate text-foreground underline-offset-2 hover:underline"
-    >
-      {page.name}
-    </Link>
-  );
+  return <KnowledgePageLink pageId={page.id}>{page.name}</KnowledgePageLink>;
 }
 
 function Meta({ children }: { children: ReactNode }) {
@@ -115,7 +104,7 @@ function NoteList({ notes }: { notes: NoteSummary[] }) {
   );
 }
 
-interface KnowledgeCard {
+export interface KnowledgeCard {
   title: string;
   detail?: string;
   body: ReactNode;

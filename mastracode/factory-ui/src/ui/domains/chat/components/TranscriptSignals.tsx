@@ -1,6 +1,8 @@
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 
+import { pinnedKnowledgeFromSignal } from '@mastra/playground-ui/domains/chat/knowledge';
+import type { PinnedKnowledge } from '@mastra/playground-ui/domains/chat/knowledge';
 import { parseSkillBody } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import type { SkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 
@@ -36,6 +38,7 @@ export const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 
 export type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
+  | { kind: 'pinned'; pinned: PinnedKnowledge }
   | { kind: 'divider'; label: string; title?: string }
   | { kind: 'reminder'; text: string }
   | { kind: 'reactive'; tagName?: string; text: string };
@@ -52,6 +55,8 @@ export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
     attributes.type === 'temporal-gap' ? timeGapDivider(text) : { kind: 'reminder', text };
 
   if (signal.type === 'state') {
+    const pinned = pinnedKnowledgeFromSignal(signal);
+    if (pinned) return { kind: 'pinned', pinned };
     const metadata = isRecord(signal.metadata) ? signal.metadata : {};
     const stateMeta = isRecord(metadata.state) ? metadata.state : {};
     return {

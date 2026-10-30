@@ -7,6 +7,8 @@ import {
   FolderPlus,
   FolderSearch,
   Globe,
+  Library,
+  Pin,
   ScrollText,
   Search,
   SquarePen,
@@ -95,6 +97,11 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   skill: { icon: BookOpen, label: 'Skill', detailKeys: ['name'] },
   skill_search: { icon: BookOpen, label: 'Search skills', detailKeys: ['query'] },
   skill_read: { icon: BookOpen, label: 'Skill file', detailKeys: ['path'] },
+  knowledge_search: { icon: Library, label: 'Search knowledge', detailKeys: ['query'] },
+  knowledge_read: { icon: Library, label: 'Read page', detailKeys: ['page', 'scope'] },
+  knowledge_page: { icon: Library, label: 'Write page', detailKeys: ['name', 'page'] },
+  knowledge_note: { icon: Library, label: 'Note', detailKeys: ['page'] },
+  knowledge_pin: { icon: Pin, label: 'Pin', detailKeys: ['page'] },
 };
 
 function prettifyToolName(toolName: string): string {

@@ -28,6 +28,7 @@ import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { isTurnDivider } from './TranscriptSignals';
+import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
@@ -131,62 +132,64 @@ export function TranscriptEntries({
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
-    <ActivityDisclosureProvider>
-      {turnGroups.map((group, index) => {
-        const isLiveTurn = index === turnGroups.length - 1;
-        const runningTurn = isLiveTurn && running;
-        // The first turn opens at the top of the transcript already, so room under it
-        // would buy no travel — only empty scroll below a fresh thread.
-        const holdsRoom =
-          runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
+    <FactoryKnowledgeLinks>
+      <ActivityDisclosureProvider>
+        {turnGroups.map((group, index) => {
+          const isLiveTurn = index === turnGroups.length - 1;
+          const runningTurn = isLiveTurn && running;
+          // The first turn opens at the top of the transcript already, so room under it
+          // would buy no travel — only empty scroll below a fresh thread.
+          const holdsRoom =
+            runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
 
-        // One reply, however many messages the server split it into: the meta row lands
-        // once, under the last of them, and copies the whole answer. While the run is
-        // still answering there is no whole answer yet — a step ending is not the reply
-        // ending, so no stamp lands mid-turn.
-        const steps = replySteps(group);
-        const replyEnd = steps.at(-1);
-        const reply = runningTurn
-          ? undefined
-          : steps
-              .map(step => messageText(renderableParts(step)))
-              .filter(Boolean)
-              .join('\n\n');
-        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
+          // One reply, however many messages the server split it into: the meta row lands
+          // once, under the last of them, and copies the whole answer. While the run is
+          // still answering there is no whole answer yet — a step ending is not the reply
+          // ending, so no stamp lands mid-turn.
+          const steps = replySteps(group);
+          const replyEnd = steps.at(-1);
+          const reply = runningTurn
+            ? undefined
+            : steps
+                .map(step => messageText(renderableParts(step)))
+                .filter(Boolean)
+                .join('\n\n');
+          const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
 
-        return (
-          <ChatShell.Turn
-            key={group.key}
-            opensTurn={group.opensTurn}
-            holdsRoom={holdsRoom}
-            restored={group.key === restoredTurnKey}
-          >
-            {group.entries.map(entry => (
-              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                <TranscriptEntryContent
-                  entry={entry}
-                  suspensions={suspensions}
-                  reply={entry === replyEnd ? reply : undefined}
-                  activity={activityByEntry.get(entry.id)}
-                  redundantSuspension={
-                    entry.kind === 'suspension' &&
-                    entry.toolName !== 'request_access' &&
-                    canonicalToolCallIds.has(entry.toolCallId)
-                  }
-                  isSubmitting={isSubmitting}
-                  viewerId={viewerId}
-                  owner={owner}
-                  onApprove={onApprove}
-                  onRespond={onRespond}
-                />
-              </TranscriptItem>
-            ))}
-            {isLiveTurn && tail}
-          </ChatShell.Turn>
-        );
-      })}
-      {turnGroups.length === 0 && tail}
-    </ActivityDisclosureProvider>
+          return (
+            <ChatShell.Turn
+              key={group.key}
+              opensTurn={group.opensTurn}
+              holdsRoom={holdsRoom}
+              restored={group.key === restoredTurnKey}
+            >
+              {group.entries.map(entry => (
+                <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
+                  <TranscriptEntryContent
+                    entry={entry}
+                    suspensions={suspensions}
+                    reply={entry === replyEnd ? reply : undefined}
+                    activity={activityByEntry.get(entry.id)}
+                    redundantSuspension={
+                      entry.kind === 'suspension' &&
+                      entry.toolName !== 'request_access' &&
+                      canonicalToolCallIds.has(entry.toolCallId)
+                    }
+                    isSubmitting={isSubmitting}
+                    viewerId={viewerId}
+                    owner={owner}
+                    onApprove={onApprove}
+                    onRespond={onRespond}
+                  />
+                </TranscriptItem>
+              ))}
+              {isLiveTurn && tail}
+            </ChatShell.Turn>
+          );
+        })}
+        {turnGroups.length === 0 && tail}
+      </ActivityDisclosureProvider>
+    </FactoryKnowledgeLinks>
   );
 }
 

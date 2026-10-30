@@ -49,6 +49,16 @@ const KIND_PHRASES = {
     one: 'read a skill file',
     many: 'read skill files',
   },
+  'Search knowledge': {
+    live: 'Searching knowledge',
+    done: 'Searched knowledge',
+    one: 'searched knowledge',
+    many: 'searched knowledge',
+  },
+  'Read page': { live: 'Reading page', done: 'Read page', one: 'read a page', many: 'read pages' },
+  'Write page': { live: 'Writing page', done: 'Wrote page', one: 'wrote a page', many: 'wrote pages' },
+  Note: { live: 'Adding note', done: 'Added note', one: 'added a note', many: 'added notes' },
+  Pin: { live: 'Pinning', done: 'Pinned', one: 'pinned a page', many: 'pinned pages' },
 } satisfies Record<string, ToolPhrases>;
 
 /** The kinds `presentTool` labels a call with; each one has its phrases. */
