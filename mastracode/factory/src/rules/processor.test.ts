@@ -1037,6 +1037,19 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
+  it('tells the planner the approved plan moves the card, not to move it itself', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'planning' });
+    const boards = createBoardRegistry();
+    const signal = await new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+    }).computeStateSignal(stateArgs(requestContext()));
+    expect(signal?.contents).toContain('This phase ends when submit_plan succeeds; Factory then moves the card on.');
+    expect(signal?.contents).not.toContain('Then move the card with factory_transition_work_item');
+  });
+
   it('emits, suppresses, re-emits after compaction, and retracts a revoked phase snapshot', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
