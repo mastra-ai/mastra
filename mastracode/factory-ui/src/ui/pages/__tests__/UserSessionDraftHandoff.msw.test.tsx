@@ -163,9 +163,8 @@ describe('a user session draft on the real thread route', () => {
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
 
-    // The send is held, not dropped: the composer shows it is starting and keeps the prompt.
-    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
-    expect(message).toHaveValue('fix the login bug');
+    // The send is held, not dropped: the prompt is taken and the composer stays locked until the model is known.
+    expect(await screen.findByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
     expect(message).toBeDisabled();
     expect(route.createBodies).toEqual([]);
 

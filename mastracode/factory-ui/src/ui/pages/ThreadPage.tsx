@@ -5,7 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquareOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
@@ -20,8 +20,9 @@ import { TeammateSessionLine } from '../domains/chat/components/TeammateSessionL
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { useReturnToDraftOnCreateFailure } from '../domains/chat/hooks/useCreateUserSessionFromDraft';
+import { DraftSessionCreateError } from '../domains/workspaces/services/user-sessions';
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
+import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
@@ -43,12 +44,17 @@ export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const workspace = useThreadWorkspacePath();
-  const returningToDraft = useReturnToDraftOnCreateFailure(workspace.error);
-  const resolvingSession = factoryQuery.isPending || workspace.isPending || returningToDraft;
+  const resolvingSession = factoryQuery.isPending || workspace.isPending;
 
   return (
     <>
-      {workspace.error && !returningToDraft ? (
+      {workspace.error instanceof DraftSessionCreateError ? (
+        <Navigate
+          replace
+          to={workspace.error.draftPath}
+          state={failedDraftState(workspace.error.prompt, workspace.error.message)}
+        />
+      ) : workspace.error ? (
         <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />
       ) : resolvingSession ? (
         <ResolvingSessionMain />

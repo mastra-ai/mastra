@@ -3,7 +3,7 @@ import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, MemoryRouter, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
+import { Link, MemoryRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { expect } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -12,8 +12,9 @@ import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
-import { useReturnToDraftOnCreateFailure } from '../../hooks/useCreateUserSessionFromDraft';
+import { DraftSessionCreateError } from '../../../workspaces/services/user-sessions';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
+import { failedDraftState } from '../../services/handoffFiles';
 import { useThreadWorkspacePath } from '../../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { ActivityLine } from '../ActivityLine';
 import { Composer } from '../Composer';
@@ -51,6 +52,8 @@ interface StubPreparingSessionOptions {
   materialized?: boolean;
   /** Close the turn as soon as a message is delivered. Off when a test drives the turn itself. */
   autoAgentEnd?: boolean;
+  /** Hold the personal default model lookup until this settles; a rejection fails the lookup. */
+  defaultModelGate?: Promise<void>;
 }
 
 function readSentMessage(body: unknown): string {
@@ -71,6 +74,7 @@ export function stubPreparingSession({
   failWorkspace = false,
   materialized = false,
   autoAgentEnd = true,
+  defaultModelGate,
 }: StubPreparingSessionOptions = {}): PreparingSession {
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
@@ -125,9 +129,14 @@ export function stubPreparingSession({
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
+      try {
+        await defaultModelGate;
+      } catch {
+        return HttpResponse.json({ message: 'Model settings unavailable' }, { status: 500 });
+      }
+      return HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -297,9 +306,14 @@ function PathnameProbe() {
   return <output data-testid="pathname">{useLocation().pathname}</output>;
 }
 
+/** Shows the route's error notice like `NewPage`, where a failed create returns. */
 function DraftRouteSurface() {
+  const { state } = useLocation();
+  const notice =
+    state && typeof state === 'object' && 'routeErrorNotice' in state ? String(state.routeErrorNotice) : undefined;
   return (
     <ChatSessionBoundary deferUntilMessagesReady={false}>
+      {notice && <output aria-label="Route error">{notice}</output>}
       <ThreadSurface />
     </ChatSessionBoundary>
   );
@@ -309,8 +323,12 @@ function DraftRouteSurface() {
 function UserThreadRouteSurface() {
   const { threadId } = useParams<{ threadId: string }>();
   const workspace = useThreadWorkspacePath();
-  const returningToDraft = useReturnToDraftOnCreateFailure(workspace.error);
-  if (workspace.isPending || returningToDraft) return <output aria-label="Loading session" />;
+  if (workspace.error instanceof DraftSessionCreateError) {
+    const { draftPath, prompt, message } = workspace.error;
+    return <Navigate replace to={draftPath} state={failedDraftState(prompt, message)} />;
+  }
+  if (workspace.error) return <output aria-label="Session unavailable">{workspace.error.message}</output>;
+  if (workspace.isPending) return <output aria-label="Loading session" />;
   return (
     <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady={false}>
       <ThreadSurface />

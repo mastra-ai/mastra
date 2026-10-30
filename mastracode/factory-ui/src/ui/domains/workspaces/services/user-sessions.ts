@@ -69,6 +69,23 @@ export type CreateUserSessionOptions = (
   visibility?: 'private' | 'org';
 };
 
+/**
+ * A draft's session failed to start after its thread opened. The thread route
+ * sends the person back to the draft with this prompt; the draft's images stay
+ * stashed under its id.
+ */
+export class DraftSessionCreateError extends Error {
+  constructor(
+    message: string,
+    readonly prompt: string,
+    readonly draftPath: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'DraftSessionCreateError';
+  }
+}
+
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,

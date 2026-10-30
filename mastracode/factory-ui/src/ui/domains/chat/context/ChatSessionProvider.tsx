@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -12,6 +12,7 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { readFailedDraft } from '../services/handoffFiles';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -174,7 +175,10 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { sessionId, resourceReady, baseUrl, sessionThreadId } = useChatSessionContext();
+  const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
+  // A draft whose session failed to start reopens with its prompt and images.
+  const location = useLocation();
+  const failedDraft = readFailedDraft(location.state, draftSessionId);
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -212,8 +216,8 @@ export function ChatSessionBoundary({
       >
         <ChatModelsProvider>
           <ChatThinkingProvider>
-            <ChatCommandsProvider>
-              <ComposerImagesProvider>{children}</ComposerImagesProvider>
+            <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+              <ComposerImagesProvider initialImages={failedDraft?.files}>{children}</ComposerImagesProvider>
             </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>

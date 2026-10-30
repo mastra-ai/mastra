@@ -40,7 +40,7 @@ function readHandoffField(state: unknown, key: keyof PromptHandoff): string | un
 }
 
 // An image-only first prompt hands off an empty string, so only a missing field means "no handoff".
-export function readHandoffPrompt(state: unknown): string | undefined {
+function readHandoffPrompt(state: unknown): string | undefined {
   if (!isRecord(state)) return undefined;
   const value = state.handoffPrompt;
   return typeof value === 'string' ? value : undefined;
