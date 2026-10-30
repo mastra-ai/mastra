@@ -13,9 +13,11 @@ import {
   useSignOutProviderOAuth,
   useStartProviderOAuth,
 } from '../../../../../../hooks/use-providers';
+import type { AccountScope } from '../../../../../../hooks/use-provider-accounts';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { signInRequest } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
+import { ProviderAccountPool } from './ProviderAccountPool';
 
 export interface ProviderConnection {
   provider: ProviderInfo;
@@ -54,12 +56,18 @@ function pendingStatus(pending: {
 export function ConnectedProviderRow({
   connection,
   requestScope,
+  accountScope,
+  manageable,
   disabled,
   onUpdateKey,
   onOAuthStarted,
 }: {
   connection: ProviderConnection;
   requestScope: CredentialScope | undefined;
+  /** Scope the provider's account pool is read and managed at. */
+  accountScope: AccountScope;
+  /** False for members viewing org credentials: the pool shows without its controls. */
+  manageable: boolean;
   disabled: boolean;
   onUpdateKey: () => void;
   onOAuthStarted: (provider: string, session: OAuthStartResponse) => void;
@@ -97,26 +105,38 @@ export function ConnectedProviderRow({
   };
 
   return (
-    <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
-      <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
-        {displayName}
-      </Txt>
-      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        <Status presentation={pending ?? status} />
-      </Txt>
-      {credential ? (
-        <CredentialMenu
+    <li className="flex flex-col py-1.5 pr-1.5 pl-3">
+      <div className="flex min-h-7 items-center gap-2.5">
+        <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
+        <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
+          {displayName}
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+          <Status presentation={pending ?? status} />
+        </Txt>
+        {credential ? (
+          <CredentialMenu
+            displayName={displayName}
+            credential={credential}
+            disabled={disabled || pending !== undefined}
+            onSignInAgain={signInExpired && provider.oauth?.supported === true ? signInAgain : undefined}
+            onSignOut={signOut}
+            onUpdateKey={onUpdateKey}
+            onRemoveKey={removeKey}
+            onAddAccount={provider.oauth?.supported === true ? signInAgain : onUpdateKey}
+          />
+        ) : (
+          <span aria-hidden="true" className="size-control-sm shrink-0" />
+        )}
+      </div>
+      {credential && (
+        <ProviderAccountPool
+          provider={provider.provider}
           displayName={displayName}
-          credential={credential}
-          disabled={disabled || pending !== undefined}
-          onSignInAgain={signInExpired && provider.oauth?.supported === true ? signInAgain : undefined}
-          onSignOut={signOut}
-          onUpdateKey={onUpdateKey}
-          onRemoveKey={removeKey}
+          scope={accountScope}
+          manageable={manageable}
+          disabled={disabled}
         />
-      ) : (
-        <span aria-hidden="true" className="size-control-sm shrink-0" />
       )}
     </li>
   );
@@ -130,6 +150,7 @@ function CredentialMenu({
   onSignOut,
   onUpdateKey,
   onRemoveKey,
+  onAddAccount,
 }: {
   displayName: string;
   credential: ProviderCredential;
@@ -138,6 +159,7 @@ function CredentialMenu({
   onSignOut: () => void;
   onUpdateKey: () => void;
   onRemoveKey: () => void;
+  onAddAccount: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -149,6 +171,7 @@ function CredentialMenu({
         }
       />
       <DropdownMenu.Content align="end">
+        <DropdownMenu.Item onClick={onAddAccount}>Add account</DropdownMenu.Item>
         {credential === 'oauth' ? (
           <>
             {onSignInAgain && <DropdownMenu.Item onClick={onSignInAgain}>Sign in again</DropdownMenu.Item>}

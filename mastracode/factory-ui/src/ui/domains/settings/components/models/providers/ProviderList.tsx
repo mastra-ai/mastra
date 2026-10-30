@@ -127,6 +127,8 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
             key={connection.provider.provider}
             connection={connection}
             requestScope={requestScope}
+            accountScope={scope}
+            manageable={!readOnly}
             disabled={actionsDisabled}
             onUpdateKey={() => setKeyDialogProvider(connection.provider)}
             onOAuthStarted={openOAuth}
