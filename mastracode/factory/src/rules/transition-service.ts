@@ -61,6 +61,8 @@ export interface FactoryTransitionRequest {
   reenter?: boolean;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
+  /** Internal: the tool whose successful result this move consumes (a tool-result rule's move). */
+  completedTool?: string;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -500,8 +502,8 @@ export class FactoryTransitionService {
               ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
               : false);
           // When the board's own rule for a phase's exit tool moves the card on success, that
-          // approved result is the handoff to the next working phase. Anyone but a person needs
-          // it, unless the tool is auto-approved for this card.
+          // result is the handoff to the next working phase (for submit_plan, only an approved
+          // plan). Anyone but a person needs it, unless the tool is auto-approved for this card.
           const fromPhase = board.phases[fromStage];
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
@@ -510,7 +512,7 @@ export class FactoryTransitionService {
             board.tools[exitTool.id] &&
             fromStage !== request.stage &&
             entersWorking &&
-            request.planApproved !== true
+            !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id)
           ) {
             const autoApproved =
               exitTool.id === 'submit_plan' ? plansAutoApproved : autoApprovedExitTool(boards, item) === exitTool.id;
@@ -520,7 +522,7 @@ export class FactoryTransitionService {
                 code: 'approval_required',
                 reason:
                   exitTool.id === 'submit_plan'
-                    ? 'Auto-approve plans is off, so a person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into Building with factory_transition_work_item.'
+                    ? `Auto-approve plans is off, so a person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
                     : `${fromPhase!.name} ends when ${exitTool.id} succeeds, and that moves the card. A person can also move it from the Factory board or a chat they are signed in to.`,
               };
             }

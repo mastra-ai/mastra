@@ -2737,32 +2737,44 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     )
       .map(toWorkItem)
       .filter(
-        item => item.stages[0] === 'triage' && (item.board === 'work' || item.externalSource?.type !== 'pull-request'),
+        item =>
+          item.stages.length === 1 &&
+          item.stages[0] === 'triage' &&
+          (item.board === 'work' || item.externalSource?.type !== 'pull-request'),
       );
     if (held.length === 0) return [];
-    const bound = new Set(
-      (
-        await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
-          status: 'active',
-          work_item_id: { in: held.map(item => item.id) },
-        })
-      ).map(row => `${row.org_id}:${row.work_item_id}`),
-    );
+    // A binding stays active after its run ends until the stale-binding sweep, so the triage
+    // run that classified the card is still bound. Only a run started since the card last
+    // changed can still be working on it.
+    const startedAt = new Map<string, number>();
+    for (const row of await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      status: 'active',
+      work_item_id: { in: held.map(item => item.id) },
+    })) {
+      const key = `${row.org_id}:${row.work_item_id}`;
+      startedAt.set(key, Math.max(startedAt.get(key) ?? 0, new Date(row.created_at as string | Date).getTime()));
+    }
     const moved: WorkItemRow[] = [];
     for (const item of held) {
-      if (bound.has(`${item.orgId}:${item.id}`)) continue;
-      try {
-        const result = await this.update({
-          orgId: item.orgId,
-          id: item.id,
-          userId: HELD_CARD_SWEEP_ACTOR,
-          patch: { stages: ['intake'] },
-          expectedRevision: item.revision,
-          expectedBoard: item.board,
-        });
-        if (result) moved.push(result.item);
-      } catch (error) {
-        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      if ((startedAt.get(`${item.orgId}:${item.id}`) ?? 0) >= item.updatedAt.getTime()) continue;
+      // A governed transition leaves an audit row and disarms autonomy so the card
+      // waits for a person; the identity makes a second replica's move a replay.
+      const identity = `${HELD_CARD_SWEEP_ACTOR}:${item.id}:${item.revision}`;
+      const committed = await this.commitTransition({
+        orgId: item.orgId,
+        factoryProjectId: item.factoryProjectId,
+        workItemId: item.id,
+        expectedRevision: item.revision,
+        destinationStage: 'intake',
+        actorId: HELD_CARD_SWEEP_ACTOR,
+        ingress: { identity, triggerType: 'factory.boot', transitionId: identity },
+        configVersion: HELD_CARD_SWEEP_ACTOR,
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+        autonomy: 'disarm',
+      });
+      if (committed.status === 'committed' && committed.result.status === 'accepted' && committed.item) {
+        moved.push(committed.item);
       }
     }
     return moved;
