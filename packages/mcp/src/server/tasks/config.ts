@@ -1,10 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolType } from '@mastra/core/tools';
-import { DEFAULT_TASK_TTL_MS } from '../../shared/tasks';
+import { DEFAULT_TASK_TTL_MS, taskKeyOf } from '../../shared/tasks';
 import type { MCPDetailedTask } from '../../shared/tasks';
 import { InMemoryMCPTaskStore } from './in-memory-store';
-import type { MCPTaskLimits, MCPTaskStore } from './store';
+import type {
+  MCPTaskAccess,
+  MCPTaskCreateParams,
+  MCPTaskLimits,
+  MCPTaskRunOptions,
+  MCPTaskStore,
+  MCPTaskWork,
+} from './store';
 
 /**
  * How a tool answers `tools/call` for a client that declared the Tasks extension.
@@ -24,6 +31,8 @@ export interface MCPServerToolTaskConfig {
   syncWindowMs?: number;
   /** Overrides `tasks.ttlMs` for this tool's tasks. */
   ttlMs?: number | null;
+  /** Overrides `tasks.recover` for this tool's tasks. */
+  recover?: boolean;
 }
 
 /**
@@ -60,7 +69,18 @@ export interface MCPServerTasksOptions {
   required?: string[];
   /** How long a task is kept from creation, in ms; `null` keeps it until the server closes. Default 24 hours. */
   ttlMs?: number | null;
-  /** Where tasks are kept. Default an {@link InMemoryMCPTaskStore}, which serves a single instance. */
+  /**
+   * Whether a task whose server crashed or restarted mid-attempt runs the tool again from the start.
+   * Only applies to stores that outlive a process (Mastra background tasks). Only turn this on for
+   * idempotent tools: `execute` may run twice. When off, such a task fails as lost. Default `false`.
+   */
+  recover?: boolean;
+  /**
+   * Where tasks are kept. By default, Mastra's background tasks when the server is registered on a
+   * Mastra instance with `backgroundTasks` enabled and storage that supports task expiry, so every
+   * instance sharing that storage serves the same tasks. Otherwise an {@link InMemoryMCPTaskStore},
+   * which serves a single instance.
+   */
   store?: MCPTaskStore;
   /**
    * Most open (`working` or `input_required`) tasks one client may hold. Past it, a call that
@@ -99,15 +119,15 @@ export interface ResolvedToolTaskMode {
   mode: MCPServerTaskMode;
   syncWindowMs: number;
   ttlMs: number | null;
+  recover: boolean;
 }
 
 export interface ResolvedTasksConfig {
   /** Whether any tool can answer with a task; gates the capability and the `tasks/*` handlers. */
   enabled: boolean;
-  store: MCPTaskStore;
+  /** The store passed in, if any. */
+  store?: MCPTaskStore;
   limits: MCPTaskLimits;
-  /** The store created here when none was passed in, so the server closes it. */
-  ownedStore?: InMemoryMCPTaskStore;
   required: ReadonlySet<string>;
   authorize?: MCPServerTasksOptions['authorize'];
   modeFor(name: string, toolType: MCPToolType | undefined): ResolvedToolTaskMode;
@@ -139,6 +159,12 @@ function assertDuration(owner: string, value: number | null | undefined): void {
   if (value === null || value === undefined) return;
   if (!Number.isSafeInteger(value) || value < 0) {
     throw invalid(`${owner} must be a non-negative integer number of milliseconds, got ${value}.`);
+  }
+}
+
+function assertBoolean(owner: string, value: unknown): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw invalid(`${owner} must be a boolean, got ${String(value)}.`);
   }
 }
 
@@ -182,6 +208,8 @@ export function resolveTasksConfig(
   assertMode('tasks.default', defaultMode);
   assertDuration('tasks.ttlMs', config.ttlMs);
   const ttlMs = config.ttlMs === undefined ? DEFAULT_TASK_TTL_MS : config.ttlMs;
+  assertBoolean('tasks.recover', config.recover);
+  const recover = config.recover ?? false;
   const [perPrincipal, retainedPerPrincipal] = caps(
     ['tasks.maxOpenTasksPerClient', config.maxOpenTasksPerClient, DEFAULT_MAX_OPEN_TASKS_PER_CLIENT],
     ['tasks.maxRetainedTasksPerClient', config.maxRetainedTasksPerClient, DEFAULT_MAX_RETAINED_TASKS_PER_CLIENT],
@@ -200,13 +228,20 @@ export function resolveTasksConfig(
     assertMode(`tasks.tools.${name}`, tool.mode);
     assertDuration(`tasks.tools.${name}.syncWindowMs`, tool.syncWindowMs);
     assertDuration(`tasks.tools.${name}.ttlMs`, tool.ttlMs);
+    assertBoolean(`tasks.tools.${name}.recover`, tool.recover);
     perTool.set(name, {
       mode: tool.mode,
       syncWindowMs: tool.syncWindowMs ?? DEFAULT_SYNC_WINDOW_MS,
       ttlMs: tool.ttlMs === undefined ? ttlMs : tool.ttlMs,
+      recover: tool.recover ?? recover,
     });
   }
-  const fallback: ResolvedToolTaskMode = { mode: defaultMode, syncWindowMs: DEFAULT_SYNC_WINDOW_MS, ttlMs };
+  const fallback: ResolvedToolTaskMode = {
+    mode: defaultMode,
+    syncWindowMs: DEFAULT_SYNC_WINDOW_MS,
+    ttlMs,
+    recover,
+  };
   const off: ResolvedToolTaskMode = { ...fallback, mode: 'off' };
   const modeFor = (name: string, toolType: MCPToolType | undefined) =>
     // Agent and workflow tools stay synchronous until they are served as tasks of their own.
@@ -221,14 +256,108 @@ export function resolveTasksConfig(
   }
 
   const enabled = defaultMode !== 'off' || [...perTool.values()].some(tool => tool.mode !== 'off');
-  const ownedStore = config.store ? undefined : new InMemoryMCPTaskStore();
   return {
     enabled,
-    store: config.store ?? ownedStore!,
+    store: config.store,
     limits,
-    ownedStore,
     required,
     authorize: config.authorize,
     modeFor,
   };
+}
+
+/**
+ * Picks the store on first use, once the server knows whether it runs on a Mastra instance with
+ * durable background tasks. `run` follows the `create` it pairs with, so the choice is made by then.
+ */
+export class SelectingMCPTaskStore implements MCPTaskStore {
+  readonly #select: () => Promise<MCPTaskStore>;
+  #selecting?: Promise<MCPTaskStore>;
+  #selected?: MCPTaskStore;
+  /** In-memory stores chosen before a later registration on Mastra, still serving the tasks created on them. */
+  readonly #earlier: InMemoryMCPTaskStore[] = [];
+
+  constructor(select: () => Promise<MCPTaskStore>) {
+    this.#select = select;
+  }
+
+  /** The chosen store, choosing it if no task request has yet. */
+  resolve(): Promise<MCPTaskStore> {
+    return this.#store();
+  }
+
+  /**
+   * Chooses again on next use, for a server registered on Mastra after it served tasks. An
+   * in-memory store chosen before keeps the tasks created on it and goes on serving them.
+   */
+  reselect(): void {
+    const chosen = this.#selected;
+    if (chosen) {
+      if (!(chosen instanceof InMemoryMCPTaskStore)) return;
+      this.#earlier.push(chosen);
+      this.#selected = undefined;
+      this.#selecting = undefined;
+      return;
+    }
+    const choosing = this.#selecting;
+    if (!choosing) return;
+    // A choice still in flight was made without Mastra: set it aside once made, and choose again.
+    const next = choosing.then(() => {
+      this.reselect();
+      return this.#store();
+    });
+    next.catch(() => {});
+    this.#selecting = next;
+  }
+
+  /** Cancels the work of the in-memory stores it chose; a background-task store is closed by the server. */
+  close(): void {
+    for (const store of [...this.#earlier.splice(0), this.#selected]) {
+      if (store instanceof InMemoryMCPTaskStore) store.close();
+    }
+  }
+
+  /** The store that holds this task: an earlier in-memory store that created it, else the chosen one. */
+  #storeOf(taskId: string): Promise<MCPTaskStore> {
+    const earlier = this.#earlier.find(store => store.has(taskId));
+    return earlier ? Promise.resolve(earlier) : this.#store();
+  }
+
+  #store(): Promise<MCPTaskStore> {
+    // A failed choice (e.g. storage briefly unreachable) is not remembered: the next request chooses again.
+    this.#selecting ??= this.#select().then(
+      store => (this.#selected = store),
+      error => {
+        this.#selecting = undefined;
+        throw error;
+      },
+    );
+    return this.#selecting;
+  }
+
+  async create(params: MCPTaskCreateParams) {
+    return (await this.#store()).create(params);
+  }
+
+  async get(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).get(taskId, access);
+  }
+
+  async update(taskId: string, inputResponses: Parameters<MCPTaskStore['update']>[1], access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).update(taskId, inputResponses, access);
+  }
+
+  async cancel(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).cancel(taskId, access);
+  }
+
+  async traceOf(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).traceOf?.(taskId, access);
+  }
+
+  run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void {
+    const store = this.#earlier.find(earlier => earlier.has(taskId)) ?? this.#selected;
+    if (!store) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
+    store.run(taskId, work, options);
+  }
 }

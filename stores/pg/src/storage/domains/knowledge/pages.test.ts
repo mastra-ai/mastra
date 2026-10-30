@@ -312,8 +312,11 @@ describe('PgKnowledgePages (schema 4)', () => {
     await pool.query(`DROP SCHEMA stale_key_test CASCADE`);
   });
 
-  it('requires a reset over legacy tables and resets only Knowledge tables', async () => {
-    await pool.query(`CREATE SCHEMA IF NOT EXISTS legacy_test`);
+  it('refuses an unknown schema version until reset, and resets only Knowledge tables', async () => {
+    await pool.query(`DROP SCHEMA IF EXISTS legacy_test CASCADE`);
+    await pool.query(`CREATE SCHEMA legacy_test`);
+    await initPgKnowledgePagesSchema(client, 'legacy_test');
+    await pool.query(`UPDATE legacy_test.mastra_knowledge_access_state SET "schemaVersion" = 5`);
     await pool.query(`CREATE TABLE legacy_test.mastra_knowledge_nodes (id text)`);
     await pool.query(`CREATE TABLE legacy_test.mastra_messages_keep (id text)`);
     await expect(initPgKnowledgePagesSchema(client, 'legacy_test')).rejects.toBeInstanceOf(

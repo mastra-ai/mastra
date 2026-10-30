@@ -1,7 +1,10 @@
 import {
   inspectKnowledgePagesSchema,
+  legacyKnowledgeTablesToDrop,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
 import { KnowledgeSchemaResetRequiredError, KnowledgeStorage } from '@mastra/core/storage';
@@ -47,10 +50,23 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     });
   }
 
+  override getCapabilities() {
+    return {
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    } as const;
+  }
+
   // Schema-4 page store: delegates to MySQLKnowledgePages.
-  async #inspectPages() {
+  async #inspectPages(client: Pick<Pool, 'query'> | Pick<PoolConnection, 'query'> = this.#pool) {
+    return inspectKnowledgePagesSchema(await this.#pagesSnapshot(client));
+  }
+
+  async #pagesSnapshot(client: Pick<Pool, 'query'> | Pick<PoolConnection, 'query'>) {
     const exec = async (sql: string) => {
-      const [rows] = await this.#pool.query(sql);
+      const [rows] = await client.query(sql);
       return rows as RowDataPacket[];
     };
     const tables = await exec(
@@ -62,7 +78,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       const state = await exec(`SELECT schemaVersion FROM \`${TABLE_KNOWLEDGE_PAGES_STATE}\` WHERE id = 'knowledge'`);
       if (state[0]) schemaVersion = Number(state[0].schemaVersion);
     }
-    return inspectKnowledgePagesSchema({ tableNames, schemaVersion });
+    return { tableNames, schemaVersion };
   }
 
   override async inspectSchema() {
@@ -85,14 +101,28 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   override async init(): Promise<void> {
-    const inspection = await this.#inspectPages();
-    if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
-    for (const statement of KNOWLEDGE_PAGE_DDL) await this.#pool.query(statement);
+    // DDL commits on its own in MySQL, so a named lock keeps processes starting together from
+    // dropping tables another one has just created.
+    const connection = await this.#pool.getConnection();
+    try {
+      const [locked] = await connection.query<RowDataPacket[]>("SELECT GET_LOCK('mastra_knowledge_init', 60) AS ok");
+      if (Number(locked[0]?.ok) !== 1) throw new Error('Timed out waiting for the Knowledge schema lock');
+      // Knowledge before schema 4 was experimental and is not migrated: drop its tables, rows included.
+      for (const table of legacyKnowledgeTablesToDrop(await this.#pagesSnapshot(connection))) {
+        await connection.query(`DROP TABLE IF EXISTS \`${table}\``);
+      }
+      const inspection = await this.#inspectPages(connection);
+      if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
+      for (const statement of KNOWLEDGE_PAGE_DDL) await connection.query(statement);
+      await connection.query(
+        `INSERT IGNORE INTO \`${TABLE_KNOWLEDGE_PAGES_STATE}\` (id, schemaVersion) VALUES ('knowledge', ?)`,
+        [KNOWLEDGE_PAGES_SCHEMA_VERSION],
+      );
+    } finally {
+      await connection.query("SELECT RELEASE_LOCK('mastra_knowledge_init')").catch(() => {});
+      connection.release();
+    }
     await this.#upgrade();
-    await this.#pool.query(
-      `INSERT IGNORE INTO \`${TABLE_KNOWLEDGE_PAGES_STATE}\` (id, schemaVersion) VALUES ('knowledge', ?)`,
-      [KNOWLEDGE_PAGES_SCHEMA_VERSION],
-    );
   }
 
   override async dangerouslyReset(): Promise<void> {
@@ -105,6 +135,16 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['materializeScope']>[0],
   ): ReturnType<KnowledgePageStore['materializeScope']> {
     return this.#pages.materializeScope(input);
+  }
+
+  override listScopeDeclarations(): ReturnType<KnowledgePageStore['listScopeDeclarations']> {
+    return this.#pages.listScopeDeclarations();
+  }
+
+  override renameScopeDeclaration(
+    input: Parameters<KnowledgePageStore['renameScopeDeclaration']>[0],
+  ): ReturnType<KnowledgePageStore['renameScopeDeclaration']> {
+    return this.#pages.renameScopeDeclaration(input);
   }
 
   override getScopesByAddress(

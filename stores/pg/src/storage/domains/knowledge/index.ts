@@ -146,6 +146,16 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#pages.getScopesByAddress(input);
   }
 
+  override listScopeDeclarations(): ReturnType<KnowledgePageStore['listScopeDeclarations']> {
+    return this.#pages.listScopeDeclarations();
+  }
+
+  override renameScopeDeclaration(
+    input: Parameters<KnowledgePageStore['renameScopeDeclaration']>[0],
+  ): ReturnType<KnowledgePageStore['renameScopeDeclaration']> {
+    return this.#pages.renameScopeDeclaration(input);
+  }
+
   override listChildScopes(
     input: Parameters<KnowledgePageStore['listChildScopes']>[0],
   ): ReturnType<KnowledgePageStore['listChildScopes']> {

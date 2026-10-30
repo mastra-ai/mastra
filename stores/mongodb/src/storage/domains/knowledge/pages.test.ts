@@ -322,12 +322,13 @@ describe('MongoKnowledgePages (schema 4)', () => {
     ).resolves.toMatchObject({ scopeId: y.id });
   });
 
-  it('requires a reset over legacy collections', async () => {
-    await (await connector.getCollection('mastra_knowledge_nodes')).insertOne({ id: 'legacy' });
+  it('refuses an unknown schema version until reset', async () => {
+    await (
+      await connector.getCollection('mastra_knowledge_access_state')
+    ).updateOne({ id: 'knowledge' }, { $set: { schemaVersion: 5 } });
     await expect(store.init()).rejects.toBeInstanceOf(MongoKnowledgeResetRequiredError);
     await store.reset();
-    expect(await connector.collectionExists('mastra_knowledge_nodes')).toBe(false);
-    expect(await connector.collectionExists('mastra_knowledge_pages')).toBe(true);
+    expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 4 });
   });
 
   it('lists pages across every scope a prefix read reaches, in name order, and nothing else', async () => {

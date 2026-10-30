@@ -5353,6 +5353,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
       '@mastra/observability':
         specifier: workspace:*
         version: link:../../observability/mastra

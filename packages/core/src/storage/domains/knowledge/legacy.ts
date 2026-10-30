@@ -18,6 +18,35 @@ export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
 /** @deprecated Not enforced. Kept so published packages that import it still load. */
 export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
 
+/**
+ * Schema-2 node description bound. Published `@mastra/libsql` and `@mastra/pg` look this up before
+ * they enable Knowledge; without it they fail with a misleading error instead of reporting that
+ * the adapter lacks the page store.
+ *
+ * @deprecated Schema-2 only. Do not use in new code.
+ */
+export function assertKnowledgeDescriptionWithinBound(description: string | undefined): void {
+  if (description !== undefined && description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Knowledge node description exceeds the ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
+    );
+  }
+}
+
+/**
+ * Schema-2 record text bound. Kept for the same published adapters as
+ * {@link assertKnowledgeDescriptionWithinBound}.
+ *
+ * @deprecated Schema-2 only. Do not use in new code.
+ */
+export function assertKnowledgeRecordTextWithinBound(text: string): void {
+  if (text.length > MAX_KNOWLEDGE_RECORD_TEXT_LENGTH) {
+    throw new Error(
+      `Knowledge record text exceeds the ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code unit limit; split it into separate facts or summarize it`,
+    );
+  }
+}
+
 /** @deprecated Schema-2 node cursor. */
 export interface KnowledgeNodeCursor {
   updatedAt: Date;

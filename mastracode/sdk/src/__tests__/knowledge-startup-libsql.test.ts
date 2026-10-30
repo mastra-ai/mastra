@@ -105,16 +105,16 @@ describe('createMastraCode on a database with v1 Knowledge rows', () => {
     expect(countV1Nodes(databasePath)).toEqual({ count: 1 });
   });
 
-  it('starts, keeps the v1 rows, and explains the reset when Knowledge is on', async () => {
+  it('starts on schema 4 and drops the v1 tables when Knowledge is on', async () => {
     const { directory, databasePath } = createV1Database();
 
     const code = await start(directory, databasePath, true);
 
     expect(code.knowledge).toBeDefined();
-    expect(code.knowledgeInspector).toBeUndefined();
-    expect(code.knowledgeInspectorUnavailableReason).toContain('Knowledge schema reset required');
-    expect(code.knowledgeInspectorUnavailableReason).toContain('dangerouslyReset()');
-    expect(countV1Nodes(databasePath)).toEqual({ count: 1 });
+    expect(code.knowledgeInspector).toBeDefined();
+    expect(code.knowledgeInspectorUnavailableReason).toBeUndefined();
+    expect(knowledgeSchemaVersion(databasePath)).toEqual({ schemaVersion: 4 });
+    expect(hasTable(databasePath, 'mastra_knowledge_nodes')).toBe(false);
   });
 
   it('opens Knowledge on schema 4 after the host calls dangerouslyReset()', async () => {

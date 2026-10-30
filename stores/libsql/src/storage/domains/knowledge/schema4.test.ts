@@ -27,15 +27,6 @@ describe('KnowledgeLibSQL schema 4 wiring', () => {
     expect(await store.getPage({ id: page.id, read: 'all' })).toBeNull();
   });
 
-  it('refuses a database that holds schema-2 tables until reset', async () => {
-    const client = createClient({ url: ':memory:' });
-    await client.execute('CREATE TABLE mastra_knowledge_nodes (id TEXT PRIMARY KEY)');
-    const store = new KnowledgeLibSQL({ client });
-    await expect(store.init()).rejects.toThrow(/reset/i);
-    await store.dangerouslyReset();
-    expect((await store.getScopesByAddress(['org:x'])).length).toBe(0);
-  });
-
   it('rehomes a merged source into the target scope with its history', async () => {
     const store = await makeStore();
     const a = (

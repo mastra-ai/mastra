@@ -6,6 +6,7 @@ import {
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   knowledgePageKeyProblem,
   knowledgePagesResetMessage,
+  legacyKnowledgeTablesToDrop,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgePagesSchemaInspection } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
@@ -26,6 +27,8 @@ import type {
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
+  KnowledgeScopeDeclarationCount,
+  KnowledgeScopeDeclarationRename,
   MaterializeKnowledgeScopeInput,
   MaterializeKnowledgeScopeResult,
   MergeKnowledgePagesInput,
@@ -208,24 +211,37 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   // Schema ---------------------------------------------------------------------------------------
 
   async inspectSchema(): Promise<KnowledgePagesSchemaInspection> {
-    const names: string[] = [];
-    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) {
-      if (await this.#connector.collectionExists(name)) names.push(name);
-    }
-    return this.#inspectNames(names);
+    return inspectKnowledgePagesSchema(await this.#snapshot());
   }
 
-  async #inspectNames(collectionNames: string[]): Promise<KnowledgePagesSchemaInspection> {
-    const tableNames = collectionNames.filter(name => name.startsWith('mastra_knowledge_'));
+  async #snapshot(): Promise<{ tableNames: string[]; schemaVersion?: number }> {
+    const tableNames: string[] = [];
+    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) {
+      if (await this.#connector.collectionExists(name)) tableNames.push(name);
+    }
     let schemaVersion: number | undefined;
     if (tableNames.includes(MONGO_KNOWLEDGE_PAGES_COLLECTIONS.state)) {
       const state = await (await this.#c('state')).findOne({ id: 'knowledge' });
       schemaVersion = typeof state?.schemaVersion === 'number' ? state.schemaVersion : undefined;
     }
-    return inspectKnowledgePagesSchema({ tableNames, schemaVersion });
+    return { tableNames, schemaVersion };
+  }
+
+  async #drop(name: string): Promise<void> {
+    const collection = (await this.#connector.getCollection(name)) as Collection<Document>;
+    try {
+      await collection.drop();
+    } catch (error) {
+      if ((error as { codeName?: string }).codeName !== 'NamespaceNotFound') throw error;
+    }
   }
 
   async init(): Promise<void> {
+    // Knowledge before schema 4 was experimental and is not migrated: drop its collections, documents
+    // included. Mongo has no DDL lock; two processes upgrading the same old layout at once can both
+    // drop the reused activity and state collections, which only loses activity written in that
+    // window. Pages, notes and pins are never dropped.
+    for (const name of legacyKnowledgeTablesToDrop(await this.#snapshot())) await this.#drop(name);
     const inspection = await this.inspectSchema();
     if (inspection.status === 'incompatible-reset-required') throw new MongoKnowledgeResetRequiredError(inspection);
     const [pages, notes, pins, activity, state] = await Promise.all([
@@ -267,14 +283,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   /** Drops exactly the Knowledge collections (never Memory's) and recreates schema 4. */
   async reset(): Promise<void> {
-    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) {
-      const collection = (await this.#connector.getCollection(name)) as Collection<Document>;
-      try {
-        await collection.drop();
-      } catch (error) {
-        if ((error as { codeName?: string }).codeName !== 'NamespaceNotFound') throw error;
-      }
-    }
+    for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) await this.#drop(name);
     await this.init();
   }
 
@@ -636,6 +645,56 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       .toArray();
     const byAddress = new Map(rows.map(row => [String(row.address), toPage(row)]));
     return [...new Set(addresses)].flatMap(address => byAddress.get(address) ?? []);
+  }
+
+  async listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]> {
+    const rows = await (
+      await this.#c('pages')
+    )
+      .aggregate([
+        { $match: { isScope: true, declaration: { $type: 'string' } } },
+        { $group: { _id: '$declaration', scopes: { $sum: 1 } } },
+      ])
+      .toArray();
+    return rows
+      .map(row => ({ declaration: String(row._id), scopes: Number(row.scopes) }))
+      .sort((a, b) => (a.declaration < b.declaration ? -1 : a.declaration > b.declaration ? 1 : 0));
+  }
+
+  async renameScopeDeclaration(input: {
+    from: string;
+    to: string;
+    check: (scopes: KnowledgeScopeDeclarationRename[]) => void;
+  }): Promise<number> {
+    return this.#tx(async session => {
+      const pages = await this.#c('pages');
+      const rows = await pages
+        .find(
+          {
+            isScope: true,
+            $or: [{ declaration: input.from }, { declaration: { $regex: `^${escapeRegex(`${input.from}/`)}` } }],
+          },
+          { projection: { _id: 0, id: 1, address: 1, declaration: 1 }, session },
+        )
+        .toArray();
+      if (rows.length === 0) return 0;
+      const renames = rows.map(row => ({
+        address: String(row.address),
+        from: String(row.declaration),
+        to: input.to + String(row.declaration).slice(input.from.length),
+      }));
+      input.check(renames);
+      const result = await pages.bulkWrite(
+        rows.map((row, index) => ({
+          updateOne: { filter: { id: row.id, isScope: true }, update: { $set: { declaration: renames[index]!.to } } },
+        })),
+        { session },
+      );
+      if (result.matchedCount < rows.length) {
+        throw new KnowledgeConflictError('Knowledge scope declarations changed while renaming; retry the rename');
+      }
+      return rows.length;
+    });
   }
 
   async listChildScopes(input: {
