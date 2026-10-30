@@ -550,6 +550,24 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(runtime.drainPendingSignals(runId, pubsub)).toMatchObject([{ contents: 'forwarded follow-up' }]);
   });
 
+  it('addresses a follow-up to the run a legacy handover token resolves to', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'legacy-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const target = { resourceId: 'legacy-user', threadId: 'legacy-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    // A process on the previous release is handing the thread over to old-run.
+    pubsub.owners.set(key, 'old-run\u0000retake\u0000handover');
+    setTimeout(() => pubsub.owners.set(key, 'old-run'), 100);
+
+    const sent = runtime.sendMessage(agent, 'follow-up during handover', target, pubsub);
+    await sent.accepted;
+
+    const forwarded = pubsub.publishedData.filter(data => data?.type === 'signal-enqueued');
+    expect(forwarded.map(data => data.runId)).toEqual(['old-run']);
+    expect(agent.stream).not.toHaveBeenCalled();
+  });
+
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();

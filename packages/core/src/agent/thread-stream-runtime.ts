@@ -189,6 +189,15 @@ function forwardedSignalRunId(address: string): string {
   return legacyRetake > 0 ? address.slice(0, legacyRetake) : address;
 }
 
+/**
+ * A handover token in either format. The legacy shape can also be a caller-supplied run id, so it is only
+ * ever waited on, never rejected.
+ */
+function isHandoverLeaseOwner(owner: string | undefined): boolean {
+  if (isRetakeLeaseOwner(owner)) return true;
+  return !!owner && !parseThreadLeaseOwner(owner) && owner.lastIndexOf(LEGACY_RETAKE_LEASE_MARKER) > 0;
+}
+
 /** @internal Distinguishes temporary handover tokens from qualified execution owners. */
 export function isRetakeLeaseOwner(owner: string | undefined): boolean {
   return parseThreadLeaseOwner(owner)?.[1] === 'retake';
@@ -513,8 +522,7 @@ type PendingContinuation<OUTPUT = unknown> = {
 };
 
 type ClaimedThreadOwnerStreamOptions =
-  | AgentExecutionOptions<any>
-  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+  AgentExecutionOptions<any> | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
 type ClaimedThreadOwner<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -934,6 +942,7 @@ export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
   #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
+  #stalledLeaseReads = new WeakMap<LeaseProvider, Map<string, number>>();
   // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
   // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
   // run finishes, is aborted, or the runtime state is reset; every other cleanup path is unchanged.
@@ -980,13 +989,55 @@ export class AgentThreadStreamRuntime {
     return { provider, isFallback: provider === NoopLeaseProvider };
   }
 
+  /**
+   * Remembers a lease read that outlived its deadline until it settles. Reads behind it on the same backend
+   * connection can't answer sooner, so waiting on each of them again would cost a full deadline per event.
+   * After one lease TTL the backend is asked again, so a read that never settles can't skip it for good.
+   */
+  #noteStalledLeaseRead(provider: LeaseProvider, key: string, read: Promise<unknown>) {
+    let stalled = this.#stalledLeaseReads.get(provider);
+    if (!stalled) this.#stalledLeaseReads.set(provider, (stalled = new Map()));
+    if (this.#isLeaseReadStalled(provider, key)) return;
+    const since = Date.now();
+    // Reads that never settle never clear their own mark; drop expired marks so they can't pile up.
+    for (const [staleKey, staleSince] of stalled) {
+      if (since - staleSince >= AGENT_THREAD_LEASE_TTL_MS) stalled.delete(staleKey);
+    }
+    stalled.set(key, since);
+    const clear = () => {
+      if (stalled.get(key) === since) stalled.delete(key);
+    };
+    void read.then(clear, clear);
+  }
+
+  #isLeaseReadStalled(provider: LeaseProvider, key: string): boolean {
+    const since = this.#stalledLeaseReads.get(provider)?.get(key);
+    return since !== undefined && Date.now() - since < AGENT_THREAD_LEASE_TTL_MS;
+  }
+
   async #hasLiveThreadLease(pubsub: PubSub, key: string, runId: string): Promise<boolean> {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return true;
-    return provider
-      .getLeaseOwner(key)
-      .then(owner => owner !== undefined && threadLeaseRunId(owner) === runId && !isRetakeLeaseOwner(owner))
-      .catch(() => false);
+    // Subscribers process events in order, so a read that never answers would hold every later event, and
+    // initial history waits on those events. An unanswered read counts as no lease, like a failed one.
+    if (this.#isLeaseReadStalled(provider, key)) return false;
+    const read = provider.getLeaseOwner(key);
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    // A read that answered by the time the deadline fired still wins, even when the deadline settles the race.
+    let reply: boolean | undefined;
+    const answered = await Promise.race([
+      read.then(
+        owner => (reply = owner !== undefined && threadLeaseRunId(owner) === runId && !isRetakeLeaseOwner(owner)),
+        () => (reply = false),
+      ),
+      new Promise<undefined>(
+        resolve => (giveUp = setTimeout(() => resolve(undefined), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+      ),
+    ]).finally(() => clearTimeout(giveUp));
+    if (answered !== undefined) return answered;
+    if (reply !== undefined) return reply;
+    this.#noteStalledLeaseRead(provider, key, read);
+    return false;
   }
 
   /**
@@ -1536,7 +1587,7 @@ export class AgentThreadStreamRuntime {
     lease: { acquired: boolean; owner?: string },
   ): Promise<{ acquired: boolean; owner?: string }> {
     if (lease.acquired) return lease;
-    if (!isRetakeLeaseOwner(lease.owner)) return lease;
+    if (!isHandoverLeaseOwner(lease.owner)) return lease;
     // The token is not a run. Wait briefly for its handover, without acquiring a
     // new lease that could arrive after this caller has already given up.
     let stopped = false;
@@ -1548,7 +1599,7 @@ export class AgentThreadStreamRuntime {
             await new Promise(resolve => setTimeout(resolve, 10));
             if (stopped) break;
             const owner = await provider.getLeaseOwner(key);
-            if (!stopped && owner && !isRetakeLeaseOwner(owner)) return { acquired: false, owner };
+            if (!stopped && owner && !isHandoverLeaseOwner(owner)) return { acquired: false, owner };
           }
           return lease;
         })().catch(() => lease),
@@ -3261,8 +3312,7 @@ export class AgentThreadStreamRuntime {
         try {
           if (cancelled) return;
           const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
-            | ReadableStream<unknown>
-            | undefined;
+            ReadableStream<unknown> | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -3363,7 +3413,8 @@ export class AgentThreadStreamRuntime {
       }
       if (cutoffAt === undefined || cutoff <= trimmedThrough) return;
       trimmedThrough = cutoff;
-      void runtime.#getPubSub(pubsub)
+      void runtime
+        .#getPubSub(pubsub)
         .trimTopic(runtime.#threadTopic(key), { runId: output.runId, producedBefore: cutoffAt })
         .catch(() => {});
       let keep = cutoff + 1;
@@ -5885,15 +5936,20 @@ export class AgentThreadStreamRuntime {
     // Queued streams of a run aborted before this subscriber read them.
     const abortedPendingStreamIds = new Set<string>();
 
-    const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
-      if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
+    /** Owner agents of remote runs registered here, kept for runs whose lease check deferred them. */
+    const remoteAgentIdsByRegisteredRunId = new Map<string, string>();
+    const markActiveIfLive = async (runId: string, streamId: string, local: boolean): Promise<boolean> => {
+      if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return false;
       state.activeThreadRunIds.set(key, runId);
       state.activeThreadStreamIds.set(key, streamId);
       if (!local) {
         state.remoteThreadKeysByRunId.set(runId, key);
+        const agentId = remoteAgentIdsByRegisteredRunId.get(runId);
+        if (agentId) state.remoteAgentIdsByRunId.set(runId, agentId);
         // The lease check awaited; only trust the run if someone still observes the thread.
         if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
       }
+      return true;
     };
 
     // A deferred run may be flushed only when its replayed chunks ended with a
@@ -6225,6 +6281,7 @@ export class AgentThreadStreamRuntime {
             ? this.#isThreadBlockingRun(state, localRecord) || sameSourceLive
             : !displacesActiveRun &&
               (sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)));
+        if (!local && data.agentId) remoteAgentIdsByRegisteredRunId.set(data.runId, data.agentId);
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
@@ -6286,10 +6343,19 @@ export class AgentThreadStreamRuntime {
         if (isSuperseded(data.runId, data.generation)) return;
         noteGeneration(data.runId, data.streamId, data.generation, false);
         if (
+          deferredRunsByStreamId.has(data.streamId) ||
           state.activeThreadRunIds.get(key) !== data.runId ||
           state.activeThreadStreamIds.get(key) !== data.streamId
         ) {
-          await markActiveIfLive(data.runId, data.streamId, false);
+          // A run deferred because its lease read failed or timed out turns out to be live: stream it now
+          // instead of buffering every part until its terminal event. The deferral is per subscriber, so
+          // check it even when another subscriber in this process already marked the run active.
+          const live = await markActiveIfLive(data.runId, data.streamId, false);
+          const deferredRecord = deferredRunsByStreamId.get(data.streamId);
+          if (live && deferredRecord) {
+            deferredRunsByStreamId.delete(data.streamId);
+            enqueueRun(deferredRecord);
+          }
         }
         let remoteRun = remoteRuns.get(data.streamId);
         if (!remoteRun) {
@@ -6574,16 +6640,71 @@ export class AgentThreadStreamRuntime {
       historyReadAt = Date.now();
       try {
         const history = await this.#loadThreadHistory(agent, options);
-        const readOwner = () =>
-          hasFallbackLeaseProvider ? Promise.resolve(activeRunId()) : leaseProvider.getLeaseOwner(key);
-        let leaseOwner = await readOwner();
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const tail = eventTail;
-          await tail;
-          const nextOwner = await readOwner();
-          const stable = nextOwner === leaseOwner && tail === eventTail;
-          leaseOwner = nextOwner;
-          if (stable) break;
+        // Only activeRunId depends on the lease backend, so it must not decide whether the subscription opens.
+        // All reads share one renewal interval; a stalled or failing backend falls back to this process's view.
+        const unreachable = Symbol('unreachable');
+        let giveUp: ReturnType<typeof setTimeout> | undefined;
+        let expired = false;
+        const deadline = new Promise<typeof unreachable>(
+          resolve =>
+            (giveUp = setTimeout(() => {
+              expired = true;
+              resolve(unreachable);
+            }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+        );
+        let leaseError: unknown;
+        const readOwner = async (): Promise<string | null | undefined | typeof unreachable> => {
+          if (hasFallbackLeaseProvider) return activeRunId();
+          if (this.#isLeaseReadStalled(leaseProvider, key)) return unreachable;
+          const read = leaseProvider.getLeaseOwner(key);
+          let settled = false;
+          let reply: { owner: string | null | undefined } | undefined;
+          void read.then(
+            owner => {
+              settled = true;
+              reply = { owner };
+            },
+            () => (settled = true),
+          );
+          const owner = await Promise.race([
+            read.catch((error): typeof unreachable => {
+              leaseError = error;
+              return unreachable;
+            }),
+            deadline.then((timedOut): typeof unreachable => {
+              if (!settled) this.#noteStalledLeaseRead(leaseProvider, key, read);
+              return timedOut;
+            }),
+          ]);
+          // A read that answered by the time the deadline fired still wins, even when the deadline settles the race.
+          return owner === unreachable && reply ? reply.owner : owner;
+        };
+        let leaseOwner: string | null | undefined | typeof unreachable;
+        try {
+          leaseOwner = await readOwner();
+          for (let attempt = 0; attempt < 3 && leaseOwner !== unreachable; attempt++) {
+            const tail = eventTail;
+            await tail;
+            // The deadline passed while earlier events were processed: keep the last answer rather than
+            // issue a read that would get no time and be noted as a stall on a healthy backend.
+            if (expired) break;
+            const nextOwner = await readOwner();
+            // A re-read that got no answer in the time left keeps the answer the backend already gave.
+            if (nextOwner === unreachable) break;
+            const stable = nextOwner === leaseOwner && tail === eventTail;
+            leaseOwner = nextOwner;
+            if (stable) break;
+          }
+        } finally {
+          clearTimeout(giveUp);
+        }
+        if (leaseOwner === unreachable) {
+          agent.__getLogger?.()?.warn('Could not read the thread lease owner for initial history; using local state', {
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            error: leaseError ?? `no answer within ${AGENT_THREAD_LEASE_RENEW_INTERVAL_MS}ms`,
+          });
+          leaseOwner = activeRunId();
         }
         const ownerRunId = leaseOwner && !hasFallbackLeaseProvider ? threadLeaseRunId(leaseOwner) : leaseOwner;
         const snapshotRunId = ownerRunId && !settledRunIds.has(ownerRunId) ? ownerRunId : null;

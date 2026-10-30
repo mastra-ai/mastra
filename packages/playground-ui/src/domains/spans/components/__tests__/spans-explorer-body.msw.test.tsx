@@ -22,6 +22,7 @@ import {
   spanAggregateError,
   spanCountsAggregate,
   spanHeadPage,
+  spanModelCapabilities,
   spanOutcomeCapabilities,
   spanQueryCapabilities,
   spanRowsPage,
@@ -180,6 +181,55 @@ describe('SpansExplorerBody', () => {
       fireEvent.change(filterInput(), { target: { value: 'Outcome' } });
 
       expect(screen.queryByRole('option', { name: 'Outcome' })).toBeNull();
+    });
+  });
+
+  describe('when the store filters spans by model and provider', () => {
+    const spanQueryBodies = vi.fn<(body: unknown) => void>();
+    const setModelHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
+      setHandlers(spanRowsPage, capabilities);
+      server.use(
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          spanQueryBodies(await request.json());
+          return HttpResponse.json(spanRowsPage);
+        }),
+      );
+    };
+    const filterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
+
+    afterEach(() => spanQueryBodies.mockClear());
+
+    it('queries spans with no recorded provider', async () => {
+      setModelHandlers(spanModelCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Provider' } });
+      await screen.findByRole('option', { name: 'Provider' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+      fireEvent.change(filterInput(), { target: { value: 'does not exist' } });
+      await screen.findByRole('option', { name: 'does not exist' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+
+      await waitFor(() =>
+        expect(spanQueryBodies).toHaveBeenLastCalledWith(
+          expect.objectContaining({ where: { op: 'and', args: [{ op: 'notExists', path: 'provider' }] } }),
+        ),
+      );
+    });
+
+    it('does not offer model filters when the store cannot filter on them', async () => {
+      setModelHandlers(spanQueryCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Status' } });
+      await screen.findByRole('option', { name: 'Status' });
+      fireEvent.change(filterInput(), { target: { value: 'Provider' } });
+
+      expect(screen.queryByRole('option', { name: 'Provider' })).toBeNull();
     });
   });
 

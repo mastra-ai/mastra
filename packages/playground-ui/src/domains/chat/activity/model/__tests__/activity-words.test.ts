@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ActivityCallStatus } from '../activity-members';
 import { callsOutcome, liveWords, outcomeText, settledWords, wordsName } from '../activity-words';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 
 const call = (toolName: string, args: unknown, status: ActivityCallStatus = 'done') => ({ toolName, args, status });
 const view = (path: string, status?: ActivityCallStatus) => call('view', { path }, status);
@@ -33,6 +34,11 @@ describe('liveWords', () => {
 describe('settledWords', () => {
   it('reads Thought for reasoning alone', () => {
     expect(settledWords([]).label).toBe('Thought');
+  });
+
+  it("wears one kind's own glyph, and the tool glyph once kinds mix rather than whichever came first", () => {
+    expect(settledWords([view('a.ts'), view('b.ts')]).icon).toBe(agentGlyph('reading'));
+    expect(settledWords([view('a.ts'), run('ls')]).icon).toBe(agentGlyph('tool'));
   });
 
   it('names a single call in the past tense', () => {
