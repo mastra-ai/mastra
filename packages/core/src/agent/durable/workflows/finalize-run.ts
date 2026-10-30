@@ -1,6 +1,7 @@
 import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
+import { commitToolResult } from '../../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { createObservabilityContext } from '../../../observability';
@@ -427,6 +428,33 @@ export async function runDurableFinishSideEffects({
  * durable run. The run never reaches its finish step, so this runs over the message list as of the
  * last completed step, the same input a provider error's finish pass would see.
  */
+/**
+ * The message list a total deadline saves: the steps that completed in time, plus the step in flight
+ * when every tool call in it returned (or was aborted) during the deadline's grace window.
+ */
+export function deadlineMessageListState(entry: RunRegistryEntry): SerializedMessageListState | undefined {
+  const late = entry.lateToolResults;
+  if (late?.length && entry.messageList) {
+    // JSON round-trip: the live list keeps mutating, and its metadata can hold functions.
+    const inFlight = new MessageList().deserialize(JSON.parse(JSON.stringify(entry.messageList.serialize())));
+    for (const result of late) {
+      commitToolResult({
+        messageList: inFlight,
+        outcome: result.outcome,
+        toolCallId: result.toolCallId,
+        toolName: result.toolName,
+        toolArgs: result.args,
+      });
+    }
+    const settled = inFlight.get.response
+      .db()
+      .flatMap(message => message.content.parts ?? [])
+      .every(part => part.type !== 'tool-invocation' || part.toolInvocation.state === 'result');
+    if (settled) return inFlight.serialize();
+  }
+  return entry.completedStepsState;
+}
+
 export async function runDurableDeadlineOutputPass({
   runId,
   initData,

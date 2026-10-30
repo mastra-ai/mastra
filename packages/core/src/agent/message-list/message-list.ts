@@ -1116,11 +1116,18 @@ export class MessageList {
   /**
    * A copy of this list holding the input and only the response of completed steps: the parts and
    * messages a step still in flight added since the last {@link markStepCompleted} are left out.
+   * A step whose tool calls all have results (an aborted call records a notice) counts as completed
+   * even though the loop never reached its step-finish.
    * @internal
    */
   public cloneWithCompletedSteps(): MessageList {
     const clone = this.clone();
     const completed = this.#completedStepParts;
+    const pending = clone.get.response
+      .db()
+      .flatMap(message => (message.content.parts ?? []).slice(completed?.get(message.id) ?? 0));
+    const toolCalls = pending.filter(part => part.type === 'tool-invocation');
+    if (toolCalls.length > 0 && toolCalls.every(part => part.toolInvocation.state === 'result')) return clone;
     for (const message of clone.get.response.db()) {
       const length = completed?.get(message.id);
       if (length === undefined) clone.removeByIds([message.id]);

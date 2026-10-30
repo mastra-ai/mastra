@@ -10,7 +10,13 @@ import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { LOCAL_MODEL_REQUEST_KEY } from '../../loop/run-scope-keys';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
-import { createTimeoutAbortSignal, isMastraTimeoutError } from '../../loop/timeout';
+import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../../loop/shared/tool-abort-grace';
+import {
+  createTimeoutAbortSignal,
+  DEADLINE_SAVE_WAIT_MS,
+  isMastraTimeoutError,
+  settledOrElapsed,
+} from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
@@ -46,6 +52,7 @@ import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
+import { whenRunStepsSettle } from '../run-lease-fence';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
@@ -119,7 +126,7 @@ import type {
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
-import { runDurableDeadlineOutputPass } from './workflows/finalize-run';
+import { deadlineMessageListState, runDurableDeadlineOutputPass } from './workflows/finalize-run';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
@@ -2785,31 +2792,42 @@ export class DurableAgent<
     // Captured before the error below lets the caller clean the run up.
     const runInputEntry = runInput && getRunRegistryEntry(runId, this.#mastra);
     let wrote = false;
+    let deadlineSave: Promise<void> | undefined;
     const writeTerminalState = async () => {
       wrote = true;
       if (totalTimeout && fence) fence.deadlineError = error;
-      // The observable deadline must not wait for snapshot I/O.
-      if (error) await reportError(error);
-      if (finished) await this.deleteRunSnapshots(runId);
       if (runInput && runInputEntry && !runInputEntry.tripwire) {
         // The run never reaches its finish step, so the output processors get their pass here, over the
         // steps that completed in time (or just the accepted request). Saves made under the claim the
         // deadline replaced are rejected; this one writes under the replacement. Saves upsert by ID.
+        // Like the finish step, memory is saved before the caller sees the run end.
         this.#runInputs.delete(fence!);
-        try {
+        deadlineSave = (async () => {
+          // A tool the deadline aborted still gets its grace window to return; wait (bounded) so its step can be saved.
+          await settledOrElapsed(
+            new Promise<void>(resolve => whenRunStepsSettle(runInputEntry, resolve)),
+            TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_MS,
+          );
           await runDurableDeadlineOutputPass({
             runId,
             initData: runInput,
-            messageListState: runInputEntry.completedStepsState ?? runInput.messageListState,
+            messageListState: deadlineMessageListState(runInputEntry) ?? runInput.messageListState,
             entry: runInputEntry,
             error: error!,
             mastra: this.#mastra,
             logger: this.logger,
           });
-        } catch (saveError) {
+        })().catch(saveError => {
           this.logger.warn(`Failed to save run ${runId} at its total deadline`, { runId, error: saveError });
-        }
+        });
+        // Saved before the caller sees the run end, unless the store hangs: the deadline must still surface.
+        await settledOrElapsed(deadlineSave, DEADLINE_SAVE_WAIT_MS);
       }
+      // The observable deadline must not wait for snapshot I/O.
+      if (error) await reportError(error);
+      if (finished) await this.deleteRunSnapshots(runId);
+      // The claim is held until the save lands, so it is not rejected as a stale write.
+      await deadlineSave;
     };
 
     if (!fence) return writeTerminalState();

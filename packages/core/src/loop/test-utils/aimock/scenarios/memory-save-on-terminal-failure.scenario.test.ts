@@ -88,12 +88,13 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     label: string,
     threadId: string,
     memoryOptions?: { observationalMemory: boolean },
+    savedToolResults = ['call_echo'],
   ) {
     const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
     const users = messages.filter(message => message.role === 'user');
     expect(users, `${label}: saved user messages`).toHaveLength(1);
     for (const message of messages) assertNoDuplicateParts(message.content.parts);
-    expect(toolResultIds(messages), `${label}: saved tool results`).toEqual(['call_echo']);
+    expect(toolResultIds(messages), `${label}: saved tool results`).toEqual(savedToolResults);
 
     const followUp = await runLoopScenario({
       engine,
@@ -158,7 +159,8 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         await new Promise(resolve => setTimeout(resolve, 300));
         console.info(`[terminal-save probe] engine=${engine} case=total-timeout`, JSON.stringify({ calls, saves }));
 
-        await expectTurnSavedAndRecalled(memory, 'total-timeout', threadId);
+        // The deadline aborts the hanging call; its step is saved with the abort notice, like a tool that returns late.
+        await expectTurnSavedAndRecalled(memory, 'total-timeout', threadId, undefined, ['call_echo', 'call_hang']);
         expect(calls.map(call => call.hook)).toContain('MessageHistory.processOutputResult');
         expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
       } finally {
@@ -262,7 +264,11 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         }
         expect(heldSaves.length, 'a user-message save was attempted').toBeGreaterThan(0);
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-        expect(messages.map(message => message.role)).toEqual(['user']);
+        // Durable engines wait for the input save before calling the model; normal/fs reach the hanging call,
+        // whose aborted step is saved too.
+        const reachedModel = result.requests.length > 0;
+        expect(messages.map(message => message.role)).toEqual(reachedModel ? ['user', 'assistant'] : ['user']);
+        expect(messages.filter(message => message.role === 'user')).toHaveLength(1);
         for (const message of messages) assertNoDuplicateParts(message.content.parts);
       } finally {
         hang.resolve({});
@@ -333,7 +339,10 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         await new Promise(resolve => setTimeout(resolve, 300));
         console.info(`[terminal-save probe] engine=${engine} case=total-timeout-om`, JSON.stringify({ calls }));
 
-        await expectTurnSavedAndRecalled(memory, 'total-timeout-om', threadId, { observationalMemory: true });
+        await expectTurnSavedAndRecalled(memory, 'total-timeout-om', threadId, { observationalMemory: true }, [
+          'call_echo',
+          'call_hang',
+        ]);
         expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
       } finally {
         hang.resolve({});

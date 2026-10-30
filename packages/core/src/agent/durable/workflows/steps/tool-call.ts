@@ -1984,11 +1984,34 @@ export function createDurableToolCallStep() {
           toolCallId,
           toolName,
           abortSignal: toolAbortSignal,
-          assertNotBailedOut: () => ownership?.throwIfLost(),
+          // Past a total deadline the outcome is still needed (recorded below); the step stops right after.
+          assertNotBailedOut: () => {
+            if (!registryEntry?.executionFence?.deadlineError) ownership?.throwIfLost();
+          },
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
           logger: logger as any,
-        }).finally(settleRunTool);
+        })
+          .then(settled => {
+            // The total deadline ended the run while this call ran, so the call's own commit is rejected
+            // below. Leave the result where the deadline save looks for it, before the call reads as settled.
+            if (registryEntry?.executionFence?.deadlineError) {
+              (registryEntry.lateToolResults ??= []).push({
+                toolCallId,
+                toolName,
+                args: cleanedArgs,
+                outcome:
+                  settled.status === 'error'
+                    ? {
+                        kind: 'error',
+                        errorText: settled.error instanceof Error ? settled.error.message : String(settled.error),
+                      }
+                    : { kind: 'result', result: settled.status === 'aborted' ? TOOL_ABORT_NOTICE : settled.result },
+              });
+            }
+            return settled;
+          })
+          .finally(settleRunTool);
 
         ownership?.throwIfLost();
         if (outcome.status === 'error') {

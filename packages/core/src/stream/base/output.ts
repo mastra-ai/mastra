@@ -8,7 +8,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { isMastraTimeoutError } from '../../loop/timeout';
+import { DEADLINE_SAVE_WAIT_MS, isMastraTimeoutError, settledOrElapsed } from '../../loop/timeout';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
@@ -2089,14 +2089,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.processorRunner &&
                 !self.#options.isLLMExecutionStep
               ) {
-                try {
-                  await self.processorRunner.runOutputProcessors(
+                let streamOpen = true;
+                const deadlinePass = (async () => {
+                  await self.processorRunner!.runOutputProcessors(
                     self.messageList.cloneWithCompletedSteps(),
                     resolveObservabilityContext(options),
                     self.#options.requestContext,
                     0,
                     {
                       custom: async (data: { type: string; data?: unknown; transient?: boolean }) => {
+                        if (!streamOpen) return;
                         self.#emitChunk(data as ChunkType<OUTPUT>);
                         controller.enqueue(data as ChunkType<OUTPUT>);
                       },
@@ -2109,9 +2111,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       error,
                     },
                   );
-                } catch (processorError) {
+                })().catch(processorError => {
                   self.logger?.error('Output processors failed at the total deadline', { error: processorError });
-                }
+                });
+                // Saved before the stream ends, unless the store hangs: the deadline must still surface.
+                await settledOrElapsed(deadlinePass, DEADLINE_SAVE_WAIT_MS);
+                streamOpen = false;
               }
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
