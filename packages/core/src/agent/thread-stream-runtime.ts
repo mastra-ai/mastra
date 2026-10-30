@@ -1574,16 +1574,22 @@ export class AgentThreadStreamRuntime {
       if (data?.type === 'signal-enqueued') {
         if (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) return;
         const activeRunId = state.activeThreadRunIds.get(key);
+        const isLive = (runId: string) => state.threadRunsById.has(runId) || state.preparedRunsById.has(runId);
         // A predecessor can still receive signals during handoff, but a finished run
-        // must not acknowledge work after its queues have already been drained.
-        if (
-          !activeRunId ||
-          state.threadKeysByRunId.get(activeRunId) !== key ||
-          (activeRunId !== data.runId &&
-            !state.threadRunsById.has(activeRunId) &&
-            !state.preparedRunsById.has(activeRunId)) ||
-          (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId))
-        )
+        // must not acknowledge work after its queues have already been drained. A run
+        // that is still live here admits its own forwards even while a reservation
+        // made by the sender holds the thread's active slot.
+        // A drain handing the thread to its successor also takes the queue, so
+        // its reservation admits forwards before the successor has a record.
+        const admits =
+          isLive(data.runId) ||
+          (!!activeRunId &&
+            state.threadKeysByRunId.get(activeRunId) === key &&
+            (activeRunId === data.runId ||
+              isLive(activeRunId) ||
+              state.drainingPendingSignalsByThread.has(key) ||
+              state.drainingIdleSignalsByThread.has(key)));
+        if (!admits || (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId)))
           return;
         const queued = [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(queue =>
           queue?.some(signal => signal.id === data.signal.id),
@@ -7535,16 +7541,22 @@ export class AgentThreadStreamRuntime {
           // A retake token is not a run and cannot admit signals; fall through to the blocked path.
           if (isRetakeLeaseOwner(lease.owner)) break;
           if (lease.owner && this.#isSweptLeaseOwner(state, lease.owner)) break;
+          // Release the reservation before forwarding: the owner may finish and
+          // drain its queues while the acknowledgment is in flight, and a drain
+          // skips a thread whose active slot is still held.
+          const heldSlot = state.activeThreadRunIds.get(reservedKey) === reservedRunId;
+          if (heldSlot) state.activeThreadRunIds.delete(reservedKey);
+          state.threadKeysByRunId.delete(reservedRunId);
           if (
             lease.owner &&
             (await this.#forwardSignalToLeaseOwner(resolvedPubSub, reservedKey, lease.owner, signal))
           ) {
-            if (state.activeThreadRunIds.get(reservedKey) === reservedRunId)
-              state.activeThreadRunIds.delete(reservedKey);
-            state.threadKeysByRunId.delete(reservedRunId);
-            state.preRunSignalsByThread.delete(reservedKey);
+            if (heldSlot && !state.activeThreadRunIds.has(reservedKey)) state.preRunSignalsByThread.delete(reservedKey);
             return { action: 'deliver' as const, runId: lease.owner };
           }
+          if (heldSlot && !state.activeThreadRunIds.has(reservedKey))
+            state.activeThreadRunIds.set(reservedKey, reservedRunId);
+          state.threadKeysByRunId.set(reservedRunId, reservedKey);
           lease = await this.#waitForRetakeOwner(
             leaseProvider,
             reservedKey,
