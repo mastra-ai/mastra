@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Maximize, Pin } from 'lucide-react';
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 
 import { runLayout } from '../lib/layout';
@@ -71,7 +71,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       data-page-type={page.isScope ? 'scope' : 'page'}
       className="relative cursor-pointer transition-opacity"
       style={{ width: size, height: size, opacity: dimmed ? 0.35 : 1 }}
-      title={page.isScope && page.address ? `${kind} · ${page.address}` : page.name}
+      title={page.isScope && page.address ? `${kind} · ${page.name} · ${page.address}` : page.name}
     >
       <div
         className="knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 px-3 text-center shadow-raised"
@@ -89,32 +89,13 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           {kind}
         </Txt>
         <Txt as="span" variant="label" tone="ink" className="pointer-events-none line-clamp-3 max-w-full break-words">
-          {page.isScope && page.address ? <BreakAtColons text={page.address} /> : page.name}
+          {page.name}
         </Txt>
       </div>
       {pinned ? <PinBadge size={size} /> : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
-  );
-}
-
-/** Lets a scope address like `role:acme:admin` wrap after a colon instead of mid-word. */
-function BreakAtColons({ text }: { text: string }) {
-  const parts = text.split(':');
-  return (
-    <>
-      {parts.map((part, index) => (
-        <Fragment key={index}>
-          {part}
-          {index < parts.length - 1 ? (
-            <>
-              :<wbr />
-            </>
-          ) : null}
-        </Fragment>
-      ))}
-    </>
   );
 }
 

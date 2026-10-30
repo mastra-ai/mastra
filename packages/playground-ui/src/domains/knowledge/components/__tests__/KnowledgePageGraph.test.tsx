@@ -129,6 +129,17 @@ describe('KnowledgePageGraph', () => {
       const captions = nodes.flatMap(n => within(n).queryAllByTestId('knowledge-scope-caption'));
       expect(captions.map(caption => caption.textContent)).toEqual(['Organization']);
     });
+
+    it('names a scope by its page name and keeps its address in the tooltip', async () => {
+      renderGraph({
+        pages: pages.map(page => (page.isScope ? { ...page, name: 'PLTFRM', address: 'linear-team:d56950a3' } : page)),
+      });
+      const nodes = await screen.findAllByTestId('knowledge-page-node');
+      const scope = nodes.find(n => n.dataset.pageType === 'scope');
+      expect(scope?.textContent).toContain('PLTFRM');
+      expect(scope?.textContent).not.toContain('linear-team');
+      expect(scope?.title).toBe('Scope · PLTFRM · linear-team:d56950a3');
+    });
   });
 
   describe('legend', () => {
