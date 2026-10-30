@@ -152,4 +152,33 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     expect((await store.getPage({ id: low.id, read: 'all' }))?.scopeId).toBe(b.id);
     await store.dangerouslyReset();
   });
+
+  it('keeps the pin audience index in step with add, remove, merge and delete', async () => {
+    const store = await makeStore();
+    const { scope } = await store.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'Acme',
+      provenance: who,
+    });
+    const a = await store.createPage({ parentId: scope.id, name: 'A', body: 'x', provenance: who });
+    const b = await store.createPage({ parentId: scope.id, name: 'B', body: 'y', provenance: who });
+    const c = await store.createPage({ parentId: scope.id, name: 'C', body: 'z', provenance: who });
+    const listed = async (audience: string[]) =>
+      (await store.listPins({ audience, read: 'all', limit: 50 })).pins.map(pin => pin.pageName).sort();
+    await store.addPinAudience({ pageId: a.id, audience: ['r:1', 'r:2'], createdBy: 'host' });
+    await store.addPinAudience({ pageId: b.id, audience: ['r:3'], createdBy: 'host' });
+    await store.addPinAudience({ pageId: c.id, audience: ['r:2'], createdBy: 'host' });
+    expect(await listed(['r:2'])).toEqual(['A', 'C']);
+    await store.removePinAudience({ pageId: a.id, audience: ['r:2'], removedBy: 'host' });
+    expect(await listed(['r:2'])).toEqual(['C']);
+    expect(await listed(['r:1', 'r:3'])).toEqual(['A', 'B']);
+    await store.mergePages({ sourceId: b.id, targetId: a.id, sourceVersion: b.version, provenance: who });
+    expect(await listed(['r:3'])).toEqual(['A']);
+    await store.deletePage({ id: c.id, expectedVersion: c.version, deletedBy: 'host' });
+    expect(await listed(['r:2'])).toEqual([]);
+    await store.removePinAudience({ pageId: a.id, audience: ['r:1', 'r:3'], removedBy: 'host' });
+    expect(await listed(['r:1', 'r:3'])).toEqual([]);
+    await store.dangerouslyReset();
+  });
 });

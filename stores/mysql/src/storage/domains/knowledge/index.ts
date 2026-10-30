@@ -80,7 +80,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
-    for (const table of KNOWLEDGE_RESETTABLE_TABLE_NAMES) await this.#pool.query(`DROP TABLE IF EXISTS \`${table}\``);
+    for (const table of [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, 'mastra_knowledge_pin_audiences'])
+      await this.#pool.query(`DROP TABLE IF EXISTS \`${table}\``);
     await this.init();
   }
 
@@ -218,6 +219,10 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['removePinAudience']>[0],
   ): ReturnType<KnowledgePageStore['removePinAudience']> {
     return this.#pages.removePinAudience(input);
+  }
+
+  override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
+    return this.#pages.getPages(input);
   }
 
   override listPins(input: Parameters<KnowledgePageStore['listPins']>[0]): ReturnType<KnowledgePageStore['listPins']> {

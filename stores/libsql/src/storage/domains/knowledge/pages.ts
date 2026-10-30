@@ -16,6 +16,7 @@ import type {
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
   KnowledgePageStore,
+  KnowledgeListedPin,
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
@@ -47,6 +48,7 @@ export const KNOWLEDGE_PAGE_TABLES = {
   stamps: 'mastra_knowledge_note_stamps',
   mentions: 'mastra_knowledge_mentions',
   pins: 'mastra_knowledge_pins',
+  pinAudiences: 'mastra_knowledge_pin_audiences',
   activity: 'mastra_knowledge_activity',
 } as const;
 
@@ -123,6 +125,12 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     createdAt TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS "${T.pinAudiences}" (
+    pinId TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    PRIMARY KEY (audience, pinId)
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS idx_kpin_audiences_pin ON "${T.pinAudiences}" (pinId)`,
   `CREATE TABLE IF NOT EXISTS "${T.activity}" (
     id TEXT PRIMARY KEY,
     action TEXT NOT NULL,
@@ -200,6 +208,10 @@ function toPin(row: Row): KnowledgePin {
     createdAt: new Date(String(row.createdAt)),
     updatedAt: new Date(String(row.updatedAt)),
   };
+}
+
+function toListedPin(row: Row): KnowledgeListedPin {
+  return { ...toPin(row), pageName: String(row.pageName) };
 }
 
 function limitOf(limit: number | undefined, max: number): number {
@@ -331,7 +343,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   /** Deletes every row from the page tables (scopes, pages, notes, pins, activity). */
   async clearAll(): Promise<void> {
     await this.#transaction(async tx => {
-      for (const table of [T.activity, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
+      for (const table of [T.activity, T.pinAudiences, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
         await tx.execute({ sql: `DELETE FROM ${table}`, args: [] });
       }
     });
@@ -541,6 +553,18 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       ...readable.args,
     ]);
     return rows[0] ? toPage(rows[0]) : null;
+  }
+
+  async getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    const ids = [...new Set(input.ids)];
+    if (ids.length === 0) return [];
+    const readable = pageReadable('p', input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT p.* FROM "${T.pages}" p WHERE p.deletedAt IS NULL AND p.id IN (SELECT value FROM json_each(?)) AND ${readable.sql}`,
+      [jsonList(ids), ...readable.args],
+    );
+    return rows.map(toPage);
   }
 
   async getPageByPath(input: {
@@ -876,6 +900,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
             sql: `UPDATE "${T.pins}" SET audience = ?, updatedAt = ? WHERE id = ?`,
             args: [JSON.stringify(merged), now, String(targetPin.id)],
           });
+          await this.#indexAudience(tx, String(targetPin.id), merged);
+          await this.#indexAudience(tx, String(sourcePin.id), []);
           await tx.execute({ sql: `DELETE FROM "${T.pins}" WHERE id = ?`, args: [String(sourcePin.id)] });
         } else {
           await tx.execute({
@@ -910,6 +936,10 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       await tx.execute({
         sql: `UPDATE "${T.pages}" SET deletedAt = ?, deletedBy = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
         args: [now, input.deletedBy, JSON.stringify({ author: input.deletedBy }), now, input.id],
+      });
+      await tx.execute({
+        sql: `DELETE FROM "${T.pinAudiences}" WHERE pinId IN (SELECT id FROM "${T.pins}" WHERE pageId = ?)`,
+        args: [input.id],
       });
       await tx.execute({ sql: `DELETE FROM "${T.pins}" WHERE pageId = ?`, args: [input.id] });
       await this.#logActivity(
@@ -1243,6 +1273,17 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     };
   }
 
+  /** Rewrites the audience index rows of one pin to match `audience`. */
+  async #indexAudience(tx: PageExecutor, pinId: string, audience: string[]): Promise<void> {
+    await tx.execute({ sql: `DELETE FROM "${T.pinAudiences}" WHERE pinId = ?`, args: [pinId] });
+    for (const entry of audience) {
+      await tx.execute({
+        sql: `INSERT OR IGNORE INTO "${T.pinAudiences}" (pinId, audience) VALUES (?, ?)`,
+        args: [pinId, entry],
+      });
+    }
+  }
+
   // Pins
 
   addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
@@ -1256,6 +1297,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           sql: `INSERT INTO "${T.pins}" (id, pageId, audience, createdBy, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
           args: [id, input.pageId, JSON.stringify([...new Set(input.audience)]), input.createdBy, now, now],
         });
+        await this.#indexAudience(tx, id, [...new Set(input.audience)]);
         await this.#logActivity(
           tx,
           'pin-added',
@@ -1271,6 +1313,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           sql: `UPDATE "${T.pins}" SET audience = ?, updatedAt = ? WHERE id = ?`,
           args: [JSON.stringify(merged), now, String(existing.id)],
         });
+        await this.#indexAudience(tx, String(existing.id), merged);
         await this.#logActivity(
           tx,
           'pin-added',
@@ -1301,6 +1344,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         );
       }
       if (remaining.length === 0) {
+        await this.#indexAudience(tx, String(existing.id), []);
         await tx.execute({ sql: `DELETE FROM "${T.pins}" WHERE id = ?`, args: [String(existing.id)] });
         return null;
       }
@@ -1308,6 +1352,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         sql: `UPDATE "${T.pins}" SET audience = ?, updatedAt = ? WHERE id = ?`,
         args: [JSON.stringify(remaining), now, String(existing.id)],
       });
+      await this.#indexAudience(tx, String(existing.id), remaining);
       return toPin((await this.#query(tx, `SELECT * FROM "${T.pins}" WHERE id = ?`, [String(existing.id)]))[0]!);
     });
   }
@@ -1316,9 +1361,12 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
     pageIds?: string[];
+    excludePageIds?: string[];
+    withBody?: boolean;
+    count?: boolean;
     cursor?: string;
     limit?: number;
-  }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
+  }): Promise<{ pins: KnowledgeListedPin[]; nextCursor?: string; total?: number }> {
     const core = await loadPagesCore();
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
@@ -1326,29 +1374,44 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const args: InValue[] = [...readable.args];
     let filters = '';
     if (input.audience !== 'all') {
-      filters += ` AND EXISTS (SELECT 1 FROM json_each(pin.audience) a WHERE a.value IN (SELECT value FROM json_each(?)))`;
+      filters += ` AND pin.id IN (SELECT pa.pinId FROM json_each(?) a JOIN "${T.pinAudiences}" pa ON pa.audience = a.value)`;
       args.push(jsonList(input.audience));
     }
     if (input.pageIds) {
       filters += ` AND pin.pageId IN (SELECT value FROM json_each(?))`;
       args.push(jsonList(input.pageIds));
     }
-    if (cursor) {
-      filters += ` AND (pin.createdAt < ? OR (pin.createdAt = ? AND pin.id < ?))`;
-      args.push(cursor[0]!, cursor[0]!, cursor[1]!);
+    if (input.excludePageIds?.length) {
+      filters += ` AND pin.pageId NOT IN (SELECT value FROM json_each(?))`;
+      args.push(jsonList(input.excludePageIds));
     }
-    args.push(limit + 1);
+    if (input.withBody) {
+      filters += ` AND p.body IS NOT NULL AND trim(p.body, char(32, 9, 10, 11, 12, 13)) <> ''`;
+    }
+    const from = `FROM "${T.pins}" pin JOIN "${T.pages}" p ON p.id = pin.pageId WHERE p.deletedAt IS NULL AND ${readable.sql}${filters}`;
+    let total: number | undefined;
+    if (input.count) {
+      total = Number((await this.#query(this.#read, `SELECT COUNT(*) AS n ${from}`, args))[0]!.n);
+    }
+    const pageArgs = [...args];
+    let cursorFilter = '';
+    if (cursor) {
+      cursorFilter = ` AND (pin.createdAt < ? OR (pin.createdAt = ? AND pin.id < ?))`;
+      pageArgs.push(cursor[0]!, cursor[0]!, cursor[1]!);
+    }
+    pageArgs.push(limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT pin.* FROM "${T.pins}" pin JOIN "${T.pages}" p ON p.id = pin.pageId WHERE p.deletedAt IS NULL AND ${readable.sql}${filters} ORDER BY pin.createdAt DESC, pin.id DESC LIMIT ?`,
-      args,
+      `SELECT pin.*, p.name AS pageName ${from}${cursorFilter} ORDER BY pin.createdAt DESC, pin.id DESC LIMIT ?`,
+      pageArgs,
     );
     const page = rows.slice(0, limit);
     return {
-      pins: page.map(toPin),
+      pins: page.map(toListedPin),
       ...(rows.length > limit
         ? { nextCursor: encodeCursor([String(page[page.length - 1]!.createdAt), String(page[page.length - 1]!.id)]) }
         : {}),
+      ...(total === undefined ? {} : { total }),
     };
   }
 }

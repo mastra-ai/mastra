@@ -49,7 +49,7 @@ createKnowledgeSchemaResetTests(async () => {
         "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'mastra\\_knowledge\\_%'",
       );
       expect(new Set((tables as Array<{ name: string }>).map(row => row.name))).toEqual(
-        new Set(KNOWLEDGE_PAGES_TABLE_NAMES),
+        new Set([...KNOWLEDGE_PAGES_TABLE_NAMES, 'mastra_knowledge_pin_audiences']),
       );
     },
     cleanup: async () => {
