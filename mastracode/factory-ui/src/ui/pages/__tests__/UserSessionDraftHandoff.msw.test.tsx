@@ -144,7 +144,7 @@ describe('a user session draft on the real thread route', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('keeps typing free while the draft model resolves, but holds the send', async () => {
+  it('sends a prompt submitted while the draft model resolves once the model is ready', async () => {
     let releaseModelDefaults = () => {};
     const modelDefaultsGate = new Promise<void>(resolve => {
       releaseModelDefaults = resolve;
@@ -154,7 +154,7 @@ describe('a user session draft on the real thread route', () => {
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
     });
-    renderWithProviders(<RouterProvider router={router} />);
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     expect(await screen.findByLabelText('Loading model')).toBeInTheDocument();
@@ -163,13 +163,21 @@ describe('a user session draft on the real thread route', () => {
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
 
-    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    // The send is held, not dropped: the composer shows it is starting and keeps the prompt.
+    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
     expect(message).toHaveValue('fix the login bug');
+    expect(message).toBeDisabled();
     expect(route.createBodies).toEqual([]);
 
     releaseModelDefaults();
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
-    expect(message).toHaveValue('fix the login bug');
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
+    );
+    await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
+    expect(route.createBodies).toHaveLength(1);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
   });
 });

@@ -187,9 +187,10 @@ describe('Starting a user session with images attached', () => {
       await user.type(message, 'look at this');
       await user.keyboard('{Enter}');
 
+      // The draft opens its thread at once, then comes back when the create fails.
       expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
       expect(screen.getByTestId('pathname')).toHaveTextContent(DRAFT_URL);
-      expect(message).toHaveValue('look at this');
+      expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('look at this');
       expect(screen.getByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
       expect(preparation.posted).toEqual([]);
     });

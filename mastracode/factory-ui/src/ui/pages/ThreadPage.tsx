@@ -20,6 +20,7 @@ import { TeammateSessionLine } from '../domains/chat/components/TeammateSessionL
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { useReturnToDraftOnCreateFailure } from '../domains/chat/hooks/useCreateUserSessionFromDraft';
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
@@ -42,11 +43,12 @@ export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const workspace = useThreadWorkspacePath();
-  const resolvingSession = factoryQuery.isPending || workspace.isPending;
+  const returningToDraft = useReturnToDraftOnCreateFailure(workspace.error);
+  const resolvingSession = factoryQuery.isPending || workspace.isPending || returningToDraft;
 
   return (
     <>
-      {workspace.error ? (
+      {workspace.error && !returningToDraft ? (
         <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />
       ) : resolvingSession ? (
         <ResolvingSessionMain />

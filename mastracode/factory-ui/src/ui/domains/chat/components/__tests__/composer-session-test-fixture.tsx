@@ -12,7 +12,9 @@ import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
+import { useReturnToDraftOnCreateFailure } from '../../hooks/useCreateUserSessionFromDraft';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
+import { useThreadWorkspacePath } from '../../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { ActivityLine } from '../ActivityLine';
 import { Composer } from '../Composer';
 import { TaskPanel } from '../TaskPanel';
@@ -303,8 +305,12 @@ function DraftRouteSurface() {
   );
 }
 
+/** Gates on the session like `ThreadPage`, which a draft opens before its session exists. */
 function UserThreadRouteSurface() {
   const { threadId } = useParams<{ threadId: string }>();
+  const workspace = useThreadWorkspacePath();
+  const returningToDraft = useReturnToDraftOnCreateFailure(workspace.error);
+  if (workspace.isPending || returningToDraft) return <output aria-label="Loading session" />;
   return (
     <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady={false}>
       <ThreadSurface />
