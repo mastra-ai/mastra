@@ -8,6 +8,7 @@
  * unwind gracefully.
  */
 import type { PubSub } from '../../events';
+import { MastraTimeoutError } from '../../loop/timeout';
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
 
 /**
@@ -17,12 +18,23 @@ import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
  * when nobody is listening — an unheard request is a no-op, exactly like
  * aborting a run that already finished.
  */
-export async function publishAbortRequest(pubsub: PubSub, runId: string): Promise<void> {
+export async function publishAbortRequest(pubsub: PubSub, runId: string, reason?: MastraTimeoutError): Promise<void> {
   await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
     type: AgentControlEventTypes.ABORT_REQUEST,
     runId,
-    data: {},
+    data: reason ? { timeout: { timeoutType: reason.timeoutType, timeoutMs: reason.timeoutMs } } : {},
   });
+}
+
+type AbortRequestData = {
+  requestId?: string;
+  /** Set when a run deadline, not a caller, stopped the run. */
+  timeout?: { timeoutType: MastraTimeoutError['timeoutType']; timeoutMs: number };
+};
+
+/** The reason the executing process aborts with: the deadline's timeout error, or a plain abort. */
+function abortReason(data?: AbortRequestData): Error {
+  return data?.timeout ? new MastraTimeoutError(data.timeout) : new Error('Aborted');
 }
 
 /**
@@ -114,15 +126,15 @@ export async function requestAcknowledgedAbort(
 export async function subscribeToAbortRequests(
   pubsub: PubSub,
   runId: string,
-  onAbortRequested: () => boolean | void,
+  onAbortRequested: (reason: Error) => boolean | void,
 ): Promise<() => Promise<void>> {
   const topic = AGENT_CONTROL_TOPIC(runId);
   // Every delivery is acknowledged, including control events this listener
   // ignores. An ignored delivery is still a delivery, and a durable transport
   // keeps unacknowledged entries pending for the life of the subscription.
-  const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
+  const handler = async (event: { type?: string; data?: AbortRequestData }, ack?: () => Promise<void>) => {
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
-      const stopped = onAbortRequested() !== false;
+      const stopped = onAbortRequested(abortReason(event.data)) !== false;
       const requestId = event.data?.requestId;
       if (requestId && stopped) {
         // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost

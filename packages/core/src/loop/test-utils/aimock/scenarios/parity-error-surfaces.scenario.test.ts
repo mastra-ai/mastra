@@ -44,6 +44,7 @@ import {
   describeParity,
   expectParity,
 } from '../parity';
+import { TOOL_ABORT_NOTICE } from '../../../shared/tool-abort-grace';
 import { MastraTimeoutError } from '../../../timeout';
 
 const THREAD = 'thread-t37';
@@ -170,6 +171,15 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
         expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
         expect(result.requests).toHaveLength(1);
+        // Inngest stops the tool on its worker at the deadline, so that worker finishes the turn and
+        // saves it with the abort notice. A held save holds the worker until it is let through.
+        if (engine === 'inngest') {
+          releaseSave();
+          await vi.waitFor(async () => {
+            const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+            expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+          });
+        }
         const workflows = await result.mastra.getStorage()!.getStore('workflows');
         const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
         const prefix = engine === 'inngest' ? 'inngest:' : '';
@@ -313,6 +323,30 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
       const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
       const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      if (engine === 'inngest') {
+        // Inngest stops the courier tool on its worker once the abort grace window passes, so that
+        // worker finishes the turn through its normal finish path, the same path that saves a tool that
+        // returns after the deadline. Both steps are saved, the courier step with the abort notice.
+        if (readOnly) {
+          // Absence can't be polled for; give the worker's finish time to land.
+          await new Promise(resolve => setTimeout(resolve, 2_000));
+          expect(JSON.stringify((await historyMemory.recall({ threadId, resourceId })).messages)).not.toContain(
+            'The order lookup is complete.',
+          );
+          return;
+        }
+        await vi.waitFor(
+          async () => {
+            const saved = JSON.stringify((await historyMemory.recall({ threadId, resourceId })).messages);
+            expect(saved.includes('Look up the order, then check the courier.')).toBe(true);
+            expect(saved.includes('The order lookup is complete.')).toBe(true);
+            expect(saved.includes('Checking the courier now.')).toBe(true);
+            expect(saved.includes(TOOL_ABORT_NOTICE)).toBe(true);
+          },
+          { timeout: 10_000, interval: 100 },
+        );
+        return;
+      }
       const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
       expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
