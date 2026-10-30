@@ -329,7 +329,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     result.cleanup();
   });
 
-  it.each([true, false])('persists completed steps only when savePerStep is enabled (%s)', async savePerStep => {
+  it.each([true, false])('persists completed steps at the total deadline (savePerStep: %s)', async savePerStep => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });
     const firstStep = toolCallingModel('lookup');
@@ -369,7 +369,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       expect(findTimeoutErrorChunk(chunks)).toBeDefined();
       await vi.waitFor(async () => {
         const { messages } = await memory.recall({ threadId: 'timeout-memory-parity-thread' });
-        expect(JSON.stringify(messages).includes('Found NYC')).toBe(savePerStep);
+        expect(JSON.stringify(messages).includes('Found NYC')).toBe(true);
       });
     } finally {
       result.cleanup();
