@@ -34,6 +34,9 @@ overrides:
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   nanoid@<5.1.16: 5.1.16
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
+  '@modelcontextprotocol/sdk>@hono/node-server': 2.1.5
+  '@modelcontextprotocol/node>@hono/node-server': 2.1.5
+  '@hono/node-ws>@hono/node-server': 2.1.5
 
 importers:
 
@@ -72,7 +75,7 @@ importers:
         version: 7.2.0
       mastra:
         specifier: '*'
-        version: 1.35.0(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7)
+        version: 1.35.0(@hono/node-server@2.1.5(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -415,9 +418,9 @@ packages:
   '@expo/sudo-prompt@9.3.2':
     resolution: {integrity: sha512-HHQigo3rQWKMDzYDLkubN5WQOYXJJE2eNqIQC2axC2iO3mHdwnIR7FgZVvHWtBwAdzBgAP0ECp8KqS8TiMKvgw==}
 
-  '@hono/node-server@1.19.15':
-    resolution: {integrity: sha512-Za2ai6TLdKjUvnur+eenO6nuYYipVAEhyCAdaV8IRvmU9kK8crOZUSYvIXn72E4f8fJqyAbpcJuTsYYmZp9Deg==}
-    engines: {node: '>=18.14.1'}
+  '@hono/node-server@2.1.5':
+    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+    engines: {node: '>=20'}
     peerDependencies:
       hono: 4.13.11
 
@@ -425,7 +428,7 @@ packages:
     resolution: {integrity: sha512-vo/MwCnpJAVHBkGzWjCJ28wF45fYHAfbPZcH2rodZODHtch2GHA94KtMfusmVycTUtsLAsaNsHhtY6P8X3RQsA==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      '@hono/node-server': 1.19.15
+      '@hono/node-server': 2.1.5
       hono: 4.13.11
 
   '@jridgewell/gen-mapping@0.4.0-beta.0':
@@ -2359,13 +2362,13 @@ snapshots:
 
   '@expo/sudo-prompt@9.3.2': {}
 
-  '@hono/node-server@1.19.15(hono@4.13.11)':
+  '@hono/node-server@2.1.5(hono@4.13.11)':
     dependencies:
       hono: 4.13.11
 
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.15(hono@4.13.11))(hono@4.13.11)':
+  '@hono/node-ws@1.3.1(@hono/node-server@2.1.5(hono@4.13.11))(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.11)
+      '@hono/node-server': 2.1.5(hono@4.13.11)
       hono: 4.13.11
       ws: 8.22.0
     transitivePeerDependencies:
@@ -2402,12 +2405,12 @@ snapshots:
       json-schema: 0.4.0
       zod: 4.6.7
 
-  '@mastra/deployer@1.79.0(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7)':
+  '@mastra/deployer@1.79.0(@hono/node-server@2.1.5(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7)':
     dependencies:
       '@babel/core': 8.0.9
       '@babel/preset-typescript': 8.0.7(@babel/core@8.0.9)
       '@babel/traverse': 8.0.7
-      '@hono/node-ws': 1.3.1(@hono/node-server@1.19.15(hono@4.13.11))(hono@4.13.11)
+      '@hono/node-ws': 1.3.1(@hono/node-server@2.1.5(hono@4.13.11))(hono@4.13.11)
       '@mastra/core': link:../../core
       '@mastra/server': 1.79.0(@mastra/core@..+core)(zod@4.6.7)
       '@optimize-lodash/rollup-plugin': 5.1.0(rollup@4.65.1)
@@ -3233,14 +3236,14 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  mastra@1.35.0(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7):
+  mastra@1.35.0(@hono/node-server@2.1.5(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7):
     dependencies:
       '@babel/parser': 8.0.8
       '@babel/types': 8.0.8
       '@clack/prompts': 1.8.1
       '@expo/devcert': 1.2.2
       '@mastra/core': link:../../core
-      '@mastra/deployer': 1.79.0(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7)
+      '@mastra/deployer': 1.79.0(@hono/node-server@2.1.5(hono@4.13.11))(@mastra/core@..+core)(zod@4.6.7)
       '@mastra/loggers': 1.3.9(@mastra/core@..+core)
       archiver: 8.0.0
       commander: 14.0.3

@@ -75,6 +75,7 @@
     "vitest": "4.1.12"
   },
   "overrides": {
+    "@hono/node-server": "2.1.5",
     "nanoid": "5.1.16",
     "shadcn": {
       "undici": "8.12.2"

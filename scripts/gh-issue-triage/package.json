@@ -17,7 +17,7 @@
     "octokit": "^5.0.5"
   },
   "overrides": {
-    "@hono/node-server": "1.19.15",
+    "@hono/node-server": "2.1.5",
     "ip-address": "10.7.4",
     "js-yaml": "3.15.2",
     "nanoid": "5.1.16",

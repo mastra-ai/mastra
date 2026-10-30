@@ -105,7 +105,9 @@
       "undici@<8.12.2": "8.12.2",
       "yargs@<18.1.0": "18.2.0",
       "raw-body@<4.0.0": "4.0.0",
-      "nanoid@<5.1.16": "5.1.16"
+      "nanoid@<5.1.16": "5.1.16",
+      "@modelcontextprotocol/sdk>@hono/node-server": "2.1.5",
+      "@modelcontextprotocol/node>@hono/node-server": "2.1.5"
     },
     "patchedDependencies": {
       "body-parser@2.4.0": "patches/body-parser@2.4.0.patch"
