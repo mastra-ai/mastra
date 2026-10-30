@@ -388,19 +388,68 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     }
     for (const table of ['factory_work_items', 'factory_work_item_sources', 'factory_board_items']) {
       for (const row of await storage.ops.findMany(table, { org_id: scope.orgId })) {
-        if (table !== 'factory_board_items') expect(row).not.toHaveProperty('claim_key');
-        for (const column of [
-          'kind',
-          'triage_type',
-          'accepted_at',
-          'plans_preapproved_at',
-          'comment_count',
-          'feed_activity_at',
-        ]) {
-          expect(row).not.toHaveProperty(column);
+        if (table !== 'factory_board_items') {
+          for (const column of [
+            'claim_key',
+            'triage_type',
+            'accepted_at',
+            'autonomy_armed_at',
+            'plans_preapproved_at',
+          ]) {
+            expect(row).not.toHaveProperty(column);
+          }
         }
+        for (const column of ['kind', 'comment_count', 'feed_activity_at']) expect(row).not.toHaveProperty(column);
       }
     }
+  });
+
+  it('keeps process consent revisioned and cached separately from provider refreshes', async () => {
+    const { storage, workItems, scope, item, sync } = await setup();
+    expect((await workItems.list(scope))[0]!.plansPreapprovedAt).toBeNull();
+    const granted = await workItems.update({ ...scope, id: item.id, patch: { plansPreapproved: true } });
+    expect(granted!.item.plansPreapprovedAt).toBeInstanceOf(Date);
+    expect(granted!.item.revision).toBe(item.revision + 1);
+    expect((await workItems.list(scope))[0]!.plansPreapprovedAt).toEqual(granted!.item.plansPreapprovedAt);
+    const transition = (expectedRevision: number) =>
+      workItems.commitTransition({
+        ...scope,
+        workItemId: item.id,
+        expectedRevision,
+        destinationStage: 'planning',
+        actorId: scope.userId,
+        ingress: { identity: 'process-consent', triggerType: 'human', transitionId: 'process-consent' },
+        configVersion: '1',
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+        triageType: 'feature request',
+        accept: true,
+        autonomy: 'arm',
+      });
+    expect(await transition(item.revision)).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
+    const committed = await transition(granted!.item.revision);
+    expect(committed).toMatchObject({ status: 'committed', result: { status: 'accepted' } });
+    const consented = (await workItems.list(scope))[0]!;
+    expect(consented).toMatchObject({ triageType: 'feature request', revision: granted!.item.revision + 1 });
+    expect(consented.acceptedAt).toBeInstanceOf(Date);
+    expect(consented.autonomyArmedAt).toBeInstanceOf(Date);
+
+    await sync();
+    await workItems.update({ ...scope, id: item.id, patch: { plansPreapproved: true } });
+    const refreshed = (await workItems.list(scope))[0]!;
+    expect(refreshed).toMatchObject({
+      triageType: consented.triageType,
+      acceptedAt: consented.acceptedAt,
+      autonomyArmedAt: consented.autonomyArmedAt,
+      plansPreapprovedAt: consented.plansPreapprovedAt,
+      revision: consented.revision,
+    });
+    expect(await storage.ops.findOne('factory_board_items', { id: item.id })).toMatchObject({
+      triage_type: consented.triageType,
+      accepted_at: consented.acceptedAt,
+      autonomy_armed_at: consented.autonomyArmedAt,
+      plans_preapproved_at: consented.plansPreapprovedAt,
+    });
   });
 
   it('refreshes a secondary source without replacing the primary source identity or facts', async () => {

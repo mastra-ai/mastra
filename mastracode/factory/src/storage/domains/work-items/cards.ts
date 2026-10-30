@@ -18,7 +18,6 @@ const BOARD_ITEMS = FACTORY_BOARD_ITEMS_SCHEMA.name;
 const WORK_ITEMS = FACTORY_WORK_ITEMS_SCHEMA.name;
 const SOURCES = FACTORY_WORK_ITEM_SOURCES_SCHEMA.name;
 const BOARD_COLUMNS = new Set(Object.keys(FACTORY_BOARD_ITEMS_SCHEMA.columns));
-const RETIRED_COLUMNS = new Set(['triage_type', 'accepted_at', 'plans_preapproved_at']);
 const PROJECTED_COLUMNS = new Set([
   'work_item',
   'work_item_sources',
@@ -74,7 +73,6 @@ function joinCard(
 ): WorkItemDbRow {
   if (!work) throw new Error(`Board item ${board.id} has no work item ${board.work_item_id}.`);
   const source = sources[0];
-  const armedAt = board.metadata?.autonomyArmedAt;
   return {
     work_item: work,
     work_item_sources: sources,
@@ -91,10 +89,10 @@ function joinCard(
     stage_history: board.stage_history as WorkItemDbRow['stage_history'],
     sessions: board.sessions as WorkItemDbRow['sessions'],
     metadata: board.metadata || source?.metadata ? { ...board.metadata, ...source?.metadata } : null,
-    triage_type: null,
-    autonomy_armed_at: typeof armedAt === 'string' ? new Date(armedAt) : null,
-    plans_preapproved_at: null,
-    accepted_at: null,
+    triage_type: board.triage_type ?? null,
+    autonomy_armed_at: board.autonomy_armed_at ?? null,
+    plans_preapproved_at: board.plans_preapproved_at ?? null,
+    accepted_at: board.accepted_at ?? null,
     comment_count: 0,
     feed_activity_at: null,
     revision: board.revision,
@@ -107,13 +105,7 @@ function joinCard(
 function boardColumns(patch: Partial<WorkItemDbRow>, { filter = false } = {}): Partial<BoardItemDbRecord> {
   const columns: Record<string, unknown> = {};
   for (const [column, value] of Object.entries(patch)) {
-    if (
-      (column === 'id' && !filter) ||
-      PROJECTED_COLUMNS.has(column) ||
-      RETIRED_COLUMNS.has(column) ||
-      column === 'autonomy_armed_at'
-    )
-      continue;
+    if ((column === 'id' && !filter) || PROJECTED_COLUMNS.has(column)) continue;
     if (column === 'parent_work_item_id') columns.parent_board_item_id = value;
     else if (BOARD_COLUMNS.has(column)) columns[column] = value;
     else throw new Error(`[cards] unknown card column '${column}'.`);
@@ -255,11 +247,10 @@ export class Cards {
       const patch = await updater(current);
       if (!patch) return null;
       const columns = boardColumns(patch);
-      if (patch.metadata !== undefined || patch.autonomy_armed_at !== undefined) {
+      if (patch.metadata !== undefined) {
         const next = { ...current, ...patch };
         const split = splitCardRows(next, { workItemId: row.work_item_id });
         columns.metadata = split.boardItem.metadata;
-        if (patch.autonomy_armed_at === null && columns.metadata) delete columns.metadata.autonomyArmedAt;
       }
       if (patch.title !== undefined && patch.title !== current.title) {
         await this.ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: row.work_item_id }, work => ({
@@ -301,10 +292,12 @@ export class Cards {
         } else if (next) await this.ops.insertOne(SOURCES, next);
         else if (previous) await this.ops.deleteMany(SOURCES, { id: previous.id });
       }
-      const boardChanged = Object.entries(columns).some(
-        ([key, value]) =>
-          !['revision', 'updated_at'].includes(key) && JSON.stringify(row[key]) !== JSON.stringify(value),
-      );
+      const boardChanged =
+        (!current.external_source && patch.title !== undefined && patch.title !== current.title) ||
+        Object.entries(columns).some(
+          ([key, value]) =>
+            !['revision', 'updated_at'].includes(key) && JSON.stringify(row[key]) !== JSON.stringify(value),
+        );
       if (!boardChanged) return null;
       return { ...columns, revision: row.revision + 1, updated_at: patch.updated_at ?? new Date() };
     });
