@@ -33,8 +33,7 @@ function stubManualCreate(title: string) {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
+    description: null,
     revision: 1,
     createdAt: '2026-08-05T00:00:00.000Z',
     updatedAt: '2026-08-05T00:00:00.000Z',
@@ -139,19 +138,6 @@ describe('Default grouped issue list', () => {
     await waitFor(() => expect(screen.getByText('Moved recently')).toBeVisible());
   });
 
-  it('reveals the group again when a link to another comment on the same issue arrives', async () => {
-    const router = renderBoard();
-    const user = userEvent.setup();
-    await screen.findByText('Moved recently');
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=recent-card&comment=comment-a`));
-    await user.click(stageToggle('Triage'));
-    expect(stageToggle('Triage')).toHaveAttribute('aria-expanded', 'false');
-
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=recent-card&comment=comment-b`));
-
-    await waitFor(() => expect(stageToggle('Triage')).toHaveAttribute('aria-expanded', 'true'));
-  });
-
   it.each([
     { width: 'wide', narrowQuery: undefined },
     { width: 'too narrow to dock', narrowQuery: '(max-width: 1279px)' },
@@ -188,14 +174,21 @@ describe('Default grouped issue list', () => {
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 
-  it('closes the docked panel on Escape from its composer and puts focus back on the row', async () => {
+  it('closes the docked panel on Escape and puts focus back on the row, after Escape first drops a description draft', async () => {
     renderBoard();
     const user = userEvent.setup();
     const triage = await screen.findByTestId('board-column-triage');
     await user.click(await within(triage).findByText('Moved recently'));
     const panel = await screen.findByRole('dialog', { name: 'Moved recently' });
 
-    await user.click(within(panel).getByRole('textbox', { name: 'Comment' }));
+    await user.click(within(panel).getByRole('button', { name: 'Add a description' }));
+    await user.type(within(panel).getByRole('textbox', { name: 'Description' }), 'Half a thought');
+    await user.keyboard('{Escape}');
+    expect(within(panel).queryByRole('textbox', { name: 'Description' })).not.toBeInTheDocument();
+    expect(panel).toBeInTheDocument();
+
+    const addDescription = within(panel).getByRole('button', { name: 'Add a description' });
+    act(() => addDescription.focus());
     await user.keyboard('{Escape}');
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

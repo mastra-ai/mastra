@@ -140,38 +140,14 @@ describe('LiveSessions', () => {
     ]);
   });
 
-  it('announces every park, answer and finished turn, and stops once the session is gone', () => {
+  it('drops a parked session once it goes away, so the inbox drops its item', () => {
     const controller = fakeController();
     const registry = new LiveSessions(controller);
     const fake = fakeSession('session-1');
     controller.create(fake.session);
-    const changed = vi.fn();
-    registry.onParkedChanged(changed);
-
-    fake.park('call-1', 'ask_user');
-    fake.end('suspended');
-    fake.answer('call-1');
-    fake.end('complete');
-    expect(changed).toHaveBeenCalledTimes(3);
-    expect(changed).toHaveBeenLastCalledWith(fake.session);
-
-    controller.delete(fake.session);
-    fake.park('call-2', 'ask_user');
-    expect(changed).toHaveBeenCalledTimes(3);
-  });
-
-  it('announces a parked session going away, so the inbox drops its item', () => {
-    const controller = fakeController();
-    const registry = new LiveSessions(controller);
-    const fake = fakeSession('session-1');
-    controller.create(fake.session);
-    const changed = vi.fn();
-    registry.onParkedChanged(changed);
-
     fake.park('call-1', 'ask_user');
     controller.delete(fake.session);
 
-    expect(changed).toHaveBeenCalledTimes(2);
     expect(registry.parkedIn('project-1')).toEqual([]);
   });
 });

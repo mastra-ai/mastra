@@ -116,56 +116,59 @@ describe('Large factory boards', () => {
     expect(screen.getAllByTestId('work-item-card')).toHaveLength(1);
   });
 
-  it('given open details, scrolling keeps the card and its comment draft alive', async () => {
+  it('given open details, scrolling keeps the card and its description draft alive', async () => {
     renderBoard();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Large task 249' }));
     const details = await screen.findByRole('dialog', { name: 'Large task 249' });
-    const comment = await within(details).findByRole('textbox', { name: 'Comment' });
-    await user.type(comment, 'Keep this draft while I scroll');
+    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
+    const draft = within(details).getByRole('textbox', { name: 'Description' });
+    await user.type(draft, 'Keep this draft while I scroll');
 
     fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Large task 248' })).not.toBeInTheDocument());
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft while I scroll');
+    expect(draft).toHaveValue('Keep this draft while I scroll');
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
   });
 
-  it('given an open comment draft, changing sort retains the same issue when its position changes', async () => {
+  it('given an open description draft, changing sort retains the same issue when its position changes', async () => {
     const { router } = renderBoard();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Large task 249' }));
     const details = await screen.findByRole('dialog', { name: 'Large task 249' });
-    const comment = await within(details).findByRole('textbox', { name: 'Comment' });
-    await user.type(comment, 'Keep this draft after sorting');
+    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
+    const draft = within(details).getByRole('textbox', { name: 'Description' });
+    await user.type(draft, 'Keep this draft after sorting');
 
     await act(() => router.navigate(`/factories/${FACTORY_ID}/work?sort=created-oldest`));
 
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft after sorting');
+    expect(draft).toHaveValue('Keep this draft after sorting');
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
   });
 
-  it('given an open comment draft, a refresh crossing the virtualization threshold keeps the draft both ways', async () => {
+  it('given an open description draft, a refresh crossing the virtualization threshold keeps the draft both ways', async () => {
     const { client } = renderBoard('', 30);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Large task 29' }));
     const details = await screen.findByRole('dialog', { name: 'Large task 29' });
-    const comment = await within(details).findByRole('textbox', { name: 'Comment' });
-    await user.type(comment, 'Keep this draft across refreshes');
+    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
+    const draft = within(details).getByRole('textbox', { name: 'Description' });
+    await user.type(draft, 'Keep this draft across refreshes');
 
     serveWorkItems(31);
     await act(() => client.invalidateQueries());
     expect(await screen.findByLabelText('Large task 30')).toBeInTheDocument();
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft across refreshes');
+    expect(draft).toHaveValue('Keep this draft across refreshes');
 
     serveWorkItems(30);
     await act(() => client.invalidateQueries());
     await waitFor(() => expect(screen.queryByLabelText('Large task 30')).not.toBeInTheDocument());
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft across refreshes');
+    expect(draft).toHaveValue('Keep this draft across refreshes');
   });
 
   it('given a focused card, scrolling preserves keyboard focus until the user leaves it', async () => {

@@ -51,6 +51,8 @@ export interface WorkItem {
   sourceKey: string | null;
   parentWorkItemId: string | null;
   title: string;
+  /** What the card is about, handed to its runs at kickoff. */
+  description: string | null;
   url: string | null;
   stages: string[];
   stageHistory: WorkItemStageEntry[];
@@ -60,9 +62,6 @@ export interface WorkItem {
   triageType: FactoryTriageType | null;
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
-  commentCount: number;
-  /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
-  feedActivityAt: string | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -81,6 +80,7 @@ export interface CreateWorkItemInput {
   sourceKey: string | null;
   parentWorkItemId?: string | null;
   title: string;
+  description?: string | null;
   url?: string | null;
   stages?: string[];
   sessions?: Record<string, WorkItemSessionInput>;
@@ -97,21 +97,12 @@ interface ExternalWorkItemSource {
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  | 'githubProjectId'
-  | 'source'
-  | 'sourceKey'
-  | 'url'
-  | 'metadata'
-  | 'commentCount'
-  | 'feedActivityAt'
-  | 'triageType'
-  | 'acceptedAt'
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'description' | 'triageType' | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
-  commentCount?: number;
-  feedActivityAt?: string | null;
+  description?: string | null;
   triageType?: WorkItem['triageType'];
   acceptedAt?: string | null;
 }
@@ -188,8 +179,7 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
-    item;
+  const { factoryProjectId, externalSource, metadata, description, triageType, acceptedAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
@@ -197,8 +187,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     sourceKey: externalSource?.externalId ?? null,
     url: externalSourceUrl(externalSource),
     metadata: metadata ?? {},
-    commentCount: commentCount ?? 0,
-    feedActivityAt: feedActivityAt ?? null,
+    description: description ?? null,
     triageType: triageType ?? null,
     acceptedAt: acceptedAt ?? null,
   };
@@ -220,6 +209,8 @@ export type FactoryTransitionResult =
 export interface UpdateWorkItemInput {
   parentWorkItemId?: string | null;
   title?: string;
+  /** Blank clears it. */
+  description?: string | null;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
   /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
@@ -297,7 +288,7 @@ export async function transitionWorkItem(
   throw new Error(body.error ?? `Request failed (${res.status})`);
 }
 
-/** Patch a work item's non-stage metadata, session refs, or title. */
+/** Patch a work item's non-stage metadata, session refs, title, or description. */
 export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateWorkItemInput): Promise<WorkItem> {
   const data = await requestJson<{ workItem: WireWorkItem }>(
     `${baseUrl}/web/factory/work-items/${encodeURIComponent(id)}`,

@@ -105,8 +105,7 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       metadata: { number: 42 },
       triageType: null,
       acceptedAt: null,
-      commentCount: 0,
-      feedActivityAt: null,
+      description: null,
       revision: 1,
       createdAt: updatedAt,
       updatedAt,
@@ -134,8 +133,7 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       metadata: { number: 99 },
       triageType: null,
       acceptedAt: null,
-      commentCount: 0,
-      feedActivityAt: null,
+      description: null,
       revision: 1,
       createdAt: updatedAt,
       updatedAt,
@@ -163,12 +161,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
     currentSessionResponse: { session: workWorkspace },
     workItemsResponse: { workItems: workItems.map(toWireWorkItem) },
     activeRunsResponse: { runs: [{ runId: 'run-work', resourceId: workSessionId, threadId: workSessionId }] },
-    rosterResponse: {
-      members: [
-        { id: 'user-1', name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' },
-        { id: 'user-grace', name: 'Grace Hopper' },
-      ],
-    },
     workRunsResponse: {
       events: [
         {
@@ -195,7 +187,7 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
           occurredAt: hoursBefore(updatedAt, 1),
         },
       ],
-      actors: {},
+      actors: { 'user-1': { id: 'user-1', name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' } },
     },
   };
 }

@@ -19,7 +19,6 @@ import type { FactoryTransitionService } from '../rules/transition-service.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import type { UpdateWorkItemInput, WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
@@ -50,8 +49,6 @@ export interface FactoryWorkItemToolDependencies {
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
   auditRecorder: AuditRecorder;
-  /** The feed's front door: validates, touches open boards and mirrors to linked channels. */
-  feed: Pick<CommentsDomain, 'createComment'>;
   /** Finds the caller session's source-control provider, whose linked repositories a card can name. */
   sessions: Pick<SourceControlSessionLookup, 'getSourceControlBySessionId'>;
 }
@@ -155,16 +152,16 @@ export function createFactoryWorkItemTools(
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
-          brief: z
+          description: z
             .string()
             .trim()
             .min(1)
             .max(8000)
-            .describe('What needs doing and why; posted as the first comment on the card.'),
+            .describe('What needs doing and why; becomes the card description its runs start from.'),
           repository: repositorySchema.optional(),
         })
         .strict(),
-      execute: async ({ title, brief, repository }) => {
+      execute: async ({ title, description, repository }) => {
         if (repository) await requireRepository(repository);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
@@ -174,7 +171,7 @@ export function createFactoryWorkItemTools(
           ...project,
           userId: scope.userId,
           ...(scope.actorProfile ? { origin: { actorProfile: scope.actorProfile } } : {}),
-          input: { title, ...(repository ? { metadata: { repository } } : {}) },
+          input: { title, description, ...(repository ? { metadata: { repository } } : {}) },
         });
         if (created.status === 'refused') throw new Error(created.message);
         if (created.status === 'rejected') throw new Error(`The board refused the new item: ${created.reason}`);
@@ -182,21 +179,6 @@ export function createFactoryWorkItemTools(
         // The card exists from here on: report follow-up failures alongside it
         // rather than failing the call, so the agent doesn't file it twice.
         const warnings: string[] = [];
-        try {
-          const comment = await deps.feed.createComment({
-            orgId: scope.orgId,
-            workItemId: item.id,
-            author: { kind: 'user', id: scope.userId },
-            body: brief,
-          });
-          if (comment.status !== 'created') {
-            warnings.push(
-              `The brief was not posted (${comment.status === 'invalid' ? comment.message : comment.status}).`,
-            );
-          }
-        } catch (error) {
-          warnings.push(`The brief was not posted: ${error instanceof Error ? error.message : String(error)}`);
-        }
         try {
           await follow(item, 'created');
         } catch (error) {
@@ -257,11 +239,17 @@ export function createFactoryWorkItemTools(
     factory_update_work_item: createTool({
       id: 'factory_update_work_item',
       description:
-        "Edit a work item's fields as the person you are working with: its title, the repository its runs use, its parent item, or pre-approving its plans. Move stages with factory_transition_work_item and start roles with factory_start_session; post to the card's feed for anything else.",
+        "Edit a work item's fields as the person you are working with: its title, description, the repository its runs use, its parent item, or pre-approving its plans. Move stages with factory_transition_work_item and start roles with factory_start_session.",
       inputSchema: z
         .object({
           workItem: workItemRefSchema,
           title: z.string().trim().min(1).max(500).optional().describe('New card title.'),
+          description: z
+            .string()
+            .trim()
+            .max(8000)
+            .optional()
+            .describe('New card description; an empty string clears it.'),
           repository: repositorySchema.optional(),
           parentWorkItem: workItemRefSchema
             .nullable()
@@ -276,7 +264,7 @@ export function createFactoryWorkItemTools(
         })
         .strict()
         .refine(input => Object.keys(input).some(key => key !== 'workItem'), 'Pass at least one field to change.'),
-      execute: async ({ workItem, title, repository, parentWorkItem, plansPreapproved }) => {
+      execute: async ({ workItem, title, description, repository, parentWorkItem, plansPreapproved }) => {
         // Pre-approval drops the plan-approval gate for good, so it is the person's call.
         if (plansPreapproved) requirePerson(scope, 'pre-approve plans');
         const item = await requireItem(workItem);
@@ -286,6 +274,7 @@ export function createFactoryWorkItemTools(
         else if (parentWorkItem !== undefined) parentWorkItemId = (await requireItem(parentWorkItem)).id;
         const patch: UpdateWorkItemInput = {
           ...(title !== undefined ? { title } : {}),
+          ...(description !== undefined ? { description: description || null } : {}),
           ...(repository ? { metadata: { repository } } : {}),
           ...(parentWorkItemId !== undefined ? { parentWorkItemId } : {}),
           ...(plansPreapproved ? { plansPreapproved } : {}),
@@ -300,6 +289,7 @@ export function createFactoryWorkItemTools(
         if (!updated) throw workItemNotFound(workItem);
         const fields = [
           ...(title !== undefined ? ['title'] : []),
+          ...(description !== undefined ? ['description'] : []),
           ...(repository ? ['metadata'] : []),
           ...(parentWorkItemId !== undefined ? ['parentWorkItemId'] : []),
           ...(plansPreapproved ? ['plansPreapproved'] : []),

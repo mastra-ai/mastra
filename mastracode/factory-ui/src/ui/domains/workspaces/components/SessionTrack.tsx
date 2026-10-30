@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react';
 
 import { formatDuration } from '../../../../lib/date/formatDuration';
 import { stageStrongTintClass, stageTintClass } from '../../factory/components/BoardIcons';
-import type { FactoryMentionMember } from '../../factory/services/members';
+import type { TrailPerson } from '../hooks/useSessionTrail';
 import { stageLabel } from '../../factory/stages';
 import { trackMomentLabel, trackStartLabel } from '../services/sessionTrack';
 import type { TrackLayout, TrackPin, TrackSpan, TrackStage } from '../services/sessionTrack';
@@ -92,7 +92,7 @@ export function SessionTrack({
   layout: TrackLayout;
   startedAt: number;
   now: number;
-  people: ReadonlyMap<string, FactoryMentionMember>;
+  people: ReadonlyMap<string, TrailPerson>;
 }) {
   const [focus, setFocus] = useState<TrackFocus>();
   const nameOf = (personId: string) => people.get(personId)?.name ?? personId;

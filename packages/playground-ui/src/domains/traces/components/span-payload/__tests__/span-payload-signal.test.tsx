@@ -114,17 +114,17 @@ describe('Model call whose user message is a skill', () => {
       tagName: 'skill',
       attributes: { name: 'factory-triage' },
       contents:
-        'Read the issue and label it.\n\nARGUMENTS: mastra-ai/mastra#123\n\n<work-item-feed>\n@alice: this blocks the release\n</work-item-feed>',
+        'Read the issue and label it.\n\nARGUMENTS: mastra-ai/mastra#123\n\n<work-item-description>\nBlocks the release.\n</work-item-description>',
     }).toLLMMessage();
     expect((modelGenerationSkillSpan.input as { messages: unknown[] }).messages[1]).toEqual(message);
   });
 
-  it('renders the skill markup as a skill row with its arguments, instructions and feed', () => {
+  it('renders the skill markup as a skill row with its arguments, instructions and description', () => {
     render(<SpanInputRenderer span={modelGenerationSkillSpan} />);
 
     const skill = screen.getByLabelText('Skill: factory-triage');
     expect(skill.textContent).toContain('factory-triage mastra-ai/mastra#123');
-    expect(screen.getByText('Work item feed')).toBeTruthy();
+    expect(screen.getByText('Work item description')).toBeTruthy();
     expect(document.body.textContent).toContain('Read the issue and label it.');
     expect(document.body.textContent).not.toContain('<skill');
     expect(document.body.textContent).not.toContain('ARGUMENTS:');

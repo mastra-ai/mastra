@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
 
-import { useApiConfig } from '../../../../api/config';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import {
   useDeleteWorkItemMutation,
@@ -13,7 +12,6 @@ import type { DragPayload } from '../boardDrag';
 import { persistedSourceKeys } from '../boardItems';
 import { belongsToBoard, itemBoard } from '../boardStages';
 import type { BoardKind } from '../boardStages';
-import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -37,7 +35,6 @@ export function useBoardItems({
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
-  const { baseUrl } = useApiConfig();
   const items = useWorkItemsQuery(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
@@ -137,11 +134,9 @@ export function useBoardItems({
         url,
         ...(initialPhase ? { stages: [initialPhase] } : {}),
         metadata,
+        // Kickoffs carry the card description, so typed guidance reaches the run through it.
+        ...(customPrompt ? { description: customPrompt } : {}),
       });
-      // The kickoff reads the card's feed, so typed guidance reaches the run as a comment on it.
-      if (customPrompt) {
-        await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
-      }
       if (!item.stages.includes(toStage)) requestTransition(item, toStage, { cause });
     })().catch(error => {
       const failure = error instanceof Error ? error : new Error('The card could not be filed.');

@@ -31,6 +31,12 @@ const rawBoundedTrimmed = (max: number) =>
     .max(max)
     .transform(value => value.trim())
     .pipe(z.string().min(1));
+/** Card description: trimmed, and blank clears it. */
+const descriptionSchema = z
+  .string()
+  .max(8000)
+  .transform(value => value.trim() || null)
+  .nullable();
 const trimmedUuidSchema = z.string().trim().regex(new RegExp(UUID_PATTERN));
 const nullableTrimmed = (max: number) =>
   z.union([
@@ -282,6 +288,7 @@ const metadataSchema = z
 
 export const createWorkItemBodySchema = z.object({
   title: rawBoundedTrimmed(500),
+  description: descriptionSchema.optional(),
   board: z.string().min(1).max(128).optional(),
   externalSource: externalSourceSchema.optional(),
   parentWorkItemId: uuidSchema.nullable().optional(),
@@ -293,6 +300,7 @@ export const createWorkItemBodySchema = z.object({
 export const updateWorkItemBodySchema = z
   .object({
     title: rawBoundedTrimmed(500).optional(),
+    description: descriptionSchema.optional(),
     board: z.string().min(1).max(128).optional(),
     parentWorkItemId: uuidSchema.nullable().optional(),
     stages: stagesSchema.optional(),
@@ -405,13 +413,7 @@ export const decisionQuerySchema = z.object({
   limit: boundedLimitSchema(25, 50),
 });
 
-const attentionKindSchema = z.enum([
-  'automation-failed',
-  'automation-proposed',
-  'mention',
-  'activity',
-  'agent-waiting',
-]);
+const attentionKindSchema = z.enum(['automation-failed', 'automation-proposed', 'agent-waiting']);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
 type AttentionStreamPosition = { occurredAt: Date; id: string };
 type AttentionCursorMap = Map<AttentionKind, AttentionStreamPosition | undefined>;

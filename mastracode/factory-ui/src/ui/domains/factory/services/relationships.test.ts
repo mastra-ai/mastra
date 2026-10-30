@@ -28,8 +28,7 @@ function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>
     acceptedAt: null,
     createdAt: '2026-07-17T00:00:00.000Z',
     updatedAt: '2026-07-17T00:00:00.000Z',
-    commentCount: 0,
-    feedActivityAt: null,
+    description: null,
     ...rest,
     revision: rest.revision ?? 1,
   };

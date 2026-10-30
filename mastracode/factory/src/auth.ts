@@ -19,7 +19,6 @@ import {
   isPlatformAuthSupportedHost,
 } from './platform-auth-host.js';
 import type { RouteAuth } from './routes/route.js';
-import { actorFromAuthUser } from './storage/domains/comments/actor.js';
 import { isFactoryTelemetryEnabled } from './telemetry.js';
 import { timedAboveThreshold } from './timing.js';
 
@@ -186,11 +185,12 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
 function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
-  const actor = actorFromAuthUser(userId, user);
+  const name = user.name?.trim() || user.email?.trim();
+  const avatarUrl = user.avatarUrl?.trim();
   return {
-    id: actor.id,
-    ...(actor.displayName ? { name: actor.displayName } : {}),
-    ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
+    id: userId,
+    ...(name ? { name } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
   };
 }
 

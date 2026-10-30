@@ -58,10 +58,6 @@ test.describe('Factory board virtualization', () => {
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
         const request = route.request();
-        if (request.url().endsWith('/feed-events')) {
-          await route.fulfill({ contentType: 'text/event-stream', body: '' });
-          return;
-        }
         const response = await fetch(request.url(), { method: request.method() });
         await route.fulfill({
           status: response.status,

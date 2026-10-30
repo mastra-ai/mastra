@@ -42,7 +42,6 @@ interface TrackedSession {
  */
 export class LiveSessions {
   readonly #byId = new Map<string, TrackedSession>();
-  readonly #parkedListeners = new Set<(session: LiveSession) => void>();
   /** A park stamp doubles as the receipt key, so two suspensions in one millisecond must not share one. */
   #lastParkStamp = 0;
 
@@ -50,10 +49,8 @@ export class LiveSessions {
     controller.onSessionCreated(session => this.#track(session));
     controller.onSessionDeleted(session => {
       const id = session.identity.getId();
-      const wasParked = this.parked(id) !== undefined;
       this.#byId.get(id)?.unsubscribe();
       this.#byId.delete(id);
-      if (wasParked) for (const listener of this.#parkedListeners) listener(session);
     });
   }
 
@@ -68,8 +65,6 @@ export class LiveSessions {
       if (event.type === 'tool_suspended') suspendedAt.set(event.toolCallId, this.#nextParkStamp());
       else if (event.type === 'tool_suspension_cancelled') suspendedAt.delete(event.toolCallId);
       else if (event.type === 'agent_end' && event.reason !== 'suspended') suspendedAt.clear();
-      else return;
-      for (const listener of this.#parkedListeners) listener(session);
     });
     this.#byId.set(session.identity.getId(), { session, seenAt: Date.now(), suspendedAt, unsubscribe });
   }
@@ -100,11 +95,5 @@ export class LiveSessions {
       if (run) parked.push({ sessionId, run });
     }
     return parked;
-  }
-
-  /** Fires when a session parks, is answered, or finishes a turn: whoever shows parked runs re-reads. */
-  onParkedChanged(listener: (session: LiveSession) => void): () => void {
-    this.#parkedListeners.add(listener);
-    return () => this.#parkedListeners.delete(listener);
   }
 }

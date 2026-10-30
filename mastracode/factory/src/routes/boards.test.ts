@@ -18,7 +18,6 @@ import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { StoredPhaseInput } from '../storage/domains/boards/base.js';
-import { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -77,7 +76,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       workItems: storage.registerDomain(new WorkItemsStorage()),
       boards: storage.registerDomain(new StoredBoardsStorage()),
       audit: storage.registerDomain(new AuditStorage()),
-      comments: storage.registerDomain(new WorkItemCommentsStorage()),
       queueHealth: storage.registerDomain(new QueueHealthStorage()),
     };
     await storage.init();
@@ -121,7 +119,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
         projects: domains.projects,
         workItems: domains.workItems,
         boardRegistry: cache,
-        comments: domains.comments,
         queueHealth: domains.queueHealth,
         liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] } as never,
       }).routes(),

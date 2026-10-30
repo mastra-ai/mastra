@@ -23,15 +23,13 @@ export function factoryBoardUrl(factoryProjectId: string, board: string): string
   return factoryUrl(factoryProjectId, boardSegment(board));
 }
 
-/** A card opened on its board, optionally scrolled to one feed comment. */
+/** A card opened on its board. */
 export function factoryWorkItemUrl(input: {
   factoryProjectId: string;
   board: string;
   workItemId: string;
-  commentId?: string;
 }): string | undefined {
   const query = new URLSearchParams({ item: input.workItemId });
-  if (input.commentId) query.set('comment', input.commentId);
   return factoryUrl(input.factoryProjectId, `${boardSegment(input.board)}?${query}`);
 }
 

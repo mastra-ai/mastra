@@ -45,13 +45,11 @@ function registeredFactoryRoutes() {
     audit: {},
     projects: {},
     workItems,
-    comments: {},
     queueHealth: {},
     liveSessions: {},
   } as never).routes();
   const attention = buildAttentionRoutes({
     workItems: workItems as never,
-    comments: {} as never,
     liveSessions: {} as never,
     resolveProject: async () => ({}) as never,
   });
@@ -136,19 +134,24 @@ describe('Factory route contracts', () => {
     });
     expect(decisionQuerySchema.safeParse({ before: 'invalid' }).success).toBe(false);
 
-    const attentionCursor = Buffer.from(JSON.stringify({ mention: ['2030-01-02T00:00:00.000Z', decisionId] })).toString(
-      'base64url',
-    );
+    const attentionCursor = Buffer.from(
+      JSON.stringify({ 'automation-proposed': ['2030-01-02T00:00:00.000Z', decisionId] }),
+    ).toString('base64url');
     const attention = attentionQuerySchema.parse({
       before: attentionCursor,
       limit: '0',
       search: '  FIND ME  ',
-      kind: ['mention', 'agent-waiting'],
+      kind: ['automation-proposed', 'agent-waiting'],
     });
-    expect(attention).toMatchObject({ view: 'open', limit: 1, search: 'find me', kind: ['mention', 'agent-waiting'] });
+    expect(attention).toMatchObject({
+      view: 'open',
+      limit: 1,
+      search: 'find me',
+      kind: ['automation-proposed', 'agent-waiting'],
+    });
     expect(attentionQuerySchema.parse({}).kind).toBeUndefined();
     expect(attentionQuerySchema.safeParse({ kind: ['bogus'] }).success).toBe(false);
-    expect(attention.before?.get('mention')).toEqual({
+    expect(attention.before?.get('automation-proposed')).toEqual({
       occurredAt: new Date('2030-01-02T00:00:00.000Z'),
       id: decisionId,
     });
@@ -157,7 +160,7 @@ describe('Factory route contracts', () => {
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.parse({
         id: projectId,
-        kind: 'mention',
+        kind: 'automation-proposed',
         sourceId: decisionId,
         occurrence: String(Number.MAX_SAFE_INTEGER),
       }).occurrence,
@@ -165,7 +168,7 @@ describe('Factory route contracts', () => {
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.safeParse({
         id: projectId,
-        kind: 'mention',
+        kind: 'automation-proposed',
         sourceId: decisionId,
         occurrence: '9007199254740992',
       }).success,
@@ -194,7 +197,7 @@ describe('Factory route contracts', () => {
   });
 
   it('accepts representative successful response envelopes', () => {
-    const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'mention', 'activity', 'agent-waiting'];
+    const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'agent-waiting'];
     expect(
       FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId }] }).success,
     ).toBe(true);

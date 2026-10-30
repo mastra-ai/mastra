@@ -35,20 +35,15 @@ import type {
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
 } from '../../storage/domains/channel-identity/base.js';
-import type { FactoryActorExternalIdentity } from '../../storage/domains/comments/actor.js';
-import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
-import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
 import { markNewChannelSession } from './channel-session-link-processor.js';
 
-import { resolveEmojiShortcodes } from './emoji.js';
-import { slackCommentSource } from './feed-publisher.js';
 import { slackRunErrorCard } from './run-error-card.js';
 
 // Derive the thread/message types from the core handler signature rather than
@@ -103,16 +98,8 @@ interface SlackChannelDeps {
    * on the thread and never re-resolved. Unset → the factory default, as before.
    */
   modelDefaults?: ModelDefaultsStorage;
-  /**
-   * Factory work-items domain, used to find the card a Slack thread already
-   * has so an `aside` can land on it. New threads never create cards.
-   */
+  /** Factory work-items domain, used to resolve which run binding owns a Slack thread. */
   workItems?: WorkItemsStorage;
-  /**
-   * Work-item feed. With it (and `workItems`), an `aside` lands as a comment on
-   * the card the thread already has. Unset → asides stay ignored, as before.
-   */
-  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
 }
@@ -881,31 +868,6 @@ async function gateDispatch(
   return {};
 }
 
-/**
- * A channel id and a `ts` name a thread only inside the workspace that issued
- * them, so the team scopes the card's key — without it two workspaces could
- * hold one key and an aside would land on another tenant's card.
- */
-export function slackThreadSource(thread: HandlerThread, teamId?: string): ExternalWorkItemSource {
-  return {
-    integrationId: thread.adapter.name,
-    type: 'slack-thread',
-    ...(teamId ? { workspaceId: teamId } : {}),
-    externalId: thread.id,
-  };
-}
-
-/** Cards written before the key carried a team are still keyed bare. */
-async function findThreadWorkItem(
-  workItems: WorkItemsStorage,
-  thread: HandlerThread,
-  teamId?: string,
-): Promise<WorkItemRow | null> {
-  const scoped = await workItems.getBySource(slackThreadSource(thread, teamId));
-  if (scoped || !teamId) return scoped;
-  return workItems.getBySource(slackThreadSource(thread));
-}
-
 function preDispatchErrorDetails(error: unknown): { message: string; cause?: { message: string } } {
   const readMessage = (value: unknown) => {
     const message =
@@ -1000,60 +962,6 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   };
 }
 
-/**
- * An `aside` never reaches the agent, but it is still part of the conversation:
- * record it on the card the thread already has. The link is resolved here rather
- * than through `gateDispatch`, which posts a Connect card an aside must not
- * trigger. Best-effort — nothing here may surface in the Slack thread.
- */
-async function ingestAside(
-  thread: HandlerThread,
-  message: HandlerMessage,
-  { feed, workItems, accountLinks }: SlackChannelDeps,
-): Promise<void> {
-  if (!feed || !workItems) return;
-  const body = resolveEmojiShortcodes(message.text.replace(/^aside\b[,:]?\s*/i, '').trim());
-  if (!body) return;
-  try {
-    const teamId = slackTeamId(message);
-    const workItem = await findThreadWorkItem(workItems, thread, teamId);
-    if (!workItem) return;
-
-    const external: FactoryActorExternalIdentity = {
-      platform: thread.adapter.name,
-      ...(teamId ? { teamId } : {}),
-      messageId: message.id,
-      userId: message.author.userId,
-      userName: message.author.userName,
-      fullName: message.author.fullName,
-      isBot: message.author.isBot,
-    };
-    const link =
-      accountLinks && teamId
-        ? await accountLinks.getAccountLink({
-            platform: external.platform,
-            externalTeamId: teamId,
-            externalUserId: external.userId,
-          })
-        : null;
-
-    const result = await feed.createComment({
-      orgId: workItem.orgId,
-      workItemId: workItem.id,
-      author: actorFromChannelAuthor(external, link),
-      body,
-      occurredAt: message.metadata.dateSent,
-      externalSource: slackCommentSource(thread.id, message.id, teamId),
-    });
-    if (result.status !== 'created') {
-      console.warn('[slack] aside not ingested', { thread: thread.id, messageTs: message.id, status: result.status });
-    }
-  } catch (error) {
-    // Slack was acked before this handler ran, so a lost aside is never redelivered.
-    console.warn('[slack] aside ingest failed', { thread: thread.id, messageTs: message.id, error });
-  }
-}
-
 export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
 
@@ -1062,7 +970,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // `aside` as its own leading word lets humans talk in a subscribed
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
-      if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
+      if (/^aside\b/i.test(message.text)) return;
       // Looked up once here for the mute check and the access gate below.
       const internalThread = await findInternalThread(ctx.mastra, thread);
       // A muted thread ignores everything that doesn't tag the bot, and the
