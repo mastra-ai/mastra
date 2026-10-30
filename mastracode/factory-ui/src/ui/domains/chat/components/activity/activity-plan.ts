@@ -1,5 +1,4 @@
 import { groupConsecutive } from '@mastra/playground-ui/components/ai/tool-call';
-import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
 import type { ReasoningPart } from '@mastra/react/ui';
 
 import type { MessageEntry, SuspensionPrompt, TimelineEntry, ToolCall } from '../../services/transcript';
@@ -56,11 +55,6 @@ export function activityPartKey(entryId: string, part: MessagePart, index: numbe
   return part.type === 'tool-invocation' ? part.toolInvocation.toolCallId : `${entryId}:${index}`;
 }
 
-/** Persisted reasoning carries no state; it is streaming exactly while its message is. */
-export function reasoningWithState(part: ReasoningPart, streaming: boolean): ReasoningPart {
-  return { ...part, state: part.state ?? (streaming ? 'streaming' : 'done') };
-}
-
 function classifyPart(
   part: MessagePart,
   entry: MessageEntry,
@@ -70,7 +64,7 @@ function classifyPart(
     case 'text':
       return hasVisibleText(part.text) ? 'ends' : 'ignored';
     case 'reasoning':
-      return getReasoningContent(reasoningWithState(part, Boolean(entry.streaming))) ? 'joins' : 'ignored';
+      return draws(part, entry, suspensions) ? 'joins' : 'ignored';
     case 'file':
     case 'error':
       return 'ends';
@@ -115,7 +109,7 @@ function entryItems(entry: TimelineEntry, suspensions: ReadonlyMap<string, Suspe
   const at = messageTime(entry);
   if (view.kind !== 'parts') return [{ key: entry.id, entryId: entry.id, at }];
   if (entry.message.role !== 'assistant') {
-    const drawsAny = parts.some(part => draws(part, suspensions, entry.runtimeTools));
+    const drawsAny = parts.some(part => draws(part, entry, suspensions));
     return drawsAny ? [{ key: entry.id, entryId: entry.id, at }] : [];
   }
 
@@ -182,6 +176,10 @@ export function planTurnActivity(
   }
 
   return plan;
+}
+
+export function hasLiveStretch(plan: ReadonlyMap<string, EntryActivity>): boolean {
+  return [...plan.values()].some(({ hosts }) => [...hosts.values()].some(stretch => stretch.live));
 }
 
 function sameMember(a: StretchMember, b: StretchMember): boolean {
