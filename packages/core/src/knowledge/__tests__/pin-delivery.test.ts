@@ -63,7 +63,7 @@ describe('Knowledge pin delivery cost', () => {
     const pins = await knowledge.__deliveredPins(context as never);
 
     // One listing per pinPriority tier the run holds (role, thread, resource, org), one count, one
-    // batched page fetch; never a page read per pin (run start may read scope pages; that is checked
+    // batched page fetch and one batched scope fetch for display labels; never a page read per pin (run start may read scope pages; that is checked
     // below by comparing with a run that has few pins).
     expect(calls.filter(call => call === 'listPins' || call === 'getPages')).toEqual([
       'listPins',
@@ -71,6 +71,7 @@ describe('Knowledge pin delivery cost', () => {
       'listPins',
       'listPins',
       'listPins',
+      'getPages',
       'getPages',
     ]);
     // And the same store calls as a run with a handful of pins.
@@ -82,8 +83,12 @@ describe('Knowledge pin delivery cost', () => {
     const expected = [...names.filter(n => n.vip).reverse(), ...names.filter(n => !n.vip).reverse()].map(n => n.name);
     const delivered = pins.filter(pin => pin.id !== PIN_OVERFLOW_ID);
     expect(delivered.map(pin => pin.text.split(' (')[0])).toEqual(expected.slice(0, 20));
+    // Display fields for UIs; the overflow entry has neither.
+    expect(delivered.map(pin => [pin.name, pin.scope])).toEqual(expected.slice(0, 20).map(name => [name, 'org:acme']));
 
     const overflow = pins.find(pin => pin.id === PIN_OVERFLOW_ID)!;
+    expect(overflow).not.toHaveProperty('name');
+    expect(overflow).not.toHaveProperty('scope');
     expect(overflow.text).toBe(
       `Also pinned (open with knowledge_read): ${expected.slice(20, 20 + OVERFLOW_NAMES).join(', ')}, …and ${
         200 - 20 - OVERFLOW_NAMES

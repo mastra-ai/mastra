@@ -26,7 +26,10 @@ import type { KnowledgeRunContext } from './run';
 
 export type { PinEntry } from './pinned';
 
-export type PinDeltaOp = { op: 'add'; pin: PinEntry } | { op: 'change'; pin: PinEntry } | { op: 'remove'; id: string };
+export type PinDeltaOp =
+  | { op: 'add'; pin: PinEntry }
+  | { op: 'change'; pin: PinEntry }
+  | { op: 'remove'; id: string; name?: string; scope?: string };
 
 // Length-prefix each field so a pin text containing the `:` / `|` delimiters
 // cannot shift a boundary and collide with a different pin set.
@@ -84,7 +87,14 @@ export function diffPins(prior: PinEntry[], current: PinEntry[]): PinDeltaOp[] {
   const priorText = new Map(prior.map(pin => [pin.id, pin.text]));
   const currentIds = new Set(current.map(pin => pin.id));
   for (const pin of prior) {
-    if (!currentIds.has(pin.id)) ops.push({ op: 'remove', id: pin.id });
+    if (!currentIds.has(pin.id)) {
+      ops.push({
+        op: 'remove',
+        id: pin.id,
+        ...(pin.name !== undefined && { name: pin.name }),
+        ...(pin.scope !== undefined && { scope: pin.scope }),
+      });
+    }
   }
   for (const pin of current) {
     const before = priorText.get(pin.id);

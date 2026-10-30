@@ -4,7 +4,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
-import { applyPinOps, PinnedStateProcessor } from '../pinned-state-processor';
+import { applyPinOps, diffPins, PinnedStateProcessor } from '../pinned-state-processor';
 
 describe('PinnedStateProcessor', () => {
   function harness() {
@@ -53,6 +53,8 @@ describe('PinnedStateProcessor', () => {
     expect(snapshot).toMatchObject({ mode: 'snapshot' });
     expect(snapshot!.contents).toContain('Answer in French.');
     const first = (snapshot as any).value.pins;
+    expect(first[0]).toMatchObject({ name: expect.any(String), scope: 'policy:acme' });
+    expect(first[0].text.startsWith(`${first[0].name} (`)).toBe(true);
     const base = { metadata: { state: { mode: 'snapshot' }, value: { pins: first } } };
 
     // Nothing changed: no signal, so the cached prefix stays put.
@@ -73,6 +75,11 @@ describe('PinnedStateProcessor', () => {
     expect(delta!.contents).toContain(`~ changed {id: ${first[0].id}}`);
     expect(delta!.contents).not.toContain('removed');
     expect(applyPinOps(first, ops)).toEqual([ops[0].pin]);
+
+    // A removed pin keeps its display fields, so a UI can name what left.
+    expect(
+      diffPins([...first, { id: 'gone', text: 'Old (gone): x', name: 'Old', scope: 'policy:acme' }], first),
+    ).toEqual([{ op: 'remove', id: 'gone', name: 'Old', scope: 'policy:acme' }]);
 
     await call('knowledge_pin', { op: 'unpin', page: 'policy:acme#tone', audience: ['org:acme'] });
     const clear = await processor.computeStateSignal(

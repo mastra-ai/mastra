@@ -22,7 +22,12 @@ export const OVERFLOW_NAMES = 10;
 
 export interface PinEntry {
   id: string;
+  /** What the model reads; the only field in the prompt and the cache key. */
   text: string;
+  /** The page's name, for display. Left off the overflow entry. */
+  name?: string;
+  /** The address of the page's home scope, e.g. `policy:acme`, for display. Left off the overflow entry. */
+  scope?: string;
 }
 
 export interface PinBudget {
@@ -141,8 +146,8 @@ function overflowLine(names: string[], more: number): string {
  * are delivered. A run costs a fixed handful of store calls however many pins exist.
  */
 export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget): Promise<PinEntry[]> {
-  // Store calls per turn: (pinPriority tiers the run holds) + 2 (one count, one getPages), plus the
-  // config-pin lookups; never one per pin.
+  // Store calls per turn: (pinPriority tiers the run holds) + 3 (one count, one getPages for pin
+  // pages, one for their scopes), plus the config-pin lookups; never one per pin.
   const configured = (await configPinPages(run)).filter(page => page.body?.trim());
   const entries: PinEntry[] = [];
 
@@ -195,6 +200,23 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
     left.unshift(pins.find(pin => pin.pageId === dropped.id)!);
   }
   entries.push(...delivered);
+  await labelEntries(run, entries, [...configured, ...pages.values()]);
   if (total > delivered.length) entries.push({ id: PIN_OVERFLOW_ID, text: line() });
   return entries;
+}
+
+/** Adds each entry's page name and home scope address, with one store call for all the scopes. */
+async function labelEntries(run: KnowledgeRun, entries: PinEntry[], pages: KnowledgePage[]): Promise<void> {
+  if (entries.length === 0) return;
+  const byId = new Map(pages.map(page => [page.id, page]));
+  const scopeIds = [...new Set(entries.map(entry => byId.get(entry.id)!.scopeId))];
+  const addresses = new Map(
+    (await run.storage.getPages({ ids: scopeIds, read: run.read })).map(scope => [scope.id, scope.address]),
+  );
+  for (const entry of entries) {
+    const page = byId.get(entry.id)!;
+    entry.name = page.name;
+    const scope = addresses.get(page.scopeId);
+    if (scope) entry.scope = scope;
+  }
 }
