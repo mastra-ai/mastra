@@ -6,12 +6,20 @@ import { renderWithProviders } from '../../../../test/render';
 import type { KnowledgePagePayload } from '../../pageTypes';
 import { KnowledgePageGraph } from '../KnowledgePageGraph';
 
-// jsdom can't lay React Flow out, so only the viewport it is handed is observed; everything else is the
-// real library.
-const setViewport = vi.fn(async () => true);
+// jsdom can't lay React Flow out, so only the viewport it is handed is observed (and read back); everything
+// else is the real library.
+type Viewport = { x: number; y: number; zoom: number };
+let shownViewport: Viewport = { x: 0, y: 0, zoom: 1 };
+const setViewport = vi.fn(async (viewport: Viewport, _options?: { duration?: number }) => {
+  shownViewport = viewport;
+  return true;
+});
 vi.mock('@xyflow/react', async importOriginal => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
-  return { ...actual, useReactFlow: () => ({ ...actual.useReactFlow(), setViewport }) };
+  return {
+    ...actual,
+    useReactFlow: () => ({ ...actual.useReactFlow(), setViewport, getViewport: () => shownViewport }),
+  };
 });
 
 /** A ResizeObserver whose size changes the test drives, per observed element. */
@@ -120,6 +128,7 @@ describe('KnowledgePageGraph inside a host that hides or resizes it', () => {
 
 describe('KnowledgePageGraph while pages keep arriving', () => {
   beforeEach(() => {
+    shownViewport = { x: 0, y: 0, zoom: 1 };
     vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
   });
   afterEach(() => {
@@ -130,6 +139,11 @@ describe('KnowledgePageGraph while pages keep arriving', () => {
     page('org', null),
     ...Array.from({ length: count }, (_, i) => page(`page-${i}`, 'org')),
   ];
+
+  async function renderFewPages() {
+    renderWithProviders(<KnowledgePageGraph pages={pagesUpTo(1)} edges={[]} onSelect={() => {}} />);
+    return screen.findByTestId('knowledge-page-graph');
+  }
 
   async function renderGrowing() {
     const view = renderWithProviders(<KnowledgePageGraph pages={pagesUpTo(1)} edges={[]} onSelect={() => {}} />);
@@ -144,15 +158,35 @@ describe('KnowledgePageGraph while pages keep arriving', () => {
     return { container, grow };
   }
 
-  it('eases the view to frame every page after each update', async () => {
+  const lastViewport = () => setViewport.mock.lastCall?.[0];
+
+  it('frames a graph of a few pages small and centred rather than zoomed in', async () => {
+    const container = await renderFewPages();
+    act(() => {
+      resize(container, 800, 600);
+      flushFrames();
+    });
+    expect(lastViewport()?.zoom).toBeLessThanOrEqual(0.8);
+
+    setViewport.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Fit view' }));
+    expect(lastViewport()?.zoom).toBeLessThanOrEqual(0.8);
+  });
+
+  it('eases the view to frame every page while new pages fit the current view', async () => {
     const { grow } = await renderGrowing();
+    grow(3);
     grow(5);
-    grow(12);
     expect(setViewport).toHaveBeenCalledTimes(2);
-    expect(setViewport).toHaveBeenLastCalledWith(expect.anything(), { duration: 300 });
-    // The later fit frames more pages, so it zooms out further.
-    const [[first], [second]] = setViewport.mock.calls as unknown as Array<[{ zoom: number }]>;
-    expect(second.zoom).toBeLessThan(first.zoom);
+    for (const [, options] of setViewport.mock.calls) expect(options).toEqual({ duration: 300 });
+  });
+
+  it('snaps out at once when new pages would land outside the current view', async () => {
+    const { grow } = await renderGrowing();
+    grow(60);
+    expect(setViewport).toHaveBeenCalledTimes(1);
+    expect(setViewport.mock.lastCall?.[1]).toBeUndefined();
+    expect(lastViewport()?.zoom).toBeLessThan(0.8);
   });
 
   it('stops following once the user clicks a page, until they press Fit view', async () => {

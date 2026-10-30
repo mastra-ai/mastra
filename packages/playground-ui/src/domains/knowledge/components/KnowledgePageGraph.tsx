@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Maximize, Pin } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
@@ -169,6 +169,26 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
     maxY = Math.max(maxY, node.position.y + (node.height ?? 0));
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** Closest zoom when framing the whole graph, so a graph of a few pages sits small and centred, not at 2×. */
+const OVERVIEW_MAX_ZOOM = 0.8;
+
+/** Whether `bounds`, in graph coordinates, lies wholly inside the pane as the viewport now shows it. */
+function boundsInView(
+  bounds: { x: number; y: number; width: number; height: number },
+  viewport: { x: number; y: number; zoom: number },
+  width: number,
+  height: number,
+) {
+  const left = -viewport.x / viewport.zoom;
+  const top = -viewport.y / viewport.zoom;
+  return (
+    bounds.x >= left &&
+    bounds.y >= top &&
+    bounds.x + bounds.width <= left + width / viewport.zoom &&
+    bounds.y + bounds.height <= top + height / viewport.zoom
+  );
 }
 
 const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
@@ -369,7 +389,9 @@ function KnowledgePageGraphInner({
   fitState.current = { nodes, allEdges, selectedPageId, reactFlow };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
   const fitPending = useRef(false);
-  const fit = useCallback((focusSelection: boolean, duration?: number) => {
+  // With `contain`, a growing graph whose new pages would land outside the current view snaps there at once
+  // instead of easing, so none of them paints off the pane.
+  const fit = useCallback((focusSelection: boolean, duration?: number, contain = false) => {
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
     const height = container?.clientHeight ?? 0;
@@ -383,8 +405,16 @@ function KnowledgePageGraphInner({
     const targets = focus ? current.filter(node => focus.has(node.id)) : current;
     const bounds = graphBounds(targets);
     if (!bounds) return;
-    const viewport = getViewportForBounds(bounds, width, height, 0.1, focus ? 1.5 : 2, focus ? 0.3 : 0.1);
-    void flow.setViewport(viewport, duration ? { duration } : undefined);
+    const viewport = getViewportForBounds(
+      bounds,
+      width,
+      height,
+      0.1,
+      focus ? 1.5 : OVERVIEW_MAX_ZOOM,
+      focus ? 0.3 : 0.1,
+    );
+    const snap = contain && !boundsInView(bounds, flow.getViewport(), width, height);
+    void flow.setViewport(viewport, duration && !snap ? { duration } : undefined);
   }, []);
 
   // A host that hides the graph behind a Tree/Graph toggle gives it zero size at first, so fit again
@@ -421,11 +451,12 @@ function KnowledgePageGraphInner({
 
   // Until the user pans, zooms or picks a page, the view follows the graph as it grows (an import adding
   // pages), easing to frame every page after each update. Once they take the view, or a selected page is
-  // framed, it stays put until they press Fit view; another Knowledge instance remounts the graph.
+  // framed, it stays put until they press Fit view; another Knowledge instance remounts the graph. It runs
+  // before paint, so new pages never show outside the old view first.
   const userMoved = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!initialized.current || userMoved.current) return;
-    fit(false, 300);
+    fit(false, 300, true);
   }, [laidOut, fit]);
   useEffect(() => {
     if (!initialized.current || !selectedIsLoaded || !selectedPageId) return;
