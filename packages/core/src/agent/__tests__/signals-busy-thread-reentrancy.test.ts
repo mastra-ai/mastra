@@ -86,31 +86,6 @@ describe('thread-bound generate()/stream() on a thread that already has a runnin
     agentThreadStreamRuntime.resetForTests();
   });
 
-  for (const outer of ['generate', 'stream'] as const) {
-    for (const inner of ['generate', 'stream'] as const) {
-      it(`a tool running inside ${outer}() can call ${inner}() on the same thread without deadlocking`, async () => {
-        const innerAgent = createAgent('inner', createModel().model);
-        const delegate = createTool({
-          id: 'delegate',
-          description: 'delegate',
-          inputSchema: z.object({}),
-          execute: async () => {
-            await run(innerAgent, inner, { memory });
-            return { ok: true };
-          },
-        });
-        const outerAgent = createAgent('outer', createModel({ toolName: 'delegate' }).model, { delegate });
-        new Mastra({ agents: { outerAgent, innerAgent }, logger: false });
-
-        const result = await Promise.race([
-          run(outerAgent, outer, { memory, maxSteps: 3 }).then(() => 'finished'),
-          sleep(4000).then(() => 'hung'),
-        ]);
-        expect(result).toBe('finished');
-      });
-    }
-  }
-
   for (const method of ['generate', 'stream'] as const) {
     it(`serializes concurrent ${method}() calls on one thread, as stream() always has`, async () => {
       let active = 0;

@@ -9710,24 +9710,17 @@ export class Agent<
         source: 'agent',
         entityId: this.id,
       }) ?? globalThis.crypto.randomUUID();
-    // A call made from inside a run on the same thread (a tool or sub-agent) is part of that run: waiting for
-    // it would wait on ourselves, and registering would displace it. Skip both and run unregistered, as before.
-    const nestedInThreadRun = agentThreadStreamRuntime.isInsideThreadRun(loopOptions as AgentExecutionOptions<any>);
-    if (!nestedInThreadRun) {
-      await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-        this as Agent<any, any, any, any>,
-        { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<any>,
-        threadStreamPubSub,
-      );
-    }
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<any>,
+      threadStreamPubSub,
+    );
 
-    const preparedOptions = nestedInThreadRun
-      ? (loopOptions as AgentExecutionOptions<any>)
-      : agentThreadStreamRuntime.prepareRunOptions(
-          { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<any>,
-          threadStreamPubSub,
-          () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
-        );
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<any>,
+      threadStreamPubSub,
+      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
+    );
 
     const executeOptions = {
       ...preparedOptions,
@@ -9745,13 +9738,11 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: nestedInThreadRun ? undefined : threadStreamPubSub,
+      _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
 
     try {
-      const result = await agentThreadStreamRuntime.runInThreadRunScope(loopOptions as AgentExecutionOptions<any>, () =>
-        this.#execute(executeOptions),
-      );
+      const result = await this.#execute(executeOptions);
 
       if (result.status !== 'success') {
         if (result.status === 'failed') {
@@ -9782,19 +9773,14 @@ export class Agent<
         });
       }
 
-      if (!nestedInThreadRun) {
-        await agentThreadStreamRuntime.registerRun(
-          this as Agent<any, any, any, any>,
-          result.result,
-          preparedOptions as AgentExecutionOptions<any>,
-          threadStreamPubSub,
-        );
-      }
-
-      const fullOutput = await agentThreadStreamRuntime.runInThreadRunScope(
-        loopOptions as AgentExecutionOptions<any>,
-        () => result.result.getFullOutput(),
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result,
+        preparedOptions as AgentExecutionOptions<any>,
+        threadStreamPubSub,
       );
+
+      const fullOutput = await result.result.getFullOutput();
 
       const error = fullOutput.error;
 
@@ -9806,16 +9792,15 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
-      if (!nestedInThreadRun)
-        agentThreadStreamRuntime.releaseThreadRunReservation(
-          mergedOptions.runId,
-          threadStreamPubSub,
-          {
-            agent: this,
-            streamOptions: preparedOptions,
-          },
-          preparedOptions.abortSignal,
-        );
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        mergedOptions.runId,
+        threadStreamPubSub,
+        {
+          agent: this,
+          streamOptions: preparedOptions,
+        },
+        preparedOptions.abortSignal,
+      );
       throw error;
     }
   }
@@ -10603,24 +10588,17 @@ export class Agent<
     // The wait also reserves the thread for this runId, so concurrent stream()
     // calls on the same thread serialize instead of racing between this wait
     // and registerRun below.
-    // A call made from inside a run on the same thread (a tool or sub-agent) belongs to that run: waiting for it
-    // would wait on ourselves. Skip the wait and run it unregistered.
-    const nestedInThreadRun = agentThreadStreamRuntime.isInsideThreadRun(loopOptions as AgentExecutionOptions<OUTPUT>);
-    if (!nestedInThreadRun) {
-      await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-        this as Agent<any, any, any, any>,
-        { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<OUTPUT>,
-        threadStreamPubSub,
-      );
-    }
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
 
-    const preparedOptions = nestedInThreadRun
-      ? (loopOptions as AgentExecutionOptions<OUTPUT>)
-      : agentThreadStreamRuntime.prepareRunOptions(
-          { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
-          threadStreamPubSub,
-          () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
-        );
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
+    );
 
     const executeOptions = {
       ...preparedOptions,
@@ -10638,14 +10616,11 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: nestedInThreadRun ? undefined : threadStreamPubSub,
+      _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 
     try {
-      const result = await agentThreadStreamRuntime.runInThreadRunScope(
-        loopOptions as AgentExecutionOptions<OUTPUT>,
-        () => this.#execute(executeOptions),
-      );
+      const result = await this.#execute(executeOptions);
 
       if (result.status !== 'success') {
         if (result.status === 'failed') {
@@ -10667,29 +10642,26 @@ export class Agent<
         });
       }
 
-      if (!nestedInThreadRun) {
-        await agentThreadStreamRuntime.registerRun(
-          this as Agent<any, any, any, any>,
-          result.result,
-          preparedOptions as AgentExecutionOptions<OUTPUT>,
-          threadStreamPubSub,
-        );
-      }
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result,
+        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
 
       return result.result;
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
-      if (!nestedInThreadRun)
-        agentThreadStreamRuntime.releaseThreadRunReservation(
-          mergedOptions.runId,
-          threadStreamPubSub,
-          {
-            agent: this,
-            streamOptions: preparedOptions,
-          },
-          preparedOptions.abortSignal,
-        );
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        mergedOptions.runId,
+        threadStreamPubSub,
+        {
+          agent: this,
+          streamOptions: preparedOptions,
+        },
+        preparedOptions.abortSignal,
+      );
       throw error;
     }
   }

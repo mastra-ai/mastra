@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-
 import { getErrorFromUnknown } from '../error';
 import { withAck } from '../events/acking-callback';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -887,8 +885,6 @@ export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
   #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
-  /** The thread key of the run whose body is executing, so a nested same-thread call can recognize itself. */
-  #threadRunScope = new AsyncLocalStorage<string>();
   #stalledLeaseReads = new WeakMap<LeaseProvider, Map<string, number>>();
   // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
   // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
@@ -1971,31 +1967,6 @@ export class AgentThreadStreamRuntime {
       type: 'user',
       tagName: 'user',
     };
-  }
-
-  /**
-   * Runs `fn` as the body of a thread-bound run, so code it calls (a tool, a workflow step) can tell that a
-   * `generate()`/`stream()` it makes on the same thread is part of this run. Without a thread this just calls `fn`.
-   */
-  runInThreadRunScope<T>(
-    options: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext },
-    fn: () => T,
-  ): T {
-    const { threadId, resourceId } = this.#getThreadTarget(options);
-    if (!threadId) return fn();
-    return this.#threadRunScope.run(this.#threadKey(resourceId, threadId), fn);
-  }
-
-  /**
-   * True when the caller is already running inside a run on the same thread. Such a call is a continuation of that
-   * run: waiting for the run to finish would wait on itself, and registering would displace it as the thread's run.
-   */
-  isInsideThreadRun(options: {
-    memory?: AgentExecutionOptions<any>['memory'];
-    requestContext?: RequestContext;
-  }): boolean {
-    const { threadId, resourceId } = this.#getThreadTarget(options);
-    return !!threadId && this.#threadRunScope.getStore() === this.#threadKey(resourceId, threadId);
   }
 
   getThreadState(options: { resourceId?: string; threadId: string }, pubsub?: PubSub): AgentThreadState {
