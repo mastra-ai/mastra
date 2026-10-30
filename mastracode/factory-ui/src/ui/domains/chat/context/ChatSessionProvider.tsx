@@ -174,7 +174,10 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { sessionId, resourceReady, baseUrl, sessionThreadId } = useChatSessionContext();
+  const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  // Each new-session page gets a fresh draft id, so unsent text on one belongs to the factory, not the id.
+  const draftScope = `${factoryId}:${threadId ?? (draftSessionId ? 'user-new' : `new:${sessionId}`)}`;
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -212,8 +215,8 @@ export function ChatSessionBoundary({
       >
         <ChatModelsProvider>
           <ChatThinkingProvider>
-            <ChatCommandsProvider>
-              <ComposerImagesProvider>{children}</ComposerImagesProvider>
+            <ChatCommandsProvider draftScope={draftScope}>
+              <ComposerImagesProvider draftScope={draftScope}>{children}</ComposerImagesProvider>
             </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>
