@@ -254,12 +254,13 @@ describe('KnowledgePageExplorer page view', () => {
       expect(activity.getByText('Page edited').parentElement?.textContent).toMatch(/Page editedadmin · /);
     });
 
-    it('names an importer by its provider, keeping the raw actor in the tooltip', () => {
-      renderWithProviders(<Host initial="refund" initialView="page" />);
+    it('names an importer by its provider and never shows its connection id, even in a tooltip', () => {
+      const { container } = renderWithProviders(<Host initial="refund" initialView="page" />);
       const activity = within(within(pageView()).getByRole('region', { name: 'Activity' }));
       const author = activity.getByText('Linear importer');
-      expect(author.getAttribute('title')).toBe(IMPORTER_ACTOR);
-      expect(activity.queryByText(IMPORTER_ACTOR)).toBeNull();
+      expect(author.getAttribute('title')).toBe('Imported by the Linear connection');
+      expect(container.innerHTML).not.toContain('lin_01ABCDEFGHJKMNPQRSTVWXYZ00');
+      expect(container.innerHTML).not.toContain('importer:connect:');
       // Long actor ids must wrap inside the narrow aside rather than push the pane sideways.
       expect(author.parentElement?.className).toContain('[overflow-wrap:anywhere]');
     });

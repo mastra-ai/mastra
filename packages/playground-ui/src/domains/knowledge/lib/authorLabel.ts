@@ -19,14 +19,25 @@ const PROVIDERS: Record<string, string> = {
 
 const IMPORTER_ACTOR = /^importer:connect:([a-z0-9-]+?)(?:-agentic)?:.+$/;
 
-export function authorLabel(author: string): string {
+function importerProvider(author: string): string | undefined {
   const provider = IMPORTER_ACTOR.exec(author)?.[1];
-  if (!provider) return author;
-  const name =
+  if (!provider) return undefined;
+  return (
     PROVIDERS[provider] ??
     provider
       .split('-')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  return `${name} importer`;
+      .join(' ')
+  );
+}
+
+export function authorLabel(author: string): string {
+  const provider = importerProvider(author);
+  return provider ? `${provider} importer` : author;
+}
+
+/** A tooltip for an importer actor that never repeats its connection id; nothing for other authors. */
+export function authorTooltip(author: string): string | undefined {
+  const provider = importerProvider(author);
+  return provider ? `Imported by the ${provider} connection` : undefined;
 }

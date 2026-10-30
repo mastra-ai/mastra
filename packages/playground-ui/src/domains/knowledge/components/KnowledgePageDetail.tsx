@@ -2,7 +2,7 @@ import { ChevronRight, Pin } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
-import { authorLabel } from '../lib/authorLabel';
+import { authorLabel, authorTooltip } from '../lib/authorLabel';
 import { parseRecordSegments } from '../lib/recordText';
 import type {
   KnowledgeActivityAction,
@@ -69,10 +69,9 @@ function When({ iso }: { iso: string }) {
   );
 }
 
-/** An author as readers know them; the raw actor stays in the tooltip when it was renamed. */
+/** An author as readers know them. An importer's raw actor carries a connection id, so it never reaches the screen. */
 function Author({ author }: { author: string }) {
-  const label = authorLabel(author);
-  return <span title={label === author ? undefined : author}>{label}</span>;
+  return <span title={authorTooltip(author)}>{authorLabel(author)}</span>;
 }
 
 /** A small round mark with the author's initial, tinted per author so a page's writers tell apart. */
