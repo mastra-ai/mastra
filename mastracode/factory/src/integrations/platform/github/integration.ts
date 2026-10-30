@@ -222,6 +222,10 @@ const BASE_REPOSITORY_TOKEN_PERMISSIONS = {
  * sessions push commits touching `.github/workflows/`, `actions` lets them
  * re-run jobs and dispatch workflows. GitHub refuses the whole mint when a
  * requested permission is not granted, so these are never requested blindly.
+ *
+ * TODO: once installations have accepted the `actions` and `workflows`
+ * permissions, move them into BASE_REPOSITORY_TOKEN_PERMISSIONS and remove the
+ * grant lookup and the base-permissions retry in #mintRepositoryToken.
  */
 const OPTIONAL_REPOSITORY_TOKEN_PERMISSIONS = ['actions', 'workflows'] as const;
 
