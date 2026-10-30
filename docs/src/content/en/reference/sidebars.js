@@ -500,13 +500,13 @@ const sidebars = {
           label: 'Tracing',
           items: [
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
+            { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
             {
               type: 'doc',
               id: 'observability/tracing/advanced-queries',
-              label: 'Advanced trace queries',
+              label: 'Query traces and spans',
             },
-            { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
-            { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
             { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
             { type: 'doc', id: 'observability/tracing/spans', label: 'Spans' },
             {
