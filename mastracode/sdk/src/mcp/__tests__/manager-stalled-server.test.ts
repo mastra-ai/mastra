@@ -42,7 +42,21 @@ createInterface({ input: process.stdin }).on('line', line => {
 `;
 
 // Keeps stdin open and swallows every request, like a server stuck in setup.
-const STALLED_SERVER = `process.stdin.resume();`;
+// Each process appends its pid to argv[2] so tests can check none are left running.
+const STALLED_SERVER = `
+import { appendFileSync } from 'node:fs';
+if (process.argv[2]) appendFileSync(process.argv[2], process.pid + '\\n');
+process.stdin.resume();
+`;
+
+const isAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 describe('MCP manager with a stalled server', () => {
   let dir: string;
@@ -77,6 +91,71 @@ describe('MCP manager with a stalled server', () => {
 
   const statusOf = (m: McpManager, name: string): McpServerStatus | undefined =>
     m.getServerStatuses().find(s => s.name === name);
+
+  const stalledPids = async (): Promise<number[]> => {
+    const text = await fs.readFile(join(dir, 'stalled.pids'), 'utf8').catch(() => '');
+    return text.split('\n').filter(Boolean).map(Number);
+  };
+
+  it('reconnects a healthy server while another server is still stalled', async () => {
+    manager = createManager(60_000);
+    void manager.init();
+    await vi.waitFor(() => expect(statusOf(manager!, 'healthy')?.connected).toBe(true), { timeout: 15_000 });
+
+    const status = await manager.reconnectServer('healthy');
+
+    expect(status).toMatchObject({ connected: true, toolNames: ['healthy_ping'] });
+    expect(statusOf(manager, 'stalled')).toMatchObject({ connecting: true });
+  }, 30_000);
+
+  it('bounds a stalled reconnect by one discovery timeout and tears it down on disconnect', async () => {
+    manager = createManager(1_000, {
+      stalled: { command: process.execPath, args: [join(dir, 'stalled.mjs'), join(dir, 'stalled.pids')] },
+    });
+    await manager.initInBackground();
+
+    const startedAt = Date.now();
+    const status = await manager.reconnectServer('stalled');
+    // One shared deadline for reconnect + tool listing, not one per phase.
+    expect(Date.now() - startedAt).toBeLessThan(1_900);
+    expect(status).toMatchObject({ connected: false, error: expect.stringMatching(/Timed out after 1s/) });
+
+    const disconnectStartedAt = Date.now();
+    await manager.disconnect();
+    expect(Date.now() - disconnectStartedAt).toBeLessThan(3_000);
+    await vi.waitFor(async () => expect((await stalledPids()).filter(isAlive)).toEqual([]), { timeout: 10_000 });
+  }, 30_000);
+
+  it('does not let a superseded discovery overwrite a newer reconnect', async () => {
+    manager = createManager(1_000, {
+      slow: { command: process.execPath, args: [join(dir, 'healthy.mjs'), '1500'] },
+    });
+    await manager.initInBackground();
+    expect(statusOf(manager, 'slow')?.error).toMatch(/Timed out after 1s/);
+
+    // The startup attempt is still finishing in the background when the reconnect replaces it.
+    const reconnect = manager.reconnectServer('slow');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(statusOf(manager, 'slow')).toMatchObject({ connected: false, connecting: true });
+
+    await reconnect;
+    await vi.waitFor(() => expect(statusOf(manager!, 'slow')?.connected).toBe(true), { timeout: 15_000 });
+    expect(manager.getTools()).toHaveProperty('slow_ping');
+  }, 30_000);
+
+  it('does not re-add tools from a late discovery after the server is disabled', async () => {
+    manager = createManager(1_000, {
+      slow: { command: process.execPath, args: [join(dir, 'healthy.mjs'), '2000'] },
+    });
+    await manager.initInBackground();
+
+    await manager.setServerDisabled('slow', true);
+    // Past the point where the startup attempt's late discovery would have finished.
+    await new Promise(resolve => setTimeout(resolve, 3_000));
+
+    expect(statusOf(manager, 'slow')).toMatchObject({ disabled: true, connected: false });
+    expect(manager.getTools()).not.toHaveProperty('slow_ping');
+  }, 30_000);
 
   it('reports a healthy server as connected while another server is still stalled', async () => {
     manager = createManager(60_000);

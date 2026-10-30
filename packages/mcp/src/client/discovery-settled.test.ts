@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MCPClient } from './configuration';
+import { MCP_DISCOVERY_TIMEOUT_CODE, MCPClient } from './configuration';
 import type { MCPServerSettledResult } from './configuration';
 
 const HEALTHY_SERVER = `
@@ -90,7 +90,7 @@ describe('MCPClient discovery onServerSettled', () => {
     expect(settled.map(([name]) => name)).toEqual(['healthy', 'stalled']);
     const [, stalled] = settled[1]!;
     expect(stalled.value).toBeUndefined();
-    expect(stalled.error).toEqual({ message: 'Discovery timed out after 3000ms' });
+    expect(stalled.error).toEqual({ message: 'Discovery timed out after 3000ms', code: MCP_DISCOVERY_TIMEOUT_CODE });
   }, 20_000);
 
   it('reports per-server results from listToolsWithErrors and survives a throwing callback', async () => {

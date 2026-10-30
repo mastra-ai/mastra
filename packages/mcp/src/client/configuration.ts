@@ -46,6 +46,12 @@ function cachedClient<TServers extends MCPClientServers<TServers>>(id: string): 
 }
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
+/**
+ * `code` of the discovery error reported when a server exceeds `perServerTimeoutMs`.
+ * The server's connect keeps running, so a later discovery can still succeed.
+ */
+export const MCP_DISCOVERY_TIMEOUT_CODE = 'MCP_DISCOVERY_TIMEOUT';
+
 // Outcome of a single server's discovery within discoverAcrossServers(). An
 // explicit discriminated union (rather than `{ value?: T; error?: string }`) so
 // that narrowing on `error` also narrows `value` — Promise.all would otherwise
@@ -1611,7 +1617,12 @@ To fix this you have three different options:
               operationPromise,
               new Promise<never>((_, reject) => {
                 timer = setTimeout(
-                  () => reject(new Error(`Discovery timed out after ${perServerTimeoutMs}ms`)),
+                  () =>
+                    reject(
+                      Object.assign(new Error(`Discovery timed out after ${perServerTimeoutMs}ms`), {
+                        code: MCP_DISCOVERY_TIMEOUT_CODE,
+                      }),
+                    ),
                   perServerTimeoutMs,
                 );
                 timer.unref?.();

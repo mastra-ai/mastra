@@ -5,7 +5,13 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { MCPClient, MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
+import type {
+  MCPClient,
+  MCPServerSettledResult,
+  MastraMCPServerDefinition,
+  OAuthClientInformation,
+  OAuthStorage,
+} from '@mastra/mcp';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from '../utils/project.js';
 import {
@@ -35,11 +41,7 @@ import type {
 } from './types.js';
 
 const MASTRACODE_MCP_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-/**
- * How long a server may take to connect and list its tools before it is
- * reported as failed. Request timeouts stay at {@link MASTRACODE_MCP_TIMEOUT_MS}
- * for long-running tool calls, so discovery needs its own bound.
- */
+/** How long a server gets to connect and list its tools before it is reported as failed. */
 const DEFAULT_MCP_DISCOVERY_TIMEOUT_MS = 60_000;
 
 /** Summary of MCP initialization result. */
@@ -255,18 +257,21 @@ export function createMcpManager(
     if (!projectOverride && globallyDisabledServers.has(name)) return 'global';
     return undefined;
   };
-  /**
-   * One MCPClient per server, so each server connects, lists tools, and reports
-   * its status independently — a stalled server never holds up the others.
-   */
-  let clients = new Map<string, MCPClient>();
-  /** Latest connect attempt per server; results from superseded attempts are dropped. */
-  const connectAttempts = new Map<string, object>();
+  let client: MCPClient | null = null;
   let serverDefs: Record<string, MastraMCPServerDefinition> = {};
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
   let stderrLogs = new Map<string, string[]>();
   let initialized = false;
+
+  /**
+   * The latest connect attempt per server. A discovery result is only applied while its
+   * attempt is still the latest and its client is still the live one, so a slow or late
+   * result never overwrites a newer reconnect, a reload, or a server being disabled.
+   */
+  let connectAttempts = new Map<string, object>();
+  const isCurrent = (name: string, attempt: object, attemptClient: MCPClient): boolean =>
+    connectAttempts.get(name) === attempt && client === attemptClient;
 
   /** Per-server handlers that receive the OAuth authorization URL during authenticateServer(). */
   const authUrlHandlers = new Map<string, (url: string) => void>();
@@ -298,13 +303,15 @@ export function createMcpManager(
   });
 
   const MAX_STDERR_LINES = 200;
+  /** Streams already being buffered, so capturing a server again never doubles its lines. */
+  const capturedStderr = new WeakSet<object>();
 
   /** Hook into a server's stderr stream and buffer its output. */
   function captureStderr(serverName: string): void {
-    const client = clients.get(serverName);
     if (!client || typeof client.getServerStderr !== 'function') return;
     const stream = client.getServerStderr(serverName);
-    if (!stream) return;
+    if (!stream || capturedStderr.has(stream)) return;
+    capturedStderr.add(stream);
 
     let buffer = '';
     const lines = stderrLogs.get(serverName) ?? [];
@@ -421,6 +428,50 @@ export function createMcpManager(
     }
   }
 
+  /** What one server's discovery produced: its tools, or why it has none. */
+  type ServerOutcome = { tools: Record<string, any>; error?: undefined } | { tools?: undefined; error: string };
+
+  const discoveryTimeoutError = () =>
+    `Timed out after ${discoveryTimeoutMs / 1000}s waiting for the server to connect and list its tools`;
+
+  function outcomeOf(result: MCPServerSettledResult<Record<string, any>>): ServerOutcome {
+    if (result.error === undefined) return { tools: result.value };
+    const { MCP_DISCOVERY_TIMEOUT_CODE } = loadedMcpModule();
+    return { error: result.error.code === MCP_DISCOVERY_TIMEOUT_CODE ? discoveryTimeoutError() : result.error.message };
+  }
+
+  /** Replace a server's tools and status with one discovery outcome. */
+  function applyServerResult(name: string, cfg: McpServerConfig, outcome: ServerOutcome): McpServerStatus {
+    const prefix = `${name}_`;
+    for (const key of Object.keys(tools)) {
+      if (key.startsWith(prefix)) delete tools[key];
+    }
+
+    const transport = getTransport(cfg);
+    const serverTools = outcome.tools ?? {};
+    const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
+    let status: McpServerStatus;
+    if (outcome.error === undefined && toolNames.length > 0) {
+      for (const [toolName, toolConfig] of Object.entries(serverTools)) {
+        tools[`${name}_${toolName}`] = toolConfig;
+      }
+      status = { name, connected: true, toolCount: toolNames.length, toolNames, transport };
+    } else {
+      const error = outcome.error ?? 'Failed to connect';
+      status = {
+        name,
+        connected: false,
+        toolCount: 0,
+        toolNames: [],
+        transport,
+        error,
+        ...(serverNeedsAuth(name, cfg, error) ? { needsAuth: true } : {}),
+      };
+    }
+    serverStatuses.set(name, status);
+    return status;
+  }
+
   async function connectAndCollectTools(): Promise<void> {
     setDisabledStatuses();
 
@@ -444,98 +495,57 @@ export function createMcpManager(
 
     const { MCPClient } = await loadMcpModule();
     serverDefs = buildServerDefs(servers);
-    for (const name of serverNames) {
-      clients.set(
-        name,
-        new MCPClient({
-          id: `mastra-code-mcp:${name}`,
-          servers: { [name]: serverDefs[name]! },
-          timeout: MASTRACODE_MCP_TIMEOUT_MS,
-        }),
-      );
-    }
-
-    await Promise.all(serverNames.map(name => discoverServer(name, servers[name]!)));
-  }
-
-  /** Connect one server and record its tools and status as soon as it settles. */
-  async function discoverServer(name: string, cfg: McpServerConfig): Promise<void> {
-    const client = clients.get(name)!;
-    const attempt = {};
-    connectAttempts.set(name, attempt);
-    // A reconnect, authenticate, or reload started meanwhile owns the status now.
-    const isCurrent = () => connectAttempts.get(name) === attempt && clients.get(name) === client;
-
-    // Capture stderr whether the server connected or failed, so its logs are viewable.
-    let stderrCaptured = false;
-    const captureStderrOnce = () => {
-      if (stderrCaptured) return;
-      stderrCaptured = true;
-      captureStderr(name);
-    };
-
-    const record = (result: { toolsets: Record<string, any>; errors: Record<string, string> }) => {
-      if (!isCurrent()) return;
-      const serverTools = (result.toolsets as Record<string, Record<string, any>>)[name];
-      if (serverTools && Object.keys(serverTools).length > 0) {
-        for (const [toolName, toolConfig] of Object.entries(serverTools)) {
-          tools[`${name}_${toolName}`] = toolConfig;
-        }
-        const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
-        serverStatuses.set(name, {
-          name,
-          connected: true,
-          toolCount: toolNames.length,
-          toolNames,
-          transport: getTransport(cfg),
-        });
-      } else {
-        // Server failed — use the real error from listToolsetsWithErrors()
-        serverStatuses.set(name, failedStatus(name, cfg, result.errors[name] ?? 'Failed to connect'));
-      }
-      captureStderrOnce();
-    };
-
-    const discovery = client.listToolsetsWithErrors();
-    try {
-      record(await withDiscoveryTimeout(discovery));
-    } catch (error) {
-      if (!isCurrent()) return;
-      serverStatuses.set(name, failedStatus(name, cfg, error instanceof Error ? error.message : String(error)));
-      captureStderrOnce();
-      // A slow server (e.g. a cold `npx` install) can still finish after the timeout; record it if nothing replaced this attempt.
-      discovery.then(record, () => {});
-    }
-  }
-
-  function failedStatus(name: string, cfg: McpServerConfig, error: string): McpServerStatus {
-    return {
-      name,
-      connected: false,
-      toolCount: 0,
-      toolNames: [],
-      transport: getTransport(cfg),
-      error,
-      ...(serverNeedsAuth(name, cfg, error) ? { needsAuth: true } : {}),
-    };
-  }
-
-  /** Reject when a server does not finish connecting and listing its tools in time. */
-  function withDiscoveryTimeout<T>(promise: Promise<T>): Promise<T> {
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(
-              `Timed out after ${discoveryTimeoutMs / 1000}s waiting for the server to connect and list its tools`,
-            ),
-          ),
-        discoveryTimeoutMs,
-      );
-      timer.unref?.();
+    const attemptClient = new MCPClient({
+      id: 'mastra-code-mcp',
+      servers: serverDefs,
+      timeout: MASTRACODE_MCP_TIMEOUT_MS,
     });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    client = attemptClient;
+
+    const attempts = new Map(serverNames.map(name => [name, {}]));
+    for (const [name, attempt] of attempts) connectAttempts.set(name, attempt);
+
+    const record = (name: string, outcome: ServerOutcome): boolean => {
+      if (!isCurrent(name, attempts.get(name)!, attemptClient)) return false;
+      captureStderr(name);
+      applyServerResult(name, servers[name]!, outcome);
+      return true;
+    };
+
+    // Each server reports as soon as it settles, so one stalled server cannot hold
+    // back the status and tools of the others.
+    const timedOut: string[] = [];
+    try {
+      await attemptClient.listToolsetsWithErrors({
+        perServerTimeoutMs: discoveryTimeoutMs,
+        onServerSettled: (name, result) => {
+          if (!attempts.has(name)) return;
+          if (result.error?.code === loadedMcpModule().MCP_DISCOVERY_TIMEOUT_CODE) timedOut.push(name);
+          record(name, outcomeOf(result));
+        },
+      });
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      for (const name of serverNames) {
+        if (serverStatuses.get(name)?.connecting) record(name, { error: errMsg });
+      }
+    }
+    for (const name of serverNames) {
+      if (serverStatuses.get(name)?.connecting) record(name, { error: 'Failed to connect' });
+    }
+
+    // A timed-out server's connect keeps running (a cold `npx` install can take a
+    // while). Discover again without a cap so it still connects once it is ready.
+    if (timedOut.length > 0) {
+      const late = new Set(timedOut);
+      void attemptClient
+        .listToolsetsWithErrors({
+          onServerSettled: (name, result) => {
+            if (late.has(name)) record(name, outcomeOf(result));
+          },
+        })
+        .catch(() => {});
+    }
   }
 
   /**
@@ -548,7 +558,7 @@ export function createMcpManager(
    */
   function serverNeedsAuth(name: string, cfg: McpServerConfig, error?: string): boolean {
     if (getTransport(cfg) !== 'http') return false;
-    if (clients.get(name)?.getServerAuthState?.(name) === 'needs-auth') return true;
+    if (client?.getServerAuthState?.(name) === 'needs-auth') return true;
     if (serverDefs[name]?.authProvider) return false;
     return error !== undefined && /\b401\b|unauthorized|invalid_token/i.test(error);
   }
@@ -556,16 +566,21 @@ export function createMcpManager(
   /**
    * Runs a single-server connect action (reconnect or authenticate), then
    * refreshes that server's tools and status from the client.
+   *
+   * With `deadlineMs`, the whole operation shares one deadline: the server is
+   * reported as failed when it passes, and its result is still applied if it
+   * arrives later. A call that a newer reconnect, reload, or disable replaced
+   * leaves the stored status alone and returns a copy of it.
    */
   async function connectSingleServer(
     name: string,
     cfg: McpServerConfig,
-    client: MCPClient,
-    connect: () => Promise<unknown>,
+    connect: (client: MCPClient) => Promise<unknown>,
+    deadlineMs?: number,
   ): Promise<McpServerStatus> {
-    const transport = getTransport(cfg);
-    // Supersede any discovery still in flight so its late result can't overwrite this one.
-    connectAttempts.set(name, {});
+    const attemptClient = client!;
+    const attempt = {};
+    connectAttempts.set(name, attempt);
 
     // Remove old tools for this server
     const prefix = `${name}_`;
@@ -583,86 +598,67 @@ export function createMcpManager(
       connecting: true,
       toolCount: 0,
       toolNames: [],
-      transport,
+      transport: getTransport(cfg),
     });
 
-    try {
-      await connect();
+    const work = (async (): Promise<ServerOutcome> => {
+      await connect(attemptClient);
+      if (isCurrent(name, attempt, attemptClient)) captureStderr(name);
 
-      // Recapture stderr for the reconnected server
-      captureStderr(name);
+      // Discovery lists every server; settle on this one instead of waiting for the slowest.
+      return new Promise<ServerOutcome>((resolve, reject) => {
+        attemptClient
+          .listToolsetsWithErrors({
+            onServerSettled: (settledName, result) => {
+              if (settledName === name) resolve(outcomeOf(result));
+            },
+          })
+          .then(() => resolve({ error: 'Failed to connect' }), reject);
+      });
+    })().catch((error): ServerOutcome => ({ error: error instanceof Error ? error.message : String(error) }));
 
-      // Fetch updated toolsets to get this server's tools
-      const { toolsets, errors } = await withDiscoveryTimeout(client.listToolsetsWithErrors());
-      const serverTools = toolsets[name];
-      const serverError = errors[name];
-
-      if (serverError) {
-        const status: McpServerStatus = {
-          name,
-          connected: false,
-          toolCount: 0,
-          toolNames: [],
-          transport,
-          error: serverError,
-          ...(serverNeedsAuth(name, cfg, serverError) ? { needsAuth: true } : {}),
-        };
-        serverStatuses.set(name, status);
-        return status;
-      } else if (serverTools && Object.keys(serverTools).length > 0) {
-        const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
-        for (const [toolName, toolConfig] of Object.entries(serverTools)) {
-          tools[`${name}_${toolName}`] = toolConfig;
-        }
-        const status: McpServerStatus = {
-          name,
-          connected: true,
-          toolCount: toolNames.length,
-          toolNames,
-          transport,
-        };
-        serverStatuses.set(name, status);
-        return status;
-      }
-      const status: McpServerStatus = {
+    const record = (outcome: ServerOutcome): McpServerStatus | undefined =>
+      isCurrent(name, attempt, attemptClient) ? applyServerResult(name, cfg, outcome) : undefined;
+    const superseded = (): McpServerStatus => ({
+      ...(serverStatuses.get(name) ?? {
         name,
         connected: false,
         toolCount: 0,
         toolNames: [],
-        transport,
-        error: 'Failed to connect',
-      };
-      serverStatuses.set(name, status);
-      return status;
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      const status: McpServerStatus = {
-        name,
-        connected: false,
-        toolCount: 0,
-        toolNames: [],
-        transport,
-        error: errMsg,
-        ...(serverNeedsAuth(name, cfg, errMsg) ? { needsAuth: true } : {}),
-      };
-      serverStatuses.set(name, status);
-      return status;
+        transport: getTransport(cfg),
+        error: 'Superseded by a newer connection attempt',
+      }),
+    });
+
+    if (deadlineMs === undefined) {
+      return record(await work) ?? superseded();
     }
+
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<'timeout'>(resolve => {
+      timer = setTimeout(() => resolve('timeout'), deadlineMs);
+      timer.unref?.();
+    });
+    const first = await Promise.race([work, deadline]);
+    clearTimeout(timer);
+    if (first !== 'timeout') {
+      return record(first) ?? superseded();
+    }
+    void work.then(record);
+    return record({ error: discoveryTimeoutError() }) ?? superseded();
   }
 
   async function disconnect(): Promise<void> {
-    const current = clients;
-    clients = new Map();
-    connectAttempts.clear();
-    await Promise.all(
-      [...current.values()].map(async client => {
-        try {
-          await client.disconnect();
-        } catch {
-          // Ignore disconnect errors
-        }
-      }),
-    );
+    connectAttempts = new Map();
+    if (client) {
+      const closing = client;
+      client = null;
+      try {
+        await closing.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
+    }
   }
 
   /** Tear down all connections and reconnect every enabled server. */
@@ -865,7 +861,6 @@ export function createMcpManager(
         };
       }
 
-      const client = clients.get(name);
       if (!client) {
         return {
           name,
@@ -877,8 +872,8 @@ export function createMcpManager(
         };
       }
 
-      // Use MCPClient's per-server reconnect
-      return connectSingleServer(name, cfg, client, () => withDiscoveryTimeout(client.reconnectServer(name)));
+      // Use MCPClient's per-server reconnect, bounded by the same discovery timeout as startup
+      return connectSingleServer(name, cfg, c => c.reconnectServer(name), discoveryTimeoutMs);
     },
 
     async authenticateServer(
@@ -901,7 +896,6 @@ export function createMcpManager(
         return { ...disabledStatus(name), error: `Server "${name}" is disabled — enable it first` };
       }
 
-      const client = clients.get(name);
       if (!client) {
         return {
           name,
@@ -965,9 +959,11 @@ export function createMcpManager(
       authenticatingServers.add(name);
       cancelledAuthServers.delete(name);
       try {
-        const result = await connectSingleServer(name, cfg, client, () =>
-          client.authenticate(name, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
+        const result = await connectSingleServer(name, cfg, c =>
+          c.authenticate(name, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
         );
+        // A newer reconnect, reload, or disable replaced this attempt; leave its status alone.
+        if (serverStatuses.get(name) !== result) return result;
         // A cancelled flow resolves with a failed status; mark it so callers can
         // distinguish a deliberate cancel from a genuine authentication failure.
         // Write the marker back to the durable status map (not just the returned
@@ -984,7 +980,6 @@ export function createMcpManager(
     },
 
     async cancelServerAuthentication(name: string): Promise<boolean> {
-      const client = clients.get(name);
       if (!client) {
         return false;
       }
