@@ -108,12 +108,7 @@ describe('MCP tasks as agent background tasks', () => {
     expect((await server.store.get(remoteTaskId, { principal: 'anonymous' }))?.status).toBe('cancelled');
   });
 
-  // Blocked on core: a resumed background task doesn't hand the tool the payload it suspended with
-  // (`background-tasks/workflow.ts` passes only `resumeData` to the executor, so
-  // `context.agent.suspendPayload` is undefined). The tool then can't tell which MCP task to answer,
-  // calls the tool again and suspends on a new task. Unskip once background resume passes
-  // `suspendPayload` (core fix in the PR 1 stack, issue #28986).
-  it.skip('parks the background task on MCP task input and completes it when the chat answers', async () => {
+  it('parks the background task on MCP task input and completes it when the chat answers', async () => {
     await runAgent(async () => {}, 'reports_confirm');
 
     const manager = mastra.backgroundTaskManager!;
