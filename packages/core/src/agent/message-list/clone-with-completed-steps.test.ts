@@ -75,6 +75,7 @@ describe('MessageList.cloneWithCompletedSteps', () => {
 
     const live = list.get.response.db().find(m => m.id === 'a1')!;
     live.content.parts.push({ type: 'step-start' }, { type: 'text', text: 'pending' });
+    live.content.metadata = { ...live.content.metadata, structuredOutput: { answer: 2 } };
 
     const clone = list.cloneWithCompletedSteps();
 
