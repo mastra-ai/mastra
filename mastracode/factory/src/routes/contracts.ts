@@ -6,6 +6,7 @@ import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
+import { WORK_ITEM_SORTS, decodeWorkItemCursor, decodeWorkItemSyncCursor } from './work-item-cursor.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
@@ -368,6 +369,52 @@ const decisionCursorSchema = z
     }
   });
 
+const commaListSchema = z
+  .string()
+  .optional()
+  .transform(value =>
+    value
+      ?.split(',')
+      .map(part => part.trim())
+      .filter(Boolean),
+  );
+
+/** Board filters, as the board UI names them; each list is comma-separated. */
+export const workItemFilterQuerySchema = z.object({
+  board: commaListSchema,
+  stage: commaListSchema,
+  q: z.string().max(200).optional(),
+  source: commaListSchema,
+  linearProject: commaListSchema,
+  label: commaListSchema,
+  teammate: commaListSchema,
+  author: commaListSchema,
+  assignee: commaListSchema,
+  reviewer: commaListSchema,
+  worked: commaListSchema,
+});
+
+export const workItemListQuerySchema = workItemFilterQuerySchema.extend({
+  sort: z.enum(WORK_ITEM_SORTS).optional().default('recent'),
+  limit: z
+    .string()
+    .regex(/^\d+$/)
+    .optional()
+    .transform(value => (value === undefined ? undefined : Math.max(1, Math.min(200, Number(value))))),
+  cursor: z
+    .string()
+    .optional()
+    .transform((value, context) => {
+      if (!value) return undefined;
+      const cursor = decodeWorkItemCursor(value);
+      if (!cursor) {
+        context.addIssue({ code: 'custom', message: 'Invalid cursor' });
+        return z.NEVER;
+      }
+      return cursor;
+    }),
+});
+
 export const decisionQuerySchema = z.object({
   statuses: z
     .string()
@@ -629,13 +676,103 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description:
+      'List Factory work items and running sessions. Without filters or a limit every card comes back; with `limit` the response pages by `nextCursor`.',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       workItems: z.array(entitySchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
+      nextCursor: z.string().optional(),
     }),
+  },
+  workItemSync: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/sync',
+    description:
+      'Keep a board current. Without a cursor (or with one older than deletes are kept), returns every open card with `reset`; with one, only cards written or deleted since. Feed events named `board` say when to ask again.',
+    pathSchema: projectPathSchema,
+    querySchema: z.object({
+      cursor: z
+        .string()
+        .optional()
+        .transform((value, context) => {
+          if (!value) return undefined;
+          const at = decodeWorkItemSyncCursor(value);
+          if (!at) {
+            context.addIssue({ code: 'custom', message: 'Invalid cursor' });
+            return z.NEVER;
+          }
+          return at;
+        }),
+    }),
+    responseSchema: z.object({
+      cursor: z.string(),
+      reset: z.boolean(),
+      workItems: z.array(entitySchema),
+      deletedIds: z.array(z.string()),
+      counts: z.object({
+        total: z.number().int(),
+        boards: z.record(z.string(), z.record(z.string(), z.number().int())),
+      }),
+      runningSessionIds: z.array(z.string()),
+      parkedSessionIds: z.array(z.string()),
+    }),
+  },
+  workItemCounts: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/counts',
+    description: 'Count Factory work items per board and stage, under the same filters as the list',
+    pathSchema: projectPathSchema,
+    querySchema: workItemFilterQuerySchema,
+    responseSchema: z.object({
+      total: z.number().int(),
+      boards: z.record(z.string(), z.record(z.string(), z.number().int())),
+    }),
+  },
+  workItemSources: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/sources',
+    description: 'List the external source of every Factory work item, for intake de-duplication',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      sources: z.array(
+        z.object({
+          board: z.string(),
+          externalSource: z.object({
+            integrationId: z.string(),
+            type: z.string(),
+            externalId: z.string(),
+            url: z.string().optional(),
+          }),
+          metadata: z.record(z.string(), z.unknown()),
+        }),
+      ),
+    }),
+  },
+  workItemSessionCards: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/session-cards',
+    description:
+      'List every Factory work item that has a session, cut to its title, key, stage and sessions, so session lists can name sessions without reading every card',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({ workItems: z.array(entitySchema) }),
+  },
+  workItemActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/activity',
+    description: 'List when Factory work items came in and shipped since a time, for the activity chart',
+    pathSchema: projectPathSchema,
+    querySchema: z.object({ since: z.iso.datetime({ offset: true }) }),
+    responseSchema: z.object({ cameIn: z.array(z.string()), shipped: z.array(z.string()) }),
+  },
+  workItemGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId',
+    description: 'Read one Factory work item',
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemResponseSchema,
   },
   workItemCreate: {
     method: 'POST',

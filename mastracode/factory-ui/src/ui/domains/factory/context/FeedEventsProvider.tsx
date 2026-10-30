@@ -9,6 +9,7 @@ import { streamFeedEvents } from '../services/feedEvents';
 import { RequestError } from '../services/request';
 
 const RETRY_MS = 3_000;
+const BOARD_JUST_SYNCED_MS = 5_000;
 
 const FeedEventsContext = createContext(false);
 
@@ -42,16 +43,24 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         factoryProjectId,
         {
           onEvent: ({ workItemId }) => {
-            // Card counts stay on the board's own 5s poll: a fetch per event
-            // would double its load to save under 5s of badge latency.
+            // Comment counts ride the board's own sync, which a board frame triggers.
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
+          },
+          onBoard: () => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
           },
           onConnected: () => {
             setConnected(true);
             // Whatever landed while this tab held no stream was never announced.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
+            // A board that just synced already has it; the backstop poll covers the few seconds between.
+            const boardKey = queryKeys.workItems(factoryProjectId);
+            const syncedAt = queryClient.getQueryState(boardKey)?.dataUpdatedAt ?? 0;
+            if (Date.now() - syncedAt > BOARD_JUST_SYNCED_MS) {
+              void queryClient.invalidateQueries({ queryKey: boardKey });
+            }
           },
         },
         abort.signal,

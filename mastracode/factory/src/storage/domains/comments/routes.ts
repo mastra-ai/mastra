@@ -12,7 +12,7 @@ import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { getFactoryAuthUser } from '../../../auth.js';
-import { feedTopic } from '../../../feed-events.js';
+import { BOARD_TOUCHED_EVENT, feedTopic } from '../../../feed-events.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
@@ -309,6 +309,14 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
           // invalidations, so a delivery is acked even when the tab is gone.
           const onEvent: EventCallback = withAck(async event => {
             if (stream.aborted) return;
+            if (event.type === BOARD_TOUCHED_EVENT) {
+              try {
+                await stream.writeSSE({ event: 'board', data: '{}' });
+              } catch {
+                // Same as below: a half-closed socket must not nack the shared topic.
+              }
+              return;
+            }
             const data = event.data;
             const workItemId = isRecord(data) && typeof data.workItemId === 'string' ? data.workItemId : undefined;
             try {

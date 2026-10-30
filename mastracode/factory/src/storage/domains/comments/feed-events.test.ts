@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { SSEStreamingApi } from 'hono/streaming';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic } from '../../../feed-events.js';
+import { BOARD_TOUCHED_EVENT, boardToucher, feedTopic } from '../../../feed-events.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
@@ -334,6 +334,28 @@ describe('project-wide touches on the feed stream', () => {
 
     await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
     expect(feed.frames[0]).toEqual({ event: 'feed', data: '{}' });
+    await feed.stop();
+  });
+});
+
+describe('board touches on the feed stream', () => {
+  it('sends one board frame for a burst of card writes', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const emitter = new EventEmitter();
+    const pubsub = new EventEmitterPubSub(emitter);
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const topic = feedTopic(ORG, project.id);
+    const touch = boardToucher(pubsub);
+
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(1));
+    const published = vi.spyOn(pubsub, 'publish');
+    for (let i = 0; i < 5; i++) touch({ orgId: ORG, factoryProjectId: project.id });
+
+    await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
+    expect(feed.frames[0]).toEqual({ event: 'board', data: '{}' });
+    expect(published.mock.calls.map(([, event]) => event.type)).toEqual([BOARD_TOUCHED_EVENT]);
     await feed.stop();
   });
 });

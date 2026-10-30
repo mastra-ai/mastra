@@ -591,8 +591,54 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
   addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {
-    description: 'List Factory work items and running sessions',
+    description: 'List Factory work items and running sessions, optionally filtered, sorted and paged',
+    input: 'optional',
     routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'get', FACTORY_API_ROUTE_CATALOG.workItemGet, {
+    description: 'Get one Factory work item',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'counts', FACTORY_API_ROUTE_CATALOG.workItemCounts, {
+    description: 'Count Factory work items per board and stage, optionally filtered',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Count the open Review cards of a project',
+        command: `mastra api factory work-item counts <project-id> '{"board":"review"}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'sources', FACTORY_API_ROUTE_CATALOG.workItemSources, {
+    description: 'List the external sources Factory work items were created from',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'session-cards', FACTORY_API_ROUTE_CATALOG.workItemSessionCards, {
+    description: 'List a brief of the Factory work items that ran a session',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'activity', FACTORY_API_ROUTE_CATALOG.workItemActivity, {
+    description: 'List when Factory work items came in and shipped since a time',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Show what came in and shipped since a date',
+        command: `mastra api factory work-item activity <project-id> '{"since":"2026-10-01T00:00:00.000Z"}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'sync', FACTORY_API_ROUTE_CATALOG.workItemSync, {
+    description: 'Sync a board: open cards first, then only cards changed since the cursor',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Start a board sync, then pass the returned cursor to get only what changed',
+        command: `mastra api factory work-item sync <project-id> '{"cursor":"<cursor>"}'`,
+      },
+    ],
   });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
     description: 'Create a Factory work item in Intake',

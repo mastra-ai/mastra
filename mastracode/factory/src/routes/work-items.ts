@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { isIdleWorkItem } from '../boards/semantics.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -44,6 +45,7 @@ import {
   WorkItemRelationError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
+import { WORK_ITEM_TOMBSTONE_TTL_MS } from '../storage/domains/work-items/board-version.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
@@ -51,6 +53,17 @@ import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
+import { encodeWorkItemSyncCursor } from './work-item-cursor.js';
+import type { WorkItemFilters } from './work-item-page.js';
+import {
+  activityTimes,
+  countWorkItems,
+  pageWorkItems,
+  sessionWorkItems,
+  syncWorkItems,
+  toSyncedWorkItem,
+  workItemSources,
+} from './work-item-page.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -94,6 +107,69 @@ function sessionIdsWhere(items: readonly WorkItemRow[], predicate: (sessionId: s
     }
   }
   return [...picked];
+}
+
+const FILTER_QUERY_PARAMS = [
+  'board',
+  'stage',
+  'q',
+  'source',
+  'linearProject',
+  'label',
+  'teammate',
+  'author',
+  'assignee',
+  'reviewer',
+  'worked',
+] as const;
+
+function filterQuery(context: Context): Record<(typeof FILTER_QUERY_PARAMS)[number], string | undefined> {
+  return Object.fromEntries(FILTER_QUERY_PARAMS.map(name => [name, context.req.query(name)])) as Record<
+    (typeof FILTER_QUERY_PARAMS)[number],
+    string | undefined
+  >;
+}
+
+function workItemFilters(query: {
+  board?: string[];
+  stage?: string[];
+  q?: string;
+  source?: string[];
+  linearProject?: string[];
+  label?: string[];
+  teammate?: string[];
+  author?: string[];
+  assignee?: string[];
+  reviewer?: string[];
+  worked?: string[];
+}): WorkItemFilters {
+  return {
+    boards: query.board,
+    stages: query.stage,
+    q: query.q,
+    sources: query.source,
+    linearProjects: query.linearProject,
+    labels: query.label,
+    people: {
+      teammate: query.teammate,
+      author: query.author,
+      assignee: query.assignee,
+      reviewer: query.reviewer,
+      worked: query.worked,
+    },
+  };
+}
+
+function hasFilters(filters: WorkItemFilters): boolean {
+  return Boolean(
+    filters.boards?.length ||
+    filters.stages?.length ||
+    filters.q ||
+    filters.sources?.length ||
+    filters.linearProjects?.length ||
+    filters.labels?.length ||
+    Object.values(filters.people ?? {}).some(ids => ids?.length),
+  );
 }
 
 function loose(c: unknown): Context {
@@ -375,16 +451,168 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
+          const context = loose(c);
+          const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
+            ...filterQuery(context),
+            sort: context.req.query('sort'),
+            limit: context.req.query('limit'),
+            cursor: context.req.query('cursor'),
+          });
+          if (!query.success) {
+            const field = query.error.issues[0]?.path[0];
+            return c.json({ error: field === 'cursor' ? 'invalid_cursor' : 'invalid_work_item_query' }, 400);
+          }
           await workItems.ensureReady();
-          const items = await workItems.listShared({
+          const all = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
+          const { sort, limit, cursor } = query.data;
+          const filters = workItemFilters(query.data);
+          const paged = hasFilters(filters) || limit !== undefined || cursor !== undefined;
+          // The query defaults `sort`, so ask the request whether the caller picked one.
+          const sorted = paged || context.req.query('sort') !== undefined;
+          const page = sorted
+            ? pageWorkItems(all, { ...filters, sort, userId: resolved.userId, limit, cursor })
+            : { items: all };
+          const items = page.items;
           return c.json({
-            workItems: items.map(toWireWorkItem),
+            // A paged read is a board read, so it gets the board's card shape; the full list keeps the old one.
+            workItems: paged ? items.map(item => toWireWorkItem(toSyncedWorkItem(item))) : items.map(toWireWorkItem),
             runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
             parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+            ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
           });
+        },
+      }),
+      // ── Cards per board and column, without the cards ────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemCounts.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemCounts.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemCounts.querySchema.safeParse(filterQuery(loose(c)));
+          if (!query.success) return c.json({ error: 'invalid_work_item_query' }, 400);
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json(countWorkItems(all, workItemFilters(query.data)));
+        },
+      }),
+      // ── Keep an open board current: open cards first, then what changed ──
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSync.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSync.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemSync.querySchema.safeParse({
+            cursor: loose(c).req.query('cursor'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_cursor' }, 400);
+          await workItems.ensureReady();
+          const scope = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          const now = new Date();
+          const oldestDelta = new Date(now.getTime() - WORK_ITEM_TOMBSTONE_TTL_MS);
+          const since = query.data.cursor;
+          const [all, deleted] = await Promise.all([
+            workItems.listShared(scope),
+            since && since >= oldestDelta ? workItems.listDeletedSince({ ...scope, since }) : [],
+          ]);
+          const boards = this.#boards;
+          const sync = syncWorkItems(all, {
+            since,
+            now,
+            deleted,
+            isPaged: item => isIdleWorkItem(boards, item),
+            oldestDelta,
+          });
+          return c.json({
+            cursor: encodeWorkItemSyncCursor(sync.at),
+            reset: sync.reset,
+            workItems: sync.items.map(item => toWireWorkItem(toSyncedWorkItem(item))),
+            deletedIds: sync.deletedIds,
+            counts: countWorkItems(all),
+            // Whether a session is running is not a card write, so every sync carries all of them.
+            runningSessionIds: sessionIdsWhere(all, sessionId => liveSessions.isRunning(sessionId)),
+            parkedSessionIds: sessionIdsWhere(all, sessionId => liveSessions.parked(sessionId) !== undefined),
+          });
+        },
+      }),
+      // ── Every card's external source, for intake de-duplication ────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSources.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSources.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({ sources: workItemSources(all) });
+        },
+      }),
+      // ── Every card a session ran on, briefly, to name sessions ─────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSessionCards.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSessionCards.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({ workItems: sessionWorkItems(all).map(toWireWorkItem) });
+        },
+      }),
+      // ── Cards that came in or shipped lately, for the activity chart ───────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemActivity.querySchema.safeParse({
+            since: context.req.query('since'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_work_item_query' }, 400);
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json(activityTimes(all, new Date(query.data.since)));
+        },
+      }),
+      // ── One card, for deep links to cards outside the loaded pages ───────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemGet.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.workItemGet.pathSchema.safeParse({
+            id: context.req.param('id'),
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          await workItems.ensureReady();
+          const [item] = await workItems.listByIds({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            ids: [parsedPath.data.workItemId],
+          });
+          if (!item) return c.json({ error: 'Work item not found' }, 404);
+          return c.json({ workItem: toWireWorkItem(item) });
         },
       }),
 

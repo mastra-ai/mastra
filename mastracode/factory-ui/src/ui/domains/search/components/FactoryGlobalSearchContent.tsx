@@ -46,7 +46,8 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
   const sessions = useGlobalSearchSessions(searchableFactoryId);
-  const workItems = useGlobalSearchWorkItems(searchableFactoryId);
+  const [search, setSearch] = useState('');
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId, search);
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const workBoard = useBoardItems({
@@ -90,6 +91,8 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     <>
       <CommandPaletteInput
         autoFocus
+        value={search}
+        onValueChange={setSearch}
         placeholder="Search sessions, reviews, #issues, pages, and Factories…"
         rightSlot={<Kbd>Esc</Kbd>}
       />

@@ -97,6 +97,25 @@ export const queryKeys = {
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  /** Kept apart from `workItems` so a board sync never refetches every session's card. */
+  sessionWorkItems: (factoryProjectId: string | undefined) =>
+    ['factory', 'session-work-items', factoryProjectId ?? null] as const,
+  workItemActivity: (factoryProjectId: string | undefined, period: string) =>
+    ['factory', 'work-item-activity', factoryProjectId ?? null, period] as const,
+  /** Every Done/Canceled page a board has read; deletes invalidate it so a removed card leaves. */
+  workItemArchiveRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-archive', factoryProjectId ?? null] as const,
+  workItemArchive: (
+    factoryProjectId: string | undefined,
+    board: string,
+    stage: string,
+    sort: string,
+    search: string,
+    filters: string,
+    cursor: string | null,
+  ) => [...queryKeys.workItemArchiveRoot(factoryProjectId), board, stage, sort, search, filters, cursor] as const,
+  workItemSources: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-sources', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
   /** Every comment read for a work item — the invalidation target for a feed event. */

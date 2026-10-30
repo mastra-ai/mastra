@@ -22,7 +22,9 @@ import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStag
 import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntake } from '../../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
+import { useBoardArchive } from '../../domains/factory/hooks/useBoardArchive';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
+import { useBoardCounts, useWorkItemsQuery } from '../../../hooks/useWorkItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
 import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
 import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from '../../domains/factory/boardLabels';
@@ -32,7 +34,7 @@ import {
   candidateMatchesPeople,
   workItemMatchesPeople,
 } from '../../domains/factory/boardPeople';
-import { boardFiltersActive } from '../../domains/factory/boardFilters';
+import { boardFilterQuery, boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
@@ -94,7 +96,23 @@ export function BoardContent({
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
-  const items = useBoardItems({ factoryProjectId, kind, currentUserId });
+  // Intake, Done and Canceled are paged in per column; the board sync carries only the cards being worked.
+  const pagedStages = stages
+    .filter(stage => stage.kind === 'terminal' || stage.kind === 'resting')
+    .map(stage => stage.id);
+  const synced = useWorkItemsQuery(factoryProjectId);
+  const archive = useBoardArchive({
+    factoryProjectId,
+    board: kind,
+    stages: pagedStages,
+    sort,
+    search: view.search,
+    filters: boardFilterQuery(filters, personId),
+    targetItemId,
+    enabled: synced.isSuccess,
+  });
+  const items = useBoardItems({ factoryProjectId, kind, currentUserId, archived: archive.items });
+  const serverCounts = useBoardCounts(factoryProjectId)?.boards[kind];
   const repositoryChoice = useRepositoryChoice(factory, definition);
   const cardForDrop = (payload: DragPayload) => {
     if (payload.kind === 'candidate') return payload.candidate;
@@ -236,10 +254,20 @@ export function BoardContent({
 
   const stageViews = stages.map(stage => {
     const isInitialPhase = stage.id === definition.initialPhase;
-    const loading = loadingStages.has(stage.id);
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
-    const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
+    const archiveColumn = archive.columns[stage.id];
+    const loading =
+      loadingStages.has(stage.id) || (archiveColumn !== undefined && archive.isPending && stageWorkItems.length === 0);
+    const loadedCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
+    // A paged column holds only its first pages, so its header counts the cards the server holds under
+    // the same search and filters, plus the unfiled feed issues Intake shows beside them.
+    const serverCount = (anyFilterActive ? archive.filteredCounts : serverCounts)?.[stage.id];
+    const loadedCandidates = stageContentCount(stage.id, stages, [], filteredCandidates);
+    const taskCount =
+      archiveColumn && serverCount !== undefined
+        ? loadedCandidates + Math.max(loadedCount - loadedCandidates, serverCount)
+        : loadedCount;
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
@@ -254,6 +282,7 @@ export function BoardContent({
       !composerOpen &&
       !feedFailed &&
       !columnFeed?.hasNextPage &&
+      !archiveColumn?.hasNextPage &&
       taskCount === 0;
     return {
       stage,
@@ -287,6 +316,7 @@ export function BoardContent({
           hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
+          archive={archiveColumn}
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions

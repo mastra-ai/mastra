@@ -4,7 +4,7 @@ import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useParkedSessions, useWorkItemsWithSessionCards } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
@@ -25,7 +25,11 @@ export function useSessionListRows(factoryId: string | undefined): {
   const { pathname } = useLocation();
   const query = useWorkspacesQuery(factoryId);
   const factory = useFactoryQuery(factoryId);
-  const workItems = useWorkItemsQuery(factoryId);
+  // Factory sessions all belong to a card; one the board lacks finished before its window.
+  const workItems = useWorkItemsWithSessionCards(factoryId, cards => {
+    const index = sessionWorkItemIndex(cards);
+    return (query.data?.workspaces ?? []).some(session => !index.has(session.sessionId));
+  });
   const parkedSessions = useParkedSessions(factoryId);
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
   const catalog = useBoardCatalog(factoryId);

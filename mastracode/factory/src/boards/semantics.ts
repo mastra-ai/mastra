@@ -117,6 +117,23 @@ export function isTerminalWorkItem(
   return stage === 'done' || stage === 'canceled';
 }
 
+/**
+ * Whether a card waits in a phase nobody is working: a resting phase such as Intake, or a terminal
+ * one. Boards read these columns a page at a time instead of syncing every card in them. Unknown
+ * boards fall back to the built-in Work and Review names.
+ */
+export function isIdleWorkItem(
+  boards: BoardRegistry,
+  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+): boolean {
+  const semantics = workItemPhaseSemantics(boards, item);
+  if (semantics) return semantics.kind === 'terminal' || semantics.kind === 'resting';
+  const board = boardForWorkItem(item);
+  if (board !== 'work' && board !== 'review') return false;
+  const stage = item.stages.length === 1 ? item.stages[0] : undefined;
+  return stage === 'intake' || stage === 'done' || stage === 'canceled';
+}
+
 /** Semantics of the single stage a work item currently occupies; undefined for multi-stage rows. */
 export function workItemPhaseSemantics(
   boards: BoardRegistry,

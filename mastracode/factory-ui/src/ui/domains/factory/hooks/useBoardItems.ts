@@ -7,6 +7,7 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
+  useWorkItemSources,
   useWorkItemsQuery,
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
@@ -29,11 +30,14 @@ export function useBoardItems({
   factoryProjectId,
   kind,
   currentUserId,
+  archived,
   onFailure,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
   currentUserId?: string;
+  /** Done and Canceled cards read from the archive pages, which the board sync leaves out. */
+  archived?: readonly WorkItem[];
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
@@ -48,10 +52,18 @@ export function useBoardItems({
   const [dropError, setDropError] = useState<Error>();
   const movingRef = useRef<Set<string>>(new Set());
 
-  const all = useMemo(() => items.data ?? [], [items.data]);
-  const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
+  const sources = useWorkItemSources(factoryProjectId);
+  const all = useMemo(() => {
+    const synced = items.data ?? [];
+    if (!archived?.length) return synced;
+    // The synced copy wins: it is the one every edit patches, and a card reopened off Done is only there.
+    const onBoard = new Set(synced.map(item => item.id));
+    return [...synced, ...archived.filter(item => !onBoard.has(item.id))];
+  }, [items.data, archived]);
+  // The board holds only open cards, so an issue whose card closed long ago is known by its source.
+  const knownSourceKeys = useMemo(() => persistedSourceKeys([...all, ...sources]), [all, sources]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
+  const elsewhereSourceKeys = persistedSourceKeys([...all, ...sources].filter(item => !belongsToBoard(item, kind)));
   const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {

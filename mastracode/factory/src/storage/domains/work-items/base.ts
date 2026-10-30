@@ -8,7 +8,7 @@
  * Factory transition path keeps one exclusive current stage per item.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
@@ -24,9 +24,11 @@ import {
   BoardScopes,
   bumpBoardVersions,
   FACTORY_BOARD_VERSIONS_SCHEMA,
+  FACTORY_WORK_ITEM_TOMBSTONES_SCHEMA,
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
+import type { BoardScope } from './board-version.js';
 
 export type WorkItemStage = string;
 
@@ -550,6 +552,8 @@ export interface WorkItemRow {
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
+  /** Last write of any kind to the card, edits or bookkeeping; what board syncs page by. */
+  changedAt: Date;
 }
 
 export interface CreateWorkItemInput {
@@ -608,6 +612,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     accepted_at: { type: 'timestamp', nullable: true },
     comment_count: { type: 'integer', default: 0 },
     feed_activity_at: { type: 'timestamp', nullable: true },
+    changed_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -744,6 +749,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   accepted_at: Date | null;
   comment_count: number;
   feed_activity_at: Date | null;
+  changed_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -785,6 +791,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    changedAt: row.changed_at ?? row.updated_at,
   };
 }
 
@@ -1298,6 +1305,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** Last full card list per project, valid while the project's board version is unchanged. */
   readonly #listCache = new Map<string, { version: string; takenAt: number; items: WorkItemRow[] }>();
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  #boardChanged: (scope: FactoryAttentionScope) => void = () => {};
   // Storage does not know boards. Until the host says which phases are terminal,
   // no card counts as finished, so the boot sweep never supersedes on a guess.
   #isTerminal: (item: WorkItemRow) => boolean = () => false;
@@ -1313,6 +1321,36 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
     this.#attentionChanged = listener;
+  }
+
+  /** Wired once at boot. Called after every committed write to a project's cards, so open boards can sync. */
+  onBoardChanged(listener: (scope: FactoryAttentionScope) => void): void {
+    this.#boardChanged = listener;
+  }
+
+  /** Ids of the project's cards deleted at or after `since`. */
+  async listDeletedSince({
+    orgId,
+    factoryProjectId,
+    since,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    since: Date;
+  }): Promise<{ id: string; deletedAt: Date }[]> {
+    // A keyset cursor just below `since` makes storage read only the window, via the (scope, deleted_at) index.
+    const rows = await this.#db.findMany<{ work_item_id: string; deleted_at: Date }>(
+      FACTORY_WORK_ITEM_TOMBSTONES_SCHEMA.name,
+      { org_id: orgId, factory_project_id: factoryProjectId },
+      {
+        orderBy: [
+          ['deleted_at', 'asc'],
+          ['id', 'asc'],
+        ],
+        cursor: { values: [since, '00000000-0000-0000-0000-000000000000'] },
+      },
+    );
+    return rows.map(row => ({ id: row.work_item_id, deletedAt: row.deleted_at }));
   }
 
   /**
@@ -1353,6 +1391,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await this.ensureCollections([
       WORK_ITEMS_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
+      FACTORY_WORK_ITEM_TOMBSTONES_SCHEMA,
       ...FACTORY_GOVERNANCE_SCHEMAS,
       WORK_ITEM_COMMENTS_SCHEMA,
       WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
@@ -1365,6 +1404,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('work_items', {});
     await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {});
+    await super.ops.deleteMany(FACTORY_WORK_ITEM_TOMBSTONES_SCHEMA.name, {});
     // A project with no version row is never served from cache, so this invalidates every replica.
     await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
     this.#listCache.clear();
@@ -1376,7 +1416,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
-    return trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope]));
+    return trackBoardWrites(ops, scope => this.#bumpBoards(ops, [scope]));
+  }
+
+  async #bumpBoards(ops: FactoryStorageOps, scopes: readonly BoardScope[]): Promise<void> {
+    await bumpBoardVersions(ops, scopes);
+    for (const scope of scopes) {
+      if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+    }
   }
 
   /** `storage.withTransaction`, bumping the board version of every project it wrote once it commits. */
@@ -1386,7 +1433,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   ): Promise<T> {
     const changed = new BoardScopes();
     const result = await this.storage.withTransaction(ops => fn(trackBoardWrites(ops, changed.add)), options);
-    await bumpBoardVersions(super.ops, changed.values());
+    await this.#bumpBoards(super.ops, changed.values());
     return result;
   }
 
@@ -3682,8 +3729,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
       const existing = await ops.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
       if (!existing) return null;
-      const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
+      // Naming the project scopes the board signal to the board that lost the card.
+      const deleted = await ops.deleteMany('work_items', {
+        org_id: orgId,
+        factory_project_id: existing.factory_project_id,
+        id,
+      });
       if (deleted === 0) return null;
+      await ops.insertOne(FACTORY_WORK_ITEM_TOMBSTONES_SCHEMA.name, {
+        id: randomUUID(),
+        org_id: orgId,
+        factory_project_id: existing.factory_project_id,
+        work_item_id: id,
+        deleted_at: new Date(),
+      });
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
       if (purgeRuleState && existing.external_source?.externalId) {
@@ -3695,7 +3754,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       await ops.updateMany(
         'work_items',
-        { org_id: orgId, parent_work_item_id: id },
+        { org_id: orgId, factory_project_id: existing.factory_project_id, parent_work_item_id: id },
         { parent_work_item_id: null, updated_at: new Date() },
       );
       return toWorkItem(existing);

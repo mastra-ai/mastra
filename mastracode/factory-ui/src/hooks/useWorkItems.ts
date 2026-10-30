@@ -1,5 +1,7 @@
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
+
+import { useMemo } from 'react';
 import {
   queryOptions,
   skipToken,
@@ -14,17 +16,24 @@ import { queryKeys } from '../api/keys';
 import {
   createWorkItem,
   deleteWorkItem,
-  listWorkItems,
+  listWorkItemSources,
+  listActivityTimes,
+  listSessionWorkItems,
+  syncWorkItems,
   transitionWorkItem,
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
+import { activityStart } from '../ui/domains/factory/periodActivity';
+import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import type {
   BoardSnapshot,
   CreateWorkItemInput,
   FactoryBoard,
   UpdateWorkItemInput,
   WorkItem,
+  WorkItemSourceRef,
   WorkItemStageEntry,
+  WorkItemSync,
 } from '../ui/domains/factory/services/workItems';
 
 function requireFactoryProjectId(factoryProjectId: string | undefined): string {
@@ -55,16 +64,63 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 // Module-level so React Query can cache each derived value instead of
 // rebuilding it (and, for the set, breaking referential equality) per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
+const selectCounts = (board: BoardSnapshot) => board.counts;
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
+const NO_SOURCES: WorkItemSourceRef[] = [];
+const NO_CARDS: WorkItem[] = [];
+
+/**
+ * How long the board trusts deltas before syncing from scratch. A full sync drops cards that went Done
+ * or Canceled in the meantime and catches any write a delta could miss (one committed long after it was
+ * stamped); on the Factory's own project it is ~1,300 open cards, a fraction of the full list.
+ */
+export const BOARD_RESYNC_MS = 5 * 60_000;
+
+/** Fold a sync into the board: a reset replaces the cards, a delta replaces only the ones it names. */
+export function applyBoardSync(previous: BoardSnapshot | undefined, sync: WorkItemSync, now: number): BoardSnapshot {
+  const sessions = {
+    runningSessionIds: sync.runningSessionIds,
+    parkedSessionIds: sync.parkedSessionIds,
+    cursor: sync.cursor,
+    counts: sync.counts,
+  };
+  if (sync.reset || !previous) return { workItems: sync.workItems, ...sessions, resetAt: now };
+  const gone = new Set(sync.deletedIds);
+  const changed = new Map(sync.workItems.map(item => [item.id, item]));
+  const kept = previous.workItems.flatMap(item => {
+    if (gone.has(item.id)) return [];
+    const next = changed.get(item.id);
+    changed.delete(item.id);
+    return [next ?? item];
+  });
+  return { workItems: [...changed.values(), ...kept], ...sessions, resetAt: previous.resetAt };
+}
 
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  const queryKey = queryKeys.workItems(factoryProjectId);
   return queryOptions({
-    queryKey: queryKeys.workItems(factoryProjectId),
-    queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
-    // Relationships can be created by GitHub ingestion or another open tab.
-    // Keep thread-page counterpart links current without requiring a reload.
-    refetchInterval: 5_000,
+    queryKey,
+    queryFn: factoryProjectId
+      ? async ({ signal, client }) => {
+          const before = client.getQueryData<BoardSnapshot>(queryKey);
+          const fresh = before?.resetAt !== undefined && Date.now() - before.resetAt < BOARD_RESYNC_MS;
+          const sync = await syncWorkItems(baseUrl, factoryProjectId, fresh ? before.cursor : undefined, signal);
+          // A resync drops cards that closed since the last one; the Done pages read them again.
+          if (sync.reset && before) {
+            void client.invalidateQueries({ queryKey: queryKeys.workItemArchiveRoot(factoryProjectId) });
+          }
+          // Read again: an optimistic edit may have landed while the sync was in flight.
+          return applyBoardSync(
+            sync.reset ? undefined : client.getQueryData<BoardSnapshot>(queryKey),
+            sync,
+            Date.now(),
+          );
+        }
+      : skipToken,
+    // The feed stream refetches on every board write; this only backs it up for a dropped stream
+    // and for writes that bump no card, like a session starting or parking.
+    refetchInterval: 30_000,
     // Cards move autonomously (rule transitions, agent runs); polling pauses
     // while the tab is hidden, so refresh immediately on return.
     refetchOnWindowFocus: true,
@@ -75,6 +131,87 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
+}
+
+/** Cards per board and phase as the server counts them, Done and Canceled cards the board never loaded included. */
+export function useBoardCounts(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCounts }).data;
+}
+
+export function workItemSourcesQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.workItemSources(factoryProjectId),
+    queryFn: factoryProjectId ? ({ signal }) => listWorkItemSources(baseUrl, factoryProjectId, signal) : skipToken,
+    // Cards the board loads cover everything filed since; this list only has to catch the old ones.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** The source of every card on the project, Done and Canceled included, so Intake never re-offers one. */
+export function useWorkItemSources(factoryProjectId: string | undefined): WorkItemSourceRef[] {
+  const { baseUrl } = useApiConfig();
+  return useQuery(workItemSourcesQueryOptions(baseUrl, factoryProjectId)).data ?? NO_SOURCES;
+}
+
+/**
+ * Every card a session ran on, Done and Canceled included, cut to what names it. Read on demand and
+ * kept for a minute: only session lookups that miss the board need it.
+ */
+export function sessionWorkItemsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.sessionWorkItems(factoryProjectId),
+    queryFn: factoryProjectId ? ({ signal }) => listSessionWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * The board's cards, plus every card a session ran on once `needsSessionCards` says the board alone
+ * falls short. Board cards win over the brief copies, since the board is synced and patched by every edit.
+ */
+export function useWorkItemsWithSessionCards(
+  factoryProjectId: string | undefined,
+  needsSessionCards: boolean | ((cards: WorkItem[]) => boolean),
+) {
+  const { baseUrl } = useApiConfig();
+  const board = useWorkItemsQuery(factoryProjectId);
+  const cards = board.data ?? NO_CARDS;
+  const enabled =
+    board.isSuccess && (typeof needsSessionCards === 'function' ? needsSessionCards(cards) : needsSessionCards);
+  const history = useQuery({ ...sessionWorkItemsQueryOptions(baseUrl, factoryProjectId), enabled });
+  const data = useMemo(() => {
+    if (!board.data || !history.data) return board.data;
+    const onBoard = new Set(board.data.map(item => item.id));
+    return [...board.data, ...history.data.filter(item => !onBoard.has(item.id))];
+  }, [board.data, history.data]);
+  const settled = !enabled || history.isFetched;
+  return {
+    data,
+    isSuccess: board.isSuccess && settled,
+    isPending: board.isPending || !settled,
+    isFetched: board.isFetched,
+    isLoading: board.isLoading || (enabled && history.isLoading),
+    isError: board.isError,
+    dataUpdatedAt: board.dataUpdatedAt,
+    refetch: board.refetch,
+  };
+}
+
+/** Every card that came in or shipped within `period`, cut to what the activity chart reads. */
+export function useActivityTimes(factoryProjectId: string | undefined, period: ActivityPeriod) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.workItemActivity(factoryProjectId, period),
+    queryFn: factoryProjectId
+      ? ({ signal }) =>
+          listActivityTimes(baseUrl, factoryProjectId, new Date(activityStart(period, Date.now())), signal)
+      : skipToken,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
@@ -183,8 +320,10 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         ?.workItems.find(candidate => candidate.id === item.id);
       const enteredAt = new Date().toISOString();
       const actor = currentUserId ?? 'factory:optimistic';
+      // A Done or Canceled card read from an archive page is not on the board yet; adding it lets the
+      // move show at once, and the board copy wins over the stale archive one.
       patchCards(queryClient, listKey, cards =>
-        cards.map(candidate =>
+        (cards.some(candidate => candidate.id === item.id) ? cards : [item, ...cards]).map(candidate =>
           candidate.id === item.id
             ? {
                 ...candidate,
@@ -279,6 +418,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onSuccess: () => {
       // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.
       void queryClient.invalidateQueries({ queryKey: listKey });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItemArchiveRoot(factoryProjectId) });
     },
   });
 }
