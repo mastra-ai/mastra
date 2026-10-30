@@ -1,5 +1,16 @@
-import { buildTraceListFilters, ROOT_ENTITY_TYPE_OPTIONS, TRACE_STATUS_VALUES } from '../../trace-filters';
-import type { EntityOptions, TraceFilterGroup, TraceFilterToken, TraceStatusFilter } from '../../trace-filters';
+import {
+  buildTraceListFilters,
+  ROOT_ENTITY_TYPE_OPTIONS,
+  TRACE_STATUS_VALUES,
+  traceQueryUnqueryableFieldIds,
+} from '../../trace-filters';
+import type {
+  EntityOptions,
+  TraceFilterGroup,
+  TraceFilterToken,
+  TraceQueryFieldSupport,
+  TraceStatusFilter,
+} from '../../trace-filters';
 import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
 import type { SpanTab, TraceDatePreset } from '../../types';
 import type { TraceSpanView } from '../trace-data-panel-view';
@@ -27,7 +38,7 @@ export type TracesFilters = {
 export type TracesSortDirection = 'asc' | 'desc';
 
 /** Fields the traces list can be sorted by, named like the trace query's `orderBy` fields. */
-export const TRACES_SORT_FIELDS = ['startedAt', 'timeToFirstChunkMs'] as const;
+export const TRACES_SORT_FIELDS = ['startedAt', 'timeToFirstChunkMs', 'timeToFirstTokenMs'] as const;
 export type TracesSortField = (typeof TRACES_SORT_FIELDS)[number];
 
 export type TracesSort = { field: TracesSortField; direction: TracesSortDirection };
@@ -115,28 +126,20 @@ export const applyDateRange = (
   dateTo: Date | undefined,
 ): TracesFilters => (filters.datePreset === 'custom' ? { ...filters, dateFrom, dateTo } : filters);
 
-/** Fields this server can't query on top of the always-unsupported ones: root duration and
- *  outcome fields each need their capability. */
-const serverUnqueryableFieldIds = (withRootDuration: boolean, withOutcomeFields: boolean): ReadonlySet<string> =>
-  new Set([...(withRootDuration ? [] : ['durationMs']), ...(withOutcomeFields ? [] : ['outcome', 'stopReason'])]);
+const isQueryableToken = (token: TraceFilterToken, unqueryableFieldIds: ReadonlySet<string>) => {
+  if (token.fieldId === 'status' && token.value === 'running') return false;
+  if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return false;
+  return !unqueryableFieldIds.has(token.fieldId);
+};
 
 /**
  * Drops the top-level tokens the trace query can't run, so no chip advertises a filter with no effect.
  * Groups pass through and stay visible in the bar: `buildTracesQueryRequest` leaves their unqueryable
  * conditions out of the query. Returns the same object when nothing is dropped.
  */
-export const sanitizeTracesFilters = (
-  filters: TracesFilters,
-  withRootDuration: boolean,
-  withOutcomeFields = false,
-): TracesFilters => {
-  const unqueryable = serverUnqueryableFieldIds(withRootDuration, withOutcomeFields);
-  const tokens = filters.tokens.filter(
-    token =>
-      !(token.fieldId === 'status' && token.value === 'running') &&
-      !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId) &&
-      !unqueryable.has(token.fieldId),
-  );
+export const sanitizeTracesFilters = (filters: TracesFilters, support: TraceQueryFieldSupport): TracesFilters => {
+  const unqueryableFieldIds = traceQueryUnqueryableFieldIds(support);
+  const tokens = filters.tokens.filter(token => isQueryableToken(token, unqueryableFieldIds));
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
 
@@ -172,10 +175,9 @@ export const buildTracesQueryRequest = ({
   filters,
   dateFrom,
   dateTo,
-  withRootDuration,
-  withOutcomeFields = false,
   now,
-}: TracesQueryWindow & { withRootDuration: boolean; withOutcomeFields?: boolean; now: Date }) =>
+  ...support
+}: TracesQueryWindow & TraceQueryFieldSupport & { now: Date }) =>
   buildTraceQueryRequest({
     rootEntityType: getSelectedEntityOption(filters.tokens)?.entityType,
     status: getSelectedStatus(filters.tokens),
@@ -183,7 +185,7 @@ export const buildTracesQueryRequest = ({
     dateTo,
     tokens: filters.tokens,
     groups: filters.groups,
-    excludedFieldIds: serverUnqueryableFieldIds(withRootDuration, withOutcomeFields),
+    excludedFieldIds: traceQueryUnqueryableFieldIds(support),
     now,
   });
 

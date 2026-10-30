@@ -29,7 +29,7 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-type RequestBody = { timeRange?: unknown; where?: unknown };
+type RequestBody = { timeRange?: { from: string; to?: string }; where?: unknown };
 
 const onTraceQuery = vi.fn<(body: RequestBody) => void>();
 const onAggregate = vi.fn<(body: RequestBody) => void>();
@@ -117,6 +117,7 @@ function Harness({
         metricsSupport={METRICS_SUPPORTED}
         features={features}
       >
+        <TracesExplorer.FilterBar />
         <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
           <TracesExplorer.List />
         </TracesExplorer.Body>
@@ -159,6 +160,14 @@ const dragAcross = async (from: number, to: number) => {
   fireEvent.mouseDown(plot, atBar(from));
   await moveTo(plot, to);
   fireEvent.mouseUp(window);
+};
+const clickBar = async (bar: number) => {
+  const plot = (await screen.findByRole('region', { name: 'Traces over time' })).querySelector('.recharts-wrapper');
+  if (!plot) throw new Error('chart did not render');
+  await moveTo(plot, bar);
+  fireEvent.mouseDown(plot, atBar(bar));
+  fireEvent.mouseUp(plot, atBar(bar));
+  fireEvent.click(plot, atBar(bar));
 };
 const lastBody = (spy: typeof onAggregate) => spy.mock.calls.at(-1)?.[0];
 
@@ -250,6 +259,147 @@ describe('TracesExplorer.Histogram', () => {
       const zoomed = { from: '2026-10-21T00:00:00.000Z', to: '2026-10-22T00:00:00.000Z' };
       expect(lastBody(onTraceQuery)?.timeRange).toEqual(zoomed);
       expect(lastBody(onAggregate)?.timeRange).toEqual(zoomed);
+    });
+  });
+
+  describe('when the user clicks a bar', () => {
+    it('narrows the list and the chart to that bar', async () => {
+      setHandlers();
+      const { queryClient } = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...ONE_WEEK } });
+
+      // Bar 12 is Oct 21, 00:00 to 02:00.
+      await clickBar(12);
+      await settle(queryClient);
+
+      const zoomed = { from: '2026-10-21T00:00:00.000Z', to: '2026-10-21T02:00:00.000Z' };
+      expect(lastBody(onTraceQuery)?.timeRange).toEqual(zoomed);
+      expect(lastBody(onAggregate)?.timeRange).toEqual(zoomed);
+    });
+
+    it('returns to the range from before the click on reset', async () => {
+      setHandlers();
+      const { queryClient } = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...ONE_WEEK } });
+      await clickBar(12);
+      await settle(queryClient);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+      await settle(queryClient);
+
+      expect(lastBody(onTraceQuery)?.timeRange).toEqual({
+        from: '2026-10-20T00:00:00.000Z',
+        to: '2026-10-27T00:00:00.000Z',
+      });
+    });
+  });
+
+  describe('when the user resets the time range after dragging', () => {
+    const ONE_WEEK_RANGE = { from: '2026-10-20T00:00:00.000Z', to: '2026-10-27T00:00:00.000Z' };
+    const resetTimeRange = () => fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+    it('returns to the custom range from before the zoom', async () => {
+      setHandlers();
+      const { queryClient } = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...ONE_WEEK } });
+      await dragAcross(12, 23);
+      await settle(queryClient);
+
+      resetTimeRange();
+      await settle(queryClient);
+
+      expect(lastBody(onTraceQuery)?.timeRange).toEqual(ONE_WEEK_RANGE);
+      expect(lastBody(onAggregate)?.timeRange).toEqual(ONE_WEEK_RANGE);
+    });
+
+    it('returns to the range from before the first of several zooms', async () => {
+      setHandlers();
+      const { queryClient } = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...ONE_WEEK } });
+      await dragAcross(12, 23);
+      await settle(queryClient);
+      await dragAcross(0, 1);
+      await settle(queryClient);
+      expect(lastBody(onTraceQuery)?.timeRange).not.toEqual({
+        from: '2026-10-21T00:00:00.000Z',
+        to: '2026-10-22T00:00:00.000Z',
+      });
+
+      resetTimeRange();
+      await settle(queryClient);
+
+      expect(lastBody(onTraceQuery)?.timeRange).toEqual(ONE_WEEK_RANGE);
+    });
+
+    it('returns to the rolling preset from before the zoom', async () => {
+      setHandlers();
+      const { queryClient } = await renderExplorer({
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, datePreset: 'last-14d' },
+      });
+      await dragAcross(12, 23);
+      await settle(queryClient);
+      expect(screen.queryByRole('button', { name: 'Last 14 days' })).toBeNull();
+
+      resetTimeRange();
+      await settle(queryClient);
+
+      expect(screen.getByRole('button', { name: 'Last 14 days' })).toBeTruthy();
+      const from = lastBody(onTraceQuery)?.timeRange?.from ?? '';
+      expect(Math.round((Date.now() - Date.parse(from)) / (24 * 60 * 60 * 1000))).toBe(14);
+    });
+
+    it('resets to the default preset once the zoom is undone', async () => {
+      setHandlers();
+      const { queryClient } = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...ONE_WEEK } });
+      await dragAcross(12, 23);
+      await settle(queryClient);
+      resetTimeRange();
+      await settle(queryClient);
+
+      resetTimeRange();
+      await settle(queryClient);
+
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    });
+
+    describe('when the user picked a range by hand after zooming', () => {
+      const openRangeEditor = () => fireEvent.click(screen.getByRole('button', { name: /^Oct 21/, hidden: true }));
+      const pickTimePart = async (time: string, part: string, value: string) => {
+        const group = screen.getByRole('group', { name: time, hidden: true });
+        const select = within(group).getByRole('combobox', { name: part, hidden: true });
+        fireEvent.click(select);
+        // Base UI only commits a pick on a real press: pointerdown followed by click.
+        const option = await screen.findByRole('option', { name: value, hidden: true });
+        fireEvent.pointerDown(option);
+        fireEvent.click(option);
+        await waitFor(() => expect(select.textContent).toBe(value));
+      };
+      const apply = () => fireEvent.click(screen.getByRole('button', { name: /apply/i, hidden: true }));
+
+      it('resets to the default preset even when that range matches the zoom', async () => {
+        setHandlers();
+        const { queryClient } = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, ...ONE_WEEK } });
+        const zoomed = { from: '2026-10-21T00:00:00.000Z', to: '2026-10-22T00:00:00.000Z' };
+        await dragAcross(12, 23);
+        await settle(queryClient);
+
+        // The editor opens on the zoomed days, ending at 11:59 PM: another range.
+        openRangeEditor();
+        apply();
+        await settle(queryClient);
+        expect(lastBody(onTraceQuery)?.timeRange).toEqual({ ...zoomed, to: '2026-10-22T23:59:00.000Z' });
+
+        // Ending at 12:00 AM instead picks the zoomed bounds again.
+        openRangeEditor();
+        await pickTimePart('End time', 'Hour', '12');
+        await pickTimePart('End time', 'Minute', '00');
+        await pickTimePart('End time', 'AM or PM', 'AM');
+        apply();
+        await settle(queryClient);
+        expect(lastBody(onTraceQuery)?.timeRange).toEqual(zoomed);
+
+        resetTimeRange();
+        await settle(queryClient);
+
+        expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
+      });
     });
   });
 

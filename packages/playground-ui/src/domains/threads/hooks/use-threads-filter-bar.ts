@@ -1,3 +1,4 @@
+import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import { useEntityNames, useEnvironments } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo } from 'react';
 import {
@@ -30,14 +31,20 @@ const NO_SUGGESTIONS: string[] = [];
 
 /** The fields the threads filter bar offers: the time range plus the fields `queryTraceThreads()` accepts. */
 export function useThreadsFilterBarFields(): FilterBarField[] {
+  const { data: capabilities } = useObservabilityCapabilities();
+  const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
+  const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
   const { data: entityNames = NO_SUGGESTIONS } = useEntityNames();
   const { data: environments = NO_SUGGESTIONS } = useEnvironments();
 
   // Memoized for correctness: static suggestion lists become the value editor's Combobox
   // `items`, which loops if handed a new array on every render.
   return useMemo(
-    () => [FILTER_BAR_TIME_RANGE_FIELD, ...createThreadFilterBarFields({ entityNames, environments })],
-    [entityNames, environments],
+    () => [
+      FILTER_BAR_TIME_RANGE_FIELD,
+      ...createThreadFilterBarFields({ withTimeToFirstChunk, withTimeToFirstToken, entityNames, environments }),
+    ],
+    [withTimeToFirstChunk, withTimeToFirstToken, entityNames, environments],
   );
 }
 

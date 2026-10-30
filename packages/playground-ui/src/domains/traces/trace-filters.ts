@@ -154,6 +154,8 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   entityName: 'filterEntityName',
   traceId: 'filterTraceId',
   durationMs: 'filterDurationMs',
+  timeToFirstChunkMs: 'filterTimeToFirstChunkMs',
+  timeToFirstTokenMs: 'filterTimeToFirstTokenMs',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
   sessionId: 'filterSessionId',
@@ -171,6 +173,8 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   'spans.model': 'filterSpanModel',
   'spans.provider': 'filterSpanProvider',
   'spans.durationMs': 'filterSpanDurationMs',
+  'spans.timeToFirstChunkMs': 'filterSpanTimeToFirstChunkMs',
+  'spans.timeToFirstTokenMs': 'filterSpanTimeToFirstTokenMs',
   'spans.error': 'filterSpanError',
   'scores.scorerId': 'filterScorerId',
   'scores.score': 'filterScore',
@@ -361,7 +365,11 @@ export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   'spans.model': 'Span Model',
   'spans.provider': 'Provider',
   durationMs: 'Duration (ms)',
+  timeToFirstChunkMs: 'Time to first chunk (ms)',
+  timeToFirstTokenMs: 'Time to first token (ms)',
   'spans.durationMs': 'Span duration (ms)',
+  'spans.timeToFirstChunkMs': 'Span time to first chunk (ms)',
+  'spans.timeToFirstTokenMs': 'Span time to first token (ms)',
   'spans.error': 'Span error',
   'scores.scorerId': 'Scorer',
   'scores.score': 'Score',
@@ -394,7 +402,11 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   'spans.model': CpuIcon,
   'spans.provider': CloudIcon,
   durationMs: TimerIcon,
+  timeToFirstChunkMs: TimerIcon,
+  timeToFirstTokenMs: TimerIcon,
   'spans.durationMs': TimerIcon,
+  'spans.timeToFirstChunkMs': TimerIcon,
+  'spans.timeToFirstTokenMs': TimerIcon,
   'spans.error': TriangleAlertIcon,
   'scores.scorerId': GaugeIcon,
   'scores.score': PercentIcon,
@@ -402,6 +414,56 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   'feedback.value': StarIcon,
   'feedback.comment': MessageCircleIcon,
 };
+
+/** Which optional trace query fields the server declares support for. */
+export type TraceQueryFieldSupport = {
+  /** Root `durationMs`, declared by `traceQueryRootDuration`. */
+  withRootDuration?: boolean;
+  /** Root and span `timeToFirstChunkMs`, declared by `traceQueryTimeToFirstChunk`. */
+  withTimeToFirstChunk?: boolean;
+  /** Root and span `timeToFirstTokenMs`, declared by `traceQueryTimeToFirstToken`. */
+  withTimeToFirstToken?: boolean;
+  /** Root `outcome` and `stopReason`, declared by `traceQueryOutcomeFields`. */
+  withOutcomeFields?: boolean;
+};
+
+const ROOT_DURATION_FIELD_IDS = ['durationMs'];
+const OUTCOME_FIELD_IDS = ['outcome', 'stopReason'];
+const TIME_TO_FIRST_CHUNK_FIELD_IDS = ['timeToFirstChunkMs', 'spans.timeToFirstChunkMs'];
+const TIME_TO_FIRST_TOKEN_FIELD_IDS = ['timeToFirstTokenMs', 'spans.timeToFirstTokenMs'];
+
+/** The optional fields this server can't query: each needs its capability. */
+export const traceQueryUnqueryableFieldIds = ({
+  withRootDuration = false,
+  withTimeToFirstChunk = false,
+  withTimeToFirstToken = false,
+  withOutcomeFields = false,
+}: TraceQueryFieldSupport): ReadonlySet<string> =>
+  new Set([
+    ...(withRootDuration ? [] : ROOT_DURATION_FIELD_IDS),
+    ...(withOutcomeFields ? [] : OUTCOME_FIELD_IDS),
+    ...(withTimeToFirstChunk ? [] : TIME_TO_FIRST_CHUNK_FIELD_IDS),
+    ...(withTimeToFirstToken ? [] : TIME_TO_FIRST_TOKEN_FIELD_IDS),
+  ]);
+
+/** Which streaming timings the store records. Spans and threads query them without a prefix. */
+export type StreamingTimingSupport = Required<
+  Pick<TraceQueryFieldSupport, 'withTimeToFirstChunk' | 'withTimeToFirstToken'>
+>;
+
+/** `fieldIds` without the streaming timings the store doesn't record: the query rejects a condition on one. */
+export function withoutUnrecordedStreamingTimings(
+  fieldIds: ReadonlySet<string>,
+  { withTimeToFirstChunk, withTimeToFirstToken }: StreamingTimingSupport,
+): ReadonlySet<string> {
+  if (withTimeToFirstChunk && withTimeToFirstToken) return fieldIds;
+  return new Set(
+    [...fieldIds].filter(
+      id =>
+        (withTimeToFirstChunk || id !== 'timeToFirstChunkMs') && (withTimeToFirstToken || id !== 'timeToFirstTokenMs'),
+    ),
+  );
+}
 
 export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_ICONS[fieldId];
 
@@ -434,6 +496,8 @@ const TRACE_FILTER_BAR_RELATED_FIELD_IDS = [
   'spans.model',
   'spans.provider',
   'spans.durationMs',
+  'spans.timeToFirstChunkMs',
+  'spans.timeToFirstTokenMs',
   'spans.error',
   'scores.scorerId',
   'scores.score',
@@ -499,13 +563,8 @@ export function createTraceFilterBarFields({
   canonicalTraceFields = [],
   valueSuggestions,
   withQueryTrace = true,
-  withRootDuration = false,
-  withOutcomeFields = false,
-}: {
-  /** Offer the root `durationMs` field. Only when the server declares `traceQueryRootDuration`. */
-  withRootDuration?: boolean;
-  /** Offer the root `outcome` and `stopReason` fields. Only when the server declares `traceQueryOutcomeFields`. */
-  withOutcomeFields?: boolean;
+  ...support
+}: TraceQueryFieldSupport & {
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
@@ -597,6 +656,7 @@ export function createTraceFilterBarFields({
   const tagsFields = tagsField ? [tagsField] : [];
 
   const hidden = new Set(hiddenFieldIds);
+  const unqueryable = traceQueryUnqueryableFieldIds(support);
   if (!withQueryTrace) {
     return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
       ...field,
@@ -608,15 +668,15 @@ export function createTraceFilterBarFields({
     ...[...pickFields, ...tagsFields].sort(byLabel),
     ...[
       ...textFields,
-      ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
-      ...(withOutcomeFields
-        ? createOutcomeFilterBarFields(traceFieldBase, path => valueSuggestions?.('trace', path))
-        : []),
+      { ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS },
+      number('timeToFirstChunkMs'),
+      number('timeToFirstTokenMs'),
+      ...createOutcomeFilterBarFields(traceFieldBase, path => valueSuggestions?.('trace', path)),
     ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
   ]
-    .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
+    .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id) && !unqueryable.has(field.id))
     .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
 }
 

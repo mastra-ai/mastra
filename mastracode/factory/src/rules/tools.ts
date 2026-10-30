@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { SELF_REVIEW_ROUND_LIMIT } from '../boards/work.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -45,7 +47,7 @@ export async function createFactoryTransitionTools(options: {
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   sessions?: FactorySessionSourceLookup;
-  boards?: BoardRegistry;
+  boards?: BoardRegistry | ProjectBoardSource;
 }): Promise<IntegrationTools> {
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
@@ -65,7 +67,10 @@ export async function createFactoryTransitionTools(options: {
     const retired = await options.storage.findRunBindingBySession(resolution.address);
     if (retired && retired.status === 'revoked' && options.boards) {
       const item = await options.storage.get({ orgId: retired.orgId, id: retired.workItemId });
-      if (item && workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') {
+      if (
+        item &&
+        workItemPhaseSemantics(await toBoardSource(options.boards).load(retired), item)?.kind === 'terminal'
+      ) {
         return { factory_transition_work_item: createRetiredSessionTool(retired.workItemId, item.stages[0]) };
       }
     }

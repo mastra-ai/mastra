@@ -24,6 +24,8 @@ export type SpansFilterBarProps = {
   onDatePresetChange: (preset: TraceDatePreset) => void;
   onDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
   onDateRangeChange: (from: Date | undefined, to: Date | undefined) => void;
+  /** Called by the time range chip's × with the default preset, e.g. to undo a histogram zoom first. */
+  onDateReset?: (defaultPreset: TraceDatePreset) => void;
   onFiltersChange: (tokens: TraceFilterToken[], groups: TraceFilterGroup[]) => void;
   /** Turns a failed value suggestions lookup into the message shown in the option list. */
   describeSuggestionsError?: (error: unknown) => string | undefined;
@@ -42,6 +44,7 @@ export function SpansFilterBar({
   onDatePresetChange,
   onDateChange,
   onDateRangeChange,
+  onDateReset,
   onFiltersChange,
   describeSuggestionsError,
   disabled,
@@ -75,6 +78,7 @@ export function SpansFilterBar({
               disabled={disabled}
               presets={SPAN_TIME_RANGE_PRESETS}
               defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
+              onReset={onDateReset && (() => onDateReset(DEFAULT_TRACES_FILTERS.datePreset))}
             />
           ) : (
             <FilterBar.Chip item={item} />

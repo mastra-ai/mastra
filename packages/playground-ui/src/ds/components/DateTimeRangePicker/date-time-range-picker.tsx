@@ -21,6 +21,26 @@ const DATE_PRESETS: { value: DateRangePreset; label: string; ms?: number }[] = [
   { value: 'custom', label: 'Custom range...' },
 ];
 
+const fmtClock = (d: Date) =>
+  d.toLocaleTimeString('en-US', d.getMinutes() === 0 ? { hour: 'numeric' } : { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * A custom range as day and time, kept short: `Oct 21, 2:05 PM – 4 PM` within one day,
+ * `Oct 20, 12 AM – Oct 27, 9:30 AM` across days, with years only outside the current one.
+ */
+function customRangeLabel(dateFrom: Date | undefined, dateTo: Date | undefined) {
+  const thisYear = new Date().getFullYear();
+  const withYear = [dateFrom, dateTo].some(d => d && d.getFullYear() !== thisYear);
+  const fmtDay = (d: Date) =>
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear && { year: 'numeric' }) });
+  const fmtMoment = (d: Date) => `${fmtDay(d)}, ${fmtClock(d)}`;
+
+  const start = dateFrom ? fmtMoment(dateFrom) : 'Start';
+  if (!dateTo) return `${start} \u2013 End`;
+  const sameDay = dateFrom !== undefined && fmtDay(dateFrom) === fmtDay(dateTo);
+  return `${start} \u2013 ${sameDay ? fmtClock(dateTo) : fmtMoment(dateTo)}`;
+}
+
 export interface DateTimeRangePickerProps {
   preset?: DateRangePreset;
   onPresetChange?: (preset: DateRangePreset) => void;
@@ -46,6 +66,8 @@ export interface DateTimeRangePickerProps {
    * trigger takes the chevron's place and switches back to it.
    */
   defaultPreset?: DateRangePreset;
+  /** Replaces what the reset × does, e.g. to undo a histogram zoom before falling back to `defaultPreset`. */
+  onReset?: () => void;
   /** The trigger Button. */
   ref?: Ref<HTMLButtonElement>;
 }
@@ -63,6 +85,7 @@ export function DateTimeRangePicker({
   presets,
   size = 'sm',
   defaultPreset,
+  onReset,
   ref,
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
@@ -123,8 +146,7 @@ export function DateTimeRangePicker({
 
   const canReset = defaultPreset !== undefined && shownPreset === 'custom';
   const editingCustomRange = shownPreset === 'custom' && !presetMenuOpen;
-  const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
-  const label = shownPreset === 'custom' ? customLabel : datePresetLabel;
+  const label = shownPreset === 'custom' ? customRangeLabel(dateFrom, dateTo) : datePresetLabel;
   const trigger = (
     <Button
       ref={ref}
@@ -141,7 +163,9 @@ export function DateTimeRangePicker({
     <JoinReset
       size={size}
       reset={
-        canReset && <ResetRangeButton size={size} disabled={disabled} onReset={() => applyPreset(defaultPreset)} />
+        canReset && (
+          <ResetRangeButton size={size} disabled={disabled} onReset={onReset ?? (() => applyPreset(defaultPreset))} />
+        )
       }
     >
       {editingCustomRange && (

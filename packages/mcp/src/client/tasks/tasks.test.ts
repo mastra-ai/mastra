@@ -93,6 +93,32 @@ describe('MCPClient with MCP Tasks', () => {
     expect(update.params.inputResponses).toEqual({ approve: { action: 'accept', content: { ok: true } } });
   });
 
+  it('writes the MCP task id and each status change to the tool output stream', async () => {
+    const { call } = await connect({
+      tasks: true,
+      inputRequests: async () => ({ action: 'accept', content: { ok: true } }),
+    });
+    const writes: unknown[] = [];
+    const writer = { write: async (data: unknown) => void writes.push(data) };
+
+    await call('confirm', {}, { writer });
+
+    const taskId = server!.requests.find(request => request.method === 'tasks/get')!.params.taskId;
+    const statuses = writes.map(write => (write as { status: string }).status);
+    expect(writes[0]).toEqual({
+      type: 'mcp-task',
+      taskId,
+      status: 'working',
+      createdAt: expect.any(String),
+      serverName: 'reports',
+    });
+    expect(statuses).toContain('input_required');
+    expect(statuses.at(-1)).toBe('completed');
+    // One write per change, not per poll.
+    expect(statuses.every((status, index) => status !== statuses[index - 1])).toBe(true);
+    expect(writes.every(write => (write as { taskId: string }).taskId === taskId)).toBe(true);
+  });
+
   it('fails a task needing input when no inputRequests handler is configured', async () => {
     const { call } = await connect();
 
@@ -189,12 +215,13 @@ describe('MCPClient with MCP Tasks', () => {
 
     const pending = caught(call('gated'));
     await waitFor(() => methods().includes('tasks/get'));
-    const initializes = methods().filter(method => method === 'initialize').length;
     await mcp!.disconnect();
 
     expect(await pending).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_POLL_FAILED' });
+    // Any request after the call ends (server/discover, initialize, tasks/get) would be a reconnect.
+    const seen = methods().length;
     await new Promise(resolve => setTimeout(resolve, 500));
-    expect(methods().filter(method => method === 'initialize')).toHaveLength(initializes);
+    expect(methods().slice(seen)).toEqual([]);
   });
 
   it('keeps waiting for a task while a proxy answers 503 for the server', async () => {
