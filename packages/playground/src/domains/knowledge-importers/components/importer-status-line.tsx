@@ -3,9 +3,9 @@ import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTime
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { describePages, pagesTouched } from '../runs';
 import { shortSchedule } from '../schedule';
-import { attentionReason, importerState, isConnected } from '../status';
+import { attentionReason, importerState } from '../status';
 
-/** "Every 15 min · last run 3m ago · 107 pages", "Not set up", "Choose a connection", … */
+/** "Every 15 min · last run 3m ago · 107 pages", "Not set up", "Connection needs re-auth", … */
 export function ImporterStatusLine({ summary }: { summary: KnowledgeImporterSummary }) {
   return (
     <Txt as="span" variant="caption" tone="muted" className="truncate">
@@ -15,7 +15,6 @@ export function ImporterStatusLine({ summary }: { summary: KnowledgeImporterSumm
 }
 
 function StatusWords({ summary }: { summary: KnowledgeImporterSummary }) {
-  if (!isConnected(summary)) return 'Not connected to this project';
   const state = importerState(summary);
   const run = summary.lastRun;
   if (state === 'running') return run?.kind === 'dry-run' ? 'Previewing now…' : 'Importing now…';

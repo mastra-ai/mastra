@@ -12,8 +12,9 @@ import {
   buildNotionPreview,
   buildNotionSummary,
   buildRun,
-  buildSlackSummary,
-  notionConnections,
+  buildLinearSummary,
+  NOTION_KEY,
+  PLATFORM_CONNECT_URL,
 } from './fixtures/importers';
 import { Link } from '@/lib/link';
 import { stubLinkPaths } from '@/test/link-provider';
@@ -22,15 +23,22 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // Custom server routes mount at their own path, not under /api.
 const API = `${TEST_BASE_URL}/knowledge-importers`;
+const NOTION = `${API}/${encodeURIComponent(NOTION_KEY)}`;
+const NOTION_HEADING = 'Notion — Acme workspace';
 const POLL_TIMEOUT = { timeout: 5000 };
 const NARROWING_COPY = 'Stops new imports. Knowledge already imported stays.';
 const READ_ONLY_COPY = 'Read-only: ask an org admin';
+const CONNECT_LINK = 'Add or link a connector';
+const NO_CONNECT_URL_CAPTION = 'Link connectors to this project on the Mastra Platform.';
 
-const useSummaries = (summaries: KnowledgeImporterSummary[], canWrite = true) => {
+const useSummaries = (
+  summaries: KnowledgeImporterSummary[],
+  canWrite = true,
+  connectUrl: string | null = PLATFORM_CONNECT_URL,
+) => {
   server.use(
-    http.get(API, () => HttpResponse.json(buildListImportersResponse(summaries, canWrite))),
-    http.get(`${API}/:importerId/connections`, () => HttpResponse.json(notionConnections)),
-    http.get(`${API}/:importerId/runs`, () => HttpResponse.json({ runs: [] })),
+    http.get(API, () => HttpResponse.json(buildListImportersResponse(summaries, canWrite, connectUrl))),
+    http.get(`${API}/:key/runs`, () => HttpResponse.json({ runs: [] })),
   );
 };
 
@@ -54,12 +62,12 @@ const addTeamspace = async (name: string) => {
 };
 
 describe('Knowledge importers page', () => {
-  describe('when the server lists an unconnected importer before a connected one', () => {
-    beforeEach(() => useSummaries([buildSlackSummary(), buildNotionSummary()]));
+  describe('when one connection is linked', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
 
-    it('opens the first connected importer', async () => {
+    it('opens it, named by provider and account', async () => {
       renderPage();
-      expect(await screen.findByRole('heading', { name: 'Notion' })).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: NOTION_HEADING })).toBeTruthy();
     });
 
     it('shows the importer description in the detail header', async () => {
@@ -69,29 +77,184 @@ describe('Knowledge importers page', () => {
       ).toBeTruthy();
     });
 
+    it('names the account under the provider in the list row', async () => {
+      renderPage();
+      const row = await screen.findByTestId(`importer-row-${NOTION_KEY}`);
+      expect(within(row).getByText('Notion')).toBeTruthy();
+      expect(within(row).getByText('Acme workspace')).toBeTruthy();
+    });
+
     it('summarises the schedule in the list row', async () => {
       renderPage();
-      const row = await screen.findByTestId('importer-row-notion');
+      const row = await screen.findByTestId(`importer-row-${NOTION_KEY}`);
       expect(within(row).getByText(/Every 15 min · last run/)).toBeTruthy();
     });
 
-    it('keeps the unconnected importer in a collapsed group', async () => {
+    it('has no group for unlinked importers', async () => {
       renderPage();
-      await screen.findByTestId('importer-row-notion');
-      expect(screen.queryByTestId('importer-row-slack')).toBeNull();
+      await screen.findByTestId(`importer-row-${NOTION_KEY}`);
+      expect(screen.queryByText(/Not connected/)).toBeNull();
     });
 
-    it('marks the unconnected importer once the group is opened', async () => {
+    it('offers no connection picker', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: /Not connected · 1/ }));
-      const row = await screen.findByTestId('importer-row-slack');
-      expect(within(row).getByText('Not connected to this project')).toBeTruthy();
+      await screen.findByRole('heading', { name: NOTION_HEADING });
+      expect(screen.queryByRole('combobox', { name: /connection/i })).toBeNull();
+    });
+  });
+
+  describe('when the project links two Linear accounts with the same name and one with its own', () => {
+    let savedTo: string[];
+
+    beforeEach(() => {
+      savedTo = [];
+      useSummaries([
+        buildLinearSummary('conn_01JA948KS', 'Mastra'),
+        buildLinearSummary('conn_01JB71Q2Z', 'Mastra'),
+        buildLinearSummary('conn_01JCXYZ00', 'Acme'),
+      ]);
+      server.use(
+        http.put(`${API}/:key/settings`, ({ params }) => {
+          savedTo.push(String(params.key));
+          return HttpResponse.json(
+            buildLinearSummary('conn_01JB71Q2Z', 'Mastra', {
+              settings: {
+                ...buildLinearSummary('conn_01JB71Q2Z', 'Mastra').settings,
+                enabled: true,
+                schedule: '0 * * * *',
+                version: 1,
+                source: 'saved',
+              },
+            }),
+          );
+        }),
+      );
     });
 
-    it('hides import controls for the unconnected importer', async () => {
+    it('lists one entry per connection', async () => {
+      renderPage();
+      const nav = await screen.findByRole('navigation', { name: 'Importers' });
+      expect(within(nav).getAllByRole('button', { name: /Linear/ })).toHaveLength(3);
+    });
+
+    it('tells same-named accounts apart by the end of the connection id', async () => {
+      renderPage();
+      expect(
+        within(await screen.findByTestId('importer-row-linear:conn_01JA948KS')).getByText('Mastra · …A948KS'),
+      ).toBeTruthy();
+      expect(
+        within(screen.getByTestId('importer-row-linear:conn_01JB71Q2Z')).getByText('Mastra · …B71Q2Z'),
+      ).toBeTruthy();
+    });
+
+    it('shows a uniquely named account as is', async () => {
+      renderPage();
+      const row = await screen.findByTestId('importer-row-linear:conn_01JCXYZ00');
+      expect(within(row).getByText('Acme')).toBeTruthy();
+    });
+
+    it('names the provider, account and connection in the detail header', async () => {
+      renderPage();
+      expect(await screen.findByRole('heading', { name: 'Linear — Mastra (…A948KS)' })).toBeTruthy();
+    });
+
+    it('opens the entry the address names', async () => {
+      renderPage('/knowledge/importers?importer=linear%3Aconn_01JB71Q2Z');
+      expect(await screen.findByRole('heading', { name: 'Linear — Mastra (…B71Q2Z)' })).toBeTruthy();
+    });
+
+    it('opens another entry when its row is chosen', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByTestId('importer-row-linear:conn_01JCXYZ00'));
+      expect(await screen.findByRole('heading', { name: 'Linear — Acme' })).toBeTruthy();
+    });
+
+    it("saves to the chosen connection's own settings", async () => {
+      renderPage('/knowledge/importers?importer=linear%3Aconn_01JB71Q2Z');
+      fireEvent.click(await screen.findByRole('radio', { name: /Hourly/ }));
+      fireEvent.click(
+        within(await screen.findByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Save' }),
+      );
+      await waitFor(() => expect(savedTo).toEqual(['linear:conn_01JB71Q2Z']));
+    });
+  });
+
+  describe('when a linked connection needs re-auth', () => {
+    beforeEach(() =>
+      useSummaries([
+        buildNotionSummary({
+          connection: { id: 'conn_notion', status: 'needs_reauth', accountName: 'Acme workspace' },
+        }),
+      ]),
+    );
+
+    it('still lists the importer and says why it needs attention', async () => {
+      renderPage();
+      const row = await screen.findByTestId(`importer-row-${NOTION_KEY}`);
+      expect(within(row).getByText(/^Connection needs re-auth/)).toBeTruthy();
+    });
+  });
+
+  describe('when the server knows the Platform Connect page', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('links to it from the sidebar', async () => {
+      renderPage();
+      const nav = await screen.findByRole('navigation', { name: 'Importers' });
+      const link = within(nav).getByRole('link', { name: CONNECT_LINK });
+      expect(link.getAttribute('href')).toBe(PLATFORM_CONNECT_URL);
+    });
+
+    it('opens it in a new tab without handing over the opener', async () => {
+      renderPage();
+      const link = await screen.findByRole('link', { name: CONNECT_LINK });
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+  });
+
+  describe('when the server has no Platform Connect page', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()], true, null));
+
+    it('says where to link connectors', async () => {
+      renderPage();
+      expect(await screen.findByText(NO_CONNECT_URL_CAPTION)).toBeTruthy();
+    });
+
+    it('offers no link', async () => {
+      renderPage();
+      await screen.findByText(NO_CONNECT_URL_CAPTION);
+      expect(screen.queryByRole('link', { name: CONNECT_LINK })).toBeNull();
+    });
+  });
+
+  describe('when the address names an importer that is not linked', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('opens the first linked importer instead', async () => {
       renderPage('/knowledge/importers?importer=slack');
-      await screen.findByRole('heading', { name: 'Slack' });
-      expect(screen.queryByRole('button', { name: 'Preview import' })).toBeNull();
+      expect(await screen.findByRole('heading', { name: NOTION_HEADING })).toBeTruthy();
+    });
+  });
+
+  describe('when no importer is linked to this project', () => {
+    beforeEach(() => useSummaries([]));
+
+    it('says no connectors are linked yet', async () => {
+      renderPage();
+      expect(await screen.findByText('No connectors are linked to this project yet.')).toBeTruthy();
+    });
+
+    it('offers the Platform Connect link', async () => {
+      renderPage();
+      const link = await screen.findByRole('link', { name: CONNECT_LINK });
+      expect(link.getAttribute('href')).toBe(PLATFORM_CONNECT_URL);
+    });
+
+    it('lists no importers', async () => {
+      renderPage();
+      await screen.findByText('No connectors are linked to this project yet.');
+      expect(screen.queryByRole('navigation', { name: 'Importers' })).toBeNull();
     });
   });
 
@@ -178,7 +341,7 @@ describe('Knowledge importers page', () => {
       saved = undefined;
       useSummaries([buildNotionSummary()]);
       server.use(
-        http.put<never, SaveKnowledgeImporterSettingsParams>(`${API}/notion/settings`, async ({ request }) => {
+        http.put<never, SaveKnowledgeImporterSettingsParams>(`${NOTION}/settings`, async ({ request }) => {
           const body = await request.json();
           saved = body;
           return HttpResponse.json(
@@ -201,7 +364,6 @@ describe('Knowledge importers page', () => {
       expect(saved).toEqual({
         enabled: true,
         schedule: null,
-        connectionId: null,
         options: { teamspaces: ['Engineering', 'Design'] },
         expectedVersion: 3,
       });
@@ -248,7 +410,7 @@ describe('Knowledge importers page', () => {
                 });
           return HttpResponse.json(buildListImportersResponse([latest]));
         }),
-        http.put(`${API}/notion/settings`, () =>
+        http.put(`${NOTION}/settings`, () =>
           HttpResponse.json(
             { error: { code: 'version_conflict', message: 'Settings changed since version 3' } },
             { status: 409 },
@@ -286,7 +448,7 @@ describe('Knowledge importers page', () => {
       polls = 0;
       useSummaries([buildNotionSummary()]);
       server.use(
-        http.post(`${API}/notion/dry-run`, async ({ request }) => {
+        http.post(`${NOTION}/dry-run`, async ({ request }) => {
           dryRunBody = await request.json();
           return HttpResponse.json({ runId: 'run_dry' }, { status: 202 });
         }),
@@ -310,7 +472,6 @@ describe('Knowledge importers page', () => {
         settings: {
           enabled: true,
           schedule: null,
-          connectionId: null,
           options: { teamspaces: ['Engineering', 'Design'] },
         },
       });
@@ -353,7 +514,7 @@ describe('Knowledge importers page', () => {
     beforeEach(() => {
       useSummaries([buildNotionSummary()]);
       server.use(
-        http.post(`${API}/notion/dry-run`, () => HttpResponse.json({ runId: 'run_dry' }, { status: 202 })),
+        http.post(`${NOTION}/dry-run`, () => HttpResponse.json({ runId: 'run_dry' }, { status: 202 })),
         http.get(`${API}/runs/run_dry`, () =>
           HttpResponse.json(
             buildRun({ status: 'failed', completedAt: '2026-10-29T13:00:01.000Z', error: 'Notion API returned 401' }),
@@ -374,7 +535,7 @@ describe('Knowledge importers page', () => {
     beforeEach(() => {
       useSummaries([buildNotionSummary()]);
       server.use(
-        http.post(`${API}/notion/dry-run`, () =>
+        http.post(`${NOTION}/dry-run`, () =>
           HttpResponse.json({ error: { code: 'run_in_progress', message: 'busy' } }, { status: 409 }),
         ),
       );
@@ -396,8 +557,8 @@ describe('Knowledge importers page', () => {
       runStarted = false;
       useSummaries([buildNotionSummary()]);
       server.use(
-        http.get(`${API}/notion/runs`, () => HttpResponse.json({ runs: [buildNotionPreview()] })),
-        http.post(`${API}/notion/run`, () => {
+        http.get(`${NOTION}/runs`, () => HttpResponse.json({ runs: [buildNotionPreview()] })),
+        http.post(`${NOTION}/run`, () => {
           runStarted = true;
           return HttpResponse.json({ runId: 'run_real' }, { status: 202 });
         }),
@@ -458,7 +619,7 @@ describe('Knowledge importers page', () => {
     beforeEach(() => {
       useSummaries([buildNotionSummary()]);
       server.use(
-        http.put(`${API}/notion/settings`, () =>
+        http.put(`${NOTION}/settings`, () =>
           HttpResponse.json({ error: { code: 'forbidden', message: 'Write access required' } }, { status: 403 }),
         ),
       );
@@ -478,7 +639,7 @@ describe('Knowledge importers page', () => {
     beforeEach(() => {
       useSummaries([buildNotionSummary()]);
       server.use(
-        http.post(`${API}/notion/dry-run`, () =>
+        http.post(`${NOTION}/dry-run`, () =>
           HttpResponse.json({ error: { code: 'forbidden', message: 'Write access required' } }, { status: 403 }),
         ),
       );

@@ -6,9 +6,9 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { ConnectorLink } from '@/domains/knowledge-importers/components/connector-link';
 import { ImporterDetail } from '@/domains/knowledge-importers/components/importer-detail';
 import { ImporterList } from '@/domains/knowledge-importers/components/importer-list';
-import { isConnected } from '@/domains/knowledge-importers/status';
 import { useImporterSummaries } from '@/domains/knowledge-importers/use-knowledge-importers';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
@@ -70,22 +70,19 @@ export default function KnowledgeImportersPage() {
       <Shell>
         <EmptyState
           variant="fill"
-          titleSlot="No importers configured"
-          descriptionSlot="Importers registered on this server's Knowledge will show up here."
+          titleSlot="No connectors are linked to this project yet."
+          actionSlot={<ConnectorLink />}
         />
       </Shell>
     );
   }
 
   const requested = searchParams.get('importer');
-  const selected =
-    summaries.data.find(summary => summary.importerId === requested) ??
-    summaries.data.find(isConnected) ??
-    summaries.data[0];
+  const selected = summaries.data.find(summary => summary.key === requested) ?? summaries.data[0];
 
-  const select = (importerId: string) => {
+  const select = (key: string) => {
     const next = new URLSearchParams(searchParams);
-    next.set('importer', importerId);
+    next.set('importer', key);
     setSearchParams(next);
   };
 
@@ -93,11 +90,11 @@ export default function KnowledgeImportersPage() {
     <Shell fit>
       <div className="grid h-full min-h-0 grid-cols-1 gap-4 overflow-y-auto md:grid-cols-[18rem_minmax(0,1fr)] md:overflow-hidden">
         <aside className="px-3 pt-4 md:min-h-0 md:overflow-y-auto md:border-r md:border-border">
-          <ImporterList summaries={summaries.data} selectedId={selected.importerId} onSelect={select} />
+          <ImporterList summaries={summaries.data} selectedKey={selected.key} onSelect={select} />
         </aside>
         <div className="px-4 pt-4 md:min-h-0 md:overflow-y-auto">
           <div className="mx-auto flex max-w-4xl flex-col pb-6">
-            <ImporterDetail key={selected.importerId} summary={selected} />
+            <ImporterDetail key={selected.key} summary={selected} />
           </div>
         </div>
       </div>

@@ -5,15 +5,11 @@ import type {
   SaveKnowledgeImporterSettingsParams,
 } from '@mastra/client-js';
 
-/** Select value for `connectionId: null` — the server picks the single linked connection. */
-export const AUTOMATIC_CONNECTION = 'automatic';
-
-/** The editable form. Wire `null`s become `''`/`AUTOMATIC_CONNECTION` here and go back at the boundary. */
+/** The editable form. A wire `null` schedule becomes `''` here and goes back at the boundary. */
 export interface ImporterDraft {
   enabled: boolean;
   /** `''` keeps the env/default schedule. */
   schedule: string;
-  connectionId: string;
   options: Record<string, KnowledgeImporterOptionValue>;
 }
 
@@ -21,7 +17,6 @@ export function draftFromSettings(settings: KnowledgeImporterSettings): Importer
   return {
     enabled: settings.enabled,
     schedule: settings.schedule ?? '',
-    connectionId: settings.connectionId ?? AUTOMATIC_CONNECTION,
     options: settings.options,
   };
 }
@@ -31,7 +26,6 @@ export function draftToSettings(draft: ImporterDraft): Omit<SaveKnowledgeImporte
   return {
     enabled: draft.enabled,
     schedule: schedule === '' ? null : schedule,
-    connectionId: draft.connectionId === AUTOMATIC_CONNECTION ? null : draft.connectionId,
     options: draft.options,
   };
 }
@@ -57,25 +51,17 @@ export function describeAllowlist(values: readonly string[], label: string): str
   return values.length === 1 ? 'Imports only this one.' : `Imports only these ${values.length}.`;
 }
 
-export type ConnectionGate =
-  /** No connection linked to this project: no run, dry-run or enable controls at all. */
-  { kind: 'hidden' } | { kind: 'disabled'; reason: string } | { kind: 'enabled' };
+export type ConnectionGate = { kind: 'disabled'; reason: string } | { kind: 'enabled' };
 
-export function connectionGate(
-  connection: { status: KnowledgeImporterConnectionStatus; message?: string },
-  draftConnectionId: string,
-): ConnectionGate {
+export function connectionGate(connection: {
+  status: KnowledgeImporterConnectionStatus;
+  message?: string;
+}): ConnectionGate {
   switch (connection.status) {
-    case 'none':
-      return { kind: 'hidden' };
     case 'needs_reauth':
       return { kind: 'disabled', reason: connection.message ?? 'The connection needs to be re-authorized.' };
     case 'error':
       return { kind: 'disabled', reason: connection.message ?? 'The connection is failing.' };
-    case 'ambiguous':
-      return draftConnectionId === AUTOMATIC_CONNECTION
-        ? { kind: 'disabled', reason: 'Several connections are linked — choose one first.' }
-        : { kind: 'enabled' };
     case 'ok':
       return { kind: 'enabled' };
   }
