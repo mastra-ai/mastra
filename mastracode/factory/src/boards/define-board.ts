@@ -534,6 +534,14 @@ export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
+  return compileBoardDefinition(config);
+}
+
+/** Validates and resolves a board declaration. Factory's own boards use this directly. */
+export function compileBoardDefinition<
+  const BoardId extends string,
+  const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
+>(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
   validateBoardIdentifier(config.id, 'Board id');
   const boardName = resolveName(config.name, config.title, `Board "${config.id}"`);
