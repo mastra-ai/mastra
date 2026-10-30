@@ -37,9 +37,12 @@ function startRedis(port: number): ChildProcess {
   return spawn('redis-server', ['--port', String(port), '--save', '', '--appendonly', 'no'], { stdio: 'ignore' });
 }
 
+const redisAnswers = (port: number) =>
+  spawnSync('redis-cli', ['-p', String(port), 'ping'], { encoding: 'utf8' }).stdout.trim() === 'PONG';
+
 async function waitForRedis(port: number) {
   for (let i = 0; i < 200; i++) {
-    if (spawnSync('redis-cli', ['-p', String(port), 'ping'], { encoding: 'utf8' }).stdout.trim() === 'PONG') return;
+    if (redisAnswers(port)) return;
     await sleep(25);
   }
   throw new Error(`redis on ${port} did not start`);
@@ -101,12 +104,14 @@ async function runOnce(port: number, mode: string) {
   } catch {
     outcome = 'rejected';
   }
-  process.stdout.write(`${JSON.stringify({ outcome, ms: Date.now() - start })}\n`);
   redis.kill('SIGKILL');
-  process.exit(0);
+  // Wait for the pipe to flush; process.exit can drop an asynchronous stdout write.
+  process.stdout.write(`${JSON.stringify({ outcome, ms: Date.now() - start })}\n`, () => process.exit(0));
 }
 
 async function lane(port: number, mode: string, runs: number) {
+  // The lane owns its port: refuse one that is in use so a cleanup SHUTDOWN never hits a foreign server.
+  if (redisAnswers(port)) throw new Error(`port ${port} already has a Redis server; free it or set BASE_PORT`);
   const outcomes: string[] = [];
   for (let run = 0; run < runs; run++) {
     const child = spawnSync(process.execPath, [...process.execArgv, SCRIPT, '--run', String(port), '--mode', mode], {

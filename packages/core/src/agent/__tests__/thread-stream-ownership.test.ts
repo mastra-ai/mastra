@@ -680,10 +680,12 @@ describe('thread ownership (#24878)', () => {
       acksToDrop = 0;
       droppedAcks = 0;
       enqueued = 0;
+      onDroppedAck?: () => void;
       override async publish(topic: string, event: any): Promise<void> {
         if (event.data?.type === 'signal-enqueued') this.enqueued++;
         if (event.data?.type === 'signal-accepted' && this.droppedAcks < this.acksToDrop) {
           this.droppedAcks++;
+          this.onDroppedAck?.();
           return;
         }
         return super.publish(topic, event);
@@ -739,6 +741,43 @@ describe('thread ownership (#24878)', () => {
       expect((agent as any).stream).not.toHaveBeenCalled();
       run.complete();
       cleanup();
+    }, 20_000);
+
+    it('runs the signal once when the run ends after admitting it and its acknowledgement is lost', async () => {
+      const pubsub = new AckDroppingPubSub();
+      pubsub.acksToDrop = 1;
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const senderRuntime = new AgentThreadStreamRuntime();
+      const threadId = 'lost-ack-ended-thread';
+      const resourceId = 'lost-ack-user';
+      const agent = {
+        id: 'lost-ack-agent',
+        stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({ runId: options.runId })),
+      } as unknown as Agent<any, any, any, any>;
+      const ownerSubscription = await ownerRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+      const subscription = await senderRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+      const run = registerRun(ownerRuntime, agent, pubsub, 'remote-ending', threadId, resourceId);
+      await run.registered;
+      await vi.waitFor(() => expect(subscription.activeRunId()).toBe('remote-ending'));
+      // The owner admits the signal, then the run ends and releases its lease while the ack is lost.
+      pubsub.onDroppedAck = () => run.complete();
+      const result = senderRuntime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'admitted then ended' },
+        { resourceId, threadId },
+        pubsub,
+      );
+      const accepted = await result.accepted;
+      // The owner's follow-up drain ran the admitted signal; the sender's retry was
+      // re-forwarded to that run and deduplicated instead of waking a second run.
+      expect(accepted.action).toBe('deliver');
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      const stream = (agent as any).stream;
+      expect(stream).toHaveBeenCalledTimes(1);
+      expect(stream.mock.calls[0][1].runId).toBe(accepted.runId);
+      expect(ownerRuntime.drainPendingSignals('remote-ending', pubsub)).toEqual([]);
+      subscription.unsubscribe();
+      ownerSubscription.unsubscribe();
     }, 20_000);
   });
 });
