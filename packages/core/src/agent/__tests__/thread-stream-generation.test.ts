@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '../agent';
+import { verifyRunLease } from '../run-lease-fence';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
@@ -79,7 +80,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       await original.registerRun(agent, a.output, options, pubsub, { strict: true, generation: 1 });
       expect(await original.isRunHoldingThreadLease(pubsub, runId, 'generation-thread', 'generation-user')).toBe(true);
       await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
-      expect(await pubsub.getLeaseOwner(key)).not.toBe(runId);
+      expect(await pubsub.getLeaseOwner(key)).toBe(`mastra:thread-lease:${JSON.stringify([runId, 'generation', 2])}`);
       b.push(start);
       b.push(text('Recovered answer'));
       await vi.waitFor(() => expect(read.some(part => part.type === 'text-delta')).toBe(true));
@@ -184,6 +185,63 @@ describe('thread stream: runs taken over by a later claim generation', () => {
         true,
       );
     } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
+  it("keeps a recovery's thread lease when the superseded execution in the same process finishes", async () => {
+    const { pubsub, original, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { strict: true, generation: 1 });
+    const b = controlledOutput('run-1');
+    await original.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    const successorOwner = await pubsub.getLeaseOwner(key);
+
+    a.end('failed');
+    await nextTicks(30);
+
+    try {
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await original.isRunHoldingThreadLease(pubsub, 'run-1', 'generation-thread', 'generation-user')).toBe(
+        true,
+      );
+    } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps a tool call in flight when the run moves its lease onto the generation it learned', async () => {
+    const { pubsub, original, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { strict: true });
+    expect(await pubsub.getLeaseOwner(key)).toBe('run-1');
+
+    // Hold the next owner read, as a slow backend would, so the tool call's fence check spans the move.
+    const read = Promise.withResolvers<void>();
+    const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
+    const held = vi.spyOn(pubsub, 'getLeaseOwner').mockImplementationOnce(async k => {
+      await read.promise;
+      return getLeaseOwner(k);
+    });
+    const toolCall = verifyRunLease('run-1');
+    await vi.waitFor(() => expect(held).toHaveBeenCalled());
+    held.mockRestore();
+
+    const b = controlledOutput('run-1');
+    await original.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 1 });
+    expect(await pubsub.getLeaseOwner(key)).toBe(`mastra:thread-lease:${JSON.stringify(['run-1', 'generation', 1])}`);
+    read.resolve();
+
+    try {
+      await expect(toolCall).resolves.toBeUndefined();
+    } finally {
+      a.end();
       b.end();
       subscription.unsubscribe();
     }

@@ -435,6 +435,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
    * Kept on the record, not on the run id: a later execution reusing the id owns its own lease again.
    */
   lateRetakeHandoff?: boolean;
+  /** The owner this record took the thread lease under. Ending releases only this owner. */
+  leaseOwner?: string;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
@@ -994,15 +996,16 @@ export class AgentThreadStreamRuntime {
     return owner !== undefined && threadLeaseRunId(owner) === runId && !isRetakeLeaseOwner(owner);
   }
 
-  #threadLeaseOwner(
-    pubsub: PubSub | undefined,
-    runId: string,
-    generation = this.#getState(pubsub).threadRunsById.get(runId)?.generation,
-  ): string {
+  /**
+   * The owner `runId` holds its thread lease under. A run keeps the owner it acquired the lease with for as long as
+   * it holds it: a generation learned later must not change the owner its renewals, fence and release use. Pass
+   * `generation` only to name the owner a new acquisition takes.
+   */
+  #threadLeaseOwner(pubsub: PubSub | undefined, runId: string, generation?: number): string {
     if (this.#getPubSub(pubsub).__rawBus() instanceof EventEmitterPubSub) return threadLeaseOwner(runId);
-    return generation === undefined
-      ? (this.#getState(pubsub).leaseOwners.get(runId) ?? threadLeaseOwner(runId))
-      : threadLeaseOwner(runId, generation);
+    if (generation !== undefined) return threadLeaseOwner(runId, generation);
+    const state = this.#getState(pubsub);
+    return state.leaseOwners.get(runId) ?? threadLeaseOwner(runId, state.threadRunsById.get(runId)?.generation);
   }
 
   async #acquireThreadLease(
@@ -1057,14 +1060,22 @@ export class AgentThreadStreamRuntime {
    * identical. Also stops the renewal timer if one is running for
    * this run.
    */
-  #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string): void {
+  #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string, owner?: string): void {
     const resolved = this.#getPubSub(pubsub);
-    const owner = this.#threadLeaseOwner(pubsub, runId);
+    const state = this.#getState(resolved);
+    const current = this.#threadLeaseOwner(pubsub, runId);
+    // An execution whose run id a successor re-registered under its own owner gives back only what it held.
+    if (owner !== undefined && owner !== current && state.leaseOwners.has(runId)) {
+      void this.#getLeaseProvider(resolved)
+        .releaseLease(key, owner)
+        .catch(() => {});
+      return;
+    }
     this.#stopLeaseRenewal(resolved, runId);
     void this.#getLeaseProvider(resolved)
-      .releaseLease(key, owner)
+      .releaseLease(key, owner ?? current)
       .catch(() => {});
-    this.#releaseUnusedThreadControlSubscription(this.#getState(resolved), key);
+    this.#releaseUnusedThreadControlSubscription(state, key);
   }
 
   /**
@@ -1170,7 +1181,14 @@ export class AgentThreadStreamRuntime {
       let owner = await Promise.race([leaseProvider.getLeaseOwner(key).catch(() => unreachable), expiredAt]).finally(
         () => clearTimeout(expired),
       );
-      if (owner === expectedOwner) return;
+      // A check that began before this process moved the run onto a new owner (a generation learned at
+      // registration) reads the new owner; the run still holds the lease under it.
+      const heldByRun = (current: unknown) =>
+        current === expectedOwner ||
+        (state.leaseRenewalTimers.get(runId) !== timer &&
+          current !== undefined &&
+          current === state.leaseOwners.get(runId));
+      if (heldByRun(owner)) return;
       // This run's own retake holds the lease under a temporary token until it hands it to the run id, which a
       // queued tool call can still catch in flight. Nobody else took the thread, so the run keeps it.
       if (typeof owner === 'string' && threadLeaseRunId(owner) === runId && isRetakeLeaseOwner(owner)) {
@@ -1251,7 +1269,7 @@ export class AgentThreadStreamRuntime {
     // The record this attempt belongs to. A later run can register under the same id while this attempt is in
     // flight, so the marking below must use this reference and never a fresh lookup that could land on it.
     const record = state.threadRunsById.get(runId);
-    const expectedOwner = this.#threadLeaseOwner(pubsub, runId, record?.generation);
+    const expectedOwner = this.#threadLeaseOwner(pubsub, runId);
     const sentAt = Date.now();
     const leaseProvider = this.#getLeaseProvider(pubsub);
     const newToken = () => encodeThreadLeaseOwner([runId, 'retake', globalThis.crypto.randomUUID()]);
@@ -1488,20 +1506,16 @@ export class AgentThreadStreamRuntime {
     // `transferLease` is a required `LeaseProvider` method. Atomic backends
     // (Redis, in-memory) swap the key gap-free; backends that can't be atomic
     // implement it as release+acquire internally and own that race cost.
+    const toOwner = this.#threadLeaseOwner(resolved, toRunId);
     const held = await leaseProvider
-      .transferLease(
-        key,
-        this.#threadLeaseOwner(resolved, fromRunId),
-        this.#threadLeaseOwner(resolved, toRunId),
-        AGENT_THREAD_LEASE_TTL_MS,
-      )
+      .transferLease(key, this.#threadLeaseOwner(resolved, fromRunId), toOwner, AGENT_THREAD_LEASE_TTL_MS)
       .catch(() => false);
     // Move the renewal timer to the new owner regardless: the old timer is
     // owner-guarded and would only no-op now, and the new owner needs its
     // own keep-alive for long drains.
     this.#stopLeaseRenewal(resolved, fromRunId);
     if (held) {
-      this.#startLeaseRenewal(resolved, key, toRunId);
+      this.#startLeaseRenewal(resolved, key, toRunId, toOwner);
     }
     return held;
   }
@@ -1589,14 +1603,13 @@ export class AgentThreadStreamRuntime {
       // Old owner lost the lease before the handoff — fall through to acquire.
     }
     const leaseProvider = this.#getLeaseProvider(resolved);
-    const result = await this.#acquireThreadLease(
-      resolved,
-      key,
-      toRunId,
-      this.#threadLeaseOwner(resolved, toRunId),
-    ).catch(() => ({ acquired: false as boolean, owner: undefined as string | undefined }));
+    const owner = this.#threadLeaseOwner(resolved, toRunId);
+    const result = await this.#acquireThreadLease(resolved, key, toRunId, owner).catch(() => ({
+      acquired: false as boolean,
+      owner: undefined as string | undefined,
+    }));
     if (result.acquired) {
-      this.#startLeaseRenewal(resolved, key, toRunId);
+      this.#startLeaseRenewal(resolved, key, toRunId, owner);
       return { acquired: true, owner: toRunId };
     }
     return this.#waitForRetakeOwner(leaseProvider, key, result);
@@ -4377,15 +4390,17 @@ export class AgentThreadStreamRuntime {
       // starts: if the acquire landed server-side but the response failed,
       // skipping renewal would let the lease expire mid-run; renewal
       // self-stops when we don't own the key.
-      const lease = takesLeaseFrom
-        ? await this.#acquireOrTransferThreadLease(resolvedPubSub, key, output.runId, takesLeaseFrom)
-        : await this.#acquireThreadLease(
-            resolvedPubSub,
-            key,
-            output.runId,
-            this.#threadLeaseOwner(resolvedPubSub, output.runId, record.generation),
-          ).catch(() => ({ acquired: true as boolean }));
-      if (lease.acquired) this.#startLeaseRenewal(resolvedPubSub, key, output.runId);
+      if (takesLeaseFrom) {
+        // Starts the renewal under the owner it took the lease with.
+        await this.#acquireOrTransferThreadLease(resolvedPubSub, key, output.runId, takesLeaseFrom);
+      } else {
+        const owner = this.#threadLeaseOwner(resolvedPubSub, output.runId, record.generation);
+        const lease = await this.#acquireThreadLease(resolvedPubSub, key, output.runId, owner).catch(() => ({
+          acquired: true as boolean,
+        }));
+        if (lease.acquired) this.#startLeaseRenewal(resolvedPubSub, key, output.runId, owner);
+      }
+      record.leaseOwner = state.leaseOwners.get(output.runId);
       await this.#publishAndWait(pubsub, key, {
         type: 'run-registered',
         runId: output.runId,
@@ -4463,6 +4478,7 @@ export class AgentThreadStreamRuntime {
       streamSeq,
       generation: registrationOptions.generation,
       supersedes: registrationOptions.generation !== undefined,
+      leaseOwner: owner,
       ownershipLost: registrationOptions.ownershipLost,
       stepOwner: registrationOptions.stepOwner,
       lifecycle: 'running',
@@ -4728,7 +4744,7 @@ export class AgentThreadStreamRuntime {
         } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
-          this.#releaseThreadLease(pubsub, key, record.runId);
+          this.#releaseThreadLease(pubsub, key, record.runId, record.leaseOwner);
         }
       });
     });
@@ -7511,7 +7527,7 @@ export class AgentThreadStreamRuntime {
         leaseProvider,
         reservedKey,
         await leaseProvider
-          .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
+          .acquireLease(reservedKey, threadLeaseOwner(reservedRunId), AGENT_THREAD_LEASE_TTL_MS)
           .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined })),
       );
 
@@ -7559,7 +7575,7 @@ export class AgentThreadStreamRuntime {
 
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
-      this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
+      this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId, threadLeaseOwner(reservedRunId));
       try {
         const output = toModelOutput<OUTPUT>(
           await agent.stream(signal, {
