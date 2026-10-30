@@ -1,3 +1,4 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
@@ -5,7 +6,7 @@ import { queryKeys } from '../../../../api/keys';
 import type { BoardCatalogResponse } from '../../../../api/types';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
-import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/intake';
+import { fetchIntakeConfig, IntakeBindingConflictError, selectIntakeSource } from '../../factory/services/intake';
 import { updateFactoryDefaultModel } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
 import type { CreateFactoryDraft } from './useCreateFactoryFlow';
@@ -54,12 +55,22 @@ export function useCreateFactoryFromDraft({
     factoryProjectId: string;
     board: string | null;
   }) => {
-    await saveIntakeBinding.mutateAsync({
-      integrationId: input.integrationId,
-      sourceId: input.sourceId,
-      factoryProjectId: input.factoryProjectId,
-      board: input.board,
-    });
+    try {
+      await saveIntakeBinding.mutateAsync({
+        integrationId: input.integrationId,
+        sourceId: input.sourceId,
+        factoryProjectId: input.factoryProjectId,
+        board: input.board,
+      });
+    } catch (error) {
+      // A Jira project already feeding another factory with all its issues is not taken over; the
+      // new factory is still created and can take a labelled slice from Settings › Intake.
+      if (!(error instanceof IntakeBindingConflictError)) throw error;
+      toast.error(
+        'This Jira project already sends all its issues to another factory. Add a label filter in Settings › Intake to route some of them here.',
+      );
+      return;
+    }
     const config = await fetchIntakeConfig(baseUrl);
     const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
     if (selection === config[input.integrationId]) return;

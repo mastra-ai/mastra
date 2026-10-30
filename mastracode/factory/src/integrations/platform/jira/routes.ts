@@ -19,6 +19,8 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
 import { JiraApiError } from '../../jira/api.js';
+import { scopeJiraSourcesToProject } from '../../jira/binding-scope.js';
+import { unfilteredJiraScopes } from '../../jira/intake-jql.js';
 import type { JiraRulesIngress } from '../../jira/rules.js';
 import type { PlatformJiraIntegration } from './integration.js';
 
@@ -63,38 +65,6 @@ export interface MountJiraRoutesOptions {
    * the same automatic intake Linear has.
    */
   ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
-}
-
-/**
- * Narrow the caller's selected Jira projects to the ones that feed this
- * Factory project.
- *
- * A Jira issue carries no Factory project of its own, so without a binding
- * every board view would show every selected project's issues on whichever
- * Factory happened to be on screen. Only sources explicitly bound to a board
- * of this Factory pass — nothing is routed implicitly. Mirrors the Linear
- * routes' scoping semantics locally — the generic binding storage is
- * provider-neutral.
- */
-async function scopeSourceIdsToProject({
-  intake,
-  orgId,
-  factoryProjectId,
-  selectedIds,
-}: {
-  intake: IntakeStorage;
-  orgId: string;
-  factoryProjectId: string;
-  selectedIds: string[];
-}): Promise<Record<string, string>> {
-  const selected = new Set(selectedIds);
-  const intakeBoards: Record<string, string> = {};
-  for (const binding of await intake.listBindings({ orgId, integrationId: 'jira' })) {
-    if (binding.factoryProjectId === factoryProjectId && binding.board && selected.has(binding.sourceId)) {
-      intakeBoards[binding.sourceId] = binding.board;
-    }
-  }
-  return intakeBoards;
 }
 
 /**
@@ -280,21 +250,22 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
         // A board request only ever sees the projects routed to a board of
         // that Factory project; unscoped listing stays available to callers
         // that don't view a specific board.
-        const intakeBoards = factoryProjectId
-          ? await scopeSourceIdsToProject({
+        const projectScope = factoryProjectId
+          ? await scopeJiraSourcesToProject({
               intake,
               orgId: resolved.tenant.orgId,
               factoryProjectId,
               selectedIds,
             })
           : null;
-        const projectIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
-        if (projectIds.length === 0) {
+        const intakeBoards = projectScope?.intakeBoards ?? null;
+        const scopes = projectScope?.scopes ?? unfilteredJiraScopes(selectedIds);
+        if (scopes.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
 
         try {
-          const { issues, nextCursor } = await jira.listActiveIssues(after, projectIds);
+          const { issues, nextCursor } = await jira.listActiveIssues(after, scopes);
           const issuePayload = issues.map(issue => ({
             id: issue.externalId,
             identifier: issue.identifier,
@@ -353,7 +324,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           return c.json({ error: 'jira_intake_disabled', message: 'Jira intake is turned off in Settings.' }, 404);
         }
 
-        const intakeBoards = await scopeSourceIdsToProject({
+        const projectScope = await scopeJiraSourcesToProject({
           intake,
           orgId: resolved.tenant.orgId,
           factoryProjectId,
@@ -363,13 +334,19 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           orgId: resolved.tenant.orgId,
           externalSource: { type: 'issue', externalId: issueRef },
         });
-        if (!dispatch?.sourceId || !(dispatch.sourceId in intakeBoards)) {
+        const sourceId = dispatch?.sourceId;
+        if (!dispatch || !sourceId || !(sourceId in projectScope.intakeBoards)) {
           return c.json({ error: 'issue_not_found' }, 404);
         }
 
         try {
           const issue = await jira.intake.getIssue(dispatch);
-          if (!issue || issue.identifier.toUpperCase() !== identifier.toUpperCase()) {
+          // An issue another Factory's label filter takes reads like one that doesn't exist.
+          if (
+            !issue ||
+            issue.identifier.toUpperCase() !== identifier.toUpperCase() ||
+            !projectScope.takes(sourceId, issue.labels)
+          ) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           return c.json({

@@ -45,6 +45,8 @@ import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
 import { JiraApiClient, JiraApiError } from './api.js';
 import type { JiraEventRules, JiraRuleOverrides } from './default-rules.js';
 import { resolveJiraRules } from './default-rules.js';
+import { buildIntakeJql, unfilteredJiraScopes } from './intake-jql.js';
+import type { JiraIntakeScope } from './intake-jql.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
@@ -214,6 +216,7 @@ export class JiraIntegration implements FactoryIntegration {
   }
 
   readonly intake: Intake = {
+    bindingLabelFilters: true,
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: () => this.#listSources(),
     listItems: input => this.#listItems(input),
@@ -262,7 +265,7 @@ export class JiraIntegration implements FactoryIntegration {
 
   async #listItems({ sourceIds, cursor }: ListIntakeItemsInput): Promise<IntakeItemPage> {
     if (sourceIds.length === 0) return { items: [], nextCursor: null };
-    const page = await this.listActiveIssues(cursor, sourceIds);
+    const page = await this.listActiveIssues(cursor, unfilteredJiraScopes(sourceIds));
     return {
       items: page.issues.map(issue => ({
         source: { type: 'issue', externalId: issue.identifier, url: issue.url },
@@ -294,22 +297,28 @@ export class JiraIntegration implements FactoryIntegration {
   }
 
   async #listIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
-    const page = await this.listActiveIssues(input.cursor, input.sourceIds, input.labels);
+    const page = await this.listActiveIssues(
+      input.cursor,
+      input.sourceIds ? unfilteredJiraScopes(input.sourceIds) : undefined,
+      input.labels,
+    );
     return { issues: page.issues, nextCursor: page.nextCursor };
   }
 
   /**
    * One page of active issues (status category not Done), most recently
-   * updated first, optionally filtered to projects and labels. The
-   * capability cursor is Jira's opaque `nextPageToken` passed through.
+   * updated first, optionally narrowed to the given project scopes and labels.
+   * The capability cursor is Jira's opaque `nextPageToken` passed through.
    */
   async listActiveIssues(
     cursor?: string,
-    projectIds?: string[],
+    scopes?: JiraIntakeScope[],
     labels?: string[],
   ): Promise<{ issues: Array<IntakeIssue & { sourceId: string }>; nextCursor: string | null }> {
+    const jql = buildIntakeJql(scopes, labels);
+    if (jql === null) return { issues: [], nextCursor: null };
     const page = await this.api.searchIssues({
-      jql: buildIntakeJql(projectIds, labels),
+      jql,
       ...(cursor ? { nextPageToken: cursor } : {}),
     });
     return {
@@ -485,29 +494,6 @@ function maskEmail(email: string): string {
   const at = email.indexOf('@');
   if (at <= 0) return '***';
   return `${email[0]}***${email.slice(at)}`;
-}
-
-/**
- * Build the intake JQL. Source ids and labels come from stored org config /
- * request input, so both are sanitized before interpolation: numeric project
- * ids pass through bare, project keys are restricted to a safe charset, and
- * label quotes/backslashes are stripped.
- */
-function buildIntakeJql(projectIds?: string[], labels?: string[]): string {
-  const clauses: string[] = [];
-  const safeProjects = (projectIds ?? [])
-    .map(id => id.trim())
-    .filter(id => /^[A-Za-z0-9_]+$/.test(id))
-    .map(id => (/^\d+$/.test(id) ? id : `"${id}"`));
-  if (safeProjects.length > 0) {
-    clauses.push(`project IN (${safeProjects.join(', ')})`);
-  }
-  clauses.push('statusCategory != Done');
-  const safeLabels = [...new Set((labels ?? []).map(label => label.trim().replace(/["\\]/g, '')).filter(Boolean))];
-  if (safeLabels.length > 0) {
-    clauses.push(`labels IN (${safeLabels.map(label => `"${label}"`).join(', ')})`);
-  }
-  return `${clauses.join(' AND ')} ORDER BY updated DESC`;
 }
 
 /** Whether the issue is already in the requested target state. */

@@ -154,10 +154,18 @@ export const jiraProjects: JiraProject[] = [
 
 export function useJiraHandlers({
   config = baseConfig(),
-  bindings = [],
-}: { config?: IntakeConfig; bindings?: IntakeSourceBinding[] } = {}) {
+  bindings: initial = [],
+  conflict,
+}: {
+  config?: IntakeConfig;
+  bindings?: IntakeSourceBinding[];
+  /** Answer every binding save with this 409, as the server does when another factory takes the issues. */
+  conflict?: { message: string; conflicts: Array<{ factoryProjectId: string; labels: string[] | null }> };
+} = {}) {
   const saved = useIntakeHandlers({ config });
+  let bindings = initial;
   const savedBindings: BindingUpdate[] = [];
+  const deletedBindings: Array<Record<string, string>> = [];
   server.use(
     http.get(JIRA_STATUS_URL, () => HttpResponse.json(jiraReadyStatus)),
     http.get(JIRA_PROJECTS_URL, () => HttpResponse.json({ projects: jiraProjects })),
@@ -165,11 +173,28 @@ export function useJiraHandlers({
     http.put<Record<string, never>, BindingUpdate>(BINDINGS_URL, async ({ request }) => {
       const body = await request.json();
       savedBindings.push(body);
-      const next = body.factoryProjectId === null ? [] : [{ ...body, factoryProjectId: body.factoryProjectId }];
-      return HttpResponse.json({ bindings: next });
+      if (conflict) return HttpResponse.json({ error: 'binding_conflict', ...conflict }, { status: 409 });
+      const factoryProjectId = body.factoryProjectId;
+      if (!factoryProjectId) return HttpResponse.json({ error: 'use_delete' }, { status: 400 });
+      // Jira keeps one binding per factory; other factories' bindings of the project stay.
+      bindings = [
+        ...bindings.filter(
+          binding => !(binding.sourceId === body.sourceId && binding.factoryProjectId === factoryProjectId),
+        ),
+        { ...body, factoryProjectId, labels: body.labels ?? null },
+      ];
+      return HttpResponse.json({ bindings });
+    }),
+    http.delete(BINDINGS_URL, ({ request }) => {
+      const query = Object.fromEntries(new URL(request.url).searchParams);
+      deletedBindings.push(query);
+      bindings = bindings.filter(
+        binding => !(binding.sourceId === query.sourceId && binding.factoryProjectId === query.factoryProjectId),
+      );
+      return HttpResponse.json({ bindings });
     }),
   );
-  return { saved, savedBindings };
+  return { saved, savedBindings, deletedBindings };
 }
 
 export function useIncidentioHandlers({
