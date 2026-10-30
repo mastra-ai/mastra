@@ -822,7 +822,6 @@ export function getObservabilityStorageCapabilities(
     aggregateTimeToFirstMeasures:
       newApiCore &&
       supportsTraceAggregateCore() &&
-      'timeToFirstToken.p50' in (coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY ?? {}) &&
       (declares(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE) ||
         declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE)) &&
       declares(OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE),

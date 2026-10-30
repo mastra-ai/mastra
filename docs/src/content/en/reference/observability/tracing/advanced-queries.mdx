@@ -870,7 +870,7 @@ Stores advertise support through the `aggregate-time-to-first-measures` feature,
 ```typescript
 const { capabilities } = await mastraClient.getObservabilityCapabilities()
 
-if (capabilities.aggregateTimeToFirstMeasures) {
+if (capabilities.traceAggregate && capabilities.aggregateTimeToFirstMeasures) {
   const { rows } = await mastraClient.aggregateTraces({
     timeRange: {
       from: '2026-08-01T00:00:00.000Z',
@@ -1015,7 +1015,14 @@ Aggregation uses the same span predicates as [`querySpans()`](#query-spans), wit
 
 `count` counts selected spans in each group or time bucket. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.
 
-`timeToFirstToken.*` and `timeToFirstChunk.*` read the span's own `timeToFirstTokenMs` and `timeToFirstChunkMs`, and skip spans without a value. Model generation spans and agent run spans both record them, so filter `spanType` to `model_generation` for per-model-call latency, or to `agent_run` for latency as the caller of each agent sees it. Without a `spanType` filter, one agent call contributes both its agent run and its model generation.
+`timeToFirstToken.*` and `timeToFirstChunk.*` read the span's own `timeToFirstTokenMs` and `timeToFirstChunkMs`, and skip spans without a value. Several span types record them:
+
+- `model_inference`: each provider call. Filter to this type for per-call time to first token.
+- `model_step`: each step of a generation, with the values of the inference that streamed the step's first chunk.
+- `model_generation`: the whole generation, with the values of its first streamed inference only. A multi-step generation, such as a tool loop, reports only its first call.
+- `agent_run`: the agent run, with time to first chunk measured from the run's start. Filter to this type for latency as the caller of each agent sees it.
+
+Without a `spanType` filter, one agent call contributes its agent run, its model generation, and every model step and model inference.
 
 On ClickHouse, a direct `spanType` `eq` or `in` predicate, or one immediately inside an `and`, can select the smaller branch table. All selected types must be branch types: `agent_run`, `workflow_run`, `processor_run`, `scorer_run`, `rag_ingestion`, `tool_call`, or `mcp_tool_call`. Every requested field must be available in that table. An equivalent `or` predicate doesn't select this optimization. The branch path can differ from `querySpans()`:
 
