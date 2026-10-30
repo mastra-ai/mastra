@@ -10,6 +10,21 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
+
+export class FactoryProjectNotFoundError extends Error {
+  constructor() {
+    super('Factory project not found for this organization.');
+    this.name = 'FactoryProjectNotFoundError';
+  }
+}
+
+async function assertFactoryProject(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<void> {
+  if (!(await ops.findOne('factory_projects', { org_id: orgId, id: factoryProjectId }))) {
+    throw new FactoryProjectNotFoundError();
+  }
+}
+
 export interface IntakeSelection {
   enabled: boolean;
   /** Provider-owned source ids; `null` means nothing is selected. */
@@ -354,6 +369,7 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     await this.ensureCollections([
+      FACTORY_PROJECTS_SCHEMA,
       INTAKE_ORG_SETTINGS_SCHEMA,
       LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
       INTAKE_SOURCE_BINDINGS_SCHEMA,
@@ -573,9 +589,15 @@ export class IntakeStorage extends FactoryStorageDomain {
     );
   }
 
-  /** Release every source a deleted Factory project was bound to, so the others can take them. */
-  async clearProjectBindings({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<void> {
-    await this.#db.deleteMany('intake_source_subscriptions', { org_id: orgId, factory_project_id: factoryProjectId });
+  /**
+   * Release every source a Factory project was bound to, so the others can take
+   * them. Pass the transaction deleting the project, so no binding lands in between.
+   */
+  async clearProjectBindings(
+    { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
+    ops: FactoryStorageOps = this.#db,
+  ): Promise<void> {
+    await ops.deleteMany('intake_source_subscriptions', { org_id: orgId, factory_project_id: factoryProjectId });
   }
 
   /**
@@ -600,6 +622,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     const source = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
     await this.storage.withTransaction(
       async ops => {
+        await assertFactoryProject(ops, orgId, factoryProjectId);
         const rows = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', source);
         for (const row of rows) {
           if (row.factory_project_id === factoryProjectId) continue;
@@ -642,6 +665,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     const kept = labels === null ? null : normalizeBindingLabels(labels);
     return this.storage.withTransaction(
       async ops => {
+        await assertFactoryProject(ops, orgId, factoryProjectId);
         const rows = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', source);
         const conflicts = bindingConflicts(factoryProjectId, kept, rows);
         if (conflicts.length > 0) return { conflicts };
