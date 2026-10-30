@@ -4,6 +4,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
+import { KNOWLEDGE_READ_INSTRUCTIONS } from '../instructions';
 import { applyPinOps, diffPins, PinnedStateProcessor } from '../pinned-state-processor';
 
 describe('PinnedStateProcessor', () => {
@@ -43,6 +44,18 @@ describe('PinnedStateProcessor', () => {
       }) as any;
     return { call, processor, args };
   }
+
+  // r92: with the pinned Refund Policy in context, models still searched for it and read it again,
+  // because nothing said a pinned entry is the page's current body.
+  it('tells the model pinned entries are current, so it does not search for or read them again', () => {
+    const { processor } = harness();
+    const result = processor.processInput({ messages: [], systemMessages: [] } as any) as any;
+    const preamble = result.systemMessages.at(-1).content as string;
+    expect(preamble).toContain("Each entry is the pinned page's full current body");
+    expect(preamble).toContain('Do not knowledge_search or knowledge_read a pinned page to confirm it');
+    expect(KNOWLEDGE_READ_INSTRUCTIONS).toMatch(/^Use the Knowledge tools.*Pinned pages are already in your context/);
+    expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('without searching for or reading them again');
+  });
 
   it('drives the processor end to end: snapshot, delta on an edit, and lane clear on unpin', async () => {
     const { call, processor, args } = harness();
