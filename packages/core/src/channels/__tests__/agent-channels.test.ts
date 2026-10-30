@@ -4743,8 +4743,7 @@ describe('per-sender handler runs end to end', () => {
       const userTurn = await deliverFiles(h, [evil]);
 
       const [savedPath] = savedPaths(userTurn);
-      expect(savedPath).toMatch(/^channel-attachments\/[0-9a-f]+\/[^/]+$/);
-      expect(savedPath!.split('/')).not.toContain('..');
+      expect(savedPath).toMatch(/^channel-attachments\/[0-9a-f]+\/_\.\._escape\.zip$/);
       expect(await readFile(join(dir, savedPath!))).toEqual(ZIP_BYTES);
       expect(await readdir(root)).toEqual(['workspace']);
     });
