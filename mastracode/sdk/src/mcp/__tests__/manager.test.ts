@@ -107,7 +107,7 @@ describe('createMcpManager', () => {
       await manager.init();
 
       expect(MockedMCPClient).toHaveBeenCalledWith({
-        id: 'mastra-code-mcp',
+        id: 'mastra-code-mcp:fs',
         servers: {
           fs: {
             command: 'npx',
@@ -291,7 +291,7 @@ describe('createMcpManager', () => {
       }
     });
 
-    it('creates one MCPClient with all servers', async () => {
+    it('creates one MCPClient per server', async () => {
       setupConfig({
         mcpServers: {
           fs: { command: 'npx' },
@@ -307,11 +307,12 @@ describe('createMcpManager', () => {
       const manager = createMcpManager('/tmp/test');
       await manager.init();
 
-      expect(MockedMCPClient).toHaveBeenCalledTimes(1);
-      const call = MockedMCPClient.mock.calls[0]![0]!;
-      expect(call.id).toBe('mastra-code-mcp');
-      expect(call.servers).toHaveProperty('fs');
-      expect(call.servers).toHaveProperty('remote');
+      expect(MockedMCPClient).toHaveBeenCalledTimes(2);
+      const calls = MockedMCPClient.mock.calls.map(([args]) => ({ id: args!.id, servers: Object.keys(args!.servers) }));
+      expect(calls).toEqual([
+        { id: 'mastra-code-mcp:fs', servers: ['fs'] },
+        { id: 'mastra-code-mcp:remote', servers: ['remote'] },
+      ]);
     });
   });
 
@@ -331,9 +332,8 @@ describe('createMcpManager', () => {
       });
       await manager.init();
 
-      const call = MockedMCPClient.mock.calls[0]![0]!;
-      expect(call.servers).toHaveProperty('fs');
-      expect(call.servers).toHaveProperty('remote');
+      const servers = MockedMCPClient.mock.calls.flatMap(([args]) => Object.keys(args!.servers));
+      expect(servers).toEqual(['fs', 'remote']);
     });
 
     it('programmatic servers override file-based servers with the same name', async () => {
@@ -379,9 +379,8 @@ describe('createMcpManager', () => {
       await manager.reload();
 
       // After reload, extra servers should still be included
-      const lastCall = MockedMCPClient.mock.calls[MockedMCPClient.mock.calls.length - 1]![0]!;
-      expect(lastCall.servers).toHaveProperty('extra');
-      expect(lastCall.servers).toHaveProperty('fs');
+      const reloadCalls = MockedMCPClient.mock.calls.slice(2);
+      expect(reloadCalls.flatMap(([args]) => Object.keys(args!.servers))).toEqual(['fs', 'extra']);
     });
   });
 
@@ -519,7 +518,7 @@ describe('createMcpManager', () => {
   });
 
   describe('disconnect', () => {
-    it('disconnects the MCPClient instance', async () => {
+    it('disconnects every per-server MCPClient instance', async () => {
       setupConfig({
         mcpServers: {
           fs: { command: 'npx' },
@@ -536,8 +535,8 @@ describe('createMcpManager', () => {
       await manager.init();
       await manager.disconnect();
 
-      expect(MockedMCPClient).toHaveBeenCalledTimes(1);
-      expect(mockDisconnect).toHaveBeenCalledTimes(1);
+      expect(MockedMCPClient).toHaveBeenCalledTimes(2);
+      expect(mockDisconnect).toHaveBeenCalledTimes(2);
     });
 
     it('ignores disconnect errors gracefully', async () => {
@@ -572,7 +571,7 @@ describe('createMcpManager', () => {
       // Should have created MCPClient twice: once for init, once for reload
       expect(MockedMCPClient).toHaveBeenCalledTimes(2);
       const lastCall = MockedMCPClient.mock.calls[1]![0]!;
-      expect(lastCall.id).toBe('mastra-code-mcp');
+      expect(lastCall.id).toBe('mastra-code-mcp:newserver');
       expect(lastCall.servers).toHaveProperty('newserver');
     });
 
