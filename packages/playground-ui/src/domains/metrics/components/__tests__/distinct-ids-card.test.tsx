@@ -69,6 +69,33 @@ function failUntilRecovered() {
   };
 }
 
+/**
+ * Fails the range-totals request once — a 4xx fails at once — then serves them, and keeps the
+ * bucket request in flight until `release()`: one request has failed while the other still runs.
+ */
+function failTotalsWhileBucketsLoad() {
+  let totalsCalls = 0;
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  serveTraceAggregate(async request => {
+    requests.push(request);
+    if (request.interval) {
+      await held;
+      return HttpResponse.json(respond(request));
+    }
+    totalsCalls++;
+    return totalsCalls === 1
+      ? HttpResponse.json(traceAggregateErrorFixture, { status: 400 })
+      : HttpResponse.json(respond(request));
+  });
+  return {
+    release: () => release(),
+    totalsCalls: () => totalsCalls,
+  };
+}
+
 function render(ui: ReactElement, filterTokens: PropertyFilterToken[] = []) {
   return renderWithProviders(
     <MetricsProvider preset="24h" filterTokens={filterTokens} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
@@ -149,6 +176,7 @@ describe('when the server answers aggregateTraces()', () => {
   });
 
   it('loads after Retry when both requests failed', async () => {
+<<<<<<< HEAD
     const outage = failUntilRecovered();
     const { queryClient } = render(<DistinctIdsCard />);
 
@@ -162,6 +190,33 @@ describe('when the server answers aggregateTraces()', () => {
 
     expect(await screen.findByText('Resources', LEGEND)).toBeDefined();
     expect(screen.getByText('Threads', LEGEND)).toBeDefined();
+  }, 15_000);
+
+  it('keeps loading until both requests settle, then loads again after Retry', async () => {
+    // One request failed while the other is still loading: the card must not report a failure
+    // Retry cannot fix, and Retry must re-request both once it does.
+    const card = failTotalsWhileBucketsLoad();
+    const { queryClient } = render(<DistinctIdsCard />);
+
+    await waitFor(() => {
+      const totals = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['trace-aggregate'] })
+        .find(query => !(query.queryKey[1] as { interval?: string }).interval);
+      expect(totals?.state.status).toBe('error');
+    });
+    expect(screen.queryByText(ERROR)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+
+    // The buckets answer: now both requests have settled, so the totals failure is the card's.
+    card.release();
+    await waitFor(() => expect(screen.getByText(ERROR)).toBeDefined(), { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
+    expect(card.totalsCalls()).toBe(2);
+    expect(legendEntry('Resources')).toBe('Resources5');
   }, 15_000);
 
   it('says a service filter has no trace equivalent, and sends nothing', async () => {
