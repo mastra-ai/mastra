@@ -833,11 +833,10 @@ describe('issue detail route', () => {
       factoryProjectId: projectB,
       input: {
         externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:OLD-42', url: issueDetail.url },
-        claimKey: 'linear:issue:issue-1',
         title: 'OLD-42: Fix intake sync',
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: { linearIssueId: 'issue-1' },
       },
     });
     fetchIssueDetail.mockResolvedValue({ ...issueDetail, teamId: 'team-1' });

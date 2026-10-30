@@ -242,6 +242,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'board',
           'source',
           'sourceKey',
+          // Decisions saved before claims were dropped still carry it; it is ignored.
           'claimKey',
           'title',
           'url',
@@ -254,11 +255,6 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
         throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
       }
-      const claimKey = optionalBoundedString(
-        value.claimKey,
-        'Factory linked work item claimKey',
-        MAX_SOURCE_KEY_LENGTH,
-      );
       const url = value.url;
       if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
@@ -270,7 +266,6 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         board: boardIdentifier(value.board, 'Factory linked work item board'),
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
-        ...(claimKey ? { claimKey } : {}),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),

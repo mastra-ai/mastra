@@ -24,7 +24,7 @@ import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemClaimConflictError } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
@@ -1347,52 +1347,21 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    const upsert = () =>
-      this.#storage.upsert({
-        orgId: record.orgId,
-        userId: 'factory-rule-dispatcher',
-        factoryProjectId: record.factoryProjectId,
-        input: {
-          externalSource: externalSourceForDecision(decision),
-          ...(decision.claimKey ? { claimKey: decision.claimKey } : {}),
-          parentWorkItemId,
-          title: decision.title,
-          board: decision.board,
-          stages: [entryStage],
-          sessions: {},
-          metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
-        },
-        reuseMode: 'preserve',
-      });
-    let result: UpsertWorkItemResult;
-    try {
-      result = await upsert().catch(async error => {
-        if (
-          error instanceof WorkItemClaimConflictError &&
-          (await this.#releaseDeletedProjectClaim(record.orgId, decision.claimKey))
-        ) {
-          return upsert();
-        }
-        throw error;
-      });
-    } catch (error) {
-      // Another live Factory project in the org holds the card for this record.
-      // The decision is spent, not failed: retrying would only be refused again.
-      if (error instanceof WorkItemClaimConflictError) return;
-      throw error;
-    }
-    const { claimKey } = decision;
-    if (!result.created && claimKey && !result.item.claimKey) {
-      // A card filed before claims existed adopts the claim now; a refusal means
-      // another live project already owns the record, and this card stays as it is.
-      const claim = { orgId: record.orgId, id: result.item.id, claimKey };
-      const claimed =
-        (await this.#storage.claimWorkItem(claim)) ??
-        ((await this.#releaseDeletedProjectClaim(record.orgId, claimKey))
-          ? await this.#storage.claimWorkItem(claim)
-          : null);
-      if (claimed) result = { ...result, item: claimed };
-    }
+    let result: UpsertWorkItemResult = await this.#storage.upsert({
+      orgId: record.orgId,
+      userId: 'factory-rule-dispatcher',
+      factoryProjectId: record.factoryProjectId,
+      input: {
+        externalSource: externalSourceForDecision(decision),
+        parentWorkItemId,
+        title: decision.title,
+        board: decision.board,
+        stages: [entryStage],
+        sessions: {},
+        metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
+      },
+      reuseMode: 'preserve',
+    });
     const itemBoard = boardForWorkItem(result.item);
     if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
@@ -1490,16 +1459,6 @@ export class FactoryDecisionDispatcher {
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
-  }
-
-  /** Drops `claimKey` when the card holding it belongs to a deleted Factory project; true when it is free again. */
-  async #releaseDeletedProjectClaim(orgId: string, claimKey: string | undefined): Promise<boolean> {
-    if (!claimKey || !this.#factoryProjectExists) return false;
-    const holder = await this.#storage.getByClaimKey({ orgId, claimKey });
-    if (!holder) return true;
-    if (await this.#factoryProjectExists({ orgId, factoryProjectId: holder.factoryProjectId })) return false;
-    await this.#storage.releaseProjectClaims({ orgId, factoryProjectId: holder.factoryProjectId });
-    return true;
   }
 
   async #requireItem(record: FactoryDeferredDecisionRecord) {

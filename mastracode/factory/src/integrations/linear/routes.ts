@@ -22,7 +22,6 @@ import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import { linearClaimKey } from './claim.js';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
@@ -84,7 +83,7 @@ export interface MountLinearRoutesOptions {
    * already holds after the issue's winning source was routed elsewhere. When
    * absent, details resolve only through sources routed to the Factory.
    */
-  workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'getByClaimKey'>;
+  workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'list'>;
   /** Installed boards, so a held card's terminal status follows its own board. */
   boards?: BoardRegistry;
 }
@@ -182,8 +181,9 @@ async function findHeldCard(
 ) {
   if (!options.workItems) return null;
   if (issueId) {
-    const claimant = await options.workItems.getByClaimKey({ orgId, claimKey: linearClaimKey(issueId) });
-    if (claimant) return claimant.factoryProjectId === factoryProjectId ? claimant : null;
+    const items = await options.workItems.list({ orgId, factoryProjectId });
+    const byIssueId = items.find(item => item.metadata?.linearIssueId === issueId);
+    if (byIssueId) return byIssueId;
   }
   return options.workItems.getByProjectSource({
     orgId,
