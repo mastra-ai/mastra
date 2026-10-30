@@ -437,7 +437,7 @@ describe.each(adapters)('Knowledge pages on a real store, curated by an agent (%
     },
   );
 
-  it('keeps a published v1 Knowledge database untouched until an explicit reset, while Memory keeps working', async () => {
+  it('drops a published v1 Knowledge database on startup, rows included, while Memory keeps working', async () => {
     const { storage, location } = await createStorage('knowledge-upgrade', adapter);
     const { countV1Nodes, hasTable } = await seedPublishedKnowledgeV1(adapter, storage, location);
 
@@ -447,16 +447,15 @@ describe.each(adapters)('Knowledge pages on a real store, curated by an agent (%
     await plainMemory.saveMessages({ messages: [message('kept-thread')] });
     expect(await countV1Nodes()).toBe(1);
 
-    // Knowledge v1 data is never migrated: the store reports a reset and leaves the rows alone.
+    // Knowledge before schema 4 is not migrated: starting Knowledge drops its tables and rows, and creates the new ones.
     const domain = storage.stores!.knowledge!;
     expect(await domain.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-    expect(await countV1Nodes()).toBe(1);
-
-    await domain.dangerouslyReset();
+    await domain.init();
     expect(await domain.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 4 });
     if (hasTable) {
       expect(await hasTable('mastra_knowledge_nodes')).toBe(false);
       expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
+      expect(await hasTable('mastra_knowledge_pages')).toBe(true);
     }
 
     const upgraded = createRuntime(storage, curation);

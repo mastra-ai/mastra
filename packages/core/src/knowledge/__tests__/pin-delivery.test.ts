@@ -81,8 +81,8 @@ describe('Knowledge pin delivery cost', () => {
       'listPins',
       'listPins',
       'getPages',
-      'countNotes',
       'getPages',
+      'countNotes',
     ]);
     // And the same store calls as a run with a handful of pins.
     const few = await seed(25);
