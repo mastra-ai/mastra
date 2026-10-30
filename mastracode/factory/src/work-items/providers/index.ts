@@ -10,7 +10,7 @@ import { stringValue } from './metadata-keys.js';
 import { slackWorkItemAdapter } from './slack.js';
 import type { WorkItemProviderAdapter } from './types.js';
 
-export type { ProviderWorkItem, ProviderWorkItemContext, WorkItemProviderAdapter } from './types.js';
+export type { ProviderWorkItemSource, WorkItemProviderAdapter } from './types.js';
 export { BOARD_METADATA_KEYS, SHARED_PROVIDER_METADATA_KEYS, splitCardMetadata } from './metadata-keys.js';
 
 /** Integrations this package does not ship: an issue keyed by its identifier, shared keys only. */

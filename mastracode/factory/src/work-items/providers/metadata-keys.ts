@@ -38,6 +38,7 @@ export const BOARD_METADATA_KEYS = [
   'authorTrusted',
   'factoryAuthored',
   'autoStartCandidate',
+  'autonomyArmedAt',
   // Dispatcher and reconciler bookkeeping.
   'factoryRuleMaterializationKey',
   'factoryPullRequestReconciliation',

@@ -1,50 +1,43 @@
-/**
- * One-time cutover of legacy `work_items` rows into `factory_work_items` (what
- * the work is) and `factory_board_items` (where it sits in Factory).
- *
- * Each legacy row becomes one work item and one board item. The board item
- * keeps the legacy id, so comments, subscriptions, run bindings and rule state
- * keyed by `work_item_id` keep pointing at the card. The work item gets a new
- * id. The legacy table is only read, never written.
- *
- * The pass is idempotent and runs on every boot: a card already copied is
- * skipped unless its legacy row changed after the copy (`updated_at` newer than
- * the board item's `migrated_from_updated_at`), which is how a rolling deploy
- * picks up cards an older replica created or moved after the first pass. Once
- * no older replica is left the legacy table stops changing and the pass writes
- * nothing.
- */
-
 import { randomUUID } from 'node:crypto';
 
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 
-import { WORK_ITEMS_SCHEMA } from '../storage/domains/work-items/base.js';
+import { factoryDecisionHash, WORK_ITEMS_SCHEMA } from '../storage/domains/work-items/base.js';
 import type { WorkItemDbRow } from '../storage/domains/work-items/base.js';
 import { bumpBoardVersions } from '../storage/domains/work-items/board-version.js';
 import type { BoardScope } from '../storage/domains/work-items/board-version.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA,
 } from '../storage/domains/work-items/work-item-schema.js';
-import type { BoardItemDbRecord, WorkItemDbRecord } from '../storage/domains/work-items/work-item-schema.js';
+import type {
+  BoardItemDbRecord,
+  WorkItemDbRecord,
+  WorkItemSourceDbRecord,
+} from '../storage/domains/work-items/work-item-schema.js';
 import { splitCardMetadata, workItemProviderAdapter } from './providers/index.js';
 
 const LEGACY = WORK_ITEMS_SCHEMA.name;
 const WORK_ITEMS = FACTORY_WORK_ITEMS_SCHEMA.name;
+const SOURCES = FACTORY_WORK_ITEM_SOURCES_SCHEMA.name;
 const BOARD_ITEMS = FACTORY_BOARD_ITEMS_SCHEMA.name;
 const PAGE_SIZE = 200;
 
-/** What a board item already in the new table says about the legacy row it came from. */
 export interface MigratedBoardItem {
   workItemId: string;
   revision: number;
+  updatedAt: Date;
   migratedFromUpdatedAt: Date | null;
+  migratedFromHash: string | null;
 }
 
 export interface WorkItemSplitCard {
+  /** Fingerprint observed when planning; rejects a stale migration plan under the row lock. */
+  previousHash?: string | null;
   workItem: WorkItemDbRecord;
+  source: WorkItemSourceDbRecord | null;
   boardItem: BoardItemDbRecord;
 }
 
@@ -54,11 +47,8 @@ export interface WorkItemSplitSkip {
 }
 
 export interface WorkItemSplitPlan {
-  /** Cards not in the new tables yet. */
   inserts: WorkItemSplitCard[];
-  /** Cards whose legacy row changed after they were copied. */
   recopies: WorkItemSplitCard[];
-  /** Cards already copied and unchanged since. */
   unchanged: number;
   skipped: WorkItemSplitSkip[];
 }
@@ -67,9 +57,8 @@ export interface WorkItemSplitReport {
   dryRun: boolean;
   projects: number;
   cards: number;
-  /** Work items written (inserted or re-copied) by this pass. */
   workItems: number;
-  /** Board items written (inserted or re-copied) by this pass. */
+  sources: number;
   boardItems: number;
   recopied: number;
   unchanged: number;
@@ -77,78 +66,81 @@ export interface WorkItemSplitReport {
 }
 
 function time(value: Date | string | null | undefined): number {
-  if (!value) return Number.NEGATIVE_INFINITY;
-  return (value instanceof Date ? value : new Date(value)).getTime();
+  return value ? new Date(value).getTime() : Number.NEGATIVE_INFINITY;
 }
 
-/** Split one legacy row. Throws when the row cannot be mapped onto a work item. */
+function legacyHash(row: WorkItemDbRow): string {
+  // stableJson does not invoke Date.toJSON; normalize before hashing.
+  return factoryDecisionHash(JSON.parse(JSON.stringify(row)));
+}
+
 export function splitLegacyWorkItem(
   row: WorkItemDbRow,
   { workItemId, revision }: { workItemId: string; revision?: number },
 ): WorkItemSplitCard {
   const adapter = workItemProviderAdapter(row.external_source ?? null);
-  const provider = adapter.toWorkItem(row.external_source ?? null, row.metadata, {
-    title: row.title,
-    boardItemId: row.id,
-  });
+  const provider = adapter.toSource(row.external_source ?? null, row.metadata);
   const metadata = splitCardMetadata(row.metadata, adapter.providerMetadataKeys);
   return {
     workItem: {
       id: workItemId,
       org_id: row.org_id,
       factory_project_id: String(row.factory_project_id),
-      provider: provider.provider,
-      kind: provider.kind,
-      integration_id: provider.integrationId,
-      source_type: provider.sourceType,
-      workspace_id: provider.workspaceId,
-      external_id: provider.externalId,
-      source_key: provider.sourceKey,
-      url: provider.url,
-      key: provider.key,
-      title: provider.title,
-      state: provider.state,
-      labels: provider.labels,
-      author: provider.author,
-      // Factory's card-to-card link moves to the board item; legacy rows record no provider parent.
+      title: row.title,
       parent_work_item_id: null,
-      metadata: metadata.provider,
       revision: 1,
-      synced_at: null,
       created_at: row.created_at,
       updated_at: row.updated_at,
     },
+    source: provider
+      ? {
+          id: workItemId,
+          org_id: row.org_id,
+          factory_project_id: String(row.factory_project_id),
+          work_item_id: workItemId,
+          provider: provider.provider,
+          kind: provider.kind,
+          integration_id: provider.integrationId,
+          source_type: provider.sourceType,
+          workspace_id: provider.workspaceId,
+          external_id: provider.externalId,
+          source_key: provider.sourceKey,
+          url: provider.url,
+          key: provider.key,
+          state: provider.state,
+          labels: provider.labels,
+          author: provider.author,
+          metadata: metadata.provider,
+          revision: 1,
+          synced_at: null,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        }
+      : null,
     boardItem: {
       id: row.id,
       org_id: row.org_id,
       factory_project_id: String(row.factory_project_id),
       work_item_id: workItemId,
       board: row.board ?? null,
-      claim_key: row.claim_key ?? null,
       parent_board_item_id: row.parent_work_item_id ?? null,
       stages: row.stages,
       stage_history: row.stage_history,
       sessions: row.sessions,
-      metadata: metadata.board,
-      triage_type: row.triage_type ?? null,
-      autonomy_armed_at: row.autonomy_armed_at ?? null,
-      plans_preapproved_at: row.plans_preapproved_at ?? null,
-      accepted_at: row.accepted_at ?? null,
-      comment_count: row.comment_count ?? 0,
-      feed_activity_at: row.feed_activity_at ?? null,
+      metadata: {
+        ...metadata.board,
+        ...(row.autonomy_armed_at ? { autonomyArmedAt: new Date(row.autonomy_armed_at).toISOString() } : {}),
+      },
       revision: revision ?? row.revision,
       created_by: row.created_by,
       created_at: row.created_at,
       updated_at: row.updated_at,
       migrated_from_updated_at: row.updated_at,
+      migrated_from_hash: legacyHash(row),
     },
   };
 }
 
-/**
- * Decide what the pass does with each legacy row, given the board items already
- * copied (by legacy id). Pure apart from minting work item ids.
- */
 export function planWorkItemSplit(
   rows: readonly WorkItemDbRow[],
   migrated: ReadonlyMap<string, MigratedBoardItem> = new Map(),
@@ -157,24 +149,24 @@ export function planWorkItemSplit(
   const plan: WorkItemSplitPlan = { inserts: [], recopies: [], unchanged: 0, skipped: [] };
   for (const row of rows) {
     const existing = migrated.get(row.id);
-    if (existing && time(row.updated_at) <= time(existing.migratedFromUpdatedAt)) {
+    if (existing?.migratedFromHash === legacyHash(row)) {
       plan.unchanged += 1;
       continue;
     }
-    let card: WorkItemSplitCard;
-    try {
-      card = existing
-        ? // A re-copy must still invalidate a revision a newer replica handed out.
-          splitLegacyWorkItem(row, {
-            workItemId: existing.workItemId,
-            revision: Math.max(existing.revision, row.revision) + 1,
-          })
-        : splitLegacyWorkItem(row, { workItemId: newId() });
-    } catch (error) {
-      plan.skipped.push({ id: row.id, reason: error instanceof Error ? error.message : String(error) });
+    if (existing && time(existing.updatedAt) > time(existing.migratedFromUpdatedAt)) {
+      plan.skipped.push({ id: row.id, reason: 'Split board item changed after migration' });
       continue;
     }
-    (existing ? plan.recopies : plan.inserts).push(card);
+    try {
+      const card = splitLegacyWorkItem(row, {
+        workItemId: existing?.workItemId ?? newId(),
+        ...(existing ? { revision: Math.max(existing.revision, row.revision) + 1 } : {}),
+      });
+      if (existing) card.previousHash = existing.migratedFromHash;
+      (existing ? plan.recopies : plan.inserts).push(card);
+    } catch (error) {
+      plan.skipped.push({ id: row.id, reason: error instanceof Error ? error.message : String(error) });
+    }
   }
   return plan;
 }
@@ -183,7 +175,7 @@ async function migratedBoardItems(
   ops: FactoryStorageOps,
   ids: readonly string[],
 ): Promise<Map<string, MigratedBoardItem>> {
-  if (ids.length === 0) return new Map();
+  if (!ids.length) return new Map();
   const rows = await ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, { id: { in: [...ids] } });
   return new Map(
     rows.map(row => [
@@ -191,41 +183,73 @@ async function migratedBoardItems(
       {
         workItemId: row.work_item_id,
         revision: row.revision,
+        updatedAt: row.updated_at,
         migratedFromUpdatedAt: row.migrated_from_updated_at,
+        migratedFromHash: row.migrated_from_hash,
       },
     ]),
   );
 }
 
-async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy: boolean): Promise<void> {
+class MigrationConflict extends Error {}
+
+async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy: boolean): Promise<boolean> {
   if (!recopy) {
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, card.workItem);
+    if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);
     await ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, card.boardItem);
-    return;
+    return true;
   }
-  const { id: workItemId, ...workItem } = card.workItem;
-  const { id: boardItemId, ...boardItem } = card.boardItem;
-  await ops.updateMany(WORK_ITEMS, { id: workItemId }, workItem);
-  await ops.updateMany(BOARD_ITEMS, { id: boardItemId }, boardItem);
+  // updateAtomic locks the board row until this transaction commits, so a new
+  // transition cannot land between the overwrite guard and the copy.
+  let unchanged = false;
+  let baseline = Number.NEGATIVE_INFINITY;
+  const board = await ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: card.boardItem.id }, current => {
+    if (current.migrated_from_hash === card.boardItem.migrated_from_hash) {
+      unchanged = true;
+      return null;
+    }
+    if (current.migrated_from_hash !== card.previousHash) {
+      throw new MigrationConflict('Migration baseline changed since planning');
+    }
+    if (time(current.updated_at) > time(current.migrated_from_updated_at)) {
+      throw new MigrationConflict('Split board item changed after migration');
+    }
+    baseline = time(current.migrated_from_updated_at);
+    return { ...card.boardItem, revision: Math.max(current.revision, card.boardItem.revision) + 1 };
+  });
+  if (unchanged) return false;
+  if (!board) throw new MigrationConflict('Split board item disappeared during migration');
+  await ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: card.workItem.id }, current => {
+    if (time(current.updated_at) > baseline) {
+      throw new MigrationConflict('Split work item changed after migration');
+    }
+    return { ...card.workItem, revision: current.revision + 1 };
+  });
+  const sources = await ops.findMany<WorkItemSourceDbRecord>(SOURCES, { work_item_id: card.workItem.id });
+  if (sources.some(source => source.id !== card.workItem.id)) {
+    throw new MigrationConflict('Split source set changed after migration');
+  }
+  for (const source of sources) {
+    await ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id: source.id }, current => {
+      if (current.synced_at != null || time(current.updated_at) > baseline) {
+        throw new MigrationConflict('Split source changed after migration');
+      }
+      return null;
+    });
+  }
+  if (sources.length) await ops.deleteMany(SOURCES, { id: { in: sources.map(source => source.id) } });
+  if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);
+  return true;
 }
 
 export interface MigrateWorkItemSplitOptions {
-  /** Plan and report only; write nothing. */
   dryRun?: boolean;
-  /**
-   * The ops to read and write through. Defaults to `storage.ops`; the
-   * work-items domain passes its own so the writes bump board versions.
-   */
   ops?: FactoryStorageOps;
   log?: (message: string, details?: Record<string, unknown>) => void;
 }
 
-/**
- * Copy every legacy card that is missing from, or newer than, the new tables.
- * Each page of cards is written in one transaction; when another replica races
- * the same page, the page falls back to one transaction per card and a card the
- * other replica already wrote counts as unchanged.
- */
+/** Legacy rows are read-only; each card and all its split rows land atomically. */
 export async function migrateWorkItemSplit(
   storage: Pick<FactoryStorage, 'ops' | 'withTransaction'>,
   { dryRun = false, ops = storage.ops, log }: MigrateWorkItemSplitOptions = {},
@@ -235,6 +259,7 @@ export async function migrateWorkItemSplit(
     projects: 0,
     cards: 0,
     workItems: 0,
+    sources: 0,
     boardItems: 0,
     recopied: 0,
     unchanged: 0,
@@ -260,11 +285,10 @@ export async function migrateWorkItemSplit(
           : {}),
       },
     );
-    if (page.length === 0) break;
+    if (!page.length) break;
     cursor = page[page.length - 1];
     report.cards += page.length;
     for (const row of page) projects.add(`${row.org_id}\u0000${row.factory_project_id}`);
-
     const plan = planWorkItemSplit(
       page,
       await migratedBoardItems(
@@ -274,34 +298,27 @@ export async function migrateWorkItemSplit(
     );
     report.unchanged += plan.unchanged;
     report.skipped.push(...plan.skipped);
-    const cards = [
+    for (const { card, recopy } of [
       ...plan.inserts.map(card => ({ card, recopy: false })),
       ...plan.recopies.map(card => ({ card, recopy: true })),
-    ];
-    let landed = cards;
-    if (!dryRun && cards.length > 0) {
-      try {
-        await storage.withTransaction(async tx => {
-          for (const { card, recopy } of cards) await writeCard(tx, card, recopy);
-        });
-      } catch (error) {
-        if (!(error instanceof UniqueViolationError)) throw error;
-        landed = [];
-        for (const entry of cards) {
-          try {
-            await storage.withTransaction(tx => writeCard(tx, entry.card, entry.recopy));
-            landed.push(entry);
-          } catch (cardError) {
-            if (!(cardError instanceof UniqueViolationError)) throw cardError;
-            const raced = await migratedBoardItems(ops, [entry.card.boardItem.id]);
-            if (!raced.has(entry.card.boardItem.id)) throw cardError;
+    ]) {
+      if (!dryRun) {
+        try {
+          const changed = await storage.withTransaction(tx => writeCard(tx, card, recopy));
+          if (!changed) {
             report.unchanged += 1;
+            continue;
           }
+        } catch (error) {
+          if (!(error instanceof UniqueViolationError) && !(error instanceof MigrationConflict)) throw error;
+          const raced = (await migratedBoardItems(ops, [card.boardItem.id])).get(card.boardItem.id);
+          if (raced?.migratedFromHash === card.boardItem.migrated_from_hash) report.unchanged += 1;
+          else report.skipped.push({ id: card.boardItem.id, reason: error.message });
+          continue;
         }
       }
-    }
-    for (const { card, recopy } of landed) {
       report.workItems += 1;
+      report.sources += card.source ? 1 : 0;
       report.boardItems += 1;
       if (recopy) report.recopied += 1;
       written.set(`${card.boardItem.org_id}\u0000${card.boardItem.factory_project_id}`, {
@@ -312,16 +329,9 @@ export async function migrateWorkItemSplit(
     if (page.length < PAGE_SIZE) break;
   }
   report.projects = projects.size;
-  if (!dryRun && written.size > 0) await bumpBoardVersions(ops, [...written.values()]);
-  if (report.workItems > 0 || report.skipped.length > 0 || dryRun) {
-    log?.(dryRun ? 'Factory work item split (dry run)' : 'Factory work item split', {
-      projects: report.projects,
-      cards: report.cards,
-      written: report.boardItems,
-      recopied: report.recopied,
-      unchanged: report.unchanged,
-      skipped: report.skipped,
-    });
+  if (!dryRun && written.size) await bumpBoardVersions(ops, [...written.values()]);
+  if (report.workItems || report.skipped.length || dryRun) {
+    log?.(dryRun ? 'Factory work item split (dry run)' : 'Factory work item split', { ...report });
   }
   return report;
 }
