@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 
+import { compileBoardDefinition } from '../boards/define-board.js';
 import type { BoardDefinition } from '../boards/define-board.js';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import { createTestBoard } from '../boards/test-utils.js';
@@ -2236,6 +2237,83 @@ describe('phase semantics', () => {
       expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
       expect(onTerminalStage).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('phase agentEnterWhen', () => {
+  const agent = { type: 'agent' as const, bindingId: 'agent', role: 'ship' };
+  const board = compileBoardDefinition({
+    id: 'gated',
+    name: 'Gated',
+    initialPhase: 'queued',
+    phases: {
+      queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping', 'shipped'] },
+      shipping: {
+        name: 'Shipping',
+        kind: 'working',
+        runner: { context: 'ship' },
+        nextPhases: ['shipped'],
+        agentEnterWhen: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'go' }] },
+      },
+      shipped: { name: 'Shipped', kind: 'terminal', agentEnterWhen: false },
+    },
+  });
+
+  async function setup(metadata: Record<string, unknown> = {}) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    // A Slack thread is never externally authored, so only agentEnterWhen can hold the agent back.
+    const item = await createItem(storage, { board: 'gated', source: 'slack-thread', stages: ['queued'], metadata });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      storage,
+    });
+    return { storage, item, service };
+  }
+
+  it('rejects an agent moving a card the condition does not match, and leaves the card where it was', async () => {
+    const { storage, item, service } = await setup({ labels: ['wait'] });
+
+    const result = await service.transition({ ...request(item, { board: 'gated', stage: 'shipping' }), actor: agent });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    assert(result.status === 'rejected');
+    expect(result.reason).toContain('Shipping');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['queued']);
+  });
+
+  it('lets an agent move a card the condition matches', async () => {
+    const { storage, item, service } = await setup({ labels: ['Go'] });
+
+    const result = await service.transition({ ...request(item, { board: 'gated', stage: 'shipping' }), actor: agent });
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['shipping']);
+  });
+
+  it('keeps agents out of a phase declared false, whatever the card', async () => {
+    const { item, service } = await setup({ labels: ['go'] });
+
+    await expect(
+      service.transition({ ...request(item, { board: 'gated', stage: 'shipped' }), actor: agent }),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
+  });
+
+  it.each([
+    ['a person', { type: 'human' as const, id: 'user-1' }],
+    ['a board rule', { type: 'system' as const, id: 'factory-rule-dispatcher' }],
+  ])('never holds back %s', async (_label, actor) => {
+    const { storage, item, service } = await setup({ labels: ['wait'] });
+
+    const shipping = await service.transition({ ...request(item, { board: 'gated', stage: 'shipping' }), actor });
+    assert(shipping.status === 'accepted');
+    const shipped = await service.transition({
+      ...request(item, { board: 'gated', stage: 'shipped', expectedRevision: shipping.revision, identity: 'second' }),
+      actor,
+    });
+
+    expect(shipped.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['shipped']);
   });
 });
 
