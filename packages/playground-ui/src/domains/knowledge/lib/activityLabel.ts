@@ -1,4 +1,4 @@
-import type { KnowledgeActivityEvent } from '../../services/knowledge';
+import type { KnowledgeActivityEvent } from '../types';
 
 export function knowledgeActivityLabel(event: KnowledgeActivityEvent): string {
   switch (event.action) {
