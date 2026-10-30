@@ -9,6 +9,7 @@ import type { ComboboxVariant } from './combobox-styles';
 import { isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
@@ -139,14 +140,15 @@ function ComboboxTrigger({
       className={comboboxTriggerClass({ variant, size, className })}
       {...props}
     >
-      {iconOnly ? (
+      {isIconButtonSize(size) ? (
         <>
           {icon}
           <span className="sr-only">{children}</span>
         </>
       ) : (
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          {icon}
+          {/* Nested past Button's `[&>svg]` sizing, so sized here to the same rung. */}
+          {icon && <span className={cn('flex shrink-0', iconSizeClasses[size])}>{icon}</span>}
           <span className="truncate">{children}</span>
         </span>
       )}
