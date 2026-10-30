@@ -4,7 +4,6 @@ import type { OutputResult } from '..';
 import type { MastraDBMessage } from '../../agent';
 import { Agent, MessageList } from '../../agent';
 import { noopLogger } from '../../logger';
-import { MastraTimeoutError } from '../../loop/timeout';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
@@ -26,11 +25,11 @@ async function setup() {
 }
 
 /**
- * Runs the output pass for a turn whose provider never produced output, ending with `error`.
+ * Runs the output pass for a turn whose provider never produced output and that ended with an error.
  * `viaAgentWorkflow` runs it the way an agent does: chained with another processor inside the
- * generated processor workflow, whose step schema does not list `result.error`.
+ * generated processor workflow.
  */
-async function saveInputOnlyFailedTurn(error: Error | undefined, { viaAgentWorkflow = false } = {}) {
+async function saveInputOnlyFailedTurn(inputAccepted: boolean | undefined, { viaAgentWorkflow = false } = {}) {
   const { memoryStore, processor, requestContext } = await setup();
   const userMessage: MastraDBMessage = {
     id: 'msg-user',
@@ -46,7 +45,7 @@ async function saveInputOnlyFailedTurn(error: Error | undefined, { viaAgentWorkf
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     finishReason: 'error',
     steps: [],
-    ...(error ? { error } : {}),
+    ...(inputAccepted === undefined ? {} : { inputAccepted }),
   };
   if (viaAgentWorkflow) {
     const agent = new Agent({
@@ -84,35 +83,28 @@ async function saveInputOnlyFailedTurn(error: Error | undefined, { viaAgentWorkf
 }
 
 describe('MessageHistory input-only failed turn', () => {
-  it('keeps the input when the run ended on its total deadline', async () => {
-    const saved = await saveInputOnlyFailedTurn(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 800 }));
+  it('keeps the input when the run accepted it', async () => {
+    const saved = await saveInputOnlyFailedTurn(true);
     expect(saved.map(message => [message.role, message.id])).toEqual([['user', 'msg-user']]);
   });
 
-  it('keeps the input on a total deadline when run inside the agent processor workflow', async () => {
-    const saved = await saveInputOnlyFailedTurn(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 800 }), {
-      viaAgentWorkflow: true,
-    });
+  it('keeps the accepted input when run inside the agent processor workflow', async () => {
+    const saved = await saveInputOnlyFailedTurn(true, { viaAgentWorkflow: true });
     expect(saved.map(message => [message.role, message.id])).toEqual([['user', 'msg-user']]);
   });
 
   it('drops the input on a provider error when run inside the agent processor workflow', async () => {
-    const saved = await saveInputOnlyFailedTurn(new Error('provider exploded'), { viaAgentWorkflow: true });
+    const saved = await saveInputOnlyFailedTurn(undefined, { viaAgentWorkflow: true });
     expect(saved).toEqual([]);
   });
 
-  it('drops the input when a single model call timed out', async () => {
-    const saved = await saveInputOnlyFailedTurn(new MastraTimeoutError({ timeoutType: 'step', timeoutMs: 800 }));
-    expect(saved).toEqual([]);
-  });
-
-  it('drops the input when the provider errored', async () => {
-    const saved = await saveInputOnlyFailedTurn(new Error('provider exploded'));
-    expect(saved).toEqual([]);
-  });
-
-  it('drops the input when the error is not known', async () => {
+  it('drops the input when inputAccepted is unset', async () => {
     const saved = await saveInputOnlyFailedTurn(undefined);
+    expect(saved).toEqual([]);
+  });
+
+  it('drops the input when inputAccepted is false', async () => {
+    const saved = await saveInputOnlyFailedTurn(false);
     expect(saved).toEqual([]);
   });
 });

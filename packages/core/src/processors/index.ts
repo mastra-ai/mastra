@@ -155,8 +155,11 @@ export interface OutputResult {
   finishReason: string;
   /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
   steps: LLMStepResult[];
-  /** The error that ended the run, when `finishReason` is 'error' and the error is known */
-  error?: Error;
+  /**
+   * Whether the run accepted this turn's input before it failed. Set only when `finishReason` is 'error'.
+   * History processors keep an input-only failed turn when this is `true`.
+   */
+  inputAccepted?: boolean;
 }
 
 /**

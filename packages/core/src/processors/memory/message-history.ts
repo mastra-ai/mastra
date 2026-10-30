@@ -2,7 +2,6 @@ import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { filterMessagesForPersistence } from '../../agent/filter-messages-for-persistence';
 import { noteThreadMessagesSaved } from '../../agent/thread-saves';
-import { isMastraTimeoutError } from '../../loop/timeout';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { SpanType } from '../../observability';
@@ -321,10 +320,8 @@ export class MessageHistory implements Processor {
 
     // Don't persist an input-only failed turn: if the provider errored before
     // producing any output, saving the user message would orphan it in history.
-    // A run cut off by its total deadline was still accepted, so its input is kept.
-    const endError = result?.error;
-    const totalDeadline = isMastraTimeoutError(endError) && endError.timeoutType === 'total';
-    if (result?.finishReason === 'error' && newOutput.length === 0 && !totalDeadline) {
+    // A run that accepted the input before failing (e.g. cut off by its total deadline) keeps it.
+    if (result?.finishReason === 'error' && newOutput.length === 0 && !result.inputAccepted) {
       return messageList;
     }
 
