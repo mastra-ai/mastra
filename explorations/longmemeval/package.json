@@ -49,7 +49,7 @@
     "openai": "^4.104.0",
     "ora": "^8.2.0",
     "xxhash-wasm": "^1.1.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "22.19.15",

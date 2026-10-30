@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@duckdb/node-api": "1.5.5-r.4",
-    "@hono/node-server": "2.1.1",
+    "@hono/node-server": "2.1.5",
     "@libsql/client": "0.17.4",
     "@linear/sdk": "92.0.0",
     "@mastra/core": "latest",
