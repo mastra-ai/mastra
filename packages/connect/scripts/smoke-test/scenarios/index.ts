@@ -14,6 +14,7 @@ import { hubspotScenario } from './hubspot.js';
 import { incidentIoScenario } from './incident-io.js';
 import { jiraScenario } from './jira.js';
 import { linearScenario } from './linear.js';
+import { microsoftExcelScenario } from './microsoft-excel.js';
 import { microsoftPowerpointScenario } from './microsoft-powerpoint.js';
 import { microsoftTeamsScenario } from './microsoft-teams.js';
 import { microsoftWordScenario } from './microsoft-word.js';
@@ -51,6 +52,7 @@ export const scenarios: Scenario[] = [
   incidentIoScenario,
   jiraScenario,
   linearScenario,
+  microsoftExcelScenario,
   microsoftPowerpointScenario,
   microsoftTeamsScenario,
   microsoftWordScenario,

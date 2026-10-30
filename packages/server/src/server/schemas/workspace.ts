@@ -221,6 +221,10 @@ export const workspaceInfoResponseSchema = z.object({
   capabilities: z
     .object({
       hasFilesystem: z.boolean(),
+      hasDynamicFilesystem: z
+        .boolean()
+        .optional()
+        .describe('True when the filesystem comes from a resolver, so file routes cannot browse it'),
       hasSandbox: z.boolean(),
       canBM25: z.boolean(),
       canVector: z.boolean(),
@@ -257,6 +261,10 @@ const workspaceItemSchema = z.object({
   agentName: z.string().optional(),
   capabilities: z.object({
     hasFilesystem: z.boolean(),
+    hasDynamicFilesystem: z
+      .boolean()
+      .optional()
+      .describe('True when the filesystem comes from a resolver, so file routes cannot browse it'),
     hasSandbox: z.boolean(),
     canBM25: z.boolean(),
     canVector: z.boolean(),
