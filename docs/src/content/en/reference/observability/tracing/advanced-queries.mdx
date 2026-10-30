@@ -21,7 +21,7 @@ The trace operations share a [trace selection](#select-traces): root-span predic
 
 | Option | Query traces | Query spans | Aggregate traces or spans |
 | - | - | - | - |
-| Maximum time-range duration | No maximum | No maximum | 365 days; Platform has an [additional span aggregation limit](/docs/mastra-platform/observability#query-observability-data) |
+| Maximum time-range duration | No maximum | No maximum | 365 days |
 | Pagination | Keyset, numbered pages, or delta polling | Keyset only | No pagination; `limit` selects groups |
 | `orderBy` shape | One-item array | One-item array | One object |
 
@@ -29,7 +29,7 @@ CLI commands take filters and request options together as one JSON argument and 
 
 The endpoints use the same authentication as other observability routes and require the `observability:read` permission. Every request requires a time range.
 
-For hosted traces, see [Query observability data on Mastra Platform](/docs/mastra-platform/observability#query-observability-data) for project credentials and regional endpoints.
+These API time-range limits are separate from data retention. For hosted traces, your Platform plan's retention period applies. See [Query observability data on Mastra Platform](/docs/mastra-platform/observability#query-observability-data) for retention, project credentials, and regional endpoints.
 
 ## Check capabilities
 

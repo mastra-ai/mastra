@@ -132,7 +132,7 @@ npx mastra api trace query '{
 }'
 ```
 
-Choose a time range containing your exported traces. Any range works as long as `from` is earlier than `to`, with no maximum duration. Results appear in `data.traces`.
+Choose a time range containing your exported traces within your plan's data retention period, with `from` earlier than `to`. Results appear in `data.traces`.
 
 Mastra Platform follows the same query and aggregate request structure as Mastra Server. Use the [Query traces and spans reference](/reference/observability/tracing/advanced-queries) for HTTP endpoints, filters, response shapes, pagination, and discovery:
 
@@ -157,7 +157,7 @@ Platform adds these fields and grouping options:
 | `aggregateTraces()` | Supports `groupBy: ['projectId']` and `countDistinct.projectId`. |
 | `aggregateSpans()` | Supports `groupBy: ['projectId']`, but not `countDistinct.projectId`. |
 
-Organization-wide span aggregation is limited to 14 days unless the request qualifies for the [ClickHouse branch selection](/reference/observability/tracing/advanced-queries#span-selection) optimization. Narrow the window or scope the request to one project when it exceeds this limit. Both trace and span aggregation retain the shared 365-day maximum, while `queryTraces()` and `querySpans()` have no maximum time-range duration.
+Data retention depends on your plan: 15 days for Starter, 6 months for Teams, and custom retention for Enterprise. See [pricing](https://mastra.ai/pricing) for current plan limits.
 
 ### Other observability data
 
