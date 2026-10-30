@@ -2336,14 +2336,19 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
   });
 
-  it.each(['intake', 'triage'])(
-    'blocks a triage agent skipping Planning from %s into Building when plans are not auto-approved',
-    async stage => {
+  it.each([
+    ['intake', false],
+    ['triage', false],
+    ['intake', true],
+    ['triage', true],
+  ])(
+    'blocks a triage agent skipping Planning from %s into Building (plans auto-approved: %s)',
+    async (stage, autoApprove) => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const service = new FactoryTransitionService({
         configVersion: 'plan-gate-v1',
         storage,
-        autoApprovePlans: async () => false,
+        autoApprovePlans: async () => autoApprove,
       });
       const item = await createItem(storage, {
         stages: [stage],
