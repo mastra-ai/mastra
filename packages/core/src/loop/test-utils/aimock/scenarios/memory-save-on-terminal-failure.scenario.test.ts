@@ -8,7 +8,10 @@ import { assertNoDuplicateParts } from '../../../../agent/test-utils';
 import { MockMemory } from '../../../../memory/mock';
 import type { MastraMemory } from '../../../../memory';
 import type { Processor } from '../../../../processors';
+import { FGADeniedError } from '../../../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../../../auth/ee/interfaces/fga';
 import { MessageHistory } from '../../../../processors/memory/message-history';
+import { RequestContext } from '../../../../request-context';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
@@ -341,6 +344,75 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           'call_hang',
         ]);
         expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The deadline save writes memory outside the finish path, so it must check write access too.
+  it.skipIf(engine === 'inngest')(
+    'total-timeout does not save the turn for a caller without memory write access',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-readonly-fga-${engine}`;
+      await memory.createThread({ threadId, resourceId: RESOURCE });
+      const denied: string[] = [];
+      // Grants everything except writing memory.
+      const fga: IFGAProvider = {
+        check: async (_user, { permission }) => String(permission) !== 'memory:write',
+        require: async (user, { resource, permission }) => {
+          if (String(permission) === 'memory:write') {
+            denied.push(resource.id);
+            throw new FGADeniedError(user, resource, permission);
+          }
+        },
+        filterAccessible: async (_user, resources) => resources,
+      };
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'reader' });
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then wait.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          server: { fga },
+          requestContext,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            echoTool,
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual([]);
+        expect(denied).toContain(threadId);
       } finally {
         hang.resolve({});
       }
