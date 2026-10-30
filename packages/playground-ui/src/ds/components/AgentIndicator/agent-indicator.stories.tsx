@@ -52,7 +52,6 @@ const RUN: [AgentIndicatorState, number][] = [
   ['searching', 2500],
   ['tool', 2500],
   ['memory', 2500],
-  ['writing', 5200],
   ['waiting', 2500],
   ['done', 2000],
   ['error', 2000],

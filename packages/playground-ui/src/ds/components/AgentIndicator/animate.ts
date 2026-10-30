@@ -11,12 +11,12 @@ const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion:
 
 export function animate(svg: SVGSVGElement) {
   const paint = painter(svg);
-  const still = prefersReducedMotion();
+  const reduced = prefersReducedMotion();
   let clock = 0;
   let state: AgentIndicatorState | undefined;
   let enteredAt = 0;
   let leaving: ((t: number) => Frame) | undefined;
-  let morph = 1;
+  let shown: Frame | undefined;
   let onScreen = true;
   let frame = 0;
   let last = 0;
@@ -24,11 +24,10 @@ export function animate(svg: SVGSVGElement) {
   const draw = () => {
     if (!state) return;
     let f = poses[state](clock, clock - enteredAt);
-    if (leaving) {
-      morph = clamp01((clock - enteredAt) / MORPH_SECONDS);
-      if (morph >= 1) leaving = undefined;
-      else f = lerpFrame(leaving(clock), f, ease(morph));
-    }
+    const morph = clamp01((clock - enteredAt) / MORPH_SECONDS);
+    if (morph >= 1) leaving = undefined;
+    if (leaving) f = lerpFrame(leaving(clock), f, ease(morph));
+    shown = f;
     paint(f);
   };
 
@@ -42,7 +41,7 @@ export function animate(svg: SVGSVGElement) {
   };
 
   const wake = () => {
-    const running = onScreen && !still && !resting();
+    const running = onScreen && !reduced && !resting();
     if (running && !frame) {
       last = performance.now();
       frame = requestAnimationFrame(tick);
@@ -62,14 +61,11 @@ export function animate(svg: SVGSVGElement) {
   return {
     show(next: AgentIndicatorState) {
       if (next === state) return;
-      if (state && !still) {
+      if (state && !reduced) {
         const outgoing = poses[state];
         const outgoingAt = enteredAt;
-        const current = (t: number) => outgoing(t, t - outgoingAt);
-        const interrupted = leaving;
-        const blend = ease(morph);
-        leaving = interrupted ? t => lerpFrame(interrupted(t), current(t), blend) : current;
-        morph = 0;
+        const frozen = shown;
+        leaving = leaving && frozen ? () => frozen : t => outgoing(t, t - outgoingAt);
       }
       state = next;
       enteredAt = clock;

@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { ToolKind } from './tool-phrases';
 import { agentGlyph } from '@/ds/components/AgentIndicator';
 import type { AgentIndicatorState } from '@/ds/components/AgentIndicator';
+import { humanize } from '@/lib/string';
 
 export interface ToolPresentation {
   /** What the agent indicator turns into while this call runs. */
@@ -86,11 +87,6 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   skill_read: { pose: 'skill', label: 'Skill file', detailKeys: ['path'] },
 };
 
-function prettifyToolName(toolName: string): string {
-  const words = toolName.replace(/[_-]+/g, ' ').trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : toolName;
-}
-
 /** Agents prefix commands with `cd <workspace> &&`, which crowds out the command itself on a one-line row. */
 function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
@@ -98,7 +94,7 @@ function withoutCdPrefix(command: string): string {
 
 export function presentTool(toolName: string, args: unknown): ToolPresentation {
   const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
-  if (!style) return { pose: 'tool', icon: agentGlyph('tool'), label: prettifyToolName(toolName) };
+  if (!style) return { pose: 'tool', icon: agentGlyph('tool'), label: humanize(toolName) };
 
   const dressed = { pose: style.pose, icon: agentGlyph(style.pose), label: style.label };
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;

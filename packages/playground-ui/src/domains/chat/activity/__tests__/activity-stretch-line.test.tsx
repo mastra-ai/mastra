@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ActivityStretchLine } from '../activity-stretch-line';
 import type { ActivityMember } from '../model/activity-members';
-import { ActivityDetail } from '@/ds/components/ai/activity';
+import { ActivityDetail, ActivityWorkingDirectory } from '@/ds/components/ai/activity';
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 
@@ -33,6 +33,16 @@ describe('ActivityStretchLine without a disclosure provider', () => {
 
     expect(screen.getByText('Both files agree.')).toBeTruthy();
     expect(screen.getByText('Row for a.ts')).toBeTruthy();
+  });
+
+  it('names a path under the working directory the way its line shows it', () => {
+    render(
+      <ActivityWorkingDirectory path="/sandboxes/7b45/mastra">
+        <ActivityStretchLine members={[call('a', '/sandboxes/7b45/mastra/src/index.ts')]} live={false} />
+      </ActivityWorkingDirectory>,
+    );
+
+    expect(screen.getByRole('group', { name: 'Read src/index.ts' })).toBeTruthy();
   });
 });
 

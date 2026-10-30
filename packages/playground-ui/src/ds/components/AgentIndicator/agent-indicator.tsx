@@ -1,6 +1,8 @@
 import { useId, useLayoutEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
 
 import { animate } from './animate';
+import { MORPH_SECONDS } from './poses';
 import type { AgentIndicatorState } from './poses';
 import { BALLS, LINES, range, TRAIL } from './shapes';
 import { cn } from '@/lib/utils';
@@ -12,6 +14,12 @@ export interface AgentIndicatorProps {
   still?: boolean;
   className?: string;
 }
+
+interface IndicatorStyle extends CSSProperties {
+  '--agent-indicator-morph': string;
+}
+
+const MORPH: IndicatorStyle = { '--agent-indicator-morph': `${MORPH_SECONDS}s` };
 
 function Strokes({ part, count }: { part: string; count: number }) {
   return range(count).map(i => <path key={i} data-part={part} />);
@@ -67,6 +75,7 @@ export function AgentIndicator({ state, still, className }: AgentIndicatorProps)
       data-state={state}
       data-still={still || undefined}
       className={cn('agent-indicator inline-flex size-4 shrink-0', className)}
+      style={MORPH}
     >
       <svg ref={svgRef} viewBox="-12 -12 24 24" className="size-full">
         <defs>

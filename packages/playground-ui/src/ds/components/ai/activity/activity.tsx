@@ -1,6 +1,8 @@
 import { X } from 'lucide-react';
 import { createContext, useContext, useId, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
+
+import { useRelativePaths, WorkingDirectoryContext } from './use-relative-paths';
 import { ArrivalScope, useArriving } from '@/ds/components/Arrival';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
@@ -27,8 +29,6 @@ const LIFTS_TO_FOREGROUND = `${LIFTS} group-hover/row:text-foreground group-has-
 const LIFTS_TO_MUTED = `${LIFTS} group-hover/row:text-muted-foreground group-has-focus-visible/row:text-muted-foreground`;
 
 const ActivityContext = createContext<ActivityContextValue | undefined>(undefined);
-
-const WorkingDirectoryContext = createContext<string | undefined>(undefined);
 
 // Stryker disable next-line ArrowFunction: the default callback is intentionally behaviorless.
 const noopOpenChange = () => {};
@@ -196,14 +196,6 @@ export function ActivityWorkingDirectory({ path, children }: { path: string | un
   return <WorkingDirectoryContext value={path}>{children}</WorkingDirectoryContext>;
 }
 
-function relativeTo(directory: string | undefined, text: string): string {
-  if (!directory) return text;
-  const escaped = directory.replace(/\/+$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`${escaped}(?:/(?=[^\\s/])|(?![\\w.-]))`, 'g'), match =>
-    match.endsWith('/') ? '' : '.',
-  );
-}
-
 export interface ActivityDetailProps extends Omit<ComponentProps<typeof Txt>, 'font'> {
   wrap?: boolean;
 }
@@ -211,7 +203,7 @@ export interface ActivityDetailProps extends Omit<ComponentProps<typeof Txt>, 'f
 export const ActivityDetail = ({ wrap = false, className, children, ...props }: ActivityDetailProps) => {
   const arriving = useArriving();
   const inline = useInline();
-  const workingDirectory = useContext(WorkingDirectoryContext);
+  const relative = useRelativePaths();
 
   return (
     <Txt
@@ -221,7 +213,7 @@ export const ActivityDetail = ({ wrap = false, className, children, ...props }: 
       className={cn('min-w-0', wrap ? 'break-words' : 'truncate', inline && LIFTS_TO_FOREGROUND, arriving, className)}
       {...props}
     >
-      {typeof children === 'string' ? relativeTo(workingDirectory, children) : children}
+      {typeof children === 'string' ? relative(children) : children}
     </Txt>
   );
 };

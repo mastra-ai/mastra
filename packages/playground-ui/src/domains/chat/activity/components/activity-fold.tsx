@@ -17,6 +17,7 @@ import {
   ActivityHeader,
   ActivityIcon,
   ActivityLabel,
+  useRelativePaths,
 } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { Unwatched } from '@/ds/components/Arrival';
@@ -86,6 +87,7 @@ export function ActivityFold({
   const pose = indicator ? stretchPose(calls, live) : undefined;
   const box = useRef<HTMLSpanElement>(null);
   const said = useRef<HTMLSpanElement>(null);
+  const relative = useRelativePaths();
   useFadingEdge(said, spoken);
   useRollingWords(box, said, spoken, animates);
 
@@ -97,7 +99,7 @@ export function ActivityFold({
       open={foldable && open}
       onOpenChange={onOpenChange}
       foldable={foldable}
-      aria-label={wordsName(words)}
+      aria-label={wordsName({ ...words, detail: words.detail && relative(words.detail) })}
     >
       <ActivityTimedTrigger at={calls[0]?.startedAt}>
         <ActivityHeader>

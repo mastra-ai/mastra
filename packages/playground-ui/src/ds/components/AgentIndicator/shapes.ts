@@ -28,14 +28,6 @@ export function sstep(a: number, b: number, x: number) {
   return k * k * (3 - 2 * k);
 }
 
-export function glide(u: number, r = 0.2) {
-  const x = clamp01(u);
-  const v = 1 / (1 - r);
-  if (x < r) return (v * x * x) / (2 * r);
-  if (x > 1 - r) return 1 - (v * (1 - x) ** 2) / (2 * r);
-  return v * (x - r / 2);
-}
-
 export function cubicBezier(x1: number, y1: number, x2: number, y2: number) {
   const cx = 3 * x1;
   const bx = 3 * (x2 - x1) - cx;

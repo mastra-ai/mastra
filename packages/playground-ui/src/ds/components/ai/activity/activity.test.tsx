@@ -380,9 +380,9 @@ describe('an Activity with nothing to fold', () => {
 });
 
 describe('ActivityDetail inside a working directory', () => {
-  function renderDetail(detail: string) {
+  function renderDetail(detail: string, directory = '/sandboxes/7b45/mastra') {
     render(
-      <ActivityWorkingDirectory path="/sandboxes/7b45/mastra">
+      <ActivityWorkingDirectory path={directory}>
         <Activity aria-label="Read">
           <ActivityHeader>
             <ActivityDetail>{detail}</ActivityDetail>
@@ -408,5 +408,25 @@ describe('ActivityDetail inside a working directory', () => {
     renderDetail('/sandboxes/7b45/mastra-docs/README.md');
 
     expect(screen.getByText('/sandboxes/7b45/mastra-docs/README.md')).toBeTruthy();
+  });
+
+  it('leaves a path or URL that only contains the directory further in untouched', () => {
+    renderDetail('cp /tmp/sandboxes/7b45/mastra/a.ts https://host.dev/sandboxes/7b45/mastra/b');
+
+    expect(
+      screen.getByText('cp /tmp/sandboxes/7b45/mastra/a.ts https://host.dev/sandboxes/7b45/mastra/b'),
+    ).toBeTruthy();
+  });
+
+  it('reads a path after a flag or inside quotes relative to it', () => {
+    renderDetail('grep --root=/sandboxes/7b45/mastra/src "/sandboxes/7b45/mastra/docs"');
+
+    expect(screen.getByText('grep --root=src "docs"')).toBeTruthy();
+  });
+
+  it('keeps every path absolute when the agent works from the filesystem root', () => {
+    renderDetail('cat /etc/hosts', '/');
+
+    expect(screen.getByText('cat /etc/hosts')).toBeTruthy();
   });
 });
