@@ -17,14 +17,10 @@ const data: Record<string, unknown>[] = Array.from({ length: 14 }, (_, i) => ({
   compute: i % 5 === 0 ? 0 : Math.round(8 + i),
 }));
 
-const sum = (key: string) => (points: Record<string, unknown>[]) => ({
-  value: usd.format(points.reduce<number>((total, p) => total + (typeof p[key] === 'number' ? p[key] : 0), 0)),
-});
-
 const series = [
-  { dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-blue)', aggregate: sum('tokens') },
-  { dataKey: 'storage', label: 'Storage', color: 'var(--chart-green)', aggregate: sum('storage') },
-  { dataKey: 'compute', label: 'Compute', color: 'var(--chart-orange)', aggregate: sum('compute') },
+  { dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-blue)' },
+  { dataKey: 'storage', label: 'Storage', color: 'var(--chart-green)' },
+  { dataKey: 'compute', label: 'Compute', color: 'var(--chart-orange)' },
 ] satisfies MetricsLineChartSeries[];
 
 const meta: Meta<typeof MetricsStackedBarChart> = {
@@ -190,8 +186,9 @@ export const Loading: Story = {
 };
 
 /**
- * `height="fill"` in two cards of different content heights: each chart takes its card's free
- * height (the content must be a flex column), so both cards end on one line.
+ * `height="fill"` in two cards of different content heights (the right chart's legend has an
+ * extra entry): each chart takes its card's free height (the content must be a flex column), so
+ * both cards end on one line.
  */
 export const FillHeight: Story = {
   render: () => {
@@ -199,12 +196,12 @@ export const FillHeight: Story = {
     const cards = [
       {
         title: 'Requests',
-        description: 'Responses by status class. A wrapping description makes this top bar taller.',
+        total: count(requestsByHour.reduce((sum, b) => sum + b.total, 0)),
         chart: <MetricsStackedBarChart {...fill} data={requestsByHour} series={statusSeries} />,
       },
       {
         title: 'Cold starts',
-        description: 'Requests that woke a stopped app.',
+        total: String(requestsByHour.reduce((sum, b) => sum + b.coldStarts, 0)),
         chart: (
           <MetricsStackedBarChart
             {...fill}
@@ -220,7 +217,8 @@ export const FillHeight: Story = {
         {cards.map(card => (
           <MetricsCard key={card.title} className="min-h-0! min-w-0!">
             <MetricsCard.TopBar>
-              <MetricsCard.TitleAndDescription title={card.title} description={card.description} />
+              <MetricsCard.Title>{card.title}</MetricsCard.Title>
+              <MetricsCard.Total value={card.total} />
             </MetricsCard.TopBar>
             <MetricsCard.Content className="flex h-full flex-col">{card.chart}</MetricsCard.Content>
           </MetricsCard>

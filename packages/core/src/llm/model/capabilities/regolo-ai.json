@@ -35,16 +35,16 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "glm5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "qwen3.8-27b": [
@@ -52,7 +52,7 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
+    "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

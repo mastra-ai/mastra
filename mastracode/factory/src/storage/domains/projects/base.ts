@@ -514,10 +514,20 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     return pinned;
   }
 
-  async delete({ orgId, id }: { orgId: string; id: string }): Promise<FactoryProject | null> {
-    const project = await this.get({ orgId, id });
-    if (!project) return null;
-    const deleted = await this.#db.deleteMany('factory_projects', { org_id: orgId, id });
-    return deleted > 0 ? project : null;
+  /** `release` runs in the deleting transaction, so nothing can be routed to the project between the two. */
+  async delete(
+    { orgId, id }: { orgId: string; id: string },
+    release?: (ops: FactoryStorageOps) => Promise<void>,
+  ): Promise<FactoryProject | null> {
+    return this.storage.withTransaction(
+      async ops => {
+        const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
+        if (!row) return null;
+        await release?.(ops);
+        await ops.deleteMany('factory_projects', { org_id: orgId, id });
+        return toFactoryProject(row);
+      },
+      { isolationLevel: 'serializable' },
+    );
   }
 }
