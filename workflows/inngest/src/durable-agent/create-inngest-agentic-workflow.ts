@@ -35,7 +35,7 @@ import type {
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
-import { isMastraTimeoutError } from '@mastra/core/loop';
+import { isMastraTimeoutError, MastraTimeoutError } from '@mastra/core/loop';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -393,6 +393,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           }
         };
 
+        // A tool the total deadline aborted ends the run. The flag travels on iteration state
+        // because this predicate can run on a worker that never received the abort request.
+        if (state.deadlineTimeout) {
+          if (tracingRegistry) tracingRegistry.tracingStopCause = 'model_finished';
+          await emitStepFinish(false);
+          return false;
+        }
+
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
@@ -475,7 +483,11 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // timeout abort request over pubsub (another worker).
           const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
           const deadlineError =
-            isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total' ? abortReason : undefined;
+            isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total'
+              ? abortReason
+              : state.deadlineTimeout
+                ? new MastraTimeoutError(state.deadlineTimeout)
+                : undefined;
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];

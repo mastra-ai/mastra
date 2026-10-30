@@ -16,6 +16,7 @@ import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/s
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
+import { isMastraTimeoutError } from '../../../../loop/timeout';
 import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
@@ -179,7 +180,34 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // the evented engine rehydrates a fresh RequestContext per step, so the
   // wrapper's by-reference flag write never reaches the mapping step there.
   delegationBailed: z.boolean().optional(),
+  // Set when the total deadline aborted this tool call. Carried on the step
+  // output so a later step on another worker, which may never have received
+  // the abort request, still ends the run as the deadline.
+  deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  // Set when abort() stopped this tool call; carried for the same reason.
+  runAborted: z.boolean().optional(),
 });
+
+/**
+ * Marks a tool call the run was stopped during, however the tool settled: the total deadline or
+ * abort(). The next step may run on a worker that never received the abort request, so the mark
+ * travels on the step output. An abort only this execution saw (lost ownership) is not the run's.
+ */
+function runStopOf(
+  signal: AbortSignal | undefined,
+  runSignal: AbortSignal | undefined,
+): { deadlineTimeout?: DurableToolDeadlineTimeout; runAborted?: true } {
+  if (!signal?.aborted || !runSignal?.aborted) return {};
+  const reason: unknown = runSignal.reason;
+  if (isMastraTimeoutError(reason)) {
+    return reason.timeoutType === 'total'
+      ? { deadlineTimeout: { timeoutType: 'total', timeoutMs: reason.timeoutMs } }
+      : {};
+  }
+  return { runAborted: true };
+}
+
+type DurableToolDeadlineTimeout = { timeoutType: 'total'; timeoutMs: number };
 
 /**
  * Flush messages to memory before suspending.
@@ -2249,6 +2277,7 @@ export function createDurableToolCallStep() {
           providerMetadata,
           result,
           ...(outcome.status === 'aborted' ? { aborted: true } : {}),
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           modelOutputComputed,
           ...(resultHidden ? { resultHidden: true } : {}),
           ...(approvalGrant ?? {}),
@@ -2323,6 +2352,7 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           // A hook may bail on a FAILED delegation too (success: false).
           ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };

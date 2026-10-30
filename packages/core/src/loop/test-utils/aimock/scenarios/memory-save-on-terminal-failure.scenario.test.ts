@@ -157,7 +157,6 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
         // Let any late, fire-and-forget save land before reading memory.
         await new Promise(resolve => setTimeout(resolve, 300));
-        console.info(`[terminal-save probe] engine=${engine} case=total-timeout`, JSON.stringify({ calls, saves }));
 
         // The deadline aborts the hanging call; its step is saved with the abort notice, like a tool that returns late.
         await expectTurnSavedAndRecalled(memory, 'total-timeout', threadId, undefined, ['call_echo', 'call_hang']);
@@ -203,7 +202,6 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       });
       expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
       await new Promise(resolve => setTimeout(resolve, 300));
-      console.info(`[terminal-save probe] engine=${engine} case=provider-error`, JSON.stringify({ calls, saves }));
 
       await expectTurnSavedAndRecalled(memory, 'provider-error', threadId);
       expect(calls.map(call => call.hook)).toContain('MessageHistory.processOutputResult');
@@ -337,7 +335,6 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         });
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
         await new Promise(resolve => setTimeout(resolve, 300));
-        console.info(`[terminal-save probe] engine=${engine} case=total-timeout-om`, JSON.stringify({ calls }));
 
         await expectTurnSavedAndRecalled(memory, 'total-timeout-om', threadId, { observationalMemory: true }, [
           'call_echo',

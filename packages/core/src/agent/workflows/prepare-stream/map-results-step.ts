@@ -7,6 +7,7 @@ import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/mo
 import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
 import type { MastraMemory } from '../../../memory/memory';
+import { isObservationalMemoryEnabled } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
