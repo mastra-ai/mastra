@@ -322,7 +322,9 @@ export class Knowledge extends MastraBase {
     const match = this.#runtime.compiled.match(address);
     const label = match?.concrete?.displayLabel ?? match?.compiled.declaration.displayLabel;
     if (label === undefined) return undefined;
-    return label.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (token, name: string) => match!.params[name] ?? token);
+    return label.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (token, name: string) =>
+      Object.hasOwn(match!.params, name) ? match!.params[name]! : token,
+    );
   }
 }
 

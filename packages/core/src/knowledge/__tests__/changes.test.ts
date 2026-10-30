@@ -175,15 +175,15 @@ describe('Knowledge scopeLabel', () => {
       storage: new InMemoryStore(),
       scopes: {
         'policy:$orgId:$teamId': {
-          displayLabel: '$teamId policy at $orgId ($unknown)',
+          displayLabel: '$teamId policy at $orgId ($unknown $toString)',
           children: [{ name: 'drafts', displayLabel: '$teamId drafts' }, { name: 'archive' }],
         },
         'policy:globex:sales': { displayLabel: 'Globex sales' },
         'user:$userId': {},
       },
     });
-    expect(knowledge.scopeLabel('policy:acme:support')).toBe('support policy at acme ($unknown)');
-    expect(knowledge.scopeLabel('policy:acme:a%2Fb')).toBe('a/b policy at acme ($unknown)');
+    expect(knowledge.scopeLabel('policy:acme:support')).toBe('support policy at acme ($unknown $toString)');
+    expect(knowledge.scopeLabel('policy:acme:a%2Fb')).toBe('a/b policy at acme ($unknown $toString)');
     expect(knowledge.scopeLabel('policy:acme:support/drafts')).toBe('support drafts');
     expect(knowledge.scopeLabel('policy:globex:sales')).toBe('Globex sales');
     expect(knowledge.scopeLabel('policy:acme:support/archive')).toBeUndefined();
