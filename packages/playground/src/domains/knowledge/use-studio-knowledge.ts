@@ -11,6 +11,8 @@ import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
+import { createBurstRefresh } from './burst-refresh';
+
 const MIN_SEARCH_LENGTH = 2;
 
 /**
@@ -26,6 +28,8 @@ const LIVE_POLL_MS = 60_000;
 const RECONNECT_MS = 5_000;
 /** A burst of writes (a page and its notes) refetches once. */
 const REFRESH_DEBOUNCE_MS = 150;
+/** A steady stream of writes (an import) still refetches this often, so the view follows it. */
+const REFRESH_MAX_WAIT_MS = 750;
 
 const pollUnless = (live: boolean) => (live ? LIVE_POLL_MS : POLL_MS);
 
@@ -51,14 +55,12 @@ export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boole
   useEffect(() => {
     if (!knowledgeKey) return;
     const abort = new AbortController();
-    let debounce: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(
-        () => void queryClient.invalidateQueries({ queryKey: ['knowledge', knowledgeKey] }),
-        REFRESH_DEBOUNCE_MS,
-      );
-    };
+    const burst = createBurstRefresh(
+      () => void queryClient.invalidateQueries({ queryKey: ['knowledge', knowledgeKey] }),
+      REFRESH_DEBOUNCE_MS,
+      REFRESH_MAX_WAIT_MS,
+    );
+    const refresh = burst.notify;
     void (async () => {
       for (let connects = 0; !abort.signal.aborted;) {
         try {
@@ -81,7 +83,7 @@ export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boole
     })();
     return () => {
       abort.abort();
-      clearTimeout(debounce);
+      burst.cancel();
       setLive(false);
     };
   }, [client, queryClient, knowledgeKey]);
