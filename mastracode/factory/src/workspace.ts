@@ -696,7 +696,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const constructedWorkspaces = new Map<string, Workspace>();
   // Review-skill visibility and override revision last used to populate each workspace's skill cache.
   const skillCacheState = new Map<string, string>();
-  const skillCacheRefreshes = new Map<string, Promise<void>>();
+  const skillCacheRefreshes = new Map<string, Promise<number>>();
   // The review check of the latest request to resolve each workspace. The skill
   // source outlives the request that built it, so it must gate on this rather
   // than on the context it was constructed with.
