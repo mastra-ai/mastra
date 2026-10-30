@@ -122,6 +122,51 @@ describe('Knowledge read routes', () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
+  describe('grants between scopes', () => {
+    const declarations = {
+      'org:$orgId': {},
+      'role:$orgId:admin': { displayLabel: '$orgId admin' },
+      'team:$orgId:$teamId': {
+        access: [
+          { principal: 'org:$orgId', role: 'viewer' as const },
+          { principal: 'role:$orgId:admin', role: 'owner' as const },
+        ],
+      },
+    };
+
+    it('sends the owner every declared grant, with a declared principal nothing was written to', async () => {
+      const { mastra, acme, support, eng } = await setup(declarations);
+      const graph = await call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, knowledgeKey: 'main' });
+      expect(graph.grants).toEqual(
+        expect.arrayContaining([
+          { principal: 'org:acme', principalId: acme.id, target: support.id, role: 'viewer' },
+          { principal: 'org:acme', principalId: acme.id, target: eng.id, role: 'viewer' },
+          { principal: 'role:acme:admin', principalLabel: 'acme admin', target: support.id, role: 'owner' },
+          { principal: 'role:acme:admin', principalLabel: 'acme admin', target: eng.id, role: 'owner' },
+        ]),
+      );
+      expect(graph.grants).toHaveLength(4);
+    });
+
+    it('sends a signed-in caller only grants from principal scopes it can read', async () => {
+      const { mastra, acme, support } = await setup(declarations);
+      const knowledge = mastra.listKnowledge().main as unknown as Record<string, unknown>;
+      knowledge.readScopeFor = vi.fn(async (principals: string[]) => ({
+        addresses: principals,
+        prefixes: [],
+        children: [],
+      }));
+      (mastra as any).getServer = () => ({ auth: { authenticateToken: async () => ({ id: 'u1' }) } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      requestContext.set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, ['org:acme', 'team:acme:support']);
+      const graph = await call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main' });
+      expect(graph.grants).toEqual([
+        { principal: 'org:acme', principalId: acme.id, target: support.id, role: 'viewer' },
+      ]);
+    });
+  });
+
   it('searches every scope, or only the given scopes, and pages activity', async () => {
     const { mastra, support, eng } = await setup();
     const args = { mastra, knowledgeKey: 'main' };

@@ -31,3 +31,5 @@ authorize: async (path, method, user, context) => {
 The routes are gated by a new `knowledge:read` permission. With an FGA provider configured, `GET /knowledge` lists only the instances the caller can read and the other routes answer 404 for any other instance.
 
 Scope pages in tree, page, graph and search responses carry their declaration's `displayLabel` when the declaration sets one, with the address's `$params` filled in (`"$orgId policy"` on `policy:$orgId` shows as `"acme policy"` for `policy:acme`), so the explorer can caption a scope by its kind.
+
+The graph response also lists `grants`: the declared access grants onto the scopes it shows (principal scope address, its page id when it has one, its `principalLabel`, the target scope's page id and the role), so the explorer can draw who reaches what. Only principal scopes the caller can read are included; an owner view (`'all'`) also gets declared principals nothing was written to yet. Servers on a core without grant support leave the field out.
