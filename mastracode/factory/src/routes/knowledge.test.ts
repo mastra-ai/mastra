@@ -103,11 +103,11 @@ async function createHarness(
 const names = (pages: Array<{ name: string }>) => pages.map(page => page.name).sort();
 
 describe('Factory Knowledge routes on the page store', () => {
-  it("labels scope pages with their declaration's displayLabel", async () => {
+  it("labels scope pages with their declaration's displayLabel, filling in the address's params", async () => {
     const h = await createHarness({
       declarations: {
         ...scopes,
-        'org:$orgId': { ...scopes['org:$orgId'], displayLabel: 'Organization' },
+        'org:$orgId': { ...scopes['org:$orgId'], displayLabel: 'Organization $orgId' },
         'project:$projectId': { ...scopes['project:$projectId'], displayLabel: 'Project' },
       },
     });
@@ -116,13 +116,13 @@ describe('Factory Knowledge routes on the page store', () => {
     expect(labels((await h.get('/graph')).body.pages)).toEqual([
       ['Deploy runbook', undefined],
       ['Handbook', undefined],
-      ['Org one', 'Organization'],
+      ['Org one', `Organization ${ORG}`],
       ['Project P', 'Project'],
     ]);
-    expect(labels((await h.get('/tree')).body.pages)).toEqual([['Org one', 'Organization']]);
+    expect(labels((await h.get('/tree')).body.pages)).toEqual([['Org one', `Organization ${ORG}`]]);
     const page = await h.get(`/pages/${h.runbook.id}`);
     expect(labels(page.body.ancestors)).toEqual([
-      ['Org one', 'Organization'],
+      ['Org one', `Organization ${ORG}`],
       ['Project P', 'Project'],
     ]);
   });
