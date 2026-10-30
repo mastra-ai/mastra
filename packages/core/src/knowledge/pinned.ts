@@ -63,7 +63,7 @@ function render(page: KnowledgePage, label: PinLabel, maxTokens: number): string
         : label.notes === 1
           ? ', 1 note'
           : `, ${label.notes} notes`;
-  const text = `${page.name} (${label.ref}${notes}): ${page.body!.trim()}`;
+  const text = `${page.name} (${label.ref}, v${page.version}${notes}): ${page.body!.trim()}`;
   if (estimateTokenCount(text) <= maxTokens) return text;
   const room = Math.max(maxTokens - estimateTokenCount(PIN_TRUNCATION_MARKER) - 1, 1);
   return `${sliceByTokens(text, 0, room).trimEnd()} ${PIN_TRUNCATION_MARKER}`;

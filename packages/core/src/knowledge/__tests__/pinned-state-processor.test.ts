@@ -51,14 +51,16 @@ describe('PinnedStateProcessor', () => {
     const { processor } = harness();
     const result = processor.processInput({ messages: [], systemMessages: [] } as any) as any;
     const preamble = result.systemMessages.at(-1).content as string;
-    expect(preamble).toContain('the ref to read it by and how many notes it has, then its full current body');
+    expect(preamble).toContain('its ref, its version and how many notes it has, then its full current body');
+    expect(preamble).toContain('pass that ref and version to knowledge_page as page and expectedVersion');
     expect(preamble).toContain('Do not knowledge_search or knowledge_read a pinned page to confirm it');
-    expect(preamble).toContain('having notes is not by itself a reason to read it');
+    expect(preamble).toContain('a note count alone is no reason to read it');
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toMatch(
       /^Use the Knowledge tools.*Pinned knowledge pages may already be in your context if <pinned-knowledge> tags are present/,
     );
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('without searching for or reading them again');
-    expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('only when you need its notes or child pages');
+    expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('edit one with the version shown');
+    expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('only when the answer depends on what its notes say');
   });
 
   it('drives the processor end to end: snapshot, delta on an edit, and lane clear on unpin', async () => {
