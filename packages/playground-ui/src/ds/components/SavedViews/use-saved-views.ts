@@ -41,7 +41,8 @@ export type SavedViewsController<TSettings> = {
   change: (patch: SavedViewDraftChange<TSettings>) => void;
   save: () => void;
   discard: () => void;
-  rename: (viewId: string, name: string) => void;
+  /** Resolves true once the view has the new name; false leaves the error in `error`. */
+  rename: (viewId: string, name: string) => boolean | Promise<boolean>;
   duplicate: (viewId: string) => void;
   remove: (viewId: string) => void;
 };
@@ -120,6 +121,7 @@ export function useSavedViews<TSettings>({
       if (viewId !== activeViewId) onActiveViewChange(viewId);
     },
     change: patch => {
+      if (patch.name !== undefined) setFailedStorageKey(undefined);
       if (draft) {
         setDraft({ ...draft, ...patch });
         return;
@@ -146,9 +148,10 @@ export function useSavedViews<TSettings>({
     },
     rename: (viewId, name) => {
       const nextName = validViewName(name);
-      if (!nextName) return;
-      if (!write(views.map(view => (view.id === viewId ? { ...view, name: nextName } : view)))) return;
+      if (!nextName) return false;
+      if (!write(views.map(view => (view.id === viewId ? { ...view, name: nextName } : view)))) return false;
       if (draft?.viewId === viewId) setDraft({ ...draft, name: nextName });
+      return true;
     },
     duplicate: viewId => {
       const index = views.findIndex(view => view.id === viewId);

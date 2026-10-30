@@ -48,9 +48,10 @@ export function ObservabilityPageLayout({
       breadcrumbs={breadcrumbs({ current, isLoading, showSwitch })}
       actionRow={
         (viewSwitch || savedViews) && (
-          <div className="flex min-w-0 items-center justify-between gap-3">
+          // Wraps on narrow screens so the saved-views picker drops to its own line instead of shrinking.
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             {viewSwitch}
-            <div ref={setHeaderSlot} className="flex min-w-0 flex-1 justify-end" />
+            <div ref={setHeaderSlot} className="flex min-w-0 grow justify-end" />
           </div>
         )
       }

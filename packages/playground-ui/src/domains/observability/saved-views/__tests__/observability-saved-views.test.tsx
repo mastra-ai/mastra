@@ -377,6 +377,7 @@ describe('ObservabilitySavedViews', () => {
 
       await waitFor(() => expect(activeName()).toBe('All errors'));
       expect(source.records().map(record => record.name)).toContain('All errors');
+      await waitFor(() => expect(screen.queryByRole('textbox', { name: 'View name' })).toBeNull());
     });
 
     it('duplicates a view and applies the copy', async () => {
@@ -431,7 +432,11 @@ describe('ObservabilitySavedViews', () => {
       nameNewView('errors');
       fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
 
-      expect((await screen.findByRole('alert')).textContent).toBe('A view named "errors" already exists.');
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toBe('A view named "errors" already exists.');
+      const input = screen.getByRole('textbox', { name: 'View name' });
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(alert.id);
       expect(screen.getByRole('button', { name: 'Save view' })).toBeTruthy();
       expect(source.records()).toHaveLength(2);
       expect(url()).not.toBe('');
@@ -440,13 +445,25 @@ describe('ObservabilitySavedViews', () => {
       expect(screen.queryByRole('alert')).toBeNull();
     });
 
-    it('shows a name clash on rename and keeps the old name', async () => {
+    it('shows a name clash on rename in the form and keeps what was typed', async () => {
       await setup();
       fireEvent.click(within(await openViewMenu('Slow')).getByRole('menuitem', { name: 'Rename' }));
       renameTo('Errors');
 
-      expect((await screen.findByRole('alert')).textContent).toBe('A view named "Errors" already exists.');
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toBe('A view named "Errors" already exists.');
+      const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'View name' });
+      expect(input.value).toBe('Errors');
+      expect(input.closest('form')?.contains(alert)).toBe(true);
+      expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(alert.id);
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
       expect(activeName()).toBe('Slow');
+
+      fireEvent.change(input, { target: { value: 'Slower' } });
+      expect(screen.queryByRole('alert')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+      await waitFor(() => expect(activeName()).toBe('Slower'));
+      await waitFor(() => expect(screen.queryByRole('textbox', { name: 'View name' })).toBeNull());
     });
 
     it('shows a failed save and keeps the draft', async () => {

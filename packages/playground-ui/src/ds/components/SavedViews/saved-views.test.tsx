@@ -134,6 +134,23 @@ describe('SavedViews', () => {
     expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
   });
 
+  it('clears a failed save once the name is edited', () => {
+    render(<Page />);
+    fireEvent.click(screen.getByRole('button', { name: 'New view' }));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage full', 'QuotaExceededError');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    expect(screen.getByRole('alert')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename view' }));
+    const name = screen.getByRole('textbox', { name: 'View name' });
+    fireEvent.change(name, { target: { value: 'Errors' } });
+    fireEvent.blur(name);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('does not carry a failed save into another board', () => {
     const page = render(<Page />);
     fireEvent.click(screen.getByRole('button', { name: 'New view' }));

@@ -35,4 +35,4 @@ const filters = useObservabilityListFilters(urlState, { defaultDatePreset: 'last
 
 Fixed filter chips that stayed on screen after the page replaced its filters (for example when switching views), and a combobox trigger icon that rendered larger than the trigger text.
 
-`useSavedViews` now reports a failed save as `error` (was `storageError`), and `SavedViewEditor` takes a `saveCaption` for the note shown next to Save view.
+`useSavedViews` now reports a failed save as `error` (was `storageError`), and `SavedViewEditor` takes a `saveCaption` for the note shown next to Save view. A saved-views controller's `rename` now returns whether the view was renamed (`boolean` or `Promise<boolean>`), so a rename form can stay open with the error when the name is taken.

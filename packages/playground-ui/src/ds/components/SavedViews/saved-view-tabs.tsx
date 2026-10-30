@@ -68,7 +68,7 @@ export function SavedViewTabs<TSettings>({
               name={view.name}
               onCommit={name => {
                 setRenamingViewId(undefined);
-                views.rename(view.id, name);
+                void views.rename(view.id, name);
               }}
             />
           );

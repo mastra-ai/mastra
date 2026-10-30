@@ -255,12 +255,15 @@ export function useHostedSavedViews({
     rename: async (viewId, rawName) => {
       const name = validName(rawName);
       const record = records.find(item => item.id === viewId);
-      if (!name || !record || name === record.name || pending || !canEdit(record)) return;
+      if (!name || !record || pending || !canEdit(record)) return false;
+      if (name === record.name) return true;
       const renamed = await run(
         () => source.update(viewId, { name }),
         cause => errorMessage(cause, name),
       );
-      if (renamed) storeRecord(renamed);
+      if (!renamed) return false;
+      storeRecord(renamed);
+      return true;
     },
     duplicate: async viewId => {
       const original = records.find(item => item.id === viewId);

@@ -16,6 +16,7 @@ import {
   ComboboxTrigger,
 } from '@/ds/components/Combobox/combobox-parts';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Field, FieldError } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Txt } from '@/ds/components/Txt';
@@ -67,14 +68,18 @@ export function SavedViewPicker<TSettings>({
   const viewsById = new Map(views.views.map(view => [view.id, view]));
 
   return (
-    <div role="group" aria-label={ariaLabel} className={cn('flex min-w-0 items-center justify-end gap-1.5', className)}>
-      {views.error && !creating && (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={cn('flex min-w-0 flex-wrap items-center justify-end gap-1.5', className)}
+    >
+      {views.error && !creating && !renaming && (
         <Txt role="alert" variant="caption" className="min-w-0 truncate text-destructive-foreground">
           {views.error}
         </Txt>
       )}
       {activeUnsaved && (
-        <>
+        <div className="flex shrink-0 items-center gap-1.5">
           <Button type="button" variant="ghost" size="sm" disabled={views.pending} onClick={views.discard}>
             Reset
           </Button>
@@ -83,7 +88,7 @@ export function SavedViewPicker<TSettings>({
               Save changes
             </Button>
           )}
-        </>
+        </div>
       )}
       <div ref={anchorRef} className="flex min-w-0 items-center gap-0.5">
         <ComboboxRoot
@@ -124,7 +129,7 @@ export function SavedViewPicker<TSettings>({
         </ComboboxRoot>
         {activeView && !creating && (
           <DropdownMenu>
-            <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip="View actions">
+            <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip="View actions" className="shrink-0">
               <EllipsisIcon />
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
@@ -158,7 +163,7 @@ export function SavedViewPicker<TSettings>({
           else views.discard();
         }}
       >
-        <PopoverTrigger variant="ghost" size="icon-sm" tooltip="Save as new view">
+        <PopoverTrigger variant="ghost" size="icon-sm" tooltip="Save as new view" className="shrink-0">
           <LayersPlusIcon />
         </PopoverTrigger>
         <PopoverContent align="end" className="w-72">
@@ -181,6 +186,8 @@ export function SavedViewPicker<TSettings>({
           open={renaming}
           anchorRef={anchorRef}
           name={activeView.name}
+          error={views.error}
+          pending={views.pending}
           onClose={() => setRenaming(false)}
           onRename={name => views.rename(activeView.id, name)}
         />
@@ -193,28 +200,43 @@ function RenamePopover({
   open,
   anchorRef,
   name,
+  error,
+  pending,
   onClose,
   onRename,
 }: {
   open: boolean;
   anchorRef: RefObject<HTMLDivElement | null>;
   name: string;
+  error: string | undefined;
+  pending: boolean | undefined;
   onClose: () => void;
-  onRename: (name: string) => void;
+  onRename: (name: string) => boolean | Promise<boolean>;
 }) {
+  // The name that last failed to save: its error shows until the user types something else.
+  const [failedName, setFailedName] = useState<string>();
+  const [typedName, setTypedName] = useState(name);
+  const close = () => {
+    setFailedName(undefined);
+    setTypedName(name);
+    onClose();
+  };
   return (
-    <Popover open={open} onOpenChange={next => !next && onClose()}>
+    <Popover open={open} onOpenChange={next => !next && close()}>
       <PopoverContent anchor={anchorRef} align="end" className="w-72">
         {open && (
           <ViewNameForm
             title="Rename view"
             initialName={name}
             submitLabel="Rename"
-            onSubmit={next => {
-              onRename(next);
-              onClose();
+            error={failedName !== undefined && failedName === typedName ? error : undefined}
+            pending={pending}
+            onNameChange={setTypedName}
+            onSubmit={async next => {
+              if (await onRename(next)) close();
+              else setFailedName(next);
             }}
-            onCancel={onClose}
+            onCancel={close}
           />
         )}
       </PopoverContent>
@@ -238,37 +260,34 @@ function ViewNameForm({
   error?: string;
   pending?: boolean;
   onNameChange?: (name: string) => void;
-  onSubmit: (name: string) => void;
+  onSubmit: (name: string) => void | Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initialName);
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (name.trim()) onSubmit(name);
+    if (name.trim()) void onSubmit(name);
   };
   return (
     <form className="flex flex-col gap-3" onSubmit={submit}>
       <Txt as="h2" variant="label">
         {title}
       </Txt>
-      <Input
-        aria-label="View name"
-        size="sm"
-        autoFocus
-        onFocus={event => event.currentTarget.select()}
-        maxLength={MAX_SAVED_VIEW_NAME_CHARS}
-        value={name}
-        error={error !== undefined}
-        onChange={event => {
-          setName(event.target.value);
-          onNameChange?.(event.target.value);
-        }}
-      />
-      {error && (
-        <Txt role="alert" variant="caption" className="text-destructive-foreground">
-          {error}
-        </Txt>
-      )}
+      <Field invalid={error !== undefined}>
+        <Input
+          aria-label="View name"
+          size="sm"
+          autoFocus
+          onFocus={event => event.currentTarget.select()}
+          maxLength={MAX_SAVED_VIEW_NAME_CHARS}
+          value={name}
+          onChange={event => {
+            setName(event.target.value);
+            onNameChange?.(event.target.value);
+          }}
+        />
+        <FieldError>{error}</FieldError>
+      </Field>
       <div className="flex justify-end gap-1.5">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel
