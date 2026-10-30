@@ -1,5 +1,13 @@
 # @mastra/fastembed
 
+## 1.3.6-alpha.1
+
+### Patch Changes
+
+- Fixed custom FastEmbed models failing to load when `tokenizer_config.json` stores `pad_token` as a serialized AddedToken object (as exported by older Transformers versions). ([#28893](https://github.com/mastra-ai/mastra/pull/28893))
+
+- Direct `FlagEmbedding` and `SparseTextEmbedding` calls now throw a clear error when a custom ONNX model returns a different number of output rows than input texts, instead of returning the wrong number of embeddings or failing with an unrelated TypeError. ([#28892](https://github.com/mastra-ai/mastra/pull/28892))
+
 ## 1.3.6-alpha.0
 
 ### Patch Changes
