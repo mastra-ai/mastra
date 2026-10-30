@@ -2528,6 +2528,27 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
+  it('sends a PR card closed without merging back to Review when the PR is reopened', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage, { stages: ['review'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const rule = (identity: string) => ({
+      actor: { type: 'system' as const, id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule' as const, identity },
+    });
+
+    // The GitHub close rule cancels it, then a review request or push on the reopened PR asks for Review.
+    const closed = await service.transition({ ...request(item, { stage: 'canceled' }), ...rule('closed') });
+    assert(closed.status === 'accepted');
+    const reopened = await service.transition({
+      ...request({ ...item, revision: closed.revision }, { stage: 'review' }),
+      ...rule('re-review'),
+    });
+
+    expect(reopened).toMatchObject({ status: 'accepted', stage: 'review' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
   it('refuses an agent pulling an untrusted PR card into Review', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await prCard(storage, { metadata: { authorTrusted: false } });
@@ -2689,7 +2710,7 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         execute: ['review', 'planning', 'done', 'canceled'],
         review: ['execute', 'intake', 'done', 'canceled'],
         done: ['review'],
-        canceled: ['intake'],
+        canceled: ['intake', 'review'],
       };
       org = `org-${randomUUID()}`;
       const storage = await workItemsOn(backend);

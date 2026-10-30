@@ -382,7 +382,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     canceled: {
       name: 'Canceled',
       kind: 'terminal',
-      nextPhases: ['intake'],
+      // Revived into Intake; a pull request closed without merging and then reopened goes back to Review.
+      nextPhases: ['intake', 'review'],
     },
   },
 });
