@@ -18,9 +18,10 @@ import { Maximize, Pin } from 'lucide-react';
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 
-import { runLayout } from '../lib/layout';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
 import { pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
+import { layoutPageGraph } from '../lib/pageLayout';
+import type { PageLayout } from '../lib/pageLayout';
 import type { KnowledgePageEdge, KnowledgePagePayload } from '../pageTypes';
 
 import { Txt } from '@/ds/components/Txt';
@@ -271,7 +272,7 @@ export interface KnowledgePageGraphProps {
 
 /**
  * The schema-4 Knowledge page graph: scopes and pages as circles sized by how often they are mentioned,
- * parent links as faint edges and mentions as solid ones. Layout is deterministic for the same pages.
+ * parent links as faint edges and mentions as solid ones. The first layout is deterministic for the same pages; later updates start from where pages already sit.
  */
 export function KnowledgePageGraph(props: KnowledgePageGraphProps) {
   return (
@@ -291,13 +292,17 @@ function KnowledgePageGraphInner({
   onMentionSelect,
 }: KnowledgePageGraphProps) {
   const allEdges = useMemo(() => pageGraphEdges(pages, edges), [pages, edges]);
+  // The last layout: a refetch or live update starts from it, so placed pages stay put.
+  const lastLayout = useRef<PageLayout | undefined>(undefined);
   const laidOut = useMemo(() => {
     const flow = toPageFlow(pages, allEdges);
-    const positions = runLayout(
+    const layout = layoutPageGraph(
+      lastLayout.current,
       flow.nodes.map(node => ({ id: node.id, size: node.data.size })),
       flow.edges.map(edge => ({ source: edge.source, target: edge.target })),
     );
-    return { nodes: flow.nodes, edges: flow.edges, positions };
+    lastLayout.current = layout;
+    return { nodes: flow.nodes, edges: flow.edges, positions: layout.positions };
   }, [pages, allEdges]);
 
   const pinned = useMemo(() => new Set(pinnedIds), [pinnedIds]);
