@@ -103,4 +103,30 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     expect(again.scope.parentId).toBe(p1.id);
     expect(again.parentConflict).toEqual({ existingParentId: p1.id, requestedParentId: p2.id });
   });
+
+  it('reads a prefix as an exact code-point range, including the highest code points', async () => {
+    const store = await makeStore();
+    const addresses = ['p:\u{10FFFF}x', 'p:\u{1F600}x', 'p:ax', 'p:Ax', 'q:ax'];
+    const pageByAddress: Record<string, string> = {};
+    for (const address of addresses) {
+      const { scope } = await store.materializeScope({ address, declaration: 'p:$id', name: address, provenance: who });
+      const page = await store.createPage({ parentId: scope.id, name: `in ${address}`, provenance: who });
+      pageByAddress[address] = page.name;
+    }
+    const names = async (prefix: string) =>
+      (
+        await store.listPages({
+          read: { addresses: [], prefixes: [{ declaration: 'p:$id', prefix }], children: [] },
+          limit: 50,
+        })
+      ).pages
+        .map(page => page.name)
+        .sort();
+    expect(await names('p:')).toEqual(['in p:\u{10FFFF}x', 'in p:\u{1F600}x', 'in p:Ax', 'in p:ax'].sort());
+    expect(await names('p:\u{10FFFF}')).toEqual(['in p:\u{10FFFF}x']);
+    expect(await names('p:\u{1F600}')).toEqual(['in p:\u{1F600}x']);
+    expect(await names('p:a')).toEqual(['in p:ax']);
+    expect(await names('')).toHaveLength(5);
+    await store.dangerouslyReset();
+  });
 });
