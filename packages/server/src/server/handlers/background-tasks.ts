@@ -159,11 +159,15 @@ export const RESUME_BACKGROUND_TASK_ROUTE = createRoute({
     }
 
     try {
-      await bgManager.resume(backgroundTaskId, resumeData);
+      await bgManager.resume(
+        backgroundTaskId,
+        resumeData,
+        suspendedAt !== undefined ? { suspendedAt: new Date(suspendedAt) } : undefined,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // Lost a race with another resume or a cancel, or no slot is free right now.
-      if (message.startsWith('Cannot resume task in status') || message.startsWith('Concurrency limit reached')) {
+      // Lost a race with another resume, a new suspension or a cancel, or no slot is free right now.
+      if (message.startsWith('Cannot resume task') || message.startsWith('Concurrency limit reached')) {
         throw new HTTPException(409, { message });
       }
       throw error;

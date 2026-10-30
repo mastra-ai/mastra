@@ -595,6 +595,28 @@ describe('Background Tasks handlers', () => {
       expect(seen).toEqual([]);
     });
 
+    it('returns 409 when the suspension changes between the route reading it and the resume', async () => {
+      const seen: unknown[] = [];
+      const task = await suspendedTask(seen);
+      const getTask = bgManager.getTask.bind(bgManager);
+      const storage = await (bgManager as any).getStorage();
+      // The route reads the original suspension; before manager.resume reads it, the task suspends again.
+      const spy = vi.spyOn(bgManager, 'getTask').mockImplementationOnce(async id => {
+        const read = await getTask(id);
+        await storage.updateTask(id, { suspendedAt: new Date(task.suspendedAt!.getTime() + 5000) });
+        return read;
+      });
+      try {
+        await expect(
+          resume(task.id, { resumeData: { approved: true }, suspendedAt: task.suspendedAt!.toISOString() }),
+        ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('suspension has changed') });
+      } finally {
+        spy.mockRestore();
+      }
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+      expect(seen).toEqual([]);
+    });
+
     it('requires resumeData in the body', () => {
       const schema = RESUME_BACKGROUND_TASK_ROUTE.bodySchema!;
       expect(schema.safeParse({}).success).toBe(false);

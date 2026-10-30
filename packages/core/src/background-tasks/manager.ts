@@ -622,6 +622,9 @@ export class BackgroundTaskManager {
     if (task.status !== 'suspended') {
       throw new Error(`Cannot resume task in status '${task.status}' (expected 'suspended')`);
     }
+    if (options?.suspendedAt !== undefined && new Date(options.suspendedAt).getTime() !== suspensionToken(task)) {
+      throw new Error(`Cannot resume task "${taskId}": its suspension has changed since it was read`);
+    }
 
     const isProcessAffine = this.taskContexts.has(taskId);
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);

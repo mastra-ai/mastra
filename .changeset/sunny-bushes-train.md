@@ -15,3 +15,9 @@ execute: async (input, context) => {
   // suspendPayload is { question: 'Approve the refund?' }
 };
 ```
+
+**Resume only the suspension you read.** `BackgroundTaskManager.resume()` takes an optional `suspendedAt`, and refuses the resume when the task has resumed or suspended again since:
+
+```typescript
+await mastra.backgroundTaskManager.resume(taskId, { approved: true }, { suspendedAt: task.suspendedAt });
+```

@@ -192,6 +192,12 @@ export interface ResumeOptions {
    * `resume()` again.
    */
   onNoSlot?: 'throw' | 'queue';
+  /**
+   * The `suspendedAt` the caller read. When set, resume throws a
+   * `suspension has changed` error unless the task is still in that same
+   * suspension, so an answer to an earlier question can't resume a later one.
+   */
+  suspendedAt?: Date | number;
 }
 
 /**
