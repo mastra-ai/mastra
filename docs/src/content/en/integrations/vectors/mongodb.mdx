@@ -76,6 +76,13 @@ const store = new MongoDBVector({
     description:
       "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
   },
+  {
+    name: 'autoEmbed',
+    type: 'MongoDBAutoEmbedConfig',
+    isOptional: true,
+    description:
+      "Automated Embedding defaults for indexes this store creates, such as `{ model: 'voyage-4' }`. An index created without its own `autoEmbed` or `dimension` uses these settings, which makes the store embed text server-side instead of receiving vectors.",
+  },
 ]}
 />
 

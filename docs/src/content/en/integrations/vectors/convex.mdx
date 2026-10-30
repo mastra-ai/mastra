@@ -32,6 +32,11 @@ Before using `ConvexVector`, you need to set up the Convex schema and storage ha
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'deploymentUrl',
     type: 'string',
     description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
@@ -350,6 +355,24 @@ Deletes the index and all its vectors.
 
 ```typescript
 await vectorStore.deleteIndex({ indexName: 'my_vectors' })
+```
+
+### `truncateIndex()`
+
+Deletes every vector in an index while keeping the index itself. Rows are removed in batches so each mutation stays within Convex's per-mutation time limit. This method is available on `ConvexVector`; `ConvexNativeVector` uses Convex's own table operations instead.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to clear',
+  },
+]}
+/>
+
+```typescript
+await vectorStore.truncateIndex({ indexName: 'my_vectors' })
 ```
 
 ### `updateVector()`

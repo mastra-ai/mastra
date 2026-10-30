@@ -61,6 +61,11 @@ const results = await store.query({
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'url',
     type: 'string',
     description:
@@ -83,6 +88,28 @@ const results = await store.query({
     type: 'number',
     isOptional: true,
     description: 'Interval in milliseconds for database sync (Turso specific)',
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 5,
+    description: 'Maximum retries for write operations that hit an `SQLITE_BUSY` error',
+  },
+  {
+    name: 'initialBackoffMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 100,
+    description: 'Initial retry backoff in milliseconds. The delay doubles on each retry',
+  },
+  {
+    name: 'vectorTopKOverFetchMultiplier',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 10,
+    description:
+      'Over-fetch multiplier for `vector_top_k` queries that have metadata filters. Higher values improve recall at the cost of scanning more rows. Must be a positive integer, or the constructor throws',
   },
 ]}
 />
@@ -338,6 +365,14 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
   },
 ]}
 />
+
+### `close()`
+
+Closes the underlying libSQL client and releases the file handles this vector store holds. Calling it more than once is a no-op.
+
+```typescript
+await store.close()
+```
 
 ## Response types
 

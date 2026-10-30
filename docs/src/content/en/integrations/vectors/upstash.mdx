@@ -245,6 +245,32 @@ The `update` object can have the following properties:
 
 Attempts to delete an item by its ID from the specified index. Logs an error message if the deletion fails.
 
+### `deleteVectors()`
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both, and neither can be empty.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Namespace to delete from',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
+]}
+/>
+
 ## Hybrid vector search
 
 Upstash Vector supports hybrid search that combines semantic search (dense vectors) with keyword-based search (sparse vectors) for improved relevance and accuracy.

@@ -220,6 +220,10 @@ interface IndexStats {
 ]}
 />
 
+### `deleteVectors()`
+
+Not implemented for Astra. Calling it throws a `MastraError` with the ID `MASTRA_VECTOR_ASTRA_DELETE_VECTORS_NOT_SUPPORTED`. Delete vectors one at a time with `deleteVector()` instead.
+
 ## Response types
 
 Query results are returned in this format:

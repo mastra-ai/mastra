@@ -22,8 +22,9 @@ The LanceVectorStore uses a factory pattern for creation. You should use the sta
   },
   {
     name: 'options',
-    type: 'ConnectionOptions',
-    description: 'Additional connection options for LanceDB',
+    type: 'ConnectionOptions & { id?: string }',
+    description:
+      'Additional connection options for LanceDB. Pass `id` to name the store; otherwise a random UUID is used.',
     isOptional: true,
   },
 ]}

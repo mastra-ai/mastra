@@ -14,6 +14,11 @@ The PgVector class provides vector search using [PostgreSQL](https://www.postgre
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'connectionString',
     type: 'string',
     description: 'PostgreSQL connection URL',
@@ -410,6 +415,24 @@ interface PGIndexStats {
   },
 ]}
 />
+
+### `truncateIndex()`
+
+Deletes every vector in an index while keeping the index itself.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to clear',
+  },
+]}
+/>
+
+```typescript
+await vectorStore.truncateIndex({ indexName: 'my_vectors' })
+```
 
 ### `updateVector()`
 

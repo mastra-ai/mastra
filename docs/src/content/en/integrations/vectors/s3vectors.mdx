@@ -309,6 +309,32 @@ Deletes a specific vector by ID.
 ]}
 />
 
+### `deleteVectors()`
+
+Deletes multiple vectors by ID. Deleting by metadata filter isn't supported: pass `ids` instead, and pass either `ids` or `filter`, never both.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Index containing the vectors to delete.',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    description: 'IDs of the vectors to delete. Required for S3 Vectors.',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description:
+      'Metadata filter. Accepted by the interface but not supported by S3 Vectors, which throws when it receives one.',
+  },
+]}
+/>
+
 ### `disconnect()`
 
 Closes the underlying AWS SDK HTTP handler to free sockets.

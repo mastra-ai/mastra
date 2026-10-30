@@ -14,6 +14,11 @@ The ChromaVector class provides vector search using [Chroma](https://docs.trychr
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'host',
     type: 'string',
     isOptional: true,
@@ -277,6 +282,25 @@ You can also provide the shape of your metadata to a `get` call for type inferen
     isOptional: true,
     defaultValue: 0,
     description: 'Offset for returning records. Use with `limit` to paginate results.',
+  },
+]}
+/>
+
+### `hybridSearch()`
+
+Run a [Chroma Search API](https://docs.trychroma.com/docs/querying-collections/overview) request against an index. It exposes Chroma's native search, including hybrid ranking across dense and sparse keys, which the standard vector methods don't cover.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to search',
+  },
+  {
+    name: 'search',
+    type: 'Search',
+    description: 'A Chroma Search request, including ranking, filters, and the fields to return',
   },
 ]}
 />

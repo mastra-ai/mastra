@@ -64,7 +64,22 @@ const results = await store.query({
   {
     name: 'url',
     type: 'string',
-    description: "Elasticsearch connection URL (e.g., 'http://localhost:9200')",
+    isOptional: true,
+    description: "Elasticsearch connection URL (e.g., 'http://localhost:9200'). Provide either `url` or `client`.",
+  },
+  {
+    name: 'client',
+    type: 'ElasticSearchClient',
+    isOptional: true,
+    description:
+      'A pre-configured Elasticsearch client. Use it instead of `url` to control connection settings yourself.',
+  },
+  {
+    name: 'auth',
+    type: 'ElasticSearchAuth',
+    isOptional: true,
+    description:
+      'Authentication for the `url` form: `{ apiKey }`, `{ username, password }`, or `{ bearer }`. Not used with `client`.',
   },
 ]}
 />
