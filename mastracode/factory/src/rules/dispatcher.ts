@@ -134,8 +134,7 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  const { canRetry, manualRetryOnly = false } = factoryDispatchFailureMetadata(failureCode);
-  return attempts >= MAX_ATTEMPTS || !canRetry || manualRetryOnly;
+  return attempts >= MAX_ATTEMPTS || factoryDispatchFailureMetadata(failureCode).retry !== 'automatic';
 }
 
 /**
