@@ -256,7 +256,7 @@ describe('compileKnowledgeScopes: validation', () => {
       { pages: [{ key: 'k', name: 'K' }] },
     ]) {
       expect(() => compileKnowledgeScopes({ ...knowledgeMemoryScopes(), 'org:acme': extra })).toThrow(
-        /can only add description, access, pinnedContext and pinnedContextPriority/,
+        /can only add displayLabel, description, access, pinnedContext and pinnedContextPriority/,
       );
     }
     expect(() =>

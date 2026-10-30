@@ -372,7 +372,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     const unsupported = (['belongsTo', 'children', 'pages'] as const).filter(field => declaration[field] !== undefined);
     if (unsupported.length) {
       throw new KnowledgeDeclarationError(
-        `Knowledge scope "${address}" is an address of "${owner.key}" and can only add description, access, pinnedContext and pinnedContextPriority; declare ${unsupported.join(', ')} on "${owner.key}".`,
+        `Knowledge scope "${address}" is an address of "${owner.key}" and can only add displayLabel, description, access, pinnedContext and pinnedContextPriority; declare ${unsupported.join(', ')} on "${owner.key}".`,
       );
     }
     concrete.set(address, { declaration, rules: [] });
