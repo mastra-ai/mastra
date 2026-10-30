@@ -182,13 +182,20 @@ describe('TranscriptEntries skill rows', () => {
 
   it('renders a kickoff with the appended work-item description as a skill row plus a description row', async () => {
     const description = 'Users land on /404 after signing in.\n\nRepro: sign in twice.';
-    renderEntries([userMessageEntry('msg-1', `${SKILL_WITH_ARGS}\n\n<work-item-description>\n${description}\n</work-item-description>`)]);
+    renderEntries([
+      userMessageEntry(
+        'msg-1',
+        `${SKILL_WITH_ARGS}\n\n<work-item-description>\n${description}\n</work-item-description>`,
+      ),
+    ]);
 
     expect(screen.getByRole('group', { name: 'Skill: triage-issue' })).toBeInTheDocument();
     const descriptionRow = screen.getByRole('group', { name: 'Signal: Work item description' });
 
     await userEvent.click(within(descriptionRow).getByRole('button'));
-    expect(within(descriptionRow).getByText(/Users land on \/404 after signing in/, { selector: 'p' })).toBeInTheDocument();
+    expect(
+      within(descriptionRow).getByText(/Users land on \/404 after signing in/, { selector: 'p' }),
+    ).toBeInTheDocument();
 
     // Neither envelope leaks as raw text.
     expect(screen.queryByText(/<skill name=/)).not.toBeInTheDocument();
@@ -289,7 +296,9 @@ describe('TranscriptEntries skill rows', () => {
 
     const descriptionRow = screen.getByRole('group', { name: 'Signal: Work item description' });
     await userEvent.click(within(descriptionRow).getByRole('button'));
-    expect(within(descriptionRow).getByText(/Users land on \/404 after signing in/, { selector: 'p' })).toBeInTheDocument();
+    expect(
+      within(descriptionRow).getByText(/Users land on \/404 after signing in/, { selector: 'p' }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/<work-item-description>/)).not.toBeInTheDocument();
 
     await userEvent.click(within(row).getByRole('button', { name: /Skill/ }));

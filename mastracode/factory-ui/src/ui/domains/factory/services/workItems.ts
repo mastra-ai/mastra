@@ -97,14 +97,7 @@ interface ExternalWorkItemSource {
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  | 'githubProjectId'
-  | 'source'
-  | 'sourceKey'
-  | 'url'
-  | 'metadata'
-  | 'description'
-  | 'triageType'
-  | 'acceptedAt'
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'description' | 'triageType' | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
@@ -186,8 +179,7 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, description, triageType, acceptedAt, ...rest } =
-    item;
+  const { factoryProjectId, externalSource, metadata, description, triageType, acceptedAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,

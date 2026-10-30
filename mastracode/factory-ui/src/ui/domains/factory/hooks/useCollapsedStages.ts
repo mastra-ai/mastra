@@ -7,8 +7,7 @@ type CollapseRevealTarget = { itemId: string; stages: BoardStageId[] };
 export function useCollapsedStages(revealTarget: CollapseRevealTarget | undefined) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<BoardStageId>>(() => new Set());
   const [revealedTargetKey, setRevealedTargetKey] = useState<string>();
-  const targetKey =
-    revealTarget && `${revealTarget.itemId}:${revealTarget.stages.join(',')}`;
+  const targetKey = revealTarget && `${revealTarget.itemId}:${revealTarget.stages.join(',')}`;
 
   if (targetKey !== revealedTargetKey) {
     setRevealedTargetKey(targetKey);

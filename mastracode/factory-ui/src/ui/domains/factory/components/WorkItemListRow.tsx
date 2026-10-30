@@ -11,13 +11,7 @@ import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import {
-  CardActions,
-  CardStatus,
-  MetadataLabels,
-  SourceTitle,
-  WorkItemSourceIcon,
-} from './BoardCardParts';
+import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
 import { columnReviewVerdict, ReviewVerdictBadge } from './WorkItemCardRows';
