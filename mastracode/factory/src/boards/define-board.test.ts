@@ -261,7 +261,7 @@ describe('defineBoard', () => {
       execute: ['review', 'planning', 'done', 'canceled'],
       review: ['execute', 'intake', 'done', 'canceled'],
       done: ['review'],
-      canceled: ['intake'],
+      canceled: ['intake', 'review'],
     };
     for (const from of Object.keys(flow)) {
       for (const to of Object.keys(flow)) {

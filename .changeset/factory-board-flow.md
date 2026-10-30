@@ -14,7 +14,7 @@ Work and Review boards no longer use transition policies. Each phase's `nextPhas
 | Building | Review, Planning, Done, Canceled |
 | Review | Building, Intake, Done, Canceled |
 | Done | Review |
-| Canceled | Intake |
+| Canceled | Intake, Review |
 
 This applies to people too: you can no longer drag a card from Intake or Triage straight into Building, and a card self-review parks in Intake resumes through Review. Pull request cards still only sit in Intake, Review, Done or Canceled. When work counts as finished (no open pull request, no review asking for changes) is now in the build and self-review instructions rather than enforced by the board.
 
