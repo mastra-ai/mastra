@@ -1,11 +1,4 @@
-export {
-  BoardDefinitionError,
-  compileBoardDefinition,
-  DEFAULT_PHASE_CONTEXT,
-  defineBoard,
-  FACTORY_AGENT_ID,
-} from './define-board.js';
-export { boardDefinitionOf, compileStoredBoard, storedBoardInputSchema } from './stored-board.js';
+export { BoardDefinitionError, DEFAULT_PHASE_CONTEXT, defineBoard, FACTORY_AGENT_ID } from './define-board.js';
 export { cardRuleFacts } from './card-facts.js';
 export type {
   BoardDefinition,
