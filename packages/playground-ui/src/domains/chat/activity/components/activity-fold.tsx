@@ -1,10 +1,10 @@
 import { X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { ActivityCallState } from '../model/activity-members';
-import { callsOutcome, liveWords, outcomeText, settledWords, wordsName } from '../model/activity-words';
+import { callsOutcome, liveWords, outcomeText, settledWords, stretchPose, wordsName } from '../model/activity-words';
 import { ActivityTimedTrigger } from './activity-timed-trigger';
 import { useFadingEdge } from './use-fading-edge';
 import { useRollingWords } from './use-rolling-words';
@@ -17,6 +17,7 @@ import {
   ActivityHeader,
   ActivityIcon,
   ActivityLabel,
+  useRelativePaths,
 } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { Unwatched } from '@/ds/components/Arrival';
@@ -26,7 +27,7 @@ import { cn } from '@/lib/utils';
 
 export interface ActivityFoldProps {
   calls: readonly ActivityCallState[];
-  pose?: AgentIndicatorState;
+  indicator?: boolean;
   live: boolean;
   elapsedMs?: number;
   open: boolean;
@@ -67,7 +68,7 @@ function foldStatus(live: boolean, failed: boolean): ActivityStatus {
 /** A line that says what its calls are doing, or did, and folds what it summarises. */
 export function ActivityFold({
   calls,
-  pose,
+  indicator = false,
   live,
   elapsedMs,
   open,
@@ -83,8 +84,12 @@ export function ActivityFold({
   const failed = !live && outcome.failed > 0;
   const outcomeLabel = live ? '' : outcomeText(outcome, calls.length);
   const spoken = [words.label, words.detail, words.duration, failed, outcomeLabel].join('\u0000');
-  const { box, said } = useRollingWords(spoken, animates);
+  const pose = indicator ? stretchPose(calls, live) : undefined;
+  const box = useRef<HTMLSpanElement>(null);
+  const said = useRef<HTMLSpanElement>(null);
+  const relative = useRelativePaths();
   useFadingEdge(said, spoken);
+  useRollingWords(box, said, spoken, animates);
 
   return (
     <Activity
@@ -94,7 +99,7 @@ export function ActivityFold({
       open={foldable && open}
       onOpenChange={onOpenChange}
       foldable={foldable}
-      aria-label={wordsName(words)}
+      aria-label={wordsName({ ...words, detail: words.detail && relative(words.detail) })}
     >
       <ActivityTimedTrigger at={calls[0]?.startedAt}>
         <ActivityHeader>

@@ -2,9 +2,7 @@ import {
   allOf,
   anyOf,
   around,
-  clamp01,
   dot,
-  glide,
   inCap,
   inCirc,
   inOval,
@@ -35,7 +33,6 @@ export const agentIndicatorStates = [
   'deleting',
   'skill',
   'tool',
-  'writing',
   'waiting',
   'done',
   'error',
@@ -372,61 +369,6 @@ const notice = once(() =>
   withTrail(kit(inCirc(0, 0, 7.4), [0, 0], { cuts: [segment([0, -0.4], [0, 3.8], 1.9)] }), dotCut([0, -3.6], 2.3)),
 );
 
-const HOME: Point = [-7.8, -5.4];
-const ROWS: [number, [number, number][]][] = [
-  [
-    HOME[1],
-    [
-      [HOME[0], -2.8],
-      [0.8, 4.8],
-    ],
-  ],
-  [
-    0,
-    [
-      [HOME[0], -0.2],
-      [3.4, 4.8],
-    ],
-  ],
-  [
-    5.4,
-    [
-      [HOME[0], -4.2],
-      [-0.6, 1.6],
-    ],
-  ],
-];
-const WORDS = ROWS.flatMap(([y, spans]) => spans.map(([from, to]) => ({ from, to, y })));
-const STEPS = WORDS.map((word, i) => {
-  const next = WORDS[i + 1];
-  return { ...word, next, gap: next && next.y !== word.y ? 4.5 : 1.6 };
-});
-const TYPED = STEPS.reduce((n, { from, to, gap }) => n + to - from + gap, 0);
-
-const writing: Pose = t => {
-  const p = (t / 5.2) % 1;
-  const fade = 1 - sstep(0.8, 0.9, p);
-  let left = glide((p - 0.04) / 0.68, 0.08) * TYPED;
-  let head = HOME;
-  const strokes = STEPS.flatMap(({ from, to, y, next, gap }): TrailPoint[] => {
-    const e = clamp01(left / (to - from));
-    const x = from + (to - from) * e;
-    if (left > 0) head = [x, y];
-    if (next && left > to - from) {
-      const k = sstep(0, 1, (left - to + from) / gap);
-      head = [to + (next.from - to) * k, y + (next.y - y) * k];
-    }
-    left -= to - from + gap;
-    return [
-      [from, y, 2.4 * fade * sstep(0, 0.05, e), 0],
-      [x, y, 0, 0],
-    ];
-  });
-  const back = sstep(0.82, 0.96, p);
-  const caret: Point = [head[0] + 3.2 + (HOME[0] - head[0]) * back, head[1] + (HOME[1] - head[1]) * back];
-  return withTrail(kit(inCap([caret[0], caret[1] - 1.5], [caret[0], caret[1] + 1.5], 1.1), caret), strokes);
-};
-
 const blank = once(() => kit(nothing, [0, 0]));
 const line =
   (a: Point, b: Point) =>
@@ -495,7 +437,6 @@ export const poses: Record<AgentIndicatorState, Pose> = {
   deleting: grown(deleting),
   skill: grown(skill),
   tool: grown(tool),
-  writing: grown(writing),
   waiting: grown(waiting),
   done: grown(done),
   error: grown(error),

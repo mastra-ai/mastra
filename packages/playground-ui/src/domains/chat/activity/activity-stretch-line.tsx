@@ -3,7 +3,6 @@ import { StretchContent } from './components/stretch-content';
 import type { ActivityCall, ActivityCallState, ActivityMember } from './model/activity-members';
 import { activitySegments } from './model/activity-segments';
 import type { ActivitySegment } from './model/activity-segments';
-import { stretchPose } from './model/activity-words';
 import type { ActivityDisclosureStore } from './model/disclosure-store';
 import { ActivityDisclosureContext, useDisclosureStore, useIsOpen } from './use-activity-disclosure';
 import { hasReasoningText } from '@/ds/components/ai/activity';
@@ -68,7 +67,7 @@ export function ActivityStretchLine({ members, live, elapsedMs, current }: Activ
       <ActivityFold
         slot="activity-stretch"
         calls={calls}
-        pose={stretchPose(calls, live)}
+        indicator
         live={live}
         elapsedMs={elapsedMs}
         open={open}

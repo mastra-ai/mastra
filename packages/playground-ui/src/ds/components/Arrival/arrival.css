@@ -12,7 +12,7 @@
 }
 
 .mastra-arriving:has([data-arrival='continuing']) {
-  animation: none;
+  animation-duration: 0s;
 }
 
 @media (prefers-reduced-motion: reduce) {

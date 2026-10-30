@@ -244,8 +244,8 @@ describe('TranscriptEntries turn groups', () => {
     renderWithProviders(<TranscriptEntries entries={sent.entries} onApprove={() => {}} onRespond={() => {}} running />);
 
     const room = screen.getByText('again please').closest<HTMLElement>(ROOM_SELECTOR);
-    if (room) expect(within(room).getByRole('separator')).toHaveTextContent('51 minutes later');
     expect(room).toBeInstanceOf(HTMLElement);
+    if (room) expect(within(room).getByRole('separator')).toHaveTextContent('51 minutes later');
   });
 
   it('gives no room to a group no user turn opens', () => {

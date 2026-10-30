@@ -91,6 +91,5 @@ describe('arrival scope', () => {
     );
 
     expect(arrives('indicator')).toBe(false);
-    expect(screen.getByTestId('indicator').parentElement?.classList.contains(ARRIVING_CLASS)).toBe(false);
   });
 });

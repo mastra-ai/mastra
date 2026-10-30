@@ -37,7 +37,7 @@ export const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 
 export type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
-  | { kind: 'divider'; label: string; title?: string }
+  | { kind: 'divider'; label: string }
   | { kind: 'reminder'; text: string }
   | { kind: 'reactive'; tagName?: string; text: string };
 
@@ -77,10 +77,12 @@ function environmentWorkingDirectory(entry: TimelineEntry): string | undefined {
   return typeof workingDirectory === 'string' ? workingDirectory : undefined;
 }
 
-/** Where the agent works, as the latest environment snapshot told it. */
 export function agentWorkingDirectory(entries: readonly TimelineEntry[]): string | undefined {
-  const environment = entries.findLast(entry => environmentWorkingDirectory(entry));
-  return environment && environmentWorkingDirectory(environment);
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const directory = environmentWorkingDirectory(entries[index]);
+    if (directory) return directory;
+  }
+  return undefined;
 }
 
 export function isTurnDivider(entry: TimelineEntry | undefined): boolean {

@@ -30,12 +30,22 @@ import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
+import { TurnRevealScope } from './TurnReveal';
 import { turnGaps } from './turn-gaps';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
 /** The live turn's last row, told whether a live stretch above it already names what the agent is doing. */
 export type TranscriptTail = (stretchLive: boolean) => ReactNode;
+
+/** A step ending is not the reply ending, so a running turn has no whole answer to copy yet. */
+function turnReply(steps: MessageEntry[], runningTurn: boolean): string | undefined {
+  if (runningTurn) return undefined;
+  return steps
+    .map(step => messageText(renderableParts(step)))
+    .filter(Boolean)
+    .join('\n\n');
+}
 
 export function Transcript({ tail }: { tail?: TranscriptTail }) {
   const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
@@ -148,18 +158,9 @@ export function TranscriptEntries({
           const holdsRoom =
             runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
 
-          // One reply, however many messages the server split it into: the meta row lands
-          // once, under the last of them, and copies the whole answer. While the run is
-          // still answering there is no whole answer yet — a step ending is not the reply
-          // ending, so no stamp lands mid-turn.
           const steps = replySteps(group);
           const replyEnd = steps.at(-1);
-          const reply = runningTurn
-            ? undefined
-            : steps
-                .map(step => messageText(renderableParts(step)))
-                .filter(Boolean)
-                .join('\n\n');
+          const reply = turnReply(steps, runningTurn);
           const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
 
           return (
@@ -169,30 +170,32 @@ export function TranscriptEntries({
               holdsRoom={holdsRoom}
               restored={group.key === restoredTurnKey}
             >
-              {group.entries.map(entry => {
-                const gap = gaps.get(entry.id);
-                return (
-                  <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                    {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
-                    <TranscriptEntryContent
-                      entry={entry}
-                      suspensions={suspensions}
-                      reply={entry === replyEnd ? reply : undefined}
-                      activity={activityByEntry.get(entry.id)}
-                      redundantSuspension={
-                        entry.kind === 'suspension' &&
-                        entry.toolName !== 'request_access' &&
-                        canonicalToolCallIds.has(entry.toolCallId)
-                      }
-                      isSubmitting={isSubmitting}
-                      viewerId={viewerId}
-                      owner={owner}
-                      onApprove={onApprove}
-                      onRespond={onRespond}
-                    />
-                  </TranscriptItem>
-                );
-              })}
+              <TurnRevealScope>
+                {group.entries.map(entry => {
+                  const gap = gaps.get(entry.id);
+                  return (
+                    <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
+                      {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
+                      <TranscriptEntryContent
+                        entry={entry}
+                        suspensions={suspensions}
+                        reply={entry === replyEnd ? reply : undefined}
+                        activity={activityByEntry.get(entry.id)}
+                        redundantSuspension={
+                          entry.kind === 'suspension' &&
+                          entry.toolName !== 'request_access' &&
+                          canonicalToolCallIds.has(entry.toolCallId)
+                        }
+                        isSubmitting={isSubmitting}
+                        viewerId={viewerId}
+                        owner={owner}
+                        onApprove={onApprove}
+                        onRespond={onRespond}
+                      />
+                    </TranscriptItem>
+                  );
+                })}
+              </TurnRevealScope>
               {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
             </ChatShell.Turn>
           );

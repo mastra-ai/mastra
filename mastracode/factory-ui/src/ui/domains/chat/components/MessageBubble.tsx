@@ -46,6 +46,7 @@ import { HostedStretch } from './activity/HostedStretch';
 import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
+import { useTurnLanded } from './TurnReveal';
 import { messageEntryView } from './message-entry-view';
 import type { StatusMetadata } from './message-entry-view';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
@@ -58,10 +59,10 @@ function steeringLabel(entry: MessageEntry): string | undefined {
   return 'Steered message';
 }
 
-function metaText(entry: MessageEntry, prose: string, reply?: string): string | undefined {
+function metaText(entry: MessageEntry, prose: string, settled: boolean, reply?: string): string | undefined {
   if (entry.message.role === 'user') return prose || undefined;
 
-  return entry.streaming ? undefined : reply;
+  return settled ? reply : undefined;
 }
 
 /** The tail line steps aside for a live stretch at once, so the reveal must not hold it back. */
@@ -113,7 +114,9 @@ export function MessageBubble({
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(entry.message.role === 'user' ? content : written);
-  const meta = metaText(entry, prose, reply);
+  const settled = !entry.streaming && paced === written;
+  const turnLanded = useTurnLanded(entry.id, !settled);
+  const meta = metaText(entry, prose, settled && turnLanded, reply);
   const showsReplyFooter = Boolean(meta);
   const drawsAnything = hasRenderablePart && (drawsOwnPart || showsReplyFooter);
   const steeringStatus = steeringLabel(entry);
@@ -280,7 +283,7 @@ export function MessageBubble({
           <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
         );
       }
-      if (row.kind === 'divider') return <TranscriptDivider label={row.label} title={row.title} />;
+      if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
       if (row.kind === 'reminder') {
         return <SignalActivity kind="reminder" label="System reminder" message={row.text} appearance="inline" />;
       }

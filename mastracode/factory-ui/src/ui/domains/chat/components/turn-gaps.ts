@@ -23,8 +23,23 @@ export interface TurnGap {
   title: string;
 }
 
-function amount(value: number, unit: string): string {
-  return new Intl.NumberFormat('en', { style: 'unit', unit, unitDisplay: 'long' }).format(value);
+type Unit = (typeof UNITS)[number][0];
+
+function unitFormat(unit: Unit): Intl.NumberFormat {
+  return new Intl.NumberFormat('en', { style: 'unit', unit, unitDisplay: 'long' });
+}
+
+const AMOUNT: Record<Unit, Intl.NumberFormat> = {
+  year: unitFormat('year'),
+  month: unitFormat('month'),
+  week: unitFormat('week'),
+  day: unitFormat('day'),
+  hour: unitFormat('hour'),
+  minute: unitFormat('minute'),
+};
+
+function amount(value: number, unit: Unit): string {
+  return AMOUNT[unit].format(value);
 }
 
 /** Worded like the reminder the agent gets for the same pause: "51 minutes later", "17 hours 17 minutes later". */

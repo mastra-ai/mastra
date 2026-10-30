@@ -14,6 +14,7 @@ import { messagePreview, messagePreviewShowsAll } from './message-preview';
 import { agentGlyph } from '@/ds/components/AgentIndicator';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
+import { humanize } from '@/lib/string';
 
 export interface SignalActivityProps {
   kind: 'state' | 'reactive' | 'reminder';
@@ -44,11 +45,9 @@ const signalKinds = {
   },
 } as const;
 
-const spoken = (name: string) => name.charAt(0).toUpperCase() + name.slice(1).replace(/[-_]+/g, ' ');
-
 function SignalLine({ kind, label, message, detail, mode, defaultOpen }: Omit<SignalActivityProps, 'appearance'>) {
   const { Icon } = signalKinds[kind];
-  const name = spoken(label);
+  const name = humanize(label);
   const lineHoldsMessage = detail === undefined && messagePreviewShowsAll(message);
 
   return (
@@ -82,26 +81,14 @@ function SignalLine({ kind, label, message, detail, mode, defaultOpen }: Omit<Si
   );
 }
 
-export function SignalActivity({
-  kind,
-  label,
-  message,
-  detail,
-  mode,
-  defaultOpen,
-  appearance = 'row',
-}: SignalActivityProps) {
-  if (appearance === 'inline') {
-    return (
-      <SignalLine kind={kind} label={label} message={message} detail={detail} mode={mode} defaultOpen={defaultOpen} />
-    );
-  }
+export function SignalActivity({ appearance = 'row', ...signal }: SignalActivityProps) {
+  if (appearance === 'inline') return <SignalLine {...signal} />;
+  const { kind, label, message, detail, mode, defaultOpen } = signal;
   const { Icon, accent, body } = signalKinds[kind];
   const lineHoldsMessage = detail === undefined && messagePreviewShowsAll(message);
 
   return (
     <ActivityItem
-      appearance={appearance}
       icon={<Icon className={accent} aria-hidden />}
       label={label}
       detail={detail ?? messagePreview(message)}
