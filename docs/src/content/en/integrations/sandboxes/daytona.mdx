@@ -373,7 +373,7 @@ For Daytona-specific desktop APIs (regions, compressed screenshots, screen recor
     name: 'apiUrl',
     type: 'string',
     description:
-      'Daytona API endpoint. Falls back to the DAYTONA_API_URL process environment variable (the SDK no longer reads it from `.env` files). If a `.env`, `.env.local` or `.env.development` file in the working directory also defines DAYTONA_API_URL, as is common with `mastra dev`, the sandbox fails to start with an "endpoint is ambiguous" error. For self-hosted Daytona, pass it explicitly: `apiUrl: process.env.DAYTONA_API_URL`.',
+      'Daytona API endpoint. Falls back to the DAYTONA_API_URL process environment variable, or the deprecated DAYTONA_SERVER_URL (the SDK no longer reads either from `.env` files). If a `.env`, `.env.local` or `.env.development` file in the working directory also defines one of these variables, as is common with `mastra dev`, the sandbox fails to start with an "endpoint is ambiguous" error. For self-hosted Daytona, pass the endpoint explicitly, for example `apiUrl: process.env.DAYTONA_API_URL`.',
     isOptional: true,
   },
   {
