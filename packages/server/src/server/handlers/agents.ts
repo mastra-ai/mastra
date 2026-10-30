@@ -85,7 +85,10 @@ import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
-import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
+// oxlint-disable-next-line import/no-duplicates
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata } from '../utils';
+// oxlint-disable-next-line import/no-duplicates
+import { toSlug } from '../utils';
 
 import { assertWriteAccess, getCallerAuthorId } from './authorship';
 import { handleError } from './error';
