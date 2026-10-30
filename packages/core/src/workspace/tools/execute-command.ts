@@ -396,7 +396,7 @@ export const executeCommandTool = createTool({
 
 const backgroundDescription = `${baseDescription}
 
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`;
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running.`;
 
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({
