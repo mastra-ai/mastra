@@ -79,6 +79,8 @@ type AddToolMetadataOptions = {
   parentArgs?: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
+  delegatedToolCallId?: string;
+  delegatedToolName?: string;
   metadata?: Record<string, unknown>;
 } & (
   | {
@@ -200,6 +202,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         resumeSchema,
         type,
         suspendedToolRunId,
+        delegatedToolCallId,
+        delegatedToolName,
         metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
@@ -239,6 +243,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // from `runId` directly; legacy entries with `parentRunId` keep working.
           runId,
           ...(suspendedToolRunId && suspendedToolRunId !== runId ? { delegatedRunId: suspendedToolRunId } : {}),
+          // The delegate's own tool call that paused. Resume stays keyed on `toolCallId`.
+          ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+          ...(delegatedToolName ? { delegatedToolName } : {}),
           ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
           resumeSchema,
           ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
@@ -363,6 +370,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolName: entry.toolName ?? inputData.toolName,
             kind,
             args: entry.args,
+            ...(typeof entry.delegatedToolCallId === 'string'
+              ? { delegatedToolCallId: entry.delegatedToolCallId }
+              : {}),
+            ...(typeof entry.delegatedToolName === 'string' ? { delegatedToolName: entry.delegatedToolName } : {}),
             ...(kind === 'suspension' ? { suspendPayload: entry.suspendPayload } : {}),
             resumeSchema: entry.resumeSchema,
           },
@@ -605,6 +616,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // `args`, `transformChunk`, `flushMessagesBeforeSuspension` and `approvalSchema`, and
         // called before approval gating so a handed-back call is never re-gated or re-run.
         const raiseToolSuspension = async (suspendPayload: any, options?: SuspendOptions): Promise<any> => {
+          // Set by the agent-tool wrapper when a delegated sub-agent paused: the sub-agent's own
+          // tool call. Carried alongside the delegation call, which stays the resume key. Ignored
+          // unless the wrapper raised the pause, so a plain tool's suspend options can't set it.
+          const fromDelegate = options?.isAgentSuspend === true;
+          const delegatedToolCallId =
+            fromDelegate && typeof options?.delegatedToolCallId === 'string' ? options.delegatedToolCallId : undefined;
+          const delegatedToolName =
+            fromDelegate && typeof options?.delegatedToolName === 'string' ? options.delegatedToolName : undefined;
           if (options?.requireToolApproval) {
             const innerApproval =
               typeof options.requireToolApproval === 'object' && options.requireToolApproval
@@ -630,6 +649,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: approvalToolName,
                 args: approvalArgs,
+                ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                ...(delegatedToolName ? { delegatedToolName } : {}),
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
                 usage: suspendedStepUsage,
@@ -645,6 +666,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 : {}),
               type: 'approval',
               suspendedToolRunId: options.runId,
+              delegatedToolCallId,
+              delegatedToolName,
               resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
@@ -712,6 +735,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             payload: {
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
+              ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+              ...(delegatedToolName ? { delegatedToolName } : {}),
               suspendPayload,
               args: inputData.args,
               resumeSchema: options?.resumeSchema,
@@ -725,6 +750,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             args,
             suspendPayload,
             suspendedToolRunId: options?.runId,
+            delegatedToolCallId,
+            delegatedToolName,
             type: 'suspension',
             resumeSchema: options?.resumeSchema,
             metadata: suspensionChunk.metadata,
