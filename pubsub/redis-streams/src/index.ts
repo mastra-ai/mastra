@@ -101,7 +101,9 @@ async function connectWithin(client: RedisClientType, role: 'write' | 'read'): P
     timer = setTimeout(() => {
       // destroy() makes the abandoned connect() reject; nothing awaits it now.
       connecting.catch(() => {});
-      client.destroy();
+      // close() may already have destroyed this client, and a standalone
+      // client's destroy() throws ClientClosedError when called twice.
+      if (client.isOpen) client.destroy();
       reject(
         new Error(
           `redis-streams: ${role} client did not connect to Redis within ${timeoutMs}ms (socket.connectTimeout); the server is unreachable or not responding`,
@@ -712,8 +714,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     } catch (err) {
       // No Subscription exists yet, so #stopSubscription will never destroy
       // this fan-out group. Without this, every retry would leave one behind.
+      // Not awaited: if Redis froze, this command stalls too, and the caller
+      // must still get the timeout instead of hanging.
       if (!isGrouped) {
-        await this.#writeClient.xGroupDestroy(streamKey, group).catch(destroyErr => {
+        void this.#writeClient.xGroupDestroy(streamKey, group).catch(destroyErr => {
           this.#logger?.debug?.('redis-streams: xGroupDestroy failed', { topic, group, error: errorText(destroyErr) });
         });
       }
