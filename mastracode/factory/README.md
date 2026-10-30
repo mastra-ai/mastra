@@ -33,10 +33,11 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 Factory stores provider facts separately from board activity:
 
-- A **work item** describes the source: provider, kind, key, URL, title, state, labels, and author. GitHub, GitLab, Jira, Linear, Slack, incident.io, and Factory-native items use the same fields in `factory_work_items`.
-- A **board item** tracks Factory's board, stages, sessions, claim, revision, and process metadata in `factory_board_items`. Trust stamps such as `authorTrusted` and `factoryAuthored` stay here, not on the provider work item.
+- A **work item** stores provider-independent identity, title, and parent linkage in `factory_work_items`.
+- A **source** stores provider identity, key, URL, state, labels, and author in `factory_work_item_sources`. A work item can have several sources; Factory-native work items have none.
+- A **board item** tracks Factory's board, stages, sessions, claim, revision, and process metadata in `factory_board_items`. Trust stamps such as `authorTrusted` and `factoryAuthored` stay here, not on the source.
 
-Storage returns a `Card` that joins both records. Read source facts from `card.workItem`; read Factory process state from `card.metadata`. A provider-only refresh updates the work item's revision without changing the board item's revision, so it doesn't invalidate a pending stage move. Both records invalidate the board list cache when they change.
+Storage returns a `Card` that joins these records. Read sources from `card.workItem.sources`; read Factory process state from `card.metadata`. A provider-only refresh updates the source's revision without changing the board item's revision, so it doesn't invalidate a pending stage move. Changes to any of these records invalidate the board list cache.
 
 ```typescript
 import type { Card } from '@mastra/factory';
@@ -69,7 +70,7 @@ MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run
 
 Dry-run mode logs the planned copies and keeps reads and writes on the legacy table. Remove the variable and restart to perform the migration and switch to the new tables. Normal operation doesn't write back to the legacy table, so rolling back to an older Factory version hides cards and changes created after cutover.
 
-During mixed-version deployments, a newer legacy row is recopied in full and can replace changes made by a newer replica. Avoid simultaneous writes from old and new versions during the cutover.
+During mixed-version deployments, a changed legacy row is recopied only while its split records still match the migration baseline. Conflicting split-side edits are skipped and logged rather than overwritten. Released legacy claims are recopied before new owners, across all projects and pages. Avoid simultaneous writes from old and new versions during the cutover.
 
 ### Product telemetry
 
@@ -99,7 +100,7 @@ MASTRA_TELEMETRY_DISABLED=true
 
 ### Work items, sources and board placements
 
-Factory separates the work (`factory_work_items`) from external facts (`factory_work_item_sources`) and placement/process state (`factory_board_items`). A work item can have several sources; current intake still creates separate work items for an issue and its pull request. Native cards have no external source. Sources are deduplicated per organization, project, provider and external ID, not claimed across projects.
+Factory separates the work (`factory_work_items`) from external facts (`factory_work_item_sources`) and placement/process state (`factory_board_items`). A work item can have several sources; current intake still creates separate work items for an issue and its pull request. Native cards have no external source. Sources are deduplicated per organization, project, provider and external ID. Separately, board placements preserve main's organization-wide claim ownership, lookups, adoption and terminal release until the claim-removal change lands.
 
 The split migration preserves legacy card IDs for comments, subscriptions, runs and URLs. It never rewrites the legacy `work_items` table. Board placements preserve `claim_key`, `triage_type`, `accepted_at`, `autonomy_armed_at` and `plans_preapproved_at` with main's existing read/write behavior; their removal belongs to separate policy changes. A deterministic legacy fingerprint detects changes even when an older replica does not update `updated_at`; conflicting newer split-side changes are reported rather than overwritten.
 
