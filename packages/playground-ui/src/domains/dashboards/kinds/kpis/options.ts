@@ -21,21 +21,21 @@ export const kpisOptionsSchema = z.object({ items: z.array(kpiItemSchema).min(1)
 
 export type KpisOptions = z.infer<typeof kpisOptionsSchema>;
 
-export type KpiFigures = { value: number | null; previous: number | null; change: number | null };
+export type KpiFigures = { value?: number; previous?: number; change?: number };
 
 /** One aggregate's figures: its value (or price) now, before, and the change the API reports. */
 function refFigures(response: AggregateValue | undefined, ref: ValueRef): KpiFigures {
   if (ref.field === 'estimatedCost') {
     return {
-      value: response?.estimatedCost ?? null,
-      previous: response?.previousEstimatedCost ?? null,
-      change: response?.costChangePercent ?? null,
+      value: response?.estimatedCost ?? undefined,
+      previous: response?.previousEstimatedCost ?? undefined,
+      change: response?.costChangePercent ?? undefined,
     };
   }
   return {
-    value: response?.value ?? null,
-    previous: response?.previousValue ?? null,
-    change: response?.changePercent ?? null,
+    value: response?.value ?? undefined,
+    previous: response?.previousValue ?? undefined,
+    change: response?.changePercent ?? undefined,
   };
 }
 
@@ -46,17 +46,17 @@ function refFigures(response: AggregateValue | undefined, ref: ValueRef): KpiFig
 export function kpiFigures(expr: ValueExpr, responses: ReadonlyMap<string, AggregateValue | undefined>): KpiFigures {
   if (!('sum' in expr)) {
     const [ref] = exprRefs(expr);
-    return ref ? refFigures(responses.get(ref.query), ref) : { value: null, previous: null, change: null };
+    return ref ? refFigures(responses.get(ref.query), ref) : {};
   }
   const parts = expr.sum.map(e => kpiFigures(e, responses));
-  const hasCurrent = parts.some(p => p.value != null);
-  const hasPrevious = parts.some(p => p.previous != null);
+  const hasCurrent = parts.some(p => p.value !== undefined);
+  const hasPrevious = parts.some(p => p.previous !== undefined);
   const value = parts.reduce((a, p) => a + (p.value ?? 0), 0);
   const previous = parts.reduce((a, p) => a + (p.previous ?? 0), 0);
   return {
-    value: hasCurrent ? value : null,
-    previous: hasPrevious ? previous : null,
-    change: hasPrevious && previous > 0 ? ((value - previous) / previous) * 100 : null,
+    value: hasCurrent ? value : undefined,
+    previous: hasPrevious ? previous : undefined,
+    change: hasPrevious && previous > 0 ? ((value - previous) / previous) * 100 : undefined,
   };
 }
 

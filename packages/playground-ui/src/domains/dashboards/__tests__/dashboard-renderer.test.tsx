@@ -412,10 +412,10 @@ describe('DashboardRenderer', () => {
         { widgets: [note('half', 'x', { span: 6 }), note('third', 'x', { span: 4 })] },
       ],
     });
-    // jsdom resolves no container queries, so the span's classes are what this can observe.
-    expect(cell(container, 'full').className).toContain('col-span-full');
-    expect(cell(container, 'half').className).toContain('@3xl:col-span-6');
-    expect(cell(container, 'third').className).toContain('@7xl:col-span-4');
+    // jsdom resolves no container queries, so the cell's declared span is what this can observe.
+    expect(cell(container, 'full').getAttribute('data-span')).toBe('12');
+    expect(cell(container, 'half').getAttribute('data-span')).toBe('6');
+    expect(cell(container, 'third').getAttribute('data-span')).toBe('4');
     // Each row is its own grid, so a short row doesn't pull widgets up from the next.
     expect(cell(container, 'full').parentElement).not.toBe(cell(container, 'half').parentElement);
   });

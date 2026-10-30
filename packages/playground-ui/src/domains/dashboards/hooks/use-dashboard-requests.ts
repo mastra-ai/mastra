@@ -53,12 +53,10 @@ export function useDashboardRequests(requests: (DashboardRequest | undefined)[])
   const queryClient = useQueryClient();
   const isObserved = (key: readonly unknown[]) =>
     (queryClient.getQueryCache().find({ queryKey: key, exact: true })?.getObserversCount() ?? 0) > 0;
-  const slots = requests.flatMap((request, slot) => (request ? [{ request, slot }] : []));
+  const sent = requests.filter(request => request !== undefined);
   const results = useQueries({
-    queries: slots.map(({ request }) => queryOptions(request, client, limiter, isObserved)),
+    queries: sent.map(request => queryOptions(request, client, limiter, isObserved)),
   });
-  return requests.map((_, slot) => {
-    const index = slots.findIndex(s => s.slot === slot);
-    return index < 0 ? undefined : results[index];
-  });
+  let next = 0;
+  return requests.map(request => (request ? results[next++] : undefined));
 }

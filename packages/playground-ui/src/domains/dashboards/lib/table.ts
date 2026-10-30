@@ -4,7 +4,7 @@ import type { DrilldownScope } from '../../metrics/drilldown';
 import { formatCount, formatDuration, formatPercent, formatUsd } from '../../metrics/lib/chart-format';
 import { groupsOf, measureOf, rowsOf } from './answers';
 import type { DashboardAnswer } from './requests';
-import { evaluate, exprRefs, queryRefSchema, unknownQueryIssues, valueExprSchema } from './values';
+import { answersById, evaluate, exprRefs, queryRefSchema, unknownQueryIssues, valueExprSchema } from './values';
 import type { ValueRef } from './values';
 
 /**
@@ -378,6 +378,54 @@ export function listedRows(
   return named([...built, ...dropped]);
 }
 
+export type TableContent = {
+  rows: TableRow[];
+  /** The previous window's values by row key, once they're passed in. */
+  before: PreviousValues | undefined;
+  truncated: boolean;
+  /** The cap the first truncated aggregate hit, when it names one. */
+  limit: number | undefined;
+};
+
+/**
+ * What the table lists once its row queries answer. `current` and `previous` hold one answer per
+ * query, in the view's order; leave `previous` out until the previous window has settled.
+ */
+export function tableContent(
+  options: TableOptions,
+  columns: TableColumn[],
+  queries: readonly DashboardQuery[],
+  current: readonly (DashboardAnswer | undefined)[],
+  previous: readonly (DashboardAnswer | undefined)[] | undefined,
+): TableContent {
+  const rowIds = new Set(rowQueries(columns, queries));
+  // Only aggregates cap their groups; the first that did names its cap.
+  const capped = queries.find(
+    (q, i) => q.id !== undefined && rowIds.has(q.id) && rowsOf(current[i])?.truncated === true,
+  );
+  const truncated = capped !== undefined;
+  const built = buildTableRows(options, columns, queries, answersById(queries, current));
+  const before = previous && previousTableValues(options, columns, queries, answersById(queries, previous));
+  return {
+    rows: listedRows(options, columns, built, before, truncated),
+    before,
+    truncated,
+    limit: capped && 'limit' in capped ? capped.limit : undefined,
+  };
+}
+
+/** Groups whose value in `column` is above zero, once `query`'s request answers. */
+export function countRows(
+  options: TableOptions,
+  column: ValueColumn,
+  query: DashboardQuery,
+  answer: DashboardAnswer | undefined,
+): OpenerRows {
+  if (!answer || query.id === undefined) return 'loading';
+  const answers = new Map([[query.id, answer]]);
+  return buildTableRows(options, [column], [query], answers).filter(r => (r.values[column.id] ?? 0) > 0).length;
+}
+
 export type Change = {
   /** Now minus before; unset when there's nothing to compare. */
   delta?: number;
@@ -444,19 +492,21 @@ export function rowDrilldown(options: TableOptions, row: TableRow): DrilldownSco
   return scope;
 }
 
+/** The opener view's row count: still loading, not countable (a page filter blocks it, or its sort column reads no query), or counted. */
+export type OpenerRows = number | 'loading' | 'uncountable';
+
 /**
  * The view a table opens on. Without an `openWhen` view, the first. The `openWhen` view opens while
  * its rows load, so the tabs don't jump, and once it has `minRows` of them; it's passed over when it
- * can't count them (`rows` is `null`: a page filter blocks it, or its sort column reads no query) or
- * has too few.
+ * can't count them or has too few.
  */
-export function openingView(views: readonly { options: TableOptions }[], rows: number | null | undefined): number {
+export function openingView(views: readonly { options: TableOptions }[], rows: OpenerRows): number {
   const opener = views.findIndex(v => v.options.openWhen);
   if (opener < 0) return 0;
   // Passed over, it opens on the view after it, or the first when it's last.
   const next = (opener + 1) % views.length;
-  if (rows === null) return next;
-  if (rows === undefined) return opener;
+  if (rows === 'uncountable') return next;
+  if (rows === 'loading') return opener;
   const minRows = views[opener]?.options.openWhen?.minRows ?? 0;
   return rows >= minRows ? opener : next;
 }

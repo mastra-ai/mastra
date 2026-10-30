@@ -1,7 +1,7 @@
 import { MastraClient } from '@mastra/client-js';
 import type { DashboardQuery } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { kpisIssues } from '../kinds/kpis/options';
 import type { KpisOptions } from '../kinds/kpis/options';
 import type { ResolvedView } from '../widget-kind';
@@ -11,12 +11,14 @@ import { buildPreviousRequest, buildRequest, sendRequest } from './requests';
 import type { DashboardAnswer, DashboardPageContext, DashboardRequestOptions } from './requests';
 import {
   buildTableRows,
+  countRows,
   formatChange,
   listedRows,
   openingView,
   parseColumns,
   previousTableValues,
   rowDrilldown,
+  tableContent,
   tableIssues,
   valueChange,
 } from './table';
@@ -25,6 +27,7 @@ import { shapeTimeseries, timeseriesIssues } from './timeseries';
 import type { TimeseriesOptions } from './timeseries';
 import { answersById, evaluate, matchesGroups, unknownQueryIssues, valueExprSchema } from './values';
 import type { ValueExpr, ValueRef } from './values';
+import { server } from '@/test/msw-server';
 
 const window = { start: new Date('2026-10-27T12:00:00Z'), end: new Date('2026-10-28T12:00:00Z') };
 const page: DashboardPageContext = {
@@ -50,10 +53,6 @@ const built = (query: DashboardQuery, options: DashboardRequestOptions) => {
   if (!request) throw new Error('no request');
   return request;
 };
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 describe('value expressions', () => {
   const values: Record<string, number | undefined> = { runs: 100, failed: 30, missing: undefined };
@@ -156,13 +155,15 @@ describe('buildRequest', () => {
     };
     const request = built(query, {});
     expect(request.unsatisfiable).toBe(true);
-    const fetch = vi.spyOn(globalThis, 'fetch');
+    const sent: string[] = [];
+    server.events.on('request:start', ({ request: r }) => sent.push(r.url));
     const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
     await expect(sendRequest(client, request)).resolves.toEqual({
       method: 'getMetricTimeSeries',
       data: { series: [] },
     });
-    expect(fetch).not.toHaveBeenCalled();
+    server.events.removeAllListeners();
+    expect(sent).toEqual([]);
   });
   it('sends anything else over the previous window as a request of its own, last', () => {
     const query: DashboardQuery = {
@@ -439,6 +440,32 @@ describe('table rows', () => {
     ).toEqual([]);
   });
 
+  it('lists rows with the cap the first truncated aggregate hit, and compares only once the previous window is in', () => {
+    const capped: DashboardQuery[] = [{ ...queries[0], limit: 50 }, queries[1]];
+    const truncated = spans(
+      [{ dimensions: { projectId: 'p1', entityName: 'Code Agent' }, measures: { 'countDistinct.traceId': 4 } }],
+      true,
+    );
+    const content = tableContent(options, columns, capped, [truncated, usage], undefined);
+    expect(content.rows.map(r => r.name)).toEqual(['Code Agent', 'Idle Agent']);
+    expect(content).toMatchObject({ truncated: true, limit: 50, before: undefined });
+
+    const compared = tableContent(options, columns, queries, [aggregate, usage], [aggregate, groups([])]);
+    expect(compared).toMatchObject({ truncated: false, limit: undefined });
+    expect(compared.before?.get('["p1","Code Agent"]')).toMatchObject({ count: 4 });
+  });
+
+  it('counts the groups above zero in a column once its request answers', () => {
+    const [figures] = queries;
+    const count = valueColumn('count');
+    const zero = spans([
+      { dimensions: { projectId: 'p2', entityName: 'Idle' }, measures: { 'countDistinct.traceId': 0 } },
+    ]);
+    expect(countRows(options, count, figures, undefined)).toBe('loading');
+    expect(countRows(options, count, figures, aggregate)).toBe(1);
+    expect(countRows(options, count, figures, zero)).toBe(0);
+  });
+
   it('compares totals as New and percents in points', () => {
     const count = valueColumn('count');
     const errors = valueColumn('errorRate');
@@ -508,7 +535,7 @@ describe('openingView', () => {
   });
 
   it('opens on the openWhen view while its rows load', () => {
-    expect(openingView(views, undefined)).toBe(0);
+    expect(openingView(views, 'loading')).toBe(0);
   });
 
   it('opens on the openWhen view once it has minRows rows', () => {
@@ -520,7 +547,7 @@ describe('openingView', () => {
   });
 
   it("passes over the openWhen view when it can't count its rows", () => {
-    expect(openingView(views, null)).toBe(1);
+    expect(openingView(views, 'uncountable')).toBe(1);
   });
 
   it('opens on the first view when a passed-over openWhen view is last', () => {

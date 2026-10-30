@@ -17,7 +17,7 @@ import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
 const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: MessagesSquareIcon } as const;
 
 const FORMAT = { count: formatCount, usd: formatUsd };
-const change = (pct: number | null) => (pct == null || !Number.isFinite(pct) ? undefined : pct);
+const change = (pct: number | undefined) => (pct !== undefined && Number.isFinite(pct) ? pct : undefined);
 
 export function KpisWidget({ views }: WidgetKindProps<KpisOptions>) {
   const [view] = views;
@@ -46,11 +46,11 @@ function KpisView({ view, page }: { view: ResolvedView<KpisOptions>; page: Dashb
             key={i}
             label={item.label}
             icon={ICONS[item.icon]}
-            value={figures.value == null ? '—' : format(figures.value)}
+            value={figures.value === undefined ? '—' : format(figures.value)}
             change={change(figures.change)}
             lowerIsBetter={item.lowerIsBetter}
             detail={item.detail}
-            previous={figures.previous == null ? undefined : format(figures.previous)}
+            previous={figures.previous === undefined ? undefined : format(figures.previous)}
             comparison={comparisonLabel}
             isLoading={used.some(r => r.isLoading)}
             isUpdating={used.some(r => r.isRefetching)}

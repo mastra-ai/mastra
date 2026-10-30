@@ -25,7 +25,7 @@ export function DashboardGridRow({ children }: { children: ReactNode }) {
 /** A grid cell; the grid owns the width, so a card's own `min-w-*` is neutralised. */
 export function DashboardGridCell({ span, id, children }: { span: DashboardSpan; id?: string; children: ReactNode }) {
   return (
-    <div data-widget-id={id} className={cn('min-w-0 *:w-full *:min-w-0!', SPAN_CLASSES[span])}>
+    <div data-widget-id={id} data-span={span} className={cn('min-w-0 *:w-full *:min-w-0!', SPAN_CLASSES[span])}>
       {children}
     </div>
   );
