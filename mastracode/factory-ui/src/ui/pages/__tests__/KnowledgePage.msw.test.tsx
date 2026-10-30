@@ -241,6 +241,27 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   });
 
+  it('selects a graph page on the first click and opens it on the second', async () => {
+    stubKnowledge();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?view=graph`);
+    const runbookNode = async () => {
+      const nodes = await screen.findAllByTestId('knowledge-page-node');
+      const node = nodes.find(n => n.dataset.pageId === 'runbook');
+      if (!node) throw new Error('runbook not drawn');
+      return node;
+    };
+    fireEvent.click(await runbookNode());
+    await waitFor(() => expect(router.state.location.search).toContain('page=runbook'));
+    expect(router.state.location.search).toContain('view=graph');
+    expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+    expect((await runbookNode()).querySelector('.knowledge-circle')).toHaveAttribute('data-selected');
+
+    fireEvent.click(await runbookNode());
+    const pane = await screen.findByRole('region', { name: 'Selected page' });
+    expect(await within(pane).findByText('Deploys run nightly.')).toBeInTheDocument();
+    expect(router.state.location.search).toContain('view=page');
+  });
+
   it('says when a linked page is gone', async () => {
     stubKnowledge();
     renderRoute(`/factories/${FACTORY_ID}/knowledge?page=missing`);
