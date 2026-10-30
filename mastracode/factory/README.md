@@ -78,7 +78,7 @@ A project's boards are its code boards followed by its stored boards. The catalo
 
 **Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
 
-**Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations read only the code boards. Intake bindings and label routes can target only code boards. Every card move goes through the transition service, which checks it against the project's boards.
+**Integrations.** Integration event rules and reconcilers read only the code boards. Intake bindings and label routes can target only code boards. A project's [intake routes](#intake-routes) can also send new cards to its stored boards. Every card move goes through the transition service, which checks it against the project's boards.
 
 **Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated` and `deleted`.
 
@@ -390,10 +390,10 @@ phases: {
 Boards and phases take `name` and an optional `description`. A phase lists the phases a card may move to in `nextPhases`. A working phase can also declare:
 
 - `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. When the agent moves its own card into another phase of its context, that phase's `skill` still starts: its prompt is queued onto the agent's run. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. It names a built-in Factory skill or one of your app's skills (see [Skills for custom boards](#skills-for-custom-boards)). `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
-- `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards from outside the write-access circle still wait for a person.
+- `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards the project's [intake routes](#intake-routes) hold (by default, GitHub and GitLab cards from outside the write-access circle) still wait for a person.
 - `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`. Factory sessions already run tools without asking, so today this matters for `submit_plan`: an auto-approved plan is accepted without a person. `defineBoard()` accepts `autoApprove` on any exit tool, and the catalog reports it, but on other tools it has no effect yet.
 
-Rules test a card's facts: `item.labels`, `item.title`, `item.author`, `source.kind` and `source.integration`.
+Rules test a card's facts: `item.labels`, `item.title`, `item.author`, `author.trusted`, `source.kind` and `source.integration`.
 
 ```typescript
 const LOW_EFFORT = {
@@ -607,6 +607,81 @@ Intake bindings are explicit. A Linear project, Jira project, or GitHub reposito
 - **Linear:** each project binding selects one installed board. Changing the board moves that source's existing cards to the new board's initial phase, skipping terminal cards and cards with an active session.
 - **Jira:** each connected-site project binding selects one installed board. One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 - **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
+
+A project's [intake routes](#intake-routes) are checked before these bindings and label routes. The bindings and label routes apply only to cards no intake route places.
+
+### Intake routes
+
+Each project has an ordered list of intake routes, managed through the API (there is no UI yet). A route decides two things for the cards it matches:
+
+- **Placement**: the board and phase a new card lands on.
+- **Hold**: whether only a person may start work on the card.
+
+A project with no routes behaves as it did before routes existed. Cards land where their integration's binding or label route puts them, and GitHub and GitLab cards from authors outside the write-access circle wait for a person.
+
+**Route shape.**
+
+| Field     | Meaning                                                                                                                                                                                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | Up to 120 characters.                                                                                                                                                                                                                                                                   |
+| `enabled` | Defaults to `true`. Disabled routes are skipped.                                                                                                                                                                                                                                        |
+| `when`    | A rule over the card's facts (the same format as `autoStartWhen`). `null`, the default, matches every card.                                                                                                                                                                             |
+| `target`  | `{ boardKey, phaseKey? }` sets where new cards land; without `phaseKey` they land in the board's first phase. `null`, the default, leaves placement alone, so the route only sets `hold`. The board must be installed in the project (code or stored), and the phase can't be terminal. |
+| `hold`    | `untrusted` (default), `always` or `never`. See below.                                                                                                                                                                                                                                  |
+
+Routes are evaluated in `position` order (0 first). Rules can test these card facts: `item.labels`, `item.title`, `item.author`, `source.kind` (`issue`, `pull_request`, …), `source.integration` (`github`, `gitlab`, `linear`, `jira`, `incidentio`, …) and `author.trusted`. `author.trusted` is `true` when the card carries an `authorTrusted: true` or `factoryAuthored: true` stamp. GitHub and GitLab stamp `authorTrusted` from the author's repository permission, and a stamp that is missing counts as untrusted.
+
+**Placement.** When an integration files a new card, or someone creates one without naming a board (for example, the `factory_create_work_item` tool), the first enabled route that matches the card and has a usable target decides where the card lands. A target is usable when its board is installed and can hold the card. The built-in Work board takes no pull requests and Review takes only pull requests. If the route's phase no longer exists, the card lands in the board's first phase. A card routed to a later phase enters the first phase and then moves on through the transition service, like any other move. The move is recorded in the card's history. If no route places a card, the integration's binding, label route or default decides.
+
+Routes place cards only when they arrive. They never move existing cards: a reconcile that sees a known issue again, a relabel, or an edited route leaves cards where they are. An explicit placement also wins over routes, for example:
+
+- a maintainer's review request that files a pull request directly in Reviewing;
+- a custom rule with `skipRules`;
+- a board chosen on New card.
+
+Routing a card into a working phase does not start a run when the card is held.
+
+**Hold.** Before an agent run starts without a person, Factory reads the project's routes again and takes the `hold` of the first enabled route whose `when` matches the card. Here the target doesn't matter, so a route without one can still set `hold`.
+
+- `untrusted`: the card waits for a person when it is a GitHub or GitLab card whose author is not trusted (`author.trusted` is not `true`). If no route matches, this applies.
+- `always`: every matching card waits for a person, including cards from trusted authors.
+- `never`: matching cards may start without a person, including cards from outside the write-access circle. This is the only setting that weakens the default. Use it only for sources you trust.
+
+A held card does not start from a project's auto-run setting, from autonomy a person armed, from a phase's `autoStart`, from a re-review a maintainer's push asks for, or from a re-triage an outside comment asks for. An agent that moves a held card from a resting phase into a working phase is refused with `approval_required`. Holds are read when the decision is made, so edits to routes, and a reconcile that marks the author trusted later, take effect right away. Runs on untrusted cards still use their own isolated memory, whatever the routes say.
+
+Not covered: a relabel does not place a card again (a held card's `hold` does react to its new labels). Messages sent into a session a person already started, such as Slack replies, are not intake and are not held.
+
+**Routes.** Reading needs project membership. Changes need an organization admin when auth is enabled. Changes are recorded in the audit log as `factory.intake_route.created`, `updated`, `deleted` and `reordered`.
+
+| Method   | Path                                                                  | Body                                                       | Result                                                                                                                            |
+| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/web/factory/projects/:id/intake-routes`                             | —                                                          | `intakeRoutes` in order, and `fallback` (`{ hold: 'untrusted', untrustedWhen }`), which applies when no route matches.            |
+| `GET`    | `/web/factory/projects/:id/intake-routes/:routeId`                    | —                                                          | The route.                                                                                                                        |
+| `POST`   | `/web/factory/projects/:id/intake-routes`                             | The route.                                                 | `201` and the route, added at the end. `422 unknown_board`, `unknown_phase` or `terminal_phase` for a target cards can't land on. |
+| `PATCH`  | `/web/factory/projects/:id/intake-routes/:routeId`                    | The fields to change, plus `expectedRevision`.             | The route.                                                                                                                        |
+| `DELETE` | `/web/factory/projects/:id/intake-routes/:routeId?expectedRevision=n` | —                                                          | `204`.                                                                                                                            |
+| `POST`   | `/web/factory/projects/:id/intake-routes/reorder`                     | `{ "ids": [...] }`: every route of the project, once each. | The routes in their new order. `409 intake_route_set_mismatch` if the list differs from the project's routes.                     |
+
+A stale `expectedRevision` is refused with `409 revision_mismatch`. Each route reports `problems`, for example when its board has since been deleted. Such a route places no cards, but its `hold` still applies.
+
+```bash
+# Send issues from trusted authors straight to Triage.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+  "name": "Trusted issues to Triage",
+  "when": { "operator": "AND", "conditions": [
+    { "field": "author.trusted", "operator": "equals", "value": true },
+    { "field": "source.kind", "operator": "equals", "value": "issue" }
+  ] },
+  "target": { "boardKey": "work", "phaseKey": "triage" }
+}'
+
+# Hold every Linear card for a person, wherever it lands.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+  "name": "Linear waits for a person",
+  "when": { "operator": "AND", "conditions": [{ "field": "source.integration", "operator": "equals", "value": "linear" }] },
+  "hold": "always"
+}'
+```
 
 ### GitHub event rules
 
