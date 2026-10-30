@@ -500,6 +500,55 @@ describe('gating', () => {
   });
 });
 
+// ── Sign-in appends to the account pool ──────────────────────────────────
+
+describe('sign-in appends to the account pool', () => {
+  async function signInCodex(app: Hono, credentials: Record<string, unknown>, scope?: 'org') {
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials });
+    const startRes = await post(app, '/web/config/providers/openai/oauth/start', scope ? { scope } : undefined);
+    const { sessionId } = await startRes.json();
+    await makePollable(sessionId);
+    const res = await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+    expect(await res.json()).toMatchObject({ status: 'complete' });
+  }
+
+  it('signing in to a second subscription adds an account and keeps the first', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-first', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-second', accountId: 'acct-2' });
+
+    const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    expect(accounts).toHaveLength(2);
+    expect(accounts.map(a => a.active)).toEqual([false, true]);
+    expect(await seed.credentials.getCredential(TENANT_A, 'openai-codex')).toMatchObject({ access: 'a-second' });
+    expect(await seed.credentials.getAccountCredential(TENANT_A, accounts[0]!.id)).toMatchObject({
+      access: 'a-first',
+    });
+  });
+
+  it('signing in again to the same subscription refreshes its account instead of duplicating it', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-old', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-other', accountId: 'acct-2' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-new', accountId: 'acct-1' });
+
+    const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    expect(accounts).toHaveLength(2);
+    const [first] = accounts;
+    expect(first!.active).toBe(true);
+    expect(await seed.credentials.getAccountCredential(TENANT_A, first!.id)).toMatchObject({ access: 'a-new' });
+  });
+
+  it('org-scoped sign-in appends to the org pool', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, accountId: 'acct-1' }, 'org');
+    await signInCodex(app, { ...CODEX_CREDS, accountId: 'acct-2' }, 'org');
+
+    expect(await seed.credentials.listAccounts({ orgId: 'org1' }, 'openai-codex')).toHaveLength(2);
+    expect(await seed.credentials.listAccounts(TENANT_A, 'openai-codex')).toHaveLength(0);
+  });
+});
+
 // ── Local mode (no auth adapter, no tenant) ──────────────────────────────
 
 describe('local mode', () => {

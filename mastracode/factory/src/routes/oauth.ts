@@ -27,6 +27,7 @@ import type { CodexDeviceLoginPending } from '@mastra/code-sdk/auth/providers/op
 import { pollXAIDeviceLogin, startXAIDeviceLogin } from '@mastra/code-sdk/auth/providers/xai';
 import type { XAIDeviceLoginPending } from '@mastra/code-sdk/auth/providers/xai';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -34,7 +35,7 @@ import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
-import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
+import { getAuthProviderId, loose, resolveCredentialContext } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteDependencies } from './route.js';
@@ -152,10 +153,6 @@ const OAUTH_FLOWS: Record<string, OAuthFlow> = {
   },
 };
 
-function loose(c: unknown): Context {
-  return c as Context;
-}
-
 /**
  * Local-mode login sessions. Flows in local mode are single-process, so a
  * process-local libsql `:memory:` database (which already handles TTL
@@ -200,7 +197,12 @@ async function loadOwnedSession({
   return session;
 }
 
-/** Persist completed OAuth credentials — user-scoped unless the flow was started org-wide. */
+/**
+ * Persist completed OAuth credentials — user-scoped unless the flow was
+ * started org-wide. Signing in adds an account to the scope's pool and makes
+ * it active; signing in again to a subscription the pool already holds (same
+ * provider identity) refreshes that account instead of duplicating it.
+ */
 async function persistOAuthCredential({
   ctx,
   provider,
@@ -219,15 +221,26 @@ async function persistOAuthCredential({
   const authProviderId = getAuthProviderId(provider);
   if (ctx.mode === 'tenant') {
     const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
-    await ctx.storage.setCredential(tenant, authProviderId, {
-      type: 'oauth',
-      ...credentials,
+    await ctx.storage.addAccount(tenant, authProviderId, {
+      credential: { type: 'oauth', ...credentials },
+      identity: accountIdentity(authProviderId, credentials),
+      activate: true,
     });
     onCredentialsChanged(tenant);
     return;
   }
   if (!authStorage) throw new Error('Credential storage is not available');
   await authStorage.addAccount(authProviderId, credentials);
+}
+
+/** The provider's stable subscription identity for these credentials, when it exposes one. */
+function accountIdentity(authProviderId: string, credentials: OAuthCredentials): string | undefined {
+  try {
+    const identity = getOAuthProvider(authProviderId)?.getAccountIdentity?.(credentials);
+    return identity || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function readJsonBody(c: Context): Promise<Record<string, unknown>> {

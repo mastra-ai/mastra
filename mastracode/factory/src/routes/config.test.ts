@@ -425,6 +425,33 @@ describe('provider key routes with a tenant', () => {
     expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'user')).toBeUndefined();
   });
 
+  it('appends a new key to the pool and makes it active instead of replacing the existing account', async () => {
+    const app = buildApp(userA);
+    expect((await putKey(app, { key: 'sk-first' })).status).toBe(200);
+    expect((await putKey(app, { key: 'sk-second' })).status).toBe(200);
+
+    const tenant = { orgId: 'org1', userId: 'user-a' };
+    const accounts = await seed.credentials.listAccounts(tenant, 'anthropic');
+    expect(accounts).toHaveLength(2);
+    expect(accounts.map(a => a.active)).toEqual([false, true]);
+    expect(await seed.credentials.getCredential(tenant, 'anthropic')).toEqual({ type: 'api_key', key: 'sk-second' });
+    expect(await seed.credentials.getAccountCredential(tenant, accounts[0]!.id)).toEqual({
+      type: 'api_key',
+      key: 'sk-first',
+    });
+  });
+
+  it('re-saving the same key updates its account instead of adding a duplicate', async () => {
+    const app = buildApp(userA);
+    await putKey(app, { key: 'sk-first' });
+    await putKey(app, { key: 'sk-second' });
+    await putKey(app, { key: 'sk-first' });
+
+    const accounts = await seed.credentials.listAccounts({ orgId: 'org1', userId: 'user-a' }, 'anthropic');
+    expect(accounts).toHaveLength(2);
+    expect(accounts.map(a => a.active)).toEqual([true, false]);
+  });
+
   it('stores a Kimi key under the credential id model resolution reads', async () => {
     const res = await buildApp(userA).request('/web/config/providers/kimi-code-plan-cn/key', {
       method: 'PUT',
