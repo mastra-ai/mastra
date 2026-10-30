@@ -128,7 +128,8 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
     await mock.start();
 
     const [proxyPort, portA, portB] = [await freePort(), await freePort(), await freePort()];
-    workers.push(await startWorker(portA, 'a'), await startWorker(portB, 'b'));
+    workers.push(await startWorker(portA, 'a'));
+    workers.push(await startWorker(portB, 'b'));
     proxy = await startRoundRobinProxy(proxyPort, [portA, portB]);
     devServer = await startServeInngestDevServer(`http://localhost:${proxyPort}/inngest/api`);
     await vi.waitFor(

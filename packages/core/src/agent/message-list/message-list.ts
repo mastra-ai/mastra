@@ -60,7 +60,11 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
-import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
+import {
+  advancesToolInvocationState,
+  isClientToolInvocationUpdate,
+  isTerminalToolInvocationState,
+} from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -1127,7 +1131,8 @@ export class MessageList {
       .db()
       .flatMap(message => (message.content.parts ?? []).slice(completed?.get(message.id) ?? 0));
     const toolCalls = pending.filter(part => part.type === 'tool-invocation');
-    if (toolCalls.length > 0 && toolCalls.every(part => part.toolInvocation.state === 'result')) return clone;
+    if (toolCalls.length > 0 && toolCalls.every(part => isTerminalToolInvocationState(part.toolInvocation.state)))
+      return clone;
     for (const message of clone.get.response.db()) {
       const length = completed?.get(message.id);
       if (length === undefined) clone.removeByIds([message.id]);

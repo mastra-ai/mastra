@@ -16,6 +16,7 @@ import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
@@ -444,7 +445,7 @@ export function deadlineMessageListState(entry: RunRegistryEntry): SerializedMes
     const settled = inFlight.get.response
       .db()
       .flatMap(message => message.content.parts ?? [])
-      .every(part => part.type !== 'tool-invocation' || part.toolInvocation.state === 'result');
+      .every(part => part.type !== 'tool-invocation' || isTerminalToolInvocationState(part.toolInvocation.state));
     if (settled) return inFlight.serialize();
   }
   return entry.completedStepsState;

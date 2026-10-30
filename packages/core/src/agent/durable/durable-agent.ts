@@ -13,6 +13,7 @@ import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-u
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../../loop/shared/tool-abort-grace';
 import {
   createTimeoutAbortSignal,
+  DEADLINE_SAVE_CLAIM_HOLD_MS,
   DEADLINE_SAVE_WAIT_MS,
   isMastraTimeoutError,
   settledOrElapsed,
@@ -2826,8 +2827,8 @@ export class DurableAgent<
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
-      // The claim is held until the save lands, so it is not rejected as a stale write.
-      await deadlineSave;
+      // The claim is held until the save lands (bounded), so it is not rejected as a stale write.
+      if (deadlineSave) await settledOrElapsed(deadlineSave, DEADLINE_SAVE_CLAIM_HOLD_MS);
     };
 
     if (!fence) return writeTerminalState();
