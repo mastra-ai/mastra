@@ -78,6 +78,18 @@ export function orderedSignals(catalog: readonly SignalCatalogEntry[], signalNam
   });
 }
 
+/**
+ * Orders the signals a client may request theme output for. Theme snapshots exist per exact
+ * signal set, so catalog entries marked disabled are dropped; uncatalogued names are kept.
+ */
+export function selectableSignals(catalog: readonly SignalCatalogEntry[], signalNames: readonly string[]): string[] {
+  const disabled = new Set(catalog.filter(signal => !signal.enabled).map(signal => signal.name));
+  return orderedSignals(
+    catalog,
+    signalNames.filter(name => !disabled.has(name)),
+  );
+}
+
 /** Returns the server label or derives one from an uncatalogued slug. */
 export function signalLabel(catalog: readonly SignalCatalogEntry[], signalName: string): string {
   return catalog.find(signal => signal.name === signalName)?.label ?? labelFromSignalName(signalName);

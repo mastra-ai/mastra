@@ -12,6 +12,7 @@ import {
   formatSnapshotWindow,
   getSignalDescription,
   orderedSignals,
+  selectableSignals,
   shareSentence,
   signalDescription,
   signalLabel,
@@ -191,6 +192,40 @@ describe('signal catalog formatting', () => {
     it('keeps the signal and derives a readable label', () => {
       expect(orderedSignals(customCatalog, ['goal', 'handoff_quality'])).toEqual(['goal', 'handoff_quality']);
       expect(signalLabel(customCatalog, 'handoff_quality')).toBe('Handoff Quality');
+    });
+  });
+});
+
+describe('selectableSignals', () => {
+  const catalogWithPausedSignal: SignalCatalogEntry[] = [
+    ...customCatalog,
+    {
+      name: 'behavior',
+      label: 'Behavior',
+      description: 'Behavior description',
+      order: 1.5,
+      builtIn: true,
+      enabled: false,
+      status: 'ready',
+    },
+  ];
+
+  describe('when available signals include a disabled catalog entry', () => {
+    it('drops the disabled signal and keeps catalog order', () => {
+      expect(selectableSignals(catalogWithPausedSignal, ['outcome', 'behavior', 'goal', 'tool_usage'])).toEqual([
+        'goal',
+        'tool_usage',
+        'outcome',
+      ]);
+    });
+  });
+
+  describe('when an available signal is missing from the catalog', () => {
+    it('keeps it so older servers without catalog metadata still render', () => {
+      expect(selectableSignals(catalogWithPausedSignal, ['goal', 'handoff_quality'])).toEqual([
+        'goal',
+        'handoff_quality',
+      ]);
     });
   });
 });
