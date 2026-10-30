@@ -551,7 +551,7 @@ A query using keyset pagination returns lightweight completed traces and a curso
 }
 ```
 
-The response includes `name`, `createdAt`, identity fields, `metadata`, and input/output/error previews. Nullable fields remain present with `null` when no value was recorded. Previews summarize payloads; retrieve the full trace for complete input, output, and error details.
+The response includes `name`, `createdAt`, identity fields, `metadata`, and input/output/error previews. Supported nullable fields remain present with `null` when no value was recorded. Fields that require an optional store feature are omitted when the store lacks that feature. Previews summarize payloads; retrieve the full trace for complete input, output, and error details.
 
 `timeToFirstChunkMs` and `timeToFirstTokenMs` are present only when the configured store supports them. See [Filter by time to first chunk](#filter-by-time-to-first-chunk) and [Filter and sort by time to first token](#filter-and-sort-by-time-to-first-token). `outcome`, `stopReason`, and `stopReasonContext` read the root span and are present only when the store supports the `traceQueryOutcomeFields` capability. They're `null` when the root span didn't record them. See [Filter by outcome](#filter-by-outcome).
 
