@@ -568,6 +568,24 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(agent.stream).not.toHaveBeenCalled();
   });
 
+  it('addresses a follow-up to a run whose id contains the legacy marker once a handover resolves to it', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'legacy-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const target = { resourceId: 'legacy-user', threadId: 'legacy-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const runId = 'ctl-run\u0000retake\u0000literal-suffix';
+    pubsub.owners.set(key, `${runId}\u0000retake\u0000handover`);
+    setTimeout(() => pubsub.owners.set(key, runId), 100);
+
+    const sent = runtime.sendMessage(agent, 'follow-up during handover', target, pubsub);
+    await sent.accepted;
+
+    const forwarded = pubsub.publishedData.filter(data => data?.type === 'signal-enqueued');
+    expect(forwarded.map(data => data.runId)).toEqual([runId]);
+    expect(agent.stream).not.toHaveBeenCalled();
+  });
+
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();

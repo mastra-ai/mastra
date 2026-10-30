@@ -1602,7 +1602,10 @@ export class AgentThreadStreamRuntime {
             await new Promise(resolve => setTimeout(resolve, 10));
             if (stopped) break;
             const owner = await provider.getLeaseOwner(key);
-            if (!stopped && owner && !isHandoverLeaseOwner(owner)) return { acquired: false, owner };
+            // Stop on the first owner that differs from the token, even one shaped like a legacy token: a run id
+            // can contain the marker, and the handover may resolve to it.
+            if (!stopped && owner && owner !== lease.owner && !isRetakeLeaseOwner(owner))
+              return { acquired: false, owner };
           }
           return lease;
         })().catch(() => lease),
@@ -4816,10 +4819,12 @@ export class AgentThreadStreamRuntime {
             }
             this.#releaseUnusedThreadControlSubscription(state, key);
           }
+        } else if (record.leaseNotAcquired) {
+          // A drain transfers the lease to the follow-up run, so a registration that never got the lease must not
+          // drain either; whichever execution holds the lease takes the queued work when it finishes.
+          this.#releaseUnusedThreadControlSubscription(state, key);
         } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
-        } else if (record.leaseNotAcquired) {
-          this.#releaseUnusedThreadControlSubscription(state, key);
         } else {
           this.#releaseThreadLease(pubsub, key, record.runId, record.leaseOwner);
         }
