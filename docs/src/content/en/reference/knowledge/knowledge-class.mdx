@@ -226,6 +226,14 @@ readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope>
 
 Returns what a holder of `principals` can read: the principals themselves plus every scope their rules reach in one hop. Pass the result as `read` to the store's read methods when host code reads Knowledge for a user. Undeclared principals throw `Knowledge run scope "project:x" does not match a declared scope type.` An empty list reads nothing.
 
+### `renameScopeDeclaration()`
+
+```typescript oxfmt:false
+renameScopeDeclaration(from: string, to: string): Promise<number>
+```
+
+Moves stored scopes created from declaration key `from`, and its child scopes (`from/<name>`), to key `to`, in one step. Resolves to how many scopes moved. Refuses, and changes nothing, when `from` is still in `scopes`, `to` isn't, or a stored address doesn't match `to`'s pattern. Until stored keys match `scopes`, the instance refuses to run. See [rename or retire a scope type](/docs/knowledge/scope-types#rename-or-retire-a-scope-type).
+
 ### `getStorage()`
 
 ```typescript oxfmt:false

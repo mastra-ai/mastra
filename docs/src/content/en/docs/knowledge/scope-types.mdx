@@ -218,3 +218,23 @@ Knowledge run scope "project:x" does not match a declared scope type. Declare it
 ```
 
 A type that only names who a run is still needs a declaration, even an empty one such as `'role:$orgId:support': {}`.
+
+## Rename or retire a scope type
+
+Each stored scope remembers the declaration key it was created from, and prefix and `belongsTo` rules match on that key. Renaming a key in `scopes`, say `'team:$org:$team'` to `'team:$orgId:$teamId'`, would cut every existing team scope off from those rules. To prevent that, Knowledge checks the stored keys against `scopes` on first use and refuses to run while any is missing:
+
+```text
+Knowledge storage has scopes created from declarations this config doesn't declare: "team:$org:$team" (12 scopes). Restore each key in scopes, rename it with knowledge.renameScopeDeclaration(from, to), or keep the key with no access rules to retire it.
+```
+
+After renaming the key in `scopes`, move the stored scopes to the new key. Child scope keys such as `team:$org:$team/internal` move with it:
+
+```typescript
+await knowledge.renameScopeDeclaration('team:$org:$team', 'team:$orgId:$teamId')
+```
+
+The rename happens in one step and changes nothing when it's refused: when the old key is still in `scopes`, the new key isn't, or a stored address doesn't match the new pattern.
+
+During a rolling deploy, instances with the new config refuse to run until the rename happens, and instances still on the old config lose those scopes' prefix and `belongsTo` reach after it. Deploy the new config, then run the rename straight away.
+
+To retire a type without moving its scopes, keep its key in `scopes` with no `access` rules. Its scopes stay stored, and no rule reaches them.
