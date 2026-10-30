@@ -35,4 +35,18 @@ describe('a lazily loaded page', () => {
     expect(screen.getByRole('heading', { name: 'Thread' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Loading page')).not.toBeInTheDocument();
   });
+
+  it('loads on the visit when its preload failed', async () => {
+    let attempts = 0;
+    const Page = lazyPage(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('Failed to fetch dynamically imported module');
+      return () => <h1>Thread</h1>;
+    });
+
+    await expect(Page.preload()).rejects.toThrow('Failed to fetch dynamically imported module');
+
+    render(<Page />);
+    expect(await screen.findByRole('heading', { name: 'Thread' })).toBeInTheDocument();
+  });
 });

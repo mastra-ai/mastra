@@ -1,5 +1,5 @@
 /**
- * SPA route table (React Router v7, data mode).
+ * SPA route table (React Router v8, data mode).
  *
  * Auth gating happens in React layout components, not loaders: `RequireAuth`
  * wraps the app routes and reads `/auth/me` through the `useFactoryAuth` custom

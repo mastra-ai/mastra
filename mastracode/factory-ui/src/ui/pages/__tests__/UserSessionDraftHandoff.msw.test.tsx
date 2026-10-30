@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
-import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
+import { DRAFT_SESSION_ID, FACTORY_ID, OTHER_DRAFT_SESSION_ID, stubDraftRoute } from './fixtures/draftRoute';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -211,6 +211,39 @@ describe('a user session draft on the real thread route', () => {
     finishCreate();
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
     expect(thread.getAllByText('fix the login bug', { selector: 'p' })).toHaveLength(1);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
+  it('gives the prompt back when the thread is left before its session exists', async () => {
+    let finishCreate = () => {};
+    const createGate = new Promise<void>(resolve => {
+      finishCreate = resolve;
+    });
+    const route = stubDraftRoute({ createGate, defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'fix the login bug');
+    await user.keyboard('{Enter}');
+    expect(await screen.findByText('fix the login bug', { selector: 'main p' }, { timeout: 5000 })).toBeInTheDocument();
+
+    await router.navigate(`/factories/${FACTORY_ID}/user/new/${OTHER_DRAFT_SESSION_ID}`);
+    await waitFor(() =>
+      expect(screen.queryByText('fix the login bug', { selector: 'main p' })).not.toBeInTheDocument(),
+    );
+    finishCreate();
+    await router.navigate(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`);
+
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('fix the login bug'));
+    expect(screen.getByText(/The previous message may not have been sent/)).toBeInTheDocument();
+    expect(route.posted).toEqual([]);
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);

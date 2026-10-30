@@ -108,9 +108,11 @@ export function useHandoffPrompt(): void {
   useEffect(() => {
     if (handedOff.current) return;
     // The prompt shows as soon as the thread opens, while its session may still
-    // be being created; it sends once the session exists.
+    // be being created; it sends once the session exists. Kept recoverable from
+    // then on: leaving before the send, or an interrupted send, must not lose it.
     if (prompt !== undefined && !shown.current) {
       shown.current = true;
+      storePendingHandoff(sessionId, prompt);
       const files = peekHandoffFiles(sessionId);
       if (prompt || files.length > 0) localUser(prompt, false, toOutgoing(files));
     }
@@ -119,17 +121,17 @@ export function useHandoffPrompt(): void {
       if (recovered.current) return;
       recovered.current = true;
       const interruptedPrompt = readPendingHandoff(sessionId);
-      if (interruptedPrompt) {
-        prefillComposer(interruptedPrompt);
+      const interruptedFiles = takeHandoffFiles(sessionId);
+      if (interruptedPrompt || interruptedFiles.length > 0) {
+        if (interruptedPrompt) prefillComposer(interruptedPrompt);
+        if (interruptedFiles.length > 0) setImages(current => [...interruptedFiles, ...current]);
         pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
       }
       return;
     }
     handedOff.current = true;
     const files = takeHandoffFiles(sessionId);
-    // Keep a recoverable draft before dropping history state. Never auto-resend
-    // after an interruption: the server may already have accepted the message.
-    storePendingHandoff(sessionId, prompt);
+    // Never auto-resend after an interruption: the server may already have accepted the message.
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     if (!prompt && files.length === 0) return;
     const outgoing = toOutgoing(files);

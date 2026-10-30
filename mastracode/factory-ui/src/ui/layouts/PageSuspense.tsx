@@ -20,10 +20,16 @@ export function lazyPage(load: () => Promise<ComponentType>, fallback: ReactNode
   let loading: Promise<{ default: ComponentType }> | undefined;
   let loaded: ComponentType | undefined;
   const preload = () =>
-    (loading ??= load().then(Page => {
-      loaded = Page;
-      return { default: Page };
-    }));
+    (loading ??= load().then(
+      Page => {
+        loaded = Page;
+        return { default: Page };
+      },
+      (error: unknown) => {
+        loading = undefined;
+        throw error;
+      },
+    ));
   const LazyLoaded = lazy(preload);
 
   function LazyPage() {

@@ -6,6 +6,7 @@ import type { FactoryUserSession } from '../../../domains/workspaces/services/us
 
 export const FACTORY_ID = 'factory-draft-handoff';
 export const DRAFT_SESSION_ID = '30000000-0000-4000-8000-000000000001';
+export const OTHER_DRAFT_SESSION_ID = '30000000-0000-4000-8000-000000000002';
 const REPOSITORY_ID = 'repository-draft-handoff';
 const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 

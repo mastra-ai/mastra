@@ -44,9 +44,10 @@ export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const workspace = useThreadWorkspacePath();
+  const location = useLocation();
   // A thread opened with its first prompt renders while its session is created,
   // so the prompt shows straight away instead of a loader.
-  const opening = opensWithPrompt(useLocation().state);
+  const opening = opensWithPrompt(location.state);
   const resolvingSession = factoryQuery.isPending || (workspace.isPending && !opening);
 
   return (
