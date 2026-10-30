@@ -4296,6 +4296,9 @@ export class Agent<
 
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
+    // A version fork runs inside this agent's `untilIdle` wrapper, so it must see that wrapper
+    // to know a finished background task is already being reported.
+    fork.#activeStreamUntilIdle = this.#activeStreamUntilIdle;
 
     return fork;
   }
