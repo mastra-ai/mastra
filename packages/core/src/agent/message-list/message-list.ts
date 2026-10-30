@@ -1136,7 +1136,15 @@ export class MessageList {
     for (const message of clone.get.response.db()) {
       const length = completed?.get(message.id);
       if (length === undefined) clone.removeByIds([message.id]);
-      else if ((message.content.parts?.length ?? 0) > length) clone.#truncateParts(message, length);
+      else if ((message.content.parts?.length ?? 0) > length) {
+        // clone() shares content with this list; truncating it in place would cut the live step too.
+        message.content = {
+          ...message.content,
+          parts: [...message.content.parts],
+          ...(message.content.metadata ? { metadata: { ...message.content.metadata } } : {}),
+        };
+        clone.#truncateParts(message, length);
+      }
     }
     return clone;
   }

@@ -11,7 +11,7 @@ import {
   mockDate,
   testUsage,
 } from './test-utils/utils';
-import { isMastraTimeoutError } from './timeout';
+import { isMastraTimeoutError, MastraTimeoutError } from './timeout';
 
 const hangingModel = (id: string): ModelManagerModelConfig => ({
   id,
@@ -154,4 +154,17 @@ describe('modelSettings.timeout.totalMs', () => {
       expect(isMastraTimeoutError(errorChunk.payload.error)).toBe(false);
     }
   });
+
+  it.each([undefined, 30_000])(
+    'ends as an abort when the caller signal aborts with a parent run timeout (totalMs %s)',
+    async totalMs => {
+      // A sub-agent's caller signal carries the parent run's own total-timeout error.
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 50 })), 50);
+
+      const chunks = await runLoop({ models: [hangingModel('slow')], totalMs, abortSignal: controller.signal });
+
+      expect(chunks.some(chunk => chunk.type === 'abort')).toBe(true);
+    },
+  );
 });

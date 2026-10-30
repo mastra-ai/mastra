@@ -61,7 +61,14 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         enqueue: chunk => {
           // The total deadline ends the run with a timeout error after the tool grace window.
           // Steps that notice the abort inside that window must not end it as a caller abort first.
-          if (chunk.type === 'abort' && isMastraTimeoutError(totalTimeoutSignal?.reason)) return;
+          // A timeout carried in from the caller's signal (a parent run's deadline) is a caller abort.
+          if (
+            chunk.type === 'abort' &&
+            isMastraTimeoutError(totalTimeoutSignal?.reason) &&
+            totalTimeoutSignal?.reason !== rest.options?.abortSignal?.reason
+          ) {
+            return;
+          }
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
           streamController.enqueue(chunk);
         },
