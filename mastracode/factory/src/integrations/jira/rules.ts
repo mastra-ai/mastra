@@ -106,7 +106,13 @@ export class JiraRules {
 
   async #heldElsewhere(input: JiraRulesIngress, issue: JiraIssueIngress): Promise<boolean> {
     const cards = await jiraIssueCards(this.options.storage, { orgId: input.orgId, issueRef: issue.id });
-    return cards.some(row => row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row));
+    const liveElsewhere = cards.filter(
+      row => row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row),
+    );
+    for (const row of liveElsewhere) {
+      if (await this.options.projects.get({ orgId: input.orgId, id: row.factoryProjectId })) return true;
+    }
+    return false;
   }
 
   async #ingestIssue(

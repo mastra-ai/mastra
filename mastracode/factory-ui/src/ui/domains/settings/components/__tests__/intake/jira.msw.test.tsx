@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -6,6 +6,7 @@ import { server } from '../../../../../../../e2e/ui/msw-server';
 import type { IntakeConfig, IntakeSourceBinding } from '../../../../factory/services/intake';
 import type { JiraStatus } from '../../../../factory/services/jira';
 import {
+  BINDINGS_URL,
   CONFIG_URL,
   JIRA_STATUS_URL,
   JIRA_PROJECTS_URL,
@@ -242,11 +243,11 @@ describe('IntakeSection jira', () => {
   });
 
   it.each([
-    { board: 'work', allIssues: 'All other issues' },
-    { board: null, allIssues: 'All issues' },
+    { board: 'work', allIssues: 'All other issues', precedenceExplained: true },
+    { board: null, allIssues: 'All issues', precedenceExplained: false },
   ])(
-    'calls the all-issues filter "$allIssues" when the label factory board is $board',
-    async ({ board, allIssues }) => {
+    'calls the all-issues filter "$allIssues" and explains label precedence only once the label factory board is set ($board)',
+    async ({ board, allIssues, precedenceExplained }) => {
       seedFactories();
       useJiraHandlers({
         config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
@@ -264,6 +265,9 @@ describe('IntakeSection jira', () => {
       renderIntakeSection();
 
       expect(await screen.findByLabelText('Issues from ENG · Engineering for Acme Web')).toHaveTextContent(allIssues);
+      expect(
+        screen.queryByText('Labelled factories take matching issues first, in the order they were added.') !== null,
+      ).toBe(precedenceExplained);
     },
   );
 
@@ -293,6 +297,52 @@ describe('IntakeSection jira', () => {
     expect(savedBindings[0]).toMatchObject({ factoryProjectId: FACTORY_A, labels: ['bug'] });
     expect(input).toHaveFocus();
     await waitFor(() => expect(screen.queryByText('Still takes all issues until you add a label.')).toBeNull());
+  });
+
+  it('keeps the commas typed while a label save is in flight, so every label saves next', async () => {
+    seedFactories();
+    const { savedBindings } = useJiraHandlers({
+      config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+      bindings: [jiraBinding({ labels: ['payments'] })],
+    });
+    let answerFirstSave = () => {};
+    const firstSaveAnswered = new Promise<void>(resolve => {
+      answerFirstSave = resolve;
+    });
+    server.use(http.put(BINDINGS_URL, () => firstSaveAnswered, { once: true }));
+
+    renderIntakeSection();
+
+    const input = await screen.findByLabelText('Add label for Acme Web');
+    await userEvent.type(input, 'billing{Enter}');
+    await waitFor(() => expect(screen.getByLabelText('Remove label payments')).toBeDisabled());
+    await userEvent.type(input, 'refunds,ops');
+    expect(input).toHaveValue('refunds,ops');
+
+    answerFirstSave();
+    expect(await screen.findByText('billing')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Remove label payments')).toBeEnabled());
+    await userEvent.type(input, '{Enter}');
+
+    await waitFor(() => expect(savedBindings).toHaveLength(2));
+    expect(savedBindings[1]).toMatchObject({ labels: ['payments', 'billing', 'refunds', 'ops'] });
+  });
+
+  it('does not add a label when Enter confirms an input-method composition', async () => {
+    seedFactories();
+    const { savedBindings } = useJiraHandlers({
+      config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+      bindings: [jiraBinding({ labels: ['payments'] })],
+    });
+
+    renderIntakeSection();
+
+    const input = await screen.findByLabelText('Add label for Acme Web');
+    await userEvent.type(input, 'ばぐ');
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+
+    expect(input).toHaveValue('ばぐ');
+    expect(savedBindings).toEqual([]);
   });
 
   it('explains which factory already takes a label when the save is refused, until the input changes', async () => {

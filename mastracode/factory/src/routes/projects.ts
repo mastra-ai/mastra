@@ -191,7 +191,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain used by session retirement and running-thread model updates. */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get' | 'releaseProjectClaims'>;
   /** Controller used to reach the thread store behind each active binding. */
   controller?: ModelApplyController;
   /** The factory's normalized sandbox; describes and validates the environment settings. */
@@ -286,11 +286,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return this.deps.sourceControl;
   }
 
-  async #releaseIntakeSources(orgId: string, factoryProjectId: string): Promise<void> {
-    const { intake } = this.deps;
-    if (!intake) return;
-    await intake.ensureReady();
-    await intake.clearProjectBindings({ orgId, factoryProjectId });
+  /** Hand a deleted project's intake back: its sources become routable and its cards stop claiming their records. */
+  async #releaseIntake(orgId: string, factoryProjectId: string): Promise<void> {
+    const { intake, workItems } = this.deps;
+    if (intake) {
+      await intake.ensureReady();
+      await intake.clearProjectBindings({ orgId, factoryProjectId });
+    }
+    await workItems?.releaseProjectClaims({ orgId, factoryProjectId });
   }
 
   async #handles(): Promise<SourceControlStorageHandle[]> {
@@ -723,8 +726,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
           }
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
-          await this.#releaseIntakeSources(tenant.orgId, id);
           await this.#dropSchedule(id);
+          await this.#releaseIntake(tenant.orgId, id);
           return context.body(null, 204);
         },
       }),

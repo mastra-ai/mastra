@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
+import { ProjectRoutes } from '../../routes/projects.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -169,10 +170,16 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       c.set('factoryAuthUser' as never, { workosId: 'u1', organizationId: 'org1' } as never);
       await next();
     });
-    mountApiRoutes(
-      app,
-      path.routes(seed, input => rules.ingest(input)),
-    );
+    mountApiRoutes(app, [
+      ...path.routes(seed, input => rules.ingest(input)),
+      ...new ProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+        intake: seed.intake,
+        workItems: seed.workItems,
+      }).routes(),
+    ]);
 
     const create = async (name: string) =>
       (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name } })).id;
@@ -267,6 +274,31 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
     expect(await poll(triage)).toEqual(['OPS-2']);
     expect(await filed(triage)).toEqual([]);
+  });
+
+  it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {
+    expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+    await fileProposedCards();
+    expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
+    const growth = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'growth' } })).id;
+    await seed.intake.setSharedBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: path.sourceId,
+      factoryProjectId: growth,
+      board: 'work',
+      labels: null,
+    });
+
+    expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+    expect(await filed(growth)).toEqual(['OPS-1', 'OPS-2']);
+    await fileProposedCards();
+
+    const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: growth });
+    expect(cards.map(card => card.title).sort()).toEqual([
+      expect.stringMatching(/^OPS-1\b/),
+      expect.stringMatching(/^OPS-2\b/),
+    ]);
   });
 
   it("does not open an issue from another factory's slice by its identifier", async () => {

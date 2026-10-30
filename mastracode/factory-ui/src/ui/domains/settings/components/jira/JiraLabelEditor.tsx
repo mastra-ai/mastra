@@ -22,7 +22,6 @@ export function JiraLabelEditor({
   const [error, setError] = useState<string>();
 
   const commitDraft = () => {
-    // The field stays focusable during a save; committing then would race the save it waits on.
     if (saving) return;
     const parsed = parseLabels(draft);
     if ('error' in parsed) {
@@ -64,10 +63,10 @@ export function JiraLabelEditor({
             setError(undefined);
           }}
           onKeyDown={event => {
-            if (event.key === 'Enter' || event.key === ',') {
-              event.preventDefault();
-              commitDraft();
-            }
+            if (saving || event.nativeEvent.isComposing) return;
+            if (event.key !== 'Enter' && event.key !== ',') return;
+            event.preventDefault();
+            commitDraft();
           }}
           onBlur={commitDraft}
           className="w-28"
