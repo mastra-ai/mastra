@@ -943,6 +943,9 @@ export class ExecutionFence implements RunFenceScope {
   #startHeartbeat(): void {
     this.#heartbeat = setInterval(() => {
       if (this.#settlement || this.#lossError) return;
+      // A storage renewal queued behind other writes can still extend this generation's lease.
+      // Wait for its result; a takeover makes the renewal return false.
+      if (this.#renewalInFlight && this.generation !== undefined) return;
       if (Date.now() >= this.#leaseExpiresAt) {
         this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
@@ -954,7 +957,7 @@ export class ExecutionFence implements RunFenceScope {
         .renew(this.claim)
         .then(renewed => {
           if (renewed) {
-            this.#leaseExpiresAt = startedAt + EXECUTION_LEASE_TTL_MS;
+            this.#leaseExpiresAt = (this.generation !== undefined ? Date.now() : startedAt) + EXECUTION_LEASE_TTL_MS;
             return;
           }
           this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));

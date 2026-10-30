@@ -476,6 +476,50 @@ describe('storage-backed ExecutionFence', () => {
     expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.ownerId).toBe('foreign');
   });
 
+  it('keeps a storage-backed run alive when a queued renewal eventually confirms the same owner (#28879)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+      await blocked;
+      return renew(args);
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(fence.isLost()).toBe(false);
+
+    unblock();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(fence.verify()).resolves.toBeUndefined();
+    expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.ownerId).toBe(fence.executionId);
+    expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
+  it('rejects a delayed renewal after another execution takes over (#28879)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+      await blocked;
+      return renew(args);
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    const successor = await storageClaim(workflowsStore, 'run-1', 'takeover');
+    unblock();
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    expect(await fence.settle(async () => {})).toBe('superseded');
+    await successor.settle(async () => {});
+  });
+
   it('a released claim can be acquired again under the next generation', async () => {
     const { workflowsStore } = await stores();
     const first = await storageClaim(workflowsStore, 'run-1');
