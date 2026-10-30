@@ -17,7 +17,6 @@ export { BOARD_METADATA_KEYS, SHARED_PROVIDER_METADATA_KEYS, splitCardMetadata }
 const customWorkItemAdapter = externalAdapter('custom', {
   providerFromSource: true,
   providerMetadataKeys: [],
-  kind: () => 'issue',
   key: (_source, metadata) => stringValue(metadata.identifier),
 });
 

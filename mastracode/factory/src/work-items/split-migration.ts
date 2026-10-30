@@ -99,7 +99,6 @@ export function splitLegacyWorkItem(
           factory_project_id: String(row.factory_project_id),
           work_item_id: workItemId,
           provider: provider.provider,
-          kind: provider.kind,
           integration_id: provider.integrationId,
           source_type: provider.sourceType,
           workspace_id: provider.workspaceId,

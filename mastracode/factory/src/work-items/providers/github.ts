@@ -19,7 +19,6 @@ export const githubWorkItemAdapter = externalAdapter('github', {
     'baseBranch',
     'requestedReviewers',
   ],
-  kind: source => (source.type === 'pull-request' ? 'pull_request' : 'issue'),
   key: (source, metadata) => {
     const match = source.url ? GITHUB_URL.exec(source.url) : null;
     if (match) return `${match[1]}#${match[2]}`;

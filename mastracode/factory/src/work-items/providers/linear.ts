@@ -15,7 +15,6 @@ export const linearWorkItemAdapter = externalAdapter('linear', {
     'team',
     'teamKey',
   ],
-  kind: () => 'issue',
   key: (_source, metadata) => stringValue(metadata.identifier),
   state: (_source, metadata) => stringValue(metadata.linearState) ?? stringValue(metadata.state),
   author: metadata =>
