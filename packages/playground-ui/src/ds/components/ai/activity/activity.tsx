@@ -177,7 +177,11 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   );
 };
 
-export const ActivityLabel = ({ className, ...props }: ComponentProps<typeof Txt>) => {
+export interface ActivityLabelProps extends ComponentProps<typeof Txt> {
+  wrap?: boolean;
+}
+
+export const ActivityLabel = ({ wrap = false, className, ...props }: ActivityLabelProps) => {
   const inline = useInline();
 
   return (
@@ -185,7 +189,11 @@ export const ActivityLabel = ({ className, ...props }: ComponentProps<typeof Txt
       as="span"
       variant="caption"
       tone="muted"
-      className={cn('shrink-0 truncate', inline ? `max-w-none ${LIFTS_TO_FOREGROUND}` : 'max-w-[55%]', className)}
+      className={cn(
+        wrap ? 'min-w-0 break-words' : 'shrink-0 truncate',
+        inline ? `max-w-none ${LIFTS_TO_FOREGROUND}` : 'max-w-[55%]',
+        className,
+      )}
       {...props}
     />
   );
