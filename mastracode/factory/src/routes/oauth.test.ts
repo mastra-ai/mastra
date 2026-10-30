@@ -359,9 +359,74 @@ describe('session cancel and sign-out', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
     expect(authStorage.logout).not.toHaveBeenCalled();
   });
+
+  describe('in a pool that also holds API keys', () => {
+    const key = { type: 'api_key' as const, key: 'sk-ant' };
+    const oauthCred = (refresh: string) => ({ type: 'oauth' as const, ...ANTHROPIC_CREDS, refresh });
+    const signOut = () => buildApp(userA).request('/web/config/providers/anthropic/oauth', { method: 'DELETE' });
+    const pool = async () => (await seed.credentials.listAccounts(TENANT_A, 'anthropic')).map(a => [a.type, a.active]);
+
+    it('removes the OAuth account and keeps an active API key', async () => {
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: oauthCred('r-1') });
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: key, activate: true });
+
+      expect((await signOut()).status).toBe(200);
+      expect(await pool()).toEqual([['api-key', true]]);
+    });
+
+    it('removes the active OAuth account when there are several', async () => {
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: oauthCred('r-1') });
+      const active = await seed.credentials.addAccount(TENANT_A, 'anthropic', {
+        credential: oauthCred('r-2'),
+        activate: true,
+      });
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: key });
+
+      expect((await signOut()).status).toBe(200);
+      const left = await seed.credentials.listAccounts(TENANT_A, 'anthropic');
+      expect(left.map(a => a.id)).not.toContain(active.id);
+      expect(left.map(a => [a.type, a.active])).toEqual([
+        ['oauth', true],
+        ['api-key', false],
+      ]);
+    });
+
+    it('is a no-op when the pool holds no OAuth account', async () => {
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: key });
+
+      expect((await signOut()).status).toBe(200);
+      expect(await pool()).toEqual([['api-key', true]]);
+    });
+  });
 });
 
 // ── Org-scoped sign-in ───────────────────────────────────────────────────
+
+describe('members who are not org admins', () => {
+  it('sign in to and sign out of their own pool without touching the org pool', async () => {
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = buildApp(userA, { isOrganizationAdmin });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', {
+      type: 'oauth',
+      ...ANTHROPIC_CREDS,
+      refresh: 'r-org',
+    });
+
+    for (const refresh of ['r-first', 'r-second']) {
+      completeAnthropicLogin.mockResolvedValueOnce({ ...ANTHROPIC_CREDS, refresh });
+      const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+      const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+      expect(res.status).toBe(200);
+    }
+    expect((await seed.credentials.listAccounts(TENANT_A, 'anthropic')).map(a => a.active)).toEqual([false, true]);
+
+    const out = await app.request('/web/config/providers/anthropic/oauth', { method: 'DELETE' });
+    expect(out.status).toBe(200);
+    expect((await seed.credentials.listAccounts(TENANT_A, 'anthropic')).map(a => a.active)).toEqual([true]);
+    expect(await seed.credentials.listAccounts({ orgId: 'org1' }, 'anthropic')).toHaveLength(1);
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+  });
+});
 
 describe('provider login preserves OM selection intent', () => {
   it('leaves automatic roles unset after paste-code completion', async () => {
@@ -497,6 +562,109 @@ describe('gating', () => {
     const res = await post(buildApp(userA, { noCredentials: true }), '/web/config/providers/anthropic/oauth/start');
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('credentials_unavailable');
+  });
+});
+
+// ── Sign-in appends to the account pool ──────────────────────────────────
+
+describe('sign-in appends to the account pool', () => {
+  async function signInCodex(app: Hono, credentials: Record<string, unknown>, scope?: 'org') {
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials });
+    const startRes = await post(app, '/web/config/providers/openai/oauth/start', scope ? { scope } : undefined);
+    const { sessionId } = await startRes.json();
+    await makePollable(sessionId);
+    const res = await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+    expect(await res.json()).toMatchObject({ status: 'complete' });
+  }
+
+  it('signing in to a second subscription adds an account and keeps the first', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-first', refresh: 'r-first', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-second', refresh: 'r-second', accountId: 'acct-2' });
+
+    const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    expect(accounts).toHaveLength(2);
+    expect(accounts.map(a => a.active)).toEqual([false, true]);
+    expect(await seed.credentials.getCredential(TENANT_A, 'openai-codex')).toMatchObject({ access: 'a-second' });
+    expect(await seed.credentials.getAccountCredential(TENANT_A, accounts[0]!.id)).toMatchObject({
+      access: 'a-first',
+    });
+  });
+
+  it('signing in again with the same identity updates that account in place', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-old', refresh: 'r-old', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-other', refresh: 'r-other', accountId: 'acct-2' });
+    const before = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    await signInCodex(app, { ...CODEX_CREDS, access: 'a-new', refresh: 'r-new', accountId: 'acct-1' });
+
+    const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    // Same ids, labels and order; the re-authed account becomes active, as in mastracode's login().
+    expect(accounts).toEqual([
+      { ...before[0], active: true },
+      { ...before[1], active: false },
+    ]);
+    expect(await seed.credentials.getAccountCredential(TENANT_A, before[0]!.id)).toMatchObject({ access: 'a-new' });
+  });
+
+  it('labels new accounts "<Provider name> account N" when the provider has no label', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-1', accountId: 'acct-1' });
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-2', accountId: 'acct-2' });
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-3', accountId: 'acct-3', email: 'me@example.com' });
+
+    const accounts = await seed.credentials.listAccounts(TENANT_A, 'openai-codex');
+    expect(accounts.map(a => a.label)).toEqual([
+      'ChatGPT Plus/Pro (Codex Subscription) account 1',
+      'ChatGPT Plus/Pro (Codex Subscription) account 2',
+      'me@example.com',
+    ]);
+  });
+
+  it('org-scoped sign-in appends to the org pool', async () => {
+    const app = buildApp(userA);
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-1', accountId: 'acct-1' }, 'org');
+    await signInCodex(app, { ...CODEX_CREDS, refresh: 'r-2', accountId: 'acct-2' }, 'org');
+
+    expect(await seed.credentials.listAccounts({ orgId: 'org1' }, 'openai-codex')).toHaveLength(2);
+    expect(await seed.credentials.listAccounts(TENANT_A, 'openai-codex')).toHaveLength(0);
+  });
+
+  describe('Anthropic, which exposes no account identity', () => {
+    async function signInAnthropic(app: Hono, credentials: typeof ANTHROPIC_CREDS) {
+      completeAnthropicLogin.mockResolvedValue(credentials);
+      const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+      const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c#s' });
+      expect(res.status).toBe(200);
+    }
+
+    it('updates the account holding the same refresh token in place and activates it', async () => {
+      const app = buildApp(userA);
+      await signInAnthropic(app, ANTHROPIC_CREDS);
+      await signInAnthropic(app, { ...ANTHROPIC_CREDS, refresh: 'r-2', access: 'a-2' });
+      const before = await seed.credentials.listAccounts(TENANT_A, 'anthropic');
+      await signInAnthropic(app, { ...ANTHROPIC_CREDS, access: 'a-reissued' });
+
+      expect(await seed.credentials.listAccounts(TENANT_A, 'anthropic')).toEqual([
+        { ...before[0], active: true },
+        { ...before[1], active: false },
+      ]);
+      expect(await seed.credentials.getAccountCredential(TENANT_A, before[0]!.id)).toMatchObject({
+        access: 'a-reissued',
+      });
+    });
+
+    it('adds a new, active account for a different refresh token', async () => {
+      const app = buildApp(userA);
+      await signInAnthropic(app, ANTHROPIC_CREDS);
+      await signInAnthropic(app, { ...ANTHROPIC_CREDS, refresh: 'r-2' });
+
+      const accounts = await seed.credentials.listAccounts(TENANT_A, 'anthropic');
+      expect(accounts.map(a => [a.label, a.active])).toEqual([
+        ['Anthropic (Claude Pro/Max) account 1', false],
+        ['Anthropic (Claude Pro/Max) account 2', true],
+      ]);
+    });
   });
 });
 

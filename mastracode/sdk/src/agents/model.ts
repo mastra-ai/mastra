@@ -5,7 +5,7 @@ import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInt
 import { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
-import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
+import type { CredentialStore } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
@@ -71,22 +71,11 @@ function getAgentControllerHeaders(requestContext?: RequestContext): ModelReques
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
-function accountCredential(account: OAuthAccountRecord) {
-  const { type: _type, id: _id, label: _label, addedAt: _addedAt, active: _active, ...credential } = account;
-  return { type: 'oauth' as const, ...credential };
-}
-
 export function createRequestScopedCredentialStore(
   base: CredentialStore,
   requestContext?: RequestContext,
 ): CredentialStore {
   const selectedId = (providerId: string) => getRequestAccountSelection(requestContext, providerId);
-  const selectedAccount = (providerId: string) => {
-    const accountInstanceId = selectedId(providerId);
-    return accountInstanceId
-      ? base.listAccounts?.(providerId).find(account => account.id === accountInstanceId)
-      : undefined;
-  };
   // Routing rejected every account for this provider on this request. Fail
   // closed on every credential read: falling through to `base` would use the
   // provider's active account — the exhausted one routing just refused.
@@ -102,8 +91,7 @@ export function createRequestScopedCredentialStore(
       // account — that is the account routing deliberately passed over.
       const accountInstanceId = selectedId(providerId);
       if (accountInstanceId === undefined) return base.get(providerId);
-      const selected = selectedAccount(providerId);
-      return selected ? accountCredential(selected) : undefined;
+      return base.getAccountCredential?.(providerId, accountInstanceId);
     },
     getStoredApiKey: providerId => {
       if (rejectAll(providerId)) return undefined;
@@ -125,6 +113,9 @@ export function createRequestScopedCredentialStore(
       : undefined,
     listAccounts: base.listAccounts ? providerId => base.listAccounts!(providerId) : undefined,
     getActiveAccount: base.getActiveAccount ? providerId => base.getActiveAccount!(providerId) : undefined,
+    getAccountCredential: base.getAccountCredential
+      ? (providerId, accountInstanceId) => base.getAccountCredential!(providerId, accountInstanceId)
+      : undefined,
     activateAccount: base.activateAccount
       ? (providerId, accountInstanceId) => base.activateAccount!(providerId, accountInstanceId)
       : undefined,

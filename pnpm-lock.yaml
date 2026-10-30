@@ -2448,6 +2448,9 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.47.0(vitest@4.1.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config

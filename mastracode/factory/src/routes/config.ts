@@ -38,9 +38,11 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
 import {
+  apiKeyIdentity,
   credentialLabel,
   getAuthProviderId,
   listTenantCredentialsForRequest,
+  loose,
   resolveCredentialContext,
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
@@ -48,11 +50,6 @@ import {
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
 import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
-
-/** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /**
  * Server-side configuration routes for the web app.
@@ -1019,8 +1016,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               }
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
               // envVar is intentionally ignored: tenant credentials are resolved
-              // per-request, never written into process.env.
-              await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
+              // per-request, never written into process.env. A saved key joins
+              // the scope's account pool and becomes active; saving the same key
+              // again updates that account rather than adding a duplicate.
+              await ctx.storage.addAccount(tenant, getAuthProviderId(provider), {
+                credential: { type: 'api_key', key },
+                identity: apiKeyIdentity(key),
+                label: credentialLabel(provider, 'api_key'),
+                activate: true,
+              });
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
               const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
@@ -1052,7 +1056,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
-              await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
+              // Only API keys are removed here — OAuth accounts in the same pool
+              // stay. The active account when it is a key, otherwise the first
+              // key in pool order; removeAccount promotes the next account when
+              // the removed one was active.
+              const accounts = await ctx.storage.listAccounts(tenant, getAuthProviderId(provider));
+              const apiKeys = accounts.filter(account => account.type === 'api-key');
+              const target = apiKeys.find(account => account.active) ?? apiKeys[0];
+              if (!target) return c.json({ error: 'api_key_not_found' }, 404);
+              await ctx.storage.removeAccount(tenant, target.id);
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
               const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });

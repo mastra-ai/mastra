@@ -14,6 +14,8 @@
  * is rejected when auth is enabled and falls back to local otherwise.
  */
 
+import { createHash } from 'node:crypto';
+
 import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
@@ -51,6 +53,20 @@ export function credentialLabel(provider: string, credentialType: CredentialReco
   return credentialType === 'api_key'
     ? `${providerDisplayName(provider)} API key`
     : WEB_OAUTH_PROVIDERS[provider]?.subscription;
+}
+
+/**
+ * Pool identity for an API key: a digest, so saving the same key again
+ * updates its account instead of adding a duplicate, without storing the key
+ * itself in the (unencrypted) identity column.
+ */
+export function apiKeyIdentity(key: string): string {
+  return `api-key:${createHash('sha256').update(key).digest('hex')}`;
+}
+
+/** Widen a Mastra route handler's context to the Hono `Context` the credential helpers take. */
+export function loose(c: unknown): Context {
+  return c as Context;
 }
 
 export type CredentialContext =

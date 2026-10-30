@@ -138,6 +138,24 @@ export interface OAuthAccountRecord extends OAuthCredentials {
 export type AuthStorageData = Record<string, AuthCredential | OAuthAccountRecord>;
 
 /**
+ * What account routing reads about one pool account. Carries no token
+ * material: a store may answer it from metadata alone (`OAuthAccountRecord`
+ * satisfies it structurally). Credentials for a specific account come from
+ * `getAccountCredential` / `getApiKey(provider, accountInstanceId)`.
+ */
+export interface CredentialAccount {
+  id: string;
+  label: string;
+  active: boolean;
+  /** Switch order: lower is tried first. */
+  priority?: number;
+  /** Stores that track health report it; absent means usable. */
+  status?: 'ok' | 'cooldown' | 'auth-failed';
+  /** Epoch ms when a cooldown ends; only meaningful while `status` is `cooldown`. */
+  cooldownUntil?: number;
+}
+
+/**
  * The read surface model resolution and the OAuth fetch wrappers need from a
  * credential source. `AuthStorage` satisfies it structurally (file-backed,
  * server-global); deployed web injects a per-tenant implementation backed by
@@ -172,23 +190,31 @@ export interface CredentialStore {
   getOAuthCredential?(provider: string, accountInstanceId?: string): Promise<OAuthCredentialSnapshot | undefined>;
 
   /**
-   * Registered OAuth accounts for a provider, in switch order (priority, then
-   * insertion order). Optional so
-   * deployed per-tenant stores need no change.
+   * Registered accounts for a provider, in switch order (priority, then
+   * insertion order). Optional so stores without a pool need no change.
    */
-  listAccounts?(providerId: string): OAuthAccountRecord[];
+  listAccounts?(providerId: string): CredentialAccount[];
 
   /** The provider's active registry entry, if a registry exists. */
-  getActiveAccount?(providerId: string): OAuthAccountRecord | undefined;
+  getActiveAccount?(providerId: string): CredentialAccount | undefined;
+
+  /**
+   * Credential of one registered account, for synchronous reads of a
+   * request-scoped account selection. Returns undefined for an unknown id.
+   */
+  getAccountCredential?(providerId: string, instanceId: string): AuthCredential | undefined;
 
   /**
    * Activate an account: rotate to the next instance (switch order,
-   * wrapping once), or to `instanceId` when given. Moves the active tokens
-   * between the legacy slot and the registry entries. Returns the newly
-   * active record, or undefined when there is no other instance to rotate to
-   * (or `instanceId` is unknown).
+   * wrapping once), or to `instanceId` when given. Returns the newly active
+   * account, or undefined when there is no other instance to rotate to (or
+   * `instanceId` is unknown). Database-backed stores persist the pointer
+   * asynchronously, so callers await the result.
    */
-  activateAccount?(providerId: string, instanceId?: string): OAuthAccountRecord | undefined;
+  activateAccount?(
+    providerId: string,
+    instanceId?: string,
+  ): CredentialAccount | undefined | Promise<CredentialAccount | undefined>;
 
   /** Remove one account from the registry (activating the next if it was active). */
   removeAccount?(providerId: string, instanceId: string): void;

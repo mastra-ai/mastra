@@ -425,6 +425,34 @@ describe('provider key routes with a tenant', () => {
     expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'user')).toBeUndefined();
   });
 
+  it('appends a new key to the pool and makes it active instead of replacing the existing account', async () => {
+    const app = buildApp(userA);
+    expect((await putKey(app, { key: 'sk-first' })).status).toBe(200);
+    expect((await putKey(app, { key: 'sk-second' })).status).toBe(200);
+
+    const tenant = { orgId: 'org1', userId: 'user-a' };
+    const accounts = await seed.credentials.listAccounts(tenant, 'anthropic');
+    expect(accounts).toHaveLength(2);
+    expect(accounts.map(a => a.active)).toEqual([false, true]);
+    expect(await seed.credentials.getCredential(tenant, 'anthropic')).toEqual({ type: 'api_key', key: 'sk-second' });
+    expect(await seed.credentials.getAccountCredential(tenant, accounts[0]!.id)).toEqual({
+      type: 'api_key',
+      key: 'sk-first',
+    });
+  });
+
+  it('re-saving the same key updates its account instead of adding a duplicate', async () => {
+    const app = buildApp(userA);
+    await putKey(app, { key: 'sk-first' });
+    await putKey(app, { key: 'sk-second' });
+    await putKey(app, { key: 'sk-first' });
+
+    const accounts = await seed.credentials.listAccounts({ orgId: 'org1', userId: 'user-a' }, 'anthropic');
+    expect(accounts).toHaveLength(2);
+    // The re-saved key keeps its id, label and place, and becomes active again.
+    expect(accounts.map(a => a.active)).toEqual([true, false]);
+  });
+
   it('stores a Kimi key under the credential id model resolution reads', async () => {
     const res = await buildApp(userA).request('/web/config/providers/kimi-code-plan-cn/key', {
       method: 'PUT',
@@ -498,6 +526,25 @@ describe('provider key routes with a tenant', () => {
     expect(isOrganizationAdmin).not.toHaveBeenCalled();
   });
 
+  it('lets non-admin members add keys to and remove keys from their own pool only', async () => {
+    await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
+    isOrganizationAdmin.mockClear();
+    isOrganizationAdmin.mockResolvedValue(false);
+    const userPool = { orgId: 'org1', userId: 'user-a' };
+
+    expect((await putKey(buildApp(userA), { key: 'sk-one' })).status).toBe(200);
+    expect((await putKey(buildApp(userA), { key: 'sk-two' })).status).toBe(200);
+    expect((await seed.credentials.listAccounts(userPool, 'anthropic')).map(a => a.active)).toEqual([false, true]);
+
+    const res = await buildApp(userA).request('/web/config/providers/anthropic/key', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const left = await seed.credentials.listAccounts(userPool, 'anthropic');
+    expect(left.map(a => a.active)).toEqual([true]);
+    expect(await seed.credentials.getAccountCredential(userPool, left[0]!.id)).toMatchObject({ key: 'sk-one' });
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toMatchObject({ key: 'sk-shared' });
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+  });
+
   it("lists the caller's user key when both scopes exist", async () => {
     await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     await putKey(buildApp(userA), { key: 'sk-mine' });
@@ -528,6 +575,79 @@ describe('provider key routes with a tenant', () => {
 
     expect(res.status).toBe(403);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
+  });
+
+  describe('deleting a key from a pool that also holds OAuth accounts', () => {
+    const userPool = { orgId: 'org1', userId: 'user-a' };
+    const deleteKey = () => buildApp(userA).request('/web/config/providers/anthropic/key', { method: 'DELETE' });
+    const addOAuth = (refresh: string, activate = true) =>
+      seed.credentials.addAccount(userPool, 'anthropic', {
+        credential: { type: 'oauth', access: `a-${refresh}`, refresh, expires: Date.now() + 60_000 },
+        activate,
+      });
+
+    it('re-saving a key while an OAuth account is active switches back to that key', async () => {
+      await putKey(buildApp(userA), { key: 'sk-mine' });
+      const oauth = await addOAuth('r-1');
+      const [key] = await seed.credentials.listAccounts(userPool, 'anthropic');
+
+      expect((await putKey(buildApp(userA), { key: 'sk-mine' })).status).toBe(200);
+      const accounts = await seed.credentials.listAccounts(userPool, 'anthropic');
+      expect(accounts.map(a => [a.id, a.type, a.active])).toEqual([
+        [key!.id, 'api-key', true],
+        [oauth.id, 'oauth', false],
+      ]);
+    });
+
+    it('removes the key and leaves an active OAuth account in place', async () => {
+      await putKey(buildApp(userA), { key: 'sk-mine' });
+      const oauth = await addOAuth('r-1');
+
+      const res = await deleteKey();
+      expect(res.status).toBe(200);
+      const accounts = await seed.credentials.listAccounts(userPool, 'anthropic');
+      expect(accounts.map(a => [a.id, a.type, a.active])).toEqual([[oauth.id, 'oauth', true]]);
+    });
+
+    it('removes the active key when the pool holds several, promoting the next account', async () => {
+      const oauth = await addOAuth('r-1');
+      await putKey(buildApp(userA), { key: 'sk-first' });
+      await putKey(buildApp(userA), { key: 'sk-second' });
+
+      expect((await deleteKey()).status).toBe(200);
+      const accounts = await seed.credentials.listAccounts(userPool, 'anthropic');
+      expect(accounts.map(a => a.type)).toEqual(['oauth', 'api-key']);
+      expect(await seed.credentials.getAccountCredential(userPool, accounts[1]!.id)).toMatchObject({ key: 'sk-first' });
+      // The removed key was active: the next account by priority takes over.
+      expect(accounts.map(a => a.active)).toEqual([true, false]);
+      expect(accounts[0]!.id).toBe(oauth.id);
+    });
+
+    it('removes the first key by priority when an OAuth account is active', async () => {
+      await putKey(buildApp(userA), { key: 'sk-first' });
+      await putKey(buildApp(userA), { key: 'sk-second' });
+      const oauth = await addOAuth('r-1');
+
+      expect((await deleteKey()).status).toBe(200);
+      const accounts = await seed.credentials.listAccounts(userPool, 'anthropic');
+      expect(accounts.map(a => [a.type, a.active])).toEqual([
+        ['api-key', false],
+        ['oauth', true],
+      ]);
+      expect(await seed.credentials.getAccountCredential(userPool, accounts[0]!.id)).toMatchObject({
+        key: 'sk-second',
+      });
+      expect(accounts[1]!.id).toBe(oauth.id);
+    });
+
+    it('returns 404 and removes nothing when the pool holds no key', async () => {
+      await addOAuth('r-1');
+
+      const res = await deleteKey();
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'api_key_not_found' });
+      expect(await seed.credentials.listAccounts(userPool, 'anthropic')).toHaveLength(1);
+    });
   });
 
   it("GET /web/config/providers reflects the caller's own view", async () => {
