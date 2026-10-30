@@ -5,6 +5,7 @@
  * `socket.connectTimeout` instead of hanging forever.
  */
 import { randomUUID } from 'node:crypto';
+import { createClient } from 'redis';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // AgentThreadStreamRuntime is internal to @mastra/core with no public export.
@@ -27,14 +28,16 @@ function settle(promise: Promise<unknown>, ms: number) {
 describe('RedisStreamsPubSub connect timeout', () => {
   let proxy: ReturnType<typeof makeStallingProxy>;
   let pubsub: RedisStreamsPubSub | undefined;
+  let keyPrefix: string;
 
   async function createPubSub() {
     const upstream = new URL(REDIS_URL);
     proxy = makeStallingProxy({ host: upstream.hostname, port: Number(upstream.port) || 6379 });
     const port = await proxy.listening;
+    keyPrefix = `connect-timeout-${randomUUID()}`;
     pubsub = new RedisStreamsPubSub({
       url: `redis://127.0.0.1:${port}`,
-      keyPrefix: `connect-timeout-${randomUUID()}`,
+      keyPrefix,
       blockMs: 200,
       redisOptions: { socket: { connectTimeout: CONNECT_TIMEOUT_MS } },
     });
@@ -88,6 +91,28 @@ describe('RedisStreamsPubSub connect timeout', () => {
       status: 'rejected',
       message: expect.stringContaining(`read client did not connect to Redis within ${CONNECT_TIMEOUT_MS}ms`),
     });
+  }, 15_000);
+
+  it("removes the fan-out group it created when the subscription's reader cannot connect", async () => {
+    const ps = await createPubSub();
+    await ps.publish('topic', { type: 'test', data: {}, runId: 'warmup' });
+    proxy.stall();
+
+    expect(
+      await settle(
+        ps.subscribe('topic', () => {}),
+        5_000,
+      ),
+    ).toMatchObject({ status: 'rejected' });
+
+    // Without cleanup every timed-out retry leaves another group on a live stream.
+    const direct = createClient({ url: REDIS_URL });
+    await direct.connect();
+    try {
+      expect(await direct.xInfoGroups(`${keyPrefix}:topic`)).toEqual([]);
+    } finally {
+      await direct.close();
+    }
   }, 15_000);
 
   it('rejects subscribeToThread() instead of hanging when the server is frozen', async () => {

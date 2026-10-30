@@ -707,7 +707,18 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // connection until a message arrives.
     const readClient = this.#createReadClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
-    await connectWithin(readClient, 'read');
+    try {
+      await connectWithin(readClient, 'read');
+    } catch (err) {
+      // No Subscription exists yet, so #stopSubscription will never destroy
+      // this fan-out group. Without this, every retry would leave one behind.
+      if (!isGrouped) {
+        await this.#writeClient.xGroupDestroy(streamKey, group).catch(destroyErr => {
+          this.#logger?.debug?.('redis-streams: xGroupDestroy failed', { topic, group, error: errorText(destroyErr) });
+        });
+      }
+      throw err;
+    }
 
     return {
       members: new Map([[cb, {}]]),
