@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
-import { externalSourceForWorkItem } from '../../../rules/types.js';
+import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
@@ -907,6 +907,8 @@ function applyUpdate({
     updated_at: now,
   };
 }
+/** Stage-history actor for the one-time move of cards held for triage acceptance. */
+export const HELD_CARD_SWEEP_ACTOR = 'factory-held-card-sweep';
 const ATTENTION_RECEIPT_QUERY_BATCH_SIZE = 200;
 const ATTENTION_RECEIPT_WRITE_BATCH_SIZE = 25;
 
@@ -2615,6 +2617,54 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     supersededAt: Date;
   }): Promise<void> {
     await this.supersedeDecisionsForWorkItem(input);
+  }
+
+  /**
+   * Factory used to hold a triaged non-bug in Triage until a person accepted it.
+   * Triage now sends those cards back to Intake instead, so move the ones still
+   * held there, once. A card with a live run, or one that changed under us, is
+   * left alone. Returns the cards moved; a second run finds none.
+   */
+  async returnHeldTriageCards(): Promise<WorkItemRow[]> {
+    // Cards filed before boards were recorded carry no board; outside pull requests they are Work cards.
+    const held = (
+      await this.#db.findMany<WorkItemDbRow>('work_items', {
+        board: { in: ['work', null] },
+        triage_type: { in: FACTORY_TRIAGE_TYPES.filter(type => type !== 'bug') },
+        accepted_at: null,
+      })
+    )
+      .map(toWorkItem)
+      .filter(
+        item => item.stages[0] === 'triage' && (item.board === 'work' || item.externalSource?.type !== 'pull-request'),
+      );
+    if (held.length === 0) return [];
+    const bound = new Set(
+      (
+        await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+          status: 'active',
+          work_item_id: { in: held.map(item => item.id) },
+        })
+      ).map(row => `${row.org_id}:${row.work_item_id}`),
+    );
+    const moved: WorkItemRow[] = [];
+    for (const item of held) {
+      if (bound.has(`${item.orgId}:${item.id}`)) continue;
+      try {
+        const result = await this.update({
+          orgId: item.orgId,
+          id: item.id,
+          userId: HELD_CARD_SWEEP_ACTOR,
+          patch: { stages: ['intake'] },
+          expectedRevision: item.revision,
+          expectedBoard: item.board,
+        });
+        if (result) moved.push(result.item);
+      } catch (error) {
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      }
+    }
+    return moved;
   }
 
   async repairLegacyAttentionState(): Promise<void> {
