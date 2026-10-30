@@ -32,7 +32,7 @@ export interface WorkItemFilters {
   /** `github`, `gitlab`, `linear`, `jira`, `incidentio`, `slack` or `manual`. */
   sources?: readonly string[];
   linearProjects?: readonly string[];
-  /** Case-insensitive; any picked label matches. */
+  /** Case-insensitive; the card must carry every picked label, as the board's label filter does. */
   labels?: readonly string[];
   /** Every non-empty person filter must match; within one, any picked person in any of its roles will do. */
   people?: Partial<Record<PersonFilter, readonly string[]>>;
@@ -148,7 +148,7 @@ export function matchesWorkItemFilters(item: WorkItemRow, filters: WorkItemFilte
   }
   if (filters.labels?.length) {
     const labels = new Set(metadataStrings(item, 'labels').map(label => label.toLowerCase()));
-    if (!filters.labels.some(label => labels.has(label.toLowerCase()))) return false;
+    if (!filters.labels.every(label => labels.has(label.toLowerCase()))) return false;
   }
   if (!matchesPeople(item, filters.people)) return false;
   if (filters.sessions?.length || filters.threads?.length) {

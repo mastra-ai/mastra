@@ -625,7 +625,7 @@ describe('work item read wire', () => {
       externalId: String(n),
       url: `https://github.com/acme/app/issues/${n}`,
     });
-    await seedCard('Ada bug', 'intake', issue(1), { author: 'Ada', assignees: ['grace'], labels: ['Bug'] });
+    await seedCard('Ada bug', 'intake', issue(1), { author: 'Ada', assignees: ['grace'], labels: ['Bug', 'urgent'] });
     await seedCard('Grace chore', 'execute', issue(2), { author: 'grace', labels: ['chore'] });
     await seedCard('Ada done', 'done', issue(3), { author: 'ada', labels: ['bug'] });
     await seedCard(
@@ -651,6 +651,8 @@ describe('work item read wire', () => {
     expect(await titles('linearProject=p1')).toEqual(['Linear thing']);
     expect(await titles('label=BUG')).toEqual(['Ada bug', 'Ada done']);
     expect(await titles('label=bug&stage=intake')).toEqual(['Ada bug']);
+    expect(await titles('label=bug,URGENT')).toEqual(['Ada bug']);
+    expect(await titles('label=bug,chore')).toEqual([]);
     expect(await titles('author=github:ada&assignee=github:grace')).toEqual(['Ada bug']);
 
     expect(await (await json('GET', `${base}/counts?author=github:ada&stage=intake`)).json()).toEqual({
