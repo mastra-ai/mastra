@@ -5133,32 +5133,53 @@ export class Session<TState = unknown> {
             },
           });
         }
+        // The run can end between the check above and delivery. The agent would
+        // then wake the thread with this call's `ifIdle`, which carries no stream
+        // options: that run has no request context, so it cannot resolve the
+        // session's model. Building stream options here is too costly for the
+        // common active delivery, so probe with an idle `discard` instead and,
+        // when the run is already gone, fall through to the idle path below,
+        // which builds them.
+        const fallBackWhenIdle = (ifActive?.behavior ?? 'deliver') === 'deliver' && ifIdle?.behavior !== 'discard';
         const result = agent.sendSignal(signal, {
           resourceId: this.identity.getResourceId(),
           threadId,
           ifActive,
-          ifIdle,
+          ifIdle: fallBackWhenIdle ? { ...ifIdle, behavior: 'discard' } : ifIdle,
         });
         const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
-        const settled = shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
-        if (settled?.action === 'persist') {
-          await result.persisted;
-          const message = signal.toDBMessage({
-            resourceId: this.identity.getResourceId(),
-            threadId,
-          });
-          this.emit({ type: 'message_start', message });
-          this.emit({ type: 'message_end', id: message.id });
+        const settled =
+          fallBackWhenIdle || shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
+        if (!(fallBackWhenIdle && settled?.action === 'discard')) {
+          if (settled?.action === 'persist') {
+            await result.persisted;
+            const message = signal.toDBMessage({
+              resourceId: this.identity.getResourceId(),
+              threadId,
+            });
+            this.emit({ type: 'message_start', message });
+            this.emit({ type: 'message_end', id: message.id });
+          }
+          if (requireDelivery) {
+            const acceptedResult = settled ?? (await result.accepted);
+            return {
+              accepted: true as const,
+              runId: 'runId' in acceptedResult ? acceptedResult.runId : undefined,
+              action: acceptedResult.action,
+            };
+          }
+          return { accepted: true as const, runId: await settleRunId(result) };
         }
-        if (requireDelivery) {
-          const acceptedResult = settled ?? (await result.accepted);
-          return {
-            accepted: true as const,
-            runId: 'runId' in acceptedResult ? acceptedResult.runId : undefined,
-            action: acceptedResult.action,
-          };
+
+        // The agent has no blocking run for this thread any more, but this
+        // session may not have seen that run end yet. Start the new run on a
+        // fresh subscription once the old one has torn down.
+        if (!(await this.waitForStreamIdle())) {
+          this.thread.cleanupSubscription();
         }
-        return { accepted: true as const, runId: await settleRunId(result) };
+        assertNotCancelled();
+        await this.thread.ensureSubscription(threadId, agent, requestContextInput);
+        assertNotCancelled();
       }
 
       // Post-abort lingering state: the AbortController was cleared (so
