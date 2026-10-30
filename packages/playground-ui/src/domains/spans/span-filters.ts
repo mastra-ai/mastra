@@ -65,6 +65,9 @@ export const SPAN_CONTEXT_FILTER_FIELD_IDS = [
 /** Span query fields the server only accepts when the store declares `spanQueryOutcomeFields`. */
 export const SPAN_OUTCOME_FILTER_FIELD_IDS = ['outcome', 'stopReason'] as const;
 
+/** Span query fields the server only accepts when the store declares `spanQueryModelFields`. */
+export const SPAN_MODEL_FILTER_FIELD_IDS = ['model', 'provider'] as const;
+
 const NUMBER_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs', 'timeToFirstChunkMs', 'timeToFirstTokenMs']);
 /** The query can only test `error` for presence; any other operator is rejected. */
 const PRESENCE_ONLY_FIELD_IDS: ReadonlySet<string> = new Set(['error']);
@@ -98,6 +101,8 @@ const SPAN_FILTER_BAR_LABELS: Record<string, string> = {
   rootEntityId: 'Root primitive ID',
   rootEntityName: 'Root primitive name',
   rootEntityVersionId: 'Root primitive version ID',
+  model: 'Model',
+  provider: 'Provider',
 };
 
 /** Span fields without their own trace icon borrow the icon of the closest trace field. */
@@ -119,6 +124,8 @@ const SPAN_ICON_FIELD_ALIASES: Record<string, string> = {
   rootEntityVersionId: 'entityId',
   parentEntityName: 'entityName',
   rootEntityName: 'entityName',
+  model: 'spans.model',
+  provider: 'spans.provider',
 };
 
 const spanFieldBase = (id: string) => ({
@@ -158,6 +165,7 @@ export function createSpanFilterBarFields({
   withTimeToFirstChunk,
   withTimeToFirstToken,
   withOutcomeFields = false,
+  withModelFields = false,
   entityNames,
   environments,
   valueSuggestions,
@@ -166,6 +174,8 @@ export function createSpanFilterBarFields({
   withContextFields: boolean;
   /** Offer `outcome` and `stopReason`. Only when the server declares `spanQueryOutcomeFields`. */
   withOutcomeFields?: boolean;
+  /** Offer `model` and `provider`. Only when the server declares `spanQueryModelFields`. */
+  withModelFields?: boolean;
   entityNames: readonly string[];
   environments: readonly string[];
   /** Builds a lazy value resolver for a span field. Absent → free text. */
@@ -213,6 +223,15 @@ export function createSpanFilterBarFields({
       case 'traceId':
       case 'spanId':
         return { ...spanFieldBase(id), operators: TRACE_REQUIRED_STRING_OPERATORS };
+      case 'model':
+      case 'provider': {
+        const resolver = valueSuggestions?.(id);
+        return {
+          ...spanFieldBase(id),
+          operators: TRACE_STRING_OPERATORS,
+          ...(resolver ? { suggestions: resolver } : {}),
+        };
+      }
       default:
         return { ...spanFieldBase(id), operators: TRACE_STRING_OPERATORS };
     }
@@ -233,6 +252,7 @@ export function createSpanFilterBarFields({
   return [
     ...sortFields(SPAN_CORE_FILTER_FIELD_IDS),
     ...(withContextFields ? sortFields(SPAN_CONTEXT_FILTER_FIELD_IDS) : []),
+    ...(withModelFields ? SPAN_MODEL_FILTER_FIELD_IDS.map(field) : []),
     ...(withOutcomeFields ? createOutcomeFilterBarFields(spanFieldBase, valueSuggestions) : []),
   ];
 }
@@ -289,7 +309,7 @@ function groupToSpanQueryPredicate(
 
 /**
  * The span query `where` for the filter bar's tokens and groups, or `undefined` when nothing applies.
- * Conditions the span query can't run (unknown fields, context fields or streaming timings without
+ * Conditions the span query can't run (unknown fields, context, model or outcome fields or streaming timings without
  * the capability, unusable values) are left out instead of failing the request.
  */
 export function buildSpanQueryWhere(
@@ -298,14 +318,16 @@ export function buildSpanQueryWhere(
   {
     withContextFields,
     withOutcomeFields = false,
+    withModelFields = false,
     ...support
-  }: StreamingTimingSupport & { withContextFields: boolean; withOutcomeFields?: boolean },
+  }: StreamingTimingSupport & { withContextFields: boolean; withOutcomeFields?: boolean; withModelFields?: boolean },
 ): TraceQueryScalarPredicate | undefined {
   const allowedFieldIds = withoutUnrecordedStreamingTimings(
     new Set([
       ...SPAN_CORE_FILTER_FIELD_IDS,
       ...(withContextFields ? SPAN_CONTEXT_FILTER_FIELD_IDS : []),
       ...(withOutcomeFields ? SPAN_OUTCOME_FILTER_FIELD_IDS : []),
+      ...(withModelFields ? SPAN_MODEL_FILTER_FIELD_IDS : []),
     ]),
     support,
   );
