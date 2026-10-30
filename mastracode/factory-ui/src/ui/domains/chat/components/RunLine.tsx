@@ -29,10 +29,10 @@ function lineLook(state: LineState): LineLook {
   return { pose: callPose(state.toolName), label, detail, status: 'running' };
 }
 
-/** Born done = the answer or a stretch already said the run is over. */
-export function RunLine({ state, live }: { state: LineState; live: boolean }) {
-  const [bornDone] = useState(state === 'done');
-  if (bornDone) return null;
+/** A run already over when the line mounts, or whose exit has faded, draws nothing until another run starts. */
+export function RunLine({ state, live, run }: { state: LineState; live: boolean; run: number }) {
+  const [settledRun, setSettledRun] = useState(live ? undefined : run);
+  if (!live && settledRun === run) return null;
   const { pose, label, detail, status } = lineLook(state);
 
   return (
@@ -40,6 +40,9 @@ export function RunLine({ state, live }: { state: LineState; live: boolean }) {
       <div
         aria-hidden
         className={cn('transition-opacity duration-300 motion-reduce:duration-0', !live && 'opacity-0 delay-1100')}
+        onTransitionEnd={event => {
+          if (event.target === event.currentTarget && !live) setSettledRun(run);
+        }}
       >
         <Activity foldable={false} status={status} appearance="inline">
           <ActivityHeader>

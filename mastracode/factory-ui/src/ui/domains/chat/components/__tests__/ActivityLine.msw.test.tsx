@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
@@ -31,6 +31,12 @@ function assistantText(text: string) {
 async function ready(finishWorkspace: () => void, client: QueryClient) {
   finishWorkspace();
   await waitForMutationsIdle(client);
+}
+
+function fadeOut(said: HTMLElement) {
+  const line = said.closest('[aria-hidden]');
+  if (!line) throw new Error('expected the activity line');
+  fireEvent.transitionEnd(line);
 }
 
 describe('ActivityLine', () => {
@@ -150,6 +156,32 @@ describe('ActivityLine', () => {
     expect(await screen.findByText('Updating memory')).toBeInTheDocument();
   });
 
+  it('stays quiet while memory saves after the answer, and when the run then ends', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+    await session.emit({ type: 'message_start', message: assistantText('') });
+    await session.emit({
+      type: 'message_update',
+      id: 'assistant-1',
+      event: { type: 'text-delta', delta: 'Auth starts at the composer' },
+    });
+    await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
+
+    await session.emit({ type: 'om_observation_start' });
+    await screen.findByText('saving memory');
+
+    expect(screen.queryByText('Updating memory')).not.toBeInTheDocument();
+
+    await session.emit({ type: 'agent_end' });
+    await screen.findByRole('button', { name: 'Copy message' }, { timeout: 3000 });
+
+    expect(screen.queryByText('Done')).not.toBeInTheDocument();
+  });
+
   it('waits on the user while an approval is pending', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
@@ -174,7 +206,7 @@ describe('ActivityLine', () => {
     expect(await screen.findByText('Waiting for you')).toBeInTheDocument();
   });
 
-  it('lands on done when the run ends, then leaves', async () => {
+  it('lands on done when the run ends, then leaves once it has faded', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();
     const { client } = renderThread();
@@ -184,9 +216,26 @@ describe('ActivityLine', () => {
     await screen.findByText('Thinking');
 
     await session.emit({ type: 'agent_end' });
+    fadeOut(await screen.findByText('Done'));
 
+    expect(screen.queryByText('Done')).not.toBeInTheDocument();
+  });
+
+  it('follows a run the agent starts on its own after the last one faded', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+    await session.emit({ type: 'agent_end' });
+    fadeOut(await screen.findByText('Done'));
+
+    await session.emit({ type: 'agent_start' });
+    expect(await screen.findByText('Thinking')).toBeInTheDocument();
+
+    await session.emit({ type: 'agent_end' });
     expect(await screen.findByText('Done')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText('Done')).not.toBeInTheDocument(), { timeout: 3000 });
   });
 
   it('ends quietly after an answer, which already said the run is over', async () => {
@@ -205,8 +254,9 @@ describe('ActivityLine', () => {
     await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
 
     await session.emit({ type: 'agent_end' });
+    await screen.findByRole('button', { name: 'Copy message' }, { timeout: 3000 });
 
-    await expect(screen.findByText('Done', {}, { timeout: 1000 })).rejects.toThrow();
+    expect(screen.queryByText('Done')).not.toBeInTheDocument();
     expect(document.querySelector('.agent-indicator')).toBeNull();
   });
 

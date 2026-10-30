@@ -86,5 +86,6 @@ export function runActivity(entries: TimelineEntry[]): RunActivity {
 export function lineState(activity: RunActivity, busy: boolean, savingMemory: boolean): RunActivity {
   if (activity === 'waiting' || activity === 'error') return activity;
   if (!busy) return 'done';
-  return savingMemory ? 'memory' : activity;
+  if (activity === 'writing' || !savingMemory) return activity;
+  return 'memory';
 }
