@@ -121,6 +121,7 @@ export function splitLegacyWorkItem(
       org_id: row.org_id,
       factory_project_id: String(row.factory_project_id),
       work_item_id: workItemId,
+      claim_key: row.claim_key ?? null,
       board: row.board ?? null,
       parent_board_item_id: row.parent_work_item_id ?? null,
       stages: row.stages,
@@ -193,6 +194,25 @@ async function migratedBoardItems(
 class MigrationConflict extends Error {}
 
 async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy: boolean): Promise<boolean> {
+  const claimKey = card.boardItem.claim_key;
+  if (claimKey) {
+    const holder = await ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, {
+      org_id: card.boardItem.org_id,
+      claim_key: claimKey,
+    });
+    if (holder && holder.id !== card.boardItem.id) {
+      // An old replica may have transferred the claim since our first copy.
+      // Only release an untouched migrated holder whose legacy row released it.
+      const legacy = await ops.updateAtomic<WorkItemDbRow>(LEGACY, { id: holder.id }, () => null);
+      await ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: holder.id }, current => {
+        if (current.claim_key !== claimKey) return null;
+        if (legacy?.claim_key === claimKey || time(current.updated_at) > time(current.migrated_from_updated_at)) {
+          throw new MigrationConflict('Split claim is held by another card');
+        }
+        return { claim_key: null };
+      });
+    }
+  }
   if (!recopy) {
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, card.workItem);
     if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);

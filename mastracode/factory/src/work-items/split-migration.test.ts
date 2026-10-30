@@ -358,6 +358,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         org_id: ORG,
         factory_project_id: PROJECT,
         board: card.board,
+        claim_key: card.claimKey,
         parent_board_item_id: card.parentWorkItemId,
         stages: card.stages,
         revision: card.revision,
@@ -370,6 +371,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
       const sources = split.sources.filter(source => source.work_item_id === workItem!.id);
       expect(sources, fixture.name).toHaveLength(card.externalSource ? 1 : 0);
       const source = sources[0];
+      expect(workItem, fixture.name).not.toHaveProperty('claim_key');
+      if (source) expect(source, fixture.name).not.toHaveProperty('claim_key');
       if (card.externalSource) expect(source, fixture.name).toMatchObject(fixture.expected);
       for (const key of fixture.providerKeys) {
         expect(source!.metadata?.[key], `${fixture.name}: source ${key}`).toEqual(card.metadata![key]);
@@ -382,7 +385,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
       for (const row of [workItem, boardItem, source].filter(Boolean)) {
         for (const column of [
           'kind',
-          'claim_key',
           'triage_type',
           'accepted_at',
           'plans_preapproved_at',
@@ -434,6 +436,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect(recopied.revision).toBeGreaterThan(Math.max(copied.revision, moved!.item.revision));
     expect(split.boardItems.get(created.item.id)).toMatchObject({ stages: created.item.stages });
     expect(split.workItems.size).toBe(FIXTURES.length + 1);
+  });
+
+  it('copies an old replica claim handoff even when the new owner is migrated first', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await migrateWorkItemSplit(storage);
+    const oldId = cards.get('github issue')!;
+    await workItems.update({ orgId: ORG, id: oldId, userId: USER, patch: { stages: ['done'] } });
+    const { item: newOwner } = await workItems.upsert({
+      orgId: ORG,
+      userId: USER,
+      factoryProjectId: 'aaa-project',
+      input: { title: 'New owner', claimKey: 'github:issue:10:42' },
+    });
+
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 2, recopied: 1, skipped: [] });
+    const split = await readSplit(storage);
+    expect(split.boardItems.get(oldId)).toMatchObject({ claim_key: null, stages: ['done'] });
+    expect(split.boardItems.get(newOwner.id)).toMatchObject({ claim_key: 'github:issue:10:42' });
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 0, skipped: [] });
   });
 
   it('copies each card once when two replicas boot at the same time', async () => {

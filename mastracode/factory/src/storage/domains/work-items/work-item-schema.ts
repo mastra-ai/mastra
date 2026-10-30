@@ -71,6 +71,7 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     work_item_id: { type: 'text' },
+    claim_key: { type: 'text', nullable: true },
     board: { type: 'text', nullable: true },
     parent_board_item_id: { type: 'text', nullable: true },
     stages: { type: 'json' },
@@ -84,7 +85,10 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     migrated_from_updated_at: { type: 'timestamp', nullable: true },
     migrated_from_hash: { type: 'text', nullable: true },
   },
-  uniqueIndexes: [{ name: 'factory_board_items_work_item_unique', columns: ['work_item_id'] }],
+  uniqueIndexes: [
+    { name: 'factory_board_items_work_item_unique', columns: ['work_item_id'] },
+    { name: 'factory_board_items_org_claim_key_unique', columns: ['org_id', 'claim_key'] },
+  ],
   indexes: [
     {
       name: 'factory_board_items_org_project_created_at_id_idx',
@@ -136,6 +140,7 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   org_id: string;
   factory_project_id: string;
   work_item_id: string;
+  claim_key: string | null;
   board: string | null;
   parent_board_item_id: string | null;
   stages: string[];
