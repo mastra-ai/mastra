@@ -4551,6 +4551,53 @@ describe('per-sender handler runs end to end', () => {
       expect(await readFile(join(dir, zipPath!))).toEqual(ZIP_BYTES);
     });
 
+    it('resolves the filesystem with the channel already in the request context', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(root);
+      const seen: Array<string | undefined> = [];
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({
+          filesystem: ({ requestContext }) => {
+            const channelId = (requestContext.get('channel') as { channelId?: string } | undefined)?.channelId;
+            seen.push(channelId);
+            return new LocalFilesystem({ basePath: join(root, channelId ? 'per-channel' : 'no-channel') });
+          },
+        }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      const zipPath = userTurn.match(/report\.zip \(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(zipPath).toBeDefined();
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every(id => typeof id === 'string' && id.length > 0)).toBe(true);
+      expect(await readdir(root)).toEqual(['per-channel']);
+      expect(await readFile(join(root, 'per-channel', zipPath!))).toEqual(ZIP_BYTES);
+    });
+
+    it('saves into the first writable mount of a mounted workspace', async () => {
+      const codeDir = await mkdtemp(join(tmpdir(), 'channel-attachments-code-'));
+      const dataDir = await mkdtemp(join(tmpdir(), 'channel-attachments-data-'));
+      tempDirs.push(codeDir, dataDir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({
+          mounts: {
+            '/code': new LocalFilesystem({ basePath: codeDir, readOnly: true }),
+            '/data': new LocalFilesystem({ basePath: dataDir }),
+          },
+        }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      const zipPath = userTurn.match(/report\.zip \(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(zipPath).toMatch(/^\/data\/channel-attachments\/[0-9a-f]+\/report\.zip$/);
+      expect(await readFile(join(dataDir, zipPath!.slice('/data/'.length)))).toEqual(ZIP_BYTES);
+      expect(await readdir(codeDir)).toEqual([]);
+    });
+
     it('keeps attachments without a URL apart when they share a name, type and size', async () => {
       const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
       tempDirs.push(dir);

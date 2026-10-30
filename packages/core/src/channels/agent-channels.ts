@@ -24,6 +24,7 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
+import { CompositeFilesystem } from '../workspace/filesystem/composite-filesystem';
 import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 
 import { getChatModule } from './chat-lazy';
@@ -1524,6 +1525,22 @@ export class AgentChannels {
       );
     }
 
+    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
+      chatThread,
+      platform,
+      eventType,
+      messageId: message.id,
+      actor: message.author,
+    });
+
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here. Set it before attachments are handled: the workspace
+    // caches the filesystem it resolves per request context, so a
+    // channel-aware resolver must see the channel on its first call.
+    requestContext.set('channel', channelContext);
+
     // On a non-DM first mention (not yet subscribed), persist the platform
     // thread's prior messages into the Mastra thread as individual attributed
     // user signals so the agent sees them as separate turns with their own
@@ -1643,20 +1660,6 @@ export class AgentChannels {
       canRenderApprovalButtons,
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
-
-    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
-      chatThread,
-      platform,
-      eventType,
-      messageId: message.id,
-      actor: message.author,
-    });
-
-    // NOTE: `requestContext` is constructed per message at the handler boundary
-    // (see `beginMessage` in initialize) so a custom handler can contribute to
-    // it — e.g. stamping the tenant — before the run dispatches. Core only
-    // enriches it here.
-    requestContext.set('channel', channelContext);
 
     // Stash the per-event render deps so `ChatChannelOutputProcessor` can
     // route the agent's stream to the chat platform. The processor opens an
@@ -1819,7 +1822,8 @@ export class AgentChannels {
   }
 
   /**
-   * Save an attachment under `channel-attachments/<hash>/<name>` and return
+   * Save an attachment under `channel-attachments/<hash>/<name>` (inside the
+   * first writable mount of a composite filesystem) and return
    * the path, or undefined when it cannot be downloaded or written, or when
    * it would push the folder over `maxAttachmentStorageBytes`. The folder
    * hashes the URL so history walks reuse a saved file without refetching;
@@ -1833,9 +1837,11 @@ export class AgentChannels {
     filename: string,
     mimeType: string,
   ): Promise<string | undefined> {
+    const dir = attachmentDirFor(fs);
+    if (!dir) return undefined;
     const safeName = filename.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '') || 'file';
     const pathFor = (source: string | Uint8Array) =>
-      `${ATTACHMENT_DIR}/${createHash('sha256').update(source).digest('hex').slice(0, 16)}/${safeName}`;
+      `${dir}/${createHash('sha256').update(source).digest('hex').slice(0, 16)}/${safeName}`;
     const limit = this.maxAttachmentStorageBytes;
     const overLimit = (used: number, size: number) => {
       if (used + size <= limit) return false;
@@ -1844,7 +1850,7 @@ export class AgentChannels {
     };
     try {
       if (att.url && (await fs.exists(pathFor(att.url)))) return pathFor(att.url);
-      const used = await storedAttachmentBytes(fs);
+      const used = await storedAttachmentBytes(fs, dir);
       if (att.size !== undefined && overLimit(used, att.size)) return undefined;
       const buf = await fetchData();
       const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
@@ -2703,13 +2709,24 @@ function parseLastSender(value: unknown): LastSender | undefined {
   return { author, raw: raw && typeof raw === 'object' ? raw : {} };
 }
 
-/** Total size of the files under `channel-attachments/` (0 when the folder doesn't exist yet). */
-async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir = ATTACHMENT_DIR): Promise<number> {
-  if (dir === ATTACHMENT_DIR && !(await fs.exists(dir))) return 0;
+/**
+ * Folder for saved attachments. A composite filesystem only accepts paths
+ * under one of its mounts, so the folder goes in the first writable mount.
+ */
+function attachmentDirFor(fs: WorkspaceFilesystem): string | undefined {
+  if (!(fs instanceof CompositeFilesystem)) return ATTACHMENT_DIR;
+  const mount = fs.mountPaths.find(path => !fs.mounts.get(path)?.readOnly);
+  if (mount === undefined) return undefined;
+  return mount === '/' ? `/${ATTACHMENT_DIR}` : `${mount}/${ATTACHMENT_DIR}`;
+}
+
+/** Total size of the files under `dir` (0 when the folder doesn't exist yet). */
+async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir: string, root = true): Promise<number> {
+  if (root && !(await fs.exists(dir))) return 0;
   let total = 0;
   for (const entry of await fs.readdir(dir)) {
     const path = `${dir}/${entry.name}`;
-    if (entry.type === 'directory') total += await storedAttachmentBytes(fs, path);
+    if (entry.type === 'directory') total += await storedAttachmentBytes(fs, path, false);
     else total += entry.size ?? (await fs.stat(path)).size;
   }
   return total;
