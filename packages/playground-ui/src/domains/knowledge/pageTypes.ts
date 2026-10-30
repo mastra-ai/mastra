@@ -89,10 +89,29 @@ export interface KnowledgeActivityPayload {
 /**
  * A graph edge between two pages. `parent`: tree containment (parent → child).
  * `mention`: notes on `source` mention `target`; `count` is how many.
+ * `grant`: the `source` scope's holders get `role` on the `target` scope.
  */
 export interface KnowledgePageEdge {
   source: string;
   target: string;
-  kind: 'parent' | 'mention';
+  kind: 'parent' | 'mention' | 'grant';
   count?: number;
+  role?: KnowledgeRolePayload;
+}
+
+/** @experimental */
+export type KnowledgeRolePayload = 'viewer' | 'contributor' | 'editor' | 'owner';
+
+/**
+ * A scope declaration's access rule bound to a scope in the graph: holders of `principal` get `role` on
+ * `target`. `principalId` is the principal's scope page when it exists; a declared principal nothing has
+ * been written to yet has none, and the graph draws it as a placeholder circle.
+ */
+export interface KnowledgeScopeGrantPayload {
+  principal: string;
+  principalId?: string;
+  /** The principal's declaration `displayLabel`, e.g. "acme admin". */
+  principalLabel?: string;
+  target: string;
+  role: KnowledgeRolePayload;
 }
