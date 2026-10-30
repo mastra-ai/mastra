@@ -20,6 +20,6 @@ const server = new MCPServer({
 
 **Workflows**: a workflow task follows one run, started once when the task is created. A suspended step asks the client for input through the task, and the answer resumes the run. Cancelling the task cancels the run, even while it waits for input. A run that fails completes the task with `isError: true`. When a server stops mid-run, Mastra's workflow recovery continues the run on the next instance and the task follows it.
 
-**Agents**: an agent task runs the agent's answer as the task, cancels it through its abort signal, and supports `recover`. An agent that pauses for tool approval completes the task with an error, since tasks can't answer approvals yet.
+**Agents**: an agent task runs the agent's `generate()` call as the task's work. Cancelling the task aborts that call, and agent tasks support `recover`. An agent that pauses for tool approval completes the task with an error, since tasks can't answer approvals yet.
 
 `tasks.default` now also applies to workflows and agents not listed in `tasks.workflows` or `tasks.agents`, and `tasks.required` takes the names clients call, such as `run_nightly`.
