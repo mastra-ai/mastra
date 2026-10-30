@@ -53,7 +53,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held 
     async function triaged(
       item: WorkItemRow,
       triageType: FactoryTriageType,
-      { accept = false }: { accept?: boolean } = {},
+      { accept = false, arm = false }: { accept?: boolean; arm?: boolean } = {},
     ): Promise<WorkItemRow> {
       const committed = await workItems.commitTransition({
         orgId,
@@ -68,35 +68,58 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held 
         evaluation: { outcome: 'accepted', decisions: [] },
         triageType,
         accept,
+        ...(arm ? { autonomy: 'arm' as const } : {}),
       });
       if (committed.status !== 'committed' || !committed.item) throw new Error('seed transition failed');
       return committed.item;
     }
 
+    /** A person starts a new run on the card after triage classified it. */
+    async function startRun(item: WorkItemRow): Promise<WorkItemRow> {
+      return (
+        await workItems.prepareRunStart({
+          orgId,
+          userId: 'user-1',
+          factoryProjectId: PROJECT,
+          workItem: { id: item.id, input: { title: item.title } },
+          role: 'triage',
+          session: { sessionId: `rerun-${item.id}`, branch: 'factory/rerun', threadId: `rerun-${item.id}` },
+          resourceId: 'resource-1',
+          kickoffKey: `rerun-${item.id}`,
+          kickoffMessage: null,
+        })
+      ).item;
+    }
+
     const mine = (moved: WorkItemRow[]) => moved.filter(item => item.orgId === orgId).map(item => item.id);
     const stageOf = async (item: WorkItemRow) => (await workItems.get({ orgId, id: item.id }))?.stages;
-    return { workItems, file, triaged, mine, stageOf, orgId };
+    return { workItems, file, triaged, startRun, mine, stageOf, orgId };
   }
 
-  it('moves only an unaccepted non-bug held in Triage with no live run back to Intake, once', async () => {
-    const { workItems, file, triaged, mine, stageOf, orgId } = await setup();
-    const held = await triaged(await file('work', false), 'feature request');
+  it('moves only an unaccepted non-bug held in Triage with no newer run back to Intake, once', async () => {
+    const { workItems, file, triaged, startRun, mine, stageOf, orgId } = await setup();
+    // A person dragged it into Triage, which armed autonomy; back in Intake it waits for a person again.
+    const held = await triaged(await file('work', false), 'feature request', { arm: true });
     const legacy = await triaged(await file(undefined, false), 'question/support');
     const bug = await triaged(await file('work', false), 'bug');
     const accepted = await triaged(await file('work', false), 'feature request', { accept: true });
-    const running = await triaged(await file('work', true), 'docs');
+    // The triage run that classified the card is still bound: bindings outlive their run.
+    const classifiedByItsRun = await triaged(await file('work', true), 'docs');
+    const rerun = await startRun(await triaged(await file('work', false), 'feature request'));
     const review = await triaged(await file('review', false), 'feature request');
     expect(held).toMatchObject({ triageType: 'feature request', acceptedAt: null, stages: ['triage'] });
+    expect(held.autonomyArmedAt).not.toBeNull();
     expect(accepted.acceptedAt).not.toBeNull();
 
     const first = await workItems.returnHeldTriageCards();
 
-    expect(mine(first).sort()).toEqual([held.id, legacy.id].sort());
+    expect(mine(first).sort()).toEqual([held.id, legacy.id, classifiedByItsRun.id].sort());
     const after = await workItems.get({ orgId, id: held.id });
-    expect(after).toMatchObject({ stages: ['intake'], revision: held.revision + 1 });
+    expect(after).toMatchObject({ stages: ['intake'], revision: held.revision + 1, autonomyArmedAt: null });
     expect(after!.stageHistory.at(-1)).toMatchObject({ stage: 'intake', by: HELD_CARD_SWEEP_ACTOR });
     expect(await stageOf(legacy)).toEqual(['intake']);
-    for (const untouched of [bug, accepted, running, review]) {
+    expect(await stageOf(classifiedByItsRun)).toEqual(['intake']);
+    for (const untouched of [bug, accepted, rerun, review]) {
       expect(await stageOf(untouched)).toEqual(['triage']);
     }
 

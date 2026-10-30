@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Added `agentEnterWhen` to board phases, so a board can say which cards agents may move into a phase. People and board rules are never held back. Work and Review now use it instead of transition policies. Agents can close Work cards when there is no open pull request, no review asked for changes, and self-review approved. They still can't skip Planning or close a card a person has to look at.
+Added `agentEnterWhen` to board phases, so a board can say which cards agents may move into a phase. People and board rules are never held back. Work and Review now use it instead of transition policies. Agents can close Work cards when there is no open pull request and no review asked for changes; a card leaving Review also needs an approving self-review or a recorded verdict. They still can't skip Planning or close a card a person has to look at.
 
 ```typescript
 phases: {
