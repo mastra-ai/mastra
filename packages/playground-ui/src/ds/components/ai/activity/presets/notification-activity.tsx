@@ -48,7 +48,7 @@ export function NotificationActivity({
     <ActivityItem
       label={label}
       detail={messagePreview(message)}
-      detailFont="sans"
+
       icon={icon ?? <Bell className="text-warning-foreground" aria-hidden />}
       badges={
         hasBadges && (

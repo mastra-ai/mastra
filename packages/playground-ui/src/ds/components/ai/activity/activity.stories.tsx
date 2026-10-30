@@ -149,7 +149,7 @@ export const EveryKind: Story = {
           </Badge>
         }
         detail="Opening a workflow shows a blank page."
-        detailFont="sans"
+
         aria-label="Notification: github / issue-opened"
       />
       <ActivityItem icon={<Sparkles aria-hidden />} label="Thinking" status="running" aria-label="Thinking" />

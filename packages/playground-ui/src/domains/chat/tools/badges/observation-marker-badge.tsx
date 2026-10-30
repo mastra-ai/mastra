@@ -205,7 +205,7 @@ export const ObservationMarkerBadge = ({ toolName, omData }: ObservationMarkerBa
       data-om-no-highlight={state === 'activated' ? 'true' : undefined}
     >
       <ActivityTrigger>
-        <ActivityHeadline icon={icon} label={label} detail={detail} detailFont="sans" />
+        <ActivityHeadline icon={icon} label={label} detail={detail} />
       </ActivityTrigger>
       {body && <ActivityContent>{body}</ActivityContent>}
     </Activity>

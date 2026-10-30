@@ -6,9 +6,8 @@ import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages
 import { useState } from 'react';
 
 import { ToolBody, toolHasBody } from '../tool/ToolBody';
-import { toolFromInvocationPart } from '../transcript-parts';
+import { reasoningWithState, toolFromInvocationPart } from '../transcript-parts';
 import type { MessagePart } from '../transcript-parts';
-import { reasoningWithState } from './activity-plan';
 import type { ActivityStretch, StretchMember } from './activity-plan';
 import { StretchToolRow } from './StretchToolRow';
 

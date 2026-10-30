@@ -39,6 +39,13 @@ export function Continuing({ children }: { children: ReactNode }) {
   );
 }
 
+const UNWATCHED = { current: false };
+
+/** Content whose entrance its host plays: nothing inside fades in on its own, as if no scope were watching. */
+export function Unwatched({ children }: { children: ReactNode }) {
+  return <SettledContext value={UNWATCHED}>{children}</SettledContext>;
+}
+
 /** An element that fades in when it lands, and hosts a scope for whatever lands inside it later. */
 export function Arriving({ children, className }: { children: ReactNode; className?: string }) {
   const arriving = useArriving();

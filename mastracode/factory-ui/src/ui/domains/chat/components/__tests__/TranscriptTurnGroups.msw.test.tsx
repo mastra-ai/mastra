@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { createInitialTranscript, transcriptReducer } from '../../services/transcript';
@@ -10,34 +10,12 @@ import { TranscriptEntries } from '../Transcript';
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
 const ROOM_SELECTOR = '[data-holds-room]';
 
-function textEntry(id: string, role: 'user' | 'assistant', text: string): TimelineEntry {
+function textEntry(id: string, role: 'user' | 'assistant', text: string, createdAt = CREATED_AT): TimelineEntry {
   const message: MastraDBMessage = {
     id,
     role,
-    createdAt: CREATED_AT,
+    createdAt,
     content: { format: 2, parts: [{ type: 'text', text }] },
-  };
-  return { kind: 'message', id, message };
-}
-
-function gapEntry(id: string): TimelineEntry {
-  const message: MastraDBMessage = {
-    id,
-    role: 'signal',
-    createdAt: CREATED_AT,
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: '24 minutes later — 07/15/2026, 10:00 AM GMT+2' }],
-      metadata: {
-        signal: {
-          id,
-          type: 'reactive',
-          tagName: 'system-reminder',
-          createdAt: CREATED_AT.toISOString(),
-          attributes: { type: 'temporal-gap' },
-        },
-      },
-    },
   };
   return { kind: 'message', id, message };
 }
@@ -237,10 +215,11 @@ describe('TranscriptEntries turn groups', () => {
     expect(screen.getByTestId('tail').parentElement).not.toHaveAttribute('data-holds-room');
   });
 
-  it('takes the gap that introduces a turn into that turn, where the room absorbs it', () => {
+  it('opens a turn sent after a pause with how long it was, inside the room', () => {
+    const later = new Date(CREATED_AT.getTime() + (17 * 60 + 17) * 60_000);
     renderWithProviders(
       <TranscriptEntries
-        entries={[entries[0], entries[1], gapEntry('gap-1'), entries[2]]}
+        entries={[entries[0], entries[1], textEntry('user-2', 'user', 'second question', later)]}
         onApprove={() => {}}
         onRespond={() => {}}
         running
@@ -249,7 +228,24 @@ describe('TranscriptEntries turn groups', () => {
 
     const room = screen.getByText('second question').closest<HTMLElement>(ROOM_SELECTOR);
     expect(room).toBeInstanceOf(HTMLElement);
-    if (room) expect(within(room).getByRole('separator')).toBeInTheDocument();
+    if (room) expect(within(room).getByRole('separator')).toHaveTextContent('17 hours 17 minutes later');
+    expect(screen.getAllByRole('separator')).toHaveLength(1);
+  });
+
+  it('shows the pause the moment a message is sent, before the run answers', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(CREATED_AT.getTime() + 51 * 60_000));
+    const sent = transcriptReducer(
+      { ...createInitialTranscript({ messages: [], threadId: 'thread-1' }), entries: [entries[0], entries[1]] },
+      { type: 'localUser', text: 'again please' },
+    );
+    vi.useRealTimers();
+
+    renderWithProviders(<TranscriptEntries entries={sent.entries} onApprove={() => {}} onRespond={() => {}} running />);
+
+    const room = screen.getByText('again please').closest<HTMLElement>(ROOM_SELECTOR);
+    if (room) expect(within(room).getByRole('separator')).toHaveTextContent('51 minutes later');
+    expect(room).toBeInstanceOf(HTMLElement);
   });
 
   it('gives no room to a group no user turn opens', () => {

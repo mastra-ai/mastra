@@ -6,6 +6,8 @@ import type { ReactNode } from 'react';
 import type { ActivityCallState } from '../model/activity-members';
 import { callsOutcome, liveWords, outcomeText, settledWords, wordsName } from '../model/activity-words';
 import { ActivityTimedTrigger } from './activity-timed-trigger';
+import { useFadingEdge } from './use-fading-edge';
+import { useRollingWords } from './use-rolling-words';
 import { AgentIndicator, agentGlyph } from '@/ds/components/AgentIndicator';
 import type { AgentIndicatorState } from '@/ds/components/AgentIndicator';
 import {
@@ -17,6 +19,8 @@ import {
   ActivityLabel,
 } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { Unwatched } from '@/ds/components/Arrival';
+import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
@@ -53,6 +57,8 @@ function FoldIcon({
   return <AgentIndicator state={pose} still={!live} />;
 }
 
+const UNTRUNCATED = 'shrink-0 whitespace-nowrap text-clip';
+
 function foldStatus(live: boolean, failed: boolean): ActivityStatus {
   if (live) return 'running';
   return failed ? 'error' : 'idle';
@@ -76,6 +82,9 @@ export function ActivityFold({
   const outcome = callsOutcome(calls);
   const failed = !live && outcome.failed > 0;
   const outcomeLabel = live ? '' : outcomeText(outcome, calls.length);
+  const spoken = [words.label, words.detail, words.duration, failed, outcomeLabel].join('\u0000');
+  const { box, said } = useRollingWords(spoken, animates);
+  useFadingEdge(said, spoken);
 
   return (
     <Activity
@@ -92,26 +101,36 @@ export function ActivityFold({
           <ActivityIcon className={cn(pose && '[&_svg]:size-4')}>
             <FoldIcon pose={pose} animates={animates} live={live} fallback={words.icon} />
           </ActivityIcon>
-          <ActivityLabel className={cn(prominent && 'text-body font-medium', !words.detail && 'min-w-0 shrink')}>
-            {words.label}
-          </ActivityLabel>
-          {words.detail && <ActivityDetail className={cn(prominent && 'text-body-sm')}>{words.detail}</ActivityDetail>}
-          {words.duration && (
-            <ActivityLabel className={cn(prominent && 'text-body font-medium', '-ml-1 tabular-nums')}>
-              · {words.duration}
-            </ActivityLabel>
-          )}
-          {failed && <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />}
-          {outcomeLabel && (
-            <Txt
-              as="span"
-              variant="meta"
-              tone="muted"
-              className={cn('shrink-0 tabular-nums', prominent && 'text-body-sm')}
-            >
-              {outcomeLabel}
-            </Txt>
-          )}
+          <span ref={box} className="relative flex min-w-0">
+            <Shimmer ref={said} active={live} className="-my-1 flex min-w-0 items-center gap-2 overflow-hidden py-1">
+              <Unwatched>
+                <ActivityLabel className={cn(prominent && 'text-body font-medium', UNTRUNCATED)}>
+                  {words.label}
+                </ActivityLabel>
+                {words.detail && (
+                  <ActivityDetail className={cn(prominent && 'text-body', UNTRUNCATED)}>{words.detail}</ActivityDetail>
+                )}
+                {words.duration && (
+                  <ActivityLabel className={cn(prominent && 'text-body font-medium', '-ml-1 tabular-nums')}>
+                    · {words.duration}
+                  </ActivityLabel>
+                )}
+                {failed && (
+                  <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+                )}
+                {outcomeLabel && (
+                  <Txt
+                    as="span"
+                    variant="meta"
+                    tone="muted"
+                    className={cn('shrink-0 tabular-nums', prominent && 'text-body-sm')}
+                  >
+                    {outcomeLabel}
+                  </Txt>
+                )}
+              </Unwatched>
+            </Shimmer>
+          </span>
           <ActivityDisclosure />
         </ActivityHeader>
       </ActivityTimedTrigger>

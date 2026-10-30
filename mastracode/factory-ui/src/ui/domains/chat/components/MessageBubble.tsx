@@ -33,10 +33,17 @@ import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
-import { draws, hasVisibleText, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
+import {
+  draws,
+  hasVisibleText,
+  messageText,
+  reasoningWithState,
+  renderableParts,
+  toolFromInvocationPart,
+} from './transcript-parts';
 import type { MessagePart } from './transcript-parts';
 import { HostedStretch } from './activity/HostedStretch';
-import { activityPartKey, NO_ACTIVITY, reasoningWithState } from './activity/activity-plan';
+import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { messageEntryView } from './message-entry-view';
@@ -91,11 +98,11 @@ export function MessageBubble({
   const { attachments, content } =
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
-  const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
+  const hasRenderablePart = written.some(part => draws(part, entry, suspensions));
   const drawsOwnPart = written.some((part, index) => {
     const key = activityPartKey(entry.id, part, index);
     if (activity.hosts.has(key)) return true;
-    return draws(part, suspensions, entry.runtimeTools) && !activity.hidden.has(key);
+    return draws(part, entry, suspensions) && !activity.hidden.has(key);
   });
   const revealed = new Map<string, MessagePart>(
     paced.map((part, index) => [activityPartKey(entry.id, part, index), part]),

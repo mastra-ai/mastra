@@ -173,7 +173,7 @@ describe('TranscriptEntries signal rows', () => {
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('marks a temporal gap as a separator and keeps the stamp out of the line', () => {
+  it("leaves the agent's pause reminder to the divider the transcript draws from the messages", () => {
     renderEntries([
       {
         kind: 'message',
@@ -188,9 +188,7 @@ describe('TranscriptEntries signal rows', () => {
       },
     ]);
 
-    const gap = screen.getByRole('separator');
-    expect(gap).toHaveTextContent('1 hour 58 minutes later');
-    expect(gap).not.toHaveTextContent('5:21 PM');
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Signal: System reminder' })).not.toBeInTheDocument();
   });
 

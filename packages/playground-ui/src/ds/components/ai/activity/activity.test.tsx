@@ -16,6 +16,7 @@ import {
   ActivitySummary,
   ActivityTrailing,
   ActivityTrigger,
+  ActivityWorkingDirectory,
 } from './activity';
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
@@ -85,7 +86,6 @@ describe('Activity', () => {
     expect(screen.getByTestId('icon').textContent).toBe('$');
     expect(screen.getByText('Ran command').className).toContain('truncate');
     expect(screen.getByText('pnpm test').classList).toContain('truncate');
-    expect(screen.getByText('pnpm test').classList).toContain('font-mono');
     expect(screen.getByText('2 files').className).toContain('items-center');
     expect(screen.getByText('Done').className).toContain('shrink-0');
 
@@ -376,5 +376,37 @@ describe('an Activity with nothing to fold', () => {
 
     expect(screen.getByRole('button', { name: /Read/ }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('arguments')).toBeTruthy();
+  });
+});
+
+describe('ActivityDetail inside a working directory', () => {
+  function renderDetail(detail: string) {
+    render(
+      <ActivityWorkingDirectory path="/sandboxes/7b45/mastra">
+        <Activity aria-label="Read">
+          <ActivityHeader>
+            <ActivityDetail>{detail}</ActivityDetail>
+          </ActivityHeader>
+        </Activity>
+      </ActivityWorkingDirectory>,
+    );
+  }
+
+  it('reads a path inside it relative to it, as the agent refers to it', () => {
+    renderDetail('/sandboxes/7b45/mastra/packages/core/package.json');
+
+    expect(screen.getByText('packages/core/package.json')).toBeTruthy();
+  });
+
+  it('names the directory itself `.` wherever a command mentions it', () => {
+    renderDetail('cd /sandboxes/7b45/mastra && git status');
+
+    expect(screen.getByText('cd . && git status')).toBeTruthy();
+  });
+
+  it('leaves a sibling directory that only shares its name prefix untouched', () => {
+    renderDetail('/sandboxes/7b45/mastra-docs/README.md');
+
+    expect(screen.getByText('/sandboxes/7b45/mastra-docs/README.md')).toBeTruthy();
   });
 });

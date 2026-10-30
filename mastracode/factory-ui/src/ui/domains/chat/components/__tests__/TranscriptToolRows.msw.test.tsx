@@ -83,6 +83,32 @@ function assistantMessage(
   };
 }
 
+function environmentSignal(workingDirectory: string): TimelineEntry {
+  return {
+    kind: 'message',
+    id: 'environment',
+    message: {
+      id: 'environment',
+      role: 'signal',
+      createdAt: CREATED_AT,
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: `Factory environment: 1 repository at ${workingDirectory}, your working directory.` },
+        ],
+        metadata: {
+          signal: {
+            id: 'environment',
+            type: 'state',
+            tagName: 'factory-environment',
+            attributes: { workingDirectory, repositories: 1 },
+          },
+        },
+      },
+    },
+  };
+}
+
 function userMessage(id: string, text: string): TimelineEntry {
   return {
     kind: 'message',
@@ -188,6 +214,18 @@ describe('TranscriptEntries tool rows', () => {
     expect(screen.getByRole('group', { name: 'Running pnpm test' })).toBeInTheDocument();
   });
 
+  it('keeps the run thinking on screen while its reply has opened a thought with no text yet', () => {
+    renderEntries(
+      [
+        userMessage('user-1', 'again please'),
+        assistantMessage('msg-1', [{ type: 'reasoning', reasoning: '', details: [] }], undefined, true),
+      ],
+      true,
+    );
+
+    expect(screen.getByRole('group', { name: 'Thinking' })).toBeInTheDocument();
+  });
+
   it('names a single call in the past tense with its salient argument, not the raw tool name', () => {
     renderEntries([assistantMessage('msg-1', [doneTool('call-1', 'execute_command', { command: 'pnpm build' })])]);
 
@@ -195,6 +233,18 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(line).getByText('Ran')).toBeInTheDocument();
     expect(within(line).getByText('pnpm build')).toBeInTheDocument();
     expect(within(line).queryByText('execute_command')).not.toBeInTheDocument();
+  });
+
+  it('reads a path inside the working directory the environment gave the agent relative to it', () => {
+    renderEntries([
+      environmentSignal('/sandboxes/7b45/mastra'),
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view', { path: '/sandboxes/7b45/mastra/packages/core/package.json' }),
+      ]),
+    ]);
+
+    expect(screen.getByText('packages/core/package.json')).toBeInTheDocument();
+    expect(screen.queryByText('/sandboxes/7b45/mastra/packages/core/package.json')).not.toBeInTheDocument();
   });
 
   it("reads a running shell command's description alone, and shows the command when expanded", async () => {
