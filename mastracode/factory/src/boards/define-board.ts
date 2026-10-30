@@ -514,27 +514,26 @@ function warnDeprecatedFields(config: DeclaredBoard): void {
   );
 }
 
-const appBoards = new WeakSet<object>();
+/** Marks a board an app declared with the deprecated `defineBoard()`; a copy does not carry it. */
+const DEFINED_BOARD = Symbol('DefinedBoard');
 
 /**
  * Declares a board in code.
  *
  * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
- * (README § Stored boards). A board passed to `MastraFactory({ boards })` is now only seed input,
- * written into each project's database at startup.
+ * (README § Stored boards). Code boards are read-only and served alongside each project's stored
+ * boards.
  */
 export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
-  const board = compileBoardDefinition(config);
-  appBoards.add(board);
-  return board;
+  return buildBoard(config, true);
 }
 
 /** Whether an app declared the board with the deprecated `defineBoard()`. */
 export function isDefinedBoard(board: object): boolean {
-  return appBoards.has(board);
+  return DEFINED_BOARD in board;
 }
 
 /** Validates and resolves a board declaration. Factory's own boards use this directly. */
@@ -542,6 +541,13 @@ export function compileBoardDefinition<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
+  return buildBoard(config, false);
+}
+
+function buildBoard<
+  const BoardId extends string,
+  const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
+>(config: BoardConfig<BoardId, Phases>, defined: boolean): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
   validateBoardIdentifier(config.id, 'Board id');
   const boardName = resolveName(config.name, config.title, `Board "${config.id}"`);
@@ -673,7 +679,7 @@ export function compileBoardDefinition<
     if (!phaseByRole.has(phase.runner.context)) phaseByRole.set(phase.runner.context, phaseId);
   }
 
-  return Object.freeze({
+  const board = {
     id: config.id,
     name: boardName,
     ...(boardDescription !== undefined ? { description: boardDescription } : {}),
@@ -699,5 +705,7 @@ export function compileBoardDefinition<
       if (!definition.autoStartWhen) return true;
       return facts !== undefined && evaluateRuleGroup(definition.autoStartWhen, facts);
     },
-  });
+  };
+  if (defined) Object.defineProperty(board, DEFINED_BOARD, { value: true });
+  return Object.freeze(board);
 }

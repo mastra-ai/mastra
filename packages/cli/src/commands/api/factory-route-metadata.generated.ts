@@ -126,7 +126,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "boardGet",
     "method": "GET",
     "path": "/web/factory/projects/:id/boards/:boardKey",
-    "description": "Get a project board's editable definition",
+    "description": "Get a project board's definition",
     "pathParams": [
       "id",
       "boardKey"
@@ -479,25 +479,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "key",
       "name",
       "phases"
-    ],
-    "hasQuery": false,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /web/factory/projects/:id/boards/:boardKey/reset": {
-    "contractKey": "boardReset",
-    "method": "POST",
-    "path": "/web/factory/projects/:id/boards/:boardKey/reset",
-    "description": "Reset a project board to its code definition",
-    "pathParams": [
-      "id",
-      "boardKey"
-    ],
-    "queryParams": [],
-    "bodyParams": [
-      "expectedRevision"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -1428,9 +1409,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "revision": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "source": {
               "type": "string",
@@ -1440,13 +1428,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "stored"
               ]
             },
-            "customized": {
-              "type": "boolean"
-            },
-            "drift": {
-              "type": "boolean"
-            },
-            "deleted": {
+            "editable": {
               "type": "boolean"
             },
             "problems": {
@@ -1463,9 +1445,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "phases",
             "revision",
             "source",
-            "customized",
-            "drift",
-            "deleted",
+            "editable",
             "problems"
           ]
         }
@@ -2811,9 +2791,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "revision": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "source": {
               "type": "string",
@@ -2823,13 +2810,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "stored"
               ]
             },
-            "customized": {
-              "type": "boolean"
-            },
-            "drift": {
-              "type": "boolean"
-            },
-            "deleted": {
+            "editable": {
               "type": "boolean"
             },
             "problems": {
@@ -2846,9 +2827,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "phases",
             "revision",
             "source",
-            "customized",
-            "drift",
-            "deleted",
+            "editable",
             "problems"
           ]
         }
@@ -4425,9 +4404,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "revision": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "source": {
               "type": "string",
@@ -4437,13 +4423,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "stored"
               ]
             },
-            "customized": {
-              "type": "boolean"
-            },
-            "drift": {
-              "type": "boolean"
-            },
-            "deleted": {
+            "editable": {
               "type": "boolean"
             },
             "problems": {
@@ -4460,383 +4440,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "phases",
             "revision",
             "source",
-            "customized",
-            "drift",
-            "deleted",
-            "problems"
-          ]
-        }
-      },
-      "required": [
-        "board"
-      ],
-      "$defs": {
-        "__schema0": {
-          "type": "object",
-          "properties": {
-            "operator": {
-              "type": "string",
-              "enum": [
-                "AND",
-                "OR"
-              ]
-            },
-            "conditions": {
-              "minItems": 1,
-              "maxItems": 20,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema1"
-              }
-            }
-          },
-          "required": [
-            "operator",
-            "conditions"
-          ],
-          "additionalProperties": false
-        },
-        "__schema1": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/__schema2"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "operator": {
-                  "type": "string",
-                  "enum": [
-                    "AND",
-                    "OR"
-                  ]
-                },
-                "conditions": {
-                  "minItems": 1,
-                  "maxItems": 20,
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/__schema7"
-                  }
-                }
-              },
-              "required": [
-                "operator",
-                "conditions"
-              ],
-              "additionalProperties": false
-            }
-          ]
-        },
-        "__schema2": {
-          "type": "object",
-          "properties": {
-            "field": {
-              "$ref": "#/$defs/__schema3"
-            },
-            "operator": {
-              "$ref": "#/$defs/__schema4"
-            },
-            "value": {
-              "$ref": "#/$defs/__schema5"
-            }
-          },
-          "required": [
-            "field",
-            "operator"
-          ],
-          "additionalProperties": false
-        },
-        "__schema3": {
-          "type": "string",
-          "enum": [
-            "item.labels",
-            "item.title",
-            "item.author",
-            "source.kind",
-            "source.integration"
-          ]
-        },
-        "__schema4": {
-          "type": "string",
-          "enum": [
-            "equals",
-            "not_equals",
-            "contains",
-            "not_contains",
-            "in",
-            "not_in",
-            "exists",
-            "not_exists",
-            "greater_than",
-            "less_than",
-            "greater_than_or_equal",
-            "less_than_or_equal"
-          ]
-        },
-        "__schema5": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/__schema6"
-            },
-            {
-              "maxItems": 100,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema6"
-              }
-            }
-          ]
-        },
-        "__schema6": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "type": "number"
-            },
-            {
-              "type": "boolean"
-            }
-          ]
-        },
-        "__schema7": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/__schema2"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "operator": {
-                  "type": "string",
-                  "enum": [
-                    "AND",
-                    "OR"
-                  ]
-                },
-                "conditions": {
-                  "minItems": 1,
-                  "maxItems": 20,
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/__schema2"
-                  }
-                }
-              },
-              "required": [
-                "operator",
-                "conditions"
-              ],
-              "additionalProperties": false
-            }
-          ]
-        }
-      }
-    }
-  },
-  "POST /web/factory/projects/:id/boards/:boardKey/reset": {
-    "path": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        },
-        "boardKey": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        }
-      },
-      "required": [
-        "id",
-        "boardKey"
-      ]
-    },
-    "body": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "expectedRevision": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
-        }
-      },
-      "required": [
-        "expectedRevision"
-      ],
-      "additionalProperties": false
-    },
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "board": {
-          "type": "object",
-          "properties": {
-            "key": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "description": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "phases": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "key": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "resting",
-                      "working",
-                      "terminal"
-                    ]
-                  },
-                  "runner": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "skill": {
-                            "type": "string"
-                          },
-                          "context": {
-                            "type": "string"
-                          },
-                          "instructions": {
-                            "type": "string"
-                          }
-                        },
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "nextPhases": {
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "autoStart": {
-                    "type": "boolean"
-                  },
-                  "autoStartWhen": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "exitTool": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "autoApprove": {
-                            "type": "boolean"
-                          },
-                          "autoApproveWhen": {
-                            "$ref": "#/$defs/__schema0"
-                          }
-                        },
-                        "required": [
-                          "id"
-                        ],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "key",
-                  "name",
-                  "kind"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "revision": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
-            },
-            "source": {
-              "type": "string",
-              "enum": [
-                "builtin",
-                "app",
-                "stored"
-              ]
-            },
-            "customized": {
-              "type": "boolean"
-            },
-            "drift": {
-              "type": "boolean"
-            },
-            "deleted": {
-              "type": "boolean"
-            },
-            "problems": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "required": [
-            "key",
-            "name",
-            "description",
-            "phases",
-            "revision",
-            "source",
-            "customized",
-            "drift",
-            "deleted",
+            "editable",
             "problems"
           ]
         }
@@ -5709,7 +5313,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "attentionRestore": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/restore",
   "attentionReadAll": "POST /web/factory/projects/:id/attention/read-all",
   "boardCreate": "POST /web/factory/projects/:id/boards",
-  "boardReset": "POST /web/factory/projects/:id/boards/:boardKey/reset",
   "decisionApprove": "POST /web/factory/projects/:id/decisions/:decisionId/approve",
   "decisionDismiss": "POST /web/factory/projects/:id/decisions/:decisionId/dismiss",
   "decisionRetry": "POST /web/factory/projects/:id/decisions/:decisionId/retry",

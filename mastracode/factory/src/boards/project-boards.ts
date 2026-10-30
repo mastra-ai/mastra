@@ -162,11 +162,6 @@ export class ProjectBoardCache implements ProjectBoardSource {
     return this.codeRegistry;
   }
 
-  /** The current code definition and behaviors for a board key, when code defines one. */
-  seedFor(key: string): BoardSeed | undefined {
-    return this.#seedsByKey.get(key);
-  }
-
   /** The code skills stored runners may name. */
   get codeSkills(): readonly InlineSkill[] {
     return this.#codeSkills;

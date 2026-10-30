@@ -309,11 +309,11 @@ export interface MastraFactoryConfig {
    */
   configVersion?: string;
   /**
-   * Boards written into every project's database at startup, as seed input.
+   * Boards served to every project, read-only, next to the boards each project stored.
    *
    * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
-   * (README § Stored boards). Boards passed here still work: they seed each project, and a stored
-   * board someone edited keeps the edit.
+   * (README § Stored boards). Boards passed here still work: code boards are read-only and served
+   * alongside each project's stored boards.
    */
   boards?: readonly InstalledBoard[];
   /**
@@ -324,11 +324,10 @@ export interface MastraFactoryConfig {
    */
   skills?: readonly InlineSkill[];
   /**
-   * Whether the built-in Work and Review boards are seeded into each project. Default: true.
-   * Turning it off later keeps the boards already stored.
+   * Whether every project gets the built-in Work and Review boards, read-only. Default: true.
    *
    * @deprecated Will be replaced by installing the built-in boards once per project, with an action
-   * to restore them (README § Stored boards). It still controls seeding until then.
+   * to restore them (README § Stored boards). It still decides whether projects get them until then.
    */
   includeDefaultBoards?: boolean;
 

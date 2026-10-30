@@ -9,12 +9,10 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { compileBoardDefinition } from '../boards/define-board.js';
-import type { BoardPhaseDefinition } from '../boards/define-board.js';
-import { DRIFT_PROBLEM, ProjectBoardCache } from '../boards/project-boards.js';
+import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import type { InstalledBoard } from '../boards/registry.js';
-import { reviewBoard } from '../boards/review.js';
-import { seedFromDefinition } from '../boards/stored-board.js';
+import { boardDefinitionOf } from '../boards/stored-board.js';
 import { workBoard } from '../boards/work.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
@@ -34,24 +32,15 @@ const RECHECK_MS = 1000;
 const ADMIN = 'admin-user';
 const MEMBER = 'member-user';
 
-const released = () => undefined;
-
-/** An app board from `MastraFactory({ boards })`, with a code handler on its working phase. */
-function releaseBoard(shippingName = 'Shipping'): InstalledBoard {
-  return compileBoardDefinition<string, Record<string, BoardPhaseDefinition<string>>>({
+/** An app board from `MastraFactory({ boards })`. */
+function releaseBoard(): InstalledBoard {
+  return compileBoardDefinition({
     id: 'release',
     name: 'Release',
     initialPhase: 'queued',
     phases: {
       queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
-      shipping: {
-        name: shippingName,
-        kind: 'working',
-        runner: { context: 'work' },
-        nextPhases: ['shipped'],
-        onEnter: { manual: released },
-        outcomes: { released: 'shipped' },
-      },
+      shipping: { name: 'Shipping', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
       shipped: { name: 'Shipped', kind: 'terminal' },
     },
   });
@@ -65,7 +54,7 @@ const bugsBoard = {
     { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' } },
     { key: 'fixed', name: 'Fixed', kind: 'terminal' },
   ],
-};
+} satisfies { key: string; name: string; phases: StoredPhaseInput[] };
 
 function definitionError(define: () => unknown): string {
   try {
@@ -98,14 +87,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
   type Client = Awaited<ReturnType<typeof client>>;
 
   /** One replica: the board and catalog routes over HTTP, with its own board cache and clock. */
-  function replica(
-    domains: Client,
-    orgId: string,
-    options: { release?: InstalledBoard; auth?: RouteAuth; clock?: { now: number } } = {},
-  ) {
+  function replica(domains: Client, orgId: string, options: { auth?: RouteAuth; clock?: { now: number } } = {}) {
     const clock = options.clock ?? { now: 0 };
     const cache = new ProjectBoardCache({
-      seedRegistry: createBoardRegistry({ boards: [options.release ?? releaseBoard()] }),
+      codeRegistry: createBoardRegistry({ boards: [releaseBoard()] }),
       storage: domains.boards,
       projects: domains.projects,
       recheckMs: RECHECK_MS,
@@ -174,11 +159,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       key: string;
       name: string;
       phases: StoredPhaseInput[];
-      revision: number;
+      revision: number | null;
       source: string;
-      customized: boolean;
-      drift: boolean;
-      deleted: boolean;
+      editable: boolean;
       problems: string[];
     };
   }
@@ -189,55 +172,126 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     return (response.body.boards as Array<Record<string, any>>).find(board => board.id === key);
   }
 
-  function withPhases(phases: StoredPhaseInput[], edit: (phases: StoredPhaseInput[]) => StoredPhaseInput[]) {
-    return edit(structuredClone(phases));
-  }
+  it('refuses changing a built-in or app board, which are defined in code, and stores nothing', async () => {
+    const { a, scope, base, replicaA } = await setup();
+    const work = await getBoard(replicaA.send, base, 'work');
+    const refused = (key: string) => ({
+      status: 409,
+      body: { error: 'code_board', message: `Board "${key}" is defined in code and can't be edited here.` },
+    });
 
-  it('lets an admin create a board, which the catalog lists as stored and records in the audit trail', async () => {
+    expect(
+      await replicaA.send('PATCH', `${base}/work`, { name: 'Renamed', phases: work.phases, expectedRevision: 1 }),
+    ).toEqual(refused('work'));
+    expect(await replicaA.send('DELETE', `${base}/work?expectedRevision=1`)).toEqual(refused('work'));
+    expect(await replicaA.send('DELETE', `${base}/release?expectedRevision=1`)).toEqual(refused('release'));
+    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'release' })).toEqual(refused('release'));
+
+    expect(await a.boards.list(scope)).toEqual([]);
+    expect(await a.boards.readVersion(scope)).toBeNull();
+    expect((await catalogBoard(replicaA.send, base, 'work'))!.name).toBe('Work');
+    expect((await catalogBoard(replicaA.send, base, 'release'))!.name).toBe('Release');
+  });
+
+  it('lists code boards as read-only and boards the project created as editable', async () => {
+    const { base, replicaA } = await setup();
+    expect((await replicaA.send('POST', base, bugsBoard)).status).toBe(201);
+    const catalog = await replicaA.send('GET', base);
+    expect(
+      (catalog.body.boards as Array<Record<string, unknown>>).map(board => [board.id, board.source, board.editable]),
+    ).toEqual([
+      ['work', 'builtin', false],
+      ['review', 'builtin', false],
+      ['release', 'app', false],
+      ['bugs', 'stored', true],
+    ]);
+  });
+
+  it("returns a code board's definition read-only, with no revision", async () => {
+    const { base, replicaA } = await setup();
+    const work = await getBoard(replicaA.send, base, 'work');
+    const { description, ...definition } = boardDefinitionOf(workBoard);
+    expect(work).toEqual({
+      ...definition,
+      description: description ?? null,
+      revision: null,
+      source: 'builtin',
+      editable: false,
+      problems: [],
+    });
+    expect(work.phases.map(phase => [phase.key, phase.nextPhases])).toEqual(
+      Object.keys(workBoard.phases).map(key => [
+        key,
+        [...workBoard.phases[key as keyof typeof workBoard.phases].nextPhases],
+      ]),
+    );
+    expect(await getBoard(replicaA.send, base, 'release')).toMatchObject({
+      source: 'app',
+      editable: false,
+      revision: null,
+    });
+  });
+
+  it("lets an admin create, edit and delete the project's own board, recording each in the audit trail", async () => {
     const { a, orgId, base, replicaA } = await setup();
     const created = await replicaA.send('POST', base, bugsBoard);
     expect(created.status).toBe(201);
-    expect(created.body.board).toMatchObject({ key: 'bugs', revision: 1, source: 'stored', customized: false });
-
+    expect(created.body.board).toMatchObject({ key: 'bugs', revision: 1, source: 'stored', editable: true });
     expect(await catalogBoard(replicaA.send, base, 'bugs')).toMatchObject({
       name: 'Bugs',
-      source: 'stored',
       initialPhase: 'reported',
-      // Unset nextPhases on an API board means every other phase.
+      // Unset nextPhases on a stored board means every other phase.
       phases: [
         { id: 'reported', nextPhases: ['fixing', 'fixed'] },
         { id: 'fixing', nextPhases: ['reported', 'fixed'] },
         { id: 'fixed', nextPhases: [] },
       ],
     });
-    expect((await getBoard(replicaA.send, base, 'bugs')).revision).toBe(1);
-    const trail = await a.audit.list({ orgId, actions: ['factory.board.created'] });
-    expect(trail.events.map(event => event.targets)).toEqual([[{ type: 'board', id: 'bugs', name: 'Bugs' }]]);
+
+    // A stored board may change which phase comes first.
+    const edited = await replicaA.send('PATCH', `${base}/bugs`, {
+      name: 'Bug reports',
+      phases: [{ key: 'triaged', name: 'Triaged', kind: 'resting' }, ...bugsBoard.phases],
+      expectedRevision: 1,
+    });
+    expect(edited.status).toBe(200);
+    expect(edited.body.board).toMatchObject({ name: 'Bug reports', revision: 2 });
+    expect((await catalogBoard(replicaA.send, base, 'bugs'))!.initialPhase).toBe('triaged');
+
+    expect((await replicaA.send('DELETE', `${base}/bugs?expectedRevision=2`)).status).toBe(204);
+    expect(await catalogBoard(replicaA.send, base, 'bugs')).toBeUndefined();
+    expect((await replicaA.send('GET', `${base}/bugs`)).status).toBe(404);
+
+    const trail = await a.audit.list({
+      orgId,
+      actions: ['factory.board.created', 'factory.board.updated', 'factory.board.deleted'],
+    });
+    expect(trail.events.map(event => event.action).sort()).toEqual([
+      'factory.board.created',
+      'factory.board.deleted',
+      'factory.board.updated',
+    ]);
   });
 
   it('refuses board changes from a member who is not an admin, and leaves the boards as they were', async () => {
     const { base, replicaA } = await setup();
-    const work = await getBoard(replicaA.send, base, 'work');
+    await replicaA.send('POST', base, bugsBoard);
 
-    const create = await replicaA.send('POST', base, bugsBoard, MEMBER);
+    const create = await replicaA.send('POST', base, { ...bugsBoard, key: 'hotfix' }, MEMBER);
     expect(create).toMatchObject({ status: 403, body: { error: 'organization_admin_required' } });
     const rename = await replicaA.send(
       'PATCH',
-      `${base}/work`,
-      { name: 'Renamed', phases: work.phases, expectedRevision: work.revision },
+      `${base}/bugs`,
+      { name: 'Renamed', phases: bugsBoard.phases, expectedRevision: 1 },
       MEMBER,
     );
     expect(rename.status).toBe(403);
-    const remove = await replicaA.send('DELETE', `${base}/release?expectedRevision=1`, undefined, MEMBER);
-    expect(remove.status).toBe(403);
-    const reset = await replicaA.send('POST', `${base}/work/reset`, { expectedRevision: work.revision }, MEMBER);
-    expect(reset.status).toBe(403);
+    expect((await replicaA.send('DELETE', `${base}/bugs?expectedRevision=1`, undefined, MEMBER)).status).toBe(403);
 
-    expect(await catalogBoard(replicaA.send, base, 'bugs')).toBeUndefined();
-    expect(await getBoard(replicaA.send, base, 'work')).toMatchObject({ name: 'Work', revision: work.revision });
-    expect((await getBoard(replicaA.send, base, 'release')).deleted).toBe(false);
+    expect(await catalogBoard(replicaA.send, base, 'hotfix')).toBeUndefined();
+    expect(await getBoard(replicaA.send, base, 'bugs')).toMatchObject({ name: 'Bugs', revision: 1 });
     // Reading needs only membership.
-    expect((await replicaA.send('GET', `${base}/work`, undefined, MEMBER)).status).toBe(200);
+    expect((await replicaA.send('GET', `${base}/bugs`, undefined, MEMBER)).status).toBe(200);
   });
 
   it('needs no admin in local mode', async () => {
@@ -246,54 +300,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       auth: fakeRouteAuth({ enabled: false, isOrganizationAdmin: async () => false }),
     });
     expect((await local.send('POST', base, bugsBoard, MEMBER)).status).toBe(201);
-  });
-
-  it("keeps an admin's rename of Work's Building phase when newer code changes Work, and reset adopts the code", async () => {
-    const { b, scope, base, replicaA } = await setup();
-    const work = await getBoard(replicaA.send, base, 'work');
-    expect(work).toMatchObject({ source: 'builtin', customized: false, drift: false });
-
-    const renamed = await replicaA.send('PATCH', `${base}/work`, {
-      name: work.name,
-      phases: withPhases(work.phases, phases =>
-        phases.map(phase => (phase.key === 'execute' ? { ...phase, name: 'Shipping' } : phase)),
-      ),
-      expectedRevision: work.revision,
-    });
-    expect(renamed.status).toBe(200);
-    expect(renamed.body.board).toMatchObject({ customized: true, drift: false, revision: work.revision + 1 });
-    const catalog = await catalogBoard(replicaA.send, base, 'work');
-    expect(catalog).toMatchObject({ source: 'builtin', customized: true });
-    expect(catalog!.phases.find((phase: { id: string }) => phase.id === 'execute').name).toBe('Shipping');
-
-    // A replica running a newer Factory, whose Work renamed Planning, seeds the project.
-    const newerWork = compileBoardDefinition({
-      ...workBoard,
-      phases: Object.fromEntries(
-        Object.entries(workBoard.phases).map(([key, phase]) => [
-          key,
-          key === 'planning' ? { ...phase, name: 'Designing' } : phase,
-        ]),
-      ),
-    } as never) as InstalledBoard;
-    await b.boards.applySeed(scope, [
-      seedFromDefinition(newerWork, 'builtin'),
-      seedFromDefinition(reviewBoard, 'builtin'),
-      seedFromDefinition(releaseBoard(), 'app'),
-    ]);
-    replicaA.clock.now += RECHECK_MS;
-
-    const drifted = await getBoard(replicaA.send, base, 'work');
-    expect(drifted).toMatchObject({ customized: true, drift: true });
-    expect(drifted.phases.find(phase => phase.key === 'execute')!.name).toBe('Shipping');
-    expect(drifted.phases.find(phase => phase.key === 'planning')!.name).toBe('Planning');
-    expect((await catalogBoard(replicaA.send, base, 'work'))!.problems).toEqual([DRIFT_PROBLEM]);
-
-    const reset = await replicaA.send('POST', `${base}/work/reset`, { expectedRevision: drifted.revision });
-    expect(reset.status).toBe(200);
-    expect(reset.body.board).toMatchObject({ customized: false, drift: false, problems: [] });
-    expect(reset.body.board.phases.find((phase: StoredPhaseInput) => phase.key === 'execute').name).toBe('Building');
-    expect((await catalogBoard(replicaA.send, base, 'work'))!.customized).toBe(false);
   });
 
   it('refuses an invalid definition with the message defineBoard() gives', async () => {
@@ -316,46 +322,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const response = await replicaA.send('POST', base, { key: 'broken', name: 'Broken', phases });
     expect(response).toEqual({ status: 422, body: { error: 'invalid_board', message: expected } });
     expect(await catalogBoard(replicaA.send, base, 'broken')).toBeUndefined();
-  });
-
-  it("refuses removing the terminal phase Work's code closes finished issues into", async () => {
-    const { base, replicaA } = await setup();
-    const work = await getBoard(replicaA.send, base, 'work');
-    const response = await replicaA.send('PATCH', `${base}/work`, {
-      name: work.name,
-      phases: withPhases(work.phases, phases =>
-        phases
-          .filter(phase => phase.key !== 'done')
-          .map(phase => ({ ...phase, nextPhases: phase.nextPhases?.filter(next => next !== 'done') ?? null })),
-      ),
-      expectedRevision: work.revision,
-    });
-    expect(response.status).toBe(422);
-    expect(response.body.error).toBe('invalid_board');
-    expect(response.body.message).toMatch(/"done"/);
-    expect((await getBoard(replicaA.send, base, 'work')).revision).toBe(work.revision);
-  });
-
-  it("refuses removing a phase an app board's code outcomes lead to", async () => {
-    const { base, replicaA } = await setup();
-    const release = await getBoard(replicaA.send, base, 'release');
-    const response = await replicaA.send('PATCH', `${base}/release`, {
-      name: release.name,
-      phases: withPhases(release.phases, phases =>
-        phases
-          .filter(phase => phase.key !== 'shipped')
-          .map(phase => ({ ...phase, nextPhases: phase.nextPhases?.filter(next => next !== 'shipped') ?? null })),
-      ),
-      expectedRevision: release.revision,
-    });
-    expect(response).toEqual({
-      status: 422,
-      body: {
-        error: 'invalid_board',
-        message: 'Phase "shipping" targets undefined phase "shipped". The board\'s code behaviors depend on it.',
-      },
-    });
-    expect((await getBoard(replicaA.send, base, 'release')).revision).toBe(release.revision);
   });
 
   it('refuses a runner skill that does not exist, and warns about a review skill outside review', async () => {
@@ -381,139 +347,63 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
   it('lets only one of two edits made from the same revision on two replicas land', async () => {
     const { b, orgId, base, replicaA } = await setup();
+    await replicaA.send('POST', base, bugsBoard);
     const replicaB = replica(b, orgId);
-    const work = await getBoard(replicaA.send, base, 'work');
-    const edit = (name: string) => ({ name, phases: work.phases, expectedRevision: work.revision });
+    const edit = (name: string) => ({ name, phases: bugsBoard.phases, expectedRevision: 1 });
     const results = await Promise.all([
-      replicaA.send('PATCH', `${base}/work`, edit('Work A')),
-      replicaB.send('PATCH', `${base}/work`, edit('Work B')),
+      replicaA.send('PATCH', `${base}/bugs`, edit('Bugs A')),
+      replicaB.send('PATCH', `${base}/bugs`, edit('Bugs B')),
     ]);
     expect(results.map(result => result.status).sort()).toEqual([200, 409]);
     expect(results.find(result => result.status === 409)!.body.error).toBe('revision_mismatch');
     const winner = results.find(result => result.status === 200)!.body.board.name;
-    expect(await getBoard(replicaA.send, base, 'work')).toMatchObject({ name: winner, revision: work.revision + 1 });
+    expect(await getBoard(replicaA.send, base, 'bugs')).toMatchObject({ name: winner, revision: 2 });
   });
 
   it('refuses removing or changing the kind of a phase cards sit in, and allows renaming it', async () => {
     const { a, scope, base, replicaA } = await setup();
+    await replicaA.send('POST', base, bugsBoard);
     for (const title of ['First', 'Second']) {
-      await a.workItems.upsert({ ...scope, userId: ADMIN, input: { title, board: 'work', stages: ['review'] } });
+      await a.workItems.upsert({ ...scope, userId: ADMIN, input: { title, board: 'bugs', stages: ['fixing'] } });
     }
-    const work = await getBoard(replicaA.send, base, 'work');
     const patch = (phases: StoredPhaseInput[]) =>
-      replicaA.send('PATCH', `${base}/work`, { name: work.name, phases, expectedRevision: work.revision });
+      replicaA.send('PATCH', `${base}/bugs`, { name: 'Bugs', phases, expectedRevision: 1 });
 
-    const removed = await patch(
-      withPhases(work.phases, phases =>
-        phases
-          .filter(phase => phase.key !== 'review')
-          .map(phase => ({ ...phase, nextPhases: phase.nextPhases?.filter(next => next !== 'review') ?? null })),
-      ),
-    );
+    const removed = await patch(bugsBoard.phases.filter(phase => phase.key !== 'fixing'));
     expect(removed.status).toBe(409);
-    expect(removed.body).toMatchObject({ error: 'phase_in_use', phases: { review: 2 } });
+    expect(removed.body).toMatchObject({ error: 'phase_in_use', phases: { fixing: 2 } });
 
     const rekinded = await patch(
-      withPhases(work.phases, phases =>
-        phases.map(phase =>
-          phase.key === 'review'
-            ? { key: 'review', name: phase.name, kind: 'resting', nextPhases: phase.nextPhases }
-            : phase,
-        ),
+      bugsBoard.phases.map(phase =>
+        phase.key === 'fixing' ? { key: 'fixing', name: phase.name, kind: 'resting' } : phase,
       ),
     );
-    expect(rekinded).toMatchObject({ status: 409, body: { error: 'phase_in_use', phases: { review: 2 } } });
-    expect((await getBoard(replicaA.send, base, 'work')).revision).toBe(work.revision);
+    expect(rekinded).toMatchObject({ status: 409, body: { error: 'phase_in_use', phases: { fixing: 2 } } });
+    expect((await getBoard(replicaA.send, base, 'bugs')).revision).toBe(1);
 
     const renamed = await patch(
-      withPhases(work.phases, phases =>
-        phases.map(phase => (phase.key === 'review' ? { ...phase, name: 'Checking' } : phase)),
-      ),
+      bugsBoard.phases.map(phase => (phase.key === 'fixing' ? { ...phase, name: 'Patching' } : phase)),
     );
     expect(renamed.status).toBe(200);
   });
 
-  it('refuses deleting a board that still has cards, and deleting a built-in board', async () => {
+  it('refuses deleting a board that still has cards', async () => {
     const { a, scope, base, replicaA } = await setup();
     await replicaA.send('POST', base, bugsBoard);
     await a.workItems.upsert({ ...scope, userId: ADMIN, input: { title: 'Crash', board: 'bugs', stages: ['fixing'] } });
     const inUse = await replicaA.send('DELETE', `${base}/bugs?expectedRevision=1`);
     expect(inUse).toMatchObject({ status: 409, body: { error: 'board_in_use', cards: 1 } });
-
-    const work = await getBoard(replicaA.send, base, 'work');
-    const builtin = await replicaA.send('DELETE', `${base}/work?expectedRevision=${work.revision}`);
-    expect(builtin).toMatchObject({ status: 409, body: { error: 'builtin_board' } });
-    expect(await catalogBoard(replicaA.send, base, 'work')).toBeDefined();
+    expect(await catalogBoard(replicaA.send, base, 'bugs')).toBeDefined();
   });
 
-  it('keeps the first phase of a board defined in code first', async () => {
-    const { base, replicaA } = await setup();
-    const work = await getBoard(replicaA.send, base, 'work');
-    const response = await replicaA.send('PATCH', `${base}/work`, {
-      name: work.name,
-      phases: [{ key: 'inbox', name: 'Inbox', kind: 'resting', nextPhases: null }, ...work.phases],
-      expectedRevision: work.revision,
-    });
-    expect(response).toMatchObject({ status: 422, body: { error: 'initial_phase_locked' } });
-
-    // A board created through the API may change its first phase.
-    await replicaA.send('POST', base, bugsBoard);
-    const bugs = await getBoard(replicaA.send, base, 'bugs');
-    const reordered = await replicaA.send('PATCH', `${base}/bugs`, {
-      name: bugs.name,
-      phases: [{ key: 'triaged', name: 'Triaged', kind: 'resting' }, ...bugs.phases],
-      expectedRevision: bugs.revision,
-    });
-    expect(reordered.status).toBe(200);
-    expect((await catalogBoard(replicaA.send, base, 'bugs'))!.initialPhase).toBe('triaged');
-  });
-
-  it('keeps a deleted app board deleted after a restart, until reset restores it', async () => {
-    const { a, orgId, base, replicaA } = await setup();
-    const release = await getBoard(replicaA.send, base, 'release');
-    expect(release.source).toBe('app');
-    const deleted = await replicaA.send('DELETE', `${base}/release?expectedRevision=${release.revision}`);
-    expect(deleted.status).toBe(204);
-    expect(await catalogBoard(replicaA.send, base, 'release')).toBeUndefined();
-    const recreate = await replicaA.send('POST', base, seedFromDefinition(releaseBoard(), 'app').input);
-    expect(recreate).toMatchObject({ status: 409, body: { error: 'board_deleted' } });
-
-    // A restart is a new process: a fresh cache that seeds the project again.
-    const restarted = replica(a, orgId);
-    expect(await catalogBoard(restarted.send, base, 'release')).toBeUndefined();
-    const tombstone = await getBoard(restarted.send, base, 'release');
-    expect(tombstone.deleted).toBe(true);
-
-    const reset = await restarted.send('POST', `${base}/release/reset`, { expectedRevision: tombstone.revision });
-    expect(reset.status).toBe(200);
-    expect(reset.body.board).toMatchObject({ deleted: false, customized: false });
-    expect(await catalogBoard(restarted.send, base, 'release')).toMatchObject({ source: 'app' });
-  });
-
-  it('has nothing to reset a board created through the API to', async () => {
-    const { base, replicaA } = await setup();
-    await replicaA.send('POST', base, bugsBoard);
-    const response = await replicaA.send('POST', `${base}/bugs/reset`, { expectedRevision: 1 });
-    expect(response).toMatchObject({ status: 409, body: { error: 'not_seeded' } });
-  });
-
-  it("shows an edit made on one replica in another replica's catalog after the recheck window", async () => {
+  it("shows a board one replica created on another replica's routes after the recheck window", async () => {
     const { b, orgId, base, replicaA } = await setup();
     const replicaB = replica(b, orgId);
-    expect((await catalogBoard(replicaB.send, base, 'review'))!.name).toBe('Review');
+    expect(await catalogBoard(replicaB.send, base, 'bugs')).toBeUndefined();
 
-    const review = await getBoard(replicaA.send, base, 'review');
-    const renamed = await replicaA.send('PATCH', `${base}/review`, {
-      name: 'Code review',
-      phases: review.phases,
-      expectedRevision: review.revision,
-    });
-    expect(renamed.status).toBe(200);
-    expect((await catalogBoard(replicaA.send, base, 'review'))!.name).toBe('Code review');
-
-    replicaB.clock.now += RECHECK_MS - 1;
-    expect((await catalogBoard(replicaB.send, base, 'review'))!.name).toBe('Review');
-    replicaB.clock.now += 1;
-    expect((await catalogBoard(replicaB.send, base, 'review'))!.name).toBe('Code review');
+    await replicaA.send('POST', base, bugsBoard);
+    expect(await catalogBoard(replicaB.send, base, 'bugs')).toBeUndefined();
+    replicaB.clock.now += RECHECK_MS;
+    expect(await catalogBoard(replicaB.send, base, 'bugs')).toMatchObject({ name: 'Bugs', editable: true });
   });
 });

@@ -47,7 +47,6 @@ const boardPathSchema = z.object({ id: uuidSchema, boardKey: z.string().min(1).m
 const boardRevisionSchema = z.number().int().min(1);
 /** A board's definition; send the `revision` you read so a concurrent edit is not overwritten. */
 export const replaceBoardBodySchema = storedBoardDefinitionSchema.extend({ expectedRevision: boardRevisionSchema });
-export const boardRevisionBodySchema = z.object({ expectedRevision: boardRevisionSchema }).strict();
 export const boardDeleteQuerySchema = z.object({ expectedRevision: z.coerce.number().int().min(1) });
 const storedBoardResponseSchema = z.object({
   board: z.object({
@@ -56,15 +55,11 @@ const storedBoardResponseSchema = z.object({
     description: z.string().nullable(),
     /** In order; the first phase is where cards start. */
     phases: z.array(storedPhaseInputSchema),
-    /** Send it back as `expectedRevision` when editing. */
-    revision: z.number().int(),
+    /** Send it back as `expectedRevision` when editing. Null for code boards, which are not stored. */
+    revision: z.number().int().nullable(),
     source: z.enum(['builtin', 'app', 'stored']),
-    /** True once a person edited a board seeded from code; seeding then keeps the edit. */
-    customized: z.boolean(),
-    /** The code definition changed after the board was edited; reset adopts it. */
-    drift: z.boolean(),
-    /** A board seeded from code that was deleted; reset restores it. */
-    deleted: z.boolean(),
+    /** False for built-in and app boards: they are defined in code and read-only here. */
+    editable: z.boolean(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
     problems: z.array(z.string()),
   }),
@@ -664,7 +659,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
   boardGet: {
     method: 'GET',
     path: '/web/factory/projects/:id/boards/:boardKey',
-    description: "Get a project board's editable definition",
+    description: "Get a project board's definition",
     pathSchema: boardPathSchema,
     responseSchema: storedBoardResponseSchema,
   },
@@ -682,14 +677,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: "Replace a project board's definition",
     pathSchema: boardPathSchema,
     bodySchema: replaceBoardBodySchema,
-    responseSchema: storedBoardResponseSchema,
-  },
-  boardReset: {
-    method: 'POST',
-    path: '/web/factory/projects/:id/boards/:boardKey/reset',
-    description: 'Reset a project board to its code definition',
-    pathSchema: boardPathSchema,
-    bodySchema: boardRevisionBodySchema,
     responseSchema: storedBoardResponseSchema,
   },
   boardDelete: {
