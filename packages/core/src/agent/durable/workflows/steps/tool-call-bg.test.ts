@@ -202,7 +202,7 @@ describe('durable tool-call background task dispatch', () => {
 
     const result = await executeStep(pubsub, initData);
 
-    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: expect.any(AbortSignal) });
     expect(result.result).toEqual(authoritativeResult);
     expect(result.providerMetadata).toMatchObject({
       mastra: { backgroundTask: { taskId: 'task-awaited', status: 'completed' } },
@@ -295,7 +295,7 @@ describe('durable tool-call background task dispatch', () => {
 
     expect(dispatch).not.toHaveBeenCalled();
     expect(checkIfRunning).not.toHaveBeenCalled();
-    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: expect.any(AbortSignal) });
     expect(result.result).toEqual(authoritativeResult);
     expect(result.providerMetadata).toMatchObject({
       mastra: { backgroundTask: { taskId: terminalTask.id, status: 'completed' } },
@@ -795,7 +795,7 @@ describe('durable tool-call background task dispatch', () => {
 
     const result = await executeStep(pubsub, initData, undefined, testCase.resumeData);
 
-    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: expect.any(AbortSignal) });
     expect(result.result).toEqual(authoritativeResult);
     expect(result.providerMetadata).toMatchObject({
       mastra: { backgroundTask: { taskId, status: 'completed' } },

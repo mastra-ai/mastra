@@ -59,6 +59,8 @@ const durableLLMMappingOutputSchema = z.object({
   }),
   state: z.any(),
   delegationBailed: z.boolean().optional(),
+  deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  runAborted: z.boolean().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   releasedToolResultIds: z.array(z.string()).optional(),
@@ -360,6 +362,11 @@ export function createDurableLLMMappingStep() {
         requestContext.set('__mastra_delegationBailed', false);
       }
 
+      // A tool the total deadline aborted, possibly on another worker, ends the run as the deadline.
+      const deadlineTimeout = toolResults.find(r => r?.deadlineTimeout)?.deadlineTimeout;
+      // abort() stopped a tool, possibly on a worker the next step never hears from.
+      const runAborted = toolResults.some(r => r?.runAborted === true);
+
       // 4. Carry the deferred step-finish after tool-result chunks have been
       // emitted. The loop predicate adds step content and emits it after resolving
       // continuation policy, avoiding duplicate tool results in persisted snapshots.
@@ -413,6 +420,8 @@ export function createDurableLLMMappingStep() {
         processorRetryFeedback: llmOutput.processorRetryFeedback,
         releasedToolResultIds: llmOutput.releasedToolResultIds,
         delegationBailed,
+        ...(deadlineTimeout ? { deadlineTimeout } : {}),
+        ...(runAborted ? { runAborted } : {}),
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,

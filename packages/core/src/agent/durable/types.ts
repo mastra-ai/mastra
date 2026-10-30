@@ -533,6 +533,10 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * the same iteration on every engine (G3).
    */
   delegationBailed?: boolean;
+  /** Set when the total deadline aborted this tool call; carried so any worker ends the run as the deadline */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped this tool call; carried so any worker ends the run as aborted */
+  runAborted?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -586,6 +590,10 @@ export interface DurableAgenticExecutionOutput {
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Set when the total deadline aborted a tool call this iteration */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped a tool call this iteration */
+  runAborted?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
