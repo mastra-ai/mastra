@@ -17,7 +17,7 @@ export const AUDIT_ACTIONS = {
   ],
   run: ['started', 'ended', 'approved', 'dismissed', 'retry', 'queued', 'rejected'],
   git: ['commit', 'push', 'pr_opened'],
-  agent: ['commit', 'push', 'pr_opened', 'signaled'],
+  agent: ['commit', 'push', 'pr_opened', 'signaled', 'workflow_rerun'],
   intake: ['config_updated', 'binding_updated', 'label_route_updated'],
   session: ['owner_transferred'],
 } as const;

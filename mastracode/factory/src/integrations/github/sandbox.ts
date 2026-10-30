@@ -15,7 +15,12 @@
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import type { RepositoryAccess } from '../../capabilities/version-control.js';
+import type {
+  CommitIdentity,
+  CommitTreeChange,
+  ExportedCommit,
+  RepositoryAccess,
+} from '../../capabilities/version-control.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
@@ -1277,4 +1282,200 @@ export async function createPullRequest(
   }
 
   return { url };
+}
+
+const MAX_EXPORTED_COMMITS = 100;
+const MAX_EXPORTED_BLOB_BYTES = 50 * 1024 * 1024;
+const NULL_OID = /^0+$/;
+const OID = /^[0-9a-f]{40}$/;
+
+export interface ExportedBranch {
+  headSha: string;
+  /** Oldest first. */
+  commits: ExportedCommit[];
+  /** Base64 content keyed by blob SHA. */
+  blobs: Record<string, string>;
+}
+
+/** Read a git command's stdout byte-exactly; sandbox stdout is text, so the bytes travel as base64. */
+async function gitBytes(sandbox: ExecutableSandbox, workdir: string, args: string[]): Promise<Buffer> {
+  const result = await execute(sandbox, 'sh', [
+    '-c',
+    'set -e; out=$(mktemp); trap \'rm -f "$out"\' EXIT; git "$@" > "$out"; base64 -w0 "$out"',
+    'git-bytes',
+    '-C',
+    workdir,
+    ...args,
+  ]);
+  if (result.exitCode !== 0) throw classifyGitFailure(result, 'push-failed');
+  return Buffer.from(result.stdout.trim(), 'base64');
+}
+
+async function gitLine(sandbox: ExecutableSandbox, workdir: string, args: string[]): Promise<string> {
+  const result = await execute(sandbox, 'git', ['-C', workdir, ...args]);
+  if (result.exitCode !== 0) throw classifyGitFailure(result, 'push-failed');
+  return result.stdout.trim();
+}
+
+function parseIdentity(line: string, commit: string): CommitIdentity {
+  const match = /^(.*) <(.*)> (\d+) ([+-])(\d{2})(\d{2})$/.exec(line);
+  if (!match) throw new MaterializeError(`Commit ${commit} has an identity git data cannot replay.`, 'push-failed');
+  const [, name, email, seconds, sign, hours, minutes] = match;
+  const offsetMinutes = (sign === '-' ? -1 : 1) * (Number(hours) * 60 + Number(minutes));
+  const local = new Date((Number(seconds) + offsetMinutes * 60) * 1000).toISOString().slice(0, 19);
+  return { name: name!, email: email!, date: `${local}${sign}${hours}:${minutes}` };
+}
+
+/** Split a raw commit object; only commits the git data API can recreate byte-for-byte are accepted. */
+export function parseCommitObject(sha: string, raw: Buffer): Omit<ExportedCommit, 'changes'> {
+  const text = raw.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(raw)) {
+    throw new MaterializeError(`Commit ${sha} is not UTF-8 and cannot be replayed.`, 'push-failed');
+  }
+  const split = text.indexOf('\n\n');
+  const headers = (split === -1 ? text : text.slice(0, split)).split('\n');
+  const message = split === -1 ? '' : text.slice(split + 2);
+  let tree: string | undefined;
+  let author: CommitIdentity | undefined;
+  let committer: CommitIdentity | undefined;
+  const parents: string[] = [];
+  for (const header of headers) {
+    const space = header.indexOf(' ');
+    const key = header.slice(0, space);
+    const value = header.slice(space + 1);
+    if (key === 'tree') tree = value;
+    else if (key === 'parent') parents.push(value);
+    else if (key === 'author') author = parseIdentity(value, sha);
+    else if (key === 'committer') committer = parseIdentity(value, sha);
+    else {
+      throw new MaterializeError(
+        `Commit ${sha} carries a '${key || header}' header (for example a signature) and cannot be replayed. Recreate it unsigned.`,
+        'push-failed',
+      );
+    }
+  }
+  if (!tree || !author || !committer) {
+    throw new MaterializeError(`Commit ${sha} is malformed.`, 'push-failed');
+  }
+  if (parents.length === 0)
+    throw new MaterializeError(`Commit ${sha} is a root commit and cannot be replayed.`, 'push-failed');
+  return { sha, tree, parents, author, committer, message };
+}
+
+/** Parse `git diff-tree -r -z --raw` output. */
+export function parseTreeChanges(raw: string): CommitTreeChange[] {
+  const fields = raw.split('\0').filter(field => field.length > 0);
+  const changes: CommitTreeChange[] = [];
+  for (let index = 0; index + 1 < fields.length; index += 2) {
+    const [, newMode, , newSha] = fields[index]!.slice(1).split(' ');
+    const path = fields[index + 1]!;
+    if (!newMode || !newSha) throw new MaterializeError('Could not read commit changes.', 'push-failed');
+    const deleted = NULL_OID.test(newSha);
+    changes.push({
+      path,
+      mode: deleted ? '100644' : newMode,
+      type: newMode === '160000' ? 'commit' : 'blob',
+      sha: deleted ? null : newSha,
+    });
+  }
+  return changes;
+}
+
+/**
+ * Export the commits `branch` has beyond `fastForwardFrom` (or beyond what the
+ * remote already has, for a new branch), with every blob they introduce, so a
+ * server can recreate them without giving the sandbox a push credential.
+ */
+export async function exportBranchCommits(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  branch: string,
+  options: { fastForwardFrom: string | null; knownRemoteCommits?: string[] },
+): Promise<ExportedBranch> {
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to export: invalid branch name '${branch}'.`, 'push-failed');
+  }
+  const headSha = await gitLine(sandbox, workdir, ['rev-parse', '--verify', `refs/heads/${branch}^{commit}`]);
+  const exclude: string[] = [];
+  if (options.fastForwardFrom) {
+    const from = options.fastForwardFrom;
+    if (!OID.test(from)) throw new MaterializeError(`Invalid remote head '${from}'.`, 'push-failed');
+    const present = await execute(sandbox, 'git', ['-C', workdir, 'cat-file', '-e', `${from}^{commit}`]);
+    if (present.exitCode !== 0) {
+      throw new MaterializeError(
+        `The remote ${branch} head ${from} is not in this checkout. Fetch and rebase onto it first.`,
+        'push-failed',
+      );
+    }
+    const ancestor = await execute(sandbox, 'git', ['-C', workdir, 'merge-base', '--is-ancestor', from, headSha]);
+    if (ancestor.exitCode !== 0) {
+      throw new MaterializeError(
+        `${branch} does not build on the remote head ${from}. Rebase onto it first; force pushes are not supported.`,
+        'push-failed',
+      );
+    }
+    exclude.push(from);
+  }
+  for (const known of options.knownRemoteCommits ?? []) {
+    if (!OID.test(known)) continue;
+    const present = await execute(sandbox, 'git', ['-C', workdir, 'cat-file', '-e', `${known}^{commit}`]);
+    if (present.exitCode === 0) exclude.push(known);
+  }
+
+  const listed = await gitLine(sandbox, workdir, [
+    'rev-list',
+    '--reverse',
+    '--topo-order',
+    headSha,
+    '--not',
+    ...exclude,
+    '--remotes=origin',
+  ]);
+  const shas = listed.split('\n').filter(Boolean);
+  if (shas.length > MAX_EXPORTED_COMMITS) {
+    throw new MaterializeError(
+      `${branch} has ${shas.length} unpushed commits; at most ${MAX_EXPORTED_COMMITS} can be pushed this way.`,
+      'push-failed',
+    );
+  }
+
+  const commits: ExportedCommit[] = [];
+  const blobShas = new Set<string>();
+  for (const sha of shas) {
+    const commit = parseCommitObject(sha, await gitBytes(sandbox, workdir, ['cat-file', 'commit', sha]));
+    const diff = await gitBytes(sandbox, workdir, [
+      'diff-tree',
+      '-r',
+      '-z',
+      '--raw',
+      '--no-renames',
+      '--no-abbrev',
+      '--no-commit-id',
+      commit.parents[0]!,
+      sha,
+    ]);
+    const changes = parseTreeChanges(diff.toString('utf8'));
+    for (const change of changes) if (change.sha && change.type === 'blob') blobShas.add(change.sha);
+    commits.push({ ...commit, changes });
+  }
+
+  const blobs: Record<string, string> = {};
+  let total = 0;
+  for (const sha of blobShas) {
+    total += Number(await gitLine(sandbox, workdir, ['cat-file', '-s', sha]));
+    if (total > MAX_EXPORTED_BLOB_BYTES) {
+      throw new MaterializeError('The unpushed changes are too large to push this way.', 'push-failed');
+    }
+    blobs[sha] = (await gitBytes(sandbox, workdir, ['cat-file', 'blob', sha])).toString('base64');
+  }
+  return { headSha, commits, blobs };
+}
+
+/** Workflow files (`.github/workflows/**`) the commits add, change, or delete, sorted. */
+export function changedWorkflowFiles(commits: readonly ExportedCommit[]): string[] {
+  const paths = new Set<string>();
+  for (const commit of commits) {
+    for (const change of commit.changes) if (change.path.startsWith('.github/workflows/')) paths.add(change.path);
+  }
+  return [...paths].sort();
 }

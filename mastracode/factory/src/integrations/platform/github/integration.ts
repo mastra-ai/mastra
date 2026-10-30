@@ -14,6 +14,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
 import type {
+  BranchState,
   CommitCheck,
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -22,6 +23,7 @@ import type {
   DeletePullRequestCommentInput,
   DismissReviewInput,
   ListPullRequestCommentsInput,
+  ListWorkflowRunsInput,
   ListPullRequestsInput,
   ListReviewCommentsInput,
   ListReviewsInput,
@@ -30,7 +32,10 @@ import type {
   PullRequestComment,
   PublishCommitCheckInput,
   PullRequestRef,
+  PushCommitsInput,
   RepositoryAccess,
+  RepositoryTarget,
+  RerunWorkflowRunInput,
   Review,
   ReviewComment,
   ReviewRef,
@@ -38,6 +43,7 @@ import type {
   UpdatePullRequestCommentInput,
   UpdatePullRequestInput,
   UpdateReviewInput,
+  WorkflowRun,
   UpdateReviewersInput,
   VersionControl,
 } from '../../../capabilities/version-control.js';
@@ -210,37 +216,11 @@ function setBounded<K, V>(cache: Map<K, V>, key: K, value: V): void {
   }
 }
 
-/** Permissions every repository-scoped installation token needs. */
-const BASE_REPOSITORY_TOKEN_PERMISSIONS = {
+const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
   pull_requests: 'write',
 } as const;
-
-/**
- * Write permissions added when the installation grants them: `workflows` lets
- * sessions push commits touching `.github/workflows/`, `actions` lets them
- * re-run jobs and dispatch workflows. GitHub refuses the whole mint when a
- * requested permission is not granted, so these are never requested blindly.
- *
- * TODO: once installations have accepted the `actions` and `workflows`
- * permissions, move them into BASE_REPOSITORY_TOKEN_PERMISSIONS and remove the
- * grant lookup and the base-permissions retry in #mintRepositoryToken.
- */
-const OPTIONAL_REPOSITORY_TOKEN_PERMISSIONS = ['actions', 'workflows'] as const;
-
-type RepositoryTokenPermissions = Partial<
-  Record<
-    keyof typeof BASE_REPOSITORY_TOKEN_PERMISSIONS | (typeof OPTIONAL_REPOSITORY_TOKEN_PERMISSIONS)[number],
-    'write'
-  >
->;
-
-/**
- * How long an installation's granted optional permissions are reused. Short,
- * so an accepted permission update on GitHub is picked up soon.
- */
-const INSTALLATION_PERMISSIONS_CACHE_TTL_MS = 10 * 60_000;
 
 /** The Platform mints one installation token for at most this many named repositories. */
 const MAX_REPOSITORIES_PER_TOKEN = 10;
@@ -284,11 +264,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
-  /** installationId → token permissions the installation grants (TTL-bounded). */
-  readonly #installationTokenPermissionsCache = new Map<
-    number,
-    { permissions: RepositoryTokenPermissions; expiresAt: number }
-  >();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
   /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
@@ -478,7 +453,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const repositoryName = splitRepository(repository.slug).repo;
 
       try {
-        const token = await this.#mintRepositoryToken(installationId, [repositoryName]);
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${installationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
         const access: RepositoryAccess = {
           cloneUrl,
           authorization: { scheme: 'bearer', token: token.token },
@@ -509,7 +488,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           newInstallationId: newInstallation.id,
         });
 
-        const token = await this.#mintRepositoryToken(newInstallationId, [repositoryName]);
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
         const access: RepositoryAccess = {
           cloneUrl,
           authorization: { scheme: 'bearer', token: token.token },
@@ -541,9 +524,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const installationId = parsePositiveInteger(installation.externalId);
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
 
-      const token = await this.#mintRepositoryToken(
-        installationId,
-        found.map(repository => splitRepository(repository.slug).repo),
+      const token = await this.#client.request<{ token: string }>(
+        'POST',
+        `${API_PREFIX}/github-app/installations/${installationId}/token`,
+        {
+          repositories: found.map(repository => splitRepository(repository.slug).repo),
+          permissions: REPOSITORY_TOKEN_PERMISSIONS,
+        },
       );
       const access: RepositoryAccess = {
         cloneUrl: `https://github.com/${found[0]!.slug}.git`,
@@ -580,6 +567,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     requestReviewers: input => this.#requestedReviewers('POST', input),
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
     publishCommitCheck: input => this.#publishCommitCheck(input),
+    listWorkflowRuns: input => this.#listWorkflowRuns(input),
+    getWorkflowRun: input => this.#getWorkflowRun(input),
+    rerunWorkflowRun: input => this.#rerunWorkflowRun(input),
+    getBranchState: input => this.#getBranchState(input),
+    pushCommits: input => this.#pushCommits(input),
   };
 
   constructor(
@@ -1206,72 +1198,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (repositories.length === 0 || repositories.length > MAX_REPOSITORIES_PER_TOKEN) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');
     }
-    const result = await this.#mintRepositoryToken(
-      installationId,
-      repositories.map(repository => repository.name),
+    const result = await this.#client.request<{ token: string }>(
+      'POST',
+      `${API_PREFIX}/github-app/installations/${installationId}/token`,
+      { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
     );
     return result.token;
-  }
-
-  /**
-   * Mints an installation token for `repositories`, adding `actions` and
-   * `workflows` write only when the installation grants them. A refused mint
-   * is retried once with the base permissions so installations whose
-   * recorded grants are stale keep working.
-   */
-  async #mintRepositoryToken(installationId: number, repositories: string[]): Promise<{ token: string }> {
-    const path = `${API_PREFIX}/github-app/installations/${installationId}/token`;
-    const permissions = await this.#installationTokenPermissions(installationId);
-    const widened = Object.keys(permissions).length > Object.keys(BASE_REPOSITORY_TOKEN_PERMISSIONS).length;
-    try {
-      return await this.#client.request<{ token: string }>('POST', path, { repositories, permissions });
-    } catch (error) {
-      // The Platform reports GitHub refusing the requested permissions as 502.
-      if (!widened || !(error instanceof PlatformApiError) || error.status !== 502) throw error;
-    }
-    const token = await this.#client.request<{ token: string }>('POST', path, {
-      repositories,
-      permissions: BASE_REPOSITORY_TOKEN_PERMISSIONS,
-    });
-    logPlatformWarn('GitHub refused optional token permissions; minted without them', {
-      installationId,
-      permissions: Object.keys(permissions).join(','),
-    });
-    setBounded(this.#installationTokenPermissionsCache, installationId, {
-      permissions: BASE_REPOSITORY_TOKEN_PERMISSIONS,
-      expiresAt: Date.now() + INSTALLATION_PERMISSIONS_CACHE_TTL_MS,
-    });
-    return token;
-  }
-
-  /** The token permissions to request: the base set plus any optional ones the installation grants. */
-  async #installationTokenPermissions(installationId: number): Promise<RepositoryTokenPermissions> {
-    const cached = this.#installationTokenPermissionsCache.get(installationId);
-    if (cached && cached.expiresAt > Date.now()) return cached.permissions;
-    this.#installationTokenPermissionsCache.delete(installationId);
-
-    const permissions: RepositoryTokenPermissions = { ...BASE_REPOSITORY_TOKEN_PERMISSIONS };
-    try {
-      const { installations } = await this.#client.request<{
-        installations: Array<{ installationId: number; permissions?: Record<string, string> }>;
-      }>('GET', `${API_PREFIX}/github-app/installations`);
-      const granted = installations.find(installation => installation.installationId === installationId)?.permissions;
-      for (const permission of OPTIONAL_REPOSITORY_TOKEN_PERMISSIONS) {
-        if (granted?.[permission] === 'write') permissions[permission] = 'write';
-      }
-    } catch (error) {
-      // The listing only widens the token; without it, mint with the base set.
-      logPlatformWarn('Could not read GitHub installation permissions', {
-        installationId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return permissions;
-    }
-    setBounded(this.#installationTokenPermissionsCache, installationId, {
-      permissions,
-      expiresAt: Date.now() + INSTALLATION_PERMISSIONS_CACHE_TTL_MS,
-    });
-    return permissions;
   }
 
   async addIssueLabels(
@@ -1467,7 +1399,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           const { token } = await this.#client.request<{ token: string }>(
             'POST',
             `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
-            { repositories: [repo], permissions: BASE_REPOSITORY_TOKEN_PERMISSIONS },
+            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
           );
           const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
           const { data } = await octokit.issues.addAssignees({
@@ -1617,6 +1549,144 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       { actingUserId: input.actingUserId },
     );
     return { id: String(run.id), name: input.name, headSha: input.headSha, status: input.status, url: run.htmlUrl };
+  }
+
+  /**
+   * Octokit authenticated with a token minted for one repository and exactly
+   * `permissions`. It stays on the server: privileged operations never hand
+   * the sandbox a credential broader than the session's own.
+   */
+  async #scopedOctokit(input: RepositoryTarget, permissions: Record<string, 'read' | 'write'>) {
+    if (input.connection.type !== 'app-installation') {
+      throw new Error('This operation requires a GitHub App installation connection.');
+    }
+    const { owner, repo } = splitRepository(input.sourceId);
+    const { token } = await this.#client.request<{ token: string }>(
+      'POST',
+      `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
+      { repositories: [repo], permissions },
+    );
+    return { octokit: new Octokit({ auth: token, request: { timeout: 30_000 } }), owner, repo };
+  }
+
+  async #listWorkflowRuns(input: ListWorkflowRunsInput): Promise<WorkflowRun[]> {
+    const { octokit, owner, repo } = await this.#scopedOctokit(input, ACTIONS_READ_PERMISSIONS);
+    const { data } = await octokit.actions.listWorkflowRunsForRepo({
+      owner,
+      repo,
+      per_page: 20,
+      ...(input.branch ? { branch: input.branch } : {}),
+      ...(input.headSha ? { head_sha: input.headSha } : {}),
+    });
+    return data.workflow_runs.map(parseWorkflowRun);
+  }
+
+  async #getWorkflowRun(input: RepositoryTarget & { runId: number }): Promise<WorkflowRun | null> {
+    const { octokit, owner, repo } = await this.#scopedOctokit(input, ACTIONS_READ_PERMISSIONS);
+    try {
+      const { data } = await octokit.actions.getWorkflowRun({ owner, repo, run_id: input.runId });
+      return parseWorkflowRun(data);
+    } catch (error) {
+      if (httpStatus(error) === 404) return null;
+      throw error;
+    }
+  }
+
+  async #rerunWorkflowRun(input: RerunWorkflowRunInput): Promise<void> {
+    const { octokit, owner, repo } = await this.#scopedOctokit(input, ACTIONS_WRITE_PERMISSIONS);
+    if (input.failedJobsOnly) {
+      await octokit.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: input.runId });
+    } else {
+      await octokit.actions.reRunWorkflow({ owner, repo, run_id: input.runId });
+    }
+  }
+
+  async #getBranchState(input: RepositoryTarget & { branch: string }): Promise<BranchState> {
+    const { octokit, owner, repo } = await this.#scopedOctokit(input, CONTENTS_READ_PERMISSIONS);
+    return readBranchState(octokit, owner, repo, input.branch);
+  }
+
+  async #pushCommits(input: PushCommitsInput): Promise<{ headSha: string }> {
+    const last = input.commits.at(-1);
+    if (!last) throw new Error('There are no commits to push.');
+    const { octokit, owner, repo } = await this.#scopedOctokit(input, WORKFLOW_PUSH_PERMISSIONS);
+    const state = await readBranchState(octokit, owner, repo, input.branch);
+    if (input.branch === state.defaultBranch || state.protected) {
+      throw new Error(`Refusing to push to ${input.branch}: it is the default or a protected branch.`);
+    }
+    if (state.headSha !== input.expectedHeadSha) {
+      throw new Error(
+        `${input.branch} moved on the remote (now ${state.headSha ?? 'missing'}, expected ${input.expectedHeadSha ?? 'missing'}). Nothing was pushed.`,
+      );
+    }
+
+    for (const [sha, content] of Object.entries(input.blobs)) {
+      const { data } = await octokit.git.createBlob({ owner, repo, content, encoding: 'base64' });
+      if (data.sha !== sha) throw new Error(`Blob ${sha} was recreated as ${data.sha}. Nothing was pushed.`);
+    }
+
+    // Git objects are content-addressed, so recreating each commit from its exact
+    // tree, parents, identities, and message yields the same SHA as in the sandbox.
+    const trees = new Map<string, string>();
+    for (const commit of input.commits) {
+      const firstParent = commit.parents[0];
+      const baseTree = firstParent
+        ? (trees.get(firstParent) ??
+          (await octokit.git.getCommit({ owner, repo, commit_sha: firstParent })).data.tree.sha)
+        : undefined;
+      let tree = baseTree;
+      if (commit.changes.length > 0 || !baseTree) {
+        const { data } = await octokit.git.createTree({
+          owner,
+          repo,
+          ...(baseTree ? { base_tree: baseTree } : {}),
+          tree: commit.changes.map(change => ({
+            path: change.path,
+            mode: change.mode as '100644',
+            type: change.type,
+            sha: change.sha,
+          })),
+        });
+        tree = data.sha;
+      }
+      if (tree !== commit.tree) {
+        throw new Error(`Tree of commit ${commit.sha} was recreated as ${tree}. Nothing was pushed.`);
+      }
+      const { data } = await octokit.git.createCommit({
+        owner,
+        repo,
+        message: commit.message,
+        tree: commit.tree,
+        parents: commit.parents,
+        author: commit.author,
+        committer: commit.committer,
+      });
+      if (data.sha !== commit.sha) {
+        throw new Error(`Commit ${commit.sha} was recreated as ${data.sha}. Nothing was pushed.`);
+      }
+      trees.set(commit.sha, commit.tree);
+    }
+
+    const changed = await changedWorkflowPaths(
+      octokit,
+      owner,
+      repo,
+      input.expectedHeadSha ?? state.defaultBranchSha,
+      last.sha,
+    );
+    const approved = [...new Set(input.approvedWorkflowFiles)].sort();
+    if (changed.length !== approved.length || changed.some((path, index) => path !== approved[index])) {
+      throw new Error(
+        `The push would change workflow files ${changed.join(', ') || '(none)'}, but ${approved.join(', ') || '(none)'} were approved. Nothing was pushed.`,
+      );
+    }
+
+    if (input.expectedHeadSha === null) {
+      await octokit.git.createRef({ owner, repo, ref: `refs/heads/${input.branch}`, sha: last.sha });
+    } else {
+      await octokit.git.updateRef({ owner, repo, ref: `heads/${input.branch}`, sha: last.sha, force: false });
+    }
+    return { headSha: last.sha };
   }
 
   async #updateReview(input: UpdateReviewInput) {
@@ -1845,6 +1915,100 @@ function parseReviewComment(comment: GithubReviewComment): ReviewComment {
     commitId: comment.commitId,
     replyToId: comment.replyToId === null ? null : String(comment.replyToId),
   };
+}
+
+const ACTIONS_READ_PERMISSIONS = { actions: 'read' } as const;
+const ACTIONS_WRITE_PERMISSIONS = { actions: 'write' } as const;
+const CONTENTS_READ_PERMISSIONS = { contents: 'read' } as const;
+const WORKFLOW_PUSH_PERMISSIONS = { contents: 'write', workflows: 'write' } as const;
+
+function httpStatus(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+function parseWorkflowRun(run: {
+  id: number;
+  name?: string | null;
+  head_branch: string | null;
+  head_sha: string;
+  event: string;
+  status: string | null;
+  conclusion: string | null;
+  html_url: string;
+}): WorkflowRun {
+  return {
+    id: run.id,
+    workflowName: run.name ?? null,
+    headBranch: run.head_branch,
+    headSha: run.head_sha,
+    event: run.event,
+    status: run.status,
+    conclusion: run.conclusion,
+    url: run.html_url,
+  };
+}
+
+/** GitHub's compare endpoint stops listing files after this many. */
+const MAX_COMPARED_FILES = 3000;
+
+/** `.github/workflows/` paths that differ between `base` and `head`, as GitHub computes them, sorted. */
+async function changedWorkflowPaths(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  base: string,
+  head: string,
+): Promise<string[]> {
+  const paths = new Set<string>();
+  let seen = 0;
+  for (let page = 1; ; page++) {
+    const { data } = await octokit.repos.compareCommitsWithBasehead({
+      owner,
+      repo,
+      basehead: `${base}...${head}`,
+      per_page: 100,
+      page,
+    });
+    const files = data.files ?? [];
+    for (const file of files) {
+      for (const path of [file.filename, file.previous_filename]) {
+        if (path?.startsWith('.github/workflows/')) paths.add(path);
+      }
+    }
+    seen += files.length;
+    if (seen >= MAX_COMPARED_FILES) {
+      throw new Error('The push changes too many files to verify its workflow changes. Nothing was pushed.');
+    }
+    if (files.length < 100) break;
+  }
+  return [...paths].sort();
+}
+
+async function readBranchState(octokit: Octokit, owner: string, repo: string, branch: string): Promise<BranchState> {
+  const { data: repository } = await octokit.repos.get({ owner, repo });
+  const defaultBranch = repository.default_branch;
+  const { data: defaultHead } = await octokit.repos.getBranch({ owner, repo, branch: defaultBranch });
+  if (branch === defaultBranch) {
+    return {
+      headSha: defaultHead.commit.sha,
+      protected: defaultHead.protected,
+      defaultBranch,
+      defaultBranchSha: defaultHead.commit.sha,
+    };
+  }
+  try {
+    const { data } = await octokit.repos.getBranch({ owner, repo, branch });
+    return {
+      headSha: data.commit.sha,
+      protected: data.protected,
+      defaultBranch,
+      defaultBranchSha: defaultHead.commit.sha,
+    };
+  } catch (error) {
+    if (httpStatus(error) !== 404) throw error;
+    return { headSha: null, protected: false, defaultBranch, defaultBranchSha: defaultHead.commit.sha };
+  }
 }
 
 function requireGithubConnection(connection: IntegrationConnection): void {

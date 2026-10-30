@@ -1208,3 +1208,431 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
     });
   });
 });
+
+describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }, () => {
+  const branch = 'factory/issue-1';
+  const roots: string[] = [];
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const gitBinary = path.join(execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(), 'git');
+  const run = (cwd: string, args: string[], input?: string, extraEnv: Record<string, string> = {}) =>
+    execFileSync(gitBinary, args, {
+      cwd,
+      encoding: 'utf8',
+      env: { ...env, ...extraEnv },
+      input,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  const run123 = {
+    id: 123,
+    workflowName: 'Test Suite',
+    headBranch: branch,
+    headSha: 'a'.repeat(40),
+    event: 'pull_request',
+    status: 'completed',
+    conclusion: 'failure',
+    url: 'https://github.com/acme/repo/actions/runs/123',
+  };
+
+  async function githubTools(
+    overrides: { run?: Partial<typeof run123> | null; branchState?: Record<string, unknown> } = {},
+  ) {
+    const setup = await fixture('github');
+    const getWorkflowRun = vi.fn(async () => (overrides.run === null ? null : { ...run123, ...overrides.run }));
+    const listWorkflowRuns = vi.fn(async () => [run123]);
+    const rerunWorkflowRun = vi.fn(async () => undefined);
+    const pushCommits = vi.fn();
+    const getBranchState = vi.fn();
+    Object.assign(setup.versionControl, {
+      getWorkflowRun,
+      listWorkflowRuns,
+      rerunWorkflowRun,
+      pushCommits,
+      getBranchState,
+    });
+    const built = await createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'github', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    return { ...setup, built, getWorkflowRun, listWorkflowRuns, rerunWorkflowRun, pushCommits, getBranchState };
+  }
+
+  const rerunInput = {
+    runId: 123,
+    workflowName: 'Test Suite',
+    headBranch: branch,
+    headSha: 'a'.repeat(40),
+    failedJobsOnly: true,
+  };
+  const beforeApproval = (tool: any, input: unknown, workspace?: unknown) =>
+    tool.beforeApproval(input, { toolCallId: 'call-1', toolName: tool.id, workspace });
+
+  it('asks a person before re-running or pushing workflow changes, but not before plain pushes or run lookups', async () => {
+    const { built } = await githubTools();
+    expect((built.source_control_rerun_workflow_run as any).requireApproval).toBe(true);
+    expect((built.source_control_push_workflow_changes as any).requireApproval).toBe(true);
+    expect((built.source_control_push_branch as any).requireApproval).toBeFalsy();
+    expect((built.source_control_list_workflow_runs as any).requireApproval).toBeFalsy();
+  });
+
+  it('lists runs of the session branch only', async () => {
+    const { built, listWorkflowRuns } = await githubTools();
+    await expect((built.source_control_list_workflow_runs!.execute as any)({})).resolves.toEqual({ runs: [run123] });
+    expect(listWorkflowRuns).toHaveBeenCalledWith(expect.objectContaining({ sourceId: 'acme/repo', branch }));
+  });
+
+  it('re-runs exactly the approved run and records it', async () => {
+    const { built, rerunWorkflowRun, emitAgent } = await githubTools();
+    const tool = built.source_control_rerun_workflow_run as any;
+    await expect(beforeApproval(tool, rerunInput)).resolves.toBeUndefined();
+    expect(rerunWorkflowRun).not.toHaveBeenCalled();
+
+    await expect(tool.execute(rerunInput, {})).resolves.toMatchObject({ rerun: true, runId: 123 });
+    expect(rerunWorkflowRun).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: 'acme/repo', runId: 123, failedJobsOnly: true }),
+    );
+    expect(emitAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          action: 'factory.agent.workflow_rerun',
+          metadata: expect.objectContaining({ runId: 123, headSha: 'a'.repeat(40) }),
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    ['a different workflow', { workflowName: 'Publish to npm' }, "workflow is 'Publish to npm'"],
+    ['a different commit', { headSha: 'b'.repeat(40) }, `head SHA is ${'b'.repeat(40)}`],
+    ['another branch', { headBranch: 'main' }, "head branch is 'main'"],
+    ['a missing run', null, 'does not exist'],
+  ])('refuses before approval when the run is %s', async (_label, run, message) => {
+    const { built, rerunWorkflowRun } = await githubTools({ run });
+    const tool = built.source_control_rerun_workflow_run as any;
+    await expect(beforeApproval(tool, rerunInput)).resolves.toEqual({
+      proceed: false,
+      output: { error: expect.stringContaining(message) },
+    });
+    await expect(tool.execute(rerunInput, {})).rejects.toThrow(message);
+    expect(rerunWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it('refuses runs of other branches even when the arguments match them', async () => {
+    const { built, rerunWorkflowRun } = await githubTools({ run: { headBranch: 'main' } });
+    const tool = built.source_control_rerun_workflow_run as any;
+    await expect(tool.execute({ ...rerunInput, headBranch: 'main' }, {})).rejects.toThrow(
+      "Only runs of this session's branch",
+    );
+    expect(rerunWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it.each(['workflow_dispatch', 'schedule', 'release'])('refuses to re-run %s runs', async event => {
+    const { built, rerunWorkflowRun } = await githubTools({ run: { event } });
+    await expect((built.source_control_rerun_workflow_run!.execute as any)(rerunInput, {})).rejects.toThrow(
+      `triggered by '${event}'`,
+    );
+    expect(rerunWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it('never runs a declined re-run', async () => {
+    const { built, rerunWorkflowRun } = await githubTools();
+    const { Agent } = await import('@mastra/core/agent');
+    const { Mastra } = await import('@mastra/core/mastra');
+    const { InMemoryStore } = await import('@mastra/core/storage');
+    const { MastraLanguageModelV2Mock } = await import('@mastra/core/test-utils/llm-mock');
+    // The factory package has no aimock dependency; a scripted model is enough to drive one approval round trip.
+    const model = new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          start(controller) {
+            for (const chunk of [
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'source_control_rerun_workflow_run',
+                input: JSON.stringify(rerunInput),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ])
+              controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
+      }),
+    });
+    const agent = new Agent({
+      id: 'rerun-agent',
+      name: 'rerun-agent',
+      instructions: 'test',
+      model: model as any,
+      tools: { source_control_rerun_workflow_run: built.source_control_rerun_workflow_run! },
+    });
+    new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+
+    const stream = await agent.stream('re-run it', { requestContext: requestContext() as any });
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) chunks.push(chunk);
+    const approval = chunks.find(chunk => chunk.type === 'tool-call-approval');
+    expect(approval?.payload).toMatchObject({ toolName: 'source_control_rerun_workflow_run', args: rerunInput });
+
+    const declined = await agent.declineToolCall({ runId: stream.runId, toolCallId: 'call-1' });
+    for await (const _ of declined.fullStream);
+    expect(rerunWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  async function checkout() {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-workflow-push-'));
+    roots.push(root);
+    const origin = path.join(root, 'origin.git');
+    const repo = path.join(root, 'repo');
+    run(root, ['init', '--bare', '--initial-branch=main', origin]);
+    run(root, ['init', '--initial-branch=main', repo]);
+    run(repo, ['config', 'user.name', 'Test']);
+    run(repo, ['config', 'user.email', 'test@example.com']);
+    run(repo, ['remote', 'add', 'origin', 'https://github.com/acme/repo.git']);
+    run(repo, ['remote', 'set-url', '--push', 'origin', origin]);
+    writeFileSync(path.join(repo, 'README.md'), 'base\n');
+    run(repo, ['add', '.']);
+    run(repo, ['commit', '-m', 'base']);
+    run(repo, ['push', 'origin', 'main']);
+    const base = run(repo, ['rev-parse', 'HEAD']);
+    run(repo, ['switch', '-c', branch]);
+    const commit = (files: Record<string, string | null>, message: string, date = '1700000000 +0230') => {
+      for (const [file, content] of Object.entries(files)) {
+        const full = path.join(repo, file);
+        if (content === null) run(repo, ['rm', '-q', file]);
+        else {
+          execFileSync('mkdir', ['-p', path.dirname(full)]);
+          writeFileSync(full, content);
+          run(repo, ['add', file]);
+        }
+      }
+      run(repo, ['commit', '-q', '-m', message], undefined, { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
+      return run(repo, ['rev-parse', 'HEAD']);
+    };
+    const sandbox = {
+      id: 'real-git',
+      provider: 'custom',
+      workingDirectory: root,
+      async executeCommand(command: string, args: string[] = [], options?: { env?: Record<string, string> }) {
+        const result = spawnSync(command === 'git' ? gitBinary : command, args, {
+          encoding: 'utf8',
+          env: { ...env, ...options?.env },
+          timeout: 10_000,
+        });
+        if (result.error) throw result.error;
+        return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+      },
+    };
+    return { root, origin, repo, base, commit, sandbox };
+  }
+
+  /**
+   * Stands in for GitHub's git data API: rebuilds every exported object in the
+   * bare origin from the exported fields alone, and fails like GitHub does when
+   * a rebuilt SHA differs or the workflow diff does not match the approval.
+   */
+  function replayInto(origin: string, base: string) {
+    return vi.fn(async (input: any) => {
+      for (const [sha, content] of Object.entries(input.blobs as Record<string, string>)) {
+        const written = execFileSync(gitBinary, ['--git-dir', origin, 'hash-object', '-w', '--stdin'], {
+          input: Buffer.from(content, 'base64'),
+          env,
+        })
+          .toString()
+          .trim();
+        expect(written).toBe(sha);
+      }
+      const index = path.join(origin, 'replay-index');
+      for (const commit of input.commits) {
+        const indexEnv = { GIT_INDEX_FILE: index };
+        run(origin, ['--git-dir', origin, 'read-tree', commit.parents[0]], undefined, indexEnv);
+        const info = commit.changes
+          .map((change: any) =>
+            change.sha === null
+              ? `0 ${'0'.repeat(40)}\t${change.path}`
+              : `${change.mode} ${change.sha}\t${change.path}`,
+          )
+          .join('\n');
+        run(origin, ['--git-dir', origin, 'update-index', '--index-info'], `${info}\n`, indexEnv);
+        expect(run(origin, ['--git-dir', origin, 'write-tree'], undefined, indexEnv)).toBe(commit.tree);
+        const rebuilt = run(
+          origin,
+          ['--git-dir', origin, 'commit-tree', commit.tree, ...commit.parents.flatMap((p: string) => ['-p', p])],
+          commit.message,
+          {
+            GIT_AUTHOR_NAME: commit.author.name,
+            GIT_AUTHOR_EMAIL: commit.author.email,
+            GIT_AUTHOR_DATE: commit.author.date,
+            GIT_COMMITTER_NAME: commit.committer.name,
+            GIT_COMMITTER_EMAIL: commit.committer.email,
+            GIT_COMMITTER_DATE: commit.committer.date,
+          },
+        );
+        expect(rebuilt).toBe(commit.sha);
+      }
+      const head = input.commits.at(-1).sha;
+      const changed = run(origin, [
+        '--git-dir',
+        origin,
+        'diff',
+        '--name-only',
+        '--no-renames',
+        input.expectedHeadSha ?? base,
+        head,
+        '--',
+        '.github/workflows/',
+      ])
+        .split('\n')
+        .filter(Boolean)
+        .sort();
+      if (JSON.stringify(changed) !== JSON.stringify([...input.approvedWorkflowFiles].sort())) {
+        throw new Error('Nothing was pushed.');
+      }
+      run(origin, ['--git-dir', origin, 'update-ref', `refs/heads/${input.branch}`, head]);
+      return { headSha: head };
+    });
+  }
+
+  async function workflowPushFixture(branchState: Partial<Record<string, unknown>> = {}) {
+    const git = await checkout();
+    const tools = await githubTools();
+    tools.getBranchState.mockImplementation(async () => {
+      let headSha: string | null = null;
+      try {
+        headSha = run(git.root, ['--git-dir', git.origin, 'rev-parse', '--verify', `refs/heads/${branch}`]);
+      } catch {
+        headSha = null;
+      }
+      return { headSha, protected: false, defaultBranch: 'main', defaultBranchSha: git.base, ...branchState };
+    });
+    tools.pushCommits.mockImplementation(replayInto(git.origin, git.base));
+    const tool = tools.built.source_control_push_workflow_changes as any;
+    const workspace = { sandbox: git.sandbox };
+    return { ...git, ...tools, tool, workspace };
+  }
+
+  it('pushes workflow changes with identical commits once the exact files are approved', async () => {
+    const { tool, workspace, commit, origin, root, pushCommits, emitAgent } = await workflowPushFixture();
+    commit({ 'src/a.ts': 'a\n' }, 'plain change');
+    const head = commit(
+      { '.github/workflows/test.yml': 'on: push\n', '.github/workflows/old.yml': 'x\n' },
+      'add workflows\n\nwith a body',
+      '1700000100 -0530',
+    );
+    const input = { headSha: head, workflowFiles: ['.github/workflows/test.yml', '.github/workflows/old.yml'] };
+
+    await expect(beforeApproval(tool, input, workspace)).resolves.toBeUndefined();
+    expect(pushCommits).not.toHaveBeenCalled();
+
+    await expect(tool.execute(input, { workspace })).resolves.toMatchObject({
+      pushed: true,
+      headSha: head,
+      workflowFiles: ['.github/workflows/old.yml', '.github/workflows/test.yml'],
+    });
+    expect(run(root, ['--git-dir', origin, 'rev-parse', `refs/heads/${branch}`])).toBe(head);
+    expect(pushCommits).toHaveBeenCalledWith(
+      expect.objectContaining({ branch, expectedHeadSha: null, approvedWorkflowFiles: input.workflowFiles }),
+    );
+    expect(pushCommits.mock.calls[0]![0].commits).toHaveLength(2);
+    expect(emitAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          action: 'factory.agent.push',
+          metadata: expect.objectContaining({ headSha: head }),
+        }),
+      }),
+    );
+
+    // A follow-up deletes one workflow file on top of the pushed head.
+    const next = commit({ '.github/workflows/old.yml': null }, 'drop old workflow');
+    await tool.execute({ headSha: next, workflowFiles: ['.github/workflows/old.yml'] }, { workspace });
+    expect(pushCommits.mock.calls[1]![0]).toMatchObject({ expectedHeadSha: head });
+    expect(pushCommits.mock.calls[1]![0].commits).toHaveLength(1);
+    expect(run(root, ['--git-dir', origin, 'rev-parse', `refs/heads/${branch}`])).toBe(next);
+  });
+
+  it.each([
+    ['a missing workflow file', ['.github/workflows/test.yml'], 'List exactly those'],
+    [
+      'an extra workflow file',
+      ['.github/workflows/test.yml', '.github/workflows/deploy.yml', '.github/workflows/publish.yml'],
+      'List exactly those',
+    ],
+  ])('refuses before approval when the list has %s', async (_label, workflowFiles, message) => {
+    const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
+    const head = commit({ '.github/workflows/test.yml': 'a\n', '.github/workflows/deploy.yml': 'b\n' }, 'two');
+    const input = { headSha: head, workflowFiles };
+    await expect(beforeApproval(tool, input, workspace)).resolves.toEqual({
+      proceed: false,
+      output: { error: expect.stringContaining(message) },
+    });
+    await expect(tool.execute(input, { workspace })).rejects.toThrow(message);
+    expect(pushCommits).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the branch moved past the approved head', async () => {
+    const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
+    const approved = commit({ '.github/workflows/test.yml': 'a\n' }, 'approved');
+    commit({ '.github/workflows/test.yml': 'b\n' }, 'sneaked in after approval');
+    await expect(
+      tool.execute({ headSha: approved, workflowFiles: ['.github/workflows/test.yml'] }, { workspace }),
+    ).rejects.toThrow('Request approval for the current head');
+    expect(pushCommits).not.toHaveBeenCalled();
+  });
+
+  it('sends commits without workflow changes back to the plain push', async () => {
+    const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
+    const head = commit({ 'src/a.ts': 'a\n' }, 'plain');
+    await expect(
+      tool.execute({ headSha: head, workflowFiles: ['.github/workflows/test.yml'] }, { workspace }),
+    ).rejects.toThrow('source_control_push_branch');
+    expect(pushCommits).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['protected', { protected: true }],
+    ['default', { defaultBranch: branch }],
+  ])('never pushes to a %s branch', async (_label, state) => {
+    const { tool, workspace, commit, pushCommits } = await workflowPushFixture(state);
+    const head = commit({ '.github/workflows/test.yml': 'a\n' }, 'wf');
+    const input = { headSha: head, workflowFiles: ['.github/workflows/test.yml'] };
+    await expect(beforeApproval(tool, input, workspace)).resolves.toMatchObject({ proceed: false });
+    await expect(tool.execute(input, { workspace })).rejects.toThrow('default or a protected branch');
+    expect(pushCommits).not.toHaveBeenCalled();
+  });
+
+  it('points the plain push at the approval-gated tool when GitHub refuses workflow changes', async () => {
+    const { built } = await githubTools();
+    const sandbox = {
+      id: 's',
+      provider: 'custom',
+      workingDirectory: '/home/user',
+      executeCommand: vi.fn(async (_command: string, args: string[]) =>
+        args.includes('push')
+          ? {
+              exitCode: 1,
+              stdout: '',
+              stderr:
+                '! [remote rejected] factory/issue-1 -> factory/issue-1 (refusing to allow a GitHub App to create or update workflow `.github/workflows/test.yml` without `workflows` permission)',
+            }
+          : { exitCode: 0, stdout: '', stderr: '' },
+      ),
+    };
+    await expect((built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } })).rejects.toThrow(
+      'source_control_push_workflow_changes',
+    );
+  });
+});

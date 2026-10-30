@@ -8,7 +8,9 @@ import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserI
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
+  changedWorkflowFiles,
   ensureLocalBranch,
+  exportBranchCommits,
   isCheckoutOf,
   pushRepositoryBranch,
   refreshMergeRequestCheckout,
@@ -227,10 +229,58 @@ async function emitAgentAudit(
   }
 }
 
+/**
+ * Run events a session may re-run. Dispatched, scheduled, and release runs can
+ * publish or deploy, so re-running them stays a human action outside Factory.
+ */
+const RERUNNABLE_EVENTS = new Set(['pull_request', 'push', 'merge_group']);
+
+/** GitHub refuses to let an App token without `workflows` touch `.github/workflows/`. */
+const WORKFLOW_PUSH_REFUSAL = /without `?workflows`? permission/i;
+
+function sameFiles(a: readonly string[], b: readonly string[]): boolean {
+  const left = [...new Set(a)].sort();
+  const right = [...new Set(b)].sort();
+  return left.length === right.length && left.every((path, index) => path === right[index]);
+}
+
+/**
+ * Validate a call before a person is asked to approve it, so the approval
+ * notice (which shows the tool arguments) never describes something other than
+ * what would run. `execute` re-runs the same check after approval.
+ */
+function refuseBeforeApproval(check: (input: any, workspace: unknown) => Promise<unknown>) {
+  return async (input: any, context: { workspace?: unknown }) => {
+    try {
+      await check(input, context.workspace);
+      return undefined;
+    } catch (error) {
+      return { proceed: false as const, output: { error: error instanceof Error ? error.message : String(error) } };
+    }
+  };
+}
+
 /** Fixed server-side so an agent cannot publish under, and impersonate, another required check. */
 export const FACTORY_TEST_CHECK_NAME = 'Factory Review / tests';
 
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
+const SHA = /^[0-9a-f]{40}$/;
+const rerunSchema = repositorySchema.extend({
+  runId: z.number().int().positive(),
+  workflowName: z.string().min(1).describe('Name of the workflow the run belongs to.'),
+  headBranch: z.string().min(1).describe('Branch the run ran on; must be the session branch.'),
+  headSha: z.string().regex(SHA).describe('Commit the run ran on.'),
+  failedJobsOnly: z.boolean().describe('Re-run only failed jobs (true) or the whole run (false).'),
+});
+type RerunInput = z.infer<typeof rerunSchema>;
+const workflowPushSchema = repositorySchema.extend({
+  headSha: z.string().regex(SHA).describe('Current head commit of the session branch.'),
+  workflowFiles: z
+    .array(z.string().min(1))
+    .min(1)
+    .describe('Every .github/workflows/ path the unpushed commits add, change, or delete.'),
+});
+type WorkflowPushInput = z.infer<typeof workflowPushSchema>;
 const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
 });
@@ -281,7 +331,175 @@ export async function createSourceControlTools({
     actingUserId: target.userId,
   });
 
+  const versionControlFor = <K extends keyof VersionControl>(target: SessionTarget, method: K) => {
+    const versionControl = target.provider.versionControl;
+    if (!versionControl[method]) {
+      throw new Error(`${target.provider.id} repositories do not support this operation in Factory.`);
+    }
+    return versionControl as VersionControl & Required<Pick<VersionControl, K>>;
+  };
+
+  const verifyRerun = async (input: RerunInput) => {
+    const target = await targetFor(input);
+    const run = await versionControlFor(target, 'getWorkflowRun').getWorkflowRun({
+      ...(await reference(target)),
+      runId: input.runId,
+    });
+    if (!run) throw new Error(`Workflow run ${input.runId} does not exist in ${target.repository.slug}.`);
+    const mismatches = [
+      run.workflowName !== input.workflowName && `workflow is '${run.workflowName}'`,
+      run.headBranch !== input.headBranch && `head branch is '${run.headBranch}'`,
+      run.headSha !== input.headSha && `head SHA is ${run.headSha}`,
+    ].filter(Boolean);
+    if (mismatches.length > 0) {
+      throw new Error(`Workflow run ${input.runId} does not match the request: its ${mismatches.join(', ')}.`);
+    }
+    if (run.headBranch !== target.session.branch) {
+      throw new Error(`Only runs of this session's branch (${target.session.branch}) can be re-run.`);
+    }
+    if (!RERUNNABLE_EVENTS.has(run.event)) {
+      throw new Error(`Runs triggered by '${run.event}' cannot be re-run from a session.`);
+    }
+    return { target, run };
+  };
+
+  const prepareWorkflowPush = async (input: WorkflowPushInput, workspace: unknown) => {
+    const target = await targetFor(input);
+    const versionControl = versionControlFor(target, 'pushCommits');
+    if (!versionControl.getBranchState) {
+      throw new Error(`${target.provider.id} repositories do not support this operation in Factory.`);
+    }
+    const sandbox = executableSandbox((workspace as { sandbox?: unknown } | undefined)?.sandbox);
+    const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
+    if (!target.ownRepository) {
+      const access = await versionControl.getRepositoryAccess({
+        orgId: target.orgId,
+        repositoryId: target.repository.id,
+      });
+      if (!(await isCheckoutOf(sandbox, workdir, access.cloneUrl))) {
+        throw new Error(`There is no checkout of ${target.repository.slug} in this session.`);
+      }
+    }
+    const branch = target.session.branch;
+    const ref = await reference(target);
+    const state = await versionControl.getBranchState({ ...ref, branch });
+    if (branch === state.defaultBranch || state.protected) {
+      throw new Error(`Refusing to push to ${branch}: it is the default or a protected branch.`);
+    }
+    await ensureLocalBranch(sandbox, workdir, branch);
+    const exported = await exportBranchCommits(sandbox, workdir, branch, {
+      fastForwardFrom: state.headSha,
+      knownRemoteCommits: [state.defaultBranchSha],
+    });
+    if (exported.headSha !== input.headSha) {
+      throw new Error(
+        `${branch} is at ${exported.headSha}, not ${input.headSha}. Request approval for the current head.`,
+      );
+    }
+    if (exported.commits.length === 0) throw new Error(`${branch} has nothing to push.`);
+    const workflowFiles = changedWorkflowFiles(exported.commits);
+    if (workflowFiles.length === 0) {
+      throw new Error('These commits do not change .github/workflows/. Push them with source_control_push_branch.');
+    }
+    if (!sameFiles(workflowFiles, input.workflowFiles)) {
+      throw new Error(
+        `The commits change these workflow files: ${workflowFiles.join(', ')}. List exactly those in workflowFiles.`,
+      );
+    }
+    return { target, versionControl, sandbox, workdir, branch, ref, state, exported, workflowFiles };
+  };
+
   return {
+    source_control_list_workflow_runs: createTool({
+      id: 'source_control_list_workflow_runs',
+      description: `List recent GitHub Actions runs of the active session branch, newest first, with the run id, workflow name, head SHA, event, status, and conclusion needed to re-run one. ${repositoryArgument}`,
+      inputSchema: repositorySchema.extend({
+        headSha: z
+          .string()
+          .regex(/^[0-9a-f]{40}$/)
+          .optional()
+          .describe('Only runs of this commit.'),
+      }),
+      execute: async input => {
+        const target = await targetFor(input);
+        return {
+          runs: await versionControlFor(target, 'listWorkflowRuns').listWorkflowRuns({
+            ...(await reference(target)),
+            branch: target.session.branch,
+            ...(input.headSha ? { headSha: input.headSha } : {}),
+          }),
+        };
+      },
+    }),
+    source_control_rerun_workflow_run: createTool({
+      id: 'source_control_rerun_workflow_run',
+      description: `Re-run a GitHub Actions run of the active session branch: only its failed jobs, or the whole run. A person must approve each call; the arguments are shown to them and must match the run exactly (get them from source_control_list_workflow_runs). Only pull_request, push, and merge_group runs of the session branch can be re-run. ${repositoryArgument}`,
+      inputSchema: rerunSchema,
+      requireApproval: true,
+      beforeApproval: refuseBeforeApproval(input => verifyRerun(input)),
+      execute: async input => {
+        const { target, run } = await verifyRerun(input);
+        await versionControlFor(target, 'rerunWorkflowRun').rerunWorkflowRun({
+          ...(await reference(target)),
+          runId: run.id,
+          failedJobsOnly: input.failedJobsOnly,
+        });
+        await emitAgentAudit(audit, requestContext, {
+          action: 'factory.agent.workflow_rerun',
+          targets: [{ type: 'repository', id: target.repository.slug }],
+          metadata: {
+            runId: run.id,
+            workflow: run.workflowName,
+            branch: run.headBranch,
+            headSha: run.headSha,
+            failedJobsOnly: input.failedJobsOnly,
+            provider: target.provider.id,
+          },
+        });
+        return { rerun: true, runId: run.id, url: run.url, failedJobsOnly: input.failedJobsOnly };
+      },
+    }),
+    source_control_push_workflow_changes: createTool({
+      id: 'source_control_push_workflow_changes',
+      description: `Push the active session branch when its unpushed commits change files under .github/workflows/, which source_control_push_branch cannot do. A person must approve each call; the arguments are shown to them. Pass the branch head SHA and exactly the workflow files the unpushed commits add, change, or delete. The commits are recreated on GitHub server-side with identical SHAs, so the branch must fast-forward the remote and commits must be unsigned. Never pushes the default or a protected branch. ${repositoryArgument}`,
+      inputSchema: workflowPushSchema,
+      requireApproval: true,
+      beforeApproval: refuseBeforeApproval((input, workspace) => prepareWorkflowPush(input, workspace)),
+      execute: async (input, { workspace }) => {
+        const { target, versionControl, sandbox, workdir, branch, ref, state, exported, workflowFiles } =
+          await prepareWorkflowPush(input, workspace);
+        const { headSha } = await versionControl.pushCommits({
+          ...ref,
+          branch,
+          expectedHeadSha: state.headSha,
+          commits: exported.commits,
+          blobs: exported.blobs,
+          approvedWorkflowFiles: input.workflowFiles,
+        });
+        // Keep the checkout's view of the remote current; git status and later plain pushes rely on it.
+        await sandbox
+          .executeCommand('git', ['-C', workdir, 'update-ref', `refs/remotes/origin/${branch}`, headSha])
+          .catch(() => undefined);
+        await target.provider.storage.sessionRepositories.upsert({
+          sessionId: target.session.sessionId,
+          projectRepositoryId: target.projectRepository.id,
+          branch,
+        });
+        updateSessionEnvironmentRepository(target.session.sessionId, target.repository.slug, { branch });
+        await emitAgentAudit(audit, requestContext, {
+          action: 'factory.agent.push',
+          targets: [{ type: 'repository', id: target.repository.slug }],
+          metadata: {
+            branch,
+            provider: target.provider.id,
+            repository: target.repository.slug,
+            headSha,
+            workflowFiles,
+          },
+        });
+        return { pushed: true, branch, repository: target.repository.slug, headSha, workflowFiles };
+      },
+    }),
     source_control_refresh_change_request_checkout: createTool({
       id: 'source_control_refresh_change_request_checkout',
       description:
@@ -338,7 +556,16 @@ export async function createSourceControlTools({
         // Materialize the session branch at the active HEAD without discarding
         // session-only commits, so the push includes the agent's current work.
         await ensureLocalBranch(sandbox, workdir, branch);
-        await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug);
+        try {
+          await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug);
+        } catch (error) {
+          if (error instanceof Error && WORKFLOW_PUSH_REFUSAL.test(error.message)) {
+            throw new Error(
+              `${error.message}\nThe session credential cannot change .github/workflows/. Push this branch with source_control_push_workflow_changes, which asks a person to approve the workflow changes.`,
+            );
+          }
+          throw error;
+        }
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,

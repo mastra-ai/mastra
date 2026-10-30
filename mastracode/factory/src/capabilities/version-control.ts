@@ -264,6 +264,78 @@ export interface CommitCheck {
   url: string | null;
 }
 
+export interface WorkflowRun {
+  id: number;
+  workflowName: string | null;
+  headBranch: string | null;
+  headSha: string;
+  event: string;
+  status: string | null;
+  conclusion: string | null;
+  url: string;
+}
+
+export interface ListWorkflowRunsInput extends RepositoryTarget {
+  branch?: string;
+  headSha?: string;
+}
+
+export interface RerunWorkflowRunInput extends RepositoryTarget {
+  runId: number;
+  /** Re-run only the failed jobs (and their dependents) instead of the whole run. */
+  failedJobsOnly: boolean;
+}
+
+export interface BranchState {
+  /** Current head of the branch, or `null` when the branch does not exist yet. */
+  headSha: string | null;
+  protected: boolean;
+  defaultBranch: string;
+  defaultBranchSha: string;
+}
+
+export interface CommitIdentity {
+  name: string;
+  email: string;
+  /** ISO 8601 with the original UTC offset, so the replayed commit keeps its SHA. */
+  date: string;
+}
+
+export interface CommitTreeChange {
+  path: string;
+  mode: string;
+  type: 'blob' | 'commit';
+  /** `null` deletes the path. */
+  sha: string | null;
+}
+
+export interface ExportedCommit {
+  sha: string;
+  tree: string;
+  parents: string[];
+  author: CommitIdentity;
+  committer: CommitIdentity;
+  message: string;
+  /** Changes against the first parent. */
+  changes: CommitTreeChange[];
+}
+
+export interface PushCommitsInput extends RepositoryTarget {
+  branch: string;
+  /** Remote head the commits build on; `null` creates the branch. */
+  expectedHeadSha: string | null;
+  /** Oldest first; every parent is either earlier in the list or already on the remote. */
+  commits: ExportedCommit[];
+  /** Base64 content of every blob the commits add or change, keyed by blob SHA. */
+  blobs: Record<string, string>;
+  /**
+   * The `.github/workflows/` paths a person approved. The provider compares the
+   * new head against the remote itself and refuses the ref update unless the
+   * workflow files it changes are exactly these.
+   */
+  approvedWorkflowFiles: string[];
+}
+
 /** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
 export interface VersionControl {
   initialize(input: { storage: SourceControlStorageHandle }): void;
@@ -316,4 +388,16 @@ export interface VersionControl {
   removeRequestedReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
   /** Optional because not every provider (or connection type) can publish commit checks. */
   publishCommitCheck?(input: PublishCommitCheckInput): Promise<CommitCheck>;
+  /**
+   * CI and privileged-push operations. Each mints its own single-repository
+   * credential server-side for exactly the permissions it needs; the credential
+   * never reaches the session sandbox. Optional because not every provider
+   * supports them.
+   */
+  listWorkflowRuns?(input: ListWorkflowRunsInput): Promise<WorkflowRun[]>;
+  getWorkflowRun?(input: RepositoryTarget & { runId: number }): Promise<WorkflowRun | null>;
+  rerunWorkflowRun?(input: RerunWorkflowRunInput): Promise<void>;
+  getBranchState?(input: RepositoryTarget & { branch: string }): Promise<BranchState>;
+  /** Recreate already-built commits on the remote and fast-forward `branch` to the last one. */
+  pushCommits?(input: PushCommitsInput): Promise<{ headSha: string }>;
 }
