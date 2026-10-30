@@ -29,6 +29,7 @@ const ACTOR = 'actor-model';
 const OBSERVER = 'observer-model';
 const CURATOR = 'curator-model';
 const REMINDER = 'reminder-model';
+const REFLECTOR = 'reflector-model';
 const THREAD = 'alpha';
 const RESOURCE = 'user-42';
 
@@ -69,7 +70,7 @@ afterAll(async () => {
   await mock.stop();
 });
 
-async function runObservedTurn(scope: 'thread' | 'resource') {
+async function runObservedTurn(scope: 'thread' | 'resource', { reflect = false } = {}) {
   mock.on({ endpoint: 'chat', model: ACTOR }, { content: 'Noted, I will plan around the Atlas launch.' });
   mock.on(
     { endpoint: 'chat', model: OBSERVER, userMessage: 'Extract structured data' },
@@ -84,11 +85,33 @@ async function runObservedTurn(scope: 'thread' | 'resource') {
           : `<observations>\n<thread id="${THREAD}">\n* 🔴 User is preparing the Project Atlas launch\n</thread>\n</observations>`,
     },
   );
+  mock.on(
+    { endpoint: 'chat', model: REFLECTOR, userMessage: 'Extract structured data' },
+    { content: JSON.stringify({ project: 'Atlas' }) },
+  );
+  mock.on(
+    { endpoint: 'chat', model: REFLECTOR },
+    { content: '<observations>\n* 🔴 Atlas launch prep\n</observations>' },
+  );
   mock.on({ endpoint: 'chat', model: CURATOR }, { content: 'Nothing new to save.' });
   mock.on({ endpoint: 'chat', model: REMINDER }, { content: '<no-reminder />' });
 
   const openai = createOpenAI({ apiKey: 'test-key', baseURL: `${mock.url}/v1` });
-  const hookContexts: Array<ObservabilityContext | undefined> = [];
+  const hookContexts: Array<{ source: string; observabilityContext?: ObservabilityContext }> = [];
+  const extractors = () => [
+    new Extractor({
+      name: 'Launch project',
+      instructions: 'Extract the project being launched.',
+      schema: z.object({ project: z.string() }),
+    }),
+    new Extractor({
+      name: 'Trace probe',
+      mode: 'hook',
+      onExtracted: ({ source, observabilityContext }) => {
+        hookContexts.push({ source, observabilityContext });
+      },
+    }),
+  ];
   const subconscious = new Subconscious({
     defaultScope: 'resource',
     observation: [
@@ -108,22 +131,11 @@ async function runObservedTurn(scope: 'thread' | 'resource') {
           model: openai.chat(OBSERVER),
           messageTokens: 20,
           bufferTokens: false,
-          extract: [
-            new Extractor({
-              name: 'Launch project',
-              instructions: 'Extract the project being launched.',
-              schema: z.object({ project: z.string() }),
-            }),
-            new Extractor({
-              name: 'Trace probe',
-              mode: 'hook',
-              onExtracted: ({ observabilityContext }) => {
-                hookContexts.push(observabilityContext);
-              },
-            }),
-          ],
+          extract: extractors(),
         },
-        reflection: { model: openai.chat(OBSERVER), observationTokens: 100_000 },
+        reflection: reflect
+          ? { model: openai.chat(REFLECTOR), observationTokens: 1, extract: extractors() }
+          : { model: openai.chat(REFLECTOR), observationTokens: 100_000 },
         experimental_subconscious: subconscious,
       },
     },
@@ -209,7 +221,32 @@ describe.each(['thread', 'resource'] as const)('%s-scoped observation hooks', { 
     expect(observerAgentRuns.every(span => span.parentSpanId === observeSpan!.id)).toBe(true);
 
     expect(hookContexts).toHaveLength(1);
-    const hookSpan = hookContexts[0]?.tracingContext?.currentSpan;
+    const hookSpan = hookContexts[0]?.observabilityContext?.tracingContext?.currentSpan;
     expect(hookSpan?.id).toBe(observeSpan!.id);
+  });
+});
+
+describe('reflection hooks', { timeout: 30_000 }, () => {
+  it('run structured extraction and hook extractors inside the memory reflect span', async () => {
+    const { hookContexts } = await runObservedTurn('thread', { reflect: true });
+
+    // The compression ladder may retry, so there can be one reflect span per attempt.
+    const reflectSpanIds = endedSpans.filter(span => span.name.startsWith('memory: reflect')).map(span => span.id);
+    expect(reflectSpanIds.length).toBeGreaterThan(0);
+    expect(
+      requestsTo(REFLECTOR).some(request => JSON.stringify(request.body).includes('Extract structured data')),
+    ).toBe(true);
+    // Reflector attempts + the structured extraction run, all inside a reflect operation.
+    const reflectorAgentRuns = endedSpans.filter(
+      span => span.type === SpanType.AGENT_RUN && span.entityId === 'observational-memory-reflector',
+    );
+    expect(reflectorAgentRuns.length).toBeGreaterThanOrEqual(2);
+    for (const run of reflectorAgentRuns) expect(reflectSpanIds).toContain(run.parentSpanId);
+
+    // The extraction run finishes last and shares the reflect span the hook receives.
+    const extractionRun = reflectorAgentRuns.at(-1)!;
+    const reflectorHook = hookContexts.find(context => context.source === 'reflector');
+    expect(reflectorHook).toBeDefined();
+    expect(reflectorHook!.observabilityContext?.tracingContext?.currentSpan?.id).toBe(extractionRun.parentSpanId);
   });
 });

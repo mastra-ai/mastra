@@ -441,7 +441,7 @@ new Extractor({
 })
 ```
 
-To trace work that `onExtracted` starts as part of the observation, spread `observabilityContext` into the agent call options. The run then appears as a child of the `memory: observe` or `memory: reflect` span instead of as a separate trace:
+To trace work that `onExtracted` starts as part of the observation, spread `observabilityContext` into the agent call options. The run is then traced as a child of the `memory: observe` or `memory: reflect` span instead of as a separate trace:
 
 ```typescript title="src/mastra/agents/agent.ts"
 new Extractor({
