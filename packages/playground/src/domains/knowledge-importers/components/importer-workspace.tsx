@@ -7,6 +7,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { Eye, Play } from 'lucide-react';
 import { useState } from 'react';
 import { entryAccount } from '../connection-name';
+import { rootLabel } from '../roots';
 import { parseCron, scheduleChoice, SCHEDULE_PRESETS } from '../schedule';
 import type { ScheduleChoice } from '../schedule';
 import {
@@ -22,6 +23,7 @@ import type { ImporterDraft } from '../settings';
 import {
   isRunActive,
   useImporterCanWrite,
+  useImporterRoots,
   useImporterRun,
   useImporterRuns,
   useImporterSummaries,
@@ -31,8 +33,10 @@ import {
 } from '../use-knowledge-importers';
 import { ImportNowDialog } from './import-now-dialog';
 import { ImporterHeader } from './importer-header';
+import { MoveRootDialog } from './move-root-dialog';
 import { OptionFields } from './option-fields';
 import { PreviewPanel } from './preview-panel';
+import { RootControl } from './root-control';
 import { RunHistory } from './run-history';
 import { SaveBar } from './save-bar';
 import { ScheduleControl } from './schedule-control';
@@ -44,6 +48,7 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
   const [baseVersion, setBaseVersion] = useState(settings.version);
   const [customPinned, setCustomPinned] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
+  const [confirmMove, setConfirmMove] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string>();
 
   const summaries = useImporterSummaries();
@@ -53,6 +58,7 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
   const reset = useResetImporterSettings(importerKey);
   const startRun = useStartImporterRun(importerKey);
   const canWrite = useImporterCanWrite();
+  const roots = useImporterRoots();
 
   // A 403 on any write means the list's canWrite was stale; trust the server.
   const readOnly =
@@ -89,7 +95,11 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
     update({ enabled: true, schedule: SCHEDULE_PRESETS.find(preset => preset.id === next)?.cron ?? cron });
   };
 
-  const handleSave = () => {
+  const showRoots = roots.length > 0 && draft.root !== undefined;
+  const moving = draft.root !== undefined && draft.root !== settings.root;
+
+  const persist = () => {
+    setConfirmMove(false);
     save.mutate(
       { ...draftToSettings(draft), expectedVersion: baseVersion },
       {
@@ -108,6 +118,8 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
       },
     );
   };
+
+  const handleSave = () => (moving ? setConfirmMove(true) : persist());
 
   const handleReset = () =>
     reset.mutate(undefined, {
@@ -223,17 +235,31 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
         </div>
       </SectionCard>
 
-      <SectionCard title="Schedule">
-        <ScheduleControl
-          choice={choice}
-          cron={cron}
-          usingDefault={draft.schedule.trim() === '' && defaultCron !== ''}
-          wasOn={settings.enabled}
-          readOnly={readOnly}
-          onChoose={choose}
-          onCronChange={schedule => update({ schedule })}
-        />
-      </SectionCard>
+      <div className={showRoots ? 'grid gap-6 lg:grid-cols-2' : 'flex flex-col'}>
+        {showRoots ? (
+          <SectionCard title="Where it lands">
+            <RootControl
+              roots={roots}
+              value={draft.root ?? ''}
+              fallbackFrom={settings.rootFallbackFrom}
+              readOnly={readOnly}
+              disabled={saving}
+              onChange={root => update({ root })}
+            />
+          </SectionCard>
+        ) : null}
+        <SectionCard title="Schedule">
+          <ScheduleControl
+            choice={choice}
+            cron={cron}
+            usingDefault={draft.schedule.trim() === '' && defaultCron !== ''}
+            wasOn={settings.enabled}
+            readOnly={readOnly}
+            onChoose={choose}
+            onCronChange={schedule => update({ schedule })}
+          />
+        </SectionCard>
+      </div>
 
       <SectionCard title="Activity">
         <RunHistory importerKey={importerKey} />
@@ -253,6 +279,13 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
           onSave={handleSave}
         />
       ) : null}
+
+      <MoveRootDialog
+        target={rootLabel(roots, draft.root ?? '')}
+        open={confirmMove}
+        onOpenChange={setConfirmMove}
+        onConfirm={persist}
+      />
 
       <ImportNowDialog
         label={summary.label}

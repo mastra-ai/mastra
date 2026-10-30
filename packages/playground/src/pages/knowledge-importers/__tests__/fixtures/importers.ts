@@ -1,4 +1,5 @@
 import type {
+  KnowledgeImporterRoot,
   KnowledgeImporterRunEvent,
   KnowledgeImporterRunSummary,
   KnowledgeImporterSummary,
@@ -140,4 +141,20 @@ export const buildRunEvent = (
     message,
     ...rest,
   };
+};
+
+/** Three roots, so a picker that hard-codes Internal/External would show up in tests. */
+export const DECLARED_ROOTS: KnowledgeImporterRoot[] = [
+  { id: 'internal', displayLabel: 'Internal', description: 'Knowledge for people inside the organization.' },
+  { id: 'external', displayLabel: 'External', description: 'Knowledge shared with customers and partners.' },
+  { id: 'partners', displayLabel: 'Partner portal' },
+];
+
+/** A Notion connection on a server that declares roots, landing under `root`. */
+export const buildRootedNotionSummary = (
+  root: string,
+  settings: Partial<KnowledgeImporterSummary['settings']> = {},
+): KnowledgeImporterSummary => {
+  const summary = buildNotionSummary();
+  return buildNotionSummary({ settings: { ...summary.settings, root, ...settings } });
 };

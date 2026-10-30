@@ -1,4 +1,5 @@
 import type {
+  KnowledgeImporterRoot,
   KnowledgeImporterRunSummary,
   KnowledgeImporterSettings,
   ListKnowledgeImporterRunEventsResponse,
@@ -44,6 +45,8 @@ function useImportersList<T>(select: (response: ListKnowledgeImportersResponse) 
 const selectSummaries = (response: ListKnowledgeImportersResponse) => response.summaries;
 const selectCanWrite = (response: ListKnowledgeImportersResponse) => response.canWrite;
 const selectConnectUrl = (response: ListKnowledgeImportersResponse) => response.connectUrl ?? undefined;
+const NO_ROOTS: KnowledgeImporterRoot[] = [];
+const selectRoots = (response: ListKnowledgeImportersResponse) => response.roots ?? NO_ROOTS;
 
 export function useImporterSummaries() {
   return useImportersList(selectSummaries);
@@ -57,6 +60,11 @@ export function useImporterCanWrite() {
 /** The project's Platform Connect settings page; undefined when the server has none configured. */
 export function useImporterConnectUrl() {
   return useImportersList(selectConnectUrl).data;
+}
+
+/** The roots the server declares, in display order; empty when it has none. */
+export function useImporterRoots() {
+  return useImportersList(selectRoots).data ?? NO_ROOTS;
 }
 
 export function useImporterRuns(importerKey: string) {

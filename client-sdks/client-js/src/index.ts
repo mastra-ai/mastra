@@ -53,6 +53,7 @@ export type {
   KnowledgeImporterSettings,
   KnowledgeImporterSummary,
   KnowledgeImporterPlacement,
+  KnowledgeImporterRoot,
   ListKnowledgeImporterConnectionsResponse,
   ListKnowledgeImporterRunEventsResponse,
   ListKnowledgeImporterRunsResponse,

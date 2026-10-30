@@ -11,6 +11,8 @@ export interface ImporterDraft {
   /** `''` keeps the env/default schedule. */
   schedule: string;
   options: Record<string, KnowledgeImporterOptionValue>;
+  /** The declared root pages land under; undefined on servers without roots, and then never sent. */
+  root: string | undefined;
 }
 
 export function draftFromSettings(settings: KnowledgeImporterSettings): ImporterDraft {
@@ -18,6 +20,7 @@ export function draftFromSettings(settings: KnowledgeImporterSettings): Importer
     enabled: settings.enabled,
     schedule: settings.schedule ?? '',
     options: settings.options,
+    root: settings.root,
   };
 }
 
@@ -27,6 +30,7 @@ export function draftToSettings(draft: ImporterDraft): Omit<SaveKnowledgeImporte
     enabled: draft.enabled,
     schedule: schedule === '' ? null : schedule,
     options: draft.options,
+    ...(draft.root === undefined ? {} : { root: draft.root }),
   };
 }
 

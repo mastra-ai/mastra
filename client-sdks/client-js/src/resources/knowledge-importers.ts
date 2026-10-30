@@ -22,6 +22,18 @@ export interface KnowledgeImporterSettings {
   updatedAt: string | null;
   updatedBy: string | null;
   source: 'saved' | 'env';
+  /** Id of the declared root this connection's pages land under; resolves to `'internal'` when unset. Absent on servers without roots. */
+  root?: string;
+  /** Set when the saved root is no longer declared: the id that was saved, now standing in as `'internal'`. */
+  rootFallbackFrom?: string;
+}
+
+/** A top-level area under the organization that imported pages land in, e.g. Internal or External. */
+export interface KnowledgeImporterRoot {
+  /** Stable slug, e.g. `internal`. */
+  id: string;
+  displayLabel: string;
+  description?: string;
 }
 
 export type KnowledgeImporterConnectionStatus = 'ok' | 'needs_reauth' | 'error';
@@ -100,6 +112,8 @@ export interface ListKnowledgeImportersResponse {
   canWrite: boolean;
   /** The project's Platform Connect settings page (an `https://` URL), or null when the server has none configured. */
   connectUrl: string | null;
+  /** Declared roots in display order. Absent on servers without roots. */
+  roots?: KnowledgeImporterRoot[];
 }
 
 export interface KnowledgeImporterConnection {
@@ -117,6 +131,8 @@ export interface SaveKnowledgeImporterSettingsParams {
   enabled: boolean;
   schedule: string | null;
   options: Record<string, KnowledgeImporterOptionValue>;
+  /** A declared root id; an undeclared one is rejected with 400 `unknown_root`. Takes effect on the next run. */
+  root?: string;
   expectedVersion: number;
 }
 
