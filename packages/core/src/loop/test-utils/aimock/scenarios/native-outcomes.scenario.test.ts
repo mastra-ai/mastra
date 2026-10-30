@@ -7,6 +7,7 @@ import { createScorer } from '../../../../evals';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { SCENARIO_MODEL_ID } from '../types';
 import { SamplingStrategyType, SpanType, TracingEventType } from '../../../../observability';
+import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runApprovalScenario, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { captureOutcomeEvents as capture } from '../outcome-test-utils';
@@ -249,6 +250,38 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       expect(ended(type).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'timeout' });
     }
   });
+
+  // The durable engines keep the caller's deadline running until the run ends, so it reports the
+  // timeout and the run must end as it. The plain loop has already finished its stream by then.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'reports a deadline that expires while the run is finishing as a limit',
+    async () => {
+      const { observability, ended } = capture();
+      const slowFinish: Processor = {
+        id: 'slow-finish',
+        processOutputResult: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Quick answer',
+        errorProcessors: [],
+        maxRetries: 0,
+        outputProcessors: [slowFinish],
+        modelSettings: { timeout: { totalMs: 1500 } },
+        fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'quick answer' }),
+      });
+      expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+      expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    },
+  );
 
   it('reports a deadline hit during a tool call as a limit', async () => {
     const { observability, ended } = capture();
