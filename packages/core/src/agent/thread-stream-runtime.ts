@@ -6192,11 +6192,13 @@ export class AgentThreadStreamRuntime {
         if (isSuperseded(data.runId, data.generation)) return;
         noteGeneration(data.runId, data.streamId, data.generation, false);
         if (
+          deferredRunsByStreamId.has(data.streamId) ||
           state.activeThreadRunIds.get(key) !== data.runId ||
           state.activeThreadStreamIds.get(key) !== data.streamId
         ) {
           // A run deferred because its lease read failed or timed out turns out to be live: stream it now
-          // instead of buffering every part until its terminal event.
+          // instead of buffering every part until its terminal event. The deferral is per subscriber, so
+          // check it even when another subscriber in this process already marked the run active.
           const live = await markActiveIfLive(data.runId, data.streamId, false);
           const deferredRecord = deferredRunsByStreamId.get(data.streamId);
           if (live && deferredRecord) {

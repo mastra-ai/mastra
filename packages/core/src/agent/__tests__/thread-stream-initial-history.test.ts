@@ -233,6 +233,36 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  // Deferral is per subscriber: a healthy subscriber marking the run active must not stop a second
+  // subscriber in the same process, whose lease read failed, from promoting its deferred run.
+  it('streams a live remote run to a second subscriber whose first lease read failed', async () => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    await run.part({ type: 'text-delta', payload: { text: 'before' } });
+    const first = await subscribe();
+    await nextTicks(10);
+    vi.spyOn(pubsub, 'getLeaseOwner').mockRejectedValueOnce(new Error('Lease unavailable'));
+    const second = await subscribe();
+    try {
+      await run.part({ type: 'text-delta', payload: { text: ' live' } });
+      await nextTicks(10);
+      const texts = (collected: any[]) => collected.filter(p => p.type === 'text-delta').map(p => p.payload.text);
+      expect(texts(first.collected)).toEqual(['before', ' live']);
+      expect(texts(second.collected)).toEqual(['before', ' live']);
+      await run.part({ type: 'finish', payload: {} });
+      await run.completed();
+      await nextTicks(10);
+      expect(second.collected.filter(p => p.type === 'text-delta')).toHaveLength(2);
+      expect(second.collected.filter(p => p.type === 'finish')).toHaveLength(1);
+    } finally {
+      first.subscription.unsubscribe();
+      second.subscription.unsubscribe();
+      await Promise.all([first.consumed, second.consumed]);
+    }
+  });
+
   // A read that never settles (say, a command lost on a dropped connection) must not make later checks skip
   // the backend for good: after one lease TTL they ask again, and a live run streams.
   it('asks the backend again once a never-settling lease read is a lease TTL old', async () => {
