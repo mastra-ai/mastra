@@ -53,7 +53,7 @@ describe('PinnedStateProcessor', () => {
     const preamble = result.systemMessages.at(-1).content as string;
     expect(preamble).toContain('the ref to read it by and how many notes it has, then its full current body');
     expect(preamble).toContain('Do not knowledge_search or knowledge_read a pinned page to confirm it');
-    expect(preamble).toContain('read it with knowledge_read using that ref');
+    expect(preamble).toContain('having notes is not by itself a reason to read it');
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toMatch(
       /^Use the Knowledge tools.*Pinned knowledge pages may already be in your context if <pinned-knowledge> tags are present/,
     );
