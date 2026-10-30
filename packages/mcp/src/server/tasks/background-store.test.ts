@@ -382,9 +382,14 @@ describe('BackgroundTaskMCPTaskStore', () => {
       'metadata' in change ? Promise.resolve(false) : update(id, change, options),
     );
 
-    await expect(store.update(task.taskId, { who: { action: 'accept', content: {} } }, access)).rejects.toThrow(
-      'Could not store the input responses',
+    const refused = await store.update(task.taskId, { who: { action: 'accept', content: {} } }, access).then(
+      () => undefined,
+      (error: Error) => error,
     );
+    expect(refused?.message).toContain('Could not store the input responses');
+    // The task id is a bearer token: the error names the task by its key only.
+    expect(refused?.message).toContain(taskKeyOf(task.taskId));
+    expect(refused?.message).not.toContain(task.taskId);
     expect(await store.get(task.taskId, access)).toMatchObject({
       status: 'input_required',
       inputRequests: { who: {} },

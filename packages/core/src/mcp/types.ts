@@ -536,9 +536,7 @@ export interface MCPServerTaskSummary {
 }
 
 /**
- * Lists, cancels and answers a server's MCP tasks in-process, for Studio. Cancel and answer
- * run through the same task-store code as `tasks/cancel` and `tasks/update`.
- * There is no MCP protocol equivalent of `list`.
+ * Filters and paging for {@link MCPServerTasksInspector.list}. Every filter narrows the result.
  * @experimental
  */
 export interface MCPServerTasksListParams {

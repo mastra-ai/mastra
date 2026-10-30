@@ -69,6 +69,13 @@ describe('ToolBadge MCP task chip', () => {
       expect(chip()?.textContent).toContain('task · working · 0:42');
     });
 
+    it('shows no elapsed time when the server sent a createdAt the browser cannot read', () => {
+      render(badge({ result: [{ ...progress('working'), createdAt: '20261027T120000Z' }], status: 'running' }));
+
+      expect(chip()?.textContent).toContain('task · working · --:--');
+      expect(chip()?.textContent).not.toContain('NaN');
+    });
+
     it('keeps the elapsed time ticking while it works', () => {
       render(badge({ result: [progress('working')], status: 'running' }));
 

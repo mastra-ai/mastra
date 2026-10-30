@@ -430,7 +430,8 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
   }
 
   async update(taskId: string, inputResponses: MCPTaskInputResponses, access: MCPTaskAccess): Promise<boolean> {
-    return (await this.#update(taskKeyOf(taskId), inputResponses, `"${taskId}"`, access)) !== 'not_found';
+    const taskKey = taskKeyOf(taskId);
+    return (await this.#update(taskKey, inputResponses, `with key "${taskKey}"`, access)) !== 'not_found';
   }
 
   async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {

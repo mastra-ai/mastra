@@ -27,6 +27,8 @@ function useClock(endedAt: number | undefined) {
 }
 
 const formatElapsed = (ms: number) => {
+  // A server may send a valid ISO 8601 `createdAt` that `Date.parse` can't read, like `20261029T120000Z`.
+  if (Number.isNaN(ms)) return '--:--';
   const seconds = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 };
