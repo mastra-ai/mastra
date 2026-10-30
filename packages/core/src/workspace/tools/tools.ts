@@ -300,8 +300,18 @@ function wrapWithReadTracker(
       // optimistic-concurrency mtime for write tools.
       const writePaths: string[] = getWritePaths ? getWritePaths(input) : [input.path];
       if (mode === 'write' && fs) {
+        // Both the read-first gate and the optimistic-concurrency mtime check
+        // follow requireReadBeforeWrite: unset or false skips them. A dynamic
+        // function that throws resolves to true (fail-closed).
+        const shouldRequireRead =
+          config.requireReadBeforeWrite !== undefined &&
+          (await resolveDynamicValue(
+            config.requireReadBeforeWrite,
+            { args: input, requestContext: enrichedContext.requestContext ?? {}, workspace: effectiveWorkspace },
+            true,
+          ));
         const expectedMtimes: Record<string, Date> = {};
-        for (const path of writePaths) {
+        for (const path of shouldRequireRead ? writePaths : []) {
           // Optimistic concurrency: attach the mtime from the last read
           // *before* stat so it's preserved even when the file has been
           // deleted externally (stat throws FileNotFoundError). Records from a
@@ -315,20 +325,9 @@ function wrapWithReadTracker(
             const stat = await fs.stat(path);
 
             // Policy gate: require the agent to have read the file first.
-            // Only evaluate when explicitly configured (opt-in policy).
-            // Safe default true = fail-closed if a dynamic function throws.
-            if (config.requireReadBeforeWrite !== undefined) {
-              const shouldRequireRead = await resolveDynamicValue(
-                config.requireReadBeforeWrite,
-                { args: input, requestContext: enrichedContext.requestContext ?? {}, workspace: effectiveWorkspace },
-                true,
-              );
-              if (shouldRequireRead) {
-                const check = await readTracker.needsReRead(path, stat.modifiedAt, scope);
-                if (check.needsReRead) {
-                  throw new FileReadRequiredError(path, check.reason!);
-                }
-              }
+            const check = await readTracker.needsReRead(path, stat.modifiedAt, scope);
+            if (check.needsReRead) {
+              throw new FileReadRequiredError(path, check.reason!);
             }
           } catch (error) {
             if (!(error instanceof FileNotFoundError)) {
@@ -486,9 +485,8 @@ export async function createWorkspaceTools(
       timeoutMs: toolsConfig?.writeLockTimeoutMs,
     }));
 
-  // Shared read tracker — always active so optimistic concurrency (mtime
-  // checking) works on every write, regardless of the requireReadBeforeWrite
-  // policy setting. The agent provides a thread-scoped, storage-backed
+  // Shared read tracker — records reads so the requireReadBeforeWrite policy
+  // (read-first gate and mtime checking) can be enforced. The agent provides a thread-scoped, storage-backed
   // tracker when it has thread identity and Mastra storage (records survive
   // suspend/resume, later turns, and process restarts); otherwise tracking
   // is per-run.
