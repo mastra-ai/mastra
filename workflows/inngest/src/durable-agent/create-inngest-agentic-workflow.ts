@@ -576,16 +576,18 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // reaches this worker either through the caller's composed signal (same process) or as a
           // timeout abort request over pubsub (another worker). A worker that saw neither still has the
           // deadline carried on request context: past it, the caller has already reported the timeout.
-          const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
-          const carriedDeadline = readRunDeadline(requestContext);
-          const deadlineError =
-            isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total'
+          const resolveDeadlineError = () => {
+            const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
+            const carriedDeadline = readRunDeadline(requestContext);
+            return isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total'
               ? abortReason
               : state.deadlineTimeout
                 ? new MastraTimeoutError(state.deadlineTimeout)
                 : carriedDeadline && Date.now() >= carriedDeadline.at
                   ? new MastraTimeoutError({ timeoutType: 'total', timeoutMs: carriedDeadline.timeoutMs })
                   : undefined;
+          };
+          const sideEffectsDeadlineError = resolveDeadlineError();
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
@@ -609,7 +611,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
-              finishReason: deadlineError
+              finishReason: sideEffectsDeadlineError
                 ? 'error'
                 : state.runAborted
                   ? 'abort'
@@ -617,6 +619,9 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               steps: state.accumulatedSteps,
             },
           });
+          // The deadline can expire while the side effects run; the caller has then already
+          // reported the timeout, so the run must end as it here too.
+          const deadlineError = sideEffectsDeadlineError ?? resolveDeadlineError();
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;
