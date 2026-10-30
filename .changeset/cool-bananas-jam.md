@@ -13,4 +13,4 @@
 '@mastra/pg': patch
 ---
 
-Fixed a late background task write overwriting a newer suspension. A write meant for an earlier suspension of a task is now rejected instead of replacing the later one. The adapter supports the new `expectedSuspendedAt` update condition.
+Fixed a late background task write overwriting a newer suspension. A write meant for an earlier suspension of a task is now rejected instead of replacing the later one. Background task updates in this storage adapter now support the `expectedSuspendedAt` condition.

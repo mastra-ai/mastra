@@ -17,13 +17,9 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "GLM-5.2": [
+    "GLM-5.1": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "MiniMax-M3": [
@@ -35,9 +31,13 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "GLM-5.1": [
+    "GLM-5.2": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }
