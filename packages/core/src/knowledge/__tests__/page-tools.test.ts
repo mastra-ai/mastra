@@ -40,6 +40,7 @@ const scopes: KnowledgeScopeDeclarations = {
       { principal: 'org:$orgId', role: 'viewer' },
     ],
   },
+  'team-public:acme:ops': { access: [{ principal: 'team:acme:ops', role: 'owner' }] },
   'account:$orgId:$accountId': {
     access: [
       { principal: 'role:$orgId:support', role: 'viewer' },
@@ -249,6 +250,63 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     await expect(user.page({ op: 'move', page: 'Scratch plan', scope: 'org:acme' })).rejects.toThrow(
       /needs owner on "org:acme"; this run has editor/,
     );
+  });
+
+  describe('merging across scopes needs owner on the target scope, like a move', () => {
+    const alex = () => as('alex', ['org:acme', 'agent:acme:alex', 'team:acme:support', 'team:acme:ops']);
+
+    const seed = async (targetScope: string) => {
+      const draft = await alex().page({ op: 'write', scope: 'agent:acme:alex', key: 'draft', name: 'Draft' });
+      const child = await alex().page({
+        op: 'write',
+        scope: 'agent:acme:alex',
+        parent: 'Draft',
+        name: 'Secret child',
+        body: 'Private.',
+      });
+      const overview = await alex().page({ op: 'write', scope: targetScope, key: 'overview', name: 'Overview' });
+      return { draft: draft.page, child: child.page, overview: overview.page };
+    };
+
+    it('refuses a merge into a scope the run only edits, by id, key path or name, and moves nothing', async () => {
+      const { draft, child, overview } = await seed('team-public:acme:support');
+      await expect(alex().page({ op: 'move', page: 'Draft', scope: 'team-public:acme:support' })).rejects.toThrow(
+        /needs owner on "team-public:acme:support"; this run has editor/,
+      );
+      for (const [page, into] of [
+        [draft.id, overview.id],
+        ['agent:acme:alex#draft', 'team-public:acme:support#overview'],
+        ['Draft', 'Overview'],
+      ]) {
+        await expect(alex().page({ op: 'merge', page, into })).rejects.toThrow(
+          /needs owner on "team-public:acme:support"; this run has editor/,
+        );
+      }
+      expect((await alex().read('Secret child')).page.scope).toBe('agent:acme:alex');
+      expect((await alex().read('Draft')).page.id).toBe(draft.id);
+      expect((await sales().search('Secret')).results).toEqual([]);
+      expect((await sales().read('Overview')).page.id).toBe(overview.id);
+      expect(child.id).toBeDefined();
+    });
+
+    it('allows the merge when the run owns the target scope', async () => {
+      const { child, overview } = await seed('team-public:acme:ops');
+      const merged = await alex().page({ op: 'merge', page: 'Draft', into: 'Overview' });
+      expect(merged.page.id).toBe(overview.id);
+      expect((await alex().read(child.id)).page.scope).toBe('team-public:acme:ops');
+    });
+
+    it('within one scope still needs owner on the source and editor on the target', async () => {
+      await support().page({ op: 'write', scope: 'team-public:acme:support', name: 'Old FAQ' });
+      await support().page({ op: 'write', scope: 'team-public:acme:support', name: 'FAQ' });
+      await expect(support().page({ op: 'merge', page: 'Old FAQ', into: 'FAQ' })).rejects.toThrow(
+        /Merging a page away needs owner on "team-public:acme:support"; this run has editor/,
+      );
+      await alex().page({ op: 'write', scope: 'agent:acme:alex', name: 'Scratch' });
+      await alex().page({ op: 'write', scope: 'agent:acme:alex', name: 'Notes' });
+      const merged = await alex().page({ op: 'merge', page: 'Scratch', into: 'Notes' });
+      expect(merged.page.name).toBe('Notes');
+    });
   });
 
   it('9: a concrete feature share lets eng edit and support only contribute stamped notes', async () => {

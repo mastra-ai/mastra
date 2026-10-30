@@ -424,7 +424,13 @@ function pageTool(host: KnowledgePageToolHost) {
       if (!args.into) throw new Error('Merging needs into: the page that remains.');
       const target = await run.page(args.into);
       await run.require(home, 'owner', 'Merging a page away');
-      await run.require(await run.scopeOf(target), 'editor', 'Merging into a page');
+      const targetHome = await run.scopeOf(target);
+      // Merging carries the source's child pages into the target's scope, so across scopes it is a move.
+      await run.require(
+        targetHome,
+        targetHome.id === home.id ? 'editor' : 'owner',
+        targetHome.id === home.id ? 'Merging into a page' : 'Merging a page across scopes',
+      );
       const merged = await storage.mergePages({
         sourceId: page.id,
         sourceVersion: args.expectedVersion ?? page.version,
