@@ -1357,7 +1357,7 @@ export class MastraFactory {
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
           skills: this.#skills,
-          skillOverrides: skillOverridesStorage,
+          ...(storage.isDomainReady('skill-overrides') ? { skillOverrides: skillOverridesStorage } : {}),
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           sourceControls: integrations.flatMap(integration =>
