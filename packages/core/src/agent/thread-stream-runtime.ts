@@ -119,11 +119,6 @@ function describeThreadKey(key: string): string {
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /**
- * Per-attempt window for a claimed thread owner to answer a discovery request.
- * Kept short because the claim path waits out the full window whenever no owner
- * exists. Overridable via `MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS`.
- */
-/**
  * Per-attempt window for a thread lease owner to acknowledge a forwarded signal.
  * Overridable via `MASTRA_AGENT_THREAD_SIGNAL_ACCEPTANCE_TIMEOUT_MS`.
  */
@@ -131,6 +126,11 @@ const AGENT_THREAD_SIGNAL_ACCEPTANCE_TIMEOUT_MS = readPositiveIntEnv(
   'MASTRA_AGENT_THREAD_SIGNAL_ACCEPTANCE_TIMEOUT_MS',
   500,
 );
+/**
+ * Per-attempt window for a claimed thread owner to answer a discovery request.
+ * Kept short because the claim path waits out the full window whenever no owner
+ * exists. Overridable via `MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS`.
+ */
 const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = readPositiveIntEnv(
   'MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS',
   100,
