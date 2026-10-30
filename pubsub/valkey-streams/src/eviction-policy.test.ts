@@ -31,7 +31,7 @@ async function startValkey(policy: string): Promise<string> {
         '-d',
         '--rm',
         '-p',
-        `${port}:6379`,
+        `127.0.0.1:${port}:6379`,
         'valkey/valkey:8-alpine',
         'valkey-server',
         '--maxmemory',
@@ -47,7 +47,10 @@ async function startValkey(policy: string): Promise<string> {
   for (;;) {
     const ready = await new Promise<boolean>(resolve => {
       const socket = net.connect(port, 'localhost');
+      // Docker's port proxy can accept and then close before the server is up.
+      socket.setTimeout(1_000, () => socket.destroy());
       socket.once('error', () => resolve(false));
+      socket.once('close', () => resolve(false));
       socket.once('data', data => {
         socket.destroy();
         resolve(data.toString().startsWith('+PONG'));

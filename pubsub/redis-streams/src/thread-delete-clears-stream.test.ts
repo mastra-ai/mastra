@@ -91,13 +91,16 @@ describe('Memory.deleteThread clears the thread event stream in Redis', () => {
     const thread = await memory.createThread({ resourceId: 'user-1', threadId: `thread-${randomUUID()}` });
 
     // settled() is what shutdown and storage-close paths await, so it must not wait either.
-    const deleted = memory
-      .deleteThread(thread.id)
-      .then(() => memory.settled())
-      .then(() => 'deleted');
-    const timedOut = new Promise(resolve => setTimeout(() => resolve('timed out'), 2_000));
-    expect(await Promise.race([deleted, timedOut])).toBe('deleted');
-    expect(await memory.getThreadById({ threadId: thread.id })).toBeNull();
-    client.destroy();
+    try {
+      const deleted = memory
+        .deleteThread(thread.id)
+        .then(() => memory.settled())
+        .then(() => 'deleted');
+      const timedOut = new Promise(resolve => setTimeout(() => resolve('timed out'), 2_000));
+      expect(await Promise.race([deleted, timedOut])).toBe('deleted');
+      expect(await memory.getThreadById({ threadId: thread.id })).toBeNull();
+    } finally {
+      client.destroy();
+    }
   }, 10_000);
 });

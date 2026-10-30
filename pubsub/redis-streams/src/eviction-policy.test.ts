@@ -21,7 +21,7 @@ async function startRedis(policy: string): Promise<string> {
         '-d',
         '--rm',
         '-p',
-        `${port}:6379`,
+        `127.0.0.1:${port}:6379`,
         'redis:8-alpine',
         'redis-server',
         '--maxmemory',
