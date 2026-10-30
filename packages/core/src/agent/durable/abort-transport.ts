@@ -194,12 +194,6 @@ export async function ensureRemoteAbortListener(
     if (!setRunRegistryEntry(runId, entry, mastra)) return;
   }
 
-  if (entry.remoteAbortListenerInstalled) return;
-
-  // Claim before awaiting: two steps starting concurrently in this process
-  // would otherwise both pass the check and install duplicate subscriptions.
-  entry.remoteAbortListenerInstalled = true;
-
   // The owner process already has a controller wired to its `abort()`. A worker
   // rebuilding state from storage has none, so give it one — flipping it is
   // what actually stops the model call.
@@ -208,6 +202,18 @@ export async function ensureRemoteAbortListener(
     entry.abortController = controller;
     entry.abortSignal = controller.signal;
   }
+
+  // The deadline's abort request is published once, live. A worker that subscribes after it went
+  // out never hears it, so the run's deadline also travels with the run and is armed here. It is
+  // armed whether or not the subscription below succeeds, and re-armed when a resumed segment
+  // on a warm worker carries a new deadline.
+  syncRunDeadline(entry, deadline);
+
+  if (entry.remoteAbortListenerInstalled) return;
+
+  // Claim before awaiting: two steps starting concurrently in this process
+  // would otherwise both pass the check and install duplicate subscriptions.
+  entry.remoteAbortListenerInstalled = true;
 
   let unsubscribe: () => Promise<void>;
   try {
@@ -228,19 +234,38 @@ export async function ensureRemoteAbortListener(
   // Chain onto the entry's existing cleanup rather than replacing it: the
   // registry's dispose hook only calls `cleanup()`, and other owners of the
   // entry have their own teardown registered there.
-  // The deadline's abort request is published once, live. A worker that subscribes after it went
-  // out never hears it, so the run's deadline also travels with the run and is armed here.
-  const deadlineTimer = deadline ? armRunDeadline(entry, deadline) : undefined;
-
   const previousCleanup = entry.cleanup;
   entry.cleanup = () => {
     try {
       previousCleanup?.();
     } finally {
-      clearTimeout(deadlineTimer);
       void unsubscribe();
     }
   };
+}
+
+/** The deadline each entry currently has armed, so a later segment can replace it. */
+const armedDeadlines = new WeakMap<RunRegistryEntry, { at: number; timer?: ReturnType<typeof setTimeout> }>();
+
+/** Arm the entry's deadline, replacing a timer armed for a different deadline. */
+function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefined): void {
+  if (!deadline) return;
+  const armed = armedDeadlines.get(entry);
+  if (armed?.at === deadline.at) return;
+  if (armed) {
+    clearTimeout(armed.timer);
+  } else {
+    const previousCleanup = entry.cleanup;
+    entry.cleanup = () => {
+      try {
+        previousCleanup?.();
+      } finally {
+        clearTimeout(armedDeadlines.get(entry)?.timer);
+        armedDeadlines.delete(entry);
+      }
+    };
+  }
+  armedDeadlines.set(entry, { at: deadline.at, timer: armRunDeadline(entry, deadline) });
 }
 
 /**

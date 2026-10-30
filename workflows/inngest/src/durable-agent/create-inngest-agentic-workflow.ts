@@ -45,7 +45,7 @@ import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
-import { agentLoopTermination, generationUsage } from '../observability-compat';
+import { agentLoopTermination, executionFailureTermination, generationUsage } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
@@ -561,13 +561,15 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             messageId: state.messageId,
             stepResult: tripwire
               ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
-              : state.runAborted
-                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
-                : state.lastStepResult || {
-                    reason: 'stop',
-                    warnings: [],
-                    isContinued: false,
-                  },
+              : deadlineError
+                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'error' as const, isContinued: false }
+                : state.runAborted
+                  ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
+                  : state.lastStepResult || {
+                      reason: 'stop',
+                      warnings: [],
+                      isContinued: false,
+                    },
             output: {
               text: finalText,
               usage: state.accumulatedUsage,
@@ -584,6 +586,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const observability = mastra?.observability?.getSelectedInstance({});
           // Resumed segments carry their own clocks beside their fresh spans.
           const registry = getRunRegistryEntry(state.runId, mastra);
+          // A tripwire keeps its own classification; otherwise a deadline-stopped run ends its spans as
+          // the timeout failure rather than a normal loop finish.
+          const deadlineTermination =
+            deadlineError && !tripwire ? executionFailureTermination(deadlineError) : undefined;
           const completionClock = registry?.resumeModelSpanData
             ? registry.resumeCompletionStartTime
             : state.completionStartTime;
@@ -610,15 +616,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             );
             const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...(deadlineTermination
+                ? deadlineTermination
+                : ['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                  ? registry.tracingTermination
+                  : agentLoopTermination({
+                      stopCause: registry?.tracingStopCause,
+                      delegationFailure: registry?.tracingDelegationFailure,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: state.options?.maxSteps ?? maxSteps,
+                    })),
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
@@ -636,15 +644,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               registry?.agentSpan ??
               observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...(deadlineTermination
+                ? deadlineTermination
+                : ['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                  ? registry.tracingTermination
+                  : agentLoopTermination({
+                      stopCause: registry?.tracingStopCause,
+                      delegationFailure: registry?.tracingDelegationFailure,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: state.options?.maxSteps ?? maxSteps,
+                    })),
               output: { text: finalText },
               ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });

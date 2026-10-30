@@ -250,6 +250,47 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     }
   });
 
+  it('reports a deadline hit during a tool call as a limit', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      maxSteps: 3,
+      modelSettings: { timeout: { totalMs: 1500 } },
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up an order',
+          inputSchema: z.object({}),
+          execute: async (_input, context) => {
+            await new Promise<void>(resolve => {
+              const timer = setTimeout(resolve, 4000);
+              context?.abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return { status: 'shipped' };
+          },
+        }),
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+    });
+    expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+  });
+
   it.each([401, 403])('reports a provider access denial (%s) as blocked', async status => {
     const { observability, ended } = capture();
     await runLoopScenario({

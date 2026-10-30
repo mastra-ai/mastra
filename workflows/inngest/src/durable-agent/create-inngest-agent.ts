@@ -942,8 +942,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     const deadline = timeoutMs !== undefined && timeoutMs > 0 ? { at: Date.now() + timeoutMs, timeoutMs } : undefined;
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
-      // A step running on another worker only sees this process's abort through pubsub.
-      await requestRemoteAbort(runId, error);
+      // A step running on another worker only sees this process's abort through pubsub. Not
+      // awaited: a slow publish must not hold back the caller's error.
+      void requestRemoteAbort(runId, error);
       // The worker owns span finalization and accumulated usage/output (OBS-754).
       // Ending caller copies here races that finalization.
       await emitError(runId, error);

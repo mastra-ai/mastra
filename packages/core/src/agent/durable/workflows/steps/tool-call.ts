@@ -1431,14 +1431,14 @@ export function createDurableToolCallStep() {
 
       // A tool step can run on a worker whose LLM step ran elsewhere, so it subscribes to abort
       // requests too. Otherwise a deadline or abort() published while the tool runs never reaches it.
-      // Only a real entry: a cold worker without one keeps no registry state. Keyed on the subscription,
-      // not the signal, so a step whose subscribe failed earlier retries it. The listener reuses the
-      // entry's controller; a signal with no controller behind it would be replaced, so leave it alone.
+      // Only a real entry: a cold worker without one keeps no registry state. Called on every tool
+      // step rather than keyed on the signal: a step whose subscribe failed earlier retries it, and a
+      // warm worker re-arms the deadline this segment carries. The listener reuses the entry's
+      // controller; a signal with no controller behind it would be replaced, so leave it alone.
       if (
         pubsub &&
         registryEntry &&
         !registryEntry.isPlaceholder &&
-        !registryEntry.remoteAbortListenerInstalled &&
         (!registryEntry.abortSignal || registryEntry.abortController)
       ) {
         try {
