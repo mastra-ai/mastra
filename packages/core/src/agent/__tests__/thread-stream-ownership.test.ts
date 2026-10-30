@@ -775,6 +775,10 @@ describe('thread ownership (#24878)', () => {
       const stream = (agent as any).stream;
       expect(stream).toHaveBeenCalledTimes(1);
       expect(stream.mock.calls[0][1].runId).toBe(accepted.runId);
+      // The follow-up run received the admitted signal itself, not just some run.
+      expect(stream.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ id: result.signal.id, contents: 'admitted then ended' }),
+      );
       expect(ownerRuntime.drainPendingSignals('remote-ending', pubsub)).toEqual([]);
       subscription.unsubscribe();
       ownerSubscription.unsubscribe();

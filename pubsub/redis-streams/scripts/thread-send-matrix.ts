@@ -16,7 +16,7 @@
  *
  * Outcome per run: pass (model saw message 2), lost (sendMessage settled but
  * the model never saw message 2), hung (no settle within 15 s), rejected.
- * Requires redis-server on PATH. Ports BASE_PORT (default 6391) .. +lanes-1.
+ * Requires redis-server and redis-cli on PATH. Ports BASE_PORT (default 6391) .. +lanes-1.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -37,8 +37,11 @@ function startRedis(port: number): ChildProcess {
   return spawn('redis-server', ['--port', String(port), '--save', '', '--appendonly', 'no'], { stdio: 'ignore' });
 }
 
-const redisAnswers = (port: number) =>
-  spawnSync('redis-cli', ['-p', String(port), 'ping'], { encoding: 'utf8' }).stdout.trim() === 'PONG';
+const redisAnswers = (port: number) => {
+  const result = spawnSync('redis-cli', ['-p', String(port), 'ping'], { encoding: 'utf8' });
+  if (result.error) throw new Error(`redis-cli failed (is it on PATH?): ${result.error.message}`);
+  return result.stdout.trim() === 'PONG';
+};
 
 async function waitForRedis(port: number) {
   for (let i = 0; i < 200; i++) {
@@ -147,7 +150,20 @@ if (process.argv.includes('--run')) {
           );
           let out = '';
           child.stdout.on('data', d => (out += d));
-          child.on('exit', () => resolve(JSON.parse(out.trim().split('\n').pop()!)));
+          // A lane that crashes or prints no valid result still counts: one error per run.
+          child.on('exit', code => {
+            let outcomes: unknown;
+            try {
+              outcomes = JSON.parse(out.trim().split('\n').pop() ?? '');
+            } catch {
+              outcomes = undefined;
+            }
+            resolve(
+              code === 0 && Array.isArray(outcomes) && outcomes.length === runs
+                ? (outcomes as string[])
+                : Array.from({ length: runs }, () => 'error'),
+            );
+          });
         }),
     ),
   );
