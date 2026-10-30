@@ -1160,6 +1160,49 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     await vi.waitFor(() => expect(a.warn).toHaveBeenCalledWith(expect.stringContaining('generated id')));
   });
 
+  it('keeps new tasks in Mastra storage once a server that served tasks in memory is registered, and still serves the earlier ones', async () => {
+    const server = new MCPServer({
+      name: 'Tasks',
+      version: '1.0.0',
+      tools: makeTools(probe, counterFile),
+      tasks: { tools: { approve: 'always', echo: 'always' } },
+    });
+    const served = await serveHTTP(server, { auth: () => authFor('alice') });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new LibSQLStore({ id: 'tasks', url: db }),
+      backgroundTasks: { enabled: true, leaseDurationMs: LEASE_MS },
+    });
+    instances.push({
+      url: served.url,
+      server,
+      mastra,
+      close: async () => (await served.close(), await mastra.shutdown()),
+    });
+    const tasks = await requester(served.url);
+
+    // Before registration there is no Mastra to keep tasks in: they live in memory.
+    const waiting = await call(served.url, 'approve', { item: 'invoice' });
+    const cancelled = await call(served.url, 'approve', { item: 'refund' });
+    const { inputRequests } = await waitFor(tasks, waiting, 'input_required');
+    await waitFor(tasks, cancelled, 'input_required');
+
+    mastra.addMCPServer(server, 'tasks');
+    const later = await call(served.url, 'echo', { text: 'hi' });
+    await waitFor(tasks, later, 'completed');
+    expect((await rows(mastra)).map(row => row.toolName)).toEqual(['mcp-server:tasks:echo']);
+
+    // The tasks created in memory are still read, answered and cancelled there.
+    const [key] = Object.keys(inputRequests ?? {});
+    await tasks.update(waiting, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+    expect(await waitFor(tasks, waiting, 'completed')).toMatchObject({
+      result: { content: [{ type: 'text', text: 'invoice approved by bob' }] },
+    });
+    await tasks.cancel(cancelled);
+    await waitFor(tasks, cancelled, 'cancelled');
+    expect(await rows(mastra)).toHaveLength(1);
+  });
+
   it('uses the store passed in over Mastra background tasks', async () => {
     const store = new InMemoryMCPTaskStore();
     const a = await instance({ tools: { echo: 'always' }, store });
