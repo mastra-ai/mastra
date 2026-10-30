@@ -178,7 +178,14 @@ describe('IntakeStorage', () => {
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-2' });
 
       expect(await storage.listBindings({ orgId: 'org1' })).toEqual([
-        { integrationId: 'linear', sourceId: 'src-a', factoryProjectId: 'proj-2', board: null },
+        {
+          integrationId: 'linear',
+          sourceId: 'src-a',
+          factoryProjectId: 'proj-2',
+          board: null,
+          labels: null,
+          createdAt: expect.any(Date),
+        },
       ]);
       expect(await storage.listBoundSourceIds({ ...binding, factoryProjectId: 'proj-1' })).toEqual([]);
     });
@@ -193,6 +200,8 @@ describe('IntakeStorage', () => {
         sourceId: 'src-a',
         factoryProjectId: 'proj-1',
         board: 'release',
+        labels: null,
+        createdAt: expect.any(Date),
       });
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
@@ -210,6 +219,8 @@ describe('IntakeStorage', () => {
         sourceId: 'src-a',
         factoryProjectId: 'proj-1',
         board: null,
+        labels: null,
+        createdAt: expect.any(Date),
       });
 
       expect(await storage.clearBinding(binding)).toBeNull();
@@ -260,7 +271,14 @@ describe('IntakeStorage', () => {
         gitlab: { enabled: true, sourceIds: ['canonical'] },
       });
       expect(await storage.listBindings({ orgId: 'org1', integrationId: 'gitlab' })).toEqual([
-        { integrationId: 'gitlab', sourceId: 'canonical', factoryProjectId: 'proj-1', board: 'work' },
+        {
+          integrationId: 'gitlab',
+          sourceId: 'canonical',
+          factoryProjectId: 'proj-1',
+          board: 'work',
+          labels: null,
+          createdAt: expect.any(Date),
+        },
       ]);
     });
 
@@ -292,6 +310,224 @@ describe('IntakeStorage', () => {
       ).resolves.toEqual({ migrations: [], conflicts: [{ from: 'legacy', to: 'canonical' }] });
       expect(await storage.getConfig({ orgId: 'org1' })).toEqual(config);
       expect(await storage.listBindings({ orgId: 'org1', integrationId: 'gitlab' })).toHaveLength(2);
+    });
+  });
+
+  describe('bindings shared by label', () => {
+    const source = { orgId: 'org1', integrationId: 'jira', sourceId: 'OPS' };
+
+    it('lets several factories share a source with disjoint label filters', async () => {
+      const storage = await makeStorage();
+      await expect(
+        storage.setSharedBinding({ ...source, factoryProjectId: 'A', board: 'work', labels: null }),
+      ).resolves.toEqual({
+        conflicts: [],
+      });
+      await storage.setSharedBinding({
+        ...source,
+        factoryProjectId: 'B',
+        board: 'work',
+        labels: [' Payments ', 'payments'],
+      });
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'C', board: 'work', labels: ['mobile', 'ios'] });
+
+      expect(
+        (await storage.listBindings({ orgId: 'org1', integrationId: 'jira' })).map(({ factoryProjectId, labels }) => ({
+          factoryProjectId,
+          labels,
+        })),
+      ).toEqual([
+        { factoryProjectId: 'A', labels: null },
+        // Trimmed and de-duplicated case-insensitively, keeping the spelling the user typed first.
+        { factoryProjectId: 'B', labels: ['Payments'] },
+        { factoryProjectId: 'C', labels: ['mobile', 'ios'] },
+      ]);
+    });
+
+    it('rejects a second all-issues binding and overlapping labels without saving them', async () => {
+      const storage = await makeStorage();
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'A', labels: null });
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: ['payments', 'billing'] });
+
+      await expect(storage.setSharedBinding({ ...source, factoryProjectId: 'C', labels: null })).resolves.toEqual({
+        conflicts: [{ factoryProjectId: 'A', labels: null }],
+      });
+      await expect(
+        storage.setSharedBinding({ ...source, factoryProjectId: 'C', labels: ['PAYMENTS', 'mobile'] }),
+      ).resolves.toEqual({ conflicts: [{ factoryProjectId: 'B', labels: ['payments'] }] });
+      expect(await storage.getBinding({ ...source, factoryProjectId: 'C' })).toBeNull();
+
+      // A label filter alongside the all-issues binding is not a conflict: labels take precedence.
+      await expect(storage.setSharedBinding({ ...source, factoryProjectId: 'C', labels: ['mobile'] })).resolves.toEqual(
+        {
+          conflicts: [],
+        },
+      );
+    });
+
+    it("edits a factory's own binding in place and keeps its precedence", async () => {
+      const storage = await makeStorage();
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: ['payments'] });
+      const created = (await storage.getBinding({ ...source, factoryProjectId: 'B' }))!.createdAt;
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'C', labels: ['mobile'] });
+
+      await storage.setSharedBinding({
+        ...source,
+        factoryProjectId: 'B',
+        board: 'release',
+        labels: ['payments', 'refunds'],
+      });
+
+      const bindings = await storage.listBindings({ orgId: 'org1', integrationId: 'jira' });
+      expect(bindings).toHaveLength(2);
+      expect(bindings[0]).toMatchObject({ factoryProjectId: 'B', board: 'release', labels: ['payments', 'refunds'] });
+      expect(bindings[0]!.createdAt).toEqual(created);
+    });
+
+    it('lets only one of two concurrent conflicting saves win', async () => {
+      const storage = await makeStorage();
+      const results = await Promise.all([
+        storage.setSharedBinding({ ...source, factoryProjectId: 'A', labels: null }),
+        storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: null }),
+        storage.setSharedBinding({ ...source, factoryProjectId: 'C', labels: ['payments'] }),
+        storage.setSharedBinding({ ...source, factoryProjectId: 'D', labels: ['Payments'] }),
+      ]);
+
+      expect(results.filter(result => result.conflicts.length === 0)).toHaveLength(2);
+      const bindings = await storage.listBindings({ orgId: 'org1', integrationId: 'jira' });
+      expect(bindings.filter(binding => binding.labels === null)).toHaveLength(1);
+      expect(bindings.filter(binding => binding.labels !== null)).toHaveLength(1);
+    });
+
+    it("removes one factory's binding and leaves the others", async () => {
+      const storage = await makeStorage();
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'A', labels: null });
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: ['payments'] });
+
+      expect(await storage.clearBinding({ ...source, factoryProjectId: 'B' })).toMatchObject({
+        factoryProjectId: 'B',
+        labels: ['payments'],
+      });
+      expect(await storage.clearBinding({ ...source, factoryProjectId: 'B' })).toBeNull();
+      expect(await storage.listBindings({ orgId: 'org1' })).toEqual([
+        expect.objectContaining({ factoryProjectId: 'A', labels: null }),
+      ]);
+    });
+  });
+
+  describe('bindings saved before label filters', () => {
+    function tempDatabaseUrl(): string {
+      const dir = mkdtempSync(join(tmpdir(), 'intake-bindings-'));
+      onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+      return `file:${join(dir, 'intake.db')}`;
+    }
+
+    const legacyCreatedAt = new Date('2026-03-01T00:00:00Z');
+
+    /** A database as an earlier build left it: bindings only in `intake_source_bindings`, nothing copied yet. */
+    async function seedLegacyBindings(url: string) {
+      const backend = new LibSQLFactoryStorage({ id: 'intake-test-legacy-bindings', url });
+      backend.registerDomain(new IntakeStorage());
+      await backend.init();
+      try {
+        await backend.ops.deleteMany('intake_source_subscriptions', {});
+        await backend.ops.deleteMany('intake_data_migrations', {});
+        for (const [integrationId, sourceId, factoryProjectId, board] of [
+          ['jira', 'OPS', 'proj-1', 'work'],
+          ['linear', 'team-1', 'proj-2', null],
+        ] as const) {
+          await backend.ops.insertOne('intake_source_bindings', {
+            org_id: 'org1',
+            integration_id: integrationId,
+            source_id: sourceId,
+            factory_project_id: factoryProjectId,
+            board,
+            created_by_user_id: 'alice',
+            created_at: legacyCreatedAt,
+            updated_at: legacyCreatedAt,
+          });
+        }
+      } finally {
+        await backend.close();
+      }
+    }
+
+    async function legacyRows(url: string) {
+      const backend = new LibSQLFactoryStorage({ id: 'intake-test-legacy-read', url });
+      backend.registerDomain(new IntakeStorage());
+      await backend.init();
+      try {
+        return await backend.ops.findMany('intake_source_bindings', {});
+      } finally {
+        await backend.close();
+      }
+    }
+
+    it('keeps every existing binding as an all-issues binding after upgrade', async () => {
+      const url = tempDatabaseUrl();
+      await seedLegacyBindings(url);
+
+      const storage = await makeStorage(url);
+
+      expect(await storage.listBindings({ orgId: 'org1' })).toEqual([
+        {
+          integrationId: 'jira',
+          sourceId: 'OPS',
+          factoryProjectId: 'proj-1',
+          board: 'work',
+          labels: null,
+          createdAt: legacyCreatedAt,
+        },
+        {
+          integrationId: 'linear',
+          sourceId: 'team-1',
+          factoryProjectId: 'proj-2',
+          board: null,
+          labels: null,
+          createdAt: legacyCreatedAt,
+        },
+      ]);
+    });
+
+    it('copies once, so a binding removed after upgrade stays removed on the next boot', async () => {
+      const url = tempDatabaseUrl();
+      await seedLegacyBindings(url);
+      const before = await legacyRows(url);
+
+      const firstBoot = await makeStorage(url);
+      await firstBoot.clearBinding({
+        orgId: 'org1',
+        integrationId: 'jira',
+        sourceId: 'OPS',
+        factoryProjectId: 'proj-1',
+      });
+      await firstBoot.setSharedBinding({
+        orgId: 'org1',
+        integrationId: 'jira',
+        sourceId: 'OPS',
+        factoryProjectId: 'proj-3',
+        labels: ['payments'],
+      });
+      await firstBoot.setBinding({
+        orgId: 'org1',
+        integrationId: 'linear',
+        sourceId: 'team-1',
+        factoryProjectId: 'proj-4',
+      });
+
+      const secondBoot = await makeStorage(url);
+      expect(
+        (await secondBoot.listBindings({ orgId: 'org1' })).map(({ sourceId, factoryProjectId, labels }) => ({
+          sourceId,
+          factoryProjectId,
+          labels,
+        })),
+      ).toEqual([
+        { sourceId: 'OPS', factoryProjectId: 'proj-3', labels: ['payments'] },
+        { sourceId: 'team-1', factoryProjectId: 'proj-4', labels: null },
+      ]);
+      // The old collection is left exactly as the earlier build wrote it, for a rollback.
+      expect(await legacyRows(url)).toEqual(before);
     });
   });
 

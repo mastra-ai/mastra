@@ -2,8 +2,11 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { ProjectBoardCache } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
@@ -61,7 +64,11 @@ const githubRepositories = {
   ),
 };
 
-function buildApp(user: { workosId: string; organizationId?: string } | null, intakeIntegrations = integrations) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  intakeIntegrations = integrations,
+  boards: typeof boardRegistry | ProjectBoardSource = boardRegistry,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -75,7 +82,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
       intake: seed.intake,
       projects: seed.projects,
       integrations: intakeIntegrations,
-      boardRegistry,
+      boardRegistry: boards,
       workItems: seed.workItems,
       githubRepositories,
     }).routes(),
@@ -103,6 +110,16 @@ const triageBoard = defineBoard({
 const boardRegistry = createBoardRegistry({ boards: [releaseBoard, triageBoard] });
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
+
+/** Project boards whose database can't be read: the boards domain was never attached to storage. */
+const unreadableProjectBoards = () =>
+  new ProjectBoardCache({ codeRegistry: boardRegistry, storage: new StoredBoardsStorage() });
+const putWithUnreadableBoards = (path: string, body: unknown) =>
+  buildApp(orgUser, integrations, unreadableProjectBoards()).request(path, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
@@ -169,7 +186,16 @@ describe('intake configuration', () => {
       const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
       const response = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id });
 
-      const bindings = [{ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id, board: null }];
+      const bindings = [
+        {
+          integrationId: 'linear',
+          sourceId: 'team-1',
+          factoryProjectId: project.id,
+          board: null,
+          labels: null,
+          createdAt: expect.any(String),
+        },
+      ];
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ bindings });
       expect(await (await buildApp(orgUser).request('/web/intake/bindings')).json()).toEqual({ bindings });
@@ -177,9 +203,23 @@ describe('intake configuration', () => {
         {
           action: 'factory.intake.binding_updated',
           factoryProjectId: project.id,
-          metadata: { factoryProjectId: project.id, board: null },
+          metadata: { factoryProjectId: project.id, board: null, labels: null },
         },
       ]);
+    });
+
+    it("saves nothing when the project's boards can't be read", async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const response = await putWithUnreadableBoards('/web/intake/bindings', {
+        integrationId: 'linear',
+        sourceId: 'team-1',
+        factoryProjectId: project.id,
+        board: 'release',
+      });
+
+      expect(response.status).toBe(500);
+      expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'linear', sourceId: 'team-1' })).toBeNull();
+      expect(auditEvents).toEqual([]);
     });
 
     it('binds a source to an installed board and rebinding clears the board', async () => {
@@ -192,9 +232,18 @@ describe('intake configuration', () => {
       });
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
-        bindings: [{ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id, board: 'release' }],
+        bindings: [
+          {
+            integrationId: 'linear',
+            sourceId: 'team-1',
+            factoryProjectId: project.id,
+            board: 'release',
+            labels: null,
+            createdAt: expect.any(String),
+          },
+        ],
       });
-      expect(auditEvents.at(-1)?.metadata).toEqual({ factoryProjectId: project.id, board: 'release' });
+      expect(auditEvents.at(-1)?.metadata).toEqual({ factoryProjectId: project.id, board: 'release', labels: null });
 
       await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id });
       expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'linear', sourceId: 'team-1' })).toEqual({
@@ -202,6 +251,8 @@ describe('intake configuration', () => {
         sourceId: 'team-1',
         factoryProjectId: project.id,
         board: null,
+        labels: null,
+        createdAt: expect.any(Date),
       });
     });
 
@@ -291,6 +342,7 @@ describe('intake configuration', () => {
       expect(auditEvents.at(-1)?.metadata).toEqual({
         factoryProjectId: project.id,
         board: 'release',
+        labels: null,
         relocated: { moved: 2, skipped: 2 },
       });
 
@@ -465,7 +517,7 @@ describe('intake configuration', () => {
         {
           action: 'factory.intake.binding_updated',
           factoryProjectId: project.id,
-          metadata: { factoryProjectId: null, board: null },
+          metadata: { factoryProjectId: null, board: null, labels: null },
         },
       ]);
     });
@@ -486,6 +538,174 @@ describe('intake configuration', () => {
     });
   });
 
+  describe('Jira bindings shared by label', () => {
+    const jira: Pick<Intake, 'listSources' | 'listItems' | 'bindingLabelFilters'> = {
+      bindingLabelFilters: true,
+      listSources: vi.fn(async () => [{ id: '10000', name: 'OPS', type: 'project' }]),
+      listItems: vi.fn(async () => ({ items: [], nextCursor: null })),
+    };
+    const withJira = [...integrations, { id: 'jira', intake: jira }];
+    const app = () => buildApp(orgUser, withJira);
+    const put = (body: unknown) =>
+      app().request('/web/intake/bindings', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const remove = (query: Record<string, string>) =>
+      app().request(`/web/intake/bindings?${new URLSearchParams(query)}`, { method: 'DELETE' });
+    const factories = async () => {
+      const create = (name: string) => seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name } });
+      return { platform: await create('platform'), payments: await create('payments'), mobile: await create('mobile') };
+    };
+    const ops = { integrationId: 'jira', sourceId: '10000' };
+    const summary = (bindings: Array<{ factoryProjectId: string; labels: string[] | null }>) =>
+      bindings.map(({ factoryProjectId, labels }) => ({ factoryProjectId, labels }));
+
+    it('lets several factories take their own labelled slice of one Jira project', async () => {
+      const { platform, payments, mobile } = await factories();
+      expect((await put({ ...ops, factoryProjectId: platform.id, board: 'release' })).status).toBe(200);
+      expect(
+        (await put({ ...ops, factoryProjectId: payments.id, board: 'release', labels: ['payments'] })).status,
+      ).toBe(200);
+      const response = await put({ ...ops, factoryProjectId: mobile.id, board: 'release', labels: ['mobile', 'ios'] });
+
+      expect(response.status).toBe(200);
+      const expected = [
+        { factoryProjectId: platform.id, labels: null },
+        { factoryProjectId: payments.id, labels: ['payments'] },
+        { factoryProjectId: mobile.id, labels: ['mobile', 'ios'] },
+      ];
+      // Bindings saved within one millisecond share a timestamp, so compare without order.
+      const saved = summary((await response.json()).bindings);
+      expect(saved).toHaveLength(3);
+      expect(saved).toEqual(expect.arrayContaining(expected));
+      expect(summary((await (await app().request('/web/intake/bindings')).json()).bindings)).toEqual(saved);
+      expect(auditEvents.at(-1)).toEqual({
+        action: 'factory.intake.binding_updated',
+        factoryProjectId: mobile.id,
+        metadata: { factoryProjectId: mobile.id, board: 'release', labels: ['mobile', 'ios'] },
+      });
+    });
+
+    it('rejects overlapping labels and a second all-issues binding with binding_conflict', async () => {
+      const { platform, payments, mobile } = await factories();
+      await put({ ...ops, factoryProjectId: platform.id, board: 'release' });
+      await put({ ...ops, factoryProjectId: payments.id, board: 'release', labels: ['payments'] });
+
+      const overlap = await put({ ...ops, factoryProjectId: mobile.id, board: 'release', labels: ['Payments', 'ios'] });
+      expect(overlap.status).toBe(409);
+      expect(await overlap.json()).toEqual({
+        error: 'binding_conflict',
+        message: 'Already routed to another factory: payments.',
+        conflicts: [{ factoryProjectId: payments.id, labels: ['payments'] }],
+      });
+      const allIssues = await put({ ...ops, factoryProjectId: mobile.id, board: 'release', labels: null });
+      expect(allIssues.status).toBe(409);
+      expect(await allIssues.json()).toMatchObject({ conflicts: [{ factoryProjectId: platform.id, labels: null }] });
+      expect(await seed.intake.listBindings({ orgId: 'org1', integrationId: 'jira' })).toHaveLength(2);
+    });
+
+    it('keeps the label filter when only the board changes, and clears it with labels: null', async () => {
+      const { payments } = await factories();
+      await put({ ...ops, factoryProjectId: payments.id, board: 'release', labels: ['payments'] });
+
+      await put({ ...ops, factoryProjectId: payments.id, board: 'triage' });
+      expect(await seed.intake.getBinding({ orgId: 'org1', ...ops, factoryProjectId: payments.id })).toMatchObject({
+        board: 'triage',
+        labels: ['payments'],
+      });
+
+      await put({ ...ops, factoryProjectId: payments.id, board: 'triage', labels: null });
+      expect(
+        (await seed.intake.getBinding({ orgId: 'org1', ...ops, factoryProjectId: payments.id }))?.labels,
+      ).toBeNull();
+    });
+
+    it('rejects an empty label list, a label with a space, and unbinding a Jira project through PUT', async () => {
+      const { payments } = await factories();
+      expect((await put({ ...ops, factoryProjectId: payments.id, labels: [] })).status).toBe(400);
+      expect((await put({ ...ops, factoryProjectId: payments.id, labels: ['  '] })).status).toBe(400);
+      expect((await put({ ...ops, factoryProjectId: payments.id, labels: ['needs triage'] })).status).toBe(400);
+      const unbind = await put({ ...ops, factoryProjectId: null });
+      expect(unbind.status).toBe(400);
+      expect(await unbind.json()).toMatchObject({ error: 'use_delete' });
+    });
+
+    it("removes one factory's binding with DELETE and leaves the rest of the project's bindings", async () => {
+      const { platform, payments } = await factories();
+      await put({ ...ops, factoryProjectId: platform.id, board: 'release' });
+      await put({ ...ops, factoryProjectId: payments.id, board: 'release', labels: ['payments'] });
+
+      const response = await remove({ ...ops, factoryProjectId: payments.id });
+
+      expect(response.status).toBe(200);
+      expect(summary((await response.json()).bindings)).toEqual([{ factoryProjectId: platform.id, labels: null }]);
+      expect(auditEvents.at(-1)).toEqual({
+        action: 'factory.intake.binding_updated',
+        factoryProjectId: payments.id,
+        metadata: { factoryProjectId: null, board: null, labels: null },
+      });
+      expect((await remove({ ...ops, factoryProjectId: payments.id })).status).toBe(404);
+    });
+
+    it('unroutes a binding whose factory was deleted, so another factory can take all issues', async () => {
+      const { platform, payments } = await factories();
+      await put({ ...ops, factoryProjectId: platform.id, board: 'release' });
+      await seed.projects.delete({ orgId: 'org1', id: platform.id });
+      expect((await put({ ...ops, factoryProjectId: payments.id, board: 'release' })).status).toBe(409);
+
+      const unrouted = await remove({ ...ops, factoryProjectId: platform.id });
+
+      expect(unrouted.status).toBe(200);
+      expect((await put({ ...ops, factoryProjectId: payments.id, board: 'release' })).status).toBe(200);
+      expect(summary(await seed.intake.listBindings({ orgId: 'org1' }))).toEqual([
+        { factoryProjectId: payments.id, labels: null },
+      ]);
+    });
+
+    it('rejects DELETE without every identifier, or for another org', async () => {
+      const { payments } = await factories();
+      const foreign = await seed.projects.create({ orgId: 'org2', userId: 'u2', input: { name: 'other' } });
+      expect((await remove({ integrationId: 'jira', sourceId: '10000' })).status).toBe(400);
+      expect((await remove({ integrationId: 'jira', factoryProjectId: payments.id })).status).toBe(400);
+      expect((await remove({ ...ops, integrationId: 'unknown', factoryProjectId: payments.id })).status).toBe(400);
+      expect((await remove({ ...ops, factoryProjectId: foreign.id })).status).toBe(404);
+      expect(
+        (
+          await buildApp(null, withJira).request(`/web/intake/bindings?${new URLSearchParams(ops)}`, {
+            method: 'DELETE',
+          })
+        ).status,
+      ).toBe(401);
+    });
+
+    it('keeps moving a Linear source between factories and rejects label filters for it', async () => {
+      const { platform, payments } = await factories();
+      const linearSource = { integrationId: 'linear', sourceId: 'team-1' };
+      await put({ ...linearSource, factoryProjectId: platform.id });
+      await put({ ...linearSource, factoryProjectId: payments.id });
+      expect(summary(await seed.intake.listBindings({ orgId: 'org1', integrationId: 'linear' }))).toEqual([
+        { factoryProjectId: payments.id, labels: null },
+      ]);
+
+      const labelled = await put({ ...linearSource, factoryProjectId: payments.id, labels: ['bug'] });
+      expect(labelled.status).toBe(400);
+      expect((await put({ ...linearSource, factoryProjectId: null })).status).toBe(200);
+      expect(await seed.intake.listBindings({ orgId: 'org1', integrationId: 'linear' })).toEqual([]);
+    });
+
+    it('never writes the frozen pre-upgrade bindings collection', async () => {
+      const { platform, payments } = await factories();
+      await put({ ...ops, factoryProjectId: platform.id, board: 'release' });
+      await put({ ...ops, factoryProjectId: payments.id, board: 'release', labels: ['payments'] });
+      await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: platform.id });
+      await remove({ ...ops, factoryProjectId: payments.id });
+
+      expect(await seed.storage.ops.findMany('intake_source_bindings', {})).toEqual([]);
+    });
+  });
+
   describe('label routes', () => {
     const put = (body: unknown, user: typeof orgUser | null = orgUser) =>
       buildApp(user).request('/web/intake/label-routes', {
@@ -501,6 +721,20 @@ describe('intake configuration', () => {
     it('requires an authenticated organization', async () => {
       expect((await buildApp(null).request('/web/intake/label-routes')).status).toBe(401);
       expect((await buildApp({ workosId: 'u1' }).request('/web/intake/label-routes')).status).toBe(403);
+    });
+
+    it("saves no route when the project's boards can't be read", async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const response = await putWithUnreadableBoards('/web/intake/label-routes', {
+        integrationId: 'github',
+        factoryProjectId: project.id,
+        label: 'release',
+        board: 'release',
+      });
+
+      expect(response.status).toBe(500);
+      expect(await (await list(project.id)).json()).toEqual({ routes: [] });
+      expect(auditEvents).toEqual([]);
     });
 
     it('stores a normalized label route, reads it back per project, and clears it', async () => {

@@ -128,6 +128,18 @@ describe('InMemoryMCPTaskStore', () => {
     expect(await store.cancel(taskId, alice)).toBe(true);
   });
 
+  it('acknowledges a cancel without waiting for onCancel, and calls it with the task context', async () => {
+    const contexts: unknown[] = [];
+    store = new InMemoryMCPTaskStore({ onCancel: context => (contexts.push(context), new Promise(() => {})) });
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { id: 1 } });
+    store.run(task.taskId, async () => ({ status: 'input_required', inputRequests: { who: elicit('who?') } }));
+    await vi.waitFor(async () => expect((await store.get(task.taskId, alice))?.status).toBe('input_required'));
+
+    expect(await store.cancel(task.taskId, alice)).toBe(true);
+    expect(await store.get(task.taskId, alice)).toMatchObject({ status: 'cancelled' });
+    await vi.waitFor(() => expect(contexts).toEqual([{ id: 1 }]));
+  });
+
   it('keeps prototype-named input keys open until each is answered, first answer winning', async () => {
     store = new InMemoryMCPTaskStore();
     const { taskId } = await store.create({ ttlMs: null, principal: 'alice' });

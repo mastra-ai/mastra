@@ -20,7 +20,7 @@ import type { Span, TracingContext } from '@mastra/core/observability';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
-import { createTool, isValidationError } from '@mastra/core/tools';
+import { createTool, isValidationError, validateToolInput } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
@@ -68,7 +68,7 @@ import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, EVENTS_EXTENSION_ID } from '../sh
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { hasTasksCapability, taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
-import type { MCPTaskInputRequests } from '../shared/tasks';
+import type { MCPTask, MCPTaskInputRequests } from '../shared/tasks';
 import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
 import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
@@ -97,8 +97,25 @@ import { registerTaskHandlers } from './tasks/handlers';
 import type { TaskRequestTracing } from './tasks/handlers';
 import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
 import { createTasksInspector, tasksInfo } from './tasks/inspector';
+import type {
+  MCPTaskAttempt,
+  MCPTaskAttemptOutcome,
+  MCPTaskCreateParams,
+  MCPTaskRunOptions,
+  MCPTaskStore,
+  MCPTaskTrace,
+  MCPTaskWork,
+} from './tasks/store';
 import { isMCPTaskStoreAdmin, MCPTaskLimitError } from './tasks/store';
-import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskStore, MCPTaskTrace, MCPTaskWork } from './tasks/store';
+import {
+  firstSuspendedStep,
+  isFinalRunStatus,
+  isStillSuspended,
+  isWorkflowTaskContext,
+  runErrorMessage,
+  runSummary,
+} from './tasks/workflow-runs';
+import type { AnsweredSuspension, WorkflowRunView, WorkflowTaskContext } from './tasks/workflow-runs';
 import type {
   AppResources,
   MCPAuthInfoToUserMapper,
@@ -270,6 +287,8 @@ export class MCPServer extends MCPServerBase {
   private readonly tasks: ResolvedTasksConfig;
   /** Where tasks are kept: `tasks.store`, or the store picked on first use. */
   private readonly taskStore: MCPTaskStore;
+  /** Cancels for the workflow runs executing in this process, by run id, while they execute. */
+  private readonly executingRuns = new Map<string, () => void>();
   /** Prepared on Mastra registration so its executors exist before the manager recovers rows. */
   private backgroundTaskStore?: BackgroundTaskMCPTaskStore;
 
@@ -290,7 +309,11 @@ export class MCPServer extends MCPServerBase {
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
-    this.tasks = resolveTasksConfig(config.tasks, Object.keys(config.tools ?? {}));
+    this.tasks = resolveTasksConfig(config.tasks, {
+      tools: Object.keys(config.tools ?? {}),
+      workflows: Object.keys(config.workflows ?? {}),
+      agents: Object.keys(config.agents ?? {}),
+    });
     this.hasStableId = Boolean(config.id);
     this.taskStore = this.tasks.store ?? new SelectingMCPTaskStore(() => this.selectTaskStore());
     const webhook = this.eventsOptions.webhook;
@@ -445,10 +468,7 @@ export class MCPServer extends MCPServerBase {
    */
   private assertFormRepresentable(owner: string, resumeSchema: unknown): void {
     const requestedSchema = this.formSchema(resumeSchema);
-    const validation = specTypeSchemas.ElicitRequestFormParams['~standard'].validate({
-      message: owner,
-      requestedSchema,
-    });
+    const validation = formValidation(owner, requestedSchema);
     if (validation instanceof Promise || validation.issues) {
       throw new MastraError({
         id: 'MCP_SERVER_RESUME_SCHEMA_NOT_REPRESENTABLE',
@@ -458,6 +478,13 @@ export class MCPServer extends MCPServerBase {
         details: { owner, issues: JSON.stringify(validation instanceof Promise ? 'async' : validation.issues) },
       });
     }
+  }
+
+  /** The input-request form for `resumeSchema`, or `undefined` when the protocol can't present it. */
+  private representableForm(resumeSchema: unknown): JSONSchema7 | undefined {
+    const requestedSchema = resumeSchema ? this.formSchema(resumeSchema) : { type: 'object', properties: {} };
+    const validation = formValidation('form', requestedSchema);
+    return validation instanceof Promise || validation.issues ? undefined : (requestedSchema as JSONSchema7);
   }
 
   /**
@@ -997,6 +1024,11 @@ export class MCPServer extends MCPServerBase {
             `Tool '${name}' only runs as a task; declare the io.modelcontextprotocol/tasks extension`,
           );
         }
+        if (asTask && tool.mcp?.toolType === 'workflow') {
+          return await this.startWorkflowTask(ctx, requestContext, name, args, taskMode, {
+            currentSpan: trace.requestSpan,
+          });
+        }
         if (asTask && taskMode.mode === 'always') {
           try {
             return await this.startToolTask(ctx, requestContext, name, args, taskMode, {
@@ -1173,18 +1205,10 @@ export class MCPServer extends MCPServerBase {
       initialAttempt?: () => NonNullable<MCPTaskRunOptions['initialAttempt']>;
     },
   ): Promise<CallToolResult> {
-    const { persisted, dropped } = persistableRequestContext(requestContext);
-    if (dropped.length > 0) {
-      // Later runs only see what was persisted; a missing `user` fails their authorization checks.
-      this.logger.warn(`Tool task '${name}' can't persist request context keys; runs from the task won't see them`, {
-        tool: name,
-        keys: dropped,
-      });
-    }
     const context: ToolTaskContext = {
       toolName: name,
       args,
-      requestContext: persisted,
+      requestContext: this.persistTaskRequestContext(name, requestContext),
       ...(resume && { resume }),
     };
     const params = {
@@ -1194,16 +1218,7 @@ export class MCPServer extends MCPServerBase {
       limits: this.tasks.limits,
       ...(rootSpan && { trace: { traceId: rootSpan.traceId, spanId: rootSpan.id } }),
     };
-    const store = this.taskStore instanceof SelectingMCPTaskStore ? await this.taskStore.resolve() : this.taskStore;
-    const task =
-      store instanceof BackgroundTaskMCPTaskStore
-        ? await store.create(params, {
-            pinToWorker: initialAttempt !== undefined,
-            clientLabel: clientLabelOf(ctx, requestContext),
-          })
-        : store instanceof InMemoryMCPTaskStore
-          ? await store.create(params, { clientLabel: clientLabelOf(ctx, requestContext) })
-          : await store.create(params);
+    const { store, task } = await this.createTask(ctx, requestContext, params, initialAttempt !== undefined);
     store.run(task.taskId, this.toolTaskWork(context), {
       initialAttempt:
         initialAttempt &&
@@ -1212,6 +1227,36 @@ export class MCPServer extends MCPServerBase {
     });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);
+  }
+
+  /** The request context a task keeps for its later attempts. */
+  private persistTaskRequestContext(name: string, requestContext: RequestContext): Record<string, unknown> {
+    const { persisted, dropped } = persistableRequestContext(requestContext);
+    if (dropped.length > 0) {
+      // Later runs only see what was persisted; a missing `user` fails their authorization checks.
+      this.logger.warn(`Tool task '${name}' can't persist request context keys; runs from the task won't see them`, {
+        tool: name,
+        keys: dropped,
+      });
+    }
+    return persisted;
+  }
+
+  /** Creates a task durably. `pinned` keeps its first attempt on this worker, which already runs it. */
+  private async createTask(
+    ctx: ServerContext,
+    requestContext: RequestContext,
+    params: MCPTaskCreateParams,
+    pinned: boolean,
+  ): Promise<{ store: MCPTaskStore; task: MCPTask }> {
+    const store = this.taskStore instanceof SelectingMCPTaskStore ? await this.taskStore.resolve() : this.taskStore;
+    const task =
+      store instanceof BackgroundTaskMCPTaskStore
+        ? await store.create(params, { pinToWorker: pinned, clientLabel: clientLabelOf(ctx, requestContext) })
+        : store instanceof InMemoryMCPTaskStore
+          ? await store.create(params, { clientLabel: clientLabelOf(ctx, requestContext) })
+          : await store.create(params);
+    return { store, task };
   }
 
   /**
@@ -1354,8 +1399,8 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * An `'auto'` tool's first run, already under way under the request, as attempt 1 of its task:
-   * the attempt span opens when the task is created and ends with that run.
+   * A first run already under way (an `'auto'` tool's or workflow's, under the request, or a
+   * workflow run started under `opened`) as attempt 1 of its task: the attempt span ends with that run.
    */
   private tracedInitialAttempt(
     name: string,
@@ -1363,14 +1408,13 @@ export class MCPServer extends MCPServerBase {
     trace: MCPTaskTrace | undefined,
     taskId: string,
     requestContext: RequestContext,
+    /** The attempt's span, when it was opened before the attempt started so it could run under it. */
+    opened?: Span<SpanType.MCP_SERVER_REQUEST>,
   ): NonNullable<MCPTaskRunOptions['initialAttempt']> {
     if (!trace) return initialAttempt;
-    const span = this.openTaskSpan(`task attempt ${name} #1`, trace, {
-      mcpMethod: 'tools/call',
-      targetName: name,
-      requestContext,
-      metadata: { mcpTaskKey: taskKeyOf(taskId), attempt: 1, resumed: false, recovered: false },
-    });
+    const span =
+      opened ??
+      this.openTaskSpan(`task attempt ${name} #1`, trace, { requestContext, ...firstAttemptSpan(name, taskId) });
     const aborted = new AbortController();
     return {
       outcome: this.endAttemptSpan(span, aborted.signal, initialAttempt.outcome),
@@ -1394,12 +1438,381 @@ export class MCPServer extends MCPServerBase {
       } as MCPTaskInputRequests;
       return { status: 'input_required', inputRequests, suspendPayload: execution.suspendPayload };
     }
+    if (
+      tool.mcp?.toolType === 'agent' &&
+      (execution.output as { finishReason?: unknown })?.finishReason === 'suspended'
+    ) {
+      // TODO(MCP Tasks): answer an agent's tool approval or suspended tool through `input_required`.
+      return completed(
+        errorResult(
+          `Agent '${name.slice('ask_'.length)}' paused for tool approval or input, which MCP tasks don't support yet`,
+        ),
+      );
+    }
     return completed(this.toCallToolResult(name, tool, execution.output));
   }
 
   /** A tool that throws inside a task completes it with `isError`, as a synchronous call would answer. */
   private toolErrorOutcome(name: string, error: unknown): MCPTaskAttemptOutcome {
     return completed(errorResult(JSON.stringify(this.toolError(name, error).toJSON())));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Workflow tasks
+  //
+  // A workflow task follows one workflow run. The run starts exactly once, here under the request
+  // that creates the task; a task's work only ever watches, resumes or cancels it. A run whose
+  // server died is continued by Mastra's workflow recovery, and the task re-attaches to it.
+
+  /**
+   * Starts the run behind a `run_<key>` task. `'auto'` answers synchronously when the run finishes
+   * within `syncWindowMs`; a run that suspends or outlasts the window continues as a task.
+   */
+  private async startWorkflowTask(
+    ctx: ServerContext,
+    requestContext: RequestContext,
+    name: string,
+    args: unknown,
+    taskMode: ResolvedToolTaskMode,
+    tracingContext: TracingContext,
+  ): Promise<CallToolResult> {
+    const workflowKey = name.slice('run_'.length);
+    const workflow = this.workflowFor(workflowKey);
+    if (!workflow) throw new Error(`Workflow '${workflowKey}' is not served`);
+    // Rejected input answers as the plain tool does, before a run or task exists to be left behind.
+    const input = validateToolInput(workflow.inputSchema, args, name);
+    if (input.error) {
+      this.logger.warn(`Tool '${name}' rejected its input.`, { error: input.error.message });
+      return errorResult(input.error.message);
+    }
+    // Never the task id: a task id is unguessable, a run id is visible to anyone who can list runs.
+    const context: WorkflowTaskContext = {
+      toolName: name,
+      kind: 'workflow',
+      workflowKey,
+      runId: randomUUID(),
+      requestContext: this.persistTaskRequestContext(name, requestContext),
+    };
+    const rootSpan = tracingContext.currentSpan;
+    const params = {
+      ttlMs: taskMode.ttlMs,
+      principal: principalOf(ctx, requestContext),
+      context,
+      limits: this.tasks.limits,
+      ...(rootSpan && { trace: { traceId: rootSpan.traceId, spanId: rootSpan.id } }),
+    };
+    // The run's span persists with its snapshot, so its resumes and restarts can join the same trace.
+    const start = (runTracing: TracingContext) => {
+      const run = workflow.createRun({ runId: context.runId });
+      const result: Promise<WorkflowRunView> = run.then(started =>
+        started.start({ inputData: input.data, requestContext, tracingContext: runTracing }),
+      );
+      const cancel = () =>
+        void run
+          .then(started => started.cancel())
+          .catch(error => this.logger.warn('Could not cancel workflow run', { tool: name, error }));
+      this.executingRuns.set(context.runId, cancel);
+      const done = () => this.executingRuns.delete(context.runId);
+      result.then(done, done);
+      return { result, cancel };
+    };
+
+    if (taskMode.mode === 'always') {
+      // The task exists before the run does: if creating it fails, at the open task cap say, nothing ran.
+      let created: Awaited<ReturnType<typeof this.createTask>>;
+      try {
+        created = await this.createTask(ctx, requestContext, params, true);
+      } catch (error) {
+        if (error instanceof MCPTaskLimitError) return errorResult(taskLimitMessage(error));
+        throw error;
+      }
+      const { store, task } = created;
+      // The run is the task's first attempt, so it runs under that attempt's span.
+      const span =
+        params.trace && this.openTaskSpan(`task attempt ${name} #1`, params.trace, firstAttemptSpan(name, task.taskId));
+      const live = start(span ? { currentSpan: span } : tracingContext);
+      store.run(task.taskId, this.workflowTaskWork(context), {
+        initialAttempt: this.tracedInitialAttempt(
+          name,
+          this.liveWorkflowAttempt(workflow, context, live.result),
+          params.trace,
+          task.taskId,
+          requestContext,
+          span,
+        ),
+      });
+      this.logger.debug(`Workflow tool '${name}' runs as task.`);
+      return taskHandleResult(task);
+    }
+
+    // Started under the request, as an 'auto' tool is: the request span becomes the task's root.
+    const live = start(tracingContext);
+    const requestSignal = ctx.mcpReq.signal;
+    const followRequest = () => live.cancel();
+    if (requestSignal.aborted) followRequest();
+    else requestSignal.addEventListener('abort', followRequest, { once: true });
+    const settled = live.result.then(
+      view => ({ view }),
+      (error: unknown) => ({ error }),
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<'timeout'>(resolve => {
+      timer = setTimeout(() => resolve('timeout'), taskMode.syncWindowMs);
+    });
+    const winner = await Promise.race([settled, deadline]);
+    clearTimeout(timer);
+    requestSignal.removeEventListener('abort', followRequest);
+    if (winner !== 'timeout') {
+      if ('error' in winner) throw winner.error;
+      const outcome = this.workflowRunOutcome(workflow, context, winner.view);
+      // A suspended run continues as a task: the client supports them, and they can ask for input.
+      if (outcome?.status === 'completed') return outcome.result;
+    }
+    try {
+      const { store, task } = await this.createTask(ctx, requestContext, params, true);
+      store.run(task.taskId, this.workflowTaskWork(context), {
+        initialAttempt: this.tracedInitialAttempt(
+          name,
+          this.liveWorkflowAttempt(workflow, context, live.result),
+          params.trace,
+          task.taskId,
+          requestContext,
+        ),
+      });
+      this.logger.debug(`Workflow tool '${name}' continues as task.`);
+      return taskHandleResult(task);
+    } catch (error) {
+      if (!(error instanceof MCPTaskLimitError)) {
+        // No task owns the run, so nothing could ever cancel it.
+        live.cancel();
+        throw error;
+      }
+      // At the open task cap: the run already started, so follow it under this request instead, as
+      // an 'auto' tool does. A run that suspends could only be answered through a task, so it is
+      // cancelled rather than left waiting for input nobody can give.
+      this.logger.debug(`Workflow tool '${name}' outlived its sync window at the open task cap.`);
+      if (requestSignal.aborted) followRequest();
+      else requestSignal.addEventListener('abort', followRequest, { once: true });
+      const late = await settled;
+      requestSignal.removeEventListener('abort', followRequest);
+      if ('error' in late) throw late.error;
+      const outcome = this.workflowRunOutcome(workflow, context, late.view);
+      if (outcome?.status === 'completed') return outcome.result;
+      live.cancel();
+      return errorResult(taskLimitMessage(error));
+    }
+  }
+
+  /** The first attempt of a workflow task: the run this request started, in this process. */
+  private liveWorkflowAttempt(
+    workflow: Workflow,
+    context: WorkflowTaskContext,
+    result: Promise<WorkflowRunView>,
+  ): NonNullable<MCPTaskRunOptions['initialAttempt']> {
+    const controller = new AbortController();
+    return {
+      outcome: result.then(
+        view =>
+          this.workflowRunOutcome(workflow, context, view) ??
+          this.watchWorkflowRun(workflow, context, controller.signal),
+        (error: unknown) => this.toolErrorOutcome(context.toolName, error),
+      ),
+      // Stops following the run, and only that: an attempt is also aborted when this server shuts
+      // down or loses the task to another worker, and the run must go on then. Cancelling the task
+      // cancels the run through the store's onCancel (see cancelWorkflowRun).
+      abort: reason => controller.abort(reason),
+    };
+  }
+
+  /**
+   * The work of a workflow task, rebuilt from its context. It never starts the run: a first attempt
+   * dispatched again (after a restart) re-attaches to it, and an answered suspension resumes it.
+   */
+  private workflowTaskWork(context: WorkflowTaskContext): MCPTaskWork {
+    const name = context.toolName;
+    return async attempt => {
+      const workflow = this.workflowFor(context.workflowKey);
+      if (!workflow) throw new Error(`Workflow '${context.workflowKey}' is no longer served`);
+      const requestContext: RequestContext = new RequestContext(Object.entries(context.requestContext));
+      try {
+        await this.enforceToolExecutionFGA(name, requestContext);
+      } catch (error) {
+        return this.toolErrorOutcome(name, error);
+      }
+      const span =
+        attempt.trace &&
+        this.openTaskSpan(`task attempt ${name} #${attempt.trace.attempt}`, attempt.trace, {
+          requestContext,
+          mcpMethod: 'tools/call',
+          targetName: name,
+          metadata: {
+            mcpTaskKey: attempt.trace.taskKey,
+            attempt: attempt.trace.attempt,
+            resumed: attempt.trace.resumed,
+            recovered: attempt.trace.recovered,
+          },
+        });
+      return this.endAttemptSpan(
+        span,
+        attempt.signal,
+        // An aborted attempt only stops following the run (see liveWorkflowAttempt).
+        attempt.resume
+          ? this.resumeWorkflowRun(workflow, context, attempt, requestContext, span)
+          : this.watchWorkflowRun(workflow, context, attempt.signal),
+      );
+    };
+  }
+
+  private async resumeWorkflowRun(
+    workflow: Workflow,
+    context: WorkflowTaskContext,
+    attempt: MCPTaskAttempt,
+    requestContext: RequestContext,
+    span: Span<SpanType.MCP_SERVER_REQUEST> | undefined,
+  ): Promise<MCPTaskAttemptOutcome> {
+    const { inputResponses, suspendPayload } = attempt.resume!;
+    // One key is enough: the server asks for one suspension at a time (see workflowRunOutcome).
+    const [key] = Object.keys(inputResponses);
+    const answer = inputResponse(inputResponses, key!);
+    const label = `Workflow '${context.workflowKey}'`;
+    if (answer.kind !== 'elicit') return completed(errorResult(`Unsupported input response for ${label}`));
+    if (answer.action !== 'accept') {
+      await this.cancelWorkflowRun(context);
+      return completed(errorResult(`${label} was ${answer.action === 'decline' ? 'declined' : 'cancelled'}`));
+    }
+    const current = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
+    if (!current) throw new Error(`${label} run '${context.runId}' was lost`);
+    const answered = suspendPayload as AnsweredSuspension;
+    // Resumed elsewhere since the task asked (Studio, the API): the answer is stale, so follow the
+    // run, which asks again if it waits for input once more.
+    if (!isStillSuspended({ status: current.status, steps: current.steps }, answered)) {
+      return this.watchWorkflowRun(workflow, context, attempt.signal);
+    }
+    const run = await workflow.createRun({ runId: context.runId });
+    let view: WorkflowRunView;
+    this.executingRuns.set(
+      context.runId,
+      () =>
+        void run
+          .cancel()
+          .catch(error => this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error })),
+    );
+    try {
+      view = await run.resume({
+        step: answered.step,
+        resumeData: answer.content ?? {},
+        requestContext,
+        // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
+        // Without a span, core falls back to the trace the run's snapshot recorded.
+        ...(span && { tracingContext: { currentSpan: span } }),
+      });
+    } catch (error) {
+      // Resumed already, by another instance or an earlier try of this attempt: follow that.
+      if (isResumeClaimLost(error)) return this.watchWorkflowRun(workflow, context, attempt.signal);
+      // Or resumed elsewhere between the check above and this resume, so core refused the step.
+      const now = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
+      if (now && !isStillSuspended({ status: now.status, steps: now.steps }, answered)) {
+        return this.watchWorkflowRun(workflow, context, attempt.signal);
+      }
+      return this.toolErrorOutcome(context.toolName, error);
+    } finally {
+      this.executingRuns.delete(context.runId);
+    }
+    return this.workflowRunOutcome(workflow, context, view) ?? this.watchWorkflowRun(workflow, context, attempt.signal);
+  }
+
+  /**
+   * Polls the run until it finishes or suspends on a step the client can answer. The only way to
+   * follow a run from any instance, whichever engine runs it.
+   */
+  private async watchWorkflowRun(
+    workflow: Workflow,
+    context: WorkflowTaskContext,
+    signal: AbortSignal,
+  ): Promise<MCPTaskAttemptOutcome> {
+    let first = true;
+    for (;;) {
+      signal.throwIfAborted();
+      const state = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
+      // Started under the request that created the task, so a run that never started never will.
+      if (!state || (first && state.status === 'pending')) {
+        throw new Error(`Workflow '${context.workflowKey}' run '${context.runId}' was lost`);
+      }
+      first = false;
+      const outcome = this.workflowRunOutcome(workflow, context, {
+        status: state.status,
+        input: state.payload,
+        steps: state.steps,
+        result: state.result,
+        error: state.error,
+      });
+      if (outcome) return outcome;
+      await sleep(WORKFLOW_POLL_INTERVAL_MS, signal);
+    }
+  }
+
+  /**
+   * What a run's state means for its task, or `undefined` while there is nothing to report: the
+   * run is still going, or waits on a step whose `resumeSchema` no input request can present (the
+   * task stays `working` until the run is resumed some other way).
+   */
+  private workflowRunOutcome(
+    workflow: Workflow,
+    context: WorkflowTaskContext,
+    view: WorkflowRunView,
+  ): MCPTaskAttemptOutcome | undefined {
+    const label = `Workflow '${context.workflowKey}'`;
+    switch (view.status) {
+      case 'success':
+      case 'bailed':
+        return completed({ isError: false, content: [{ type: 'text', text: JSON.stringify(runSummary(view)) }] });
+      case 'failed':
+        return completed(errorResult(`${label} failed: ${runErrorMessage(view)}`));
+      case 'tripwire':
+        return completed(errorResult(`${label} was blocked: ${runErrorMessage(view)}`));
+      case 'canceled':
+        return completed(errorResult(`${label} run was cancelled`));
+      case 'suspended': {
+        const suspended = firstSuspendedStep(workflow, view);
+        if (!suspended) return undefined;
+        const requestedSchema = this.representableForm(suspended.step?.resumeSchema);
+        if (!requestedSchema) return undefined;
+        this.logger.debug(`Workflow task '${context.toolName}' requires client input.`);
+        // A fresh key per suspension: a task's keys must be unique over its lifetime.
+        const inputRequests = {
+          [`${INPUT_KEY}-${randomUUID()}`]: this.inputRequestForm(context.toolName, suspended.payload, requestedSchema),
+        } as MCPTaskInputRequests;
+        const answered: AnsweredSuspension = { step: suspended.path, suspendedAt: suspended.suspendedAt };
+        return { status: 'input_required', inputRequests, suspendPayload: answered };
+      }
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Cancels the task's run, for a declined input or the store's onCancel (`tasks/cancel`, TTL
+   * expiry), on whichever instance that happens. A run executing in this process is cancelled here.
+   * A run executing in another process is left alone: writing `canceled` under it doesn't stop it,
+   * its next write overwrites the status, and its own cancel would then find it `canceled` and do
+   * nothing. A run that waits (suspended, pending) is cancelled in storage. A finished run is left alone.
+   */
+  private async cancelWorkflowRun(context: WorkflowTaskContext): Promise<void> {
+    const local = this.executingRuns.get(context.runId);
+    if (local) return local();
+    const workflow = this.workflowFor(context.workflowKey);
+    if (!workflow) return;
+    try {
+      const state = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
+      if (!state || isFinalRunStatus(state.status) || state.status === 'running') return;
+      await (await workflow.createRun({ runId: context.runId })).cancel();
+    } catch (error) {
+      this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error });
+    }
+  }
+
+  private workflowFor(key: string): Workflow | undefined {
+    return this.workflows?.[key] as Workflow | undefined;
   }
 
   /**
@@ -1829,7 +2242,11 @@ export class MCPServer extends MCPServerBase {
     const store = new BackgroundTaskMCPTaskStore({
       manager,
       serverId: this.id,
-      workFor: context => this.toolTaskWork(context as unknown as ToolTaskContext),
+      workFor: context =>
+        isWorkflowTaskContext(context)
+          ? this.workflowTaskWork(context)
+          : this.toolTaskWork(context as unknown as ToolTaskContext),
+      onCancel: context => (isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context) : undefined),
       recoverFor: name => this.tasks.modeFor(name, this.convertedTools[name]?.mcp?.toolType).recover,
       logger: () => this.logger,
     });
@@ -1871,7 +2288,9 @@ export class MCPServer extends MCPServerBase {
       await this.backgroundTaskStore?.close();
       this.backgroundTaskStore = undefined;
     }
-    return new InMemoryMCPTaskStore();
+    return new InMemoryMCPTaskStore({
+      onCancel: context => (isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context) : undefined),
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -2079,8 +2498,46 @@ function errorResult(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
+/** The span options of a task's first attempt, minus its request context. */
+function firstAttemptSpan(name: string, taskId: string) {
+  return {
+    mcpMethod: 'tools/call',
+    targetName: name,
+    metadata: { mcpTaskKey: taskKeyOf(taskId), attempt: 1, resumed: false, recovered: false },
+  };
+}
+
 function completed(result: CallToolResult): MCPTaskAttemptOutcome {
   return { status: 'completed', result };
+}
+
+/** How often a workflow task reads its run's state while it runs elsewhere. */
+const WORKFLOW_POLL_INTERVAL_MS = 1_000;
+
+function formValidation(message: string, requestedSchema: unknown) {
+  return specTypeSchemas.ElicitRequestFormParams['~standard'].validate({ message, requestedSchema });
+}
+
+/** `run.resume()` lost to another resume, or found the run no longer suspended. */
+function isResumeClaimLost(error: unknown): boolean {
+  return (
+    error instanceof MastraError &&
+    (error.id === 'WORKFLOW_RESUME_ALREADY_CLAIMED' || error.id === 'WORKFLOW_RUN_NOT_SUSPENDED')
+  );
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /** Whether this request's client declared the Tasks extension; only 2026-07-28 requests carry it. */
