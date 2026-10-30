@@ -47,7 +47,13 @@ describe('work board triage dispatch', () => {
       item: {
         ...context.item,
         sourceKey: 'incidentio:issue:incidentio:follow-up:01HFOLLOWUP',
-        metadata: { identifier: 'ENG-42' },
+        metadata: { identifier: 'stale-board-identifier' },
+        workItem: createProviderWorkItemForTests({
+          id: context.item.id,
+          title: context.item.title,
+          source: { integrationId: 'incidentio', type: 'issue', externalId: 'incidentio:follow-up:01HFOLLOWUP' },
+          metadata: { identifier: 'ENG-42' },
+        }),
       },
       source: 'incidentioFollowUp',
       stage: 'triage',
