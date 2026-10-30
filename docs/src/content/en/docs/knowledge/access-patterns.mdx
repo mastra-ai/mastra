@@ -37,7 +37,7 @@ export const knowledge = new Knowledge({
     'role:$orgId:support': {
       description: 'Support agents',
       access: [{ principal: 'role:$orgId:policy-admin', role: 'editor' }],
-      pins: ['policy:$orgId#refund-policy'],
+      pinnedContext: ['policy:$orgId#refund-policy'],
     },
     'audience:$orgId:public': { description: 'Public-facing agents' },
     'agent:$orgId:$agentId': {
@@ -148,7 +148,7 @@ A run that also holds `role:acme:policy-admin` owns `policy:acme` and can edit i
 
 ### Policy pinned for support
 
-Add the policy to the support role's `pins`, or let a policy admin pin it at runtime:
+Add the policy to the support role's `pinnedContext`, or let a policy admin pin it at runtime:
 
 ```json
 { "op": "pin", "page": "policy:acme#refund-policy", "audience": ["role:acme:support"] }

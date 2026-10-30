@@ -56,20 +56,20 @@ export const knowledge = new Knowledge({
 
 `KnowledgeScopeDeclarations` with three entries:
 
-| Key | Access | `belongsTo` | `pinPriority` |
+| Key | Access | `belongsTo` | `pinnedContextPriority` |
 | - | - | - | - |
 | `thread:$threadId` | `self` `owner` | `resource:$resourceId` | `2` |
 | `resource:$resourceId` | `self` `owner` | `org:$orgId` | `1` |
 | `org:$orgId` | `self` `editor` | none | `0` |
 
-The tenant row uses the `org` and `orgRole` options. Pins delivered through a higher `pinPriority` scope come first. A run's thread pins come before its resource pins, and tenant pins come last.
+The tenant row uses the `org` and `orgRole` options. Pins delivered through a higher `pinnedContextPriority` scope come first. A run's thread pins come before its resource pins, and tenant pins come last.
 
 ```typescript oxfmt:false
 knowledgeMemoryScopes({ org: 'workspace:$workspaceId', orgRole: 'contributor' })
 // {
-//   'thread:$threadId': { access: [{ principal: 'self', role: 'owner' }], belongsTo: 'resource:$resourceId', pinPriority: 2 },
-//   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }], belongsTo: 'workspace:$workspaceId', pinPriority: 1 },
-//   'workspace:$workspaceId': { access: [{ principal: 'self', role: 'contributor' }], pinPriority: 0 },
+//   'thread:$threadId': { access: [{ principal: 'self', role: 'owner' }], belongsTo: 'resource:$resourceId', pinnedContextPriority: 2 },
+//   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }], belongsTo: 'workspace:$workspaceId', pinnedContextPriority: 1 },
+//   'workspace:$workspaceId': { access: [{ principal: 'self', role: 'contributor' }], pinnedContextPriority: 0 },
 // }
 ```
 
@@ -79,7 +79,7 @@ knowledgeMemoryScopes({ org: 'workspace:$workspaceId', orgRole: 'contributor' })
 knowledgeScopeAddress(pattern: string, params: Record<string, string>): string
 ```
 
-Builds a canonical scope address from a pattern and raw parameter values, for Knowledge APIs, config pins and page references written by host code. Inside values, `%`, `/` and `#` are encoded as `%25`, `%2F` and `%23`, and `:` is encoded as `%3A` in every parameter except the last. It throws when a parameter is missing or empty.
+Builds a canonical scope address from a pattern and raw parameter values, for Knowledge APIs, `pinnedContext` entries and page references written by host code. Inside values, `%`, `/` and `#` are encoded as `%25`, `%2F` and `%23`, and `:` is encoded as `%3A` in every parameter except the last. It throws when a parameter is missing or empty.
 
 ```typescript
 import { knowledgeScopeAddress } from '@mastra/core/knowledge'

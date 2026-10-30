@@ -45,7 +45,7 @@ export const knowledge = new Knowledge({
     name: 'scopes',
     type: 'KnowledgeScopeDeclarations',
     description:
-      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `belongsTo`, `children`, `pages`, `pins` and `pinPriority`. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Declare scope types](/docs/knowledge/scope-types).",
+      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `belongsTo`, `children`, `pages`, `pinnedContext` and `pinnedContextPriority`. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Declare scope types](/docs/knowledge/scope-types).",
   },
   {
     name: 'id',
