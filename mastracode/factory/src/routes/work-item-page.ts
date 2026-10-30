@@ -36,6 +36,14 @@ export interface WorkItemFilters {
   labels?: readonly string[];
   /** Every non-empty person filter must match; within one, any picked person in any of its roles will do. */
   people?: Partial<Record<PersonFilter, readonly string[]>>;
+  /** Cards holding any of these session ids. */
+  sessions?: readonly string[];
+  /** Cards holding a session on any of these thread ids. */
+  threads?: readonly string[];
+  /** Cards whose parent is any of these card ids: a card's pull requests. */
+  parents?: readonly string[];
+  /** Pull request cards opened from any of these branches, the ones never linked to a parent. */
+  headBranches?: readonly string[];
 }
 
 export interface WorkItemPageQuery extends WorkItemFilters {
@@ -147,6 +155,18 @@ export function matchesWorkItemFilters(item: WorkItemRow, filters: WorkItemFilte
     if (!filters.labels.some(label => labels.has(label.toLowerCase()))) return false;
   }
   if (!matchesPeople(item, filters.people)) return false;
+  if (filters.sessions?.length || filters.threads?.length) {
+    const refs = Object.values(item.sessions);
+    if (filters.sessions?.length && !refs.some(ref => filters.sessions!.includes(ref.sessionId))) return false;
+    if (filters.threads?.length && !refs.some(ref => filters.threads!.includes(ref.threadId))) return false;
+  }
+  if (filters.parents?.length && (!item.parentWorkItemId || !filters.parents.includes(item.parentWorkItemId))) {
+    return false;
+  }
+  if (filters.headBranches?.length) {
+    const branch = item.metadata?.headBranch;
+    if (typeof branch !== 'string' || !filters.headBranches.includes(branch)) return false;
+  }
   const needle = filters.q?.trim().toLowerCase();
   if (!needle) return true;
   return (
@@ -193,6 +213,25 @@ export function countWorkItems(
     stages[stage] = (stages[stage] ?? 0) + 1;
   }
   return { total, boards };
+}
+
+/**
+ * When cards came in and when they last reached Done, from `since` on. The activity chart counts these
+ * over a month, far past the cards a board holds, so it reads timestamps instead of cards.
+ */
+export function workItemActivity(
+  items: readonly WorkItemRow[],
+  since: Date,
+): { total: number; createdAt: string[]; doneAt: string[] } {
+  const createdAt: string[] = [];
+  const doneAt: string[] = [];
+  for (const item of items) {
+    if (item.createdAt >= since) createdAt.push(item.createdAt.toISOString());
+    if (!item.stages.includes('done')) continue;
+    const entered = item.stageHistory.findLast(entry => entry.stage === 'done')?.enteredAt;
+    if (entered && new Date(entered) >= since) doneAt.push(new Date(entered).toISOString());
+  }
+  return { total: items.length, createdAt, doneAt };
 }
 
 /** The metadata a board needs to recognise an issue or pull request it already has a card for. */

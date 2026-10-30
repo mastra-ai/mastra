@@ -392,6 +392,14 @@ export const workItemFilterQuerySchema = z.object({
   assignee: commaListSchema,
   reviewer: commaListSchema,
   worked: commaListSchema,
+  /** Cards holding any of these sessions, so a session list can find its cards without reading every card. */
+  session: commaListSchema,
+  /** Cards holding a session on any of these threads. */
+  thread: commaListSchema,
+  /** Cards whose parent is any of these card ids. */
+  parent: commaListSchema,
+  /** Pull request cards opened from any of these branches. */
+  headBranch: commaListSchema,
 });
 
 export const workItemListQuerySchema = workItemFilterQuerySchema.extend({
@@ -729,6 +737,19 @@ export const FACTORY_ROUTE_CONTRACTS = {
     responseSchema: z.object({
       total: z.number().int(),
       boards: z.record(z.string(), z.record(z.string(), z.number().int())),
+    }),
+  },
+  workItemActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/activity',
+    description:
+      'When cards came in and shipped since a time, without the cards: what the activity chart counts over periods longer than the board holds',
+    pathSchema: projectPathSchema,
+    querySchema: z.object({ since: z.iso.datetime() }),
+    responseSchema: z.object({
+      total: z.number().int(),
+      createdAt: z.array(z.string()),
+      doneAt: z.array(z.string()),
     }),
   },
   workItemSources: {

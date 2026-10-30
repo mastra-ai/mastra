@@ -18,7 +18,8 @@ export interface BoardStageView {
   stage: { id: string; label: string };
   phaseKind?: BoardPhaseKind;
   taskCount: number;
-  loading: boolean;
+  /** True until the board sync answers; it carries every column's count, so headers wait on nothing else. */
+  countLoading: boolean;
   collapsed: boolean;
   groupOpen: boolean;
   onGroupOpenChange: (open: boolean) => void;
@@ -62,7 +63,7 @@ export function BoardStages({
                         label={stageView.stage.label}
                         taskCount={stageView.taskCount}
                         totalTaskCount={totalTaskCount}
-                        loading={stageView.loading}
+                        loading={stageView.countLoading}
                         collapsed={stageView.collapsed}
                         headerAction={stageView.createButton}
                       />
@@ -99,7 +100,7 @@ export function BoardStages({
                           label={stageView.stage.label}
                           phaseKind={stageView.phaseKind}
                           count={stageView.taskCount}
-                          loading={stageView.loading}
+                          loading={stageView.countLoading}
                           open={stageView.groupOpen}
                           onOpenChange={stageView.onGroupOpenChange}
                           action={stageView.createButton}

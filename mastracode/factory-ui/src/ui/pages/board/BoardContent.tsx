@@ -280,6 +280,7 @@ export function BoardContent({
       stage,
       phaseKind: builtin ? undefined : stage.kind,
       loading,
+      countLoading: items.isPending,
       taskCount,
       collapsed,
       groupOpen: collapsedStages.isStageOpen(stage.id),

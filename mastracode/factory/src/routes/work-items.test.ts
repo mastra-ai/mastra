@@ -659,6 +659,78 @@ describe('work item read wire', () => {
     });
   });
 
+  it('finds the cards holding given sessions or threads, Done ones included, in the board shape', async () => {
+    const seedCard = (title: string, stage: string, sessions: Record<string, unknown>, metadata = {}) =>
+      seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        input: { externalSource: null, title, stages: [stage], sessions, metadata },
+      });
+    const ref = (n: number) => ({ sessionId: `/sb/s${n}`, branch: `b${n}`, threadId: `t${n}`, startedBy: 'u1' });
+    await seedCard('Open', 'execute', { work: ref(1) });
+    await seedCard('Shipped', 'done', { work: ref(2), review: ref(3) }, { selfReviewFindings: [{ note: 'big' }] });
+    await seedCard('Unrelated', 'done', { work: ref(4) });
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const read = async (query: string) => (await (await json('GET', `${base}?${query}`)).json()).workItems;
+    const titles = async (query: string) => (await read(query)).map((item: { title: string }) => item.title).sort();
+
+    expect(await titles(`session=${encodeURIComponent('/sb/s1,/sb/s3')}`)).toEqual(['Open', 'Shipped']);
+    expect(await titles('thread=t2')).toEqual(['Shipped']);
+    expect(await titles('session=/sb/nope')).toEqual([]);
+    const [shipped] = await read('thread=t3');
+    expect(shipped.metadata.selfReviewFindings).toBeUndefined();
+  });
+
+  it("finds a card's pull requests by parent or by the branch they were opened from", async () => {
+    const seedCard = async (title: string, input: Record<string, unknown> = {}) =>
+      (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          input: { externalSource: null, title, stages: ['done'], sessions: {}, metadata: {}, ...input },
+        })
+      ).item;
+    const parent = await seedCard('Parent');
+    await seedCard('Linked PR', { parentWorkItemId: parent.id });
+    await seedCard('Unlinked PR', { metadata: { headBranch: 'feat/x' } });
+    await seedCard('Other PR', { metadata: { headBranch: 'feat/y' } });
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (query: string) =>
+      (await (await json('GET', `${base}?${query}`)).json()).workItems.map((item: { title: string }) => item.title);
+
+    expect(await titles(`parent=${parent.id}`)).toEqual(['Linked PR']);
+    expect(await titles('headBranch=feat/x')).toEqual(['Unlinked PR']);
+  });
+
+  it('reports when cards came in and shipped without sending the cards', async () => {
+    vi.useFakeTimers({ now: new Date('2026-10-01T00:00:00.000Z'), toFake: ['Date'] });
+    try {
+      const seedCard = (title: string, stage: string) =>
+        seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          input: { externalSource: null, title, stages: [stage], sessions: {}, metadata: {} },
+        });
+      await seedCard('Old', 'done');
+      vi.setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
+      await seedCard('New open', 'intake');
+      await seedCard('New shipped', 'done');
+      const base = `/web/factory/projects/${PROJECT_ID}/work-items/activity`;
+
+      expect(await (await json('GET', `${base}?since=2026-10-10T00:00:00.000Z`)).json()).toEqual({
+        total: 3,
+        createdAt: ['2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'],
+        doneAt: ['2026-10-20T00:00:00.000Z'],
+      });
+      expect((await json('GET', `${base}?since=nope`)).status).toBe(400);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('starts a board from its open cards and then sends only what changed', async () => {
     const t0 = new Date('2026-10-29T12:00:00.000Z');
     vi.useFakeTimers({ now: t0, toFake: ['Date'] });

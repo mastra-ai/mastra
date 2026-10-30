@@ -55,7 +55,14 @@ import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 import { encodeWorkItemSyncCursor } from './work-item-cursor.js';
 import type { WorkItemFilters } from './work-item-page.js';
-import { countWorkItems, pageWorkItems, syncWorkItems, toSyncedWorkItem, workItemSources } from './work-item-page.js';
+import {
+  countWorkItems,
+  pageWorkItems,
+  syncWorkItems,
+  toSyncedWorkItem,
+  workItemActivity,
+  workItemSources,
+} from './work-item-page.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -113,6 +120,10 @@ const FILTER_QUERY_PARAMS = [
   'assignee',
   'reviewer',
   'worked',
+  'session',
+  'thread',
+  'parent',
+  'headBranch',
 ] as const;
 
 function filterQuery(context: Context): Record<(typeof FILTER_QUERY_PARAMS)[number], string | undefined> {
@@ -134,6 +145,10 @@ function workItemFilters(query: {
   assignee?: string[];
   reviewer?: string[];
   worked?: string[];
+  session?: string[];
+  thread?: string[];
+  parent?: string[];
+  headBranch?: string[];
 }): WorkItemFilters {
   return {
     boards: query.board,
@@ -149,6 +164,10 @@ function workItemFilters(query: {
       reviewer: query.reviewer,
       worked: query.worked,
     },
+    sessions: query.session,
+    threads: query.thread,
+    parents: query.parent,
+    headBranches: query.headBranch,
   };
 }
 
@@ -160,6 +179,10 @@ function hasFilters(filters: WorkItemFilters): boolean {
     filters.sources?.length ||
     filters.linearProjects?.length ||
     filters.labels?.length ||
+    filters.sessions?.length ||
+    filters.threads?.length ||
+    filters.parents?.length ||
+    filters.headBranches?.length ||
     Object.values(filters.people ?? {}).some(ids => ids?.length),
   );
 }
@@ -547,6 +570,26 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             factoryProjectId: resolved.factoryProjectId,
           });
           return c.json({ sources: workItemSources(all) });
+        },
+      }),
+      // ── When cards came in and shipped, for the activity chart ─────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemActivity.querySchema.safeParse({
+            since: context.req.query('since'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_since' }, 400);
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json(workItemActivity(all, new Date(query.data.since)));
         },
       }),
       // ── One card, for deep links to cards outside the loaded pages ───────────
