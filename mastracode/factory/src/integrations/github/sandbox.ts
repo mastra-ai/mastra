@@ -1479,3 +1479,40 @@ export function changedWorkflowFiles(commits: readonly ExportedCommit[]): string
   }
   return [...paths].sort();
 }
+
+/**
+ * The end state of every workflow file the exported commits touch, as the text a
+ * person approves: each file's full new content, or that it is deleted. Built only
+ * from the exported commits and blobs, which the server recreates and checks
+ * SHA-for-SHA before moving any ref, so what is shown is what gets pushed.
+ * Content is shown whole rather than as a diff because the "before" side would
+ * come from the untrusted checkout.
+ */
+export function renderWorkflowChanges(exported: ExportedBranch): string {
+  const bySha = new Map(exported.commits.map(commit => [commit.sha, commit]));
+  // The branch head's state of a path is set by the newest first-parent commit that changes it.
+  const finalChanges = new Map<string, CommitTreeChange>();
+  for (let commit = bySha.get(exported.headSha); commit; commit = bySha.get(commit.parents[0]!)) {
+    for (const change of commit.changes) {
+      if (change.path.startsWith('.github/workflows/') && !finalChanges.has(change.path)) {
+        finalChanges.set(change.path, change);
+      }
+    }
+  }
+  return changedWorkflowFiles(exported.commits)
+    .map(path => {
+      const change = finalChanges.get(path);
+      if (!change) return `=== ${path}: unchanged once all commits apply ===\n`;
+      if (change.sha === null) return `=== ${path}: deleted ===\n`;
+      if (change.type === 'commit') return `=== ${path}: submodule at ${change.sha} ===\n`;
+      const encoded = exported.blobs[change.sha];
+      if (encoded === undefined) throw new Error(`The content of ${path} was not exported.`);
+      const bytes = Buffer.from(encoded, 'base64');
+      const text = bytes.toString('utf8');
+      if (!Buffer.from(text, 'utf8').equals(bytes)) {
+        throw new Error(`${path} is not UTF-8 text, so it cannot be shown for approval.`);
+      }
+      return `=== ${path} (mode ${change.mode}) ===\n${text}${text.endsWith('\n') ? '' : '\n'}`;
+    })
+    .join('');
+}

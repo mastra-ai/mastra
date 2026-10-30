@@ -460,8 +460,11 @@ interface SessionReportDependencies {
   reporting: () => Promise<FactoryReporting | null>;
 }
 
-/** How much of a gated call's arguments an approval notice quotes. */
-const APPROVAL_ARGS_LENGTH = 3000;
+/**
+ * How much of a gated call's arguments an approval notice quotes. Large enough to carry a
+ * whole workflow change, which source_control_push_workflow_changes caps at 20k characters.
+ */
+const APPROVAL_ARGS_LENGTH = 24_000;
 
 /**
  * Who hears from a session: a work session (one with an active run binding)

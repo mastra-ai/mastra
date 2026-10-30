@@ -1524,6 +1524,14 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
     return { ...git, ...tools, tool, workspace };
   }
 
+  const shown = (files: Record<string, string | null>) =>
+    Object.keys(files)
+      .sort()
+      .map(path =>
+        files[path] === null ? `=== ${path}: deleted ===\n` : `=== ${path} (mode 100644) ===\n${files[path]}`,
+      )
+      .join('');
+
   it('pushes workflow changes with identical commits once the exact files are approved', async () => {
     const { tool, workspace, commit, origin, root, pushCommits, emitAgent } = await workflowPushFixture();
     commit({ 'src/a.ts': 'a\n' }, 'plain change');
@@ -1532,7 +1540,11 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
       'add workflows\n\nwith a body',
       '1700000100 -0530',
     );
-    const input = { headSha: head, workflowFiles: ['.github/workflows/test.yml', '.github/workflows/old.yml'] };
+    const input = {
+      headSha: head,
+      workflowFiles: ['.github/workflows/test.yml', '.github/workflows/old.yml'],
+      workflowChanges: shown({ '.github/workflows/test.yml': 'on: push\n', '.github/workflows/old.yml': 'x\n' }),
+    };
 
     await expect(beforeApproval(tool, input, workspace)).resolves.toBeUndefined();
     expect(pushCommits).not.toHaveBeenCalled();
@@ -1558,7 +1570,14 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
 
     // A follow-up deletes one workflow file on top of the pushed head.
     const next = commit({ '.github/workflows/old.yml': null }, 'drop old workflow');
-    await tool.execute({ headSha: next, workflowFiles: ['.github/workflows/old.yml'] }, { workspace });
+    await tool.execute(
+      {
+        headSha: next,
+        workflowFiles: ['.github/workflows/old.yml'],
+        workflowChanges: shown({ '.github/workflows/old.yml': null }),
+      },
+      { workspace },
+    );
     expect(pushCommits.mock.calls[1]![0]).toMatchObject({ expectedHeadSha: head });
     expect(pushCommits.mock.calls[1]![0].commits).toHaveLength(1);
     expect(run(root, ['--git-dir', origin, 'rev-parse', `refs/heads/${branch}`])).toBe(next);
@@ -1574,7 +1593,7 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
   ])('refuses before approval when the list has %s', async (_label, workflowFiles, message) => {
     const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
     const head = commit({ '.github/workflows/test.yml': 'a\n', '.github/workflows/deploy.yml': 'b\n' }, 'two');
-    const input = { headSha: head, workflowFiles };
+    const input = { headSha: head, workflowFiles, workflowChanges: 'irrelevant' };
     await expect(beforeApproval(tool, input, workspace)).resolves.toEqual({
       proceed: false,
       output: { error: expect.stringContaining(message) },
@@ -1588,7 +1607,14 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
     const approved = commit({ '.github/workflows/test.yml': 'a\n' }, 'approved');
     commit({ '.github/workflows/test.yml': 'b\n' }, 'sneaked in after approval');
     await expect(
-      tool.execute({ headSha: approved, workflowFiles: ['.github/workflows/test.yml'] }, { workspace }),
+      tool.execute(
+        {
+          headSha: approved,
+          workflowFiles: ['.github/workflows/test.yml'],
+          workflowChanges: shown({ '.github/workflows/test.yml': 'a\n' }),
+        },
+        { workspace },
+      ),
     ).rejects.toThrow('Request approval for the current head');
     expect(pushCommits).not.toHaveBeenCalled();
   });
@@ -1597,7 +1623,10 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
     const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
     const head = commit({ 'src/a.ts': 'a\n' }, 'plain');
     await expect(
-      tool.execute({ headSha: head, workflowFiles: ['.github/workflows/test.yml'] }, { workspace }),
+      tool.execute(
+        { headSha: head, workflowFiles: ['.github/workflows/test.yml'], workflowChanges: 'a\n' },
+        { workspace },
+      ),
     ).rejects.toThrow('source_control_push_branch');
     expect(pushCommits).not.toHaveBeenCalled();
   });
@@ -1608,9 +1637,57 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
   ])('never pushes to a %s branch', async (_label, state) => {
     const { tool, workspace, commit, pushCommits } = await workflowPushFixture(state);
     const head = commit({ '.github/workflows/test.yml': 'a\n' }, 'wf');
-    const input = { headSha: head, workflowFiles: ['.github/workflows/test.yml'] };
+    const input = {
+      headSha: head,
+      workflowFiles: ['.github/workflows/test.yml'],
+      workflowChanges: shown({ '.github/workflows/test.yml': 'a\n' }),
+    };
     await expect(beforeApproval(tool, input, workspace)).resolves.toMatchObject({ proceed: false });
     await expect(tool.execute(input, { workspace })).rejects.toThrow('default or a protected branch');
+    expect(pushCommits).not.toHaveBeenCalled();
+  });
+
+  it('shows the approver the workflow content that will be pushed, and refuses anything else', async () => {
+    const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
+    commit({ '.github/workflows/test.yml': 'on: push\njobs: {}\n' }, 'add workflow');
+    const head = commit({ '.github/workflows/test.yml': 'on: push\njobs:\n  leak: { run: env }\n' }, 'change it');
+    const workflowFiles = ['.github/workflows/test.yml'];
+    const workflowChanges = shown({ '.github/workflows/test.yml': 'on: push\njobs:\n  leak: { run: env }\n' });
+
+    // A benign-looking description of the change is refused, and the refusal carries the real content.
+    const benign = {
+      headSha: head,
+      workflowFiles,
+      workflowChanges: shown({ '.github/workflows/test.yml': 'on: push\njobs: {}\n' }),
+    };
+    await expect(beforeApproval(tool, benign, workspace)).resolves.toEqual({
+      proceed: false,
+      output: { error: expect.stringContaining(`Pass exactly this text as workflowChanges:\n${workflowChanges}`) },
+    });
+    await expect(tool.execute(benign, { workspace })).rejects.toThrow('does not match the commits');
+    expect(pushCommits).not.toHaveBeenCalled();
+
+    // The approved arguments (what the approval prompt and follower notice show) carry the final content.
+    const approved = { headSha: head, workflowFiles, workflowChanges };
+    await expect(beforeApproval(tool, approved, workspace)).resolves.toBeUndefined();
+    await tool.execute(approved, { workspace });
+    expect(pushCommits).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses workflow changes too large to show for approval', async () => {
+    const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
+    const big = '# filler\n'.repeat(2_500);
+    const head = commit({ '.github/workflows/test.yml': big }, 'huge workflow');
+    const input = {
+      headSha: head,
+      workflowFiles: ['.github/workflows/test.yml'],
+      workflowChanges: shown({ '.github/workflows/test.yml': big }),
+    };
+    await expect(beforeApproval(tool, input, workspace)).resolves.toEqual({
+      proceed: false,
+      output: { error: expect.stringContaining('too large to show for approval') },
+    });
+    await expect(tool.execute(input, { workspace })).rejects.toThrow('too large to show for approval');
     expect(pushCommits).not.toHaveBeenCalled();
   });
 

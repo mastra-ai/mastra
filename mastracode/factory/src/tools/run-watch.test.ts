@@ -415,6 +415,15 @@ describe('createSessionApprovalNotifier', () => {
     args: { stage: 'done' },
   };
 
+  it('quotes a whole workflow change for approval without cutting it off', async () => {
+    const { notify, deliver } = notifier(true);
+    const workflowChanges = `=== .github/workflows/test.yml (mode 100644) ===\n${'run: echo\n'.repeat(1_500)}`;
+    await notify({ ...request, toolName: 'source_control_push_workflow_changes', args: { workflowChanges } });
+    const summary = (deliver.mock.calls[0] as unknown as [unknown, { summary: string }])[1].summary;
+    expect(summary).toContain(JSON.stringify({ workflowChanges }));
+    expect(summary).not.toContain('…');
+  });
+
   it("urgently tells the item's other followers which call to answer, once per call", async () => {
     const { notify, deliver } = notifier(true);
     await notify(request);

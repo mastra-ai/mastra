@@ -1949,8 +1949,11 @@ function parseWorkflowRun(run: {
   };
 }
 
-/** GitHub's compare endpoint stops listing files after this many. */
-const MAX_COMPARED_FILES = 3000;
+/**
+ * GitHub's compare endpoint lists at most this many changed files, and only on the first page
+ * (its pagination applies to commits). A list this long may be truncated, so it can't be trusted.
+ */
+const MAX_COMPARED_FILES = 300;
 
 /** `.github/workflows/` paths that differ between `base` and `head`, as GitHub computes them, sorted. */
 async function changedWorkflowPaths(
@@ -1960,27 +1963,16 @@ async function changedWorkflowPaths(
   base: string,
   head: string,
 ): Promise<string[]> {
+  const { data } = await octokit.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${base}...${head}` });
+  const files = data.files ?? [];
+  if (files.length >= MAX_COMPARED_FILES) {
+    throw new Error('The push changes too many files to verify its workflow changes. Nothing was pushed.');
+  }
   const paths = new Set<string>();
-  let seen = 0;
-  for (let page = 1; ; page++) {
-    const { data } = await octokit.repos.compareCommitsWithBasehead({
-      owner,
-      repo,
-      basehead: `${base}...${head}`,
-      per_page: 100,
-      page,
-    });
-    const files = data.files ?? [];
-    for (const file of files) {
-      for (const path of [file.filename, file.previous_filename]) {
-        if (path?.startsWith('.github/workflows/')) paths.add(path);
-      }
+  for (const file of files) {
+    for (const path of [file.filename, file.previous_filename]) {
+      if (path?.startsWith('.github/workflows/')) paths.add(path);
     }
-    seen += files.length;
-    if (seen >= MAX_COMPARED_FILES) {
-      throw new Error('The push changes too many files to verify its workflow changes. Nothing was pushed.');
-    }
-    if (files.length < 100) break;
   }
   return [...paths].sort();
 }

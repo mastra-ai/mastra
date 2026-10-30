@@ -1826,7 +1826,7 @@ describe('privileged GitHub operations', () => {
       }
       githubCalls.push(`${init?.method ?? 'GET'} ${decodeURIComponent(url.pathname)}`);
       expect(new Headers(init?.headers).get('authorization')).toBe('token scoped-token');
-      const response = route(new URL(decodeURIComponent(url.pathname), url), init);
+      const response = route(new URL(`${decodeURIComponent(url.pathname)}${url.search}`, url), init);
       if (!response) throw new Error(`Unexpected request: ${init?.method} ${url}`);
       return response;
     });
@@ -1904,8 +1904,12 @@ describe('privileged GitHub operations', () => {
         expect(body).toMatchObject({ message: commit.message, author: commit.author, parents: commit.parents });
         return json({ sha: 'c'.repeat(40) }, 201);
       }
-      if (url.pathname.startsWith('/repos/acme/app/compare/'))
-        return json({ files: (overrides.files ?? ['.github/workflows/test.yml']).map(filename => ({ filename })) });
+      if (url.pathname.startsWith('/repos/acme/app/compare/')) {
+        // GitHub lists changed files on the first page only, capped at 300; later pages paginate commits.
+        const firstPage = (url.searchParams.get('page') ?? '1') === '1';
+        const files = (overrides.files ?? ['.github/workflows/test.yml']).slice(0, 300).map(filename => ({ filename }));
+        return json({ files: firstPage ? files : [] });
+      }
       if (method === 'PATCH' && url.pathname === '/repos/acme/app/git/refs/heads/factory/issue-1') {
         expect(body).toEqual({ sha: 'c'.repeat(40), force: false });
         return json({ object: { sha: 'c'.repeat(40) } });
@@ -1929,6 +1933,17 @@ describe('privileged GitHub operations', () => {
       'GitHub sees unapproved workflow changes',
       { files: ['.github/workflows/test.yml', '.github/workflows/publish.yml'] },
       'were approved',
+    ],
+    [
+      'GitHub truncates the compared file list',
+      {
+        files: [
+          '.github/workflows/test.yml',
+          ...Array.from({ length: 299 }, (_, i) => `src/file-${i}.ts`),
+          '.github/workflows/publish.yml',
+        ],
+      },
+      'too many files to verify',
     ],
   ])('moves no ref when %s', async (_label, overrides, message) => {
     const { integration, githubCalls } = remote(overrides);

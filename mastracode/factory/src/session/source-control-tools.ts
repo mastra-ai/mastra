@@ -9,6 +9,7 @@ import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
   changedWorkflowFiles,
+  renderWorkflowChanges,
   ensureLocalBranch,
   exportBranchCommits,
   isCheckoutOf,
@@ -263,6 +264,12 @@ function refuseBeforeApproval(check: (input: any, workspace: unknown) => Promise
 /** Fixed server-side so an agent cannot publish under, and impersonate, another required check. */
 export const FACTORY_TEST_CHECK_NAME = 'Factory Review / tests';
 
+/**
+ * Largest workflow change, as JSON-quoted text, that a person can be asked to approve.
+ * Stays under the follower approval notice's argument limit so nothing approved is cut off.
+ */
+const MAX_WORKFLOW_CHANGES_LENGTH = 20_000;
+
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
 const SHA = /^[0-9a-f]{40}$/;
 const rerunSchema = repositorySchema.extend({
@@ -279,6 +286,11 @@ const workflowPushSchema = repositorySchema.extend({
     .array(z.string().min(1))
     .min(1)
     .describe('Every .github/workflows/ path the unpushed commits add, change, or delete.'),
+  workflowChanges: z
+    .string()
+    .describe(
+      "The end state of those workflow files, exactly as a refused call reports it: each file's full new content, or that it is deleted. The approver reads this.",
+    ),
 });
 type WorkflowPushInput = z.infer<typeof workflowPushSchema>;
 const changeRequestSchema = repositorySchema.extend({
@@ -406,6 +418,17 @@ export async function createSourceControlTools({
         `The commits change these workflow files: ${workflowFiles.join(', ')}. List exactly those in workflowFiles.`,
       );
     }
+    const workflowChanges = renderWorkflowChanges(exported);
+    if (JSON.stringify(workflowChanges).length > MAX_WORKFLOW_CHANGES_LENGTH) {
+      throw new Error(
+        `The workflow changes are too large to show for approval (over ${MAX_WORKFLOW_CHANGES_LENGTH} characters). Push smaller workflow changes. Nothing was pushed.`,
+      );
+    }
+    if (input.workflowChanges !== workflowChanges) {
+      throw new Error(
+        `workflowChanges does not match the commits. Pass exactly this text as workflowChanges:\n${workflowChanges}`,
+      );
+    }
     return { target, versionControl, sandbox, workdir, branch, ref, state, exported, workflowFiles };
   };
 
@@ -461,7 +484,7 @@ export async function createSourceControlTools({
     }),
     source_control_push_workflow_changes: createTool({
       id: 'source_control_push_workflow_changes',
-      description: `Push the active session branch when its unpushed commits change files under .github/workflows/, which source_control_push_branch cannot do. A person must approve each call; the arguments are shown to them. Pass the branch head SHA and exactly the workflow files the unpushed commits add, change, or delete. The commits are recreated on GitHub server-side with identical SHAs, so the branch must fast-forward the remote and commits must be unsigned. Never pushes the default or a protected branch. ${repositoryArgument}`,
+      description: `Push the active session branch when its unpushed commits change files under .github/workflows/, which source_control_push_branch cannot do. A person must approve each call; the arguments are shown to them. Pass the branch head SHA, exactly the workflow files the unpushed commits add, change, or delete, and their end state as workflowChanges (a call with any other value is refused and told the exact text). The commits are recreated on GitHub server-side with identical SHAs, so the branch must fast-forward the remote and commits must be unsigned. Never pushes the default or a protected branch. ${repositoryArgument}`,
       inputSchema: workflowPushSchema,
       requireApproval: true,
       beforeApproval: refuseBeforeApproval((input, workspace) => prepareWorkflowPush(input, workspace)),
