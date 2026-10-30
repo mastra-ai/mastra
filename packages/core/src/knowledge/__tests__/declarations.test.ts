@@ -256,11 +256,14 @@ describe('compileKnowledgeScopes: validation', () => {
       { pages: [{ key: 'k', name: 'K' }] },
     ]) {
       expect(() => compileKnowledgeScopes({ ...knowledgeMemoryScopes(), 'org:acme': extra })).toThrow(
-        /can only add description, access, pins and pinPriority/,
+        /can only add description, access, pinnedContext and pinnedContextPriority/,
       );
     }
     expect(() =>
-      compileKnowledgeScopes({ ...knowledgeMemoryScopes(), 'org:acme': { description: 'Acme', pins: ['org:acme#p'] } }),
+      compileKnowledgeScopes({
+        ...knowledgeMemoryScopes(),
+        'org:acme': { description: 'Acme', pinnedContext: ['org:acme#p'] },
+      }),
     ).not.toThrow();
   });
 
@@ -282,8 +285,12 @@ describe('knowledgeMemoryScopes', () => {
       belongsTo: 'org:$orgId',
     });
     expect(declared['org:$orgId']).toMatchObject({ access: [{ principal: 'self', role: 'editor' }] });
-    expect(declared['thread:$threadId']!.pinPriority!).toBeGreaterThan(declared['resource:$resourceId']!.pinPriority!);
-    expect(declared['resource:$resourceId']!.pinPriority!).toBeGreaterThan(declared['org:$orgId']!.pinPriority!);
+    expect(declared['thread:$threadId']!.pinnedContextPriority!).toBeGreaterThan(
+      declared['resource:$resourceId']!.pinnedContextPriority!,
+    );
+    expect(declared['resource:$resourceId']!.pinnedContextPriority!).toBeGreaterThan(
+      declared['org:$orgId']!.pinnedContextPriority!,
+    );
   });
 
   it('renames the tenant scope, makes it append-only, or leaves it out', () => {
@@ -299,7 +306,7 @@ describe('knowledgeMemoryScopes', () => {
   });
 });
 
-describe('compileKnowledgeScopes: config pins', () => {
+describe('compileKnowledgeScopes: pinnedContext', () => {
   const policy = {
     'org:$orgId': {},
     'policy:$orgId': { access: [{ principal: 'org:$orgId', role: 'viewer' as const }] },
@@ -310,39 +317,39 @@ describe('compileKnowledgeScopes: config pins', () => {
     expect(() =>
       compileKnowledgeScopes({
         ...policy,
-        'role:$orgId:$role': { pins: ['policy:$orgId#refund-policy'] },
-        'role:acme:support': { pins: ['policy:acme#refund-policy', 'policy:$orgId#returns'] },
+        'role:$orgId:$role': { pinnedContext: ['policy:$orgId#refund-policy'] },
+        'role:acme:support': { pinnedContext: ['policy:acme#refund-policy', 'policy:$orgId#returns'] },
       }),
     ).not.toThrow();
   });
 
   it('accepts a nested key path pin', () => {
     expect(() =>
-      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['policy:$orgId#policies/refund'] } }),
+      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pinnedContext: ['policy:$orgId#policies/refund'] } }),
     ).not.toThrow();
   });
 
   it('refuses a pin with a param the holding scope cannot bind', () => {
     expect(() =>
-      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['team:$orgId:$teamId#refund'] } }),
+      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pinnedContext: ['team:$orgId:$teamId#refund'] } }),
     ).toThrow(/uses \$teamId, which "role:\$orgId:\$role" can't bind/);
     expect(() =>
       compileKnowledgeScopes({
         ...policy,
         'role:$orgId:$role': {},
-        'role:acme:support': { pins: ['team:$orgId:$teamId#refund'] },
+        'role:acme:support': { pinnedContext: ['team:$orgId:$teamId#refund'] },
       }),
     ).toThrow(/uses \$teamId/);
   });
 
   it('refuses a pin that is a name or has no key, and one on an undeclared type', () => {
     for (const ref of ['Refund Policy', 'policy:$orgId#', '#refund', 'policy:$orgId#a#b', 'policy:$orgId#a//b']) {
-      expect(() => compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: [ref] } })).toThrow(
+      expect(() => compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pinnedContext: [ref] } })).toThrow(
         /must be "<scope>#<key>\[\/<key>…\]"/,
       );
     }
     expect(() =>
-      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pins: ['handbook:$orgId#intro'] } }),
+      compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pinnedContext: ['handbook:$orgId#intro'] } }),
     ).toThrow(/undeclared scope type/);
   });
 });

@@ -59,16 +59,18 @@ export class Knowledge extends MastraBase {
     const { declarations, concrete } = this.#runtime.compiled;
     const entries: Array<[string, string[] | undefined]> = [
       ...[...declarations.values()].map(
-        compiled => [compiled.key, compiled.declaration.pins] as [string, string[] | undefined],
+        compiled => [compiled.key, compiled.declaration.pinnedContext] as [string, string[] | undefined],
       ),
-      ...[...concrete].map(([address, entry]) => [address, entry.declaration.pins] as [string, string[] | undefined]),
+      ...[...concrete].map(
+        ([address, entry]) => [address, entry.declaration.pinnedContext] as [string, string[] | undefined],
+      ),
     ];
     for (const [key, pins] of entries) {
       const count = pins?.length ?? 0;
       if (count === 0) continue;
       if (count > budget.maxPins || budget.maxTokens / count < MIN_TOKENS_PER_CONFIG_PIN) {
         this.logger.warn(
-          `Knowledge scope "${key}" has ${count} config pins for a budget of ${budget.maxPins} pins / ${budget.maxTokens} tokens; config pins are never dropped, so each will be cut to about ${Math.floor(budget.maxTokens / count)} tokens and stored pins won't fit. Pin fewer pages or raise pinnedContext.maxTokens.`,
+          `Knowledge scope "${key}" has ${count} pinnedContext pages for a budget of ${budget.maxPins} pins / ${budget.maxTokens} tokens; pinnedContext pages are never dropped, so each will be cut to about ${Math.floor(budget.maxTokens / count)} tokens and stored pins won't fit. Pin fewer pages or raise pinnedContext.maxTokens.`,
         );
       }
     }
@@ -133,6 +135,22 @@ export class Knowledge extends MastraBase {
     target: { scope: string } | { page: string },
   ): Promise<KnowledgeAccessExplanation> {
     return this.#runtime.explainAccess(runScopes, target);
+  }
+
+  /**
+   * After renaming a scope declaration key in `scopes`, moves the scopes stored under the old key
+   * (and its template children, `from/<name>`) to the new one, in one atomic step. Until then this
+   * instance refuses to run: stored scopes under an undeclared key would otherwise silently lose
+   * prefix and `belongsTo` reach. Refuses when `from` is still declared, `to` isn't, or any stored
+   * address doesn't match the `to` pattern; nothing changes then. Returns how many scopes moved.
+   *
+   * In a rolling deploy, instances with the new config fail until the rename runs, and instances
+   * still on the old config lose reach to those scopes after it; deploy, then rename right away.
+   *
+   * @experimental
+   */
+  renameScopeDeclaration(from: string, to: string): Promise<number> {
+    return this.#runtime.renameScopeDeclaration(from, to);
   }
 
   #groups(override?: KnowledgeToolSelection): { read: boolean; write: boolean; pins: boolean } {

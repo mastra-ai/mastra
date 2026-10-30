@@ -211,6 +211,34 @@ export function inspectKnowledgePagesSchema(snapshot: {
   };
 }
 
+/** Schema-2 table names schema 4 reuses with a different shape. */
+const REUSED_KNOWLEDGE_TABLE_NAMES = KNOWLEDGE_TABLE_NAMES.filter(name =>
+  (KNOWLEDGE_PAGES_TABLE_NAMES as readonly string[]).includes(name),
+);
+
+/**
+ * The old Knowledge tables an adapter drops on init, rows included: Knowledge before schema 4 was an
+ * experimental store with no migration. Every schema-1/2-only table present is dropped. The table
+ * names schema 4 reuses (mentions, activity, the state table) are dropped too, but only when an old
+ * table is present and no schema-4 state row exists, so they are old-shaped. Schema-4-only tables
+ * are never listed. On a schema-4 store this lists only tables an older process recreated during a
+ * rolling deploy. Drop order is safe for adapters that enforce references.
+ */
+export function legacyKnowledgeTablesToDrop(snapshot: {
+  tableNames: readonly string[];
+  schemaVersion?: number;
+}): string[] {
+  const present = new Set(snapshot.tableNames);
+  const legacy = [...LEGACY_KNOWLEDGE_TABLE_NAMES].filter(name => present.has(name));
+  if (legacy.length === 0) return [];
+  const reused =
+    snapshot.schemaVersion === KNOWLEDGE_PAGES_SCHEMA_VERSION
+      ? []
+      : REUSED_KNOWLEDGE_TABLE_NAMES.filter(name => present.has(name));
+  const drop = new Set([...legacy, ...reused]);
+  return [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()].filter(name => drop.has(name));
+}
+
 /** Message for the error an adapter throws on `incompatible-reset-required`. */
 export function knowledgePagesResetMessage(reason: string): string {
   return `Knowledge storage needs a reset before this version can use it: ${reason}. Knowledge data has no migration; run \`await storage.stores?.knowledge?.dangerouslyReset()\` to drop the Knowledge tables (Memory tables are untouched).`;

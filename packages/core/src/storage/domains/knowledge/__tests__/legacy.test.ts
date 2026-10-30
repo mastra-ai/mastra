@@ -109,7 +109,10 @@ describe('deprecated schema-2 Knowledge helpers', () => {
   it('keeps every Knowledge @mastra/core/storage export that published memory and store packages import', () => {
     // Imported by @mastra/memory 1.36.0 and 1.39.1, @mastra/server 1.80.0, @mastra/libsql 1.25.1 and
     // 1.27.1, @mastra/pg 1.30.0 and 1.33.0, @mastra/mysql 0.12.1 and 0.14.1, and @mastra/mongodb
-    // 1.22.0 and 1.24.1. They resolve these on load whether or not Knowledge is used.
+    // 1.22.0 and 1.24.1. They resolve these on load whether or not Knowledge is used. libsql 1.27.1
+    // and pg 1.33.0 also look up the two bound assertions and the two schema functions when a core
+    // advertises Knowledge v2; missing any of them gives a misleading "advertises Knowledge v2
+    // without the required storage API" error instead of a clean unsupported-capability error.
     for (const name of [
       'InMemoryStore',
       'KNOWLEDGE_ACTIVITY_SCHEMA',
@@ -128,11 +131,15 @@ describe('deprecated schema-2 Knowledge helpers', () => {
       'TABLE_KNOWLEDGE_RECORDS',
       'TABLE_KNOWLEDGE_SEMANTIC_OUTBOX',
       'assertKnowledgeCeilingRaised',
+      'assertKnowledgeDescriptionWithinBound',
+      'assertKnowledgeRecordTextWithinBound',
+      'assertKnowledgeSchemaCompatible',
       'assertKnowledgeScopeWithinCeiling',
       'canonicalizeKnowledgeScope',
       'createKnowledgeNodeCursor',
       'createKnowledgeUlid',
       'expandKnowledgeScope',
+      'inspectKnowledgeSchema',
       'isKnowledgeScopeVisible',
       'knowledgeScopeKey',
       'knowledgeSemanticDocumentId',

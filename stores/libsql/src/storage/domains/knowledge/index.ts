@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 
 import {
   inspectKnowledgePagesSchema,
+  legacyKnowledgeTablesToDrop,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
@@ -99,6 +100,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   // Schema-4 page store: delegates to LibSQLKnowledgePages.
   async #inspectPages(tx: Pick<Executor, 'execute'>) {
+    return inspectKnowledgePagesSchema(await this.#pagesSnapshot(tx));
+  }
+
+  async #pagesSnapshot(tx: Pick<Executor, 'execute'>) {
     const tables = await tx.execute({
       sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\'",
     });
@@ -110,7 +115,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       });
       if (state.rows[0]) schemaVersion = Number(state.rows[0].schemaVersion);
     }
-    return inspectKnowledgePagesSchema({ tableNames, schemaVersion });
+    return { tableNames, schemaVersion };
   }
 
   override async inspectSchema() {
@@ -119,6 +124,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   override async init(): Promise<void> {
     await this.#transaction(async tx => {
+      // Knowledge before schema 4 was experimental and is not migrated: drop its tables, rows included.
+      for (const table of legacyKnowledgeTablesToDrop(await this.#pagesSnapshot(tx))) {
+        await tx.execute(`DROP TABLE IF EXISTS "${table}"`);
+      }
       const inspection = await this.#inspectPages(tx);
       if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
       for (const statement of KNOWLEDGE_PAGE_DDL) await tx.execute(statement);
@@ -146,6 +155,16 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['materializeScope']>[0],
   ): ReturnType<KnowledgePageStore['materializeScope']> {
     return this.#pages.materializeScope(input);
+  }
+
+  override listScopeDeclarations(): ReturnType<KnowledgePageStore['listScopeDeclarations']> {
+    return this.#pages.listScopeDeclarations();
+  }
+
+  override renameScopeDeclaration(
+    input: Parameters<KnowledgePageStore['renameScopeDeclaration']>[0],
+  ): ReturnType<KnowledgePageStore['renameScopeDeclaration']> {
+    return this.#pages.renameScopeDeclaration(input);
   }
 
   override getScopesByAddress(

@@ -23,8 +23,6 @@ import {
   loadRunStoredMessages,
   takeRunScorerInstances,
   pruneAgentLoopSnapshot,
-  runInRunDeadlineScope,
-  withRunDeadlineScope,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -149,20 +147,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
   const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS, retries } = options;
   const { createWorkflow } = init(inngest);
 
-  // Steps run inside their run's deadline scope: once a total timeout passes,
-  // memory writes from any worker are refused, atomically where the memory
-  // store supports run fencing.
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
-  const llmExecutionStep = withRunDeadlineScope(createDurableLLMExecutionStep());
+  const llmExecutionStep = createDurableLLMExecutionStep();
 
   // Create the tool call step - each tool call runs as its own step with suspend support
-  const toolCallStep = withRunDeadlineScope(createDurableToolCallStep());
+  const toolCallStep = createDurableToolCallStep();
 
   // Create the LLM mapping step - reuse from core
-  const llmMappingStep = withRunDeadlineScope(createDurableLLMMappingStep());
+  const llmMappingStep = createDurableLLMMappingStep();
 
   // Create the background task check step
-  const backgroundTaskCheckStep = withRunDeadlineScope(createDurableBackgroundTaskCheckStep());
+  const backgroundTaskCheckStep = createDurableBackgroundTaskCheckStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   const singleIterationWorkflow = createWorkflow({
@@ -483,25 +478,21 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Inngest step, which the Inngest protocol does not support: the nested step's
           // callback never executes and its promise never settles, hanging the run and
           // silently skipping output processors, memory persistence, and title generation.
-          const finishResult = await runInRunDeadlineScope(
-            { mastra, agentId: initData.agentId, runId: state.runId, requestContext },
-            () =>
-              runDurableFinishSideEffects({
-                runId: state.runId,
-                initData,
-                messageListState: state.messageListState,
-                mastra,
-                requestContext,
-                tracingContext,
-                logger: mastra?.getLogger?.(),
-                outputResult: {
-                  text: finalText ?? '',
-                  usage: state.accumulatedUsage,
-                  finishReason: state.lastStepResult?.reason ?? 'unknown',
-                  steps: state.accumulatedSteps,
-                },
-              }),
-          );
+          const finishResult = await runDurableFinishSideEffects({
+            runId: state.runId,
+            initData,
+            messageListState: state.messageListState,
+            mastra,
+            requestContext,
+            tracingContext,
+            logger: mastra?.getLogger?.(),
+            outputResult: {
+              text: finalText ?? '',
+              usage: state.accumulatedUsage,
+              finishReason: state.lastStepResult?.reason ?? 'unknown',
+              steps: state.accumulatedSteps,
+            },
+          });
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;

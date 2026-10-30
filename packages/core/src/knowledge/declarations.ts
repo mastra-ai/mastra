@@ -51,10 +51,10 @@ export interface KnowledgeScopeDeclaration {
   children?: Array<{ name: string; description?: string; displayLabel?: string; access?: KnowledgeAccessRule[] }>;
   /** Keyed pages created with this scope; they may nest (`pages` inside a page, same scope). */
   pages?: KnowledgePageTemplate[];
-  /** Config pins (page refs) delivered to runs holding this scope. */
-  pins?: string[];
+  /** Pages (refs) pinned into the context of runs holding this scope; delivered to runs holding this scope. */
+  pinnedContext?: string[];
   /** Ordering of stored pins delivered through this scope; higher first. Default 0. */
-  pinPriority?: number;
+  pinnedContextPriority?: number;
 }
 
 /**
@@ -108,15 +108,19 @@ export function knowledgeMemoryScopes(
     'thread:$threadId': {
       access: [{ principal: 'self', role: 'owner' }],
       belongsTo: 'resource:$resourceId',
-      pinPriority: 2,
+      pinnedContextPriority: 2,
     },
     'resource:$resourceId': {
       access: [{ principal: 'self', role: 'owner' }],
       ...(org ? { belongsTo: org } : {}),
-      pinPriority: 1,
+      pinnedContextPriority: 1,
     },
   };
-  if (org) declarations[org] = { access: [{ principal: 'self', role: options.orgRole ?? 'editor' }], pinPriority: 0 };
+  if (org)
+    declarations[org] = {
+      access: [{ principal: 'self', role: options.orgRole ?? 'editor' }],
+      pinnedContextPriority: 0,
+    };
   return declarations;
 }
 
@@ -368,7 +372,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     const unsupported = (['belongsTo', 'children', 'pages'] as const).filter(field => declaration[field] !== undefined);
     if (unsupported.length) {
       throw new KnowledgeDeclarationError(
-        `Knowledge scope "${address}" is an address of "${owner.key}" and can only add description, access, pins and pinPriority; declare ${unsupported.join(', ')} on "${owner.key}".`,
+        `Knowledge scope "${address}" is an address of "${owner.key}" and can only add description, access, pinnedContext and pinnedContextPriority; declare ${unsupported.join(', ')} on "${owner.key}".`,
       );
     }
     concrete.set(address, { declaration, rules: [] });
@@ -527,28 +531,28 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
       const parsed = parseKnowledgePageRef(ref);
       if (!parsed) {
         throw new KnowledgeDeclarationError(
-          `Knowledge config pin "${ref}" on "${owner}" must be "<scope>#<key>[/<key>…]" naming a keyed page, e.g. "policy:$orgId#refund-policy" or "org:$orgId#policies/refund"; keys can't be empty or contain "/", "#" or "%".`,
+          `Knowledge pinnedContext entry "${ref}" on "${owner}" must be "<scope>#<key>[/<key>…]" naming a keyed page, e.g. "policy:$orgId#refund-policy" or "org:$orgId#policies/refund"; keys can't be empty or contain "/", "#" or "%".`,
         );
       }
-      const pattern = typedPattern(parsed.scope, `Knowledge config pin scope on "${owner}"`);
+      const pattern = typedPattern(parsed.scope, `Knowledge pinnedContext scope on "${owner}"`);
       if (!compiledScopes.match(sampleAddress(pattern))) {
         throw new KnowledgeDeclarationError(
-          `Knowledge config pin "${ref}" on "${owner}" points at an undeclared scope type; declare it or fix the typo.`,
+          `Knowledge pinnedContext entry "${ref}" on "${owner}" points at an undeclared scope type; declare it or fix the typo.`,
         );
       }
       const unbound = pattern.params.filter(param => !params.includes(param));
       if (unbound.length) {
         throw new KnowledgeDeclarationError(
-          `Knowledge config pin "${ref}" on "${owner}" uses ${unbound.map(p => `$${p}`).join(', ')}, which "${owner}" can't bind; pin params come from the holding scope's address.`,
+          `Knowledge pinnedContext entry "${ref}" on "${owner}" uses ${unbound.map(p => `$${p}`).join(', ')}, which "${owner}" can't bind; pinnedContext params come from the holding scope's address.`,
         );
       }
     }
   };
   for (const compiled of all.values()) {
-    if (!compiled.child) checkPins(compiled.key, compiled.declaration.pins, compiled.pattern.params);
+    if (!compiled.child) checkPins(compiled.key, compiled.declaration.pinnedContext, compiled.pattern.params);
   }
   for (const [address, entry] of concrete) {
-    checkPins(address, entry.declaration.pins, Object.keys(compiledScopes.match(address)!.params));
+    checkPins(address, entry.declaration.pinnedContext, Object.keys(compiledScopes.match(address)!.params));
   }
   return compiledScopes;
 }

@@ -106,11 +106,18 @@ export type UpdateBackgroundTask = Partial<
  * only if the stored row still matches every supplied condition — a
  * compare-and-set that fences writes from superseded owners.
  *
- * `expectedOwnerId` / `expectedLeaseExpiresAt` use `string | null` /
- * `Date | null` because "expect the column to be unset" (null) is a meaningful
- * condition distinct from "don't check it" (undefined).
+ * `expectedOwnerId` / `expectedLeaseExpiresAt` / `expectedSuspendedAt` use
+ * `string | null` / `Date | null` because "expect the column to be unset"
+ * (null) is a meaningful condition distinct from "don't check it" (undefined).
  */
 export interface UpdateBackgroundTaskOptions {
+  /**
+   * Apply only if the stored suspension time equals this value (null = not
+   * suspended / unset). Distinguishes one suspension of a task from the next:
+   * owner and lease are cleared on suspend, so status alone can't tell a stale
+   * write for an earlier suspension from a write for the current one.
+   */
+  expectedSuspendedAt?: Date | null;
   /** Apply only if the stored status equals this value. */
   expectedStatus?: BackgroundTaskStatus;
   /** Apply only if the stored owner equals this value (null = unowned). */

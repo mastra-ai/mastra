@@ -279,6 +279,14 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
         params.push(transformToSqlValue(options.expectedLeaseExpiresAt));
       }
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      if (options.expectedSuspendedAt === null) {
+        predicates.push(`${quoteIdentifier('suspendedAt', 'column name')} IS NULL`);
+      } else {
+        predicates.push(`${quoteIdentifier('suspendedAt', 'column name')} = ?`);
+        params.push(transformToSqlValue(options.expectedSuspendedAt));
+      }
+    }
     const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE ${formatTableName(TABLE_BACKGROUND_TASKS)} SET ${setClauses.join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?${predicateSql}`,
