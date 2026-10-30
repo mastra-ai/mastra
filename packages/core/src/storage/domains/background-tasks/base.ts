@@ -45,6 +45,8 @@ export abstract class BackgroundTasksStorage extends StorageDomain {
    * it is applied only if the stored row still matches every supplied
    * condition. `expectedOwnerId` / `expectedLeaseExpiresAt` fence writes from
    * superseded owners so a worker that lost its lease cannot commit results.
+   * `expectedSuspendedAt` ties a write to one particular suspension, so a
+   * write meant for an earlier suspension cannot land on a later one.
    * Returns whether the update was applied.
    */
   abstract updateTask(
