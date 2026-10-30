@@ -339,6 +339,34 @@ describe('defineBoard phase fields', () => {
     );
   });
 
+  it('warns once per board that a transition policy is deprecated, and still keeps the policy', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const transitionPolicy = () => undefined;
+    const gated = {
+      id: 'policy-release',
+      name: 'Release',
+      initialPhase: 'backlog',
+      transitionPolicy,
+      phases: {
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    } as const;
+
+    const board = defineBoard(gated);
+    defineBoard(gated);
+    defineBoard({ ...gated, id: 'policy-release-2' });
+
+    expect(board.transitionPolicy).toBe(transitionPolicy);
+    expect(warn.mock.calls.map(([message]) => message)).toEqual([
+      '[Mastra Factory] Board "policy-release" uses deprecated fields: transitionPolicy → phases.*.agentEnterWhen. ' +
+        'They still work but will be removed in a future release.',
+      '[Mastra Factory] Board "policy-release-2" uses deprecated fields: transitionPolicy → phases.*.agentEnterWhen. ' +
+        'They still work but will be removed in a future release.',
+    ]);
+  });
+
   it('stays quiet for new fields, built-in boards and defined phases declared again', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
