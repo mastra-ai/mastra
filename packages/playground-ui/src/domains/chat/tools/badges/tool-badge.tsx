@@ -39,6 +39,8 @@ export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> 
   status?: ActivityStatus;
   /** The Mastra background task running the call, when it was deferred. */
   backgroundTaskId?: string;
+  /** `running` while the part holds a deferred call's placeholder; `completed`/`failed` once it holds the result. */
+  backgroundTaskStatus?: string;
 }
 
 export const ToolBadge = ({
@@ -55,6 +57,7 @@ export const ToolBadge = ({
   withoutArgs,
   status = 'idle',
   backgroundTaskId,
+  backgroundTaskStatus,
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
@@ -75,7 +78,10 @@ export const ToolBadge = ({
     toolOutput.length > 0 ||
     needsApproval;
 
-  const mcpTask = useMcpTaskProgress(result, status, { deferred: backgroundTaskId !== undefined });
+  // An awaited call's part also names its background task, but holds the call's final result.
+  const deferred =
+    backgroundTaskId !== undefined && backgroundTaskStatus !== 'completed' && backgroundTaskStatus !== 'failed';
+  const mcpTask = useMcpTaskProgress(result, status, { deferred });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks

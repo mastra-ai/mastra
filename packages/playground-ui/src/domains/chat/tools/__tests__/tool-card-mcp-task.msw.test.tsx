@@ -7,12 +7,11 @@ import { describe, expect, it } from 'vitest';
 import type { McpTaskProgress } from '../badges/use-mcp-task-progress';
 import { ToolCard } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
+import { BACKGROUND_TASK_ID, backgroundTask } from './fixtures/background-task';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
-
-const BACKGROUND_TASK_ID = 'bg-05a4940e';
 
 const working: McpTaskProgress = {
   type: 'mcp-task',
@@ -21,21 +20,6 @@ const working: McpTaskProgress = {
   createdAt: '2026-10-27T12:00:00.000Z',
   serverName: 'reports',
 };
-
-const backgroundTask = (status: BackgroundTaskResponse['status']): BackgroundTaskResponse => ({
-  id: BACKGROUND_TASK_ID,
-  status,
-  toolName: 'reports_slow_report',
-  toolCallId: 'call-1',
-  args: { topic: 'q3' },
-  agentId: 'tasks-agent',
-  runId: 'run-1',
-  createdAt: '2026-10-27T12:00:00.000Z',
-  completedAt: status === 'completed' ? '2026-10-27T12:00:42.000Z' : undefined,
-  retryCount: 0,
-  maxRetries: 0,
-  timeoutMs: 60_000,
-});
 
 /** Serves the background task as `running` until `finish()` is called, recording each poll. */
 const serveBackgroundTask = () => {
@@ -51,13 +35,17 @@ const serveBackgroundTask = () => {
   return { requests, finish: () => (status = 'completed') };
 };
 
-const card = (output: unknown): ToolCardProps => ({
+const card = (
+  output: unknown,
+  backgroundTaskStatus: ToolCardProps['backgroundTaskStatus'] = 'running',
+): ToolCardProps => ({
   toolName: 'reports_slow_report',
   input: { topic: 'q3' },
   output,
   toolCallId: 'call-1',
   state: 'output-available',
   backgroundTaskId: BACKGROUND_TASK_ID,
+  backgroundTaskStatus,
 });
 
 const Shell = ({ props }: { props: ToolCardProps }) => (
@@ -96,6 +84,23 @@ describe('tool card for a call that continued as an MCP task', () => {
 
       background.finish();
       await waitFor(() => expect(chipText()).toContain('task · completed · 0:42'), { timeout: 5_000 });
+    });
+  });
+
+  describe('when it was awaited and its final result arrived', () => {
+    it('ends the chip from the result, without needing the background task', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+        http.get(`${TEST_BASE_URL}/api/background-tasks/:taskId`, () =>
+          HttpResponse.json({ error: 'not found' }, { status: 404 }),
+        ),
+      );
+      const { rerender } = renderWithProviders(<Shell props={card([working])} />);
+      expect(chipText()).toContain('task · working');
+
+      rerender(<Shell props={card({ report: 'q3 ready' }, 'completed')} />);
+
+      await waitFor(() => expect(chipText()).toContain('task · completed'));
     });
   });
 });

@@ -14,5 +14,5 @@ Listing and finding need `mcp:read`. Cancelling and answering need `mcp:write`. 
 ```ts
 const res = await fetch('/api/mcp/reports/tasks?status=input_required');
 const { tasks, nextCursor } = await res.json();
-await fetch(`/api/mcp/reports/tasks/${tasks[0].taskKey}/cancel`, { method: 'POST' });
+if (tasks[0]) await fetch(`/api/mcp/reports/tasks/${tasks[0].taskKey}/cancel`, { method: 'POST' });
 ```
