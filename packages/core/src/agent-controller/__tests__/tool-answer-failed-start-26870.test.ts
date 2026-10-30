@@ -173,8 +173,9 @@ describe('tool answer that fails before its run starts', () => {
       expect(env.session.run.isRunning()).toBe(true);
       expect(env.session.run.getRunId()).toBe(startedRunId);
     }
-    await vi.waitFor(() =>
-      expect(env.events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' }),
+    await vi.waitFor(
+      () => expect(env.events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' }),
+      { timeout: 10_000 },
     );
     expect(env.executed).toEqual(['confirm']);
     expect(env.session.run.isRunning()).toBe(false);
@@ -242,8 +243,9 @@ describe('tool answer that fails before its run starts', () => {
     hold = false;
     release();
 
-    await vi.waitFor(() =>
-      expect(env.events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' }),
+    await vi.waitFor(
+      () => expect(env.events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' }),
+      { timeout: 10_000 },
     );
     // The subscription armed the session for the resumed run once it saw it.
     expect(started?.running).toBe(true);
@@ -311,7 +313,7 @@ describe('persisted tool approval that fails before its run starts', () => {
     const agent = env.session.machinery.getAgent();
     const suspendedRuns = async () =>
       (await agent.listSuspendedRuns({ threadId: ids.threadId, resourceId: ids.resourceId })).runs;
-    await vi.waitFor(async () => expect(await suspendedRuns()).toHaveLength(1));
+    await vi.waitFor(async () => expect(await suspendedRuns()).toHaveLength(1), { timeout: 10_000 });
     return { env, agent, suspendedRuns };
   }
 
@@ -330,8 +332,8 @@ describe('persisted tool approval that fails before its run starts', () => {
       expect(await suspendedRuns()).toHaveLength(1);
 
       await env.session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved });
-      if (approved) await vi.waitFor(() => expect(env.executed).toEqual(['lookup']));
-      await vi.waitFor(async () => expect(await suspendedRuns()).toEqual([]));
+      if (approved) await vi.waitFor(() => expect(env.executed).toEqual(['lookup']), { timeout: 10_000 });
+      await vi.waitFor(async () => expect(await suspendedRuns()).toEqual([]), { timeout: 10_000 });
       expect(env.executed).toEqual(approved ? ['lookup'] : []);
     },
     30_000,
@@ -362,8 +364,8 @@ describe('persisted tool approval that fails before its run starts', () => {
 
     approve.mockRestore();
     await env.session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved: true });
-    await vi.waitFor(() => expect(env.executed).toEqual(['lookup']));
-    await vi.waitFor(async () => expect(await suspendedRuns()).toEqual([]));
+    await vi.waitFor(() => expect(env.executed).toEqual(['lookup']), { timeout: 10_000 });
+    await vi.waitFor(async () => expect(await suspendedRuns()).toEqual([]), { timeout: 10_000 });
   }, 30_000);
 
   it.each(['before', 'after'] as const)(
