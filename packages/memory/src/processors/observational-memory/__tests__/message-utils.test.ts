@@ -130,6 +130,8 @@ describe('pruning a message whose tool call is still pending', () => {
 
   const endMarker = () => ({ type: 'data-om-observation-end', data: { operationType: 'observation' } }) as any;
 
+  const textPart = (text: string) => ({ type: 'text', text }) as any;
+
   function pruneWith(markerParts: any[]) {
     const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
     messageList.add(createMessage('user-1', 'go'), 'memory');
@@ -189,5 +191,32 @@ describe('pruning a message whose tool call is still pending', () => {
     ]);
 
     expect(parts).toEqual([call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed reasoning when text sits between it and the pending call', () => {
+    const parts = pruneWith([
+      reasoning('observed thinking', 'sig-old'),
+      call('old'),
+      result('old'),
+      reasoning('pending thinking', 'sig-pending'),
+      textPart('Here is what I found.'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed reasoning when a step marker sits between it and the pending call', () => {
+    const parts = pruneWith([
+      reasoning('pending thinking', 'sig-pending'),
+      { type: 'step-start' } as any,
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
   });
 });

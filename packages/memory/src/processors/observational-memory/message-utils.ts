@@ -185,15 +185,18 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
       keptAnything = true;
       continue;
     }
-    // Only reasoning that runs straight into a kept call is replayed; anything else
-    // in between means the block belongs to an already-observed step. A sibling call
-    // from the same step does not end the block: parallel calls share one signed run,
-    // and only the one whose result is still pending survives the prune.
+    // Only reasoning from the same step as a kept call is replayed; a file, image or other
+    // part in between means the block belongs to an already-observed step. Text and step
+    // markers do not end the run: a step writes its thinking, then text, then the call, and
+    // pruning the block out of that turn leaves the call at the start of the turn, which
+    // Anthropic rejects. A sibling call from the same step does not end the block either:
+    // parallel calls share one signed run, and only the one whose result is still pending
+    // survives the prune.
     if (part?.type === 'reasoning' && hasReplayableReasoningMetadata(part)) {
       pendingReasoning.push(i);
       continue;
     }
-    if (id !== undefined) continue;
+    if (part?.type === 'text' || part?.type === 'step-start' || id !== undefined) continue;
     pendingReasoning = [];
   }
 

@@ -151,9 +151,11 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
     ]);
   });
 
-  it('keeps signed reasoning that carries no visible text (#1919)', () => {
-    // Anthropic can sign a thinking block whose text is empty; the signature is the
-    // only part worth replaying, and losing it here breaks prompt caching.
+  it('keeps signed reasoning stored without text details (#1919)', () => {
+    // Rows written by the current writer carry `details: [{ text: '' }]` and already survive
+    // the signed check on their own. This covers the stored shape that has no details at all
+    // (rows written before details were recorded): its text is empty too, so without the
+    // signature check the block is dropped and the signature is lost on the way to the provider.
     const prompt = buildList({
       type: 'reasoning' as const,
       reasoning: '',
