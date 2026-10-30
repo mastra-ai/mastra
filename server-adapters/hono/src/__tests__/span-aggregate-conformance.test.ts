@@ -13,8 +13,14 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import { MastraServer } from '../index';
 
-// `span-aggregate` covers every span query field, so the handler gates only on it and tenant scope.
-const AGGREGATE_STORE_FEATURES = ['span-query', 'span-aggregate', 'trace-query-tenant-scope'];
+// `span-aggregate` covers every span query field that shipped before it. Later fields
+// (`model`/`provider`) are gated separately, so a fully up-to-date store declares those too.
+const AGGREGATE_STORE_FEATURES = [
+  'span-query',
+  'span-aggregate',
+  'span-query-model-fields',
+  'trace-query-tenant-scope',
+];
 
 // `organizationId` is a reserved request-context key, so clients cannot self-assert it. Server
 // middleware sets it here, as an auth layer would in production.
