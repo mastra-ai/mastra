@@ -3,6 +3,7 @@ import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
+import { reviewPullRequest } from './pull-request-review.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
@@ -347,6 +348,9 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
         jiraIssue: selfReviewWorkItem,
         incidentioFollowUp: selfReviewWorkItem,
         manual: selfReviewWorkItem,
+        // A pull request's own card is reviewed here by the independent reviewer.
+        pullRequest: reviewPullRequest,
+        gitlabPullRequest: reviewPullRequest,
       },
     },
     done: {

@@ -1,4 +1,4 @@
-import { hasRecordedVerdict } from '../../boards/review.js';
+import { hasRecordedVerdict } from '../../boards/pull-request-review.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
