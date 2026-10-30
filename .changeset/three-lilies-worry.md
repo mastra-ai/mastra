@@ -17,5 +17,7 @@ if (reviewsPullRequest({ board: context.board, item: context.item })) {
 }
 
 // True for github-pr and gitlab-pr cards, wherever they are filed.
-isPullRequestCard({ source: context.item.source });
+if (context.item && isPullRequestCard(context.item)) {
+  // A pull request's own card, not the card that authored it.
+}
 ```
