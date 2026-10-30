@@ -721,7 +721,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
       orgId: 'org1',
       id: item.id,
       userId: 'u2',
-      patch: { metadata: { reviewVerdict: 'approved' } },
+      patch: { title: 'Concurrent edit' },
     });
 
     await expect(
