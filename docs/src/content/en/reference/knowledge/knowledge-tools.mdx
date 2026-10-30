@@ -87,16 +87,16 @@ Reads a page: its body, notes, child pages, and the notes on other pages that me
 
 ## `knowledge_page`
 
-Creates, edits, moves and merges pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`: they act on the page's own scope.
+Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits, merges and deletes take no `scope`: they act on the page's own scope.
 
 <PropertiesTable
   content={[
   {
     name: 'op',
-    type: "'write' | 'move' | 'merge'",
+    type: "'write' | 'move' | 'merge' | 'delete'",
     description: '`write` with `page` edits it; without `page` it creates one.',
   },
-  { name: 'page', type: 'string', description: 'The page to edit, move or merge.', isOptional: true },
+  { name: 'page', type: 'string', description: 'The page to edit, move, merge or delete.', isOptional: true },
   {
     name: 'scope',
     type: 'string',
@@ -141,8 +141,11 @@ Creates, edits, moves and merges pages. `scope` only names the destination: the 
 | Move within a scope | `editor` on the page's scope |
 | Move to another scope | `owner` on the page's scope and on `scope` |
 | Merge | `owner` on the merged page's scope; on the scope of `into`, `editor` if it's the same scope and `owner` if it's another, since the merged page's children move there |
+| Delete | `owner` on the page's scope |
 
-Template pages, declared in a scope's `pages`, can be edited, annotated with notes and merged into, but not moved or merged away, whatever the run's role.
+Template pages, declared in a scope's `pages`, can be edited, annotated with notes and merged into, but not moved, merged away or deleted, whatever the run's role.
+
+`delete` removes a page from reads, search and pins. It's refused while the page has child pages, for a scope page and for a template page.
 
 Errors:
 
@@ -152,6 +155,8 @@ Editing a page needs at least one of name, description or body.
 Editing a page takes no scope, parent or key; use op "move" to relocate it.
 Moving a page needs the destination scope.
 Merging needs into: the page that remains.
+"Escalation" has child pages; move or delete them first.
+"org:acme" is a scope page; scope pages can't be moved, merged or deleted.
 Knowledge page "org:acme#policies/escalation" not found.
 Knowledge page key "a/b" must not contain "/", "#" or "%"
 Knowledge page key "escalation" already exists under page aa8f6099-6111-4952-b9cb-04cb97eb2bb5. Keys are unique among siblings; pick another key or move one of the pages.
@@ -161,6 +166,7 @@ Editing a page needs editor on "team:acme:support"; this run has viewer there.
 Moving a page across scopes needs owner on "org:acme"; this run has editor there.
 Merging a page away needs owner on "team:acme:support"; this run has editor there.
 Merging a page across scopes needs owner on "team-public:acme:support"; this run has editor there.
+Deleting a page needs owner on "org:acme"; this run has editor there.
 Knowledge page description exceeds the 100 token limit; put long-form text in the page body
 Knowledge record version conflict: 37c1e879-b328-47a9-9d3c-5788ad35ca2d
 ```
