@@ -82,28 +82,41 @@ function activitySlots(period: ActivityPeriod, now: number, runsCompleteAfter: n
   }
 }
 
+/** When cards came in and shipped, in epoch ms. */
+export interface ActivityTimes {
+  cameIn: readonly number[];
+  shipped: readonly number[];
+}
+
+export function cardActivityTimes(cards: readonly WorkItem[]): ActivityTimes {
+  return {
+    cameIn: cards.map(card => Date.parse(card.createdAt)),
+    shipped: cards.flatMap(card => doneAt(card) ?? []),
+  };
+}
+
 export function periodActivity({
   period,
   now,
-  cards,
+  times,
   runStarts,
 }: {
   period: ActivityPeriod;
   now: number;
-  cards: readonly WorkItem[];
+  times: ActivityTimes;
   runStarts: RunStarts;
 }): Activity {
   const from = activityStart(period, now);
   const slots = activitySlots(period, now, runStarts.completeAfter);
   const totals = noCounts();
-  const times: Record<ActivityKind, ReadonlyArray<number | undefined>> = {
-    cameIn: cards.map(card => Date.parse(card.createdAt)),
+  const byKind: Record<ActivityKind, readonly number[]> = {
+    cameIn: times.cameIn,
     ran: runStarts.starts,
-    shipped: cards.map(doneAt),
+    shipped: times.shipped,
   };
   for (const kind of ACTIVITY_KIND_ORDER) {
-    for (const time of times[kind]) {
-      if (time === undefined || time < from) continue;
+    for (const time of byKind[kind]) {
+      if (time < from) continue;
       const slot = slots.findLast(candidate => candidate.start <= Math.min(time, now));
       if (!slot) continue;
       slot.counts[kind] += 1;

@@ -751,6 +751,22 @@ export const FACTORY_ROUTE_CONTRACTS = {
       ),
     }),
   },
+  workItemSessionCards: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/session-cards',
+    description:
+      'List every Factory work item that has a session, cut to its title, key, stage and sessions, so session lists can name sessions without reading every card',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({ workItems: z.array(entitySchema) }),
+  },
+  workItemActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/activity',
+    description: 'List when Factory work items came in and shipped since a time, for the activity chart',
+    pathSchema: projectPathSchema,
+    querySchema: z.object({ since: z.iso.datetime({ offset: true }) }),
+    responseSchema: z.object({ cameIn: z.array(z.string()), shipped: z.array(z.string()) }),
+  },
   workItemGet: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items/:workItemId',

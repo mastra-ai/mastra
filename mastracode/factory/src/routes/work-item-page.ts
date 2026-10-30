@@ -9,6 +9,8 @@ import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import { encodeWorkItemCursor } from './work-item-cursor.js';
 import type { WorkItemPageCursor, WorkItemSort } from './work-item-cursor.js';
+import { prepareSearchCard, searchScore, searchTerms } from './work-item-search.js';
+import type { PreparedCard } from './work-item-search.js';
 
 /** The board's person filters; each holds participant ids like `github:octocat` or `factory:<userId>`. */
 export const WORK_ITEM_PERSON_FILTERS = ['teammate', 'author', 'assignee', 'reviewer', 'worked'] as const;
@@ -62,7 +64,9 @@ function columnPosition(item: WorkItemRow): string {
   return latest ?? item.createdAt.toISOString();
 }
 
-function sortKey(item: WorkItemRow, sort: WorkItemSort, userId: string | undefined): string {
+function sortKey(item: WorkItemRow, sort: WorkItemSort, userId: string | undefined, q?: string): string {
+  if (sort === 'relevance')
+    return `${String(workItemSearchScore(item, q) ?? 0).padStart(6, '0')}|${columnPosition(item)}`;
   if (sort === 'created-newest' || sort === 'created-oldest') return item.createdAt.toISOString();
   if (sort === 'recent-mine' && userId) {
     const stage = item.stages[0];
@@ -147,12 +151,44 @@ export function matchesWorkItemFilters(item: WorkItemRow, filters: WorkItemFilte
     if (!filters.labels.some(label => labels.has(label.toLowerCase()))) return false;
   }
   if (!matchesPeople(item, filters.people)) return false;
-  const needle = filters.q?.trim().toLowerCase();
-  if (!needle) return true;
-  return (
-    item.title.toLowerCase().includes(needle) ||
-    (item.externalSource?.externalId.toLowerCase().includes(needle) ?? false)
-  );
+  return workItemSearchScore(item, filters.q) !== undefined;
+}
+
+/** How well a card matches the search `q` (higher is better), or `undefined` when it doesn't. */
+function workItemSearchScore(item: WorkItemRow, q: string | undefined): number | undefined {
+  const terms = searchTerms(q ?? '');
+  if (terms.length === 0) return 0;
+  return searchScore(preparedSearchCard(item), terms);
+}
+
+// Cached rows are shared and replaced on write, so a row's normalized text never goes stale.
+const preparedSearchCards = new WeakMap<WorkItemRow, PreparedCard>();
+
+function preparedSearchCard(item: WorkItemRow): PreparedCard {
+  let prepared = preparedSearchCards.get(item);
+  if (!prepared) {
+    const externalId = item.externalSource?.externalId;
+    prepared = prepareSearchCard({
+      title: item.title,
+      keys: externalId ? [...workItemKeys(item), externalId] : workItemKeys(item),
+    });
+    preparedSearchCards.set(item, prepared);
+  }
+  return prepared;
+}
+
+/** The keys a card is searched by besides its title: `#123` on GitHub and GitLab, `ENG-42` on Linear and Jira. */
+function workItemKeys(item: WorkItemRow): string[] {
+  const keys: string[] = [];
+  for (const key of ['githubIssueNumber', 'githubPullRequestNumber', 'gitlabMergeRequestIid', 'number']) {
+    const value = item.metadata?.[key];
+    if (typeof value === 'number' || (typeof value === 'string' && value)) keys.push(`#${value}`);
+  }
+  for (const key of ['identifier', 'issueReference', 'issueRef']) {
+    const value = item.metadata?.[key];
+    if (typeof value === 'string' && value) keys.push(value);
+  }
+  return keys;
 }
 
 /**
@@ -163,7 +199,7 @@ export function pageWorkItems(items: readonly WorkItemRow[], query: WorkItemPage
   const keyed: { item: WorkItemRow; at: WorkItemPageCursor }[] = [];
   for (const item of items) {
     if (!matchesWorkItemFilters(item, query)) continue;
-    const at = { key: sortKey(item, query.sort, query.userId), id: item.id };
+    const at = { key: sortKey(item, query.sort, query.userId, query.q), id: item.id };
     if (query.cursor && compare(at, query.cursor, query.sort) <= 0) continue;
     keyed.push({ item, at });
   }
@@ -226,7 +262,25 @@ export function workItemSources(items: readonly WorkItemRow[]) {
 }
 
 /** Card metadata the board never reads; the biggest per-card payload on review boards. */
-const UNSYNCED_METADATA_KEYS = ['selfReviewFindings'] as const;
+/**
+ * Metadata the board never reads, left off what it syncs and pages. Metadata patches merge on the
+ * server, so a board that writes a card back without these keys keeps them.
+ */
+const UNSYNCED_METADATA_KEYS = [
+  'selfReviewFindings',
+  'selfReviewedHeadSha',
+  'selfReviewedAt',
+  'selfReviewNeedsHuman',
+  'autoStartCandidate',
+  'authorTrusted',
+  'pullRequestHeadAt',
+  'pullRequestHeadDeliveryId',
+  'openPullRequestNumber',
+  'reviewedAt',
+  'linearPriority',
+  'linearState',
+  'linearStateType',
+] as const;
 
 /** The card as a board sync carries it: everything the board filters, sorts and renders. */
 export function toSyncedWorkItem(item: WorkItemRow): WorkItemRow {
@@ -257,7 +311,8 @@ export interface WorkItemSync {
 
 /**
  * A board's view of the project since `since`: without it (or when it is older than deletes
- * are kept for), the open cards to start from; with it, just the cards that changed.
+ * are kept for), the cards someone is working to start from (Intake, Done and Canceled are read a
+ * page at a time); with it, every card that changed, wherever it now sits.
  */
 export function syncWorkItems(
   all: readonly WorkItemRow[],
@@ -265,19 +320,19 @@ export function syncWorkItems(
     since,
     now,
     deleted,
-    isTerminal,
+    isPaged,
     oldestDelta,
   }: {
     since?: Date;
     now: Date;
     deleted: readonly { id: string; deletedAt: Date }[];
-    isTerminal: (item: WorkItemRow) => boolean;
+    isPaged: (item: WorkItemRow) => boolean;
     oldestDelta: Date;
   },
 ): WorkItemSync {
   const behind = new Date(now.getTime() - WORK_ITEM_SYNC_OVERLAP_MS);
   if (!since || since < oldestDelta) {
-    return { reset: true, items: all.filter(item => !isTerminal(item)), deletedIds: [], at: behind };
+    return { reset: true, items: all.filter(item => !isPaged(item)), deletedIds: [], at: behind };
   }
   return {
     reset: false,
@@ -285,4 +340,60 @@ export function syncWorkItems(
     deletedIds: deleted.filter(entry => entry.deletedAt >= since).map(entry => entry.id),
     at: behind > since ? behind : since,
   };
+}
+
+/** The metadata a card is named and linked by: its key, repository and PR state. */
+const BRIEF_METADATA_KEYS = [
+  'identifier',
+  'issueRef',
+  'issueReference',
+  'number',
+  'githubIssueNumber',
+  'githubPullRequestNumber',
+  'githubRepositoryId',
+  'gitlabMergeRequestIid',
+  'gitlabProjectId',
+  'linearIssueId',
+  'linearProjectId',
+  'repository',
+  'headBranch',
+  'state',
+  'draft',
+  'merged',
+] as const;
+
+/**
+ * A card cut to what names it: title, key, stage and sessions, with only its latest stage entry.
+ * Session lists and ⌘K title sessions with these instead of reading every card in full.
+ */
+export function toBriefWorkItem(item: WorkItemRow): WorkItemRow {
+  const metadata: Record<string, unknown> = {};
+  for (const key of BRIEF_METADATA_KEYS) {
+    if (item.metadata && key in item.metadata) metadata[key] = item.metadata[key];
+  }
+  return { ...item, metadata, stageHistory: item.stageHistory.slice(-1) };
+}
+
+/** Every card a session ran on, briefly. */
+export function sessionWorkItems(all: readonly WorkItemRow[]): WorkItemRow[] {
+  return all.filter(item => Object.keys(item.sessions).length > 0).map(toBriefWorkItem);
+}
+
+function shippedAt(item: WorkItemRow): number | undefined {
+  if (!item.stages.includes('done')) return undefined;
+  const entry = item.stageHistory.findLast(candidate => candidate.stage === 'done');
+  return entry && Date.parse(entry.enteredAt);
+}
+
+/** When cards came in and shipped since `since`: all the activity chart needs to count them. */
+export function activityTimes(all: readonly WorkItemRow[], since: Date): { cameIn: string[]; shipped: string[] } {
+  const from = since.getTime();
+  const cameIn: string[] = [];
+  const shipped: string[] = [];
+  for (const item of all) {
+    if (item.createdAt.getTime() >= from) cameIn.push(item.createdAt.toISOString());
+    const done = shippedAt(item);
+    if (done !== undefined && done >= from) shipped.push(new Date(done).toISOString());
+  }
+  return { cameIn, shipped };
 }

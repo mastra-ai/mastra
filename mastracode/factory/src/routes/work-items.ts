@@ -13,7 +13,7 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { isTerminalWorkItem } from '../boards/semantics.js';
+import { isIdleWorkItem } from '../boards/semantics.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -55,7 +55,15 @@ import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 import { encodeWorkItemSyncCursor } from './work-item-cursor.js';
 import type { WorkItemFilters } from './work-item-page.js';
-import { countWorkItems, pageWorkItems, syncWorkItems, toSyncedWorkItem, workItemSources } from './work-item-page.js';
+import {
+  activityTimes,
+  countWorkItems,
+  pageWorkItems,
+  sessionWorkItems,
+  syncWorkItems,
+  toSyncedWorkItem,
+  workItemSources,
+} from './work-item-page.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -519,7 +527,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             since,
             now,
             deleted,
-            isTerminal: item => isTerminalWorkItem(boards, item),
+            isPaged: item => isIdleWorkItem(boards, item),
             oldestDelta,
           });
           return c.json({
@@ -547,6 +555,41 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             factoryProjectId: resolved.factoryProjectId,
           });
           return c.json({ sources: workItemSources(all) });
+        },
+      }),
+      // ── Every card a session ran on, briefly, to name sessions ─────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSessionCards.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSessionCards.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({ workItems: sessionWorkItems(all).map(toWireWorkItem) });
+        },
+      }),
+      // ── Cards that came in or shipped lately, for the activity chart ───────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemActivity.querySchema.safeParse({
+            since: context.req.query('since'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_work_item_query' }, 400);
+          await workItems.ensureReady();
+          const all = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json(activityTimes(all, new Date(query.data.since)));
         },
       }),
       // ── One card, for deep links to cards outside the loaded pages ───────────

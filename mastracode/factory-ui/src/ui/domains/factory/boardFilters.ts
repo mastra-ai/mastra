@@ -1,6 +1,7 @@
 import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 
 import { BOARD_PERSON_FIELDS } from './boardPeople';
+import type { PersonIdentity } from './boardPeople';
 import type { BoardKind } from './boardStages';
 
 /** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */
@@ -47,6 +48,20 @@ export function boardFilterParams(params: URLSearchParams, state: BoardFilterSta
     for (const value of state[fieldId]) next.append(fieldId, value);
   }
   return next;
+}
+
+/**
+ * `state` as work-item list query parameters, for columns the server pages: each filter a comma
+ * list, and a person picked by any of the ids they are known by.
+ */
+export function boardFilterQuery(state: BoardFilterState, personId: PersonIdentity): Record<string, string> {
+  const query: Record<string, string> = {};
+  const people = new Set<string>(BOARD_PERSON_FIELDS);
+  for (const fieldId of BOARD_FILTER_FIELDS) {
+    const values = [...state[fieldId]].flatMap(value => (people.has(fieldId) ? personId.aliases(value) : [value]));
+    if (values.length > 0) query[fieldId] = values.join(',');
+  }
+  return query;
 }
 
 /** The open card and the comment it deep-links to are one selection: clear them together. */

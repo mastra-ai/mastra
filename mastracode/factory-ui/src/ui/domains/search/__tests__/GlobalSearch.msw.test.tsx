@@ -11,7 +11,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import { queryKeys } from '../../../../api/keys';
 import {
   boardQueryOptions,
-  workItemHistoryQueryOptions,
+  sessionWorkItemsQueryOptions,
   workItemSourcesQueryOptions,
 } from '../../../../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
@@ -55,6 +55,8 @@ interface SearchRequestState {
   intakeRequests: number;
   sessionRequests: Record<string, number>;
   workItemRequests: number;
+  /** `q` of each server card search the palette sent. */
+  searchQueries: string[];
 }
 
 interface StubSearchOptions {
@@ -67,6 +69,8 @@ interface StubSearchOptions {
   onSessionsAbort?: () => void;
   running?: boolean;
   workItems?: WorkItem[];
+  /** Cards the server finds for a typed query, beyond what the board and session cards hold. */
+  serverMatches?: WorkItem[];
 }
 
 function resourceIdFromRequestBody(body: unknown): string {
@@ -85,6 +89,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     intakeRequests: 0,
     sessionRequests: {},
     workItemRequests: 0,
+    searchQueries: [],
   };
 
   server.use(
@@ -125,7 +130,12 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       }
       return HttpResponse.json({ connections: factoryConnections[OTHER_FACTORY_ID] });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params, request }) => {
+      const q = new URL(request.url).searchParams.get('q');
+      if (q !== null) {
+        state.searchQueries.push(q);
+        return HttpResponse.json({ workItems: (options.serverMatches ?? []).map(toWireWorkItem) });
+      }
       state.workItemRequests += 1;
       if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
       const factoryProjectId = String(params.factoryProjectId);
@@ -309,7 +319,7 @@ async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryCli
   await Promise.all([
     client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
     client.prefetchQuery(boardQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.prefetchQuery(workItemHistoryQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.prefetchQuery(sessionWorkItemsQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
     client.prefetchQuery(workItemSourcesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
   ]);
 }
@@ -540,7 +550,7 @@ describe('Global search', () => {
     expect(within(rail).getByRole('button', { name: /Review sessions/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('filters locally across titles, branches, ids, and Factory repositories without issuing more requests', async () => {
+  it('filters loaded results locally, asking the server only for matching cards', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
@@ -572,6 +582,34 @@ describe('Global search', () => {
       sessionRequestCount,
     );
     expect(requests.workItemRequests).toBe(workItemRequestCount);
+    await waitFor(() => expect(requests.searchQueries).toContain('nothing can match this'));
+  });
+
+  it('finds a Done card the board never loaded through the server search, best match first', async () => {
+    const requests = stubSearchApi({
+      serverMatches: [
+        {
+          ...workItems[0],
+          id: 'work-item-shipped',
+          title: 'Shipped the billing export',
+          sourceKey: 'mastra-ai/mastra:777',
+          url: 'https://github.com/mastra-ai/mastra/issues/777',
+          stages: ['done'],
+          sessions: {},
+          metadata: { number: 777 },
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    await openWithShortcut();
+    await screen.findByText('Review command palette PR');
+    expect(screen.queryByText('Shipped the billing export')).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'billing export');
+
+    expect(await screen.findByText('Shipped the billing export')).toBeInTheDocument();
+    expect(requests.searchQueries.at(-1)).toBe('billing export');
   });
 
   it('reuses warm session and work-item caches without refetching', async () => {

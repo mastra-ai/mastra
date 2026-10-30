@@ -63,9 +63,7 @@ export function useBoardItems({
   // The board holds only open cards, so an issue whose card closed long ago is known by its source.
   const knownSourceKeys = useMemo(() => persistedSourceKeys([...all, ...sources]), [all, sources]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(
-    [...all, ...sources].filter(item => !belongsToBoard(item, kind)),
-  );
+  const elsewhereSourceKeys = persistedSourceKeys([...all, ...sources].filter(item => !belongsToBoard(item, kind)));
   const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {

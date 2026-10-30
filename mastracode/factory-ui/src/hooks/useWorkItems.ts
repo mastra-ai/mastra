@@ -17,11 +17,14 @@ import {
   createWorkItem,
   deleteWorkItem,
   listWorkItemSources,
-  listWorkItems,
+  listActivityTimes,
+  listSessionWorkItems,
   syncWorkItems,
   transitionWorkItem,
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
+import { activityStart } from '../ui/domains/factory/periodActivity';
+import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import type {
   BoardSnapshot,
   CreateWorkItemInput,
@@ -108,7 +111,11 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
             void client.invalidateQueries({ queryKey: queryKeys.workItemArchiveRoot(factoryProjectId) });
           }
           // Read again: an optimistic edit may have landed while the sync was in flight.
-          return applyBoardSync(sync.reset ? undefined : client.getQueryData<BoardSnapshot>(queryKey), sync, Date.now());
+          return applyBoardSync(
+            sync.reset ? undefined : client.getQueryData<BoardSnapshot>(queryKey),
+            sync,
+            Date.now(),
+          );
         }
       : skipToken,
     // The feed stream refetches on every board write; this only backs it up for a dropped stream
@@ -149,32 +156,32 @@ export function useWorkItemSources(factoryProjectId: string | undefined): WorkIt
 }
 
 /**
- * Every card on the project, Done and Canceled included. Read once and kept for a few minutes rather
- * than polled: only lookups that miss the board need it.
+ * Every card a session ran on, Done and Canceled included, cut to what names it. Read on demand and
+ * kept for a minute: only session lookups that miss the board need it.
  */
-export function workItemHistoryQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+export function sessionWorkItemsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
-    queryKey: queryKeys.workItemHistory(factoryProjectId),
-    queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
-    staleTime: 5 * 60_000,
+    queryKey: queryKeys.sessionWorkItems(factoryProjectId),
+    queryFn: factoryProjectId ? ({ signal }) => listSessionWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
-    select: selectCards,
   });
 }
 
 /**
- * The board's cards, plus every older one once `needsHistory` says the board alone falls short.
- * Board cards win over their history copies, since the board is synced and patched by every edit.
+ * The board's cards, plus every card a session ran on once `needsSessionCards` says the board alone
+ * falls short. Board cards win over the brief copies, since the board is synced and patched by every edit.
  */
-export function useWorkItemsWithHistory(
+export function useWorkItemsWithSessionCards(
   factoryProjectId: string | undefined,
-  needsHistory: boolean | ((cards: WorkItem[]) => boolean),
+  needsSessionCards: boolean | ((cards: WorkItem[]) => boolean),
 ) {
   const { baseUrl } = useApiConfig();
   const board = useWorkItemsQuery(factoryProjectId);
   const cards = board.data ?? NO_CARDS;
-  const enabled = board.isSuccess && (typeof needsHistory === 'function' ? needsHistory(cards) : needsHistory);
-  const history = useQuery({ ...workItemHistoryQueryOptions(baseUrl, factoryProjectId), enabled });
+  const enabled =
+    board.isSuccess && (typeof needsSessionCards === 'function' ? needsSessionCards(cards) : needsSessionCards);
+  const history = useQuery({ ...sessionWorkItemsQueryOptions(baseUrl, factoryProjectId), enabled });
   const data = useMemo(() => {
     if (!board.data || !history.data) return board.data;
     const onBoard = new Set(board.data.map(item => item.id));
@@ -191,6 +198,20 @@ export function useWorkItemsWithHistory(
     dataUpdatedAt: board.dataUpdatedAt,
     refetch: board.refetch,
   };
+}
+
+/** Every card that came in or shipped within `period`, cut to what the activity chart reads. */
+export function useActivityTimes(factoryProjectId: string | undefined, period: ActivityPeriod) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.workItemActivity(factoryProjectId, period),
+    queryFn: factoryProjectId
+      ? ({ signal }) =>
+          listActivityTimes(baseUrl, factoryProjectId, new Date(activityStart(period, Date.now())), signal)
+      : skipToken,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */

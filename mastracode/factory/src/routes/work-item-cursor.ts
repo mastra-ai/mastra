@@ -1,7 +1,7 @@
 /** Sorts and the keyset cursor of the paged work-items list, shared by the route contract and the pager. */
 
-/** The board's sorts; the same names the board UI stores in its view settings. */
-export const WORK_ITEM_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
+/** The board's sorts (the names the board UI stores in its view settings), plus `relevance` for search: best match first. */
+export const WORK_ITEM_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest', 'relevance'] as const;
 export type WorkItemSort = (typeof WORK_ITEM_SORTS)[number];
 
 export interface WorkItemPageCursor {

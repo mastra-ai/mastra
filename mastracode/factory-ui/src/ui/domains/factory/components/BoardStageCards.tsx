@@ -71,9 +71,7 @@ export function BoardStageCards({
           isFetchingNextPage={archive.isFetchingNextPage}
           onLoadMore={archive.loadMore}
           label={`Load more ${stage.label} cards`}
-          loadingIndicator={
-            <BoardItemsSkeleton label={`Loading more ${stage.label} cards`} rows={1} layout={layout} />
-          }
+          loadingIndicator={<BoardItemsSkeleton label={`Loading more ${stage.label} cards`} rows={1} layout={layout} />}
         />
       )}
     </>

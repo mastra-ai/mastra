@@ -306,7 +306,7 @@ export async function syncWorkItems(
   return { ...data, workItems: data.workItems.map(fromWireWorkItem) };
 }
 
-export type WorkItemPageSort = 'recent' | 'recent-mine' | 'created-newest' | 'created-oldest';
+export type WorkItemPageSort = 'recent' | 'recent-mine' | 'created-newest' | 'created-oldest' | 'relevance';
 
 /** Server-side filters, named after the query parameters of the paged list. */
 export interface WorkItemPageQuery {
@@ -316,6 +316,8 @@ export interface WorkItemPageQuery {
   sort?: WorkItemPageSort;
   limit?: number;
   cursor?: string;
+  /** Board filters as query parameters (`source`, `label`, `teammate`, ...), each a comma list. */
+  filters?: Readonly<Record<string, string>>;
 }
 
 export interface WorkItemPage {
@@ -330,15 +332,32 @@ export async function listWorkItemPage(
   query: WorkItemPageQuery,
   signal?: AbortSignal,
 ): Promise<WorkItemPage> {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
+  const { filters, ...rest } = query;
+  const params = new URLSearchParams(filters);
+  for (const [key, value] of Object.entries(rest)) {
     if (value !== undefined && value !== '') params.set(key, String(value));
   }
   const data = await requestJson<{ workItems: WireWorkItem[]; nextCursor?: string }>(
     projectWorkItemsUrl(baseUrl, factoryProjectId, `?${params.toString()}`),
     { signal },
   );
-  return { workItems: data.workItems.map(fromWireWorkItem), ...(data.nextCursor ? { nextCursor: data.nextCursor } : {}) };
+  return {
+    workItems: data.workItems.map(fromWireWorkItem),
+    ...(data.nextCursor ? { nextCursor: data.nextCursor } : {}),
+  };
+}
+
+/** Cards per board and column among those matching `filters` (query parameters, as on a page read). */
+export async function countWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  filters: Readonly<Record<string, string>>,
+  signal?: AbortSignal,
+): Promise<WorkItemCounts> {
+  const params = new URLSearchParams(filters);
+  return requestJson<WorkItemCounts>(projectWorkItemsUrl(baseUrl, factoryProjectId, `/counts?${params.toString()}`), {
+    signal,
+  });
 }
 
 /** One card by id, Done and Canceled included: what a deep link to a card the board never loaded reads. */
@@ -353,6 +372,33 @@ export async function getWorkItem(
     { signal },
   );
   return fromWireWorkItem(data.workItem);
+}
+
+/** Every card a session ran on, cut to what names it, so session lists never read every card. */
+export async function listSessionWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal?: AbortSignal,
+): Promise<WorkItem[]> {
+  const data = await requestJson<{ workItems: WireWorkItem[] }>(
+    projectWorkItemsUrl(baseUrl, factoryProjectId, '/session-cards'),
+    { signal },
+  );
+  return data.workItems.map(fromWireWorkItem);
+}
+
+/** Every card that came in or shipped since `since`, cut to what names it, for the activity chart. */
+export async function listActivityTimes(
+  baseUrl: string,
+  factoryProjectId: string,
+  since: Date,
+  signal?: AbortSignal,
+): Promise<{ cameIn: number[]; shipped: number[] }> {
+  const data = await requestJson<{ cameIn: string[]; shipped: string[] }>(
+    projectWorkItemsUrl(baseUrl, factoryProjectId, `/activity?since=${encodeURIComponent(since.toISOString())}`),
+    { signal },
+  );
+  return { cameIn: data.cameIn.map(Date.parse), shipped: data.shipped.map(Date.parse) };
 }
 
 /** What Intake needs to recognise an issue that already has a card: the card's source, never the card. */

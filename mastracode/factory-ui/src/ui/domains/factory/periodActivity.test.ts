@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ACTIVITY_KIND_ORDER, periodActivity } from './periodActivity';
+import { ACTIVITY_KIND_ORDER, periodActivity, cardActivityTimes } from './periodActivity';
 import type { Activity, RunStarts } from './periodActivity';
 import type { WorkItem } from './services/workItems';
 
@@ -63,14 +63,14 @@ describe('periodActivity', () => {
     const week = periodActivity({
       period: 'week',
       now: NOW,
-      cards: [
+      times: cardActivityTimes([
         card('new', NOW - HOUR),
         card('this-week', NOW - 3 * DAY),
         card('last-week', NOW - 8 * DAY),
         shippedCard('shipped', NOW - 2 * DAY),
         shippedCard('shipped-long-ago', NOW - 10 * DAY),
         shippedCard('reopened', NOW - DAY, ['review']),
-      ],
+      ]),
       runStarts: allRunStarts(NOW - 5 * HOUR, NOW - 9 * DAY),
     });
 
@@ -82,10 +82,10 @@ describe('periodActivity', () => {
     const today = periodActivity({
       period: 'today',
       now: NOW,
-      cards: [
+      times: cardActivityTimes([
         card('morning', new Date(2026, 9, 27, 9, 15).getTime()),
         card('last-night', new Date(2026, 9, 26, 23).getTime()),
-      ],
+      ]),
       runStarts: allRunStarts(),
     });
 
@@ -98,7 +98,7 @@ describe('periodActivity', () => {
     const month = periodActivity({
       period: 'month',
       now: NOW,
-      cards: [card('in-range', NOW - 29 * DAY), card('too-old', NOW - 31 * DAY)],
+      times: cardActivityTimes([card('in-range', NOW - 29 * DAY), card('too-old', NOW - 31 * DAY)]),
       runStarts: allRunStarts(),
     });
 
@@ -110,7 +110,7 @@ describe('periodActivity', () => {
     const today = periodActivity({
       period: 'today',
       now: NOW,
-      cards: [card('clock-skew', NOW + 2 * HOUR)],
+      times: cardActivityTimes([card('clock-skew', NOW + 2 * HOUR)]),
       runStarts: allRunStarts(),
     });
 
@@ -123,7 +123,7 @@ describe('periodActivity', () => {
     const week = periodActivity({
       period: 'week',
       now: Date.parse('2026-10-27T09:00:00Z'),
-      cards: [card('a', 0)],
+      times: cardActivityTimes([card('a', 0)]),
       runStarts: allRunStarts(),
     });
 
@@ -138,7 +138,7 @@ describe('periodActivity', () => {
     const week = periodActivity({
       period: 'week',
       now: new Date(2026, 2, 30, 0, 30).getTime(),
-      cards: [card('late-sunday', new Date(2026, 2, 22, 23, 45).getTime())],
+      times: cardActivityTimes([card('late-sunday', new Date(2026, 2, 22, 23, 45).getTime())]),
       runStarts: allRunStarts(),
     });
 
@@ -152,7 +152,7 @@ describe('periodActivity', () => {
       [new Date(2026, 2, 29, 5, 30).getTime(), [0, 1, 3, 4, 5]],
       [new Date(2026, 9, 25, 5, 30).getTime(), [0, 1, 2, 2, 3, 4, 5]],
     ] as const) {
-      const today = periodActivity({ period: 'today', now, cards: [], runStarts: allRunStarts() });
+      const today = periodActivity({ period: 'today', now, times: cardActivityTimes([]), runStarts: allRunStarts() });
 
       expect(today.slots.map(slot => new Date(slot.start).getHours())).toEqual(hours);
       expect(today.slots.every(slot => slot.end - slot.start === HOUR)).toBe(true);
@@ -161,8 +161,8 @@ describe('periodActivity', () => {
 
   it('vouches for agent runs only in spans that start after the oldest fetched run start', () => {
     const runStarts: RunStarts = { starts: [NOW - HOUR, NOW - 2 * DAY], completeAfter: NOW - 2 * DAY };
-    const week = periodActivity({ period: 'week', now: NOW, cards: [], runStarts });
-    const today = periodActivity({ period: 'today', now: NOW, cards: [], runStarts });
+    const week = periodActivity({ period: 'week', now: NOW, times: cardActivityTimes([]), runStarts });
+    const today = periodActivity({ period: 'today', now: NOW, times: cardActivityTimes([]), runStarts });
 
     expect(week.ranComplete).toBe(false);
     expect(today.ranComplete).toBe(true);

@@ -1,5 +1,5 @@
 import type { WorkItem } from '../ui/domains/factory/services/workItems';
-import { useWorkItemsWithHistory } from './useWorkItems';
+import { useWorkItemsWithSessionCards } from './useWorkItems';
 
 /**
  * Threads carry no work-item ref of their own, so the card is found in the
@@ -27,8 +27,8 @@ export function useThreadWorkItem(
   threadId: string | undefined,
   sessionId?: string,
 ) {
-  // A thread of a Done or Canceled card the board never loaded is found in the full history.
-  const items = useWorkItemsWithHistory(
+  // A thread of a card the board never loaded is found among the cards sessions ran on.
+  const items = useWorkItemsWithSessionCards(
     factoryProjectId,
     cards => threadId !== undefined && !findThreadWorkItem(cards, threadId, sessionId),
   );

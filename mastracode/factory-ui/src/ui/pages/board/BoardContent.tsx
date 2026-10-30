@@ -34,7 +34,7 @@ import {
   candidateMatchesPeople,
   workItemMatchesPeople,
 } from '../../domains/factory/boardPeople';
-import { boardFiltersActive } from '../../domains/factory/boardFilters';
+import { boardFilterQuery, boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
@@ -96,15 +96,18 @@ export function BoardContent({
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
-  // Done and Canceled are paged in per column; the board sync carries only the open cards.
-  const terminalStages = stages.filter(stage => stage.kind === 'terminal').map(stage => stage.id);
+  // Intake, Done and Canceled are paged in per column; the board sync carries only the cards being worked.
+  const pagedStages = stages
+    .filter(stage => stage.kind === 'terminal' || stage.kind === 'resting')
+    .map(stage => stage.id);
   const synced = useWorkItemsQuery(factoryProjectId);
   const archive = useBoardArchive({
     factoryProjectId,
     board: kind,
-    stages: terminalStages,
+    stages: pagedStages,
     sort,
     search: view.search,
+    filters: boardFilterQuery(filters, personId),
     targetItemId,
     enabled: synced.isSuccess,
   });
@@ -254,12 +257,17 @@ export function BoardContent({
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
     const archiveColumn = archive.columns[stage.id];
-    const loading = loadingStages.has(stage.id) || (archiveColumn !== undefined && archive.isPending && stageWorkItems.length === 0);
+    const loading =
+      loadingStages.has(stage.id) || (archiveColumn !== undefined && archive.isPending && stageWorkItems.length === 0);
     const loadedCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
-    // A Done column shows only its first page, so its header counts what the server holds; a filter
-    // runs over the loaded cards only, so then the header counts those.
+    // A paged column holds only its first pages, so its header counts the cards the server holds under
+    // the same search and filters, plus the unfiled feed issues Intake shows beside them.
+    const serverCount = (anyFilterActive ? archive.filteredCounts : serverCounts)?.[stage.id];
+    const loadedCandidates = stageContentCount(stage.id, stages, [], filteredCandidates);
     const taskCount =
-      archiveColumn && !anyFilterActive ? Math.max(loadedCount, serverCounts?.[stage.id] ?? 0) : loadedCount;
+      archiveColumn && serverCount !== undefined
+        ? loadedCandidates + Math.max(loadedCount - loadedCandidates, serverCount)
+        : loadedCount;
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);

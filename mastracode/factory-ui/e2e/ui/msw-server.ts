@@ -8,6 +8,8 @@ interface StubbedCard {
   board?: string | null;
   externalSource?: unknown;
   metadata?: Record<string, unknown> | null;
+  sessions?: Record<string, unknown> | null;
+  createdAt?: string;
 }
 
 /** The plain `/work-items` list the running test stubbed, read through MSW so its handler answers. */
@@ -91,8 +93,24 @@ export const server = setupServer(
     const list = await readStubbedList(request.url);
     return HttpResponse.json({
       sources: list.workItems.flatMap(item =>
-        item.externalSource ? [{ board: item.board ?? 'work', externalSource: item.externalSource, metadata: item.metadata ?? {} }] : [],
+        item.externalSource
+          ? [{ board: item.board ?? 'work', externalSource: item.externalSource, metadata: item.metadata ?? {} }]
+          : [],
       ),
+    });
+  }),
+  // A test's stubbed list stands in for the briefs: its cards with sessions, and every card's times for activity.
+  http.get('*/web/factory/projects/:id/work-items/session-cards', async ({ request }) => {
+    const list = await readStubbedList(request.url);
+    return HttpResponse.json({
+      workItems: list.workItems.filter(item => Object.keys(item.sessions ?? {}).length > 0),
+    });
+  }),
+  http.get('*/web/factory/projects/:id/work-items/activity', async ({ request }) => {
+    const { workItems } = await readStubbedList(request.url);
+    return HttpResponse.json({
+      cameIn: workItems.flatMap(item => (item.createdAt ? [item.createdAt] : [])),
+      shipped: [],
     });
   }),
   http.get('*/web/factory/projects/:id/work-items/counts', () => HttpResponse.json({ total: 0, boards: {} })),

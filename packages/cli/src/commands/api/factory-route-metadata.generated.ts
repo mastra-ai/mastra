@@ -258,6 +258,25 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/work-items/activity": {
+    "contractKey": "workItemActivity",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/activity",
+    "description": "List when Factory work items came in and shipped since a time, for the activity chart",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "since"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "cameIn"
+    }
+  },
   "GET /web/factory/projects/:id/work-items/counts": {
     "contractKey": "workItemCounts",
     "method": "GET",
@@ -284,6 +303,23 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/session-cards": {
+    "contractKey": "workItemSessionCards",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/session-cards",
+    "description": "List every Factory work item that has a session, cut to its title, key, stage and sessions, so session lists can name sessions without reading every card",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "workItems"
     }
   },
   "GET /web/factory/projects/:id/work-items/sources": {
@@ -1825,7 +1861,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "recent",
             "recent-mine",
             "created-newest",
-            "created-oldest"
+            "created-oldest",
+            "relevance"
           ]
         },
         "limit": {
@@ -1919,6 +1956,57 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "GET /web/factory/projects/:id/work-items/activity": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        }
+      },
+      "required": [
+        "since"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cameIn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "shipped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "cameIn",
+        "shipped"
+      ]
+    }
+  },
   "GET /web/factory/projects/:id/work-items/counts": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2008,6 +2096,40 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "total",
         "boards"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/session-cards": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "workItems"
       ]
     }
   },
@@ -3943,7 +4065,9 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "workItemGet": "GET /web/factory/projects/:id/work-items/:workItemId",
+  "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
   "workItemCounts": "GET /web/factory/projects/:id/work-items/counts",
+  "workItemSessionCards": "GET /web/factory/projects/:id/work-items/session-cards",
   "workItemSources": "GET /web/factory/projects/:id/work-items/sources",
   "workItemSync": "GET /web/factory/projects/:id/work-items/sync",
   "projectUpdate": "PATCH /web/factory/projects/:id",

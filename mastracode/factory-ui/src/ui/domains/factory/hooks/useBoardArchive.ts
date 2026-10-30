@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { getWorkItem, listWorkItemPage } from '../services/workItems';
+import { countWorkItems, getWorkItem, listWorkItemPage } from '../services/workItems';
 import type { WorkItem, WorkItemPageSort } from '../services/workItems';
 
 /** Cards per archive read: a screenful of a column, so the board never waits on a big page. */
@@ -16,10 +16,10 @@ export interface ArchiveColumn {
 }
 
 /**
- * Done and Canceled cards, which the board sync leaves out: one page per terminal column at first, the
- * next on scroll. Sort and search go to the server so a column shows the right cards before it has them
- * all; people, label and source filters still run over what is loaded. A deep-linked card outside the
- * loaded pages is read on its own.
+ * Cards of the resting and closed columns (Intake, Done, Canceled), which the board sync leaves out:
+ * one page per column at first, the next on scroll. Sort, search and filters go to the server, so a
+ * column shows the right cards and the right count before it has them all. A deep-linked card outside
+ * the loaded pages is read on its own.
  */
 export function useBoardArchive({
   factoryProjectId,
@@ -27,15 +27,18 @@ export function useBoardArchive({
   stages,
   sort,
   search,
+  filters,
   targetItemId,
   enabled,
 }: {
   factoryProjectId: string | undefined;
   board: string;
-  /** The board's terminal phases. */
+  /** The board's paged phases. */
   stages: readonly string[];
   sort: WorkItemPageSort;
   search: string;
+  /** Board filters as query parameters (see `boardFilterQuery`). */
+  filters: Readonly<Record<string, string>>;
   /** A card the URL points at, read by id when no loaded page has it. */
   targetItemId?: string;
   /** Off until the board has loaded, so the open cards land first. */
@@ -43,23 +46,22 @@ export function useBoardArchive({
 }) {
   const { baseUrl } = useApiConfig();
   const q = search.trim();
-  const scope = `${board}\u0000${sort}\u0000${q}`;
-  // Cursors of the pages each column asked for. A new sort or search starts every column over.
+  const filterKey = new URLSearchParams(filters).toString();
+  const scope = `${board}\u0000${sort}\u0000${q}\u0000${filterKey}`;
+  // Cursors of the pages each column asked for. A new sort, search or filter starts every column over.
   const [cursors, setCursors] = useState<{ scope: string; byStage: Record<string, string[]> }>({ scope, byStage: {} });
   const byStage = cursors.scope === scope ? cursors.byStage : {};
 
-  const reads = stages.flatMap(stage =>
-    [undefined, ...(byStage[stage] ?? [])].map(cursor => ({ stage, cursor })),
-  );
+  const reads = stages.flatMap(stage => [undefined, ...(byStage[stage] ?? [])].map(cursor => ({ stage, cursor })));
   const pages = useQueries({
     queries: reads.map(({ stage, cursor }) => ({
-      queryKey: queryKeys.workItemArchive(factoryProjectId, board, stage, sort, q, cursor ?? null),
+      queryKey: queryKeys.workItemArchive(factoryProjectId, board, stage, sort, q, filterKey, cursor ?? null),
       queryFn: factoryProjectId
         ? ({ signal }: { signal: AbortSignal }) =>
             listWorkItemPage(
               baseUrl,
               factoryProjectId,
-              { board, stage, sort, q, limit: BOARD_ARCHIVE_PAGE_SIZE, cursor },
+              { board, stage, sort, q, limit: BOARD_ARCHIVE_PAGE_SIZE, cursor, filters },
               signal,
             )
         : skipToken,
@@ -97,6 +99,19 @@ export function useBoardArchive({
     });
   }, [loaded, target.data]);
 
+  // Unfiltered counts ride the board sync; a filtered board asks the server what each column holds.
+  const narrowed = q !== '' || filterKey !== '';
+  const counts = useQuery({
+    queryKey: [...queryKeys.workItemArchiveRoot(factoryProjectId), 'counts', board, q, filterKey],
+    queryFn:
+      factoryProjectId && narrowed
+        ? ({ signal }) => countWorkItems(baseUrl, factoryProjectId, { ...filters, board, ...(q ? { q } : {}) }, signal)
+        : skipToken,
+    enabled,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const columns: Record<string, ArchiveColumn> = {};
   for (const stage of stages) {
     const indexes = reads.flatMap((read, index) => (read.stage === stage ? [index] : []));
@@ -121,6 +136,8 @@ export function useBoardArchive({
   return {
     items,
     columns,
+    /** Per-column totals under the current search and filters; undefined when nothing narrows the board. */
+    filteredCounts: narrowed ? counts.data?.boards[board] : undefined,
     isPending: enabled && pages.pending,
   };
 }
