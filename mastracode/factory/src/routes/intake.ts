@@ -40,7 +40,7 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   integrations?: IntakeIntegration[];
   /**
    * Installed boards, used to validate binding targets. Absent means only legacy routing is accepted.
-   * Integrations place cards with the code boards, so a target must be a code board the project still has.
+   * Integrations place cards with the code boards, so a target must be a code board.
    */
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** Work items domain handle; when present, rebinding a source to another board moves its resting cards. */
@@ -453,10 +453,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
     const boardSource = this.deps.boardRegistry ? toBoardSource(this.deps.boardRegistry) : undefined;
     const projectBoards = (orgId: string, factoryProjectId: string | null) =>
       boardSource && factoryProjectId ? boardSource.load({ orgId, factoryProjectId }) : undefined;
-    const installed = async (board: string, orgId: string, factoryProjectId: string | null) =>
-      boardSource !== undefined &&
-      boardSource.codeRegistry.has(board) &&
-      (factoryProjectId === null || (await projectBoards(orgId, factoryProjectId))!.has(board));
+    const installed = (board: string) => boardSource?.codeRegistry.has(board) === true;
 
     return [
       registerApiRoute('/web/intake/config', {
@@ -548,9 +545,11 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
           }
-          if (binding.board !== null && !(await installed(binding.board, tenant.orgId, binding.factoryProjectId))) {
+          if (binding.board !== null && !installed(binding.board)) {
             return c.json({ error: 'invalid_board', message: `Board '${binding.board}' is not installed.` }, 422);
           }
+          // Load before writing, so a failed load can't leave a saved binding with its cards unmoved.
+          const boardRegistry = await projectBoards(tenant.orgId, binding.factoryProjectId);
 
           await intake.ensureReady();
           let auditFactoryProjectId = binding.factoryProjectId;
@@ -582,7 +581,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             // effective board rather than trusting the previous binding value.
             const nextBoard = binding.board;
             const integration = integrations.find(candidate => candidate.id === binding.integrationId);
-            const boardRegistry = await projectBoards(tenant.orgId, binding.factoryProjectId);
             if (
               workItems &&
               boardRegistry &&
@@ -673,9 +671,11 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             const project = await projects.get({ orgId: tenant.orgId, id: route.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
           }
-          if (route.board !== null && !(await installed(route.board, tenant.orgId, route.factoryProjectId))) {
+          if (route.board !== null && !installed(route.board)) {
             return c.json({ error: 'invalid_board', message: `Board '${route.board}' is not installed.` }, 422);
           }
+          // Load before writing, so a failed load can't leave a saved route with its cards unmoved.
+          const boardRegistry = await projectBoards(tenant.orgId, route.factoryProjectId);
 
           await intake.ensureReady();
           const scope = {
@@ -693,7 +693,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           // Cards already carrying the label follow the route: onto the new board, or — when the
           // label is no longer routed anywhere — to the repository binding's board or Work.
           let relocated: { moved: number; skipped: number } | null = null;
-          const boardRegistry = await projectBoards(tenant.orgId, route.factoryProjectId);
           if (workItems && boardRegistry && (previous?.board ?? null) !== route.board) {
             try {
               relocated = await relocateLabeledCards({
