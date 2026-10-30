@@ -563,6 +563,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     return clone(note);
   }
 
+  async countNotes(input: Parameters<Store['countNotes']>[0]) {
+    const counts: Record<string, number> = Object.fromEntries(input.pageIds.map(id => [id, 0]));
+    for (const note of this.#notes.values()) {
+      if (Object.hasOwn(counts, note.pageId) && !note.deletedAt && this.#noteVisible(note, input.read)) {
+        counts[note.pageId]! += 1;
+      }
+    }
+    return counts;
+  }
+
   async listNotes(input: Parameters<Store['listNotes']>[0]) {
     const notes = [...this.#notes.values()]
       .filter(
