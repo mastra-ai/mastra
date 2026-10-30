@@ -172,6 +172,11 @@ export function TracesExplorerRoot({
       selectScore: scoreId => updateSelection(selectScore(latest.current.selection, scoreId)),
       highlightSpans: spanIds => updateSelection(highlightSpans(latest.current.selection, spanIds)),
     };
+    // A range picked by hand drops the zoom memory, even one that matches the zoomed bounds.
+    const pickRange = (next: TracesFilters) => {
+      zoomMemory.current = undefined;
+      updateFilters(next);
+    };
     const filtersActions: TracesFiltersActions = {
       // Re-inject the scope tokens so "Clear filters" (which drops every removable item) and any
       // other edit can never drop the scope.
@@ -180,9 +185,9 @@ export function TracesExplorerRoot({
         const scopeTokens = base.tokens.filter(token => scoped.has(token.fieldId));
         updateFilters(applyFilterTokens(base, [...scopeTokens, ...tokens], groups));
       },
-      setDatePreset: preset => updateFilters(applyDatePreset(latest.current.filters, preset)),
-      setDate: (value, end) => updateFilters(applyDate(latest.current.filters, value, end)),
-      setDateRange: (from, to) => updateFilters(applyDateRange(latest.current.filters, from, to)),
+      setDatePreset: preset => pickRange(applyDatePreset(latest.current.filters, preset)),
+      setDate: (value, end) => pickRange(applyDate(latest.current.filters, value, end)),
+      setDateRange: (from, to) => pickRange(applyDateRange(latest.current.filters, from, to)),
       zoomDateRange: (from, to) => {
         const base = latest.current.filters;
         zoomMemory.current = rememberZoom(zoomMemory.current, base, from, to);
