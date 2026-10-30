@@ -57,7 +57,6 @@ describe('cardMoves', () => {
       metadata: { labels: ['stale-label'] },
       workItem: {
         provider: 'github',
-        kind: 'issue',
         key: 'acme/repo#42',
         url: null,
         title: 'Needs approval',
@@ -94,7 +93,6 @@ describe('cardMoves', () => {
     metadata: { labels: ['stale-board-label'] },
     workItem: {
       provider: 'github',
-      kind: 'issue' as const,
       key: 'acme/repo#42',
       url: null,
       title: 'Needs approval',

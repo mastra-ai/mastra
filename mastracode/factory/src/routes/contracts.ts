@@ -74,7 +74,6 @@ const cardSchema = z
     workItem: z
       .object({
         provider: z.string(),
-        kind: z.enum(['issue', 'pull_request', 'merge_request', 'thread', 'incident', 'follow_up']),
         key: z.string().nullable(),
         url: z.string().nullable(),
         title: z.string(),
