@@ -167,10 +167,13 @@ describe('Knowledge page', () => {
       return node;
     };
 
-    it('selects it on the first click and opens it on the second', async () => {
+    it.each([
+      ['with ?view=graph', '/knowledge?view=graph'],
+      ['with no query params', '/knowledge'],
+    ])('selects it on the first click and opens it on the second (%s)', async (_, entry) => {
       withInstance();
       server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
-      renderPage('/knowledge?view=graph');
+      renderPage(entry);
       fireEvent.click(await paymentsNode());
       await waitFor(async () =>
         expect((await paymentsNode()).querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(true),
