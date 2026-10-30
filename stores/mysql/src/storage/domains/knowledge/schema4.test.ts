@@ -103,4 +103,53 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     expect(again.scope.parentId).toBe(p1.id);
     expect(again.parentConflict).toEqual({ existingParentId: p1.id, requestedParentId: p2.id });
   });
+
+  it('reads a prefix as an exact code-point range, including the highest code points', async () => {
+    const store = await makeStore();
+    const addresses = ['p:\u{10FFFF}x', 'p:\u{1F600}x', 'p:ax', 'p:Ax', 'q:ax', 'p:a\t', 'p:a\u0001'];
+    const pageByAddress: Record<string, string> = {};
+    for (const address of addresses) {
+      const { scope } = await store.materializeScope({ address, declaration: 'p:$id', name: address, provenance: who });
+      const page = await store.createPage({ parentId: scope.id, name: `in ${address}`, provenance: who });
+      pageByAddress[address] = page.name;
+    }
+    const names = async (prefix: string) =>
+      (
+        await store.listPages({
+          read: { addresses: [], prefixes: [{ declaration: 'p:$id', prefix }], children: [] },
+          limit: 50,
+        })
+      ).pages
+        .map(page => page.name)
+        .sort();
+    expect(await names('p:')).toEqual(
+      ['in p:\u{10FFFF}x', 'in p:\u{1F600}x', 'in p:Ax', 'in p:ax', 'in p:a\t', 'in p:a\u0001'].sort(),
+    );
+    expect(await names('p:\u{10FFFF}')).toEqual(['in p:\u{10FFFF}x']);
+    expect(await names('p:\u{1F600}')).toEqual(['in p:\u{1F600}x']);
+    expect(await names('p:a')).toEqual(['in p:a\t', 'in p:a\u0001', 'in p:ax'].sort());
+    expect(await names('')).toHaveLength(7);
+    await store.dangerouslyReset();
+  });
+
+  it('moves a subtree whose child ids start with control characters (PAD SPACE path ranges)', async () => {
+    const store = await makeStore();
+    const make = async (address: string) =>
+      (await store.materializeScope({ address, declaration: 'p:$id', name: address, provenance: who })).scope;
+    const a = await make('p:a');
+    const b = await make('p:b');
+    const parent = await store.createPage({ parentId: a.id, name: 'Parent', provenance: who });
+    const child = await store.createPage({ id: '\tchild', parentId: parent.id, name: 'Child', provenance: who });
+    const low = await store.createPage({ id: '\u0001low', parentId: child.id, name: 'Low', provenance: who });
+    const moved = await store.movePage({
+      id: parent.id,
+      parentId: b.id,
+      expectedVersion: parent.version,
+      provenance: who,
+    });
+    expect(moved.scopeId).toBe(b.id);
+    expect((await store.getPage({ id: child.id, read: 'all' }))?.scopeId).toBe(b.id);
+    expect((await store.getPage({ id: low.id, read: 'all' }))?.scopeId).toBe(b.id);
+    await store.dangerouslyReset();
+  });
 });

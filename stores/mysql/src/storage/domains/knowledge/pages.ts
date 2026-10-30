@@ -93,6 +93,8 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     UNIQUE KEY idx_kpages_live_key (liveKey),
     KEY idx_kpages_scope (scopeId),
     KEY idx_kpages_parent (parentId, position, id),
+    KEY idx_kpages_path (path(255)),
+    KEY idx_kpages_declaration_parent (declaration, parentId),
     KEY idx_kpages_canonical (canonicalName(255))
   )`,
   `CREATE TABLE IF NOT EXISTS ${T.notes} (
@@ -247,41 +249,93 @@ interface Fragment {
 }
 
 /**
+ * A string above every string that starts with `prefix`, comparing by code point (which is how
+ * `utf8mb4_bin` orders). `column >= prefix AND column < bound` is an exact, case-sensitive prefix
+ * match that an index range scan can serve, where `LEFT(column, CHAR_LENGTH(prefix)) = prefix`
+ * cannot. When the last code point cannot be raised (an empty prefix, or one made only of
+ * U+10FFFF), the bound is the prefix plus more U+10FFFF than an address column can hold (512).
+ */
+function prefixUpperBound(prefix: string): string {
+  const points = Array.from(prefix);
+  while (points.length > 0) {
+    const last = points.pop()!.codePointAt(0)!;
+    if (last < 0x10ffff) {
+      const next = last === 0xd7ff ? 0xe000 : last + 1;
+      return points.join('') + String.fromCodePoint(next);
+    }
+  }
+  return prefix + '\u{10FFFF}'.repeat(600);
+}
+
+/**
+ * `utf8mb4_bin` is PAD SPACE: a value compares as if padded with spaces, so `p:a\t` sorts below `p:a`.
+ * Starting the range at the prefix plus U+0000 keeps every value that begins with the prefix, whatever
+ * code point follows. (Values equal to the prefix plus trailing spaces still match, as they always have.)
+ */
+function prefixLowerBound(prefix: string): string {
+  return prefix + '\u0000';
+}
+
+/** `column` starts with `prefix`, as an index-friendly range. */
+function prefixRange(column: string, prefix: string): Fragment {
+  return { sql: `(${column} >= ? AND ${column} < ?)`, args: [prefixLowerBound(prefix), prefixUpperBound(prefix)] };
+}
+
+/**
  * The readable scope page ids as a subquery. The caller's addresses, prefixes and children go in as
- * JSON arrays so a large read scope never hits a bind-parameter limit, and prefixes compare with
- * `substr` (exact, case-sensitive), never `LIKE`.
+ * JSON arrays so a large read scope never hits a bind-parameter limit. Each kind is its own index
+ * lookup (address equality, address range for a prefix, `(declaration, parentId)` for children),
+ * unioned, so the cost follows the caller's reach rather than the number of scopes in the store.
  */
 function readableScopes(read: KnowledgeReadScope): Fragment {
   if (read === 'all') return { sql: `SELECT id FROM ${T.pages} WHERE isScope = 1`, args: [] };
-  const conditions: string[] = [];
+  const parts: string[] = [];
   const args: InValue[] = [];
   if (read.addresses.length > 0) {
-    conditions.push(`address IN ${JV}`);
+    parts.push(`SELECT id FROM ${T.pages} WHERE isScope = 1 AND address IN ${JV}`);
     args.push(JSON.stringify(read.addresses));
   }
   if (read.prefixes.length > 0) {
-    conditions.push(
-      `EXISTS (SELECT 1 FROM JSON_TABLE(?, '$[*]' COLUMNS (d VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PATH '$.declaration', pre VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PATH '$.prefix')) j WHERE declaration = j.d AND LEFT(address, CHAR_LENGTH(j.pre)) = j.pre)`,
+    parts.push(
+      `SELECT sp.id FROM JSON_TABLE(?, '$[*]' COLUMNS (d VARCHAR(255) ${BIN} PATH '$.declaration', lo VARCHAR(512) ${BIN} PATH '$.lo', hi VARCHAR(1200) ${BIN} PATH '$.hi')) j STRAIGHT_JOIN ${T.pages} sp USE INDEX (idx_kpages_address) ON sp.address >= j.lo AND sp.address < j.hi AND sp.isScope = 1 AND sp.declaration = j.d`,
     );
-    args.push(JSON.stringify(read.prefixes));
+    args.push(
+      JSON.stringify(
+        read.prefixes.map(entry => ({
+          declaration: entry.declaration,
+          lo: prefixLowerBound(entry.prefix),
+          hi: prefixUpperBound(entry.prefix),
+        })),
+      ),
+    );
   }
   if (read.children.length > 0) {
-    conditions.push(
-      `EXISTS (SELECT 1 FROM JSON_TABLE(?, '$[*]' COLUMNS (d VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PATH '$.declaration', pid VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PATH '$.parentId' NULL ON EMPTY)) j WHERE declaration = j.d AND parentId <=> j.pid)`,
+    parts.push(
+      `SELECT sp.id FROM JSON_TABLE(?, '$[*]' COLUMNS (d VARCHAR(255) ${BIN} PATH '$.declaration', pid VARCHAR(255) ${BIN} PATH '$.parentId' NULL ON EMPTY)) j STRAIGHT_JOIN ${T.pages} sp ON sp.isScope = 1 AND sp.declaration = j.d AND sp.parentId <=> j.pid`,
     );
     args.push(JSON.stringify(read.children));
   }
-  if (conditions.length === 0) return { sql: `SELECT id FROM ${T.pages} WHERE 0`, args: [] };
+  if (parts.length === 0) return { sql: `SELECT id FROM ${T.pages} WHERE 0`, args: [] };
+  return { sql: parts.join(' UNION '), args };
+}
+
+/**
+ * `FROM` clause that reads the readable scopes first and then each one's pages through `idx_kpages_scope`.
+ * MySQL otherwise tends to scan every page in the store and test its scope, which touches other
+ * tenants' rows. The `alias` pages are in readable scopes; add the page filters in `WHERE`.
+ */
+function pagesInReadableScopes(alias: string, read: KnowledgeReadScope): Fragment {
+  const scopes = readableScopes(read);
   return {
-    sql: `SELECT id FROM ${T.pages} WHERE isScope = 1 AND address IS NOT NULL AND (${conditions.join(' OR ')})`,
-    args,
+    sql: `FROM (${scopes.sql}) rs STRAIGHT_JOIN ${T.pages} ${alias} FORCE INDEX (idx_kpages_scope) ON ${alias}.scopeId = rs.id`,
+    args: scopes.args,
   };
 }
 
 /** `alias.scopeId` is readable. */
 function pageReadable(alias: string, read: KnowledgeReadScope): Fragment {
   const scopes = readableScopes(read);
-  return { sql: `${alias}.scopeId IN (${scopes.sql})`, args: scopes.args };
+  return { sql: `${alias}.scopeId IN (SELECT rs.id FROM (${scopes.sql}) rs)`, args: scopes.args };
 }
 
 /**
@@ -617,7 +671,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const core = await loadPagesCore();
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
-    const readable = pageReadable('p', input.read);
+    const readable = pagesInReadableScopes('p', input.read);
     const args: InValue[] = [...readable.args];
     let filters = '';
     if (input.scopeId !== undefined) {
@@ -636,7 +690,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     args.push(limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT p.* FROM ${T.pages} p WHERE p.isScope = 0 AND p.deletedAt IS NULL AND ${readable.sql}${filters} ORDER BY p.name, p.id LIMIT ?`,
+      `SELECT p.* ${readable.sql} WHERE p.isScope = 0 AND p.deletedAt IS NULL${filters} ORDER BY p.name, p.id LIMIT ?`,
       args,
     );
     return this.#pageOutput(rows, limit, row => [String(row.name), String(row.id)]);
@@ -742,10 +796,11 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const newScopeId = isScopeParent ? String(parent.id) : String(parent.scopeId);
     const newDepth = isScopeParent ? 1 : Number(parent.depth) + 1;
     const oldPath = String(root.path);
+    const within = prefixRange('path', oldPath);
     const subtree = await this.#query(
       tx,
-      `SELECT id, ${KEY}, depth, deletedAt FROM ${T.pages} WHERE LEFT(path, CHAR_LENGTH(?)) = ?`,
-      [oldPath, oldPath],
+      `SELECT id, ${KEY}, depth, deletedAt FROM ${T.pages} WHERE ${within.sql}`,
+      within.args,
     );
     const live = subtree.filter(row => !row.deletedAt);
     if (live.length > core.MAX_KNOWLEDGE_MOVE_PAGES)
@@ -765,8 +820,8 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const position =
       options.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, String(parent.id), false));
     await tx.execute({
-      sql: `UPDATE ${T.pages} SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1)), depth = depth + ?, scopeId = ? WHERE LEFT(path, CHAR_LENGTH(?)) = ?`,
-      args: [newPath, oldPath, shift, newScopeId, oldPath, oldPath],
+      sql: `UPDATE ${T.pages} SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1)), depth = depth + ?, scopeId = ? WHERE ${within.sql}`,
+      args: [newPath, oldPath, shift, newScopeId, ...within.args],
     });
     await tx.execute({
       sql: `UPDATE ${T.pages} SET parentId = ?, position = ? WHERE id = ?`,
@@ -814,10 +869,11 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
           `Page ${input.targetId} is inside page ${input.sourceId}; it cannot be the merge target (subtree)`,
         );
       }
+      const within = prefixRange('path', sourcePath);
       const carried = await this.#query(
         tx,
-        `SELECT COUNT(*) AS n FROM ${T.pages} WHERE LEFT(path, CHAR_LENGTH(?)) = ? AND id <> ? AND deletedAt IS NULL`,
-        [sourcePath, sourcePath, input.sourceId],
+        `SELECT COUNT(*) AS n FROM ${T.pages} WHERE ${within.sql} AND id <> ? AND deletedAt IS NULL`,
+        [...within.args, input.sourceId],
       );
       if (Number(carried[0]!.n) > core.MAX_KNOWLEDGE_MOVE_PAGES) {
         throw new core.KnowledgeMoveTooLargeError(input.sourceId, Number(carried[0]!.n));
@@ -1152,7 +1208,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const phrase = input.query.trim().toLowerCase().replace(/\s+/g, ' ');
     const limit = Math.max(1, input.limit ?? 20);
     const likes = words.map(word => `%${escapeLike(word)}%`);
-    const readable = pageReadable('p', input.read);
+    const readable = pagesInReadableScopes('p', input.read);
     const scopeFilter = input.scopeIds ? ` AND p.scopeId IN ${JV}` : '';
     const scopeArgs: InValue[] = input.scopeIds ? [jsonList(input.scopeIds)] : [];
     const pageMatch = words
@@ -1164,7 +1220,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const nameMatch = words.map(() => `LOWER(p.name) LIKE ? ESCAPE '='`).join(' AND ');
     const pageRows = await this.#query(
       this.#read,
-      `SELECT p.* FROM ${T.pages} p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND ${pageMatch} ORDER BY CASE WHEN LOCATE(?, p.canonicalName) > 0 THEN 0 WHEN ${nameMatch} THEN 1 ELSE 2 END, p.updatedAt DESC, p.id ASC LIMIT ?`,
+      `SELECT p.* ${readable.sql} WHERE p.deletedAt IS NULL AND p.isScope = 0${scopeFilter} AND ${pageMatch} ORDER BY CASE WHEN LOCATE(?, p.canonicalName) > 0 THEN 0 WHEN ${nameMatch} THEN 1 ELSE 2 END, p.updatedAt DESC, p.id ASC LIMIT ?`,
       [...readable.args, ...scopeArgs, ...likes.flatMap(like => [like, like, like]), phrase, ...likes, limit],
     );
     const hits: KnowledgePageSearchHit[] = pageRows.map(row => ({ type: 'page', page: toPage(row) }));

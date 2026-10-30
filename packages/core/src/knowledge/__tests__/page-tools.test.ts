@@ -123,6 +123,20 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     expect((await admin().read('policy:acme#refund-policy')).page.body).toBe('Refunds over $500 need approval.');
   });
 
+  it('reading a scope that was never created is not found and creates nothing', async () => {
+    const eng = as('eng', ['org:acme', 'team:acme:eng']);
+    const before = await store.getScopesByAddress(['team-public:acme:made-up', 'policy:acme']);
+    expect(before).toEqual([]);
+    for (const ref of ['team-public:acme:made-up', 'team-public:acme:made-up#overview', 'policy:acme#refund-policy']) {
+      await expect(eng.read(ref)).rejects.toThrow(/not found/);
+    }
+    await expect(eng.search('anything', ['team-public:acme:made-up'])).rejects.toThrow(/not found/);
+    expect(await store.getScopesByAddress(['team-public:acme:made-up', 'policy:acme'])).toEqual([]);
+    // A write the run's rules allow still creates the scope and its template pages.
+    await admin().page({ op: 'write', page: 'policy:acme#refund-policy', body: 'Ask a manager.' });
+    expect((await eng.read('policy:acme#refund-policy')).page.body).toBe('Ask a manager.');
+  });
+
   it('1 (alpha bypass): adding a note to a read-only page by exact name is refused and never rescopes the page', async () => {
     await admin().page({ op: 'write', page: 'policy:acme#refund-policy', body: 'Original.' });
     await expect(

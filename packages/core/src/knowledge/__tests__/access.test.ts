@@ -97,6 +97,66 @@ describe('knowledge one-hop access', () => {
     expect(await readable(await readScope(['account:acme:1']), all)).toEqual(['account:acme:1']);
   });
 
+  it('the read filter and the per-scope role agree on every scope for every principal set', async () => {
+    const acme = await scope('org:acme');
+    const globex = await scope('org:globex');
+    const eng = await scope('team:acme:eng', acme.id);
+    const sales = await scope('team:acme:sales', acme.id);
+    const globexEng = await scope('team:globex:eng', globex.id);
+    const pages = [
+      acme,
+      globex,
+      eng,
+      sales,
+      globexEng,
+      await scope('team:acme:unlinked'),
+      await scope('policy:acme'),
+      await scope('policy:globex'),
+      await scope('account:acme:1'),
+      await scope('account:acme:1/internal', (await store.getScopesByAddress(['account:acme:1']))[0]!.id),
+      await scope('project:p1', eng.id),
+      await scope('project:p2', sales.id),
+      await scope('project:p3', globexEng.id),
+      await scope('project:orphan'),
+      await scope('feature:acme:a'),
+      await scope('feature:acme:b'),
+      await scope('resource:u-1'),
+      await scope('thread:t-1'),
+    ];
+    const byId = new Map(pages.map(page => [page.id, page]));
+    const principalSets = [
+      [],
+      ['org:acme'],
+      ['org:globex'],
+      ['team:acme:eng'],
+      ['team:acme:sales'],
+      ['team:globex:eng'],
+      ['role:acme:admin'],
+      ['role:globex:admin'],
+      ['account:acme:1'],
+      ['org:acme', 'role:acme:admin', 'team:acme:eng'],
+      ['org:acme', 'team:globex:eng', 'resource:u-1', 'thread:t-1'],
+      ['resource:u-1'],
+      ['thread:t-1'],
+    ];
+    let pairs = 0;
+    for (const principals of principalSets) {
+      const read = await readScope(principals);
+      for (const page of pages) {
+        const listed = (await store.getPage({ id: page.id, read })) !== null;
+        const parentAddress = page.parentId ? byId.get(page.parentId)?.address : undefined;
+        const role = knowledgeRoleOn(compiled, principals, { address: page.address!, parentAddress });
+        expect({ principals, address: page.address, listed }).toEqual({
+          principals,
+          address: page.address,
+          listed: role !== null,
+        });
+        pairs++;
+      }
+    }
+    expect(pairs).toBe(principalSets.length * pages.length);
+  });
+
   it('never chains: a scope reached through a rule does not act as a principal', async () => {
     const acme = await scope('org:acme');
     const eng = await scope('team:acme:eng', acme.id);

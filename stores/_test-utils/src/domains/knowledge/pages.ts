@@ -1002,6 +1002,77 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         ).toBeNull();
         expect(await listed('all')).toEqual([]);
       });
+
+      it('lists pins with page names, newest first, filtered by body and excluded pages, with a total', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const pinned: Array<{ id: string }> = [];
+        for (const [name, body] of [
+          ['Empty', ''],
+          ['Blank', '  \n '],
+          ['Refunds', 'Refund within 30 days.'],
+          ['Shipping', 'Ships in 2 days.'],
+          ['Returns', 'Return with a label.'],
+        ] as const) {
+          const p = await page(acme.id, name, { body });
+          await store.addPinAudience({ pageId: p.id, audience: ['org:acme'], createdBy: 'agent:alex' });
+          pinned.push(p);
+          await new Promise(resolve => setTimeout(resolve, 15));
+        }
+        const hidden = await page(secret.id, 'Hidden', { body: 'Secret.' });
+        await store.addPinAudience({ pageId: hidden.id, audience: ['org:acme'], createdBy: 'agent:alex' });
+        const [, , refunds, shipping, returns] = pinned;
+        const acmeRead = read(['org:acme']);
+
+        const all = await store.listPins({ audience: ['org:acme'], read: acmeRead, withBody: true, count: true });
+        expect(all.pins.map(pin => [pin.pageId, pin.pageName])).toEqual([
+          [returns!.id, 'Returns'],
+          [shipping!.id, 'Shipping'],
+          [refunds!.id, 'Refunds'],
+        ]);
+        expect(all.total).toBe(3);
+
+        const first = await store.listPins({
+          audience: ['org:acme'],
+          read: acmeRead,
+          withBody: true,
+          excludePageIds: [returns!.id],
+          limit: 1,
+          count: true,
+        });
+        expect(first.pins.map(pin => pin.pageId)).toEqual([shipping!.id]);
+        expect(first.total).toBe(2);
+        expect(first.nextCursor).toBeDefined();
+        const rest = await store.listPins({
+          audience: ['org:acme'],
+          read: acmeRead,
+          withBody: true,
+          excludePageIds: [returns!.id],
+          cursor: first.nextCursor,
+        });
+        expect(rest.pins.map(pin => pin.pageId)).toEqual([refunds!.id]);
+
+        const plain = await store.listPins({ audience: ['org:acme'], read: acmeRead });
+        expect(plain.pins).toHaveLength(5);
+        expect(plain.total).toBeUndefined();
+      });
+
+      it('gets readable live pages by id in one call', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const a = await page(acme.id, 'a', { body: 'A' });
+        const b = await page(acme.id, 'b');
+        const gone = await page(acme.id, 'gone');
+        await store.deletePage({ id: gone.id, expectedVersion: gone.version, deletedBy: 'agent:alex' });
+        const hidden = await page(secret.id, 'hidden');
+        const got = await store.getPages({
+          ids: [a.id, b.id, a.id, gone.id, hidden.id, 'missing'],
+          read: read(['org:acme']),
+        });
+        expect(got.map(p => p.id).sort()).toEqual([a.id, b.id].sort());
+        expect(got.find(p => p.id === a.id)?.body).toBe('A');
+        expect(await store.getPages({ ids: [], read: read(['org:acme']) })).toEqual([]);
+      });
     });
   });
 }
