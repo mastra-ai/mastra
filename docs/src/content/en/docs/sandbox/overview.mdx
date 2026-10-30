@@ -232,12 +232,6 @@ Your application owns sandboxes returned by a resolver. Destroy them and call `w
 
 :::
 
-### Agent workspace functions
-
-An agent's `workspace` option also accepts a function that returns a `Workspace`. Mastra calls this function whenever it needs the agent's workspace, not only when the agent runs. This includes registering the agent at startup and reading agent metadata, such as `GET /api/agents` and `GET /api/agents/:agentId`, which Studio calls when it lists agents. These calls aren't cached.
-
-Keep the function cheap. Don't start a sandbox or other paid infrastructure inside it. Return a workspace that uses `filesystem` and `sandbox` resolvers instead, because Mastra calls those only when a tool needs the provider.
-
 ### Tool availability
 
 With a static sandbox, Mastra knows which capabilities the backend supports and only gives the agent the corresponding tools. Application code should also check that an optional capability is available before using it.
