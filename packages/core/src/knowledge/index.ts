@@ -330,6 +330,22 @@ export class Knowledge extends MastraBase {
 
 export * from '../storage/domains/knowledge';
 export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './instructions';
+/** Read-only readers over the schema-4 page store, for browsing UIs. */
+export {
+  DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS,
+  listKnowledgeTreeChildren,
+  readKnowledgePage,
+  readKnowledgePageActivity,
+  readKnowledgePageGraph,
+  searchKnowledgeExplorerPages,
+} from './explorer-pages';
+export type {
+  KnowledgePageGraph,
+  KnowledgePageGraphEdge,
+  KnowledgePageGraphLimits,
+  KnowledgePageView,
+  KnowledgeTreeChildren,
+} from './explorer-pages';
 export type { KnowledgeConfig } from './config';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export type {
