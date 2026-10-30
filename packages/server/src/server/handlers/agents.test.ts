@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
@@ -15,6 +18,7 @@ import {
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
@@ -872,6 +876,59 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result.metadata).toEqual({ type: 'support' });
+    });
+  });
+
+  describe('workspace skills from a filesystem resolver', () => {
+    let skillsDir: string;
+
+    beforeEach(async () => {
+      skillsDir = await mkdtemp(join(tmpdir(), 'agent-skills-'));
+      await mkdir(join(skillsDir, 'skills', 'greet'), { recursive: true });
+      await writeFile(
+        join(skillsDir, 'skills', 'greet', 'SKILL.md'),
+        '---\nname: greet\ndescription: Say hello\n---\n\nSay hello.\n',
+      );
+    });
+
+    afterEach(async () => {
+      await rm(skillsDir, { recursive: true, force: true });
+    });
+
+    it('does not call the filesystem resolver on agent metadata routes', async () => {
+      const filesystemResolver = vi.fn(() => new LocalFilesystem({ basePath: skillsDir }));
+      const agent = new Agent({
+        id: 'resolver-skills-agent',
+        name: 'resolver-skills-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+        workspace: new Workspace({ id: 'resolver-ws', filesystem: filesystemResolver, skills: ['skills'] }),
+      });
+      vi.spyOn(agent, 'listTools').mockResolvedValue({});
+      vi.spyOn(agent, 'getLLM').mockResolvedValue({
+        getModel: () => undefined,
+        getProvider: () => 'test-provider',
+        getModelId: () => 'test-model',
+      } as any);
+      vi.spyOn(agent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultOptions').mockResolvedValue({});
+      vi.spyOn(agent, 'getModelList').mockResolvedValue(null);
+      mastra = new Mastra({ agents: { 'resolver-skills-agent': agent }, logger: false });
+
+      await LIST_AGENTS_ROUTE.handler({ mastra, requestContext: new RequestContext() } as any);
+      await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'resolver-skills-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(filesystemResolver).not.toHaveBeenCalled();
+
+      // Execution paths still resolve the filesystem and see its skills.
+      const skills = await agent.listSkills({ requestContext: new RequestContext() });
+      expect(filesystemResolver).toHaveBeenCalled();
+      expect(skills.map(skill => skill.name)).toEqual(['greet']);
     });
   });
 

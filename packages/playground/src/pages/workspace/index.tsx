@@ -168,7 +168,9 @@ export default function Workspace() {
   };
 
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
-  const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
+  // A resolver-backed filesystem only exists per request, so the file routes can't browse it.
+  const hasDynamicFilesystem = workspaceInfo?.capabilities?.hasDynamicFilesystem ?? false;
+  const hasFilesystem = (workspaceInfo?.capabilities?.hasFilesystem ?? false) && !hasDynamicFilesystem;
   const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
@@ -401,7 +403,17 @@ export default function Workspace() {
           </div>
         )}
 
-        {!hasFilesystem && !isLoadingInfo && (
+        {hasDynamicFilesystem && !isLoadingInfo && (
+          <div className="min-h-0 flex-1">
+            <EmptyState
+              variant="fill"
+              titleSlot="Filesystem resolved per request"
+              descriptionSlot="This workspace creates its filesystem when an agent runs, so its files can't be browsed here."
+            />
+          </div>
+        )}
+
+        {!hasFilesystem && !hasDynamicFilesystem && !isLoadingInfo && (
           <div className="min-h-0 flex-1">
             <EmptyState
               variant="fill"

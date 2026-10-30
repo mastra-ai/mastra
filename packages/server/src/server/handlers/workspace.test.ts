@@ -358,7 +358,11 @@ describe('Workspace Handlers', () => {
       });
 
       expect(result.workspaces).toHaveLength(1);
-      expect(result.workspaces[0].capabilities).toMatchObject({ hasFilesystem: true, hasSandbox: true });
+      expect(result.workspaces[0].capabilities).toMatchObject({
+        hasFilesystem: true,
+        hasDynamicFilesystem: true,
+        hasSandbox: true,
+      });
       expect(filesystemResolver).not.toHaveBeenCalled();
       expect(sandboxResolver).not.toHaveBeenCalled();
     });
@@ -467,9 +471,20 @@ describe('Workspace Handlers', () => {
         workspaceId: 'lazy-ws',
       });
 
-      expect(result.capabilities).toMatchObject({ hasFilesystem: true, hasSandbox: true });
+      expect(result.capabilities).toMatchObject({ hasFilesystem: true, hasDynamicFilesystem: true, hasSandbox: true });
       expect(filesystemResolver).not.toHaveBeenCalled();
       expect(sandboxResolver).not.toHaveBeenCalled();
+    });
+
+    it('reports a static filesystem as browsable', async () => {
+      const mastra = createMastra(new Workspace({ id: 'static-ws', filesystem: createMockFilesystem() }));
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'static-ws',
+      });
+
+      expect(result.capabilities).toMatchObject({ hasFilesystem: true, hasDynamicFilesystem: false });
     });
 
     it('shows a mount display name instead of its provider class name', async () => {
@@ -507,6 +522,7 @@ describe('Workspace Handlers', () => {
         status: 'pending', // Workspace starts as pending until init() is called
         capabilities: {
           hasFilesystem: true,
+          hasDynamicFilesystem: false,
           hasSandbox: false,
           canBM25: true,
           canVector: false,

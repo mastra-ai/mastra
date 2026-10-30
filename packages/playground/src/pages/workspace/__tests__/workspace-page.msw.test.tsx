@@ -14,6 +14,7 @@ import {
   skillsList,
   workspaceId,
   workspaceInfo,
+  workspaceInfoWithDynamicFilesystem,
   workspaceInfoWithoutSkills,
   workspacesList,
 } from './fixtures/workspace-page';
@@ -93,6 +94,27 @@ describe('Workspace page', () => {
 
       expect(await screen.findByRole('button', { name: 'New folder' })).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Add skill' })).toBeNull();
+    });
+  });
+
+  describe('when the filesystem comes from a resolver', () => {
+    it('explains why files cannot be browsed instead of rendering the tree', async () => {
+      let listRequests = 0;
+      useWorkspace({ auth: authDisabledCapabilities, info: workspaceInfoWithDynamicFilesystem });
+      server.use(
+        http.get(`${api}/${workspaceId}/fs/list`, () => {
+          listRequests++;
+          return HttpResponse.json(rootListing);
+        }),
+      );
+      renderPage();
+
+      expect(await screen.findByText('Filesystem resolved per request')).not.toBeNull();
+      expect(screen.queryByText('No filesystem or skills configured')).toBeNull();
+      expect(screen.queryByText('notes')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Add skill' })).toBeNull();
+      expect(listRequests).toBe(0);
     });
   });
 
