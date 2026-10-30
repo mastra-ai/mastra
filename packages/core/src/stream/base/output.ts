@@ -10,7 +10,6 @@ import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
-import { isUsageIncomplete } from '../../observability/usage';
 import type { OutputResult } from '../../processors';
 // Inlined to avoid importing structured-output.ts which pulls in the agent
 // barrel and creates an ESM init-time cycle.
@@ -56,6 +55,10 @@ const detailUsageCountKeys = [
   'cacheCreationInputTokens1h',
 ] as const satisfies ReadonlyArray<keyof LanguageModelUsage>;
 const usageCountKeys = [...primaryUsageCountKeys, ...detailUsageCountKeys] as const;
+
+function hasTokenCounts(usage: Partial<LanguageModelUsage> | undefined) {
+  return primaryUsageCountKeys.some(key => usage?.[key] !== undefined);
+}
 
 function accumulateUsage(
   target: Partial<LanguageModelUsage>,
@@ -2789,10 +2792,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const totalUsage = this.#getTotalUsage(this.#getUsageCountWithSuspendedStep());
     const generationReportedUsage = this.#generationReportedUsage;
     this.#generationReportedUsage = totalUsage;
-    // A leg with incomplete usage records no tokens, so a later leg records them. Its provider
-    // cost moves with them.
+    // A leg that records no token counts leaves them to a later leg. Its provider cost moves
+    // with them.
     const generationStepProviderMetadata: (ProviderMetadata | undefined)[] = [];
-    if (!isUsageIncomplete(totalUsage)) {
+    if (hasTokenCounts(totalUsage)) {
       for (const step of this.#bufferedSteps.slice(this.#generationReportedStepCount)) {
         generationStepProviderMetadata.push(step.providerMetadata);
       }
@@ -3028,7 +3031,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       ? this.#getTotalUsage(this.#getUsageCountWithSuspendedStep(suspendedStepUsage))
       : this.#generationReportedUsage;
     const generationReportedStepCount =
-      recordSuspension && !isUsageIncomplete(generationReportedUsage)
+      recordSuspension && hasTokenCounts(generationReportedUsage)
         ? this.#bufferedSteps.length + 1
         : this.#generationReportedStepCount;
     return {
