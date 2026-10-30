@@ -236,89 +236,58 @@ describe('factory_transition_work_item', () => {
     expect((tools.factory_transition_work_item as ExecutableTool).requireApproval).toBe(true);
   });
 
-  it('requires triageType only for triage bindings', async () => {
+  it('lets a triage agent send an open non-bug back to Intake without recording a classification', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepareBoundItem(storage, 'github-issue', 'triage');
-    const tools = await createFactoryTransitionTools({
-      requestContext: requestContext(),
-      storage,
-      transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
-    });
-    const triageTool = tools.factory_transition_work_item as ExecutableTool;
-    expect(
-      triageTool.inputSchema.safeParse({ stage: 'intake', expectedRevision: 1, rationale: 'Await approval.' }).success,
-    ).toBe(false);
-    expect(
-      triageTool.inputSchema.safeParse({
-        stage: 'intake',
-        expectedRevision: 1,
-        rationale: 'Await approval.',
-        triageType: 'feature request',
-      }).success,
-    ).toBe(true);
-  });
-
-  it('accepts and drops triageType from a non-triage binding instead of rejecting the call', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBoundItem(storage);
-    const transition = vi.fn(async () => ({
-      status: 'accepted' as const,
-      transitionId: 'transition-1',
-      itemId: prepared.item.id,
-      revision: 2,
-      stage: 'execute' as const,
-      decisions: [],
-    }));
-    const context = requestContext();
-    const tools = await createFactoryTransitionTools({
-      requestContext: context,
-      storage,
-      transitionService: { transition },
-    });
-    const tool = tools.factory_transition_work_item as ExecutableTool;
-    expect(
-      tool.inputSchema.safeParse({ stage: 'execute', expectedRevision: 1, rationale: 'Done.', triageType: 'bug' })
-        .success,
-    ).toBe(true);
-    expect(tool.inputSchema.safeParse({ stage: 'execute', expectedRevision: 1, rationale: 'Done.' }).success).toBe(
-      true,
-    );
-
-    await execute(tool, context, { stage: 'execute', expectedRevision: 1, rationale: 'Done.', triageType: 'bug' });
-    expect(transition).toHaveBeenCalledTimes(1);
-    expect(transition.mock.calls[0]?.[0]).not.toHaveProperty('triageType');
-  });
-
-  it('propagates a triage binding classification to the transition service', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const prepared = await prepareBoundItem(storage, 'github-issue', 'triage');
-    const transition = vi.fn(async () => ({
-      status: 'accepted' as const,
-      transitionId: 'transition-1',
-      itemId: prepared.item.id,
-      revision: 2,
-      stage: 'intake' as const,
-      decisions: [],
-    }));
+    const triaging = await service.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: prepared.item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'start-triage' },
+      cause: 'Triage it.',
+    });
+    expect(triaging).toMatchObject({ status: 'accepted' });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({
-      requestContext: context,
-      storage,
-      transitionService: { transition },
-    });
-    await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+    const tool = (await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service }))
+      .factory_transition_work_item as ExecutableTool & { description: string };
+    expect(tool.description).toContain('to intake');
+    const input = {
       stage: 'intake',
-      expectedRevision: 1,
-      rationale: 'Await approval.',
-      triageType: 'feature request',
-    });
-    expect(transition).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workItemId: prepared.item.id,
-        actor: { type: 'agent', bindingId: prepared.binding.id, role: 'triage' },
-        triageType: 'feature request',
-      }),
-    );
+      expectedRevision: (triaging as { revision: number }).revision,
+      rationale: 'Feature request: needs a maintainer decision.',
+    };
+    expect(tool.inputSchema.safeParse(input).success).toBe(true);
+
+    await expect(execute(tool, context, input)).resolves.toMatchObject({ status: 'accepted', stage: 'intake' });
+    const item = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+    expect(item).toMatchObject({ stages: ['intake'], triageType: null, acceptedAt: null });
+  });
+
+  it('accepts and ignores a stale triageType copied from session history, for every role', async () => {
+    for (const role of ['triage', 'work'] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+      const prepared = await prepareBoundItem(storage, 'github-issue', role);
+      const context = requestContext();
+      const tool = (
+        await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service })
+      ).factory_transition_work_item as ExecutableTool;
+      const input = {
+        stage: 'canceled',
+        expectedRevision: prepared.item.revision,
+        rationale: 'Duplicate.',
+        triageType: 'duplicate',
+      };
+      expect(tool.inputSchema.safeParse(input).success).toBe(true);
+      await expect(execute(tool, context, input, `call-${role}`)).resolves.toMatchObject({ status: 'accepted' });
+      const item = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+      expect(item).toMatchObject({ stages: ['canceled'], triageType: null });
+    }
   });
 
   it('derives the item, board, actor, and immutable ingress from the binding and tool call', async () => {
