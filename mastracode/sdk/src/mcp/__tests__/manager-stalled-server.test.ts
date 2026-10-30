@@ -14,14 +14,18 @@ import type { McpManager } from '../manager.js';
 import type { McpServerStatus } from '../types.js';
 
 // Answers the handshake; an optional argv[2] delays the initialize reply by that many ms.
+// With argv[3] set to a marker path, only the first initialize is delayed.
 const HEALTHY_SERVER = `
+import { existsSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-const initDelayMs = Number(process.argv[2] ?? 0);
+const marker = process.argv[3];
 const send = msg => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...msg }) + '\\n');
 createInterface({ input: process.stdin }).on('line', line => {
   const req = JSON.parse(line);
   if (req.id === undefined) return;
   if (req.method === 'initialize') {
+    const initDelayMs = marker && existsSync(marker) ? 0 : Number(process.argv[2] ?? 0);
+    if (marker) writeFileSync(marker, '');
     setTimeout(() => send({
       id: req.id,
       result: {
@@ -126,20 +130,24 @@ describe('MCP manager with a stalled server', () => {
     await vi.waitFor(async () => expect((await stalledPids()).filter(isAlive)).toEqual([]), { timeout: 10_000 });
   }, 30_000);
 
-  it('does not let a superseded discovery overwrite a newer reconnect', async () => {
+  it('reconnects cleanly while the timed-out startup attempt is still finishing', async () => {
     manager = createManager(1_000, {
-      slow: { command: process.execPath, args: [join(dir, 'healthy.mjs'), '1500'] },
+      slow: { command: process.execPath, args: [join(dir, 'healthy.mjs'), '1500', join(dir, 'slow-started')] },
     });
     await manager.initInBackground();
     expect(statusOf(manager, 'slow')?.error).toMatch(/Timed out after 1s/);
 
     // The startup attempt is still finishing in the background when the reconnect replaces it.
-    const reconnect = manager.reconnectServer('slow');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    expect(statusOf(manager, 'slow')).toMatchObject({ connected: false, connecting: true });
+    // The reconnected process answers at once; the abandoned attempt's failure must never show.
+    const seen: McpServerStatus[] = [];
+    const sampler = setInterval(() => seen.push({ ...statusOf(manager!, 'slow')! }), 5);
+    const status = await manager.reconnectServer('slow');
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+    clearInterval(sampler);
 
-    await reconnect;
-    await vi.waitFor(() => expect(statusOf(manager!, 'slow')?.connected).toBe(true), { timeout: 15_000 });
+    expect(status).toMatchObject({ connected: true, toolNames: ['slow_ping'] });
+    expect(seen.filter(s => s.error)).toEqual([]);
+    expect(statusOf(manager, 'slow')).toMatchObject({ connected: true });
     expect(manager.getTools()).toHaveProperty('slow_ping');
   }, 30_000);
 
