@@ -10,8 +10,6 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
-import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
-
 export class FactoryProjectNotFoundError extends Error {
   constructor() {
     super('Factory project not found for this organization.');
@@ -369,7 +367,6 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     await this.ensureCollections([
-      FACTORY_PROJECTS_SCHEMA,
       INTAKE_ORG_SETTINGS_SCHEMA,
       LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
       INTAKE_SOURCE_BINDINGS_SCHEMA,
