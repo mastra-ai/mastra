@@ -11,6 +11,12 @@ The `IFGAProvider` interface defines a fine-grained authorization (FGA) provider
 
 For concepts, configuration, and the lifecycle points where Mastra enforces FGA, see [Fine-grained authorization](/docs/auth/fga).
 
+:::note
+
+FGA requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license).
+
+:::
+
 ## Usage example
 
 The following example implements a minimal provider. `require` throws to deny, and `check` returns a boolean.

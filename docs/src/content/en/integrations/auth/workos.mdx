@@ -83,6 +83,12 @@ By default, `MastraAuthWorkos` grants access to any authenticated WorkOS user. T
 
 ### FGA membership loading
 
+:::note
+
+FGA requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license).
+
+:::
+
 Set `fetchMemberships: true` when you use [`MastraFGAWorkos`](/docs/auth/fga). This tells the auth provider to load the user's WorkOS organization memberships during authentication so FGA checks can resolve the correct organization membership ID.
 
 ```typescript title="src/mastra/auth.ts"

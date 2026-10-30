@@ -104,6 +104,12 @@ export const mastra = new Mastra({
 
 ### Auth with Google Groups RBAC
 
+:::note
+
+RBAC requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license).
+
+:::
+
 Add `MastraRBACGoogle` to map Google Workspace groups to Mastra permissions:
 
 ```typescript title="src/mastra/index.ts"

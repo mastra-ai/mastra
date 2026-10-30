@@ -14,6 +14,12 @@ import PropertiesTable from "@site/src/components/PropertiesTable"
 
 `MastraRBACNeon` maps Neon Auth organization roles to Mastra permissions. Register it separately when your application uses Neon Auth organization memberships for role-based access control.
 
+:::note
+
+RBAC requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license).
+
+:::
+
 ## Usage
 
 ```typescript title="src/mastra/index.ts"

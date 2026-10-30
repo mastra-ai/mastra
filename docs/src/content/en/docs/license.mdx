@@ -23,6 +23,32 @@ Mastra uses a dual-license model with the Apache License 2.0 for the majority of
 
 - Content outside of the above-mentioned directories or restrictions is available under the "Apache License 2.0".
 
+## What requires an EE license
+
+Whether you need a Mastra Enterprise Edition (EE) license depends on which features you configure, not on which packages you install. The table shows which features need a license in production. Every feature works without a license in development and testing.
+
+| Feature | EE license required in production |
+| - | - |
+| Authentication on API routes (`server.auth`) with any provider, including Simple Auth, JWT, Auth0, Better Auth, Clerk, Firebase, Google, Neon, Okta, Supabase, and WorkOS | No |
+| Studio with Simple Auth, JWT, or Mastra platform auth | No |
+| Studio sign-in screen (an SSO button or an email and password form) with a third-party provider | Yes |
+| Role-based access control (RBAC) with `server.rbac` or `studio.rbac`, using any provider | Yes |
+| Fine-grained authorization (FGA) with `server.fga` or `studio.fga` | Yes |
+| Agent Builder | Yes |
+
+### Development and production
+
+Mastra treats a deployment as production when `NODE_ENV` is `production` or `prod`. Any other value, or no value, counts as development. In development, EE features run without a license and Mastra logs a warning.
+
+`mastra start` sets `NODE_ENV=production`. If you run the build output another way, for example in a container, set `NODE_ENV=production` yourself.
+
+### Without a license in production
+
+Set your license key in the `MASTRA_LICENSE_KEY` environment variable. Mastra also reads the older `MASTRA_EE_LICENSE` variable. Without a valid key in production:
+
+- **RBAC, FGA, or Agent Builder**: The server doesn't start, and the error names the feature that needs a license.
+- **Studio sign-in screen with a third-party provider**: Studio hides the sign-in screen. Authentication on API routes keeps working.
+
 ## Apache License 2.0
 
 ```md

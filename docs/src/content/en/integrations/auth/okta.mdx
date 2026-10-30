@@ -65,6 +65,12 @@ export const mastra = new Mastra({
 
 ### Auth with RBAC
 
+:::note
+
+RBAC requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license).
+
+:::
+
 Add `MastraRBACOkta` to map Okta groups to Mastra permissions:
 
 ```typescript title="src/mastra/index.ts"
