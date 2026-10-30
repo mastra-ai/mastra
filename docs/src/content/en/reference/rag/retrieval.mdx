@@ -273,7 +273,11 @@ const results = await pgVector.query({
 })
 ```
 
-Postgres vector indexes (HNSW and IVFFlat) can't restrict that search to rows matching a condition. When a filter is present, pgVector instead compares the query vector against every matching row and returns the closest `topK`. Results are exact, but the work grows with the number of rows the filter matches. Indexing the metadata column speeds up row retrieval. The distance comparisons still happen per row.
+With an HNSW index on pgvector 0.8.0 or newer, PostgreSQL searches the index and skips rows that don't match the filter. If it finds fewer than `topK` rows, pgVector reruns the query as an exact search.
+
+With IVFFlat, or HNSW on older pgvector versions, pgVector compares the query vector against every matching row. Results are exact, but the work grows with the number of matching rows.
+
+Indexing the metadata fields you filter on speeds up both cases and gives PostgreSQL the row counts it needs to choose between them.
 
 ### Vector Query Tool
 
