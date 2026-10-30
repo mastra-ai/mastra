@@ -6,7 +6,11 @@ import type { EventCallback } from '../../events/types';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
-import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
+import {
+  AgentThreadStreamRuntime,
+  THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL_ERROR_ID,
+  agentThreadStreamRuntime,
+} from '../thread-stream-runtime';
 import {
   createTextStreamModel,
   createBlockingFirstTextStreamModel,
@@ -2258,6 +2262,10 @@ describe('Agent signals: claimed thread ownership', () => {
       await expect(first.accepted).rejects.toThrow('Claimed thread owner was released');
       // A released owner sends no reply, so the sender is refused when its acceptance window ends.
       await expect(queued.accepted).rejects.toThrow('Claimed thread owner did not accept signal');
+      await expect(queued.accepted).rejects.toMatchObject({
+        id: THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL_ERROR_ID,
+        details: { threadId: scope.threadId, resourceId: scope.resourceId, retryable: true },
+      });
       expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
         cancelledSignalIds: [],
       });

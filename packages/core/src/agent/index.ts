@@ -29,6 +29,7 @@ export {
   type ListSchedulesFilter,
 } from '../schedules';
 export * from './agent';
+export { THREAD_OWNER_DID_NOT_ACCEPT_SIGNAL_ERROR_ID } from './thread-stream-runtime';
 export { getGoalActivityDurationMs } from './goal';
 export { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from './tool-approval';
 export * from './utils';

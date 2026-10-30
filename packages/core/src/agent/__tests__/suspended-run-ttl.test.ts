@@ -122,6 +122,19 @@ async function watchThread(pubsub: EventEmitterPubSub, threadId: string) {
 
 type ThreadWatcher = Awaited<ReturnType<typeof watchThread>>;
 
+/** Stands in for the instance running `runId`: it acknowledges signals forwarded to it, as a live owner does. */
+async function ackForwardsAs(pubsub: EventEmitterPubSub, threadId: string, runId: string) {
+  await pubsub.subscribe(threadTopic(RESOURCE_ID, threadId), async event => {
+    const data = event.data as { type?: string; runId?: string; replyTopic?: string; requestId?: string };
+    if (data?.type !== 'signal-enqueued' || data.runId !== runId || !data.replyTopic || !data.requestId) return;
+    await pubsub.publish(data.replyTopic, {
+      type: 'signal-accepted',
+      runId,
+      data: { type: 'signal-accepted', requestId: data.requestId, runId },
+    });
+  });
+}
+
 /** Let anything the sweep publishes reach its subscribers before asserting it did not. */
 const flushPublishes = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -427,6 +440,7 @@ describe('suspended run in-memory TTL', () => {
         // Another instance resumed run-1 under the kept lease after the sweep and announced it.
         vi.useFakeTimers({ shouldAdvanceTime: true, now: sweptAt + 1_000 });
         await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+        await ackForwardsAs(pubsub, 'thread-1', 'run-1');
         await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
           type: registration.type,
           runId: registration.runId,
@@ -680,6 +694,7 @@ describe('suspended run in-memory TTL', () => {
       // Another instance owns the thread under a run this one never swept.
       await pubsub.releaseLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
       await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'remote-run', 15_000);
+      await ackForwardsAs(pubsub, 'thread-1', 'remote-run');
       const { agent, stream } = createWakeableAgent('run-2');
 
       await expect(sendToThread(agent)).resolves.toEqual({ action: 'deliver', runId: 'remote-run' });
@@ -698,6 +713,7 @@ describe('suspended run in-memory TTL', () => {
       // one) resumed it and keeps renewing, so it is live and forwarding is right.
       vi.useFakeTimers({ shouldAdvanceTime: true, now: sweptAt + 15_001 });
       await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+      await ackForwardsAs(pubsub, 'thread-1', 'run-1');
 
       await expect(sendToThread(agent)).resolves.toEqual({ action: 'deliver', runId: 'run-1' });
       expect(stream).not.toHaveBeenCalled();
