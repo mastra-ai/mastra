@@ -359,6 +359,56 @@ describe('intake configuration', () => {
       expect(again.find(i => i.id === resting.id)).toMatchObject({ board: 'work', stages: ['intake'] });
     });
 
+    it('leaves a card an intake route placed when its source is rebound', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const create = (externalId: string, metadata: Record<string, unknown>) =>
+        seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: {
+            board: 'work',
+            title: externalId,
+            stages: ['intake'],
+            sessions: {},
+            metadata,
+            externalSource: {
+              integrationId: 'linear',
+              type: 'issue',
+              externalId,
+              url: `https://linear.app/acme/issue/${externalId}`,
+            },
+          },
+        });
+      const routed = (await create('linear:ENG-20', { intakeRouteId: 'route-1' })).item;
+      const bound = (await create('linear:ENG-21', {})).item;
+      const issue = (identifier: string) => ({
+        source: { type: 'issue', externalId: `uuid-${identifier}` },
+        sourceId: 'team-2',
+        title: identifier,
+        metadata: { identifier },
+      });
+      vi.mocked(linear.listItems).mockResolvedValueOnce({
+        items: [issue('ENG-20'), issue('ENG-21')],
+        nextCursor: null,
+      });
+      await put({ integrationId: 'linear', sourceId: 'team-2', factoryProjectId: project.id });
+
+      const response = await put({
+        integrationId: 'linear',
+        sourceId: 'team-2',
+        factoryProjectId: project.id,
+        board: 'release',
+      });
+
+      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 1 } });
+      const byId = new Map(
+        (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
+      );
+      expect(byId.get(routed.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(byId.get(bound.id)).toMatchObject({ board: 'release', stages: ['queued'] });
+    });
+
     it('preserves selected project precedence when rebinding an unselected team', async () => {
       const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
       await seed.intake.saveConfig({
@@ -901,6 +951,45 @@ describe('intake configuration', () => {
       items = await byId();
       expect(items.get(labelled.id)).toMatchObject({ board: 'work', stages: ['intake'] });
       expect(items.get(parked.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+    });
+
+    it('leaves a labelled card an intake route placed when a label route is added', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const create = (externalId: string, metadata: Record<string, unknown>) =>
+        seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: {
+            board: 'work',
+            title: externalId,
+            stages: ['intake'],
+            sessions: {},
+            metadata,
+            externalSource: {
+              integrationId: 'github',
+              type: 'issue',
+              externalId,
+              url: `https://github.com/acme/app/${externalId}`,
+            },
+          },
+        });
+      const routed = (await create('github-issue:30', { labels: ['release'], intakeRouteId: 'route-1' })).item;
+      const labelled = (await create('github-issue:31', { labels: ['release'] })).item;
+
+      const response = await put({
+        integrationId: 'github',
+        factoryProjectId: project.id,
+        label: 'release',
+        board: 'release',
+      });
+
+      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 1 } });
+      const items = new Map(
+        (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
+      );
+      expect(items.get(routed.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(items.get(labelled.id)).toMatchObject({ board: 'release', stages: ['queued'] });
     });
 
     it.each([

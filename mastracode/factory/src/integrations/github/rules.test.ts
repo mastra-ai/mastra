@@ -14,6 +14,7 @@ import {
   GithubRules,
   polledPullRequestEvent,
   reconciledClosedEvent,
+  reconciledIssueRelabeledEvent,
 } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -3681,7 +3682,27 @@ describe('GithubRules with intake routes', () => {
       const [item] = await base.workItems.list(scope);
       return item;
     };
-    return { ...base, scope, open };
+    /** GitHub reports a label change on issue 42: not a rule event, the label route re-files the card. */
+    const relabel = async (deliveryId: string, labels: string[]) => {
+      const ingress = issueOpened(deliveryId);
+      ingress.payload.action = 'labeled';
+      (ingress.payload.issue as Record<string, unknown>).labels = labels.map(name => ({ name }));
+      await service.ingest(ingress);
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    /** The reconcile sweep saw issue 42's labels drift and replays it as "opened". */
+    const replayLabels = async (labels: string[]) => {
+      const repository = { id: 10, fullName: 'acme/repo', installationId: 7 };
+      const state = { title: 'Issue 42', url: 'https://github.com/acme/repo/issues/42', state: 'open' as const, labels };
+      await expect(service.ingest(reconciledIssueRelabeledEvent(repository, 42, state))).resolves.toEqual({
+        status: 'committed',
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    return { ...base, scope, open, relabel, replayLabels };
   }
 
   it("files a trusted maintainer's issue in Work › Triage, through Intake", async () => {
@@ -3703,6 +3724,34 @@ describe('GithubRules with intake routes', () => {
   it('still files on the label route board when no intake route matches', async () => {
     const { open } = await setupIntake('read');
     expect(await open('label-routed', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it("keeps a routed card on the route's board when GitHub reports a label change", async () => {
+    const { open, relabel } = await setupIntake('write');
+    await open('routed-then-labeled');
+    expect(await relabel('labeled-release', ['release'])).toMatchObject({
+      board: 'work',
+      stages: ['triage'],
+      metadata: { labels: ['release'] },
+    });
+  });
+
+  it('still moves a card no intake route placed when GitHub reports a label change', async () => {
+    const { open, relabel } = await setupIntake('read');
+    await open('unrouted-then-labeled');
+    expect(await relabel('labeled-release', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it("keeps a routed card on the route's board when the reconcile sweep replays its labels", async () => {
+    const { open, replayLabels, workItems, scope } = await setupIntake('write');
+    await open('routed-then-replayed');
+    expect(await replayLabels(['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
+    const decisions = await workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId);
+    const upserts = decisions.filter(decision => decision.decision.type === 'upsertLinkedWorkItem');
+    expect(upserts.map(decision => [decision.status, decision.lastError])).toEqual([
+      ['succeeded', null],
+      ['succeeded', null],
+    ]);
   });
 
   it('lets a matching intake route win over the label route', async () => {

@@ -5,7 +5,7 @@
 
 import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { resolveIntakePlacement } from '../boards/intake-routing.js';
+import { INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
@@ -94,7 +94,12 @@ export async function createFactoryWorkItem({
     orgId,
     userId,
     factoryProjectId,
-    input: { ...input, board: boardId, stages: initialStages },
+    input: {
+      ...input,
+      board: boardId,
+      stages: initialStages,
+      ...(placement ? { metadata: { ...input.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId } } : {}),
+    },
     reuseMode: 'non-stage',
   });
   if (!result.created) return { status: 'reused', item: result.item };

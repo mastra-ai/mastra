@@ -9,6 +9,7 @@ import {
   workItemPhaseSemantics,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { selectEventRule } from '../../rules/event-rules.js';
@@ -440,6 +441,8 @@ export class GithubRules {
       item = updated.item;
       changed = true;
     }
+    // An intake route chose this card's board when it arrived; its labels no longer move it.
+    if (placedByIntakeRoute(item)) return { status: changed ? 'committed' : 'ignored' };
     const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,
