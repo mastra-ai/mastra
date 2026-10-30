@@ -1,6 +1,8 @@
 import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import type { IntakeRouteHold, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
+import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import { cardRuleFacts } from './card-facts.js';
 import type { BoardRegistry } from './registry.js';
 
 /** Reads a project's intake routes, in order. */
@@ -80,4 +82,21 @@ export function resolveIntakePlacement(
 /** The hold of the first enabled route whose condition matches the card, else `'untrusted'`. */
 export function intakeHold(routes: readonly IntakeRoute[], facts: RuleFacts): IntakeRouteHold {
   return routes.find(route => route.enabled && evaluateRuleGroup(route.when, facts))?.hold ?? 'untrusted';
+}
+
+/**
+ * Whether only a person may start work on `item`: the hold of the project's first matching
+ * route — `'untrusted'` (also when no route matches, or no reader is wired) holds a GitHub or
+ * GitLab card whose author is not trusted. Read live, so route edits and a reconcile's trust
+ * backfill take effect at once.
+ */
+export async function heldForPerson(
+  reader: IntakeRoutesReader | undefined,
+  scope: { orgId: string; factoryProjectId: string },
+  item: Pick<WorkItemRow, 'title' | 'metadata' | 'externalSource'>,
+): Promise<IntakeRouteHold | false> {
+  const facts = cardRuleFacts(item);
+  const hold = intakeHold(reader ? await reader.listIntakeRoutes(scope) : [], facts);
+  if (hold === 'always') return hold;
+  return hold === 'untrusted' && evaluateRuleGroup(UNTRUSTED_AUTHOR_WHEN, facts) ? hold : false;
 }

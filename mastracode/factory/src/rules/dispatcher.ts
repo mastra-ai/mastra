@@ -6,7 +6,7 @@ import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
 import { boardForWorkItem, cardRuleFacts, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { resolveIntakePlacement } from '../boards/intake-routing.js';
+import { heldForPerson, resolveIntakePlacement } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -41,7 +41,7 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, FACTORY_RULE_STAGES } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -907,9 +907,10 @@ export class FactoryDecisionDispatcher {
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    // Neither arming nor auto-run is standing consent for code from outside the write-access
-    // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
-    if (item && externallyAuthoredWorkItem(item)) return true;
+    // Neither arming nor auto-run is standing consent for a card the project's intake routes
+    // hold (by default, code from outside the write-access circle): only a run pre-approved by a
+    // person's gesture or its own agent's governed move passes.
+    if (item && (await heldForPerson(this.#intakeRoutes, record, item))) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
     if (item && startsInAutoPhase(boards, item, decision)) return false;
