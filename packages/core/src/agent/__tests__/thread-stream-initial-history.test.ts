@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list/types';
-import { AGENT_LEASE_RENEW_INTERVAL_MS } from '../run-ownership';
+import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { createHarness, nextTicks, setupRuntime } from './thread-stream-test-utils';
 
@@ -228,6 +228,38 @@ describe('subscribeToThread withInitialHistory', () => {
       expect(collected.filter(p => p.type === 'text-delta')).toHaveLength(2);
       expect(collected.filter(p => p.type === 'finish')).toHaveLength(1);
     } finally {
+      subscription.unsubscribe();
+      await consumed;
+    }
+  });
+
+  // A read that never settles (say, a command lost on a dropped connection) must not make later checks skip
+  // the backend for good: after one lease TTL they ask again, and a live run streams.
+  it('asks the backend again once a never-settling lease read is a lease TTL old', async () => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
+    vi.spyOn(pubsub, 'getLeaseOwner')
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockImplementation(getLeaseOwner);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let opening: ReturnType<typeof subscribe>;
+    try {
+      opening = subscribe();
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS * 1.5);
+    } finally {
+      vi.useRealTimers();
+    }
+    const { subscription, collected, consumed } = await opening;
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + AGENT_LEASE_TTL_MS);
+    try {
+      await run.part({ type: 'text-delta', payload: { text: 'live' } });
+      await nextTicks(10);
+      expect(collected.filter(p => p.type === 'text-delta').map(p => p.payload.text)).toEqual(['live']);
+    } finally {
+      now.mockRestore();
       subscription.unsubscribe();
       await consumed;
     }

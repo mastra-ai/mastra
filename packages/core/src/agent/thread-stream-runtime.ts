@@ -886,7 +886,7 @@ export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
   #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
-  #stalledLeaseReads = new WeakMap<LeaseProvider, Set<string>>();
+  #stalledLeaseReads = new WeakMap<LeaseProvider, Map<string, number>>();
   // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
   // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
   // run finishes, is aborted, or the runtime state is reset; every other cleanup path is unchanged.
@@ -936,20 +936,23 @@ export class AgentThreadStreamRuntime {
   /**
    * Remembers a lease read that outlived its deadline until it settles. Reads behind it on the same backend
    * connection can't answer sooner, so waiting on each of them again would cost a full deadline per event.
+   * After one lease TTL the backend is asked again, so a read that never settles can't skip it for good.
    */
   #noteStalledLeaseRead(provider: LeaseProvider, key: string, read: Promise<unknown>) {
     let stalled = this.#stalledLeaseReads.get(provider);
-    if (!stalled) this.#stalledLeaseReads.set(provider, (stalled = new Set()));
-    if (stalled.has(key)) return;
-    stalled.add(key);
-    void read.then(
-      () => stalled.delete(key),
-      () => stalled.delete(key),
-    );
+    if (!stalled) this.#stalledLeaseReads.set(provider, (stalled = new Map()));
+    if (this.#isLeaseReadStalled(provider, key)) return;
+    const since = Date.now();
+    stalled.set(key, since);
+    const clear = () => {
+      if (stalled.get(key) === since) stalled.delete(key);
+    };
+    void read.then(clear, clear);
   }
 
   #isLeaseReadStalled(provider: LeaseProvider, key: string): boolean {
-    return this.#stalledLeaseReads.get(provider)?.has(key) ?? false;
+    const since = this.#stalledLeaseReads.get(provider)?.get(key);
+    return since !== undefined && Date.now() - since < AGENT_THREAD_LEASE_TTL_MS;
   }
 
   async #hasLiveThreadLease(pubsub: PubSub, key: string, runId: string): Promise<boolean> {
