@@ -977,7 +977,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           await saveDurableRunAtDeadline({
             runId,
             runInput: input,
-            error,
             mastra,
             logger: mastra?.getLogger?.() ?? noopLogger,
           });

@@ -2814,7 +2814,6 @@ export class DurableAgent<
             initData: runInput,
             messageListState: deadlineMessageListState(runInputEntry) ?? runInput.messageListState,
             entry: runInputEntry,
-            error: error!,
             mastra: this.#mastra,
             logger: this.logger,
           });

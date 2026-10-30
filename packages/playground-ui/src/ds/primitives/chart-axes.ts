@@ -102,6 +102,38 @@ const LABEL_GAP = 48;
 /** Rough label width at the axis font size. */
 export const labelWidth = (text: string) => text.length * CHART_AXIS_FONT_SIZE * 0.58;
 
+export type TimeTickPlacement = { x: number; anchor: 'start' | 'middle' | 'end' };
+
+/**
+ * Where a label goes: centred on its bucket, or pinned to the plot's edge when centring would
+ * push it out. A pinned label anchors on that edge, so it ends exactly there whatever the font's
+ * real widths (`labelWidth` is only an estimate).
+ */
+export function placeTimeTick({
+  x,
+  index,
+  offset = 0,
+  count,
+  plotWidth,
+  textWidth,
+}: {
+  x: number;
+  index: number;
+  /** Half a band (bars); 0 for points (lines). */
+  offset?: number;
+  count: number;
+  plotWidth: number;
+  textWidth: number;
+}): TimeTickPlacement {
+  // Bars sit in bands (label at the band's centre); lines sit on points (first at the edge).
+  const left = offset > 0 ? x - offset * (2 * index + 1) : x - (index * plotWidth) / Math.max(count - 1, 1);
+  const right = left + plotWidth;
+  const half = textWidth / 2;
+  if (x + half > right) return { x: right, anchor: 'end' };
+  if (x - half < left) return { x: left, anchor: 'start' };
+  return { x, anchor: 'middle' };
+}
+
 /**
  * Which buckets get a label: the smallest round step whose labels fit the width, on the first
  * bucket at or after each clock-aligned time (hours divisible by the step, days on local
@@ -160,4 +192,28 @@ export function pickTimeTicks(
 
 function isFiniteNumber(value: number | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+const fmtDay = (ts: number) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+/**
+ * Date-only labels for the two ends of an `edges` axis when the hour on them says nothing: buckets
+ * shorter than a day whose first and last start at the same clock time on different days, as on
+ * rolling ranges (last 24 hours, 3 days, 7 days). Same-day or uneven ends keep their labels.
+ */
+export function edgeDateLabels(timestamps: Array<number | undefined>, mode: ChartXLabels): Map<number, string> {
+  const last = timestamps.length - 1;
+  const [first, second] = timestamps;
+  const end = timestamps[last];
+  if (mode !== 'edges' || last < 1 || !isFiniteNumber(first) || !isFiniteNumber(end)) return new Map();
+  // Daily buckets are already labelled by date.
+  if (isFiniteNumber(second) && second - first >= DAY) return new Map();
+  const a = new Date(first);
+  const b = new Date(end);
+  const sameClock = a.getHours() === b.getHours() && a.getMinutes() === b.getMinutes();
+  if (!sameClock || a.toDateString() === b.toDateString()) return new Map();
+  return new Map([
+    [0, fmtDay(first)],
+    [last, fmtDay(end)],
+  ]);
 }

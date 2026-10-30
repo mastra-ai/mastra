@@ -184,6 +184,99 @@ describe('createToolCallStep delegated run identity provenance', () => {
     expect(carouselOwners.map(m => m.id)).toEqual(['earlier-assistant']);
   });
 
+  it('suspends without announcing the suspension when the pre-suspension flush fails', async () => {
+    // A consumer that reacts to `tool-call-suspended` (a resume, or an abort that must
+    // settle the parked call) looks the call up in memory. If the flush failed the call
+    // was never stored, so the chunk must be withheld - but the run still has to suspend,
+    // otherwise it can never be resumed.
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add({ id: 'user-1', role: 'user', content: 'process this' }, 'input');
+    const enqueue = vi.fn();
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const tool = createTool({
+      id: 'suspend-tool',
+      description: 'Suspends until resumed',
+      inputSchema: z.object({ data: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async (_input, context) => await context?.agent?.suspend?.({ reason: 'waiting' }),
+    });
+    const flushMessages = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const toolCallStep = createToolCallStep({
+      tools: { suspendTool: tool } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue },
+      runId: 'flush-failure-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        inputData: { toolCallId: 'call-suspend-1', toolName: 'suspendTool', args: { data: 'x' } },
+      }),
+    );
+
+    expect(flushMessages).toHaveBeenCalled();
+    // The default queue flush swallows storage errors; only this strict form rejects
+    // and lets the guard withhold the chunk.
+    expect(flushMessages).toHaveBeenCalledWith(expect.anything(), 'thread-1', undefined, { throwOnError: true });
+    expect(suspend).toHaveBeenCalled();
+    expect(enqueue.mock.calls.map(([chunk]: [any]) => chunk.type)).not.toContain('tool-call-suspended');
+    // The suspension is silent by design, so the flush failure itself must reach the
+    // stream: otherwise the caller sees a normal completion while the run stays parked.
+    const failureChunk = enqueue.mock.calls.map(([chunk]: [any]) => chunk).find(chunk => chunk.type === 'error');
+    expect(failureChunk).toBeDefined();
+    expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
+    expect(failureChunk.payload.error.cause).toBeInstanceOf(Error);
+    // The chunk names the call that failed to persist, so a parallel call that already
+    // suspended keeps its parked state instead of being retracted with the run.
+    expect(failureChunk.payload.toolCallId).toBe('call-suspend-1');
+  });
+
+  it('delivers the flush failure directly when the writer rejects it', async () => {
+    // A rejecting writer only fails before enqueuing, so the failure chunk never reached
+    // the client. Without the fallback the caller sees a normal completion while the run
+    // is parked: no suspension event, and no error explaining why.
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add({ id: 'user-1', role: 'user', content: 'process this' }, 'input');
+    const enqueue = vi.fn();
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const tool = createTool({
+      id: 'suspend-tool',
+      description: 'Suspends until resumed',
+      inputSchema: z.object({ data: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async (_input, context) => await context?.agent?.suspend?.({ reason: 'waiting' }),
+    });
+    const flushMessages = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const outputWriter = vi.fn().mockRejectedValue(new Error('processor rejected the error chunk'));
+    const toolCallStep = createToolCallStep({
+      tools: { suspendTool: tool } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue },
+      runId: 'flush-writer-failure-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter,
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        inputData: { toolCallId: 'call-suspend-2', toolName: 'suspendTool', args: { data: 'x' } },
+      }),
+    );
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    expect(suspend).toHaveBeenCalled();
+    const failureChunk = enqueue.mock.calls.map(([chunk]: [any]) => chunk).find(chunk => chunk.type === 'error');
+    expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
+    // The fallback skips the processors that ran on the chunk, so it must not hand the
+    // client a storage error they would have redacted.
+    expect(failureChunk.payload.error.cause).toBeUndefined();
+    // Both paths carry the failing call, so the retraction stays scoped to it.
+    expect(failureChunk.payload.toolCallId).toBe('call-suspend-2');
+  });
+
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
     const runResume = async (suspendedToolCallId: string, suspendedToolRunId: string) => {
       const execute = vi.fn(async () => ({ ok: true }));
@@ -1777,6 +1870,43 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     );
 
+    expectNoToolExecution();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('still suspends and still delivers the approval chunk when the writer fails', async () => {
+    // The call is already persisted at this point; a writer that throws (a processor
+    // rejecting the chunk, a closed stream) must not turn the suspension into an error.
+    // It must not swallow the approval request either: the caller would otherwise see a
+    // normal completion while the run is parked waiting for an approval it never saw.
+    const outputWriter = vi.fn().mockRejectedValue(new Error('processor rejected approval'));
+    toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState,
+      outputWriter,
+    } as any);
+
+    const executePromise = toolCallStep.execute(makeExecuteParams());
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-call-approval' }));
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-call-approval',
+        payload: expect.objectContaining({ toolCallId: 'test-call-id', toolName: 'test-tool' }),
+      }),
+    );
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requireToolApproval: expect.objectContaining({ toolCallId: 'test-call-id' }),
+      }),
+      { resumeLabel: 'test-call-id' },
+    );
     expectNoToolExecution();
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');

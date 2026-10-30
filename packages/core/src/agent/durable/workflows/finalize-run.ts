@@ -476,7 +476,6 @@ export async function runDurableDeadlineOutputPass({
   initData,
   messageListState,
   entry,
-  error,
   mastra,
   logger,
 }: {
@@ -484,7 +483,6 @@ export async function runDurableDeadlineOutputPass({
   initData: Pick<DurableAgenticWorkflowInput, 'agentId' | 'agentName' | 'state' | 'options' | 'requestContextEntries'>;
   messageListState: SerializedMessageListState;
   entry: RunRegistryEntry;
-  error: Error;
   mastra?: Mastra;
   logger: IMastraLogger;
 }): Promise<void> {
@@ -532,7 +530,7 @@ export async function runDurableDeadlineOutputPass({
         usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
         finishReason: 'error',
         steps: [],
-        error,
+        inputAccepted: true,
       });
     } catch (processorError) {
       // A tripwire rejects the turn, as it does at finish: remove response messages already saved.
@@ -615,7 +613,6 @@ export async function claimDurableDeadlineSave({
 export async function saveDurableRunAtDeadline({
   runId,
   runInput,
-  error,
   mastra,
   logger,
 }: {
@@ -624,7 +621,6 @@ export async function saveDurableRunAtDeadline({
     DurableAgenticWorkflowInput,
     'agentId' | 'agentName' | 'state' | 'options' | 'requestContextEntries' | 'messageListState'
   >;
-  error: Error;
   mastra?: Mastra;
   logger: IMastraLogger;
 }): Promise<void> {
@@ -635,7 +631,6 @@ export async function saveDurableRunAtDeadline({
     initData: runInput,
     messageListState: deadlineMessageListState(entry) ?? runInput.messageListState,
     entry,
-    error,
     mastra,
     logger,
   }).catch(saveError => {

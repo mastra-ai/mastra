@@ -534,7 +534,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                       ? 'abort'
                       : (state.lastStepResult?.reason ?? 'unknown'),
                   steps: state.accumulatedSteps,
-                  ...(deadlineError ? { error: deadlineError } : {}),
+                  ...(deadlineError ? { inputAccepted: true } : {}),
                 },
               })
             : { messageListState: state.messageListState, outputText: finalText ?? '' };

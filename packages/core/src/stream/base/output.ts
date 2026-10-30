@@ -57,6 +57,10 @@ const detailUsageCountKeys = [
 ] as const satisfies ReadonlyArray<keyof LanguageModelUsage>;
 const usageCountKeys = [...primaryUsageCountKeys, ...detailUsageCountKeys] as const;
 
+function hasTokenCounts(usage: Partial<LanguageModelUsage> | undefined) {
+  return primaryUsageCountKeys.some(key => usage?.[key] !== undefined);
+}
+
 function accumulateUsage(
   target: Partial<LanguageModelUsage>,
   missing: Set<(typeof primaryUsageCountKeys)[number]>,
@@ -670,6 +674,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * keep token metrics counted once. Serialized with the run state.
    */
   #generationReportedUsage: LanguageModelUsage | undefined = undefined;
+  /**
+   * How many `#bufferedSteps` entries the MODEL_GENERATION spans of earlier suspended legs
+   * already reported provider cost for. It counts the suspended step, which a resumed leg
+   * replays into `#bufferedSteps`. Serialized with the run state.
+   */
+  #generationReportedStepCount = 0;
   #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
@@ -1984,6 +1994,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
                   ...(self.#generationReportedUsage && { generationReportedUsage: self.#generationReportedUsage }),
+                  ...(self.#generationReportedStepCount > 0 && {
+                    generationStepProviderMetadata: self.#bufferedSteps
+                      .slice(self.#generationReportedStepCount)
+                      .map(step => step.providerMetadata),
+                  }),
                   toolCalls: self.#toolCalls,
                   toolResults: self.#toolResults,
                   staticToolCalls: self.#toolCalls.filter(toolCall => toolCall?.payload?.dynamic === false),
@@ -2109,7 +2124,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       usage: self.#usageCount,
                       finishReason: 'error',
                       steps: [...self.#bufferedSteps] as LLMStepResult[],
-                      error,
+                      inputAccepted: true,
                     },
                   );
                 })().catch(processorError => {
@@ -2816,6 +2831,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const totalUsage = this.#getTotalUsage(this.#getUsageCountWithSuspendedStep());
     const generationReportedUsage = this.#generationReportedUsage;
     this.#generationReportedUsage = totalUsage;
+    // A leg that records no token counts leaves them to a later leg. Its provider cost moves
+    // with them.
+    const generationStepProviderMetadata: (ProviderMetadata | undefined)[] = [];
+    if (hasTokenCounts(totalUsage)) {
+      for (const step of this.#bufferedSteps.slice(this.#generationReportedStepCount)) {
+        generationStepProviderMetadata.push(step.providerMetadata);
+      }
+      generationStepProviderMetadata.push(chunk.payload.providerMetadata);
+      this.#generationReportedStepCount = this.#bufferedSteps.length + 1;
+    }
     return {
       finishReason: 'suspended',
       suspendReason: chunk.type,
@@ -2842,6 +2867,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       steps: [],
       totalUsage,
       ...(generationReportedUsage && { generationReportedUsage }),
+      generationStepProviderMetadata,
       object: undefined as OUTPUT,
     };
   }
@@ -2916,6 +2942,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #truncateRunBuffers() {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
+    this.#generationReportedStepCount = 0;
     this.#bufferedText.length = 0;
     this.#resumedPriorText = '';
     this.#bufferedTextAtStepStart = 0;
@@ -3039,6 +3066,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const generationReportedUsage = recordSuspension
       ? this.#getTotalUsage(this.#getUsageCountWithSuspendedStep(suspendedStepUsage))
       : this.#generationReportedUsage;
+    const generationReportedStepCount =
+      recordSuspension && hasTokenCounts(generationReportedUsage)
+        ? this.#bufferedSteps.length + 1
+        : this.#generationReportedStepCount;
     return {
       status: recordSuspension ? 'suspended' : this.#status,
       bufferedSteps: steps,
@@ -3068,6 +3099,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       lastStepUsage: this.#lastStepUsage,
       suspendedStepUsage,
       generationReportedUsage,
+      generationReportedStepCount,
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended || recordSuspension,
       messageList: this.messageList.serialize(),
@@ -3120,6 +3152,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#lastStepUsage = state.lastStepUsage ?? state.bufferedSteps?.at(-1)?.usage;
     this.#suspendedStepUsage = state.suspendedStepUsage;
     this.#generationReportedUsage = state.generationReportedUsage;
+    this.#generationReportedStepCount = state.generationReportedStepCount ?? 0;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
     // Buffered steps hold only the IDs of the response messages they had seen;

@@ -5,6 +5,7 @@ import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClu
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIM_PAGE_SIZE = 500;
 
 /**
@@ -76,6 +77,90 @@ function compareStreamIds(a: string, b: string): number {
 }
 
 /**
+ * Connect a client, standalone or cluster, within its `socket.connectTimeout`
+ * (node-redis default: 5000 ms; 0 disables the bound).
+ *
+ * node-redis applies `connectTimeout` only to opening the TCP socket. The
+ * handshake that follows (CLIENT SETINFO, HELLO/AUTH, SELECT) has no deadline,
+ * and the default reconnectStrategy retries a failed attempt forever. So a
+ * server that accepts the socket but never replies (a SIGSTOPped process, or a
+ * proxy that stopped forwarding) makes `connect()` hang forever. The same
+ * budget therefore bounds the whole connect here. On expiry the client is
+ * destroyed, which stops its retry loop and lets a later call connect again.
+ *
+ * destroy() does not stop a cluster's slot discovery: once the nodes answer it
+ * still connects node clients that nothing would close. So when the abandoned
+ * connect settles, the client is destroyed again unless it is open. Until then
+ * no new connect starts on that client: a second discovery would share the
+ * first one's node entries, settle before they connect, and its destroy()
+ * would miss them. A call made meanwhile waits for the abandoned connect
+ * within its own deadline, then connects.
+ */
+const abandonedConnects = new WeakMap<object, Promise<void>>();
+
+async function connectWithin(
+  client: RedisClientType,
+  role: 'write' | 'read',
+  isReleased: () => boolean = () => false,
+): Promise<void> {
+  const cluster = client as unknown as Partial<Pick<RedisClusterType, '_options'>>;
+  const socket = cluster._options ? cluster._options.defaults?.socket : client.options?.socket;
+  const timeoutMs = socket?.connectTimeout ?? 5000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let connecting: Promise<unknown> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    if (!timeoutMs) return;
+    timer = setTimeout(() => {
+      if (connecting) {
+        const settled = connecting
+          .catch(() => {})
+          .then(() => {
+            if (abandonedConnects.get(client) === settled) abandonedConnects.delete(client);
+            if (client.isOpen) return;
+            try {
+              client.destroy();
+            } catch {
+              // A standalone client's destroy() throws ClientClosedError once closed.
+            }
+          });
+        abandonedConnects.set(client, settled);
+        // close() may already have destroyed this client, and a standalone
+        // client's destroy() throws ClientClosedError when called twice.
+        if (client.isOpen) client.destroy();
+      }
+      reject(
+        new Error(
+          `redis-streams: ${role} client did not connect to Redis within ${timeoutMs}ms (socket.connectTimeout); the server is unreachable or not responding`,
+        ),
+      );
+    }, timeoutMs);
+  });
+  try {
+    const abandoned = abandonedConnects.get(client);
+    if (abandoned) {
+      await Promise.race([abandoned, timedOut]);
+      // close() may have released the client while this call waited.
+      if (isReleased()) throw new Error(`redis-streams: ${role} client closed while connecting`);
+    }
+    connecting = client.connect();
+    await Promise.race([connecting, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
+ * return the policy when the server can evict keys under memory pressure.
+ */
+function evictingMaxmemoryPolicy(info: string): string | undefined {
+  const field = (name: string) => info.match(new RegExp(`^${name}:(.*)$`, 'm'))?.[1]?.trim();
+  const policy = field('maxmemory_policy');
+  if (!policy || policy === 'noeviction' || Number(field('maxmemory') ?? 0) <= 0) return undefined;
+  return policy;
+}
+
+/**
  * Disconnect a client, standalone or cluster.
  *
  * node-redis 5 `quit()` never settles on a client that is open but waiting to
@@ -143,9 +228,9 @@ export interface RedisStreamsPubSubConfig {
    * the full duration is deleted by Redis automatically — entries, consumer
    * groups and their pending lists included.
    *
-   * Defaults to 0 (disabled) to preserve existing behavior: streams live
-   * until an explicit `clearTopic`, and a stream that never reaches one stays
-   * in Redis forever. **Production deployments should set this** — see below.
+   * Defaults to 7 days (604_800_000). Set to 0 to disable expiry: streams
+   * then live until an explicit `clearTopic`, and a stream that never reaches
+   * one stays in Redis forever.
    *
    * Why a TTL matters: topics fall into two classes.
    * - *Lifecycle-owned* topics (workflow/agent run streams, request/reply
@@ -265,6 +350,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Map<EventCallback, Set<ReturnType<typeof setTimeout>>>> = new Map();
   #closed = false;
+  /** Set once close() has drained publishes and is about to release the writer. */
+  #writerReleased = false;
+  #evictionPolicyChecked = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
     super();
@@ -274,7 +362,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
     this.#blockMs = options.blockMs ?? 1000;
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
-    const ttl = options.streamIdleTtlMs ?? 0;
+    const ttl = options.streamIdleTtlMs ?? DEFAULT_STREAM_IDLE_TTL_MS;
     // Must be a non-negative integer: node-redis serializes the PEXPIRE arg with
     // toString(), and Redis rejects a non-integer/Infinity ('value is not an
     // integer or out of range'). Without this guard a bad value would poison
@@ -391,15 +479,46 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // second connect().
     if (!this.#writerConnecting && this.#writeClient.isOpen) return;
     if (!this.#writerConnecting) {
-      this.#writerConnecting = this.#writeClient
-        .connect()
-        .then(() => undefined)
+      this.#writerConnecting = connectWithin(this.#writeClient, 'write', () => this.#writerReleased)
+        .then(() => {
+          if (!this.#evictionPolicyChecked) {
+            this.#evictionPolicyChecked = true;
+            void this.#warnOnEvictingPolicy();
+          }
+        })
         .finally(() => {
           // Clear so a failed initial connect can be retried on the next call.
           this.#writerConnecting = undefined;
         });
     }
     return this.#writerConnecting;
+  }
+
+  /**
+   * Consumer-group state, lease keys and TTL'd streams are all live data. A
+   * server with `maxmemory` set and any policy other than `noeviction` deletes
+   * them under memory pressure (silently losing events and leases), so warn
+   * once. INFO rather than CONFIG GET because managed Redis often blocks CONFIG.
+   */
+  async #warnOnEvictingPolicy(): Promise<void> {
+    try {
+      const client = this.#writeClient as unknown as Partial<Pick<RedisClusterType, 'masters'>>;
+      const reply = Array.isArray(client.masters)
+        ? await (this.#writeClient as unknown as RedisClusterType).sendCommand(undefined, true, ['INFO', 'memory'])
+        : await this.#writeClient.sendCommand(['INFO', 'memory']);
+      const policy = evictingMaxmemoryPolicy(String(reply));
+      if (!policy) return;
+      const warn = this.#logger?.warn ? this.#logger.warn.bind(this.#logger) : console.warn;
+      warn(
+        `redis-streams: Redis maxmemory-policy is "${policy}". Under memory pressure Redis will evict ` +
+          `pubsub keys (TTL'd streams, consumer groups, lease keys), losing events and leases. ` +
+          `Set maxmemory-policy to "noeviction".`,
+      );
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: maxmemory-policy check failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   #streamKey(topic: string): string {
@@ -669,7 +788,20 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // connection until a message arrives.
     const readClient = this.#createReadClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
-    await readClient.connect();
+    try {
+      await connectWithin(readClient, 'read');
+    } catch (err) {
+      // No Subscription exists yet, so #stopSubscription will never destroy
+      // this fan-out group. Without this, every retry would leave one behind.
+      // Not awaited: if Redis froze, this command stalls too, and the caller
+      // must still get the timeout instead of hanging.
+      if (!isGrouped) {
+        void this.#writeClient.xGroupDestroy(streamKey, group).catch(destroyErr => {
+          this.#logger?.debug?.('redis-streams: xGroupDestroy failed', { topic, group, error: errorText(destroyErr) });
+        });
+      }
+      throw err;
+    }
 
     return {
       members: new Map([[cb, {}]]),
@@ -1142,6 +1274,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // the caller with a ClosingError.
     await this.flush();
 
+    this.#writerReleased = true;
     if (this.#writeClient.isOpen) {
       try {
         await disconnect(this.#writeClient);

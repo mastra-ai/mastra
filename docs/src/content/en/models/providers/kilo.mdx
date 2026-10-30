@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 383 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 384 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -102,8 +102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.0372,
-    "outputCost": 1.14
+    "inputCost": 0.022,
+    "outputCost": 0.192
   },
   {
     "model": "kilo/~deepseek/deepseek-pro-latest",
@@ -115,7 +115,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1048576,
     "maxOutput": 393216,
     "inputCost": 0.1035,
-    "outputCost": 8
+    "outputCost": 4
   },
   {
     "model": "kilo/~deepseek/deepseek-v4-flash-latest",
@@ -126,8 +126,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.0345,
-    "outputCost": 0.1877
+    "inputCost": 0.0486,
+    "outputCost": 0.3
   },
   {
     "model": "kilo/~google/gemini-flash-latest",
@@ -162,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.1824,
-    "outputCost": 9.3388
+    "inputCost": 0.1615,
+    "outputCost": 10.1551
   },
   {
     "model": "kilo/~openai/gpt-astra-latest",
@@ -258,8 +258,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.0513,
-    "outputCost": 0.0701
+    "inputCost": 0.018,
+    "outputCost": 0.1402
   },
   {
     "model": "kilo/~z-ai/glm-latest",
@@ -784,10 +784,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 0.28,
-    "outputCost": 0.42
+    "contextWindow": 163840,
+    "maxOutput": 147456,
+    "inputCost": 0.26,
+    "outputCost": 0.38
   },
   {
     "model": "kilo/deepseek/deepseek-v3.2-exp",
@@ -844,8 +844,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 393216,
+    "contextWindow": 1024000,
+    "maxOutput": 384000,
     "inputCost": 1.6,
     "outputCost": 3.2
   },
@@ -1206,8 +1206,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.042,
-    "outputCost": 0.22
+    "inputCost": 0.036,
+    "outputCost": 0.107
   },
   {
     "model": "kilo/google/gemma-4-31b-it",
@@ -1340,6 +1340,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.3,
     "outputCost": 0.9
+  },
+  {
+    "model": "kilo/inclusionai/ling-3.1-flash-1019-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kilo/inference-net/schematron-v2-small",
@@ -2130,8 +2142,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.56,
-    "outputCost": 3.1
+    "inputCost": 0.6,
+    "outputCost": 3.5
   },
   {
     "model": "kilo/moonshotai/kimi-k3",
@@ -3090,8 +3102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.25,
-    "outputCost": 1
+    "inputCost": 0.05,
+    "outputCost": 0.5
   },
   {
     "model": "kilo/perceptron/perceptron-mk1",
@@ -3557,7 +3569,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 65536,
+    "maxOutput": 81920,
     "inputCost": 0.45,
     "outputCost": 2.7
   },
@@ -3640,8 +3652,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1010000,
-    "maxOutput": 909000,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
     "inputCost": 2,
     "outputCost": 6
   },
@@ -3652,8 +3664,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 262144,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
     "inputCost": 0.425,
     "outputCost": 2.55
   },
@@ -4242,8 +4254,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.1,
-    "outputCost": 0.28
+    "inputCost": 0.087,
+    "outputCost": 0.187
   },
   {
     "model": "kilo/xiaomi/mimo-v2.6-pro",
@@ -4432,8 +4444,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048575,
-    "maxOutput": 943717,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
     "inputCost": 0.15,
     "outputCost": 0.5
   },
