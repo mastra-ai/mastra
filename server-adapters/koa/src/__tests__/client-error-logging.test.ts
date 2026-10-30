@@ -1,3 +1,4 @@
+import { errorMonitor } from 'node:events';
 import type { Server } from 'node:http';
 import { Mastra } from '@mastra/core';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -21,7 +22,7 @@ describe('Koa client error logging', () => {
     }
   });
 
-  async function startServer() {
+  async function startServer(configure?: (app: Koa) => void) {
     const step = createStep({
       id: 'echo',
       inputSchema: z.object({ name: z.string() }),
@@ -40,6 +41,7 @@ describe('Koa client error logging', () => {
     vi.spyOn(mastra, 'getLogger').mockReturnValue(logger as any);
 
     const app = new Koa();
+    configure?.(app);
     const adapter = new MastraServer({ app, mastra });
     (adapter as any).registerErrorMiddleware();
     app.use(bodyParser());
@@ -96,5 +98,33 @@ describe('Koa client error logging', () => {
 
     expect(onceListener).toHaveBeenCalledTimes(1);
     expect(app.listeners('error')).not.toContain(onceListener);
+  });
+
+  it('delivers the 400 to a custom app.onerror set before listen', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const customOnError = vi.fn();
+    const { send } = await startServer(app => {
+      app.onerror = customOnError;
+    });
+
+    expect((await send()).status).toBe(400);
+
+    expect(customOnError).toHaveBeenCalledTimes(1);
+    expect(customOnError.mock.calls[0]![0]).toMatchObject({ status: 400 });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('notifies errorMonitor listeners and keeps the default listener for later 5xx', async () => {
+    const { app, send } = await startServer();
+    const monitor = vi.fn();
+    const appListener = vi.fn();
+    app.on(errorMonitor, monitor);
+    app.on('error', appListener);
+
+    expect((await send()).status).toBe(400);
+
+    expect(monitor).toHaveBeenCalledTimes(1);
+    expect(appListener).toHaveBeenCalledTimes(1);
+    expect(app.rawListeners('error')[0]).toBe(Koa.prototype.onerror);
   });
 });

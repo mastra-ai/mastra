@@ -17,7 +17,7 @@ import {
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
-import type Koa from 'koa';
+import Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
@@ -131,13 +131,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.body = { ...body, error: error.message || 'Unknown error' };
 
         // Client errors (4xx) aren't server faults, and the route handler already logged this 501
-        // at warn level. Koa's default listener prints to console.error, so deliver these only to
-        // listeners the app registered itself.
+        // at warn level. Koa's built-in default listener prints to console.error, so detach it while
+        // emitting. Every other listener, including a custom `app.onerror`, still gets the event
+        // through emit(), which keeps once(), errorMonitor and captureRejections behaviour.
         const isClientError = status >= 400 && status < 500;
         const loggedAsWarning = status === 501 && (ctx as any)._mastraLoggedNotImplementedError === err;
         if (isClientError || loggedAsWarning) {
-          for (const listener of ctx.app.rawListeners('error')) {
-            if (listener !== ctx.app.onerror) listener.call(ctx.app, err, ctx);
+          const app = ctx.app;
+          const defaultListener = Koa.prototype.onerror;
+          const hadDefaultListener = app.rawListeners('error').includes(defaultListener);
+          app.removeListener('error', defaultListener);
+          try {
+            if (app.listenerCount('error') > 0) app.emit('error', err, ctx);
+          } finally {
+            if (hadDefaultListener) app.prependListener('error', defaultListener);
           }
           return;
         }
