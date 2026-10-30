@@ -174,7 +174,7 @@ export function KnowledgeNoteItem({
       {compact ? null : <AuthorMark author={note.provenance.author} />}
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <Txt as="span" variant="label" tone="ink">
+          <Txt as="span" variant="label" tone="ink" className="[overflow-wrap:anywhere]">
             {note.provenance.author}
           </Txt>
           <Txt as="span" variant="caption" tone="muted">
@@ -343,7 +343,13 @@ export function KnowledgePageDetail({
           <div className="flex items-center gap-1.5">
             <dt className="sr-only">Version</dt>
             <dd>
-              <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
+              <Txt
+                as="span"
+                variant="caption"
+                tone="muted"
+                className="[overflow-wrap:anywhere]"
+                data-testid="knowledge-page-version"
+              >
                 Version {page.version} · updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
               </Txt>
             </dd>
@@ -429,7 +435,7 @@ export function KnowledgePageDetail({
                     <Txt as="span" variant="body-sm" tone="ink">
                       {ACTIVITY_LABELS[event.action] ?? event.action}
                     </Txt>
-                    <Txt as="span" variant="caption" tone="muted">
+                    <Txt as="span" variant="caption" tone="muted" className="[overflow-wrap:anywhere]">
                       {event.provenance.author} · <When iso={event.createdAt} />
                     </Txt>
                   </li>
