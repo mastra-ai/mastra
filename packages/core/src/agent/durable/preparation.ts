@@ -248,6 +248,12 @@ export interface PreparationOptions<OUTPUT = undefined> {
   /** Whether execution options already include the agent defaults. */
   optionsAreResolved?: boolean;
   /**
+   * The agent defaults `options` were resolved from. Function-based defaults can build new
+   * scorers on every call, so recording whether the completion policy came from the defaults
+   * must compare against this resolution rather than a fresh one.
+   */
+  resolvedDefaultOptions?: AgentExecutionOptions<OUTPUT>;
+  /**
    * Whether agent scopes were already applied to `options` (DurableAgent does this itself).
    * When false, preparation resolves scopes so wrappers that call it directly honor them.
    */
@@ -310,6 +316,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messages,
     options: rawExecOptions,
     optionsAreResolved = false,
+    resolvedDefaultOptions,
     scopesResolved = false,
     resumedSpanData,
     runId: providedRunId,
@@ -367,7 +374,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined;
+  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined = resolvedDefaultOptions;
   const loadDefaultOptions = async () =>
     (defaultOptions ??= ((await typedAgent.getDefaultOptions({ requestContext })) ??
       {}) as AgentExecutionOptions<OUTPUT>);
@@ -966,6 +973,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
                 active.onComplete === configured.onComplete
               );
             })(),
+            scorerIds: execOptions.isTaskComplete.scorers?.map(s => s.id),
             scorerNames: execOptions.isTaskComplete.scorers?.map(s => s.name).filter((n): n is string => !!n),
             strategy: execOptions.isTaskComplete.strategy,
             timeout: execOptions.isTaskComplete.timeout,

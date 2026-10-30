@@ -12,7 +12,13 @@ afterEach(async () => {
   scenarios.length = 0;
 });
 
-describe.each(['durable', 'evented'] as const)('recovered %s completion policy', kind => {
+describe.each([
+  ['durable', 'object'],
+  ['evented', 'object'],
+  // Function defaults build new scorer instances on every resolution.
+  ['durable', 'function'],
+  ['evented', 'function'],
+] as const)('recovered %s completion policy from %s defaults', (kind, defaultsShape) => {
   it('does not accept an unchecked draft after restart', async () => {
     const gate = createGate();
     gates.push(gate);
@@ -20,9 +26,24 @@ describe.each(['durable', 'evented'] as const)('recovered %s completion policy',
     let recoveredCalls = 0;
     const scenario = createRestartScenario({
       kind,
-      runId: `life-coach-completion-${kind}`,
-      build: ({ core, generation }) =>
-        new core.Agent({
+      runId: `life-coach-completion-${kind}-${defaultsShape}`,
+      build: ({ core, generation }) => {
+        const defaults = () => ({
+          maxSteps: 3,
+          isTaskComplete: {
+            scorers: [
+              {
+                id: 'confirmed-commitment',
+                name: 'Confirmed commitment',
+                run: async () => {
+                  checked.push(generation);
+                  return { score: checked.filter(g => g === generation).length > 1 ? 1 : 0 };
+                },
+              } as any,
+            ],
+          },
+        });
+        return new core.Agent({
           id: 'life-coach-completion-repro',
           name: 'Life Coach',
           instructions: 'Confirm the commitment with the user before treating it as final.',
@@ -44,22 +65,9 @@ describe.each(['durable', 'evented'] as const)('recovered %s completion policy',
               };
             },
           }),
-          defaultOptions: {
-            maxSteps: 3,
-            isTaskComplete: {
-              scorers: [
-                {
-                  id: 'confirmed-commitment',
-                  name: 'Confirmed commitment',
-                  run: async () => {
-                    checked.push(generation);
-                    return { score: checked.filter(g => g === generation).length > 1 ? 1 : 0 };
-                  },
-                } as any,
-              ],
-            },
-          },
-        }),
+          defaultOptions: defaultsShape === 'function' ? defaults : defaults(),
+        });
+      },
     });
     scenarios.push(scenario);
     const original = await scenario.start(({ agent, runId }) => agent.stream('Help me set a goal', { runId }));

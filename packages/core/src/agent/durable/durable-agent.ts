@@ -116,6 +116,7 @@ import type {
   RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
+import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
@@ -133,6 +134,7 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 }
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
@@ -1705,32 +1707,13 @@ export class DurableAgent<
     }
     executionFence.throwIfLost();
 
-    const persistedCompletion = workflowInput.options?.isTaskComplete;
-    const configuredCompletion = persistedCompletion?.fromAgentDefaults
-      ? (await wrapped.getDefaultOptions({ requestContext }))?.isTaskComplete
-      : undefined;
-    const completionScorers = configuredCompletion?.scorers;
-    const completionNames = completionScorers?.map(s => s.name).filter((name): name is string => !!name);
-    const restoredCompletion =
-      persistedCompletion?.fromAgentDefaults &&
-      completionScorers &&
-      JSON.stringify(completionNames) === JSON.stringify(persistedCompletion.scorerNames)
-        ? {
-            scorers: completionScorers,
-            onComplete: configuredCompletion?.onComplete,
-            strategy: persistedCompletion.strategy,
-            timeout: persistedCompletion.timeout,
-            parallel: persistedCompletion.parallel,
-            suppressFeedback: persistedCompletion.suppressFeedback,
-          }
-        : undefined;
-    if (persistedCompletion && !restoredCompletion) {
-      this.#mastra
-        ?.getLogger?.()
-        ?.warn?.(
-          `[DurableAgent] Cannot restore isTaskComplete for recovered run ${runId}; completion checks will not run`,
-        );
-    }
+    const restoredCompletion = await restoreCompletionPolicy({
+      agent: wrapped,
+      persisted: workflowInput.options?.isTaskComplete,
+      requestContext,
+      runId,
+      logger: this.#mastra?.getLogger?.(),
+    });
 
     const registryEntry = {
       isTaskComplete: restoredCompletion,
@@ -2026,6 +2009,7 @@ export class DurableAgent<
     });
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    Object.defineProperty(scopedOptions, RESOLVED_DEFAULT_OPTIONS, { value: defaultOptions, enumerable: true });
     return scopedOptions;
   }
 
@@ -3156,6 +3140,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         durableAgentId: this.id,
@@ -4788,6 +4773,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         methodType: 'generate',

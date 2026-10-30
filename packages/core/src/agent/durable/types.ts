@@ -308,6 +308,7 @@ export interface SerializableDurableOptions {
    */
   isTaskComplete?: {
     fromAgentDefaults?: boolean;
+    scorerIds?: string[];
     scorerNames?: string[];
     strategy?: 'all' | 'any';
     timeout?: number;
