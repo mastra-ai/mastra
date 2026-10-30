@@ -36,6 +36,8 @@ export interface DraftRoute {
 
 interface DraftRouteOptions {
   modelDefaultsGate?: Promise<void>;
+  /** Holds the session create response until it settles. */
+  createGate?: Promise<void>;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
@@ -50,6 +52,7 @@ function readSentMessage(body: unknown): string {
 
 export function stubDraftRoute({
   modelDefaultsGate,
+  createGate,
   defaultModelId = null,
   persistedMessages = [],
   workItems = [],
@@ -130,6 +133,7 @@ export function stubDraftRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, async ({ request }) => {
       route.createBodies.push(await request.json());
+      await createGate;
       return HttpResponse.json({ session: createdSession });
     }),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),

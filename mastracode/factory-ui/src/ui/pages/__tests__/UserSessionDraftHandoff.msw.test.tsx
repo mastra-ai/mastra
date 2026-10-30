@@ -179,4 +179,40 @@ describe('a user session draft on the real thread route', () => {
     route.finishWorkspace();
     await waitForMutationsIdle(client);
   });
+
+  it('opens the thread with the prompt on screen while the session is still being created', async () => {
+    let finishCreate = () => {};
+    const createGate = new Promise<void>(resolve => {
+      finishCreate = resolve;
+    });
+    const route = stubDraftRoute({ createGate, defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'fix the login bug');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.createBodies).toHaveLength(1));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
+    );
+    // The create has not answered, yet the thread shows the prompt instead of a loader.
+    // Look it up under the thread's main: the draft page's main is replaced on the way.
+    expect(await screen.findByText('fix the login bug', { selector: 'main p' }, { timeout: 5000 })).toBeInTheDocument();
+    const thread = within(screen.getByRole('main'));
+    expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument();
+    expect(route.posted).toEqual([]);
+
+    finishCreate();
+    await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
+    expect(thread.getAllByText('fix the login bug', { selector: 'p' })).toHaveLength(1);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
 });

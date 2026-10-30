@@ -12,6 +12,7 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { opensWithPrompt } from '../hooks/useHandoffPrompt';
 import { readFailedDraft } from '../services/handoffFiles';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
@@ -43,6 +44,7 @@ export function ChatSessionConfigProvider({
   draftSessionId?: string;
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
+  const location = useLocation();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const isUserDraft = userScoped && Boolean(draftSessionId);
@@ -117,7 +119,10 @@ export function ChatSessionConfigProvider({
   // for an in-session mount. Distinct from `!sandboxReady`, which is also
   // false outside any session. Track the pending query (not `!sandboxReady`)
   // so a denied/missing session cannot keep the preparing loader up forever.
-  const sandboxPreparing = resolvingSession && !addressOverride;
+  // A thread opened with its first prompt is mid-create: it shows that prompt,
+  // not the preparing steps, and sends it once the session exists.
+  const openingWithPrompt = userScoped && opensWithPrompt(location.state);
+  const sandboxPreparing = resolvingSession && !addressOverride && !openingWithPrompt;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one it becomes addressable as soon as
   // session metadata resolves — same as `resourceReady`.

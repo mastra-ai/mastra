@@ -10,6 +10,11 @@ export function stashHandoffFiles(resourceId: string, files: PendingImage[]): vo
   else handoffFiles.delete(resourceId);
 }
 
+/** Reads without taking, for renders that may run more than once. */
+export function peekHandoffFiles(resourceId: string): PendingImage[] {
+  return handoffFiles.get(resourceId) ?? [];
+}
+
 export function takeHandoffFiles(resourceId: string): PendingImage[] {
   const files = handoffFiles.get(resourceId) ?? [];
   handoffFiles.delete(resourceId);
@@ -34,5 +39,5 @@ export function readFailedDraft(
   }
   const prompt: unknown = state.failedDraftPrompt;
   if (typeof prompt !== 'string') return undefined;
-  return { prompt, files: handoffFiles.get(draftSessionId) ?? [] };
+  return { prompt, files: peekHandoffFiles(draftSessionId) };
 }

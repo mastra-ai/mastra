@@ -70,18 +70,20 @@ export function useCreateUserSessionFromDraft() {
             );
           }
           addCachedSession(queryClient, factoryId, session);
-          queryClient.setQueryData<MastraDBMessage[]>(
-            queryKeys.agentControllerThreadMessages(
-              AGENT_CONTROLLER_ID,
-              session.sessionId,
-              session.sessionId,
-              INITIAL_THREAD_MESSAGE_LIMIT,
-            ),
-            [],
-          );
           return session;
         },
       });
+      // A new session has no history, so the thread opens on an empty transcript
+      // instead of waiting on a history read the session cannot answer yet.
+      queryClient.setQueryData<MastraDBMessage[]>(
+        queryKeys.agentControllerThreadMessages(
+          AGENT_CONTROLLER_ID,
+          draftSessionId,
+          draftSessionId,
+          INITIAL_THREAD_MESSAGE_LIMIT,
+        ),
+        [],
+      );
       stashHandoffFiles(draftSessionId, files);
       void navigate(`/factories/${factoryId}/user/threads/${draftSessionId}`, {
         replace: true,
