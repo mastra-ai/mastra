@@ -606,6 +606,25 @@ console.log(errors, errorDetails, durations)
 
 When called without options, the method omits only `durations`; `toolsets`, `errors`, and `errorDetails` are always returned.
 
+#### Report each server as it settles
+
+The returned promise resolves only after every server finishes, so one slow server delays the whole result. Pass `onServerSettled` to handle each server as soon as its discovery succeeds, fails, or times out. The callback receives the server name and either `value` (that server's tools, keyed by the server's own tool names) or `error`, plus `duration` in milliseconds. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+await mcp.listToolsetsWithErrors({
+  perServerTimeoutMs: 60_000,
+  onServerSettled: (serverName, { value, error, duration }) => {
+    if (error) {
+      console.error(`${serverName} failed after ${duration}ms: ${error.message}`)
+    } else {
+      console.log(`${serverName} ready with ${Object.keys(value).length} tools`)
+    }
+  },
+})
+```
+
+Errors thrown by the callback are logged and don't affect discovery.
+
 ### `listToolDefinitions()`
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).

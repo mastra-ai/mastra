@@ -54,10 +54,21 @@ type ServerDiscoveryResult<T> =
   | { serverName: string; value: T; error: undefined; duration: number }
   | { serverName: string; value: undefined; error: MCPDiscoveryErrorDetails; duration: number };
 
+/** Outcome of one server's discovery, passed to {@link MCPDiscoveryOptions.onServerSettled}. */
+export type MCPServerSettledResult<T> =
+  | { value: T; error?: undefined; duration: number }
+  | { value?: undefined; error: MCPDiscoveryErrorDetails; duration: number };
+
 /** Options for aggregate discovery across configured MCP servers. */
-export interface MCPDiscoveryOptions {
+export interface MCPDiscoveryOptions<T = unknown> {
   /** Maximum time to wait for each server's discovery operation, in milliseconds. */
   perServerTimeoutMs?: number;
+  /**
+   * Called as soon as each server's discovery succeeds, fails, or times out, before the
+   * aggregate result resolves. Lets callers report each server independently instead of
+   * waiting for the slowest one. Errors thrown by the callback are logged and ignored.
+   */
+  onServerSettled?: (serverName: string, result: MCPServerSettledResult<T>) => void;
 }
 
 // Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
@@ -1044,7 +1055,7 @@ To fix this you have three different options:
         return;
       } catch (error) {
         if (!(error instanceof UnauthorizedError)) {
-          throw this.handleConnectError(serverName, error);
+          throw this.handleConnectError(serverName, error, client);
         }
       }
 
@@ -1054,7 +1065,7 @@ To fix this you have three different options:
       try {
         await client.connect();
       } catch (error) {
-        throw error instanceof UnauthorizedError ? error : this.handleConnectError(serverName, error);
+        throw error instanceof UnauthorizedError ? error : this.handleConnectError(serverName, error, client);
       }
     } finally {
       this.authCallbackServersByServer.delete(serverName);
@@ -1187,13 +1198,13 @@ To fix this you have three different options:
    * }
    * ```
    */
-  public listToolsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+  public listToolsWithErrors(options?: MCPDiscoveryOptions<Record<string, Tool<any, any, any, any>>>): Promise<{
     tools: MCPClientTools<TServers>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
     durations?: Record<string, number>;
   }>;
-  public async listToolsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+  public async listToolsWithErrors(options?: MCPDiscoveryOptions<Record<string, Tool<any, any, any, any>>>): Promise<{
     tools: Partial<Record<string, Tool<any, any, any, any>>>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
@@ -1275,13 +1286,13 @@ To fix this you have three different options:
    * }
    * ```
    */
-  public listToolsetsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+  public listToolsetsWithErrors(options?: MCPDiscoveryOptions<Record<string, Tool<any, any, any, any>>>): Promise<{
     toolsets: MCPClientToolsets<TServers>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
     durations?: Record<string, number>;
   }>;
-  public async listToolsetsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+  public async listToolsetsWithErrors(options?: MCPDiscoveryOptions<Record<string, Tool<any, any, any, any>>>): Promise<{
     toolsets: Partial<Record<string, Partial<Record<string, Tool<any, any, any, any>>>>>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
@@ -1352,7 +1363,9 @@ To fix this you have three different options:
    * `errors` remains a string map for compatibility; `errorDetails` preserves
    * machine-readable transport status and error codes when available.
    */
-  public async listToolDefinitionsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+  public async listToolDefinitionsWithErrors(
+    options?: MCPDiscoveryOptions<Record<string, SerializableMCPToolDefinition>>,
+  ): Promise<{
     definitions: SerializableMCPToolCatalog;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
@@ -1555,71 +1568,95 @@ To fix this you have three different options:
   private async discoverAcrossServers<T>(
     operation: (serverName: string) => Promise<T>,
     onError: { errorId: Uppercase<string>; logMessage: string },
-    options?: MCPDiscoveryOptions,
+    options?: MCPDiscoveryOptions<T>,
   ): Promise<Array<ServerDiscoveryResult<T>>> {
     const serverNames = Object.keys(this.serverConfigs);
+    const onServerSettled = options?.onServerSettled;
+    const notifySettled = (result: ServerDiscoveryResult<T>): ServerDiscoveryResult<T> => {
+      if (!onServerSettled) return result;
+      try {
+        const { serverName, ...settled } = result;
+        onServerSettled(serverName, settled);
+      } catch (error) {
+        this.logger.error('MCP onServerSettled callback threw:', {
+          serverName: result.serverName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return result;
+    };
+
     return Promise.all(
-      serverNames.map(async (serverName): Promise<ServerDiscoveryResult<T>> => {
-        const startedAt = performance.now();
-        let timer: NodeJS.Timeout | undefined;
-
-        try {
-          const operationPromise = operation(serverName);
-          const value =
-            options?.perServerTimeoutMs === undefined
-              ? await operationPromise
-              : await Promise.race([
-                  operationPromise,
-                  new Promise<never>((_, reject) => {
-                    timer = setTimeout(
-                      () => reject(new Error(`Discovery timed out after ${options.perServerTimeoutMs}ms`)),
-                      options.perServerTimeoutMs,
-                    );
-                    timer.unref?.();
-                  }),
-                ]);
-
-          return { serverName, value, error: undefined, duration: performance.now() - startedAt };
-        } catch (error) {
-          const discoveryError = getMCPDiscoveryErrorDetails(error);
-
-          try {
-            const mastraError = new MastraError(
-              {
-                id: onError.errorId,
-                domain: ErrorDomain.MCP,
-                category: ErrorCategory.THIRD_PARTY,
-                details: { serverName },
-              },
-              error,
-            );
-            this.logger.trackException(mastraError);
-            this.logger.error(onError.logMessage, { error: mastraError.toString() });
-          } catch {
-            // Error inspection performed by telemetry must not make aggregate
-            // discovery reject. Preserve the normalized message even when a
-            // hostile third-party Error uses throwing getters or Proxy traps.
-            const fallbackError = new MastraError({
-              id: onError.errorId,
-              domain: ErrorDomain.MCP,
-              category: ErrorCategory.THIRD_PARTY,
-              text: discoveryError.message,
-              details: { serverName },
-            });
-            this.logger.trackException(fallbackError);
-            this.logger.error(onError.logMessage, { error: fallbackError.toString() });
-          }
-          return {
-            serverName,
-            value: undefined,
-            error: discoveryError,
-            duration: performance.now() - startedAt,
-          };
-        } finally {
-          clearTimeout(timer);
-        }
-      }),
+      serverNames.map(async (serverName): Promise<ServerDiscoveryResult<T>> =>
+        notifySettled(await this.discoverServer(serverName, operation, onError, options?.perServerTimeoutMs)),
+      ),
     );
+  }
+
+  private async discoverServer<T>(
+    serverName: string,
+    operation: (serverName: string) => Promise<T>,
+    onError: { errorId: Uppercase<string>; logMessage: string },
+    perServerTimeoutMs: number | undefined,
+  ): Promise<ServerDiscoveryResult<T>> {
+    const startedAt = performance.now();
+    let timer: NodeJS.Timeout | undefined;
+
+    try {
+      const operationPromise = operation(serverName);
+      const value =
+        perServerTimeoutMs === undefined
+          ? await operationPromise
+          : await Promise.race([
+              operationPromise,
+              new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                  () => reject(new Error(`Discovery timed out after ${perServerTimeoutMs}ms`)),
+                  perServerTimeoutMs,
+                );
+                timer.unref?.();
+              }),
+            ]);
+
+      return { serverName, value, error: undefined, duration: performance.now() - startedAt };
+    } catch (error) {
+      const discoveryError = getMCPDiscoveryErrorDetails(error);
+
+      try {
+        const mastraError = new MastraError(
+          {
+            id: onError.errorId,
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { serverName },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error(onError.logMessage, { error: mastraError.toString() });
+      } catch {
+        // Error inspection performed by telemetry must not make aggregate
+        // discovery reject. Preserve the normalized message even when a
+        // hostile third-party Error uses throwing getters or Proxy traps.
+        const fallbackError = new MastraError({
+          id: onError.errorId,
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: discoveryError.message,
+          details: { serverName },
+        });
+        this.logger.trackException(fallbackError);
+        this.logger.error(onError.logMessage, { error: fallbackError.toString() });
+      }
+      return {
+        serverName,
+        value: undefined,
+        error: discoveryError,
+        duration: performance.now() - startedAt,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -1724,13 +1761,13 @@ To fix this you have three different options:
     try {
       await mcpClient.connect();
     } catch (e) {
-      throw this.handleConnectError(name, e);
+      throw this.handleConnectError(name, e, mcpClient);
     }
     this.logger.debug('Connected to MCP server', { name });
     return mcpClient;
   }
 
-  private handleConnectError(name: string, error: unknown): MastraError {
+  private handleConnectError(name: string, error: unknown, client: InternalMastraMCPClient): MastraError {
     const mastraError = new MastraError(
       {
         id: 'MCP_CLIENT_CONNECT_FAILED',
@@ -1748,8 +1785,14 @@ To fix this you have three different options:
     this.logger.trackException(mastraError);
     this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
     // Keep the client when authorization is required: it carries the needs-auth
-    // state and the pending transport that authenticate() completes.
-    if (!(error instanceof UnauthorizedError)) {
+    // state and the pending transport that authenticate() completes. Keep it too
+    // when a newer connect or reconnect replaced the failed one: that attempt still
+    // runs on this client, and disconnect() must be able to reach it.
+    if (
+      !(error instanceof UnauthorizedError) &&
+      !client.hasPendingConnect() &&
+      this.mcpClientsById.get(name) === client
+    ) {
       this.mcpClientsById.delete(name);
     }
     return mastraError;
