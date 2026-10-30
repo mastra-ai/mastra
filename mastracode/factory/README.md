@@ -821,7 +821,7 @@ A person's own Factory session (a user session) gets tools to find, file and man
 | `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    |
 | `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       |
 | `factory_create_work_item`      | `title`, `brief`, optional `repository` (`owner/name`, one this Factory links)                                                                  |
-| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach), `plansPreapproved: true`                                  |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach); `plansPreapproved: true` is legacy and has no effect      |
 | `factory_subscribe_work_item`   | `workItem`                                                                                                                                      |
 | `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      |
 | `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             |
