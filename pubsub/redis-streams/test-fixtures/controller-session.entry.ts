@@ -22,7 +22,9 @@ const emit = (event: Record<string, unknown>) => process.stdout.write(`${JSON.st
 
 const openai = createOpenAI({ apiKey: 'test', baseURL: `${process.env.LLM_URL!.replace(/\/+$/, '')}/v1` });
 const pubsub = new RedisStreamsPubSub({
-  url: process.env.REDIS_URL!,
+  ...(process.env.XPROC_CLUSTER_URL
+    ? { cluster: { rootNodes: [{ url: process.env.XPROC_CLUSTER_URL }] } }
+    : { url: process.env.REDIS_URL! }),
   keyPrefix: process.env.KEY_PREFIX!,
   blockMs: 200,
 });
