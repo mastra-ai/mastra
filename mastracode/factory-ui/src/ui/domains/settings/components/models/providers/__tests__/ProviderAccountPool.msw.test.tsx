@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -15,7 +16,7 @@ function account(
   overrides: Partial<PoolAccountSummary> & Pick<PoolAccountSummary, 'id' | 'label'>,
 ): PoolAccountSummary {
   return {
-    providerId: 'openai',
+    providerId: 'openai-codex',
     type: 'api-key',
     active: false,
     status: 'ok',
@@ -25,9 +26,9 @@ function account(
   };
 }
 
-const WORK = account({ id: 'openai:work', label: 'Work key', active: true, priority: 0 });
-const SIDE = account({ id: 'openai:side', label: 'Side key', priority: 1, createdAt: 2_000 });
-const SPARE = account({ id: 'openai:spare', label: 'Spare key', priority: 2, createdAt: 3_000 });
+const WORK = account({ id: 'openai-codex:work', label: 'Work key', active: true, priority: 0 });
+const SIDE = account({ id: 'openai-codex:side', label: 'Side key', priority: 1, createdAt: 2_000 });
+const SPARE = account({ id: 'openai-codex:spare', label: 'Spare key', priority: 2, createdAt: 3_000 });
 
 /** Serves the pool for each scope and records what each request sent. */
 function stubPools(pools: Partial<Record<'user' | 'org', PoolAccountSummary[]>>) {
@@ -146,7 +147,7 @@ describe('provider account pools', () => {
     expect(requests).toContainEqual(
       expect.objectContaining({
         method: 'POST',
-        path: '/web/config/providers/openai/accounts/openai%3Aside/activate',
+        path: '/web/config/providers/openai/accounts/openai-codex%3Aside/activate',
         scope: 'user',
       }),
     );
@@ -170,7 +171,7 @@ describe('provider account pools', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rename account' })).not.toBeInTheDocument());
     expect(requests).toContainEqual({
       method: 'PATCH',
-      path: '/web/config/providers/openai/accounts/openai%3Aside',
+      path: '/web/config/providers/openai/accounts/openai-codex%3Aside',
       scope: 'user',
       body: { label: 'Team key' },
     });
@@ -196,7 +197,7 @@ describe('provider account pools', () => {
     expect(requests).toContainEqual(
       expect.objectContaining({
         method: 'DELETE',
-        path: '/web/config/providers/openai/accounts/openai%3Aside',
+        path: '/web/config/providers/openai/accounts/openai-codex%3Aside',
         scope: 'user',
       }),
     );
@@ -218,13 +219,13 @@ describe('provider account pools', () => {
       method: 'PUT',
       path: '/web/config/providers/openai/accounts/order',
       scope: 'user',
-      body: { orderedIds: ['openai:work', 'openai:spare', 'openai:side'] },
+      body: { orderedIds: ['openai-codex:work', 'openai-codex:spare', 'openai-codex:side'] },
     });
     await waitFor(() => expect(labelsInOrder(accounts)).toEqual(['Work key', 'Spare key', 'Side key']));
 
     await user.click(within(accountRow('Spare key')).getByRole('button', { name: 'Move Spare key up' }));
     await waitForMutationsIdle(client);
-    expect(requests.at(-1)?.body).toEqual({ orderedIds: ['openai:spare', 'openai:work', 'openai:side'] });
+    expect(requests.at(-1)?.body).toEqual({ orderedIds: ['openai-codex:spare', 'openai-codex:work', 'openai-codex:side'] });
   });
 
   it('adds an account to an already-connected provider’s pool from "Add provider"', async () => {
@@ -236,7 +237,7 @@ describe('provider account pools', () => {
     server.use(
       http.put(keyUrl('openai'), async ({ request }) => {
         putBody = await request.json();
-        pools.user = [WORK, account({ id: 'openai:new', label: 'OpenAI account 2', priority: 1, createdAt: 5_000 })];
+        pools.user = [WORK, account({ id: 'openai-codex:new', label: 'OpenAI account 2', priority: 1, createdAt: 5_000 })];
         return HttpResponse.json({ ok: true });
       }),
     );
@@ -264,7 +265,7 @@ describe('provider account pools', () => {
       oauth: { supported: true, modes: ['paste-code'] },
     };
     server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ providers: [signedIn] })));
-    const pools = { user: [account({ id: 'openai:max', label: 'Work Max', type: 'oauth', active: true })] };
+    const pools = { user: [account({ id: 'openai-codex:max', label: 'Work Max', type: 'oauth', active: true })] };
     stubPools(pools);
     const user = userEvent.setup();
     const { client } = renderWithProviders(<ProviderList credentialScope="user" />);
@@ -312,6 +313,36 @@ describe('provider account pools', () => {
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove key' }));
     await waitForMutationsIdle(client);
     expect(deletes).toHaveLength(1);
+  });
+
+  it('explains a key that is already gone and refreshes the stale row', async () => {
+    stubProviders([{ provider: 'openai', source: 'stored' }]);
+    stubPools({ user: [WORK, SIDE] });
+    let providerReads = 0;
+    server.use(
+      http.get(PROVIDERS_URL, () => {
+        providerReads += 1;
+        return HttpResponse.json({ providers: [{ provider: 'openai', source: 'stored' }] });
+      }),
+      http.delete(keyUrl('openai'), () => HttpResponse.json({ error: 'api_key_not_found' }, { status: 404 })),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(
+      <>
+        <ProviderList credentialScope="user" />
+        <Toaster />
+      </>,
+    );
+    await pool();
+    const readsBefore = providerReads;
+
+    await user.click(screen.getByRole('button', { name: 'OpenAI actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove API key' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove key' }));
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByText('No OpenAI API key to remove')).toBeInTheDocument();
+    await waitFor(() => expect(providerReads).toBeGreaterThan(readsBefore));
   });
 
   describe('org scope', () => {

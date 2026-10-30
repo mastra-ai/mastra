@@ -87,7 +87,8 @@ export function useRemoveProviderKey() {
       client.del<SaveProviderKeyResponse>(
         `/web/config/providers/${encodeURIComponent(provider)}/key${scope ? `?scope=${scope}` : ''}`,
       ),
-    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+    // Refetch on failure too: a 404 `api_key_not_found` means the view is stale.
+    onSettled: () => invalidateCredentialDependentQueries(queryClient),
   });
 }
 

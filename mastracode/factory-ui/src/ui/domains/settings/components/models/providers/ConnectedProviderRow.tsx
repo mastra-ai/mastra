@@ -116,7 +116,14 @@ export function ConnectedProviderRow({
     setConfirmingRemoval(false);
     removeKeyMutation.mutate(
       { provider: provider.provider, scope: requestScope },
-      { onError: error => toast.error(error.message || 'Failed to remove API key') },
+      {
+        onError: error =>
+          toast.error(
+            error.message === 'api_key_not_found'
+              ? `No ${displayName} API key to remove`
+              : error.message || 'Failed to remove API key',
+          ),
+      },
     );
   };
 
