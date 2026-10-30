@@ -541,4 +541,137 @@ describe('thread ownership (#24878)', () => {
     expect((senderAgent as any).stream).not.toHaveBeenCalled();
     subscription.unsubscribe();
   });
+
+  // A pub/sub that can hold back and drop thread events on their way to
+  // subscribers, to model a reader that lags behind production and a
+  // `run-completed` lost to a Redis restart or trim.
+  class LossyPubSub extends LeasePubSub {
+    holding = false;
+    held: Array<{ topic: string; event: any }> = [];
+    dropTypes = new Set<string>();
+    override async publish(topic: string, event: any): Promise<void> {
+      if (this.dropTypes.has(event.data?.type)) return;
+      if (this.holding && topic.startsWith('agent.thread-stream.') && !topic.includes('.signal-acceptance.')) {
+        this.held.push({ topic, event });
+        return;
+      }
+      return super.publish(topic, event);
+    }
+    async flush() {
+      this.holding = false;
+      for (const { topic, event } of this.held.splice(0)) await this.publish(topic, event);
+    }
+  }
+
+  it('does not mark a local run active from its own registration echo after it ended here', async () => {
+    const pubsub = new LossyPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const threadId = 'late-echo-thread';
+    const resourceId = 'late-echo-user';
+    const agent = {
+      id: 'late-echo-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({ runId: options.runId })),
+    } as unknown as Agent<any, any, any, any>;
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    // The reader falls behind, then the run finishes and is cleaned up locally.
+    pubsub.holding = true;
+    const run = registerRun(runtime, agent, pubsub, 'ended-here', threadId, resourceId);
+    await run.registered;
+    run.complete();
+    await nextTicks(20);
+    // The registration echo arrives late and `run-completed` never does.
+    pubsub.dropTypes.add('run-completed');
+    await pubsub.flush();
+    await nextTicks(20);
+    pubsub.dropTypes.clear();
+
+    expect(subscription.activeRunId()).toBeNull();
+    const result = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'next turn' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    const accepted = await result.accepted;
+    expect(accepted.action).toBe('wake');
+    expect((agent as any).stream).toHaveBeenCalledOnce();
+    runtime.releaseThreadRunReservation(accepted.runId!, pubsub);
+    subscription.unsubscribe();
+  });
+
+  it('does not mark a local run active from its own late stream parts while its lease is still being released', async () => {
+    const pubsub = new LossyPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const threadId = 'late-parts-thread';
+    const resourceId = 'late-parts-user';
+    const key = [resourceId, threadId].join('\u0000');
+    const agent = {
+      id: 'late-parts-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({ runId: options.runId })),
+    } as unknown as Agent<any, any, any, any>;
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    pubsub.holding = true;
+    const run = registerRun(runtime, agent, pubsub, 'ended-here', threadId, resourceId);
+    await run.registered;
+    run.complete();
+    await nextTicks(20);
+    // The registration echo and stream parts reach the reader while the lease
+    // release is still in flight; `run-completed` is lost.
+    pubsub.owners.set(key, 'ended-here');
+    pubsub.dropTypes.add('run-completed');
+    await pubsub.flush();
+    await nextTicks(20);
+    pubsub.dropTypes.clear();
+    pubsub.owners.delete(key);
+
+    expect(subscription.activeRunId()).toBeNull();
+    const result = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'next turn' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    const accepted = await result.accepted;
+    expect(accepted.action).toBe('wake');
+    expect((agent as any).stream).toHaveBeenCalledOnce();
+    runtime.releaseThreadRunReservation(accepted.runId!, pubsub);
+    subscription.unsubscribe();
+  });
+
+  it('starts a new run when a remote run ended without its run-completed reaching this process', async () => {
+    const pubsub = new LossyPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const threadId = 'missed-completion-thread';
+    const resourceId = 'missed-completion-user';
+    const agent = {
+      id: 'missed-completion-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({ runId: options.runId })),
+    } as unknown as Agent<any, any, any, any>;
+
+    const subscription = await senderRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const run = registerRun(ownerRuntime, agent, pubsub, 'remote-ended', threadId, resourceId);
+    await run.registered;
+    await vi.waitFor(() => expect(subscription.activeRunId()).toBe('remote-ended'));
+    // The run ends at its owner, but its `run-completed` is trimmed or lost.
+    pubsub.dropTypes.add('run-completed');
+    run.complete();
+    await vi.waitFor(() => expect(pubsub.owners.has([resourceId, threadId].join('\u0000'))).toBe(false));
+    pubsub.dropTypes.clear();
+
+    const result = senderRuntime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'next turn' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    const accepted = await result.accepted;
+    expect(accepted.action).toBe('wake');
+    expect(accepted.runId).not.toBe('remote-ended');
+    expect((agent as any).stream).toHaveBeenCalledOnce();
+    senderRuntime.releaseThreadRunReservation(accepted.runId!, pubsub);
+    subscription.unsubscribe();
+  });
 });

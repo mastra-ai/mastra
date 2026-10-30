@@ -589,6 +589,11 @@ type AgentThreadRuntimeState = {
    * send loses the lease to a run that no longer exists here.
    */
   sweptLeasedRunIds: Map<string, number>;
+  /**
+   * Streams of runs this instance executed and has since finished, oldest first.
+   * A late echo of such a run's own registration must not restore it as active.
+   */
+  endedLocalStreamIds: Set<string>;
   /** Lease renewals still awaiting a result, by runId. */
   pendingLeaseRenewals: Map<string, number>;
   /** A dequeued idle message retains its cancellation identity until execution begins. */
@@ -839,6 +844,14 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
 const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
 // Resume fences outlive their stream segment until the suspended snapshot is gone, so cap them.
 const MAX_RESUME_FENCED_RUN_IDS = 1000;
+const MAX_ENDED_LOCAL_STREAM_IDS = 1000;
+
+function noteEndedLocalStream(state: AgentThreadRuntimeState, streamId: string) {
+  state.endedLocalStreamIds.add(streamId);
+  if (state.endedLocalStreamIds.size > MAX_ENDED_LOCAL_STREAM_IDS) {
+    state.endedLocalStreamIds.delete(state.endedLocalStreamIds.values().next().value!);
+  }
+}
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -861,6 +874,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     lostRunsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     sweptLeasedRunIds: new Map(),
+    endedLocalStreamIds: new Set(),
     pendingLeaseRenewals: new Map(),
     drainingIdleSignalsByThread: new Map(),
     drainingPendingSignalsByThread: new Map(),
@@ -3539,6 +3553,7 @@ export class AgentThreadStreamRuntime {
     record.lifecycle = 'completed';
     state.displacedRecords.set(record, 'aborted');
     state.threadRunsByStreamId.delete(record.streamId);
+    noteEndedLocalStream(state, record.streamId);
     if (state.threadRunsById.get(runId) === record) state.threadRunsById.delete(runId);
     state.threadKeysByRunId.delete(runId);
     if (state.activeThreadRunIds.get(key) !== runId) return true;
@@ -4060,6 +4075,7 @@ export class AgentThreadStreamRuntime {
     void Promise.allSettled([outputForSubscribers._waitUntilFinished(), broadcastFinished]).then(() => {
       setTimeout(() => {
         state.threadRunsByStreamId.delete(streamId);
+        noteEndedLocalStream(state, streamId);
         if (state.threadRunsById.get(runId) === record) {
           state.threadRunsById.delete(runId);
           state.threadKeysByRunId.delete(runId);
@@ -4446,6 +4462,7 @@ export class AgentThreadStreamRuntime {
       const ownsCurrentRecord = state.threadRunsById.get(record.runId) === record;
       if (state.threadRunsByStreamId.get(record.streamId) === record) {
         state.threadRunsByStreamId.delete(record.streamId);
+        noteEndedLocalStream(state, record.streamId);
       }
       state.watchedThreadStreamIds.delete(record.streamId);
       if (ownsCurrentRecord) {
@@ -4598,6 +4615,7 @@ export class AgentThreadStreamRuntime {
       record.lifecycle = 'completed';
       this.#clearSuspendedRun(state, record.runId);
       state.threadRunsByStreamId.delete(record.streamId);
+      noteEndedLocalStream(state, record.streamId);
       if (state.threadRunsById.get(record.runId) === record) {
         state.threadRunsById.delete(record.runId);
         state.threadKeysByRunId.delete(record.runId);
@@ -5809,6 +5827,9 @@ export class AgentThreadStreamRuntime {
 
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
+      // A late echo of a run that already ended here can still find its lease
+      // held while the completion watcher releases it.
+      if (!local && state.endedLocalStreamIds.has(streamId)) return;
       state.activeThreadRunIds.set(key, runId);
       state.activeThreadStreamIds.set(key, streamId);
       if (!local) {
@@ -6148,9 +6169,14 @@ export class AgentThreadStreamRuntime {
             : !displacesActiveRun &&
               (sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)));
         if (live) {
-          state.activeThreadRunIds.set(key, data.runId);
-          state.activeThreadStreamIds.set(key, data.streamId);
-          if (!local) {
+          // This instance already finished the run, so its output still plays
+          // but nothing here may route the thread's next input to it.
+          const endedHere = !local && state.endedLocalStreamIds.has(data.streamId);
+          if (!endedHere) {
+            state.activeThreadRunIds.set(key, data.runId);
+            state.activeThreadStreamIds.set(key, data.streamId);
+          }
+          if (!local && !endedHere) {
             state.remoteThreadKeysByRunId.set(data.runId, key);
             if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
             if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
@@ -7287,18 +7313,40 @@ export class AgentThreadStreamRuntime {
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
           this.#notifyPendingSignals(state, key, signal);
+          this.#publish(pubsub, key, {
+            type: 'signal-enqueued',
+            runId,
+            signal: this.#serializeSignal(signal),
+            sourceId: this.#getSourceId(),
+            preRun: true,
+          });
+          return {
+            signal,
+            accepted: Promise.resolve({ action: 'deliver' as const, runId }),
+          };
         }
-        this.#publish(pubsub, key, {
-          type: 'signal-enqueued',
-          runId,
-          signal: this.#serializeSignal(signal),
-          sourceId: this.#getSourceId(),
-          preRun: isLocalReservedRun,
-        });
-        return {
-          signal,
-          accepted: Promise.resolve({ action: 'deliver' as const, runId }),
-        };
+        // Another process's run is only known from its thread events, and a
+        // missed `run-completed` leaves it looking active after it ended. Only
+        // its acknowledgment proves delivery; without one, clear it and send
+        // the signal as if the thread were idle.
+        const remoteKey = key;
+        const remoteRunId = runId;
+        const accepted = this.#forwardSignalToLeaseOwner(this.#getPubSub(pubsub), remoteKey, remoteRunId, signal).then(
+          delivered => {
+            if (delivered) return { action: 'deliver' as const, runId: remoteRunId };
+            if (state.activeThreadRunIds.get(remoteKey) === remoteRunId) {
+              state.activeThreadRunIds.delete(remoteKey);
+              state.activeThreadStreamIds.delete(remoteKey);
+            }
+            if (state.remoteThreadKeysByRunId.get(remoteRunId) === remoteKey) {
+              state.remoteThreadKeysByRunId.delete(remoteRunId);
+            }
+            return this.#sendSignal(agent, { ...signalInput, id: signal.id }, inputTarget, pubsub, waitForIdle)
+              .accepted;
+          },
+        );
+        void accepted.catch(() => {});
+        return { signal, accepted };
       }
     }
 
