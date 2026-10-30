@@ -41,28 +41,24 @@ Do not create an `actions` config or execute authoritative policy in React. Each
 
 A pull request's own card and the Work card that authored it move independently, whether the pull request card sits on Work or on the legacy Review board. Never mirror their stages or mark Work Done only because a pull request merged.
 
-## Configure board transition policy
+## Restrict where agents move cards
 
-Search the installed `defineBoard()` definition for `transitionPolicy`. Read `src/boards/transition-policy.ts` for the public contract and `src/boards/work-transition-policy.ts` for Work's automatic classification, approval, and acceptance policy. Review has no additional policy. Custom boards without a policy do not inherit Work's classification or acceptance behavior through phase or role names.
-
-Topology declares allowed moves; transition policy adds business restrictions; lifecycle handlers return effects. Add custom restrictions to the board definition, not the generic transition service or global rules:
+Topology (`nextPhases`) declares the moves that exist for everyone, people included. To keep agents out of a phase, set `agentEnterWhen` on that phase in the board definition: a rule over card facts, or `false` for "agents never". People and board rules (lifecycle, tool-result and integration handlers) are never checked. Do not add restrictions to the generic transition service or global rules.
 
 ```typescript
-import type { BoardTransitionPolicy } from '@mastra/factory/boards';
-
-const transitionPolicy: BoardTransitionPolicy = context => {
-  if (context.toStage === 'shipped' && !context.isHumanTransition) {
-    return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
-  }
-};
-// Pass transitionPolicy to the installed custom defineBoard() definition.
+shipped: {
+  name: 'Shipped',
+  kind: 'terminal',
+  // Agents may close only cards with no open pull request.
+  agentEnterWhen: { operator: 'AND', conditions: [{ field: 'item.openPullRequest', operator: 'not_exists' }] },
+},
 ```
 
-The policy receives a deeply readonly snapshot with ISO-string dates. Return `undefined`, `{ type: 'allow', triageType?, accept?: true }`, or `{ type: 'reject', code, reason }`, never skill calls, transitions, consent overrides, or patches. Classification intents require the existing triage-agent path and must match its requested classification. Acceptance requires both human actor and human ingress. Runtime validates results and commits intents atomically only after successful lifecycle evaluation.
+Card facts: `item.labels`, `item.title`, `item.author`, `source.kind`, `source.integration`, `item.phase` (where the card is now), `item.openPullRequest`, `item.reviewVerdict`, `item.selfReviewVerdict`, `item.selfReviewNeedsHuman`. A missing fact matches only the negative operators (`not_exists`, `not_equals`, `not_contains`, `not_in`); write rules so a missing fact keeps the gate closed where that matters. Read `src/boards/work.ts` for Work's rules (no skipping Planning, Done guards, parked cards) and `src/boards/review.ts` for Review (`done` is `false`).
 
-Policies must be side-effect-free and share the lifecycle timeout budget. Initial entry, reentry, and same-stage requests evaluate policy; completed replay does not. Concurrent attempts may evaluate more than once, and timing out does not cancel work started by a callback. Do not access storage or integrations from a policy.
+A working phase whose `exitTool` has a board tool rule (`tools[exitTool.id]`) leaves through that tool: anyone but a person asking to move the card on to another working phase is rejected unless the exit tool is auto-approved for the card. Work's Planning uses `submit_plan` this way.
 
-Policy allowance cannot bypass topology, board ownership, ingress authorization, external-author safety, revision checks, replay, or decision validation. Phase meaning is declared on the phase (`kind`), not in the policy. Do not invent built-in replacement APIs.
+`transitionPolicy` is deprecated: it still runs for boards that set it and logs one warning per board. Do not add new policies; move existing ones to `agentEnterWhen`. Factory no longer records triage classification or acceptance: Work's triage agent sends open non-bugs back to Intake, and a person moving the card on is the approval. Custom boards inherit none of Work's rules through phase or role names.
 
 ## Configure board phase semantics
 
@@ -80,7 +76,7 @@ A `transition` decision stays on the item's assigned board. An `upsertLinkedWork
 
 Working roles identify bindings on the shared Code Agent, not separately configured agents. There is no per-role agent registration option. Declare `invokeSkill` decisions with the working role and a board-owned prompt (or an available skill); do not invent an `agents` configuration. For automatic session preparation, verify the deployment's GitHub integration, project connection and linked repository, sandbox, organization model credentials, and project automatic-run setting. Enter a working phase through the public transition route as an authorized human when approval is required.
 
-Verify the actual journey: initial entry, lifecycle kickoff, the declared role's phase signal and binding, a bound transition tool, role handoff, completed tool-result ingestion, deferred transition, and terminal cleanup. Polling and persisted-message ingestion resolve the single current phase through the installed board. Live binding, reassignment, revision, topology, approval, and external-author checks still apply. Custom roles named `triage` do not inherit Work classification requirements. A tool-result handler receives normalized `result.status` and `result.value`; it does not receive raw tool arguments. Check the result payload needed by the board's policy rather than treating every completed tool call as business success.
+Verify the actual journey: initial entry, lifecycle kickoff, the declared role's phase signal and binding, a bound transition tool, role handoff, completed tool-result ingestion, deferred transition, and terminal cleanup. Polling and persisted-message ingestion resolve the single current phase through the installed board. Live binding, reassignment, revision, topology, approval, and external-author checks still apply. Custom roles named `triage` inherit nothing from Work. A tool-result handler receives normalized `result.status` and `result.value`; it does not receive raw tool arguments. Check the result payload the board's rules need rather than treating every completed tool call as business success.
 
 Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, and `held-waiting` is Work-specific. Existing integration defaults do not automatically route events to a custom board.
 
