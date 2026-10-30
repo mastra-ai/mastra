@@ -456,6 +456,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   lateRetakeHandoff?: boolean;
   /** The owner this record took the thread lease under. Ending releases only this owner. */
   leaseOwner?: string;
+  /** Registration did not get the thread lease, so ending must not release whichever owner holds it. */
+  leaseNotAcquired?: boolean;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
@@ -4459,15 +4461,21 @@ export class AgentThreadStreamRuntime {
       // self-stops when we don't own the key.
       if (takesLeaseFrom) {
         // Starts the renewal under the owner it took the lease with.
-        await this.#acquireOrTransferThreadLease(resolvedPubSub, key, output.runId, takesLeaseFrom);
+        const taken = await this.#acquireOrTransferThreadLease(resolvedPubSub, key, output.runId, takesLeaseFrom);
+        if (taken.acquired) record.leaseOwner = state.leaseOwners.get(output.runId);
+        else record.leaseNotAcquired = true;
       } else {
         const owner = this.#threadLeaseOwner(resolvedPubSub, output.runId, record.generation);
         const lease = await this.#acquireThreadLease(resolvedPubSub, key, output.runId, owner).catch(() => ({
           acquired: true as boolean,
         }));
-        if (lease.acquired) this.#startLeaseRenewal(resolvedPubSub, key, output.runId, owner);
+        if (lease.acquired) {
+          this.#startLeaseRenewal(resolvedPubSub, key, output.runId, owner);
+          record.leaseOwner = owner;
+        } else {
+          record.leaseNotAcquired = true;
+        }
       }
-      record.leaseOwner = state.leaseOwners.get(output.runId);
       await this.#publishAndWait(pubsub, key, {
         type: 'run-registered',
         runId: output.runId,
@@ -4810,6 +4818,8 @@ export class AgentThreadStreamRuntime {
           }
         } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
+        } else if (record.leaseNotAcquired) {
+          this.#releaseUnusedThreadControlSubscription(state, key);
         } else {
           this.#releaseThreadLease(pubsub, key, record.runId, record.leaseOwner);
         }
@@ -6681,6 +6691,7 @@ export class AgentThreadStreamRuntime {
           return owner === unreachable && reply ? reply.owner : owner;
         };
         let leaseOwner: string | null | undefined | typeof unreachable;
+        let localOwner = false;
         try {
           leaseOwner = await readOwner();
           for (let attempt = 0; attempt < 3 && leaseOwner !== unreachable; attempt++) {
@@ -6706,8 +6717,11 @@ export class AgentThreadStreamRuntime {
             error: leaseError ?? `no answer within ${AGENT_THREAD_LEASE_RENEW_INTERVAL_MS}ms`,
           });
           leaseOwner = activeRunId();
+          localOwner = true;
         }
-        const ownerRunId = leaseOwner && !hasFallbackLeaseProvider ? threadLeaseRunId(leaseOwner) : leaseOwner;
+        // Only an owner read from the lease backend is encoded; a local run id round-trips unchanged.
+        const ownerRunId =
+          leaseOwner && !hasFallbackLeaseProvider && !localOwner ? threadLeaseRunId(leaseOwner) : leaseOwner;
         const snapshotRunId = ownerRunId && !settledRunIds.has(ownerRunId) ? ownerRunId : null;
         historyChunk = {
           type: 'thread-history',

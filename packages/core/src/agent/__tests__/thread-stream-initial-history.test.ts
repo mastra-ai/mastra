@@ -186,6 +186,29 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  it('reports a local lease-shaped run ID verbatim when the lease read fails', async () => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    const leaseShapedRunId = `mastra:thread-lease:${JSON.stringify(['other', 'retake', 'claim-token'])}`;
+    const watcher = await subscribe(false);
+    // The backend holds the run ID the way this release writes a prefixed one.
+    pubsub.owners.set(
+      [resourceId, threadId].join('\u0000'),
+      `mastra:thread-lease:${JSON.stringify([leaseShapedRunId, 'run', null])}`,
+    );
+    await emitRun(leaseShapedRunId, streamId).registered();
+    await nextTicks(10);
+    vi.spyOn(pubsub, 'getLeaseOwner').mockRejectedValue(new Error('Lease unavailable'));
+    const { subscription, collected, consumed } = await subscribe();
+    try {
+      await nextTicks(10);
+      expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: leaseShapedRunId } });
+    } finally {
+      subscription.unsubscribe();
+      watcher.subscription.unsubscribe();
+      await Promise.all([consumed, watcher.consumed]);
+    }
+  });
+
   it('opens on a stalled lease read once one renewal interval passes', async () => {
     const { pubsub, subscribe } = setup(() => []);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });

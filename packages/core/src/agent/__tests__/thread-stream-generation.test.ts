@@ -214,6 +214,30 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     }
   });
 
+  it("keeps a recovery's thread lease when an older execution that registers after it in the same process finishes", async () => {
+    const { pubsub, original, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const b = controlledOutput('run-1');
+    await original.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    const successorOwner = await pubsub.getLeaseOwner(key);
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { generation: 1 });
+
+    a.end('failed');
+    await nextTicks(30);
+
+    try {
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await original.isRunHoldingThreadLease(pubsub, 'run-1', 'generation-thread', 'generation-user')).toBe(
+        true,
+      );
+    } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
   it('keeps a tool call in flight when the run moves its lease onto the generation it learned', async () => {
     const { pubsub, original, subscription } = await setup();
     const key = 'generation-user\u0000generation-thread';
