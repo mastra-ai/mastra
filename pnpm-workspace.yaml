@@ -50,7 +50,7 @@ catalog:
   vitest: 4.1.12
   zod: ^4.6.7
   tsx: ^4.23.15
-  oxfmt: 0.59.0
+  oxfmt: 0.75.0
   sonner: 2.0.7
 
 catalogs:
