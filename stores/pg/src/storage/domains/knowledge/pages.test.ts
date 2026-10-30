@@ -312,4 +312,38 @@ describe('PgKnowledgePages (schema 4)', () => {
     expect(tables).toContain('mastra_knowledge_pages');
     await pool.query(`DROP SCHEMA legacy_test CASCADE`);
   });
+
+  it('lists pages across every scope a prefix read reaches, in name order, and nothing else', async () => {
+    const decl = 'reach:$o/thread:$t';
+    const mk = async (address: string) =>
+      (await store.materializeScope({ address, declaration: decl, name: address, provenance })).scope;
+    const a = await mk('reach:p1/thread:a');
+    const b = await mk('reach:p1/thread:b');
+    const other = await mk('reach:p2/thread:a');
+    const decoy = await mk('reach:p1_thread:x');
+    for (const [scope, names] of [
+      [a, ['n1', 'n3', 'n5']],
+      [b, ['n2', 'n4', 'n6']],
+      [other, ['n0']],
+      [decoy, ['nd']],
+    ] as const) {
+      for (const name of names) await store.createPage({ parentId: scope.id, name, provenance });
+    }
+    const read = (prefix: string): KnowledgeReadScope => ({
+      addresses: [],
+      prefixes: [{ declaration: decl, prefix }],
+      children: [],
+    });
+    const names: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const result = await store.listPages({ read: read('reach:p1/'), limit: 2, cursor });
+      names.push(...result.pages.map(page => page.name));
+      cursor = result.nextCursor;
+    } while (cursor);
+    expect(names).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6']);
+    expect((await store.listPages({ read: read('reach:p_/') })).pages).toEqual([]);
+    expect((await store.listPages({ read: read('REACH:P1/') })).pages).toEqual([]);
+    expect((await store.listPages({ read: read('reach:p1/'), scopeId: other.id })).pages).toEqual([]);
+  });
 });

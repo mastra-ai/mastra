@@ -278,6 +278,14 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   /** The ids of every scope page the read scope can see; `null` means everything. */
   async #readable(read: KnowledgeReadScope, session?: Session): Promise<string[] | null> {
     if (read === 'all') return null;
+    const any = this.#readableClauses(read);
+    if (!any.length) return [];
+    const pages = await this.#c('pages');
+    const rows = await pages.find({ isScope: true, $or: any }, { projection: { _id: 0, id: 1 }, session }).toArray();
+    return rows.map(row => String(row.id));
+  }
+
+  #readableClauses(read: Exclude<KnowledgeReadScope, 'all'>): Filter<Document>[] {
     const any: Filter<Document>[] = [];
     if (read.addresses.length) any.push({ address: { $in: read.addresses } });
     // Anchored, case-sensitive and escaped: a binary prefix match, never a case-folded one.
@@ -285,10 +293,19 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       any.push({ declaration: entry.declaration, address: { $regex: `^${escapeRegex(entry.prefix)}` } });
     }
     for (const entry of read.children) any.push({ declaration: entry.declaration, parentId: entry.parentId });
-    if (!any.length) return [];
+    return any;
+  }
+
+  /**
+   * Whether one scope page is readable, answered by a single indexed lookup instead of resolving the
+   * whole frontier. Use it when a call targets one scope; the frontier can be thousands of scopes.
+   */
+  async #scopeReadable(read: KnowledgeReadScope, scopeId: string): Promise<boolean> {
+    if (read === 'all') return true;
+    const any = this.#readableClauses(read);
+    if (!any.length) return false;
     const pages = await this.#c('pages');
-    const rows = await pages.find({ isScope: true, $or: any }, { projection: { _id: 0, id: 1 }, session }).toArray();
-    return rows.map(row => String(row.id));
+    return (await pages.countDocuments({ id: scopeId, isScope: true, $or: any }, { limit: 1 })) > 0;
   }
 
   #inScopes(field: string, ids: string[] | null): Filter<Document> {
@@ -647,11 +664,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   // Pages ----------------------------------------------------------------------------------------
 
   async getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
-    const ids = await this.#readable(input.read);
-    const row = await (
-      await this.#c('pages')
-    ).findOne({ id: input.id, ...this.#inScopes('scopeId', ids) }, noProjection);
-    return row ? toPage(row) : null;
+    const row = await (await this.#c('pages')).findOne({ id: input.id }, noProjection);
+    return row && (await this.#scopeReadable(input.read, String(row.scopeId))) ? toPage(row) : null;
   }
 
   async getPageByPath(input: {
@@ -660,13 +674,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     read: KnowledgeReadScope;
   }): Promise<KnowledgePage | null> {
     if (!input.path.length) return null;
-    const ids = await this.#readable(input.read);
+    // Every page under a parent shares its scope, so readability is checked once, on the scope.
+    if (!(await this.#scopeReadable(input.read, input.scopeId))) return null;
     const pages = await this.#c('pages');
     let page: KnowledgePage | undefined;
     let parentId = input.scopeId;
     for (const key of input.path) {
-      const filter: Filter<Document> = { parentId, key, ...live, ...notScope, ...this.#inScopes('scopeId', ids) };
-      const row = await pages.findOne(filter, noProjection);
+      const row = await pages.findOne({ parentId, key, scopeId: input.scopeId, ...live, ...notScope }, noProjection);
       if (!row) return null;
       page = toPage(row);
       parentId = page.id;
@@ -682,9 +696,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }): Promise<KnowledgePage[]> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const ids = await this.#readable(input.read);
     const filter: Filter<Document> = { canonicalName: core.canonicalKnowledgeName(input.name), ...live };
-    this.#scopeFilter(filter, input.scopeId, ids);
+    if (!(await this.#scopeFilter(filter, input.read, input.scopeId))) return [];
     const rows = await (
       await this.#c('pages')
     )
@@ -695,14 +708,23 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return rows.map(toPage);
   }
 
-  /** Adds the home-scope constraint: the explicit scope, intersected with what the read scope allows. */
-  #scopeFilter(filter: Filter<Document>, scopeId: string | undefined, ids: string[] | null): void {
+  /**
+   * Adds the home-scope constraint: the explicit scope when given (one indexed readability check),
+   * otherwise the readable frontier. Returns false when nothing can match.
+   */
+  async #scopeFilter(
+    filter: Filter<Document>,
+    read: KnowledgeReadScope,
+    scopeId: string | undefined,
+  ): Promise<boolean> {
     if (scopeId !== undefined) {
-      if (ids !== null && !ids.includes(scopeId)) filter.scopeId = { $in: [] };
-      else filter.scopeId = scopeId;
-    } else if (ids !== null) {
-      filter.scopeId = { $in: ids };
+      if (!(await this.#scopeReadable(read, scopeId))) return false;
+      filter.scopeId = scopeId;
+      return true;
     }
+    const ids = await this.#readable(read);
+    if (ids !== null) filter.scopeId = { $in: ids };
+    return true;
   }
 
   async listChildPages(input: {
@@ -743,9 +765,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }): Promise<KnowledgePageListOutput> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const ids = await this.#readable(input.read);
     const filter: Filter<Document> = { ...notScope, ...live };
-    this.#scopeFilter(filter, input.scopeId, ids);
+    if (!(await this.#scopeFilter(filter, input.read, input.scopeId))) return { pages: [] };
     if (input.namePrefix) {
       filter.canonicalName = { $regex: `^${escapeRegex(core.canonicalKnowledgeName(input.namePrefix))}` };
     }
@@ -1469,7 +1490,6 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const activity = await this.#c('activity');
     const notes = await this.#c('notes');
     const filter: Filter<Document> = {};
-    this.#scopeFilter(filter as Filter<Document>, undefined, ids);
     if (ids !== null) filter.pageScopeId = { $in: ids };
     delete filter.scopeId;
     if (input.scopeId) {
@@ -1515,17 +1535,15 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       };
     }
 
-    const page = events.slice(0, limit).map(
-      (row): KnowledgePageActivityEvent => ({
-        id: String(row.id),
-        action: String(row.action) as KnowledgePageActivityAction,
-        scopeId: String(row.scopeId),
-        pageId: String(row.pageId),
-        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-        provenance: row.provenance as KnowledgeProvenance,
-        createdAt: new Date(row.createdAt),
-      }),
-    );
+    const page = events.slice(0, limit).map((row): KnowledgePageActivityEvent => ({
+      id: String(row.id),
+      action: String(row.action) as KnowledgePageActivityAction,
+      scopeId: String(row.scopeId),
+      pageId: String(row.pageId),
+      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+      provenance: row.provenance as KnowledgeProvenance,
+      createdAt: new Date(row.createdAt),
+    }));
     const last = page[page.length - 1];
     return {
       events: page,
