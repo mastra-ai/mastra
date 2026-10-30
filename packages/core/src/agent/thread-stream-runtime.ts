@@ -967,16 +967,19 @@ export class AgentThreadStreamRuntime {
     if (this.#isLeaseReadStalled(provider, key)) return false;
     const read = provider.getLeaseOwner(key);
     let giveUp: ReturnType<typeof setTimeout> | undefined;
+    // A read that answered by the time the deadline fired still wins, even when the deadline settles the race.
+    let reply: boolean | undefined;
     const answered = await Promise.race([
       read.then(
-        owner => owner === runId,
-        () => false,
+        owner => (reply = owner === runId),
+        () => (reply = false),
       ),
       new Promise<undefined>(
         resolve => (giveUp = setTimeout(() => resolve(undefined), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
       ),
     ]).finally(() => clearTimeout(giveUp));
     if (answered !== undefined) return answered;
+    if (reply !== undefined) return reply;
     this.#noteStalledLeaseRead(provider, key, read);
     return false;
   }
