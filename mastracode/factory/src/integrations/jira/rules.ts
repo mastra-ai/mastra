@@ -111,6 +111,10 @@ export class JiraRules {
     );
     for (const row of liveElsewhere) {
       if (await this.options.projects.get({ orgId: input.orgId, id: row.factoryProjectId })) return true;
+      // Project delete leaves its cards behind; free their claims so this issue can be filed here.
+      if (row.claimKey) {
+        await this.options.storage.releaseProjectClaims({ orgId: input.orgId, factoryProjectId: row.factoryProjectId });
+      }
     }
     return false;
   }
