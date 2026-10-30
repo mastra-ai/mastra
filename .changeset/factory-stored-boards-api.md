@@ -2,15 +2,16 @@
 '@mastra/factory': minor
 ---
 
-Organization admins can now create, edit, reset and delete a project's boards through the API, including the built-in Work and Review boards.
+Organization admins can now create, edit and delete a project's own boards through the API. Saved boards pass the same checks as `defineBoard()`, and every change sends back the revision it read, so two people can't overwrite each other's edits.
 
 ```bash
-# Rename Work's Building phase: send the whole board back with the revision you read.
-curl "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work"
-curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" \
-  -H 'content-type: application/json' -d '{ "name": "Work", "phases": [...], "expectedRevision": 1 }'
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards" \
+  -H 'content-type: application/json' \
+  -d '{ "key": "bugs", "name": "Bugs", "phases": [{ "key": "reported", "name": "Reported", "kind": "resting" }, { "key": "fixed", "name": "Fixed", "kind": "terminal" }] }'
 ```
 
-`POST /web/factory/projects/:id/boards` creates a board, `PATCH …/boards/:boardKey` replaces one, `POST …/boards/:boardKey/reset` goes back to the code definition, and `DELETE …/boards/:boardKey` removes a board. Saves use the same checks as `defineBoard()`. Factory refuses edits that would strand cards, delete Work or Review, or break a board's code behaviors.
+`GET /web/factory/projects/:id/boards/:boardKey` returns a board's definition, `PATCH …/boards/:boardKey` replaces it with `expectedRevision`, and `DELETE …/boards/:boardKey?expectedRevision=n` deletes it. Factory refuses edits that would strand cards (`409 phase_in_use`, `409 board_in_use`) and runner skills that don't exist (`422 unknown_skill`).
 
-`defineBoard()` and the `boards` and `includeDefaultBoards` options of `MastraFactory` are deprecated. They keep working: the boards you pass are only used to seed each project's database, and Factory logs one deprecation warning per process. Apps that use only the built-in boards see no warning. See the "Stored boards" and "Migrating from `defineBoard()`" sections of the README.
+The built-in Work and Review boards and boards passed to `new MastraFactory({ boards })` are read-only here: creating, editing or deleting one returns `409 code_board`, and the catalog and `GET` report them with `editable: false`.
+
+`defineBoard()` and the `boards` and `includeDefaultBoards` options of `MastraFactory` are deprecated. They keep working, their boards are not stored, and Factory logs one deprecation warning per process. Apps that use only the built-in boards see no warning. See the "Stored boards" and "Migrating from `defineBoard()`" sections of the README.
