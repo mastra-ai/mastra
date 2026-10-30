@@ -7,7 +7,7 @@
 
 import type { Edge, Node } from '@xyflow/react';
 
-import type { KnowledgePageEdge, KnowledgePagePayload } from '../pageTypes';
+import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
 /**
  * Edges among loaded, live pages: a parent edge for every loaded parent, and
@@ -38,6 +38,56 @@ export function pageGraphEdges(
   return [...edges, ...mentions.values()];
 }
 
+/** Id of the placeholder circle for a declared principal that has no scope page yet. */
+export function unplacedScopeId(address: string): string {
+  return `unplaced:${address}`;
+}
+
+/**
+ * Grants as graph pages and edges. A grant from a principal with a loaded scope page draws from that
+ * page; one whose principal has no scope page yet draws from a placeholder scope (one per address), so
+ * a role nobody has written to still shows what it can reach. Grants to unloaded targets are dropped.
+ */
+export function grantGraph(
+  pages: KnowledgePagePayload[],
+  grants: readonly KnowledgeScopeGrantPayload[] = [],
+): { placeholders: KnowledgePagePayload[]; edges: KnowledgePageEdge[] } {
+  const live = new Set(pages.filter(page => !page.deletedAt && !page.mergedInto).map(page => page.id));
+  const placeholders = new Map<string, KnowledgePagePayload>();
+  const edges = new Map<string, KnowledgePageEdge>();
+  for (const grant of grants) {
+    if (!live.has(grant.target)) continue;
+    let source = grant.principalId && live.has(grant.principalId) ? grant.principalId : null;
+    if (!source) {
+      if (grant.principalId) continue;
+      source = unplacedScopeId(grant.principal);
+      if (!placeholders.has(source)) placeholders.set(source, placeholderScope(source, grant));
+    }
+    if (source === grant.target) continue;
+    edges.set(`${source}\u0000${grant.target}`, { source, target: grant.target, kind: 'grant', role: grant.role });
+  }
+  return { placeholders: [...placeholders.values()], edges: [...edges.values()] };
+}
+
+function placeholderScope(id: string, grant: KnowledgeScopeGrantPayload): KnowledgePagePayload {
+  const nobody = { author: '' };
+  return {
+    id,
+    scopeId: id,
+    parentId: null,
+    isScope: true,
+    address: grant.principal,
+    displayLabel: grant.principalLabel,
+    position: '',
+    name: grant.principal,
+    version: 0,
+    createdBy: nobody,
+    updatedBy: nobody,
+    createdAt: '',
+    updatedAt: '',
+  };
+}
+
 /** The page plus every page one edge away from it, either direction. */
 export function pageNeighbourIds(pageId: string, edges: KnowledgePageEdge[]): Set<string> {
   const ids = new Set([pageId]);
@@ -58,7 +108,7 @@ export type PageFlowNode = Node<{
   selected: boolean;
 }>;
 
-export type PageFlowEdge = Edge<{ kind: KnowledgePageEdge['kind']; count: number }>;
+export type PageFlowEdge = Edge<{ kind: KnowledgePageEdge['kind']; count: number; role?: KnowledgePageEdge['role'] }>;
 
 /** Converts pages and their edges to React Flow elements; positions are left to the layout. */
 export function toPageFlow(
@@ -87,7 +137,7 @@ export function toPageFlow(
         id: `${edge.kind}:${edge.source}->${edge.target}`,
         source: edge.source,
         target: edge.target,
-        data: { kind: edge.kind, count: edge.count ?? 1 },
+        data: { kind: edge.kind, count: edge.count ?? 1, ...(edge.role ? { role: edge.role } : {}) },
       }),
     ),
   };

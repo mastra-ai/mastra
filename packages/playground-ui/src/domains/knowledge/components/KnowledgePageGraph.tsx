@@ -19,10 +19,10 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
-import { pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
+import { grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
 import { layoutPageGraph } from '../lib/pageLayout';
 import type { PageLayout } from '../lib/pageLayout';
-import type { KnowledgePageEdge, KnowledgePagePayload } from '../pageTypes';
+import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
 import { Txt } from '@/ds/components/Txt';
 
@@ -46,6 +46,17 @@ const MENTION_EDGE_COLOR = 'var(--chart-blue)';
 // An open chevron in the dashed line's muted tone, at the child end: distinct from a mention's filled blue head.
 const PARENT_ARROW_COLOR = 'var(--muted-foreground)';
 const PARENT_ARROW = { type: MarkerType.Arrow, color: PARENT_ARROW_COLOR, width: 12, height: 12, strokeWidth: 1.5 };
+// Grants: purple dash-dot from the principal scope to the scope it reaches, so neither colour nor pattern
+// alone tells it apart from a parent or mention line.
+const GRANT_EDGE_COLOR = 'var(--chart-purple)';
+const GRANT_EDGE_STYLE = { stroke: GRANT_EDGE_COLOR, strokeWidth: 1.75, strokeDasharray: '8 3 2 3' };
+const GRANT_ARROW = { type: MarkerType.ArrowClosed, color: GRANT_EDGE_COLOR, width: 13, height: 13 };
+// A declared principal with no scope page yet: same size as a scope, dashed outline, nothing to open.
+const PLACEHOLDER_STYLE = {
+  background: 'var(--card)',
+  borderColor: 'var(--chart-purple)',
+  borderStyle: 'dashed',
+};
 
 /**
  * The pin badge sits on the circle's rim at its top-right (45°).
@@ -65,19 +76,26 @@ type PageNodeData = PageFlowNode['data'] & { pinned: boolean; dimmed: boolean };
 function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeData }>) {
   const { page, size, selected, pinned, dimmed } = data;
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
+  const placeholder = isPlaceholder(page);
   return (
     <div
       data-testid="knowledge-page-node"
       data-page-id={page.id}
-      data-page-type={page.isScope ? 'scope' : 'page'}
-      className="relative cursor-pointer transition-opacity"
+      data-page-type={placeholder ? 'placeholder' : page.isScope ? 'scope' : 'page'}
+      className={`relative transition-opacity ${placeholder ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ width: size, height: size, opacity: dimmed ? 0.35 : 1 }}
-      title={page.isScope && page.address ? `${kind} · ${page.address}` : page.name}
+      title={
+        placeholder
+          ? `${kind} · ${page.address} · nothing written to it yet`
+          : page.isScope && page.address
+            ? `${kind} · ${page.address}`
+            : page.name
+      }
     >
       <div
         className="knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 px-3 text-center shadow-raised"
         data-selected={selected || undefined}
-        style={page.isScope ? SCOPE_STYLE : PAGE_STYLE}
+        style={placeholder ? PLACEHOLDER_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE}
       >
         <Txt
           as="span"
@@ -98,6 +116,10 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
   );
+}
+
+function isPlaceholder(page: KnowledgePagePayload): boolean {
+  return page.id.startsWith('unplaced:');
 }
 
 /** Lets a scope address like `role:acme:admin` wrap after a colon instead of mid-word. */
@@ -159,14 +181,31 @@ function RimEdgeComponent({ id, data, style, markerEnd }: EdgeProps<Edge<RimEdge
   if (!data) return null;
   const { x1, y1, x2, y2 } = rimToRim(data.from, data.to);
   const mention = data.kind === 'mention';
+  const path = `M ${x1} ${y1} L ${x2} ${y2}`;
   return (
-    <BaseEdge
-      id={id}
-      path={`M ${x1} ${y1} L ${x2} ${y2}`}
-      style={{ ...style, opacity: data.dimmed ? 0.2 : 1 }}
-      markerEnd={markerEnd}
-      interactionWidth={mention ? 20 : 0}
-    />
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        style={{ ...style, opacity: data.dimmed ? 0.2 : 1 }}
+        markerEnd={markerEnd}
+        interactionWidth={mention ? 20 : 0}
+      />
+      {data.kind === 'grant' && data.role ? (
+        // A wide invisible path over the line, so hovering it names the access level.
+        <path
+          d={path}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={14}
+          data-testid="knowledge-grant-edge"
+          data-role={data.role}
+          aria-label={`Grants ${data.role}`}
+        >
+          <title>{`Grants ${data.role}`}</title>
+        </path>
+      ) : null}
+    </>
   );
 }
 
@@ -193,7 +232,7 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
 const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
 
 /** What the circles, lines and badge mean. */
-function GraphLegend() {
+function GraphLegend({ grants }: { grants: boolean }) {
   return (
     <ul
       aria-label="Legend"
@@ -235,6 +274,17 @@ function GraphLegend() {
           Parent → child
         </Txt>
       </li>
+      {grants ? (
+        <li className="flex items-center gap-2">
+          <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-grant">
+            <line x1="0" y1="4" x2="12" y2="4" {...GRANT_EDGE_STYLE} strokeDasharray="4 2 1 2" strokeWidth="1.5" />
+            <polygon points="11,1 16,4 11,7" fill={GRANT_EDGE_COLOR} />
+          </svg>
+          <Txt as="span" variant="meta" tone="muted">
+            Grants access (hover for role)
+          </Txt>
+        </li>
+      ) : null}
       <li className="flex items-center gap-2">
         <span
           className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground"
@@ -258,6 +308,8 @@ export interface KnowledgePageGraphProps {
   /** Mention edges between pages; parent edges are derived from `pages`. */
   edges: KnowledgePageEdge[];
   pinnedIds?: readonly string[];
+  /** Access grants between scopes, drawn from each principal scope to the scope it reaches. */
+  grants?: readonly KnowledgeScopeGrantPayload[];
   selectedPageId?: string | null;
   /** A page that wasn't selected was clicked, tapped, or activated with Enter or Space: select it. */
   onSelect: (page: KnowledgePagePayload) => void;
@@ -291,17 +343,23 @@ function KnowledgePageGraphInner({
   pages,
   edges,
   pinnedIds = [],
+  grants,
   selectedPageId,
   onSelect,
   onOpen,
   onClearSelection,
   onMentionSelect,
 }: KnowledgePageGraphProps) {
-  const allEdges = useMemo(() => pageGraphEdges(pages, edges), [pages, edges]);
+  // Grants add placeholder circles for declared principals with no scope page yet, and their own lines.
+  const { graphPages, allEdges } = useMemo(() => {
+    const granted = grantGraph(pages, grants);
+    const withPlaceholders = granted.placeholders.length ? [...pages, ...granted.placeholders] : pages;
+    return { graphPages: withPlaceholders, allEdges: [...pageGraphEdges(pages, edges), ...granted.edges] };
+  }, [pages, edges, grants]);
   // The last layout: a refetch or live update starts from it, so placed pages stay put.
   const lastLayout = useRef<PageLayout | undefined>(undefined);
   const laidOut = useMemo(() => {
-    const flow = toPageFlow(pages, allEdges);
+    const flow = toPageFlow(graphPages, allEdges);
     const layout = layoutPageGraph(
       lastLayout.current,
       flow.nodes.map(node => ({ id: node.id, size: node.data.size })),
@@ -309,7 +367,7 @@ function KnowledgePageGraphInner({
     );
     lastLayout.current = layout;
     return { nodes: flow.nodes, edges: flow.edges, positions: layout.positions };
-  }, [pages, allEdges]);
+  }, [graphPages, allEdges]);
 
   const pinned = useMemo(() => new Set(pinnedIds), [pinnedIds]);
   // With a page selected, everything more than one line away fades so its neighbourhood reads at a glance.
@@ -360,6 +418,7 @@ function KnowledgePageGraphInner({
     };
     return laidOut.edges.map((edge): Edge<RimEdgeData> => {
       const mention = edge.data?.kind === 'mention';
+      const grant = edge.data?.kind === 'grant';
       const dimmed = !!neighbours && !(neighbours.has(edge.source) && neighbours.has(edge.target));
       return {
         ...edge,
@@ -367,6 +426,7 @@ function KnowledgePageGraphInner({
         data: {
           kind: edge.data?.kind ?? 'parent',
           count: edge.data?.count ?? 1,
+          ...(edge.data?.role ? { role: edge.data.role } : {}),
           from: circle(edge.source),
           to: circle(edge.target),
           dimmed,
@@ -374,10 +434,14 @@ function KnowledgePageGraphInner({
         ...(mention && onMentionSelect ? { className: 'cursor-pointer' } : {}),
         style: mention
           ? { stroke: MENTION_EDGE_COLOR, strokeWidth: Math.min(1.5 + (edge.data?.count ?? 1) * 0.5, 4) }
-          : PARENT_EDGE_STYLE,
+          : grant
+            ? GRANT_EDGE_STYLE
+            : PARENT_EDGE_STYLE,
         markerEnd: mention
           ? { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 }
-          : PARENT_ARROW,
+          : grant
+            ? GRANT_ARROW
+            : PARENT_ARROW,
       };
     });
   }, [laidOut, onMentionSelect, neighbours]);
@@ -495,7 +559,7 @@ function KnowledgePageGraphInner({
         pressedAt.current = { x: event.clientX, y: event.clientY };
       }}
     >
-      <GraphLegend />
+      <GraphLegend grants={allEdges.some(edge => edge.kind === 'grant')} />
       <ReactFlow
         nodes={nodes}
         edges={flowEdges}
@@ -510,7 +574,9 @@ function KnowledgePageGraphInner({
         nodesConnectable={false}
         nodesDraggable={false}
         onPaneClick={onPaneClick}
-        onNodeClick={(_: unknown, node: PageFlowNode) => activate(node.data.page)}
+        onNodeClick={(_: unknown, node: PageFlowNode) => {
+          if (!isPlaceholder(node.data.page)) activate(node.data.page);
+        }}
         onEdgeClick={(event: React.MouseEvent, edge: Edge<RimEdgeData>) => {
           if (edge.data?.kind !== 'mention' || !onMentionSelect) return;
           const source = pagesById.get(edge.source);
