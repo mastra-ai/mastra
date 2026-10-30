@@ -49,6 +49,7 @@ import { startRunStep } from '../../../run-lease-fence';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
+import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import {
   assertExecutionNotSuperseded,
@@ -1388,6 +1389,22 @@ export function createDurableToolCallStep() {
       // workflow engine's suspend() sets an internal flag but does not throw,
       // so execution continues past the suspend call).
       let wasSuspended = false;
+
+      // A tool step can run on a worker whose LLM step ran elsewhere, so it subscribes to abort
+      // requests too. Otherwise a deadline or abort() published while the tool runs never reaches it.
+      // Only a real entry that has no signal of its own: a cold worker without one keeps
+      // no registry state, and a signal already set on the entry stays the one tools see.
+      if (pubsub && registryEntry && !registryEntry.isPlaceholder && !registryEntry.abortSignal) {
+        try {
+          await ensureRemoteAbortListener(pubsub, runId, mastra as Mastra | undefined);
+          registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined) ?? registryEntry;
+        } catch (error) {
+          logger?.warn?.('Failed to subscribe to cross-process abort requests', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       // Forward abort signal from the run registry so tools can observe
       // cancellation (mirrors the non-durable tool-call-step).

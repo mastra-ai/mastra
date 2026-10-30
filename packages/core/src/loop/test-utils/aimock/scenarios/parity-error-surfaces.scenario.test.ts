@@ -306,8 +306,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       // The durable engines persist the input through agent memory regardless of the configured
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
       const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
-      const inputSaved =
-        !readOnly && !(historyStore && engine === 'inngest') && !((customHistory || historyOff) && !durable);
+      const inputSaved = !readOnly && !((customHistory || historyOff) && !durable);
       // The lookup step completed before the deadline, and the courier step ends with the abort notice
       // once its grace window passes, so the deadline saves both with the input.
       const completedStepSaved = inputSaved || (savePerStep && !readOnly);

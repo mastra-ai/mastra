@@ -13,6 +13,7 @@
  * event is ever published, leaving stream consumers hanging forever.
  */
 import type { PubSub } from '../../events';
+import { MastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
@@ -25,12 +26,23 @@ import type { RunRegistryEntry } from './types';
  * when nobody is listening — an unheard request is a no-op, exactly like
  * aborting a run that already finished.
  */
-export async function publishAbortRequest(pubsub: PubSub, runId: string): Promise<void> {
+export async function publishAbortRequest(pubsub: PubSub, runId: string, reason?: MastraTimeoutError): Promise<void> {
   await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
     type: AgentControlEventTypes.ABORT_REQUEST,
     runId,
-    data: {},
+    data: reason ? { timeout: { timeoutType: reason.timeoutType, timeoutMs: reason.timeoutMs } } : {},
   });
+}
+
+type AbortRequestData = {
+  requestId?: string;
+  /** Set when a run deadline, not a caller, stopped the run. */
+  timeout?: { timeoutType: MastraTimeoutError['timeoutType']; timeoutMs: number };
+};
+
+/** The reason the executing process aborts with: the deadline's timeout error, or a plain abort. */
+function abortReason(data?: AbortRequestData): Error {
+  return data?.timeout ? new MastraTimeoutError(data.timeout) : new Error('Aborted');
 }
 
 /**
@@ -118,15 +130,15 @@ export async function requestAcknowledgedAbort(
 export async function subscribeToAbortRequests(
   pubsub: PubSub,
   runId: string,
-  onAbortRequested: () => void,
+  onAbortRequested: (reason: Error) => void,
 ): Promise<() => Promise<void>> {
   const topic = AGENT_CONTROL_TOPIC(runId);
   // Every delivery is acknowledged, including control events this listener
   // ignores. An ignored delivery is still a delivery, and a durable transport
   // keeps unacknowledged entries pending for the life of the subscription.
-  const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
+  const handler = async (event: { type?: string; data?: AbortRequestData }, ack?: () => Promise<void>) => {
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
-      onAbortRequested();
+      onAbortRequested(abortReason(event.data));
       const requestId = event.data?.requestId;
       if (requestId) {
         // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
@@ -194,10 +206,10 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, m
 
   let unsubscribe: () => Promise<void>;
   try {
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
+    unsubscribe = await subscribeToAbortRequests(pubsub, runId, reason => {
       const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
       if (controller && !controller.signal.aborted) {
-        controller.abort(new Error('Aborted'));
+        controller.abort(reason);
       }
     });
   } catch (error) {

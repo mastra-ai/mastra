@@ -74,6 +74,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
+import type { MastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -173,6 +174,13 @@ const STREAM_CLEANUP = Symbol('mastra.durable.inngest.streamCleanup');
 
 const RESUME_SNAPSHOT_WAIT_MS = 10_000;
 const RESUME_SNAPSHOT_POLL_MS = 100;
+/**
+ * How long the caller's process waits, past a total deadline, for the worker to stop the
+ * run, save the turn and report the deadline error. Covers the tool abort grace, one more
+ * Inngest step round trip and the memory save; a worker silent for longer gets the error
+ * reported for it.
+ */
+const DEADLINE_WORKER_WAIT_MS = 5_000;
 
 /**
  * Merges the wrapped agent's `defaultOptions` under the call options, matching
@@ -915,7 +923,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * one execution session (stream or resume) and compose it into the registry
    * entry's `abortSignal`, which co-located durable steps read. At the
    * deadline the run is reported failed: the stream gets one
-   * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
+   * `MastraTimeoutError` and the snapshot rows are deleted. The deadline is
+   * also published as a timeout abort request, so a step on another worker
+   * stops too. The worker saves the turn and reports the error itself; this
+   * process reports it only when the worker stays silent. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
    * Returns the timer teardown; a no-op when no budget is configured.
    */
@@ -937,10 +948,42 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
       // The worker owns span finalization and accumulated usage/output (OBS-754).
       // Ending caller copies here races that finalization.
-      await emitError(runId, error);
+      const workerReported = waitForWorkerError(runId);
+      await requestRemoteAbort(runId, error);
+      if (!(await workerReported)) await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });
     return totalTimeout.cleanup;
+  }
+
+  /**
+   * Resolves `true` once the worker reports the run's error, `false` when it
+   * ends another way or stays silent past `DEADLINE_WORKER_WAIT_MS`.
+   */
+  async function waitForWorkerError(runId: string): Promise<boolean> {
+    const pubsub = getPubsub();
+    const topic = AGENT_STREAM_TOPIC(runId);
+    let settle!: (reported: boolean) => void;
+    const reported = new Promise<boolean>(resolve => (settle = resolve));
+    const handler = (event: Event) => {
+      if (event.type === AgentStreamEventTypes.ERROR) settle(true);
+      else if (event.type === AgentStreamEventTypes.FINISH || event.type === AgentStreamEventTypes.ABORT) {
+        settle(false);
+      }
+    };
+    const timer = setTimeout(() => settle(false), DEADLINE_WORKER_WAIT_MS);
+    try {
+      await pubsub.subscribe(topic, handler);
+    } catch {
+      clearTimeout(timer);
+      return false;
+    }
+    try {
+      return await reported;
+    } finally {
+      clearTimeout(timer);
+      await pubsub.unsubscribe(topic, handler).catch(() => {});
+    }
   }
 
   async function deleteRunSnapshots(runId: string): Promise<void> {
@@ -1171,9 +1214,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     return () => external.removeEventListener('abort', forward);
   }
 
-  async function requestRemoteAbort(runId: string): Promise<void> {
+  async function requestRemoteAbort(runId: string, reason?: MastraTimeoutError): Promise<void> {
     try {
-      await publishAbortRequest(getPubsub(), runId);
+      await publishAbortRequest(getPubsub(), runId, reason);
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent abort request', {
         agentId,

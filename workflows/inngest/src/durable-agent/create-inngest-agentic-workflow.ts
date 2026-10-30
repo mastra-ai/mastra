@@ -10,6 +10,7 @@ import {
   DurableAgentDefaults,
   DurableStepIds,
   emitChunkEvent,
+  emitErrorEvent,
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
@@ -34,6 +35,7 @@ import type {
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
+import { isMastraTimeoutError } from '@mastra/core/loop';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -468,6 +470,13 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Access pubsub via symbol to emit finish event
           const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
+          // A run its total deadline aborted ends as the deadline error, not an abort. The abort
+          // reaches this worker either through the caller's composed signal (same process) or as a
+          // timeout abort request over pubsub (another worker).
+          const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
+          const deadlineError =
+            isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total' ? abortReason : undefined;
+
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           let finalText = lastStep?.text;
@@ -489,8 +498,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
-              finishReason: state.lastStepResult?.reason ?? 'unknown',
+              finishReason: deadlineError ? 'error' : (state.lastStepResult?.reason ?? 'unknown'),
               steps: state.accumulatedSteps,
+              ...(deadlineError ? { error: deadlineError } : {}),
             },
           });
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
@@ -618,8 +628,11 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             });
           }
 
-          // Emit finish event via pubsub
-          if (pubsub) {
+          // Memory is saved above, so the caller sees the deadline only after the turn is stored.
+          // The caller's process waits for this error before reporting the deadline itself.
+          if (pubsub && deadlineError) {
+            await emitErrorEvent(pubsub, state.runId, deadlineError);
+          } else if (pubsub) {
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
