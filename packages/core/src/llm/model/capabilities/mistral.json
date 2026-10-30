@@ -94,16 +94,16 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "labs-leanstral-1-5-1": [
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "zai-glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ],
     "glm-5-2": [
@@ -112,7 +112,31 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "magistral-medium-latest": [
+    "mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "zai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "zai-glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -124,25 +148,7 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepseek-v4-1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "mistral-medium-2604": [
+    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -154,16 +160,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "mistral-large-4": [
+    "deepseek-v4-1-flash-1017": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

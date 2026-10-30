@@ -481,6 +481,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hopper',
+          label: 'Hopper',
+        },
+        {
+          type: 'doc',
           id: 'providers/hpc-ai',
           label: 'HPC-AI',
         },
