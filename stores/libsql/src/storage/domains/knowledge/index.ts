@@ -245,6 +245,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return this.#pages.listNotes(input);
   }
 
+  override countNotes(
+    input: Parameters<KnowledgePageStore['countNotes']>[0],
+  ): ReturnType<KnowledgePageStore['countNotes']> {
+    return this.#pages.countNotes(input);
+  }
+
   override listNotesMentioning(
     input: Parameters<KnowledgePageStore['listNotesMentioning']>[0],
   ): ReturnType<KnowledgePageStore['listNotesMentioning']> {

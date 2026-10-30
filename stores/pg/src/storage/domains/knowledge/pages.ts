@@ -1219,6 +1219,21 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.pageIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT n."pageId" AS "pageId", count(*)::int AS "count" FROM ${this.#visibleNotes(filter)} AND n."deletedAt" IS NULL AND n."pageId" = ANY(${params.add(ids)}::text[]) GROUP BY n."pageId"`,
+      params.values,
+    );
+    for (const row of rows) counts[row.pageId as string] = Number(row.count);
+    return counts;
+  }
+
   async listNotesMentioning(input: {
     pageId: string;
     read: KnowledgeReadScope;

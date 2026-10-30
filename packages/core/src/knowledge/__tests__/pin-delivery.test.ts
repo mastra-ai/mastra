@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
+import { KnowledgeUnsupportedCapabilityError } from '../../storage/domains/knowledge';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
@@ -46,7 +47,14 @@ async function seed(stored: number, maxPins = 20, maxTokens = 2_000) {
 
 const countCalls = (storage: KnowledgeStorage) => {
   const calls: string[] = [];
-  for (const method of ['getPage', 'getPages', 'getPageByPath', 'getScopesByAddress', 'listPins'] as const) {
+  for (const method of [
+    'getPage',
+    'getPages',
+    'getPageByPath',
+    'getScopesByAddress',
+    'listPins',
+    'countNotes',
+  ] as const) {
     const original = storage[method].bind(storage) as (...args: unknown[]) => unknown;
     vi.spyOn(storage, method).mockImplementation(((...args: unknown[]) => {
       calls.push(method);
@@ -63,15 +71,17 @@ describe('Knowledge pin delivery cost', () => {
     const pins = await knowledge.__deliveredPins(context as never);
 
     // One listing per pinnedContextPriority tier the run holds (role, thread, resource, org), one count, one
-    // batched page fetch and one batched scope fetch for display labels; never a page read per pin (run start may read scope pages; that is checked
+    // batched page fetch, one batched note count, and one batched fetch per tree level above the pins (here
+    // only their scope pages); never a page read per pin (run start may read scope pages; that is checked
     // below by comparing with a run that has few pins).
-    expect(calls.filter(call => call === 'listPins' || call === 'getPages')).toEqual([
+    expect(calls.filter(call => ['listPins', 'getPages', 'countNotes'].includes(call))).toEqual([
       'listPins',
       'listPins',
       'listPins',
       'listPins',
       'listPins',
       'getPages',
+      'countNotes',
       'getPages',
     ]);
     // And the same store calls as a run with a handful of pins.
@@ -111,5 +121,82 @@ describe('Knowledge pin delivery cost', () => {
     const pins = await knowledge.__deliveredPins(context as never);
     expect(pins).toHaveLength(5);
     expect(pins.some(pin => pin.id === PIN_OVERFLOW_ID)).toBe(false);
+  });
+
+  // r92: a pinned entry gave the model no way to tell the page had notes, or where to read them.
+  it('names each pinned page by its key path and counts the notes the run can see', async () => {
+    const { knowledge, storage, context } = await seed(0);
+    const org = (await storage.getScopesByAddress(['org:acme']))[0]!;
+    const globex = (await storage.getScopesByAddress(['org:globex']))[0]!;
+    const policies = await storage.createPage({
+      parentId: org.id,
+      key: 'policies',
+      name: 'Policies',
+      provenance: host,
+    });
+    const refund = await storage.createPage({
+      parentId: policies.id,
+      key: 'refund',
+      name: 'Refund Policy',
+      body: 'Full refund within 30 days.',
+      provenance: host,
+    });
+    const loose = await storage.createPage({ parentId: org.id, name: 'Loose', body: 'No key here.', provenance: host });
+    const note = (text: string, stamp: string) =>
+      storage.addNote({ pageId: refund.id, text, stampScopeIds: [stamp], mentions: [], provenance: host });
+    await note('Holiday exception: refundable until January 31.', org.id);
+    await note('Retired tier 2 queue.', org.id);
+    await note('Globex only.', globex.id);
+    for (const page of [refund, loose]) {
+      await storage.addPinAudience({ pageId: page.id, audience: ['org:acme'], createdBy: 'host' });
+    }
+
+    const pins = await knowledge.__deliveredPins(context as never);
+    expect(pins.map(pin => pin.text).sort()).toEqual([
+      `Loose (${loose.id}, no notes): No key here.`,
+      'Refund Policy (org:acme#policies/refund, 2 notes): Full refund within 30 days.',
+    ]);
+  });
+  // An adapter older than countNotes must not cost the pins; nor may a failed count while the tree walk
+  // is still waiting on the store (that rejection used to go unhandled).
+  it.each([
+    ['is not supported by the adapter', () => new KnowledgeUnsupportedCapabilityError('countNotes')],
+    ['fails', () => new Error('count failed')],
+  ])('delivers pins without a note count when counting notes %s', async (_, error) => {
+    const { knowledge, storage, context } = await seed(0);
+    const org = (await storage.getScopesByAddress(['org:acme']))[0]!;
+    const policies = await storage.createPage({
+      parentId: org.id,
+      key: 'policies',
+      name: 'Policies',
+      provenance: host,
+    });
+    const refund = await storage.createPage({
+      parentId: policies.id,
+      key: 'refund',
+      name: 'Refund Policy',
+      body: 'Full refund within 30 days.',
+      provenance: host,
+    });
+    await storage.addPinAudience({ pageId: refund.id, audience: ['org:acme'], createdBy: 'host' });
+    vi.spyOn(storage, 'countNotes').mockImplementation(() => Promise.reject(error()));
+    const getPages = storage.getPages.bind(storage);
+    vi.spyOn(storage, 'getPages').mockImplementation(async args => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      return getPages(args);
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const pins = await knowledge.__deliveredPins(context as never);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(pins.map(pin => pin.text)).toEqual([
+        'Refund Policy (org:acme#policies/refund): Full refund within 30 days.',
+      ]);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });

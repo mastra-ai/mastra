@@ -248,7 +248,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
 
     prompts.length = 0;
     await agent([]).generate('hello', { maxSteps: 1, memory: { thread: 'thread-2', resource: 'user-1' } });
-    expect(JSON.stringify(prompts[0])).toContain('<pinned-knowledge');
+    expect(JSON.stringify(prompts[0])).toContain('<pinned-knowledge count=');
     expect(JSON.stringify(prompts[0])).toContain('Answer in French.');
   });
 
@@ -281,7 +281,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
     const result = await writer.generate('pin', { maxSteps: 4, ...runOptions() });
     expect(toolErrors(result)).toEqual([]);
     await writer.generate('again', { maxSteps: 1, ...runOptions() });
-    expect(JSON.stringify(prompts.at(-1))).not.toContain('<pinned-knowledge');
+    expect(JSON.stringify(prompts.at(-1))).not.toContain('<pinned-knowledge count=');
     expect(warn.mock.calls.filter(([message]) => String(message).includes('pinnedContext needs Memory'))).toHaveLength(
       1,
     );
