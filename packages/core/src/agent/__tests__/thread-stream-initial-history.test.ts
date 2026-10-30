@@ -182,6 +182,57 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  // Every later backlog part checks the lease too. While one read is stalled, the next ones can't answer
+  // sooner, so they must not each wait out another interval.
+  it('opens within one renewal interval when several backlog parts check a stalled lease', async () => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    for (const text of ['a', 'b', 'c']) await run.part({ type: 'text-delta', payload: { text } });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      vi.spyOn(pubsub, 'getLeaseOwner').mockReturnValue(new Promise(() => {}));
+      let opened = false;
+      const subscribing = subscribe().then(result => {
+        opened = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS * 1.5);
+      expect(opened).toBe(true);
+      vi.useRealTimers();
+      const { subscription, consumed } = await subscribing;
+      subscription.unsubscribe();
+      await consumed;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A run deferred because its lease read failed is live after all: once a later part confirms the lease, it
+  // streams instead of buffering until its terminal event.
+  it('streams a live remote run whose first lease read failed', async () => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    await run.part({ type: 'text-delta', payload: { text: 'before' } });
+    vi.spyOn(pubsub, 'getLeaseOwner').mockRejectedValueOnce(new Error('Lease unavailable'));
+    const { subscription, collected, consumed } = await subscribe();
+    try {
+      await run.part({ type: 'text-delta', payload: { text: ' live' } });
+      await nextTicks(10);
+      expect(collected.filter(p => p.type === 'text-delta').map(p => p.payload.text)).toEqual(['before', ' live']);
+      await run.part({ type: 'finish', payload: {} });
+      await run.completed();
+      await nextTicks(10);
+      expect(collected.filter(p => p.type === 'text-delta')).toHaveLength(2);
+      expect(collected.filter(p => p.type === 'finish')).toHaveLength(1);
+    } finally {
+      subscription.unsubscribe();
+      await consumed;
+    }
+  });
+
   it('delivers deferred output before its outcome and keeps serving later runs', async () => {
     const { emit, subscribe } = setup(() => []);
     const { subscription, collected, consumed } = await subscribe(false);

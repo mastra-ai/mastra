@@ -886,6 +886,7 @@ export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
   #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
+  #stalledLeaseReads = new WeakMap<LeaseProvider, Set<string>>();
   // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
   // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
   // run finishes, is aborted, or the runtime state is reset; every other cleanup path is unchanged.
@@ -932,21 +933,45 @@ export class AgentThreadStreamRuntime {
     return { provider, isFallback: provider === NoopLeaseProvider };
   }
 
+  /**
+   * Remembers a lease read that outlived its deadline until it settles. Reads behind it on the same backend
+   * connection can't answer sooner, so waiting on each of them again would cost a full deadline per event.
+   */
+  #noteStalledLeaseRead(provider: LeaseProvider, key: string, read: Promise<unknown>) {
+    let stalled = this.#stalledLeaseReads.get(provider);
+    if (!stalled) this.#stalledLeaseReads.set(provider, (stalled = new Set()));
+    if (stalled.has(key)) return;
+    stalled.add(key);
+    void read.then(
+      () => stalled.delete(key),
+      () => stalled.delete(key),
+    );
+  }
+
+  #isLeaseReadStalled(provider: LeaseProvider, key: string): boolean {
+    return this.#stalledLeaseReads.get(provider)?.has(key) ?? false;
+  }
+
   async #hasLiveThreadLease(pubsub: PubSub, key: string, runId: string): Promise<boolean> {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return true;
     // Subscribers process events in order, so a read that never answers would hold every later event, and
     // initial history waits on those events. An unanswered read counts as no lease, like a failed one.
+    if (this.#isLeaseReadStalled(provider, key)) return false;
+    const read = provider.getLeaseOwner(key);
     let giveUp: ReturnType<typeof setTimeout> | undefined;
-    return Promise.race([
-      provider
-        .getLeaseOwner(key)
-        .then(owner => owner === runId)
-        .catch(() => false),
-      new Promise<boolean>(
-        resolve => (giveUp = setTimeout(() => resolve(false), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+    const answered = await Promise.race([
+      read.then(
+        owner => owner === runId,
+        () => false,
+      ),
+      new Promise<undefined>(
+        resolve => (giveUp = setTimeout(() => resolve(undefined), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
       ),
     ]).finally(() => clearTimeout(giveUp));
+    if (answered !== undefined) return answered;
+    this.#noteStalledLeaseRead(provider, key, read);
+    return false;
   }
 
   /**
@@ -5758,8 +5783,8 @@ export class AgentThreadStreamRuntime {
     // Queued streams of a run aborted before this subscriber read them.
     const abortedPendingStreamIds = new Set<string>();
 
-    const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
-      if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
+    const markActiveIfLive = async (runId: string, streamId: string, local: boolean): Promise<boolean> => {
+      if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return false;
       state.activeThreadRunIds.set(key, runId);
       state.activeThreadStreamIds.set(key, streamId);
       if (!local) {
@@ -5767,6 +5792,7 @@ export class AgentThreadStreamRuntime {
         // The lease check awaited; only trust the run if someone still observes the thread.
         if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
       }
+      return true;
     };
 
     // A deferred run may be flushed only when its replayed chunks ended with a
@@ -6162,7 +6188,14 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.get(key) !== data.runId ||
           state.activeThreadStreamIds.get(key) !== data.streamId
         ) {
-          await markActiveIfLive(data.runId, data.streamId, false);
+          // A run deferred because its lease read failed or timed out turns out to be live: stream it now
+          // instead of buffering every part until its terminal event.
+          const live = await markActiveIfLive(data.runId, data.streamId, false);
+          const deferredRecord = deferredRunsByStreamId.get(data.streamId);
+          if (live && deferredRecord) {
+            deferredRunsByStreamId.delete(data.streamId);
+            enqueueRun(deferredRecord);
+          }
         }
         let remoteRun = remoteRuns.get(data.streamId);
         if (!remoteRun) {
@@ -6455,16 +6488,26 @@ export class AgentThreadStreamRuntime {
           resolve => (giveUp = setTimeout(() => resolve(unreachable), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
         );
         let leaseError: unknown;
-        const readOwner = (): Promise<string | null | undefined | typeof unreachable> =>
-          hasFallbackLeaseProvider
-            ? Promise.resolve(activeRunId())
-            : Promise.race([
-                leaseProvider.getLeaseOwner(key).catch((error): typeof unreachable => {
-                  leaseError = error;
-                  return unreachable;
-                }),
-                deadline,
-              ]);
+        const readOwner = (): Promise<string | null | undefined | typeof unreachable> => {
+          if (hasFallbackLeaseProvider) return Promise.resolve(activeRunId());
+          if (this.#isLeaseReadStalled(leaseProvider, key)) return Promise.resolve(unreachable);
+          const read = leaseProvider.getLeaseOwner(key);
+          let settled = false;
+          void read.then(
+            () => (settled = true),
+            () => (settled = true),
+          );
+          return Promise.race([
+            read.catch((error): typeof unreachable => {
+              leaseError = error;
+              return unreachable;
+            }),
+            deadline.then((timedOut): typeof unreachable => {
+              if (!settled) this.#noteStalledLeaseRead(leaseProvider, key, read);
+              return timedOut;
+            }),
+          ]);
+        };
         let leaseOwner: string | null | undefined | typeof unreachable;
         try {
           leaseOwner = await readOwner();
