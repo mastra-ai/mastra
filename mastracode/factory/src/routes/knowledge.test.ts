@@ -197,6 +197,34 @@ describe('Factory Knowledge routes on the page store', () => {
     expect(response.body.error).toBe('knowledge_misconfigured');
   });
 
+  it('returns grants between the scopes shown, only from principal scopes the member can read', async () => {
+    const h = await createHarness({
+      declarations: {
+        ...scopes,
+        'role:$orgId:admin': {},
+        'project:$projectId': {
+          ...scopes['project:$projectId'],
+          access: [
+            ...scopes['project:$projectId'].access,
+            { principal: 'org:$orgId' as const, role: 'contributor' as const },
+            { principal: 'role:$orgId:admin' as const, role: 'owner' as const },
+          ],
+        },
+      },
+    });
+    const graph = await h.get('/graph');
+    expect(graph.status).toBe(200);
+    // The org rule makes both projects readable, so both grants show; the unwritten admin role and the
+    // projects' own `self` rules draw nothing.
+    expect(graph.body.grants).toEqual(
+      expect.arrayContaining([
+        { principal: `org:${ORG}`, principalId: h.org.id, target: h.p.id, role: 'contributor' },
+        { principal: `org:${ORG}`, principalId: h.org.id, target: h.q.id, role: 'contributor' },
+      ]),
+    );
+    expect(graph.body.grants).toHaveLength(2);
+  });
+
   it('rejects out-of-range limits', async () => {
     const h = await createHarness();
     expect((await h.get('/tree?limit=0')).status).toBe(400);

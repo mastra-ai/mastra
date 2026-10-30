@@ -1,4 +1,9 @@
-import type { KnowledgePageGraph, KnowledgePageView, KnowledgeTreeChildren } from '@mastra/core/knowledge';
+import type {
+  KnowledgeGraphScopeGrant,
+  KnowledgePageGraph,
+  KnowledgePageView,
+  KnowledgeTreeChildren,
+} from '@mastra/core/knowledge';
 import type { KnowledgePageActivityEvent, KnowledgePageSearchHit } from '@mastra/core/storage';
 import type { ClientOptions, Serialized } from '../types';
 import { createSseJsonTransform } from '../utils/stream-transforms';
@@ -7,7 +12,10 @@ import { BaseResource } from './base';
 
 export type KnowledgeTreeResponse = Serialized<KnowledgeTreeChildren>;
 export type KnowledgePageResponse = Serialized<KnowledgePageView>;
-export type KnowledgeGraphResponse = Serialized<KnowledgePageGraph>;
+export type KnowledgeGraphResponse = Serialized<KnowledgePageGraph> & {
+  /** Declared access grants onto the scopes shown; absent from servers on an older core. */
+  grants?: Array<KnowledgeGraphScopeGrant & { principalLabel?: string }>;
+};
 export interface KnowledgeSearchResponse {
   results: Serialized<KnowledgePageSearchHit>[];
 }

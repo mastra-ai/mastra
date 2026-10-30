@@ -8,6 +8,7 @@ import KnowledgePage from '..';
 import {
   emptyKnowledgeGraph,
   knowledgeGraph,
+  knowledgeGraphWithGrants,
   knowledgeInstances,
   knowledgeTreeLevel,
   knowledgeTreeLevelWithChargebacks,
@@ -136,6 +137,24 @@ describe('Knowledge page', () => {
       withInstance();
       renderPage();
       expect(await screen.findByTestId('knowledge-graph-container')).toBeTruthy();
+    });
+  });
+
+  describe('when the server sends grants between scopes', () => {
+    it('draws a grant line naming the role, from a placeholder for the unwritten principal', async () => {
+      withInstance(knowledgeGraphWithGrants);
+      const { container } = renderPage('/knowledge?view=graph');
+      await screen.findAllByTestId('knowledge-page-node');
+      await waitFor(() => expect(container.querySelector('[data-testid="knowledge-grant-edge"]')).not.toBeNull());
+      const grant = container.querySelector<SVGPathElement>('[data-testid="knowledge-grant-edge"]');
+      expect(grant?.closest('.react-flow__edge')?.getAttribute('data-id')).toBe(
+        'grant:unplaced:role:acme:admin->scope-acme',
+      );
+      expect(grant?.dataset.role).toBe('owner');
+      const placeholder = screen
+        .getAllByTestId('knowledge-page-node')
+        .find(node => node.dataset.pageType === 'placeholder');
+      expect(placeholder?.textContent).toContain('acme admin');
     });
   });
 

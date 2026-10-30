@@ -277,6 +277,20 @@ describe('KnowledgePage', () => {
     expect(router.state.location.search).toContain('view=graph');
   });
 
+  it('draws the grants the server sends from the principal scope to the scope it reaches', async () => {
+    stubKnowledge({
+      ...graphFixture,
+      grants: [{ principal: 'org:org-1', principalId: 'org', target: 'project', role: 'contributor' }],
+    });
+    const { container } = renderRoute(`/factories/${FACTORY_ID}/knowledge?view=graph`);
+    await screen.findAllByTestId('knowledge-page-node');
+    await waitFor(() => expect(container.querySelector('[data-testid="knowledge-grant-edge"]')).not.toBeNull());
+    const grant = container.querySelector<SVGPathElement>('[data-testid="knowledge-grant-edge"]');
+    expect(grant?.closest('.react-flow__edge')?.getAttribute('data-id')).toBe('grant:org->project');
+    expect(grant?.dataset.role).toBe('contributor');
+    expect(screen.getByTestId('knowledge-legend-grant')).toBeInTheDocument();
+  });
+
   it('says when a linked page is gone', async () => {
     stubKnowledge();
     renderRoute(`/factories/${FACTORY_ID}/knowledge?page=missing`);
