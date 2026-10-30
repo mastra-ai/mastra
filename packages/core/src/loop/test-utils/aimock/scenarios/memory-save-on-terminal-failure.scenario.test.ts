@@ -199,9 +199,10 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
-  // The deadline cuts the model off mid-reply, before its step finished. Only the completed step is saved.
+  // The deadline cuts the model off mid-reply, before its step finished. The completed step is saved,
+  // followed by the text already streamed in its own message, as a cancel keeps it.
   itDeadline(
-    'total-timeout during a slow model reply saves only the completed step',
+    'total-timeout during a slow model reply saves the completed step and the streamed text',
     async () => {
       const memory = new MockMemory();
       const threadId = `${THREAD}-timeout-midreply-${engine}`;
@@ -236,19 +237,70 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
       const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
       expect(toolResultIds(messages)).toEqual(['call_echo']);
-      // Nothing of the unfinished step is kept, not even the boundary it opened.
+      // The unfinished step keeps its streamed text but not the boundary it opened.
       expect(messages.map(message => message.content.parts.map(part => part.type))).toEqual([
         ['text'],
         ['tool-invocation'],
+        ['text'],
       ]);
+      const streamed = messages.at(-1)!.content.parts.find(part => part.type === 'text');
+      expect(streamed?.type === 'text' && streamed.text).toMatch(/^(PARTIAL )+/);
     },
     TEST_TIMEOUT_MS,
   );
 
-  // No step finishes in time, so only the user message is left to save. History is append-only,
-  // so the input-only failed turn is still kept.
+  // A processor that writes a data part when the turn ends must see it saved at the deadline too,
+  // as it is on a normal finish, so the UI can re-render it from history.
+  itDeadline(
+    'total-timeout saves the data part an output processor writes at the end of the turn',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-data-part-${engine}`;
+      const summary: Processor = {
+        id: 'turn-summary',
+        processOutputResult: async ({ messages, writer }) => {
+          await writer?.custom({ type: 'data-turn-summary', data: { status: 'timed-out' } });
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        stopWhen: stepCountIs(5),
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        tools: { echoTool },
+        outputProcessors: [summary],
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 1 },
+            { content: 'PARTIAL '.repeat(200) },
+            { chunkSize: 8, latency: 50 },
+          );
+        },
+      });
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      const dataParts = messages
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'data-turn-summary');
+      expect(dataParts).toEqual([expect.objectContaining({ data: { status: 'timed-out' } })]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // No step finishes in time. History is append-only, so the failed turn is still kept: the user
+  // message and the text the model streamed before the deadline.
   it(
-    'total-timeout before any step finishes keeps the user message',
+    'total-timeout before any step finishes keeps the user message and the streamed text',
     async () => {
       const memory = new MockMemory();
       const threadId = `${THREAD}-timeout-input-only-${engine}`;
@@ -276,7 +328,13 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       await new Promise(resolve => setTimeout(resolve, 300));
 
       const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      expect(messages.map(message => message.role)).toEqual(['user']);
+      // Durable engines save the input up front but have no deadline pass yet (#29036).
+      if (deadlineSavePending.includes(engine)) {
+        expect(messages.map(message => message.role)).toEqual(['user']);
+        return;
+      }
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(messages[1]!.content.content).toMatch(/^(PARTIAL )+/);
     },
     TEST_TIMEOUT_MS,
   );

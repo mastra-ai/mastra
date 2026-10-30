@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
 import { EventEmitterPubSub } from '../../events';
+import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
@@ -308,7 +309,24 @@ describe('Agent FGA checks', () => {
         memory,
         tools: { hang },
       });
-      new Mastra({ agents: { testAgent: agent }, logger: false, server: { fga: fgaProvider } });
+      const logs: { level: string; message: string }[] = [];
+      class SpyLogger extends ConsoleLogger {
+        override child() {
+          return this;
+        }
+        override warn(message: string) {
+          logs.push({ level: 'warn', message });
+        }
+        override error(message: string) {
+          logs.push({ level: 'error', message });
+        }
+      }
+      new Mastra({
+        agents: { testAgent: agent },
+        logger: new SpyLogger(),
+        storage: new InMemoryStore(),
+        server: { fga: fgaProvider },
+      });
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
 
@@ -325,6 +343,12 @@ describe('Agent FGA checks', () => {
       await new Promise(resolve => setTimeout(resolve, 1_500));
       const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'resource-1', perPage: false });
       expect(messages).toEqual([]);
+      // A denied write is reported as such, not as an output processor failure.
+      expect(logs).toContainEqual({
+        level: 'warn',
+        message: 'Memory write denied at the total deadline, the turn is not saved',
+      });
+      expect(logs.map(log => log.message)).not.toContain('Output processors failed at the total deadline');
     });
   });
 

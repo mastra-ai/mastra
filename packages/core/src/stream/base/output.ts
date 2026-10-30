@@ -2098,23 +2098,46 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#status = 'failed';
               // A total deadline closes the stream without a finish chunk, so the output processors
               // (and with them memory) get their one pass here, over the steps that completed in time.
+              // The pass writes memory, so it only runs for callers that supply the write check.
+              const beforeDeadlineSave = self.#options.beforeDeadlineSave;
               if (
                 isMastraTimeoutError(error) &&
                 error.timeoutType === 'total' &&
                 self.processorRunner &&
-                !self.#options.isLLMExecutionStep
+                !self.#options.isLLMExecutionStep &&
+                beforeDeadlineSave
               ) {
                 let streamOpen = true;
                 const deadlinePass = (async () => {
-                  await self.#options.beforeDeadlineSave?.();
+                  try {
+                    await beforeDeadlineSave();
+                  } catch (authError) {
+                    self.logger?.warn('Memory write denied at the total deadline, the turn is not saved', {
+                      error: authError,
+                    });
+                    return;
+                  }
+                  const turn = self.messageList.cloneWithCompletedSteps();
+                  // Like a cancel, the text the unfinished step already streamed is part of the turn.
+                  if (self.#bufferedByStep.text.trim().length > 0) {
+                    turn.add(
+                      { role: 'assistant', content: [{ type: 'text', text: self.#bufferedByStep.text }] },
+                      'response',
+                      { merge: false },
+                    );
+                  }
                   try {
                     await self.processorRunner!.runOutputProcessors(
-                      self.messageList.cloneWithCompletedSteps(),
+                      turn,
                       resolveObservabilityContext(options),
                       self.#options.requestContext,
                       0,
                       {
-                        custom: async (data: { type: string; data?: unknown; transient?: boolean }) => {
+                        custom: async (
+                          data: { type: string; data?: unknown; transient?: boolean },
+                          writerOptions?: { messageId?: string },
+                        ) => {
+                          persistProcessorDataChunk(turn, writerOptions?.messageId ?? self.messageId, data);
                           if (!streamOpen) return;
                           self.#emitChunk(data as ChunkType<OUTPUT>);
                           controller.enqueue(data as ChunkType<OUTPUT>);
