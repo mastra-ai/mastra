@@ -12,6 +12,7 @@ import { ObservabilityListBody } from '@/domains/observability/components/observ
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
 import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
+import { ObservabilitySavedViews } from '@/domains/observability/saved-views';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
@@ -130,25 +131,28 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
       <h1 className="sr-only">Spans</h1>
       <ObservabilityListBody
         toolbar={
-          <ActionRow>
-            <ActionRow.Start>
-              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
-              <SpansFilterBar
-                datePreset={filters.datePreset}
-                dateFrom={filters.dateFrom}
-                dateTo={filters.dateTo}
-                timeRange={timeRange}
-                tokens={tokens}
-                groups={groups}
-                onDatePresetChange={filters.onDatePresetChange}
-                onDateChange={filters.onDateChange}
-                onDateRangeChange={filters.onDateRangeChange}
-                onDateReset={filters.onDateReset}
-                onFiltersChange={filters.onFiltersChange}
-                disabled={isLoading}
-              />
-            </ActionRow.Start>
-          </ActionRow>
+          <>
+            {urlState && <ObservabilitySavedViews page="spans" {...urlState} columns={columns} />}
+            <ActionRow>
+              <ActionRow.Start>
+                <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
+                <SpansFilterBar
+                  datePreset={filters.datePreset}
+                  dateFrom={filters.dateFrom}
+                  dateTo={filters.dateTo}
+                  timeRange={timeRange}
+                  tokens={tokens}
+                  groups={groups}
+                  onDatePresetChange={filters.onDatePresetChange}
+                  onDateChange={filters.onDateChange}
+                  onDateRangeChange={filters.onDateRangeChange}
+                  onDateReset={filters.onDateReset}
+                  onFiltersChange={filters.onFiltersChange}
+                  disabled={isLoading}
+                />
+              </ActionRow.Start>
+            </ActionRow>
+          </>
         }
         chart={
           <SpansExplorerHistogram

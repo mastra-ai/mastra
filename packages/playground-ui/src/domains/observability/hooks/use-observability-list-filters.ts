@@ -47,18 +47,23 @@ function useListSearchParams(url: ObservabilityListUrlState | undefined): Observ
  * The time range, filter and sort state of a spans or threads list, kept in the host's URL (same
  * date, sort and group params as /traces) so it survives a reload and can be shared. Without `url`
  * the state lives in memory. A sort on a field outside `sortFields` reads as start time, newest first.
+ * `defaultDatePreset` is the range shown when the URL names none (last 7 days unless the host differs);
+ * it is left out of the URL like any default.
  */
 export function useObservabilityListFilters<F extends string = 'startedAt'>(
   url?: ObservabilityListUrlState,
-  { sortFields }: { sortFields?: readonly F[] } = {},
+  {
+    sortFields,
+    defaultDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
+  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset } = {},
 ) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
   // Decoded values keep their identity while unrelated params (e.g. the open row) change.
-  const datesKey = JSON.stringify(readObservabilityListDates(searchParams));
+  const datesKey = JSON.stringify(readObservabilityListDates(searchParams, defaultDatePreset));
   const filtersKey = JSON.stringify(readObservabilityListFilters(searchParams));
   const { datePreset, dateFrom, dateTo } = useMemo(
-    () => readObservabilityListDates(searchParams),
+    () => readObservabilityListDates(searchParams, defaultDatePreset),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-read when the date params change
     [datesKey],
   );
@@ -105,7 +110,9 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
     setSearchParams(next, { replace: true });
   };
   const updateDates = (change: (current: ObservabilityListDates) => ObservabilityListDates) =>
-    update(next => writeObservabilityListDates(next, change(readObservabilityListDates(next))));
+    update(next =>
+      writeObservabilityListDates(next, change(readObservabilityListDates(next, defaultDatePreset)), defaultDatePreset),
+    );
 
   // Not URL state: a shared or reloaded link has no zoom to undo.
   const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
@@ -145,7 +152,7 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
     update(params => writeObservabilityListSort(params, next));
 
   const contentFiltersApplied = tokens.length > 0 || groups.length > 0;
-  const filtersApplied = contentFiltersApplied || datePreset !== OBSERVABILITY_LIST_DEFAULT_DATE_PRESET;
+  const filtersApplied = contentFiltersApplied || datePreset !== defaultDatePreset;
 
   return {
     datePreset,

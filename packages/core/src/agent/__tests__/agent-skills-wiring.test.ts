@@ -491,15 +491,5 @@ describe('Agent-level skills wiring', () => {
 
       expect(getSystemMessages(capturedPrompt).join('\n')).toContain('greet');
     });
-
-    it('skips the resolver when listSkills is called with resolveDynamicProviders: false', async () => {
-      const filesystemResolver = vi.fn(() => new LocalFilesystem({ basePath: dir }));
-      const agent = createAgent(filesystemResolver);
-
-      const skills = await agent.listSkills({ resolveDynamicProviders: false });
-
-      expect(skills.map(skill => skill.name)).toEqual([]);
-      expect(filesystemResolver).not.toHaveBeenCalled();
-    });
   });
 });

@@ -936,40 +936,33 @@ describe('Agent Routes Authorization', () => {
       await rm(skillsDir, { recursive: true, force: true });
     });
 
-    it('does not call the filesystem resolver on agent metadata routes', async () => {
-      const filesystemResolver = vi.fn(() => new LocalFilesystem({ basePath: skillsDir }));
+    it('lists the resolved filesystem skills on agent metadata routes', async () => {
       const agent = new Agent({
         id: 'resolver-skills-agent',
         name: 'resolver-skills-agent',
         instructions: 'test-instructions',
-        model: {} as any,
-        workspace: new Workspace({ id: 'resolver-ws', filesystem: filesystemResolver, skills: ['skills'] }),
+        model: 'openai/gpt-4o-mini',
+        workspace: new Workspace({
+          id: 'resolver-ws',
+          filesystem: () => new LocalFilesystem({ basePath: skillsDir }),
+          skills: ['skills'],
+        }),
       });
-      vi.spyOn(agent, 'listTools').mockResolvedValue({});
-      vi.spyOn(agent, 'getLLM').mockResolvedValue({
-        getModel: () => undefined,
-        getProvider: () => 'test-provider',
-        getModelId: () => 'test-model',
-      } as any);
-      vi.spyOn(agent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
-      vi.spyOn(agent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
-      vi.spyOn(agent, 'getDefaultOptions').mockResolvedValue({});
-      vi.spyOn(agent, 'getModelList').mockResolvedValue(null);
       mastra = new Mastra({ agents: { 'resolver-skills-agent': agent }, logger: false });
+      const abortSignal = new AbortController().signal;
 
-      await LIST_AGENTS_ROUTE.handler({ mastra, requestContext: new RequestContext() } as any);
-      await GET_AGENT_BY_ID_ROUTE.handler({
+      const agentById = await GET_AGENT_BY_ID_ROUTE.handler({
         mastra,
         agentId: 'resolver-skills-agent',
         requestContext: new RequestContext(),
-      } as any);
+        abortSignal,
+      });
+      const agents = await LIST_AGENTS_ROUTE.handler({ mastra, requestContext: new RequestContext(), abortSignal });
 
-      expect(filesystemResolver).not.toHaveBeenCalled();
-
-      // Execution paths still resolve the filesystem and see its skills.
-      const skills = await agent.listSkills({ requestContext: new RequestContext() });
-      expect(filesystemResolver).toHaveBeenCalled();
-      expect(skills.map(skill => skill.name)).toEqual(['greet']);
+      expect(agentById.skills).toEqual([expect.objectContaining({ name: 'greet', description: 'Say hello' })]);
+      expect(agents['resolver-skills-agent']?.skills).toEqual([
+        expect.objectContaining({ name: 'greet', description: 'Say hello' }),
+      ]);
     });
   });
 

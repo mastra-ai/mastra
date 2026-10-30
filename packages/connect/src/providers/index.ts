@@ -17,6 +17,7 @@ import { hubspotProvider } from './hubspot/index.js';
 import { incidentIoProvider } from './incident-io/index.js';
 import { jiraProvider } from './jira/index.js';
 import { linearProvider } from './linear/index.js';
+import { microsoftExcelProvider } from './microsoft-excel/index.js';
 import { microsoftPowerpointProvider } from './microsoft-powerpoint/index.js';
 import { microsoftTeamsProvider } from './microsoft-teams/index.js';
 import { microsoftWordProvider } from './microsoft-word/index.js';
@@ -26,6 +27,7 @@ import { openaiProvider } from './openai/index.js';
 import { outlookProvider } from './outlook/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
+import { sharepointOnlineProvider } from './sharepoint-online/index.js';
 import { slackProvider } from './slack/index.js';
 import { snowflakeProvider } from './snowflake/index.js';
 import { stripeProvider } from './stripe/index.js';
@@ -49,6 +51,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   incidentIoProvider,
   jiraProvider,
   linearProvider,
+  microsoftExcelProvider,
   microsoftPowerpointProvider,
   microsoftTeamsProvider,
   microsoftWordProvider,
@@ -58,6 +61,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   outlookProvider,
   posthogProvider,
   resendProvider,
+  sharepointOnlineProvider,
   slackProvider,
   snowflakeProvider,
   stripeProvider,
