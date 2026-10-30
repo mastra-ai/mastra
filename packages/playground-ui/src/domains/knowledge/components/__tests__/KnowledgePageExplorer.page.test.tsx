@@ -54,6 +54,8 @@ const refund = page('refund', 'policies', {
   body: '## Limits\n\nRefunds over **$100** need a manager.\n\n<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>\n\n[bad](javascript:alert(1))',
 });
 const escalation = page('escalation', 'policies', { name: 'Escalation Process', key: 'escalation', position: 'a1' });
+const IMPORTED_KEY = 'linear:document:3f2b9c1e-7a4d-4e8b-9c0f-1a2b3c4d5e6f';
+const imported = page('imported', 'policies', { name: 'Retry PRD', key: IMPORTED_KEY, position: 'a2' });
 const children = Array.from({ length: 3 }, (_, index) =>
   page(`child-${index}`, 'refund', { name: `Child ${index}`, position: `a${index}` }),
 );
@@ -65,7 +67,8 @@ const ok = <T,>(data: T): KnowledgeExplorerQueryState<T> => ({ data, isPending: 
 const idle: KnowledgeExplorerQueryState<never> = { isPending: false, isError: false, error: null };
 
 function detail(pageId: string, noteCursor?: string): KnowledgeExplorerPageDetail {
-  const target = [org, policies, refund, escalation, ...children].find(candidate => candidate.id === pageId) ?? refund;
+  const target =
+    [org, policies, refund, escalation, imported, ...children].find(candidate => candidate.id === pageId) ?? refund;
   if (pageId === 'refund') {
     return {
       page: refund,
@@ -198,11 +201,20 @@ describe('KnowledgePageExplorer page view', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       const view = within(pageView());
       const path = view.getByTestId('knowledge-page-path');
-      expect(path.textContent).toBe('Acme / policies / refund');
+      expect(path.textContent).toBe('Acme / Policies / Refund Policy');
       expect(path.querySelector('[title]')?.getAttribute('title')).toBe('org:acme#policies/refund');
       expect(view.getByTestId('knowledge-page-version').textContent).toMatch(/^Version 3 · updated .* by admin$/);
       const crumbs = within(view.getByRole('navigation', { name: 'Breadcrumb' }));
       expect(crumbs.getAllByRole('button').map(button => button.textContent)).toEqual(['Acme', 'Policies']);
+    });
+
+    it('names every page on the path and keeps provider keys in the tooltip only', () => {
+      const { container } = renderWithProviders(<Host initial="imported" initialView="page" />);
+      const path = within(pageView()).getByTestId('knowledge-page-path');
+      expect(path.textContent).toBe('Acme / Policies / Retry PRD');
+      expect(path.querySelector('[title]')?.getAttribute('title')).toBe(`org:acme#policies/${IMPORTED_KEY}`);
+      expect(container.textContent).not.toContain('3f2b9c1e');
+      expect(container.textContent).not.toContain('linear:document');
     });
 
     it('lists child pages a page at a time and opens one', () => {

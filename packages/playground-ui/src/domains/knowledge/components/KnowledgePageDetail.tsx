@@ -97,21 +97,22 @@ function AuthorMark({ author }: { author: string }) {
 }
 
 /**
- * The page's path: its home scope by name, then the keys from that scope down
- * to it (`Acme / policies / refund`), with the full address
- * (`org:acme#policies/refund`) kept for the tooltip. Null when a page on the
- * way has no key.
+ * The page's path by name: its home scope, then each page from that scope down
+ * to it (`Acme / Policies / Refund Policy`). Keys are often provider ids, so the
+ * full address (`org:acme#policies/refund`) is kept for the tooltip only, and
+ * left out when a page on the way has no key.
  */
 function knowledgePagePath(
   page: KnowledgePagePayload,
   ancestors: KnowledgePagePayload[],
-): { label: string; address: string } | null {
+): { label: string; address?: string } | null {
   const scope = ancestors.find(candidate => candidate.id === page.scopeId);
-  if (!scope?.address) return null;
-  const below = ancestors.slice(ancestors.indexOf(scope) + 1).filter(candidate => !candidate.isScope);
-  const keys = [...below, page].map(candidate => candidate.key);
-  if (keys.some(key => !key)) return null;
-  return { label: [scope.name, ...keys].join(' / '), address: `${scope.address}#${keys.join('/')}` };
+  if (!scope) return null;
+  const below = [...ancestors.slice(ancestors.indexOf(scope) + 1).filter(candidate => !candidate.isScope), page];
+  const label = [scope, ...below].map(candidate => candidate.name).join(' / ');
+  const keys = below.map(candidate => candidate.key);
+  if (!scope.address || keys.some(key => !key)) return { label };
+  return { label, address: `${scope.address}#${keys.join('/')}` };
 }
 
 /** A scope by name, with its raw address only in the tooltip. */
