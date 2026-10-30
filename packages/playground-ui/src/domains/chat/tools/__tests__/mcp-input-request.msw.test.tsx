@@ -12,6 +12,7 @@ import {
   deferredSuspendedThread,
   foregroundSuspendedMetadata,
   foregroundSuspendedThread,
+  MCP_TASK_ID,
   resumedEvent,
   signInRequest,
   SUSPENDED_AT,
@@ -177,6 +178,45 @@ describe('a deferred call whose MCP task asks for input', () => {
 
       await waitFor(() => expect(card()).toBeNull());
       expect(chipText()).toContain('task · working');
+    });
+  });
+
+  describe('when the live call still shows its MCP task progress', () => {
+    // Before a reload the client writes the task's progress records into the part, not the
+    // "Background task started" placeholder, so the card must not hang on the placeholder.
+    const liveCall: ToolCardProps = {
+      ...deferredCall,
+      output: [
+        {
+          type: 'mcp-task',
+          taskId: MCP_TASK_ID,
+          status: 'working',
+          createdAt: '2026-10-27T12:00:00.000Z',
+          serverName: 'reports',
+        },
+      ],
+    };
+
+    it('shows the question when the task suspends and answers it', async () => {
+      const events = openEventStream();
+      const backend = serveBackground(backgroundTask('running'), events.body);
+      renderWithProviders(<Shell props={liveCall} />);
+      await waitFor(() => expect(events.connected()).toBe(true));
+      await waitFor(() => expect(backend.reads).toBeGreaterThan(0));
+
+      backend.task = suspendedBackgroundTask();
+      await events.emit(suspendedEvent());
+
+      const request = await screen.findByTestId('mcp-input-request');
+      expect(within(request).getByText('Include the draft figures in the Q3 report?')).toBeTruthy();
+      expect(chipText()).toContain('task · input required');
+
+      fireEvent.click(within(request).getByRole('button', { name: 'Decline' }));
+      await waitFor(() => expect(backend.resumes).toHaveLength(1));
+      expect(backend.resumes[0]).toEqual({
+        resumeData: { inputResponses: { confirm: { action: 'decline' } } },
+        suspendedAt: SUSPENDED_AT,
+      });
     });
   });
 
