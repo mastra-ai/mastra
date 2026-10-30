@@ -202,6 +202,38 @@ describe('BackgroundTaskMCPTaskStore', () => {
     await store.close();
   }, 10_000);
 
+  it('keeps checking an aborted attempt after a failed read of its row', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const contexts: unknown[] = [];
+    const work: MCPTaskWork = () => new Promise(() => {});
+    const store = new BackgroundTaskMCPTaskStore({
+      manager,
+      serverId: 's',
+      workFor: () => work,
+      recoverFor: () => false,
+      onCancel: context => void contexts.push(context),
+    });
+    store.registerTool('tool');
+    const task = await store.create({ ttlMs: 300, principal: 'alice', context: { toolName: 'tool', id: 4 } });
+    const listTasks = manager.listTasks.bind(manager);
+    let failed = false;
+    store.run(task.taskId, work);
+    // Fail the first read made after the attempt is aborted at its TTL.
+    await sleep(300);
+    vi.spyOn(manager, 'listTasks').mockImplementation(async filter => {
+      if (!failed && filter.toolCallId) {
+        failed = true;
+        throw new Error('storage unavailable');
+      }
+      return listTasks(filter);
+    });
+
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 4 }]), { timeout: 4_000 });
+    expect(failed).toBe(true);
+    await store.close();
+  }, 10_000);
+
   async function setup(work: MCPTaskWork, recover = false, backgroundTasks: Record<string, unknown> = {}) {
     mastra = new Mastra({
       logger: false,

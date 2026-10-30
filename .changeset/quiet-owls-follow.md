@@ -18,7 +18,7 @@ const server = new MCPServer({
 });
 ```
 
-**Workflows**: a workflow task follows one run, started once when the task is created. A suspended step with a `resumeSchema` the client can fill in asks for input through the task, and the answer resumes the run. Other suspended steps leave the task `working` until the run is resumed some other way. Cancelling the task cancels the run, even while it waits for input. A run that fails completes the task with `isError: true`. When a server stops mid-run, Mastra's workflow recovery continues the run on the next instance and the task follows it.
+**Workflows**: a workflow run starts once per request, and the task follows that run. A suspended step with a `resumeSchema` the client can fill in asks for input through the task, and the answer resumes the run. Other suspended steps leave the task `working` until the run is resumed some other way. Cancelling the task cancels the run, even while it waits for input. A run that fails completes the task with `isError: true`. With tasks kept in Mastra storage, when a server stops mid-run, Mastra's workflow recovery continues the run on the next instance and the task follows it. Tasks kept in memory end with the server.
 
 **Agents**: an agent task runs the agent's `generate()` call as the task's work. Cancelling the task aborts that call, and agent tasks support `recover`. An agent that pauses for tool approval completes the task with an error, since tasks can't answer approvals yet.
 

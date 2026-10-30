@@ -486,15 +486,21 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * another instance cancelled or expired the task, or core timed the attempt out, run `onCancel`
    * here as well, where the work may be executing (a workflow run, say). Core records a timeout only
    * once the aborted attempt settles, so a row still running under this worker is read again, less
-   * often each time, until core records how the attempt ended. A shutdown releases the lease and a
+   * often each time and again after a failed read, until core records how the attempt ended. A shutdown releases the lease and a
    * lost lease changes the owner: either leaves the row running without this worker, and the work
    * alone.
    */
   #notifyIfCancelled(taskKey: string): void {
     const check = async () => {
       for (let wait = ABORT_SETTLE_FIRST_READ_MS; !this.#closed; wait = Math.min(wait * 2, ABORT_SETTLE_MAX_READ_MS)) {
-        const { tasks } = await this.#manager.listTasks({ agentId: this.#owner, toolCallId: taskKey, perPage: 1 });
-        const row = tasks[0];
+        let row: BackgroundTask | undefined;
+        try {
+          row = (await this.#manager.listTasks({ agentId: this.#owner, toolCallId: taskKey, perPage: 1 })).tasks[0];
+        } catch (error) {
+          this.#getLogger?.().warn('Could not read an aborted MCP task attempt; reading it again', { error });
+          await new Promise(resolve => setTimeout(resolve, wait));
+          continue;
+        }
         if (!row) return;
         if (wasStopped(row, Date.now())) return this.#notifyCancel(row);
         if (row.status !== 'running' || row.ownerId !== this.#manager.ownerId) return;
