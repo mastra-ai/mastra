@@ -217,3 +217,63 @@ describe('filesystem-level optimistic concurrency (StaleFileError)', () => {
     expect(content).toBe('hello');
   });
 });
+
+describe('mtime check follows requireReadBeforeWrite', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mtime-policy-test-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  async function viewThenChangeExternally(toolsConfig: Record<string, unknown> | undefined) {
+    await fs.writeFile(path.join(tempDir, 'target.txt'), 'hello world\n');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: toolsConfig as any,
+    });
+    const tools = await createWorkspaceTools(workspace);
+    await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'target.txt' }, { workspace });
+    // Another process (sed -i, git, a formatter) rewrites the file after the view.
+    await fs.writeFile(path.join(tempDir, 'target.txt'), 'hello shell\n');
+    const later = new Date(Date.now() + 5000);
+    await fs.utimes(path.join(tempDir, 'target.txt'), later, later);
+    return { workspace, tools };
+  }
+
+  it.each([
+    ['unset', undefined],
+    ['false', { [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: false } }],
+  ])('edit_file and write_file succeed after an external change when requireReadBeforeWrite is %s', async (_n, cfg) => {
+    const { workspace, tools } = await viewThenChangeExternally(
+      cfg && { ...cfg, [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireReadBeforeWrite: false } },
+    );
+    await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      { path: 'target.txt', old_string: 'hello', new_string: 'bye' },
+      { workspace },
+    );
+    expect(await fs.readFile(path.join(tempDir, 'target.txt'), 'utf-8')).toBe('bye shell\n');
+
+    await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({ path: 'target.txt', content: 'x\n' }, { workspace });
+    expect(await fs.readFile(path.join(tempDir, 'target.txt'), 'utf-8')).toBe('x\n');
+  });
+
+  it('still rejects edits after an external change when requireReadBeforeWrite is true', async () => {
+    const { workspace, tools } = await viewThenChangeExternally({
+      [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: true },
+      [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireReadBeforeWrite: true },
+    });
+    await expect(
+      tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+        { path: 'target.txt', old_string: 'hello', new_string: 'bye' },
+        { workspace },
+      ),
+    ).rejects.toThrow(FileReadRequiredError);
+    await expect(
+      tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({ path: 'target.txt', content: 'x\n' }, { workspace }),
+    ).rejects.toThrow(FileReadRequiredError);
+  });
+});
