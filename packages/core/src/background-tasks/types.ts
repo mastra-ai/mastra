@@ -344,6 +344,13 @@ export interface BackgroundTaskManagerConfig {
    * `untilIdle: { maxIdleMs }` always takes precedence. Default: 300_000 (5 minutes).
    */
   untilIdleMaxIdleMs?: number;
+  /**
+   * Whether a deferred task that finishes with no `untilIdle` stream open for
+   * its thread sends the agent a `background-task` signal, so the agent reports
+   * the outcome (waking an idle thread). Set to `false` when the app delivers
+   * its own completion signal, for example from `onTaskComplete`. Default: `true`.
+   */
+  notifyAgentOnFinish?: boolean;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */

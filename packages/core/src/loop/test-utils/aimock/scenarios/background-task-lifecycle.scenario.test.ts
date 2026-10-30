@@ -690,6 +690,50 @@ describeForAllEngines(
       expect(toolResultSentToModel(requests[2])).toEqual({ summary: 'Research complete on "quantum computing"' });
     }, 30_000);
 
+    it("doesn't signal a finished deferred task when the app delivers its own notification (#28986)", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const finished: string[] = [];
+      const { chunks, mastra, llm } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research optics on its own',
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: {
+          ...BG_CONFIG,
+          notifyAgentOnFinish: false,
+          onTaskComplete: task => void finished.push(task.id),
+        },
+        memory: new MockMemory(),
+        threadId: 'bg-no-notify-thread',
+        resourceId: 'bg-no-notify-user',
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: mock =>
+          onReportTurns(mock, 'Research optics on its own', {
+            dispatch: { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'optics' } }] },
+            ack: 'Working on it.',
+            report: 'The optics research is finished.',
+          }),
+      });
+      const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+
+      release();
+      await waitFor(
+        () => mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      await waitFor(
+        () => finished,
+        ids => ids.includes(taskId),
+      );
+      // A wake would reach the model within this window (the waking test sees it in well under it).
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+
+      expect(requestsFor(llm, 'Research optics on its own')).toHaveLength(2);
+    }, 30_000);
+
     it('tells a run already active on the thread about a finished deferred task instead of waking another (#28986)', async () => {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));

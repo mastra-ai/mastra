@@ -1722,6 +1722,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
+            // The completion callbacks signal the task's session; core's own signal would run outside it.
+            notifyAgentOnFinish: false,
             ...createBackgroundCompletionCallbacks(() => sessionRouter, backgroundCompletionEvents),
           },
         }
@@ -2238,6 +2240,8 @@ export async function prepareAgentControllerMount(
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
+            // The completion callbacks signal the task's session; core's own signal would run outside it.
+            notifyAgentOnFinish: false,
             ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
           },
         }

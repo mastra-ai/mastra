@@ -10009,7 +10009,8 @@ export class Agent<
    * finished and its result is now on the tool call. An open `untilIdle` stream
    * for the thread already reports it with its own follow-up turn, and a caller
    * that stopped the stream waiting for the task doesn't want a reply, so this
-   * does nothing then. Otherwise it sends a signal to the thread: an active run gets
+   * does nothing then. It also does nothing when the background task config
+   * sets `notifyAgentOnFinish: false`. Otherwise it sends a signal to the thread: an active run gets
    * it on its next step, and an idle thread wakes so the agent can report the
    * outcome. The signal names the tool call, never the result: the result is
    * already in the thread, and tool output may hold data that must not be
@@ -10024,6 +10025,7 @@ export class Agent<
     status: 'completed' | 'failed';
   }): Promise<void> {
     const { threadId, resourceId, taskId, toolCallId, toolName, status } = params;
+    if (this.#mastra?.backgroundTaskManager?.config.notifyAgentOnFinish === false) return;
     if (this.__untilIdleHandlesBackgroundTask(threadId, resourceId, taskId)) return;
     const outcome = status === 'completed' ? 'completed' : 'failed';
     try {
