@@ -19,6 +19,7 @@ import {
   readKnowledgePage,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
+  readKnowledgeScopeGrants,
   searchKnowledgeExplorerPages,
 } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
@@ -224,7 +225,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             ...(maxPages ? { limits: { maxPages } } : {}),
           });
           if (!graph) return c.json({ error: 'page_not_found' }, 404);
-          return c.json({ ...graph, pages: graph.pages.map(page => withDisplayLabel(view.knowledge, page)) });
+          // Declared grants between the scopes shown, limited to principal scopes this caller can read.
+          const grants = await readKnowledgeScopeGrants(view.store, {
+            pages: graph.pages,
+            read: view.read,
+            grantsFor: scope => view.knowledge.scopeGrants(scope),
+          });
+          return c.json({
+            ...graph,
+            pages: graph.pages.map(page => withDisplayLabel(view.knowledge, page)),
+            grants: grants.map(grant => {
+              const principalLabel = view.knowledge.scopeLabel(grant.principal);
+              return principalLabel ? { ...grant, principalLabel } : grant;
+            }),
+          });
         },
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/search', {
