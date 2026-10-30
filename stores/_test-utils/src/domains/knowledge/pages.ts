@@ -1307,6 +1307,32 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(got.find(p => p.id === a.id)?.body).toBe('A');
         expect(await store.getPages({ ids: [], read: read(['org:acme']) })).toEqual([]);
       });
+
+      it('counts the notes a reader can see on each page in one call', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const a = await page(acme.id, 'a');
+        const b = await page(acme.id, 'b');
+        const empty = await page(acme.id, 'empty');
+        const note = (pageId: string, stampScopeIds: string[], mentions: string[] = []) =>
+          store.addNote({ pageId, text: 'fact', stampScopeIds, mentions, provenance: alex });
+        await note(a.id, [acme.id]);
+        await note(a.id, [acme.id, secret.id]);
+        await note(a.id, [secret.id]);
+        const removed = await note(a.id, [acme.id]);
+        await store.removeNote({ id: removed.id, deletedBy: 'agent:alex', provenance: alex });
+        await note(b.id, [acme.id]);
+        // Visible stamp, but it mentions a page the reader can't see.
+        await note(b.id, [acme.id], [(await page(secret.id, 'hidden')).id]);
+
+        expect(
+          await store.countNotes({ pageIds: [a.id, b.id, a.id, empty.id, 'missing'], read: read(['org:acme']) }),
+        ).toEqual({ [a.id]: 2, [b.id]: 1, [empty.id]: 0, missing: 0 });
+        expect(await store.countNotes({ pageIds: [a.id], read: read(['org:acme', 'org:secret']) })).toEqual({
+          [a.id]: 3,
+        });
+        expect(await store.countNotes({ pageIds: [], read: read(['org:acme']) })).toEqual({});
+      });
     });
   });
 }
