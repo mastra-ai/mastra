@@ -21,6 +21,8 @@ import type {
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
+  KnowledgeScopeDeclarationCount,
+  KnowledgeScopeDeclarationRename,
   MaterializeKnowledgeScopeInput,
   MaterializeKnowledgeScopeResult,
   MergeKnowledgePagesInput,
@@ -694,6 +696,47 @@ export class PgKnowledgePages implements KnowledgePageStore {
     );
     const byAddress = new Map(rows.map(row => [String(row.address), toPage(row)]));
     return [...new Set(addresses)].flatMap(address => byAddress.get(address) ?? []);
+  }
+
+  async listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]> {
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT "declaration", COUNT(*)::int AS "scopes" FROM ${this.#pages}
+       WHERE "isScope" AND "declaration" IS NOT NULL
+       GROUP BY "declaration" ORDER BY "declaration" COLLATE "C"`,
+      [],
+    );
+    return rows.map(row => ({ declaration: String(row.declaration), scopes: Number(row.scopes) }));
+  }
+
+  async renameScopeDeclaration(input: {
+    from: string;
+    to: string;
+    check: (scopes: KnowledgeScopeDeclarationRename[]) => void;
+  }): Promise<number> {
+    return this.#tx(async tx => {
+      const rows = await this.#rows(
+        tx,
+        `SELECT "id", "address", "declaration" FROM ${this.#pages}
+         WHERE "isScope" AND ("declaration" = $1 OR starts_with("declaration", $2))
+         ORDER BY "id" FOR UPDATE`,
+        [input.from, `${input.from}/`],
+      );
+      if (rows.length === 0) return 0;
+      input.check(
+        rows.map(row => ({
+          address: String(row.address),
+          from: String(row.declaration),
+          to: input.to + String(row.declaration).slice(input.from.length),
+        })),
+      );
+      await tx.query(
+        `UPDATE ${this.#pages} SET "declaration" = $2 || substr("declaration", $3)
+         WHERE "id" = ANY($1::text[])`,
+        [rows.map(row => String(row.id)), input.to, input.from.length + 1],
+      );
+      return rows.length;
+    });
   }
 
   async listChildScopes(input: {

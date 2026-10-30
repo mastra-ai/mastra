@@ -26,6 +26,8 @@ import type {
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
+  KnowledgeScopeDeclarationCount,
+  KnowledgeScopeDeclarationRename,
   MaterializeKnowledgeScopeInput,
   MaterializeKnowledgeScopeResult,
   MergeKnowledgePagesInput,
@@ -636,6 +638,49 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       .toArray();
     const byAddress = new Map(rows.map(row => [String(row.address), toPage(row)]));
     return [...new Set(addresses)].flatMap(address => byAddress.get(address) ?? []);
+  }
+
+  async listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]> {
+    const rows = await (await this.#c('pages'))
+      .aggregate([
+        { $match: { isScope: true, declaration: { $type: 'string' } } },
+        { $group: { _id: '$declaration', scopes: { $sum: 1 } } },
+      ])
+      .toArray();
+    return rows
+      .map(row => ({ declaration: String(row._id), scopes: Number(row.scopes) }))
+      .sort((a, b) => (a.declaration < b.declaration ? -1 : a.declaration > b.declaration ? 1 : 0));
+  }
+
+  async renameScopeDeclaration(input: {
+    from: string;
+    to: string;
+    check: (scopes: KnowledgeScopeDeclarationRename[]) => void;
+  }): Promise<number> {
+    return this.#tx(async session => {
+      const pages = await this.#c('pages');
+      const rows = await pages
+        .find(
+          {
+            isScope: true,
+            $or: [{ declaration: input.from }, { declaration: { $regex: `^${escapeRegex(`${input.from}/`)}` } }],
+          },
+          { projection: { _id: 0, id: 1, address: 1, declaration: 1 }, session },
+        )
+        .toArray();
+      if (rows.length === 0) return 0;
+      const renames = rows.map(row => ({
+        address: String(row.address),
+        from: String(row.declaration),
+        to: input.to + String(row.declaration).slice(input.from.length),
+      }));
+      input.check(renames);
+      const targets = new Map(renames.map(rename => [rename.from, rename.to]));
+      for (const [from, to] of targets) {
+        await pages.updateMany({ isScope: true, declaration: from }, { $set: { declaration: to } }, { session });
+      }
+      return rows.length;
+    });
   }
 
   async listChildScopes(input: {
