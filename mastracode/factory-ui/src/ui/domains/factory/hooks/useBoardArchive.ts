@@ -10,16 +10,21 @@ import type { WorkItem, WorkItemPageSort } from '../services/workItems';
 export const BOARD_ARCHIVE_PAGE_SIZE = 50;
 
 export interface ArchiveColumn {
+  /** Whether the column has asked for its first page; it asks once it is first on screen. */
+  opened: boolean;
+  open: () => void;
+  /** Its first page is still on the way. */
+  isPending: boolean;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   loadMore: () => void;
 }
 
 /**
- * Done and Canceled cards, which the board sync leaves out: one page per terminal column at first, the
- * next on scroll. Sort and search go to the server so a column shows the right cards before it has them
- * all; people, label and source filters still run over what is loaded. A deep-linked card outside the
- * loaded pages is read on its own.
+ * Done and Canceled cards, which the board sync leaves out. A terminal column reads nothing until it is
+ * first on screen, then one page, then the next on scroll. Sort and search go to the server so a column
+ * shows the right cards before it has them all; people, label and source filters still run over what is
+ * loaded. A deep-linked card outside the loaded pages is read on its own.
  */
 export function useBoardArchive({
   factoryProjectId,
@@ -47,10 +52,12 @@ export function useBoardArchive({
   // Cursors of the pages each column asked for. A new sort or search starts every column over.
   const [cursors, setCursors] = useState<{ scope: string; byStage: Record<string, string[]> }>({ scope, byStage: {} });
   const byStage = cursors.scope === scope ? cursors.byStage : {};
+  // Kept across sort and search: a column on screen stays on screen, and its observer will not say so again.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
 
-  const reads = stages.flatMap(stage =>
-    [undefined, ...(byStage[stage] ?? [])].map(cursor => ({ stage, cursor })),
-  );
+  const reads = stages
+    .filter(stage => opened.has(stage))
+    .flatMap(stage => [undefined, ...(byStage[stage] ?? [])].map(cursor => ({ stage, cursor })));
   const pages = useQueries({
     queries: reads.map(({ stage, cursor }) => ({
       queryKey: queryKeys.workItemArchive(factoryProjectId, board, stage, sort, q, cursor ?? null),
@@ -71,7 +78,7 @@ export function useBoardArchive({
     combine: results => ({
       data: results.map(result => result.data),
       fetching: results.map(result => result.isFetching),
-      pending: results.some(result => result.isPending),
+      pending: results.map(result => result.isPending),
     }),
   });
 
@@ -104,6 +111,9 @@ export function useBoardArchive({
     const nextCursor = lastIndex === undefined ? undefined : pages.data[lastIndex]?.nextCursor;
     const fetching = indexes.some(index => pages.fetching[index]);
     columns[stage] = {
+      opened: opened.has(stage),
+      open: () => setOpened(current => (current.has(stage) ? current : new Set([...current, stage]))),
+      isPending: enabled && indexes[0] !== undefined && pages.pending[indexes[0]] === true,
       hasNextPage: nextCursor !== undefined,
       isFetchingNextPage: fetching,
       loadMore: () => {
@@ -118,9 +128,5 @@ export function useBoardArchive({
     };
   }
 
-  return {
-    items,
-    columns,
-    isPending: enabled && pages.pending,
-  };
+  return { items, columns };
 }

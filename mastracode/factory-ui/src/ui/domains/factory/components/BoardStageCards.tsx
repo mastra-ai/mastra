@@ -10,6 +10,7 @@ import { IntakeFeedNotice } from './IntakeFeedNotice';
 import type { ArchiveColumn } from '../hooks/useBoardArchive';
 import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
+import { OpenOnView } from './OpenOnView';
 
 export function BoardStageCards({
   stage,
@@ -49,11 +50,12 @@ export function BoardStageCards({
   children: ReactNode;
 }) {
   const showEmptyState = !loading && !composer && taskCount === 0 && !feed?.error;
+  const skeleton = loading && <BoardItemsSkeleton label={`Loading ${stage.label} column`} layout={layout} />;
   return (
     <>
       {composer}
       {children}
-      {loading && <BoardItemsSkeleton label={`Loading ${stage.label} column`} layout={layout} />}
+      {archive && !archive.opened ? <OpenOnView onOpen={archive.open}>{skeleton}</OpenOnView> : skeleton}
       {showEmptyState && (
         <BoardColumnEmptyState
           stage={stage.id}

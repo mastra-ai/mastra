@@ -1,12 +1,11 @@
 /**
- * The board syncs only open cards. Done reads its cards a page at a time from the
- * server, newest first, and shows the server's count for the whole column.
+ * The board syncs only open cards. Done reads nothing until it is on screen, then its cards a page at a
+ * time from the server, newest first, and shows the server's count for the whole column all along.
  */
-import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -50,26 +49,70 @@ function stubArchive() {
   return archiveReads;
 }
 
+/** An observer that reports elements inside the columns the test has scrolled to, like a browser would. */
+function stubIntersectionObserver() {
+  const onScreen = new Set<string>();
+  type Notify = (entries: Array<{ isIntersecting: boolean }>) => void;
+  const observed = new Map<Element, Notify>();
+  const visible = (element: Element) =>
+    [...onScreen].some(stage => element.closest(`[data-testid="board-column-${stage}"]`));
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      private readonly notify: Notify;
+
+      constructor(callback: Notify) {
+        this.notify = callback;
+      }
+      observe(element: Element) {
+        observed.set(element, this.notify);
+        this.notify([{ isIntersecting: visible(element) }]);
+      }
+      unobserve(element: Element) {
+        observed.delete(element);
+      }
+      disconnect() {
+        for (const [element, notify] of observed) {
+          if (notify === this.notify) observed.delete(element);
+        }
+      }
+    },
+  );
+  return {
+    scrollTo(stage: string) {
+      onScreen.add(stage);
+      act(() => {
+        for (const [element, notify] of observed) notify([{ isIntersecting: visible(element) }]);
+      });
+    },
+  };
+}
+
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('Done column paging', () => {
-  it('reads Done a page at a time and counts the whole column from the server', async () => {
+  it('reads nothing for Done until it is on screen, then a page at a time, counting the whole column', async () => {
     const archiveReads = stubArchive();
+    const viewport = stubIntersectionObserver();
     const { client } = renderWorkBoard();
 
     const done = await screen.findByTestId('board-column-done');
-    await waitFor(() => expect(within(done).getByText('Shipped login')).toBeInTheDocument());
+    await screen.findByText('Still triaging');
     await waitForMutationsIdle(client);
-    expect(within(done).queryByText('Shipped signup')).not.toBeInTheDocument();
-    expect(screen.getByText('Still triaging')).toBeInTheDocument();
     expect(within(done).getByText('40')).toBeInTheDocument();
-    expect(archiveReads.filter(read => read.stage === 'done')).toEqual([{ stage: 'done', cursor: null }]);
+    expect(archiveReads.filter(read => read.stage === 'done')).toEqual([]);
 
-    await userEvent.click(within(done).getByRole('button', { name: 'Load more Done cards' }));
+    viewport.scrollTo('done');
+    // The sentinel below the first page is on screen too, so the column keeps filling while it is.
     await waitFor(() => expect(within(done).getByText('Shipped signup')).toBeInTheDocument());
+    expect(within(done).getByText('Shipped login')).toBeInTheDocument();
     expect(archiveReads.filter(read => read.stage === 'done')).toEqual([
       { stage: 'done', cursor: null },
       { stage: 'done', cursor: 'page-2' },
