@@ -31,6 +31,7 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
     userId: 'user-1',
     input: { name: 'acme/repo' },
   });
+  const other = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'acme/other' } });
   const service = new JiraRules({
     projects: seeded.projects,
     storage: seeded.workItems,
@@ -38,7 +39,7 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
     boards,
     jiraRules: resolveJiraRules(overrides),
   });
-  return { project, service, workItems: seeded.workItems };
+  return { project, other, service, workItems: seeded.workItems };
 }
 
 describe('JiraRules', () => {
@@ -100,11 +101,11 @@ describe('JiraRules', () => {
   });
 
   it('does not mint a second card while another Factory holds a live card for the issue', async () => {
-    const { project, service, workItems } = await setup();
+    const { project, other, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
-      factoryProjectId: 'other-factory',
+      factoryProjectId: other.id,
       input: {
         externalSource: {
           integrationId: 'jira',
@@ -128,11 +129,11 @@ describe('JiraRules', () => {
   });
 
   it('ingests an issue again once the other Factory finished its card', async () => {
-    const { project, service, workItems } = await setup();
+    const { project, other, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
-      factoryProjectId: 'other-factory',
+      factoryProjectId: other.id,
       input: {
         externalSource: {
           integrationId: 'jira',
@@ -163,11 +164,11 @@ describe('JiraRules', () => {
   });
 
   it('finds the held card by claim key when the stored source key drifted', async () => {
-    const { project, service, workItems } = await setup();
+    const { project, other, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
-      factoryProjectId: 'other-factory',
+      factoryProjectId: other.id,
       input: {
         externalSource: { integrationId: 'jira', type: 'issue', externalId: 'jira-issue:old-ref', url: issue.url },
         claimKey: jiraClaimKey(issue.id),
