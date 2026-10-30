@@ -75,7 +75,10 @@ describe('subscribeToThread withInitialHistory', () => {
 
   it.each([false, true])('normalizes a retake lease owner with settled=%s', async settled => {
     const { pubsub, emitRun, subscribe } = setup(() => []);
-    pubsub.owners.set([resourceId, threadId].join('\u0000'), `${runId}\u0000retake\u0000claim-token`);
+    pubsub.owners.set(
+      [resourceId, threadId].join('\u0000'),
+      `mastra:thread-lease:${JSON.stringify([runId, 'retake', 'claim-token'])}`,
+    );
     if (settled) {
       await emitRun(runId, streamId).registered();
       await emitRun(runId, streamId).completed();
@@ -86,6 +89,27 @@ describe('subscribeToThread withInitialHistory', () => {
       expect(collected[0]).toMatchObject({
         type: 'thread-history',
         payload: { activeRunId: settled ? null : runId },
+      });
+    } finally {
+      subscription.unsubscribe();
+      await consumed;
+    }
+  });
+
+  it.each([false, true])('preserves a legacy-shaped run ID verbatim with settled=%s', async settled => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    const legacyShapedRunId = `${runId}\u0000retake\u0000claim-token`;
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), legacyShapedRunId);
+    if (settled) {
+      await emitRun(runId, streamId).registered();
+      await emitRun(runId, streamId).completed();
+    }
+    const { subscription, collected, consumed } = await subscribe();
+    try {
+      await nextTicks(10);
+      expect(collected[0]).toMatchObject({
+        type: 'thread-history',
+        payload: { activeRunId: legacyShapedRunId },
       });
     } finally {
       subscription.unsubscribe();
