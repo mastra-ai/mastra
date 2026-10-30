@@ -641,7 +641,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]> {
-    const rows = await (await this.#c('pages'))
+    const rows = await (
+      await this.#c('pages')
+    )
       .aggregate([
         { $match: { isScope: true, declaration: { $type: 'string' } } },
         { $group: { _id: '$declaration', scopes: { $sum: 1 } } },
