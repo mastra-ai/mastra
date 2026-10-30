@@ -1101,17 +1101,42 @@ describe('E2BSandbox', () => {
         ['the provider default', {}, undefined, 300_000],
         ['the configured sandbox timeout', { timeout: 900_000 }, undefined, 900_000],
         ['a per-command timeout over the default', { timeout: 900_000 }, 5_000, 5_000],
-      ])('kills a command after %s, with no deadline on its output', async (_name, config, timeout, killsAt) => {
+      ])('stops a command run to completion after %s', async (_name, config, timeout, killsAt) => {
         const killed = runForever();
         const sandbox = new E2BSandbox(config);
         await sandbox._start();
         vi.useFakeTimers();
 
-        const handle = await sandbox.processes.spawn('npm run dev', timeout ? { timeout } : {});
+        void sandbox.executeCommand!('npm test', [], timeout ? { timeout } : {});
         await vi.advanceTimersByTimeAsync(killsAt - 1);
         expect(killed).toEqual([]);
         await vi.advanceTimersByTimeAsync(1);
-        expect(killed).toEqual([Number(handle.pid)]);
+        expect(killed).toEqual([4242]);
+      });
+
+      // A dev server started in the background is meant to keep running.
+      it('gives a background process no default timeout', async () => {
+        const killed = runForever();
+        const sandbox = new E2BSandbox({ timeout: 900_000 });
+        await sandbox._start();
+        vi.useFakeTimers();
+
+        await sandbox.processes.spawn('npm run dev');
+        await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
+        expect(killed).toEqual([]);
+      });
+
+      it('stops a background process at the timeout it was given', async () => {
+        const killed = runForever();
+        const sandbox = new E2BSandbox();
+        await sandbox._start();
+        vi.useFakeTimers();
+
+        await sandbox.processes.spawn('npm test', { timeout: 180_000 });
+        await vi.advanceTimersByTimeAsync(179_999);
+        expect(killed).toEqual([]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(killed).toEqual([4242]);
       });
     });
   });
