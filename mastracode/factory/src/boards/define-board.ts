@@ -146,11 +146,6 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly next?: PhaseId;
   /** Named moves rules can choose by outcome; each target is also an allowed next phase. */
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
-  /**
-   * Cards an agent may move into this phase: only those this matches, or none with `false`.
-   * People and the board's own rules are never held back. Unset lets agents move any card in.
-   */
-  readonly agentEnterWhen?: RuleGroup | false;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
@@ -191,8 +186,6 @@ type ResolvedPhaseBase<PhaseId extends string> = {
   /** @deprecated Use `nextPhases`; set when the phase declared `next`. */
   readonly next?: PhaseId;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
-  /** Cards an agent may move into this phase; `false` for none, unset for any. */
-  readonly agentEnterWhen?: RuleGroup | false;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
@@ -242,7 +235,7 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly tools: BoardToolRules;
   /** Integration event handlers for cards on this board; empty when the board declares none. */
   readonly events: BoardEventRules;
-  /** @deprecated Restrict agents with each phase's `agentEnterWhen`; still enforced when set. */
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   readonly transitionPolicy?: BoardTransitionPolicy;
   /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
@@ -272,7 +265,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   phases: Phases;
   tools?: Record<string, BoardToolRule>;
   events?: BoardEventRules;
-  /** @deprecated Restrict agents with each phase's `agentEnterWhen`; still enforced when set. */
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   transitionPolicy?: BoardTransitionPolicy;
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
 };
@@ -517,7 +510,7 @@ type DeclaredBoard = {
 function deprecatedFields(config: DeclaredBoard): string[] {
   const found: string[] = [];
   if (config.title !== undefined && config.name === undefined) found.push('title → name');
-  if (config.transitionPolicy !== undefined) found.push('transitionPolicy → phases.*.agentEnterWhen');
+  if (config.transitionPolicy !== undefined) found.push('transitionPolicy → phases.*.nextPhases and exitTool');
   for (const [phaseId, phase] of Object.entries(config.phases)) {
     if (phase.title !== undefined && phase.name === undefined) found.push(`phases.${phaseId}.title → name`);
     if (phase.next !== undefined && !phase.nextPhases?.includes(phase.next)) {
@@ -645,8 +638,6 @@ function buildBoard<
         if (exitTool && nextPhases.length === 0) {
           throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
-        const agentEnterWhen =
-          phase.agentEnterWhen === false ? false : ruleGroup(phase.agentEnterWhen, `${label} agentEnterWhen`);
         const onEnter = runner ? phaseEnterHandlers(phase.onEnter, runner) : phase.onEnter;
         const name = resolveName(phase.name, phase.title, label);
         const description = optionalText(phase.description, `${label} description`, MAX_DESCRIPTION_LENGTH);
@@ -660,7 +651,6 @@ function buildBoard<
             nextPhases,
             ...(phase.next !== undefined ? { next: phase.next } : {}),
             ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
-            ...(agentEnterWhen !== undefined ? { agentEnterWhen } : {}),
             ...(runner ? { runner, role: runner.context } : {}),
             ...(working?.autoStart ? { autoStart: true } : {}),
             ...(autoStartWhen ? { autoStartWhen } : {}),

@@ -45,8 +45,6 @@ export interface StoredPhaseInput {
   autoStart?: boolean;
   autoStartWhen?: RuleGroup | null;
   exitTool?: StoredPhaseExitTool | null;
-  /** Cards an agent may move into the phase; `false` for none, unset or `null` for any. */
-  agentEnterWhen?: RuleGroup | false | null;
 }
 
 /** A board as it is written. Phase order is significant: the first phase is where cards start. */
@@ -68,7 +66,6 @@ export interface StoredPhaseRecord {
   autoStart: boolean;
   autoStartWhen: RuleGroup | null;
   exitTool: StoredPhaseExitTool | null;
-  agentEnterWhen: RuleGroup | false | null;
 }
 
 export interface StoredBoardRecord {
@@ -217,7 +214,6 @@ interface PhaseRow extends Record<string, unknown> {
   auto_start: boolean;
   auto_start_when: RuleGroup | null;
   exit_tool: StoredPhaseExitTool | null;
-  agent_enter_when?: RuleGroup | false | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -274,7 +270,6 @@ function toPhaseRecord(row: PhaseRow): StoredPhaseRecord {
     autoStart: row.auto_start,
     autoStartWhen: row.auto_start_when,
     exitTool: row.exit_tool,
-    agentEnterWhen: row.agent_enter_when ?? null,
   };
 }
 
@@ -664,7 +659,6 @@ async function insertPhases(ops: FactoryStorageOps, scope: StoredBoardScope, inp
       auto_start: phase.autoStart ?? false,
       auto_start_when: phase.autoStartWhen ?? null,
       exit_tool: phase.exitTool ?? null,
-      agent_enter_when: phase.agentEnterWhen ?? null,
     });
   }
 }

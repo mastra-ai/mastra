@@ -433,7 +433,7 @@ describe('Board card buttons move the card', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
   });
 

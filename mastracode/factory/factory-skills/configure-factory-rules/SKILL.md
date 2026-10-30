@@ -41,24 +41,24 @@ Do not create an `actions` config or execute authoritative policy in React. Each
 
 A pull request's own card and the Work card that authored it move independently, whether the pull request card sits on Work or on the legacy Review board. Never mirror their stages or mark Work Done only because a pull request merged.
 
-## Restrict where agents move cards
+## Restrict where cards move
 
-Topology (`nextPhases`) declares the moves that exist for everyone, people included. To keep agents out of a phase, set `agentEnterWhen` on that phase in the board definition: a rule over card facts, or `false` for "agents never". People and board rules (lifecycle, tool-result and integration handlers) are never checked. Do not add restrictions to the generic transition service or global rules.
+Topology (`nextPhases`) declares the moves that exist, for everyone: people dragging cards, agents and board rules (lifecycle, tool-result and integration handlers). To keep a move from happening, leave it out of the source phase's `nextPhases`. Do not add restrictions to the generic transition service or global rules.
 
 ```typescript
-shipped: {
-  name: 'Shipped',
-  kind: 'terminal',
-  // Agents may close only cards with no open pull request.
-  agentEnterWhen: { operator: 'AND', conditions: [{ field: 'item.openPullRequest', operator: 'not_exists' }] },
+backlog: {
+  name: 'Backlog',
+  kind: 'resting',
+  // Cards are built before they ship; nobody closes a card straight from the backlog.
+  nextPhases: ['build', 'canceled'],
 },
 ```
 
-Card facts: `item.labels`, `item.title`, `item.author`, `source.kind`, `source.integration`, `item.phase` (where the card is now), `item.openPullRequest`, `item.reviewVerdict`, `item.selfReviewVerdict`, `item.selfReviewNeedsHuman`. A missing fact matches only the negative operators (`not_exists`, `not_equals`, `not_contains`, `not_in`); write rules so a missing fact keeps the gate closed where that matters. Read `src/boards/work.ts` for Work's rules (no skipping Planning, Done guards, parked cards) and `src/boards/review.ts` for Review (`done` is `false`).
+Read `src/boards/work.ts` for Work's topology (no skipping Planning, Building only through an approved plan, self-review returns to Building or parks in Intake) and `src/boards/review.ts` for Review. Whether work is finished is the agent's instructions, not the board's: say when to move a card to Done in the phase's skill or `runner.instructions`.
 
-A working phase whose `exitTool` has a board tool rule (`tools[exitTool.id]`) leaves through that tool: anyone but a person asking to move the card on to another working phase is rejected unless the exit tool is auto-approved for the card. Work's Planning uses `submit_plan` this way.
+A working phase whose `exitTool` has a board tool rule (`tools[exitTool.id]`) leaves through that tool: anyone but a person asking to move the card on to another working phase is rejected unless the exit tool is auto-approved for the card. Work's Planning uses `submit_plan` with `autoApprove: false`, so every plan waits for a person. To approve plans without a person on your own board, set `exitTool.autoApprove` (optionally with `autoApproveWhen`); there is no project setting.
 
-`transitionPolicy` is deprecated: it still runs for boards that set it and logs one warning per board. Do not add new policies; move existing ones to `agentEnterWhen`. Factory no longer records triage classification or acceptance: Work's triage agent sends open non-bugs back to Intake, and a person moving the card on is the approval. Custom boards inherit none of Work's rules through phase or role names.
+`transitionPolicy` is deprecated: it still runs for boards that set it and logs one warning per board. Do not add new policies; express the flow with `nextPhases` and `exitTool`. Factory no longer records triage classification or acceptance: Work's triage agent sends open non-bugs back to Intake, and a person moving the card on is the approval. Custom boards inherit none of Work's rules through phase or role names.
 
 ## Configure board phase semantics
 

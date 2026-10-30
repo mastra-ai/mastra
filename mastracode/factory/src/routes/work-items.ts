@@ -361,7 +361,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 ...(phase.description !== undefined ? { description: phase.description } : {}),
                 kind: phase.kind,
                 nextPhases: [...phase.nextPhases],
-                ...(phase.agentEnterWhen !== undefined ? { agentEnterWhen: phase.agentEnterWhen } : {}),
                 ...(phase.kind === 'working'
                   ? {
                       role: phase.runner.context,

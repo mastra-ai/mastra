@@ -17,7 +17,7 @@ type Immutable<T> = T extends string | number | boolean | bigint | null | undefi
       ? { readonly [K in keyof T]: Immutable<T[K]> }
       : T;
 
-/** @deprecated Board transition policies give way to each phase's `agentEnterWhen`. */
+/** @deprecated Board transition policies give way to each phase's `nextPhases` and `exitTool`. */
 export type BoardTransitionPolicyContext = Immutable<
   FactoryRuleContextBase & {
     board: string;
@@ -39,7 +39,7 @@ export type BoardTransitionPolicyContext = Immutable<
 >;
 
 /**
- * @deprecated Board transition policies give way to each phase's `agentEnterWhen`.
+ * @deprecated Board transition policies give way to each phase's `nextPhases` and `exitTool`.
  * `triageType` and `accept` on an allow are ignored.
  */
 export type BoardTransitionPolicyResult =
@@ -47,7 +47,7 @@ export type BoardTransitionPolicyResult =
   | { type: 'allow'; triageType?: FactoryTriageType; accept?: true }
   | { type: 'reject'; code: FactoryRuleRejectionCode; reason: string };
 
-/** @deprecated Restrict agents with each phase's `agentEnterWhen`; a policy still runs when a board sets one. */
+/** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; a policy still runs when a board sets one. */
 export type BoardTransitionPolicy = (
   context: BoardTransitionPolicyContext,
 ) => BoardTransitionPolicyResult | Promise<BoardTransitionPolicyResult>;

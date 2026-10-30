@@ -35,9 +35,8 @@ function board(key: string, overrides: Partial<StoredBoardInput> = {}): StoredBo
             conditions: [{ field: 'item.labels', operator: 'contains', value: 'auto' }],
           },
         },
-        agentEnterWhen: { operator: 'AND', conditions: [{ field: 'item.phase', operator: 'equals', value: 'intake' }] },
       },
-      { key: 'done', name: 'Done', kind: 'terminal', agentEnterWhen: false },
+      { key: 'done', name: 'Done', kind: 'terminal' },
     ],
     ...overrides,
   };
@@ -103,9 +102,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
           conditions: [{ field: 'item.labels', operator: 'contains', value: 'auto' }],
         },
       },
-      agentEnterWhen: { operator: 'AND', conditions: [{ field: 'item.phase', operator: 'equals', value: 'intake' }] },
     });
-    // `false` keeps agents out; it must not read back as "no condition".
     expect(created.phases[1]).toMatchObject({
       description: null,
       runner: null,
@@ -113,9 +110,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       autoStart: false,
       autoStartWhen: null,
       exitTool: null,
-      agentEnterWhen: false,
     });
-    expect(created.phases[0]).toMatchObject({ agentEnterWhen: null });
     expect(await boards.list(scope)).toEqual([created]);
   });
 
