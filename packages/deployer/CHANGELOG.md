@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 1.81.0-alpha.3
+
+### Patch Changes
+
+- `mastra dev` and `mastra start` now run the server with Node's `--enable-source-maps` flag when `bundler.sourcemap` is enabled, so stack traces point at your source files instead of `.mastra/output/index.mjs`. A `--enable-source-maps` or `--no-enable-source-maps` setting in `NODE_OPTIONS` or `--custom-args` takes precedence. See [#29048](https://github.com/mastra-ai/mastra/issues/29048). ([#29054](https://github.com/mastra-ai/mastra/pull/29054))
+
+- Fixed `bundler` options in `src/mastra/index.ts` being ignored when a project has file-based agents (`src/mastra/agents/<name>/`). In `mastra build`, all `bundler` options apply whether or not file-based agents exist. In `mastra dev`, `bundler.sourcemap` applies. Fixes [#29048](https://github.com/mastra-ai/mastra/issues/29048). ([#29054](https://github.com/mastra-ai/mastra/pull/29054))
+
+- Updated dependencies [[`1477aad`](https://github.com/mastra-ai/mastra/commit/1477aaddf9f0086aebf7c113cb6435353416aad3)]:
+  - @mastra/core@1.81.0-alpha.3
+  - @mastra/server@1.81.0-alpha.3
+
 ## 1.81.0-alpha.2
 
 ### Patch Changes

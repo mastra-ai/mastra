@@ -1,5 +1,25 @@
 # @mastra/memory
 
+## 1.40.0-alpha.2
+
+### Patch Changes
+
+- Fixed observational memory search scanning the whole vector table on PostgreSQL. The observation index now gets `resource_id` and `thread_id` metadata indexes, like semantic recall. Existing tables get them on the first run after upgrading. With `disableInit` on `PgVector`, create them yourself for each `memory_observations_*` table, replacing `public` with your `schemaName` if you set one: ([#29058](https://github.com/mastra-ai/mastra/pull/29058))
+
+  ```sql
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS memory_observations_1536_resource_id_idx ON public.memory_observations_1536 ((metadata->>'resource_id'));
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS memory_observations_1536_thread_id_idx ON public.memory_observations_1536 ((metadata->>'thread_id'));
+  ```
+
+- Fixed observational memory re-embedding every earlier observation group on each cycle when vector retrieval is enabled. Each cycle now embeds and stores only the group it adds. Fixes https://github.com/mastra-ai/mastra/issues/27930. ([#28150](https://github.com/mastra-ai/mastra/pull/28150))
+
+  Resource-scoped observational memory with vector retrieval now indexes new observations too. Before, nothing from those cycles reached the vector store.
+
+  If storing a group's vector fails, the observation cycle still completes and logs a warning. That group is not retried.
+
+- Updated dependencies [[`1477aad`](https://github.com/mastra-ai/mastra/commit/1477aaddf9f0086aebf7c113cb6435353416aad3)]:
+  - @mastra/core@1.81.0-alpha.3
+
 ## 1.40.0-alpha.1
 
 ### Patch Changes

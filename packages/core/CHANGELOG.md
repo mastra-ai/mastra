@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.81.0-alpha.3
+
+### Patch Changes
+
+- Fixed resuming suspended agent runs across server instances when a process retains an earlier run segment. ([#29061](https://github.com/mastra-ai/mastra/pull/29061))
+
 ## 1.81.0-alpha.2
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.34.0-alpha.2
+
+### Patch Changes
+
+- Fixed `PgVector.query()` skipping HNSW indexes when a filter or `minScore` was set ([#28949](https://github.com/mastra-ai/mastra/issues/28949)). On pgvector 0.8.0 or newer, these searches now use the index, which speeds up memory recall. Like unfiltered HNSW searches, the results are approximate and can differ slightly from an exact search. If the index finds fewer than `topK` rows, the query reruns as an exact search. IVFFlat indexes still use the exact search. ([#29058](https://github.com/mastra-ai/mastra/pull/29058))
+
+- Fixed `PgVector.createIndex()` timing out with `metadataIndexes` when the connection pool has a single connection (`pgPoolOptions: { max: 1 }`). ([#29058](https://github.com/mastra-ai/mastra/pull/29058))
+
+- Updated dependencies [[`1477aad`](https://github.com/mastra-ai/mastra/commit/1477aaddf9f0086aebf7c113cb6435353416aad3)]:
+  - @mastra/core@1.81.0-alpha.3
+
 ## 1.34.0-alpha.1
 
 ### Minor Changes
