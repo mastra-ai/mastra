@@ -254,7 +254,8 @@ export function BoardContent({
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
     const archiveColumn = archive.columns[stage.id];
-    const loading = loadingStages.has(stage.id) || (archiveColumn !== undefined && archive.isPending && stageWorkItems.length === 0);
+    const loading =
+      loadingStages.has(stage.id) || (archiveColumn !== undefined && archive.isPending && stageWorkItems.length === 0);
     const loadedCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
     // A Done column shows only its first page, so its header counts what the server holds; a filter
     // runs over the loaded cards only, so then the header counts those.
@@ -304,6 +305,7 @@ export function BoardContent({
           kind={kind}
           loading={loading}
           taskCount={taskCount}
+          loadedCount={loadedCount}
           feed={columnFeed}
           intakeSource={intake.active}
           hasIntakeSource={hasIntakeSource}

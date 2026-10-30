@@ -1,8 +1,8 @@
 /**
- * Filters, cards already on the board, and drafts can leave a loaded page with
- * nothing visible, so the Intake sentinel stays in view. A sentinel that fetched
- * whenever it was in view chained through every open pull request; now coming
- * into view loads one page and the next waits for a scroll or a click.
+ * The Intake sentinel keeps loading while it stays in view and each page adds
+ * rows, so the column scrolls without a button. Filters, cards already on the
+ * board, and drafts can leave a page with nothing visible; that stops it, so it
+ * never chains through every open pull request behind a spinner.
  */
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -98,7 +98,7 @@ function stubIntersectionObserver(startsInView: boolean) {
 }
 
 /** Stubs the review board's endpoints and records which candidate pages were requested. */
-function stubReviewBoard() {
+function stubReviewBoard(pages = pullRequestPages) {
   const requestedPages: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -142,7 +142,7 @@ function stubReviewBoard() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, ({ request }) => {
       const page = new URL(request.url).searchParams.get('page') ?? '1';
       requestedPages.push(page);
-      return HttpResponse.json(pullRequestPages[page]);
+      return HttpResponse.json(pages[page]);
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
@@ -223,40 +223,42 @@ function renderWorkBoard(query = '') {
 describe('Intake candidate paging', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('loads one page on its own when the sentinel starts in view, then waits for a click', async () => {
+  it('keeps loading while the sentinel stays in view and each page adds rows', async () => {
     stubIntersectionObserver(true);
     const requestedPages = stubReviewBoard();
     const { client } = renderReviewBoard();
 
     const intake = await screen.findByTestId('board-column-intake');
-    await waitFor(() => expect(within(intake).getByText('Fix signup')).toBeInTheDocument());
-    await waitForMutationsIdle(client);
-    expect(requestedPages).toEqual(['1', '2']);
-
-    await userEvent.click(within(intake).getByRole('button', { name: 'Load more candidates' }));
     await waitFor(() => expect(within(intake).getByText('Fix logout')).toBeInTheDocument());
+    await waitForMutationsIdle(client);
     expect(requestedPages).toEqual(['1', '2', '3']);
+    expect(within(intake).queryByRole('button', { name: 'Load more candidates' })).not.toBeInTheDocument();
   });
 
-  it('fetches one page per scroll into view, never chaining into the next', async () => {
-    const { scrollSentinel } = stubIntersectionObserver(false);
-    const requestedPages = stubReviewBoard();
+  it('stops at a page that adds nothing, until scrolled into view again or clicked', async () => {
+    const { scrollSentinel } = stubIntersectionObserver(true);
+    const requestedPages = stubReviewBoard({
+      '1': { pullRequests: [pullRequest(7, 'Fix login')], nextPage: 2 },
+      '2': { pullRequests: [], nextPage: 3 },
+      '3': { pullRequests: [], nextPage: 4 },
+      '4': { pullRequests: [pullRequest(9, 'Fix logout')], nextPage: null },
+    });
     const { client } = renderReviewBoard();
 
     const intake = await screen.findByTestId('board-column-intake');
-    await waitFor(() => expect(within(intake).getByText('Fix login')).toBeInTheDocument());
-    await waitForMutationsIdle(client);
-    expect(requestedPages).toEqual(['1']);
-
-    scrollSentinel(true);
-    await waitFor(() => expect(within(intake).getByText('Fix signup')).toBeInTheDocument());
+    await within(intake).findByRole('button', { name: 'Load more candidates' });
     await waitForMutationsIdle(client);
     expect(requestedPages).toEqual(['1', '2']);
 
     scrollSentinel(false);
     scrollSentinel(true);
-    await waitFor(() => expect(within(intake).getByText('Fix logout')).toBeInTheDocument());
+    await waitFor(() => expect(requestedPages).toEqual(['1', '2', '3']));
+    await waitForMutationsIdle(client);
     expect(requestedPages).toEqual(['1', '2', '3']);
+
+    await userEvent.click(within(intake).getByRole('button', { name: 'Load more candidates' }));
+    await waitFor(() => expect(within(intake).getByText('Fix logout')).toBeInTheDocument());
+    expect(requestedPages).toEqual(['1', '2', '3', '4']);
   });
 
   it('shows one shimmering card skeleton while a populated column scroll-loads', async () => {

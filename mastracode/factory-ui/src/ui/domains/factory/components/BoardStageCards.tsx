@@ -18,6 +18,7 @@ export function BoardStageCards({
   kind,
   loading,
   taskCount,
+  loadedCount,
   feed,
   intakeSource,
   hasIntakeSource,
@@ -34,6 +35,8 @@ export function BoardStageCards({
   kind: BoardKind;
   loading: boolean;
   taskCount: number;
+  /** Cards and candidates the column holds now, which grows as pages load. */
+  loadedCount: number;
   feed?: IntakeFeed;
   intakeSource?: IntakeSource;
   hasIntakeSource: boolean;
@@ -64,16 +67,15 @@ export function BoardStageCards({
         />
       )}
       {feed && <IntakeFeedNotice source={intakeSource} feed={feed} />}
-      {feed && <IntakeColumnExtras feed={feed} currentColumnLength={taskCount} layout={layout} />}
+      {feed && <IntakeColumnExtras feed={feed} currentColumnLength={loadedCount} layout={layout} />}
       {archive && (
         <LoadMoreSentinel
           hasNextPage={archive.hasNextPage}
           isFetchingNextPage={archive.isFetchingNextPage}
           onLoadMore={archive.loadMore}
+          itemCount={loadedCount}
           label={`Load more ${stage.label} cards`}
-          loadingIndicator={
-            <BoardItemsSkeleton label={`Loading more ${stage.label} cards`} rows={1} layout={layout} />
-          }
+          loadingIndicator={<BoardItemsSkeleton label={`Loading more ${stage.label} cards`} rows={1} layout={layout} />}
         />
       )}
     </>

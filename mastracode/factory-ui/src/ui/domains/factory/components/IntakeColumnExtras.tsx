@@ -23,6 +23,7 @@ export function IntakeColumnExtras({
       hasNextPage={Boolean(feed.hasNextPage)}
       isFetchingNextPage={Boolean(feed.isFetchingNextPage)}
       onLoadMore={() => void feed.fetchNextPage()}
+      itemCount={currentColumnLength}
       label="Load more candidates"
       loadingIndicator={
         currentColumnLength > 0 ? (
