@@ -6595,6 +6595,33 @@ describe('run-end backstop report', () => {
     );
   });
 
+  it('reports a run aborted by a provider limit on its OM model, which no run end reports', async () => {
+    const reportRunEnd = vi.fn(async () => {});
+    const { storage } = await dispatchPrompt(
+      'backstop-om-limit',
+      {
+        agentEndReason: 'aborted',
+        omObservationError: 'Rate limit reached for requests: HTTP 429',
+        runError: new Error('Observational memory observation run failed: Rate limit reached for requests: HTTP 429', {
+          cause: { statusCode: 429, codes: ['requests', 'rate_limit_exceeded'] },
+        }),
+      },
+      reportRunEnd,
+    );
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
+    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
+    expect(reportRunEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: {
+          status: 'failed',
+          failureCode: 'run_provider_limited',
+          reason: expect.stringContaining('Rate limit reached'),
+        },
+      }),
+    );
+  });
+
   it('says nothing about a retryable failure; the retry reports', async () => {
     const reportRunEnd = vi.fn(async () => {});
     const { storage } = await dispatchPrompt('backstop-retry', { agentEndReason: 'error' }, reportRunEnd);

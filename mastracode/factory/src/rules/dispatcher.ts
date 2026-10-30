@@ -271,9 +271,12 @@ function watchRun(
       }
       if (endReason === 'error') throw runErrorFailure(label, runError);
       if (endReason === 'aborted') {
-        // Observational memory aborts the run when its own model call hits a provider limit.
-        const failure = runErrorFailure(label, runError);
-        if (failure.code === 'run_provider_limited') throw failure;
+        // Observational memory aborts the run when its own model call hits a provider limit. An aborted run
+        // gets no report from the session's listener, so this must not be a RunEndedInError.
+        if (runError && runErrorCode(runError) === 'run_provider_limited') {
+          const cause = runError instanceof Error ? runError.message : String(runError);
+          throw new FactoryDispatchError('run_provider_limited', `${label} was aborted by a provider limit: ${cause}`);
+        }
         // An abort that follows an observational-memory failure is not the
         // usual "process went away" case — the OM stream deliberately aborted
         // the run because observation/reflection failed. Surface that real
