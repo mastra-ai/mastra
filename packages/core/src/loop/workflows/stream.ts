@@ -55,9 +55,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   };
   const loopSource = {
     start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
+      let totalTimeoutSignal: AbortSignal | undefined;
       // Stamp chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
+          // The total deadline ends the run with a timeout error after the tool grace window.
+          // Steps that notice the abort inside that window must not end it as a caller abort first.
+          if (chunk.type === 'abort' && isMastraTimeoutError(totalTimeoutSignal?.reason)) return;
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
           streamController.enqueue(chunk);
         },
@@ -286,7 +290,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       // reads `options.abortSignal`, so injecting here covers the entire agentic loop.
       const timeout = validateModelTimeoutSettings(modelSettings?.timeout);
       const {
-        signal: totalTimeoutSignal,
+        signal: timeoutSignal,
         timeoutPromise: totalTimeoutPromise,
         cleanup: cleanupTotalTimeout,
       } = createTimeoutAbortSignal({
@@ -294,6 +298,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         timeoutMs: timeout?.totalMs,
         timeoutType: 'total',
       });
+      totalTimeoutSignal = timeoutSignal;
 
       // A run-owned signal linked to the caller's. Callers often reuse one long-lived signal
       // across many runs, so run internals listen here rather than on the caller's signal;

@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Agent runs on the default and filesystem engines that hit `modelSettings.timeout.totalMs` now save the turn to memory, not only the user's message. This replaces the `savePerStep` rule in the earlier total-timeout changeset.
+Agent runs on the default and filesystem engines that hit `modelSettings.timeout.totalMs` now save the turn to memory, not only the user's message.
 
 - Steps that finished before the deadline are saved even when `savePerStep` is off.
 - A tool call cut off by the deadline is saved with an abort notice, so the next turn sees a complete call.
