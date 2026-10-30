@@ -11,7 +11,7 @@ import {
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard, itemBoard } from '../boardStages';
+import { belongsToBoard, itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
 import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
@@ -88,6 +88,7 @@ export function useBoardItems({
     // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
     const boardId = itemBoard(item);
+    if (!pullRequestMayEnter(boardId, item.source, toStage)) return;
     if (boardId !== 'work' && boardId !== 'review') {
       const definition = catalog.data?.find(board => board.id === boardId);
       const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
@@ -142,7 +143,9 @@ export function useBoardItems({
       if (customPrompt) {
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
-      if (!item.stages.includes(toStage)) requestTransition(item, toStage, { cause });
+      if (!item.stages.includes(toStage) && pullRequestMayEnter(kind, source, toStage)) {
+        requestTransition(item, toStage, { cause });
+      }
     })().catch(error => {
       const failure = error instanceof Error ? error : new Error('The card could not be filed.');
       setDropError(failure);

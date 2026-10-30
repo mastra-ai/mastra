@@ -1,8 +1,9 @@
 import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt } from './boardItems';
-import { belongsToBoard, boardStages, itemAppearsInStage } from './boardStages';
+import { belongsToBoard, itemAppearsInStage, itemStageOptions } from './boardStages';
 import { awaitsTriageDecision, TRIAGE_DECISIONS } from './cardPrimaryAction';
 import { reviewVerdict } from './reviewVerdict';
 import type { FactoryDecisionSummary } from './services/decisions';
+import { isPullRequestSource } from './services/workItems';
 import type { WorkItem } from './services/workItems';
 import { BOARD_STAGES, isTerminalStage } from './stages';
 
@@ -69,17 +70,29 @@ function isOpen(item: WorkItem): boolean {
 }
 
 function inIntake(item: WorkItem): boolean {
-  return belongsToBoard(item, 'work') && itemAppearsInStage(item, 'intake', BOARD_STAGES);
+  return (
+    belongsToBoard(item, 'work') &&
+    !isPullRequestSource(item.source) &&
+    itemAppearsInStage(item, 'intake', BOARD_STAGES)
+  );
 }
 
 function notStarted(item: WorkItem): boolean {
-  return inIntake(item) || (belongsToBoard(item, 'work') && item.stages.includes('triage'));
+  return (
+    inIntake(item) ||
+    (belongsToBoard(item, 'work') && !isPullRequestSource(item.source) && item.stages.includes('triage'))
+  );
+}
+
+/** A pull request's own card, on Work or on the Review board it used to be filed on. */
+function reviewedPullRequest(item: WorkItem): boolean {
+  return isPullRequestSource(item.source) && (belongsToBoard(item, 'work') || belongsToBoard(item, 'review'));
 }
 
 function waitsForReview(item: WorkItem): boolean {
   return (
-    belongsToBoard(item, 'review') &&
-    itemAppearsInStage(item, 'intake', boardStages('review')) &&
+    reviewedPullRequest(item) &&
+    itemAppearsInStage(item, 'intake', itemStageOptions(item)) &&
     pullRequestStatusForItem(item) === 'open'
   );
 }
@@ -98,7 +111,7 @@ function unblock(cards: readonly WorkItem[], effectByItem: ReadonlyMap<string, F
 
 function feedback(cards: readonly WorkItem[]) {
   const changesRequested = cards.filter(item => {
-    if (!belongsToBoard(item, 'review') || item.metadata.factoryAuthored !== true) return false;
+    if (!reviewedPullRequest(item) || item.metadata.factoryAuthored !== true) return false;
     if (pullRequestStatusForItem(item) !== 'open') return false;
     const verdict = reviewVerdict(item.metadata);
     return verdict !== undefined && !verdict.approved && !verdict.outdated;
