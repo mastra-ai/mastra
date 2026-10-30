@@ -88,13 +88,39 @@ function pageSummary(page: KnowledgePage, addresses: Map<string, string>) {
   };
 }
 
-function noteSummary(note: KnowledgeNote) {
+function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
   return {
     id: note.id,
     text: note.text,
     ...(note.when ? { when: note.when.toISOString() } : {}),
     author: note.provenance.author,
+    ...(mentions ? { mentions } : {}),
   };
+}
+
+/**
+ * Which `[[ref]]` in a note's text names which page id, for a caller that links them. Each ref is
+ * resolved the way the note's write resolved it and kept only when it lands on one of the note's
+ * stored mentions; refs that no longer resolve (a renamed page) stay plain text.
+ */
+async function noteMentions(run: KnowledgeRun, note: KnowledgeNote): Promise<Record<string, string> | undefined> {
+  if (!note.mentions.length) return undefined;
+  const links: Record<string, string> = {};
+  for (const [, raw] of note.text.matchAll(MENTION)) {
+    const ref = (raw ?? '').trim();
+    if (ref in links) continue;
+    try {
+      const page = await run.page(ref);
+      if (note.mentions.includes(page.id)) links[ref] = page.id;
+    } catch {
+      // Not found or now ambiguous: leave it as text.
+    }
+  }
+  return Object.keys(links).length ? links : undefined;
+}
+
+async function noteSummaries(run: KnowledgeRun, notes: KnowledgeNote[]) {
+  return Promise.all(notes.map(async note => noteSummary(note, await noteMentions(run, note))));
 }
 
 /** Scope pages for addresses the run names; each must be readable. */
@@ -202,10 +228,16 @@ function searchTool(host: KnowledgePageToolHost) {
         hits.map(hit => hit.page),
       );
       return {
-        results: hits.map(hit =>
-          hit.type === 'page'
-            ? { type: 'page' as const, page: pageSummary(hit.page, addresses) }
-            : { type: 'note' as const, page: pageSummary(hit.page, addresses), note: noteSummary(hit.note) },
+        results: await Promise.all(
+          hits.map(async hit =>
+            hit.type === 'page'
+              ? { type: 'page' as const, page: pageSummary(hit.page, addresses) }
+              : {
+                  type: 'note' as const,
+                  page: pageSummary(hit.page, addresses),
+                  note: noteSummary(hit.note, await noteMentions(run, hit.note)),
+                },
+          ),
         ),
       };
     },
@@ -280,12 +312,12 @@ function readTool(host: KnowledgePageToolHost) {
           version: page.version,
           ...(page.body ? { body: page.body } : {}),
         },
-        notes: notes.notes.map(noteSummary),
+        notes: await noteSummaries(run, notes.notes),
         ...(notes.nextCursor ? { nextCursor: notes.nextCursor } : {}),
         children: children.pages.map(child => pageSummary(child, addresses)),
         ...(childScopes.length ? { childScopes } : {}),
-        mentionedIn: mentioning.notes.map((note, i) => ({
-          ...noteSummary(note),
+        mentionedIn: (await noteSummaries(run, mentioning.notes)).map((note, i) => ({
+          ...note,
           page: mentionPages[i] ? pageSummary(mentionPages[i]!, addresses) : undefined,
         })),
       };
@@ -539,7 +571,7 @@ function noteTool(host: KnowledgePageToolHost) {
           provenance,
         });
         await reindex(host, index => index.indexNote(note));
-        return { note: noteSummary(note), page: page.id };
+        return { note: noteSummary(note, await noteMentions(run, note)), page: page.id };
       }
 
       if (!args.note) throw new Error(`op "${args.op}" needs note.`);
@@ -556,7 +588,7 @@ function noteTool(host: KnowledgePageToolHost) {
           stampScopeIds: await stamps('Restamping a note'),
           provenance,
         });
-        return { note: noteSummary(restamped), page: page.id };
+        return { note: noteSummary(restamped, await noteMentions(run, restamped)), page: page.id };
       }
       await storage.removeNote({ id: note.id, deletedBy: provenance.author, provenance });
       await reindex(host, index => index.remove([`note:${note.id}`]));

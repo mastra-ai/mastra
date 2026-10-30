@@ -174,4 +174,28 @@ describe('Knowledge in Factory chat', () => {
       '/factories/fp-1/knowledge?page=p-esc&view=page',
     );
   });
+  it('links a [[Page Name]] in an added note to this Factory’s Knowledge page', async () => {
+    const text = 'Raised to $150, see [[Escalation Process]] and [[Old Runbook]].';
+    inFactory(
+      entries([
+        toolEntry(
+          'knowledge_note',
+          { op: 'add', page: 'customer:cust-dana#profile', scope: ['customer:cust-dana'], text },
+          {
+            note: { id: 'n1', text, author: 'agent:alex', mentions: { 'Escalation Process': 'p-esc' } },
+            page: 'p-prof',
+          },
+        ),
+      ]),
+    );
+
+    const card = screen.getByRole('group', { name: /customer:cust-dana#profile/ });
+    await userEvent.click(within(card).getAllByRole('button')[0] as HTMLElement);
+    expect(within(card).getByRole('link', { name: 'Escalation Process' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/knowledge?page=p-esc&view=page',
+    );
+    expect(within(card).queryByRole('link', { name: 'Old Runbook' })).not.toBeInTheDocument();
+    expect(within(card).getByText('Old Runbook')).toBeVisible();
+  });
 });

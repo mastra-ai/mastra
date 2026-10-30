@@ -361,6 +361,30 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     ]);
   });
 
+  it('names the page each resolved [[mention]] in a note links to; unresolved names stay text', async () => {
+    const am = as('am', ['org:acme', 'role:acme:account-manager']);
+    const account = await am.page({ op: 'write', scope: 'account:acme:123', name: 'Acme Account 123' });
+    const risk = await am.page({ op: 'write', scope: 'account:acme:123/internal', name: 'Renewal Risk' });
+    const added = await am.note({
+      op: 'add',
+      page: 'Acme Account 123',
+      scope: ['account:acme:123'],
+      text: 'See [[Renewal Risk]] and [[ Renewal Risk ]], not [[Nowhere]].',
+    });
+    expect(added.note.mentions).toEqual({ 'Renewal Risk': risk.page.id });
+
+    const read = await am.read('Acme Account 123');
+    expect(read.notes[0].mentions).toEqual({ 'Renewal Risk': risk.page.id });
+    expect((await am.read('Renewal Risk')).mentionedIn[0].mentions).toEqual({ 'Renewal Risk': risk.page.id });
+    const hit = (await am.search('Nowhere')).results.find((r: Result) => r.type === 'note');
+    expect(hit.note.mentions).toEqual({ 'Renewal Risk': risk.page.id });
+
+    await am.note({ op: 'add', page: account.page.id, scope: ['account:acme:123'], text: 'Uses SSO.' });
+    expect((await am.read('Acme Account 123')).notes.find((n: Result) => n.text === 'Uses SSO.')).not.toHaveProperty(
+      'mentions',
+    );
+  });
+
   it('12: the public bot reads only published knowledge; publishing names kb-public explicitly', async () => {
     await support().page({ op: 'write', scope: 'kb-public:acme', name: 'Reset Password', body: 'Use the link.' });
     await support().page({ op: 'write', scope: 'kb-internal:acme', name: 'Escalation Tree', body: 'Call Bea.' });

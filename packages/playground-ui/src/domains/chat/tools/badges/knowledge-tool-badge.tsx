@@ -34,6 +34,8 @@ interface NoteSummary {
   text: string;
   author?: string;
   page?: PageSummary;
+  /** Which `[[ref]]` in `text` links to which page id; refs the server couldn't resolve aren't here. */
+  mentions?: Record<string, string>;
 }
 
 const str = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
@@ -83,13 +85,44 @@ function Body({ markdown }: { markdown: string }) {
   );
 }
 
+const MENTION = /\[\[([^\]]+)\]\]/g;
+
+/** A note's text with each resolved `[[Page Name]]` linking to its page; unresolved names stay plain. */
+function NoteText({ note }: { note: NoteSummary }) {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of note.text.matchAll(MENTION)) {
+    const ref = (match[1] ?? '').trim();
+    const pageId = note.mentions?.[ref];
+    parts.push(note.text.slice(last, match.index));
+    parts.push(
+      pageId ? (
+        <KnowledgePageLink
+          key={match.index}
+          pageId={pageId}
+          className="text-foreground underline decoration-dotted underline-offset-2 hover:decoration-solid"
+        >
+          {ref}
+        </KnowledgePageLink>
+      ) : (
+        <span key={match.index} className="text-foreground" data-testid="knowledge-unresolved-mention">
+          {ref}
+        </span>
+      ),
+    );
+    last = match.index + match[0].length;
+  }
+  parts.push(note.text.slice(last));
+  return <>{parts}</>;
+}
+
 function NoteList({ notes }: { notes: NoteSummary[] }) {
   return (
     <ul className="flex flex-col gap-1">
       {notes.map(note => (
         <li key={note.id} className="flex flex-col">
           <Txt as="span" variant="body">
-            {note.text}
+            <NoteText note={note} />
           </Txt>
           {note.page || note.author ? (
             <Meta>
@@ -129,7 +162,11 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
               return page ? (
                 <li key={`${page.id}-${note?.id ?? index}`} className="flex flex-col">
                   <PageLine page={page} />
-                  {note ? <Meta>{note.text}</Meta> : null}
+                  {note ? (
+                    <Meta>
+                      <NoteText note={note} />
+                    </Meta>
+                  ) : null}
                 </li>
               ) : null;
             })}
@@ -219,7 +256,7 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
         body: (
           <div className="flex flex-col gap-1">
             <Txt as="span" variant="body">
-              {note.text}
+              <NoteText note={note} />
             </Txt>
             {pageId ? (
               <Meta>
