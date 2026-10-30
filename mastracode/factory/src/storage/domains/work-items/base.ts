@@ -29,11 +29,18 @@ import {
   trackBoardWrites,
 } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
-import type { WorkItemRow as ProviderWorkItemRow, WorkItemDbRecord } from './work-item-schema.js';
+import type {
+  WorkItemRow as ProviderWorkItemRow,
+  WorkItemDbRecord,
+  WorkItemSourceDbRecord,
+  WorkItemSourceRow,
+} from './work-item-schema.js';
 import {
+  primarySource,
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
   FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   WORK_ITEMS_SCHEMA,
 } from './work-item-schema.js';
@@ -671,6 +678,7 @@ function toWorkItemSubscription(row: WorkItemSubscriptionDbRow): WorkItemSubscri
 
 export interface WorkItemDbRow extends Record<string, unknown> {
   work_item?: WorkItemDbRecord;
+  work_item_sources?: WorkItemSourceDbRecord[];
   id: string;
   org_id: string;
   factory_project_id: string;
@@ -707,26 +715,54 @@ export function externalSourceKey(source: ExternalWorkItemSource | null | undefi
   return `${source.integrationId}:${source.type}:${workspace}${source.externalId}`;
 }
 
+function toSource(source: WorkItemSourceDbRecord): WorkItemSourceRow {
+  return {
+    id: source.id,
+    workItemId: source.work_item_id,
+    provider: source.provider,
+    kind: source.kind,
+    integrationId: source.integration_id,
+    sourceType: source.source_type,
+    workspaceId: source.workspace_id,
+    externalId: source.external_id,
+    sourceKey: source.source_key,
+    key: source.key,
+    url: source.url,
+    state: source.state,
+    labels: source.labels,
+    author: source.author,
+    metadata: source.metadata,
+    revision: source.revision,
+    syncedAt: source.synced_at,
+    createdAt: source.created_at,
+    updatedAt: source.updated_at,
+  };
+}
+
 function toWorkItem(row: WorkItemDbRow): Card {
-  const work = row.work_item ?? splitCardRows(row, { workItemId: row.id }).workItem;
+  const fallback = row.work_item ? null : splitCardRows(row, { workItemId: row.id });
+  const work = row.work_item ?? fallback!.workItem;
+  const sources = (row.work_item_sources ?? (fallback?.source ? [fallback.source] : [])).map(toSource);
+  const source = primarySource({ workItem: { sources } });
   return {
     workItem: {
+      sources,
       id: work.id,
       orgId: work.org_id,
       factoryProjectId: work.factory_project_id,
-      provider: work.provider,
-      kind: work.kind,
-      externalId: work.external_id,
-      key: work.key,
-      url: work.url,
+      provider: source?.provider ?? 'factory',
+      kind: source?.kind ?? 'issue',
+      externalId: source?.externalId ?? row.id,
+      key: source?.key ?? null,
+      url: source?.url ?? null,
       title: work.title,
-      state: work.state,
-      labels: work.labels,
-      author: work.author,
+      state: source?.state ?? null,
+      labels: source?.labels ?? [],
+      author: source?.author ?? null,
       parentWorkItemId: work.parent_work_item_id,
-      metadata: work.metadata,
+      metadata: source?.metadata ?? null,
       revision: work.revision,
-      syncedAt: work.synced_at,
+      syncedAt: source?.syncedAt ?? null,
       createdAt: work.created_at,
       updatedAt: work.updated_at,
     },
@@ -781,6 +817,8 @@ function emptyPrior(): WorkItemPriorState {
 function priorState(row: WorkItemDbRow): WorkItemPriorState {
   return { stages: row.stages, sessionRoles: Object.keys(row.sessions) };
 }
+
+export class WorkItemSplitModeError extends Error {}
 
 export class WorkItemRelationError extends Error {
   readonly code = 'invalid_work_item_relation';
@@ -1261,6 +1299,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   // no card counts as finished, so the boot sweep never supersedes on a guess.
   #isTerminal: (item: Card) => boolean = () => false;
 
+  #legacyMode = false;
+
+  get legacyMode(): boolean {
+    return this.#legacyMode;
+  }
+
   constructor() {
     super('work-items');
   }
@@ -1284,12 +1328,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
+    this.#legacyMode = process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run';
     // The comment schemas are co-registered so the delete cascade below can
     // purge feed rows regardless of domain init order.
     await this.ensureCollections([
       WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+      FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
       FACTORY_BOARD_ITEMS_SCHEMA,
       FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
@@ -1299,17 +1345,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       WORK_ITEM_ACTIVITY_SCHEMA,
       FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA,
     ]);
+    if (this.#legacyMode && (await super.ops.findOne(FACTORY_BOARD_ITEMS_SCHEMA.name, {}))) {
+      throw new WorkItemSplitModeError(
+        'MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run cannot serve a database with migrated board items.',
+      );
+    }
     // Before anything reads cards: this replica serves them from the split tables only.
     await migrateWorkItemSplit(this.storage, {
-      dryRun: process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run',
+      dryRun: this.#legacyMode,
       ops: super.ops,
       log: (message, details) => console.info(`[factory] ${message}`, details),
     });
     await this.repairLegacyAttentionState();
   }
 
-  /** Refresh provider facts without invalidating a card's stage/rule revision. */
-  async syncWorkItem({
+  /** Refresh source evidence without changing work identity or board concurrency tokens. */
+  async syncWorkItemSource({
     orgId,
     factoryProjectId,
     provider,
@@ -1320,35 +1371,39 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     provider: string;
     externalId: string;
-    patch: {
-      title?: string;
-      state?: string | null;
-      labels?: string[];
-      author?: string | null;
-      url?: string | null;
-      key?: string | null;
-      metadata?: Record<string, unknown> | null;
-      parentWorkItemId?: string | null;
-    };
+    patch: Partial<Pick<WorkItemSourceRow, 'state' | 'labels' | 'author' | 'url' | 'key' | 'metadata'>>;
   }): Promise<void> {
-    const { parentWorkItemId, ...facts } = patch;
     await this.#withTransaction(async ops => {
-      await ops.updateAtomic<WorkItemDbRecord>(
-        FACTORY_WORK_ITEMS_SCHEMA.name,
+      await ops.updateAtomic<WorkItemSourceDbRecord>(
+        FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
         { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
-        current => ({
-          ...facts,
-          ...(parentWorkItemId !== undefined ? { parent_work_item_id: parentWorkItemId } : {}),
-          revision: current.revision + 1,
-          synced_at: new Date(),
-          updated_at: new Date(),
-        }),
+        current => {
+          const { metadata, ...facts } = patch;
+          const nextMetadata =
+            metadata === null
+              ? null
+              : {
+                  ...current.metadata,
+                  ...metadata,
+                  ...(patch.labels !== undefined ? { labels: patch.labels } : {}),
+                  ...(patch.state !== undefined ? { state: patch.state } : {}),
+                  ...(patch.author !== undefined ? { author: patch.author } : {}),
+                  ...(patch.key !== undefined ? { identifier: patch.key } : {}),
+                };
+          return {
+            ...facts,
+            metadata: nextMetadata,
+            revision: current.revision + 1,
+            synced_at: new Date(),
+            updated_at: new Date(),
+          };
+        },
       );
     });
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#withTransaction(ops => new Cards(ops).deleteMany({}));
+    await this.#withTransaction(ops => new Cards(ops, this.#legacyMode).deleteMany({}));
     await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {});
     // A project with no version row is never served from cache, so this invalidates every replica.
     await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
@@ -1370,7 +1425,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
     const changed = new BoardScopes();
-    const result = await this.storage.withTransaction(ops => fn(trackBoardWrites(ops, changed.add)), options);
+    const run = () => this.storage.withTransaction(ops => fn(trackBoardWrites(ops, changed.add)), options);
+    let result: T;
+    try {
+      result = await run();
+    } catch (error) {
+      // A first guard insert can race. Retry only after the failed transaction
+      // rolls back; PostgreSQL cannot recover from a unique violation inside it.
+      if (!(error instanceof UniqueViolationError) || error.collection !== FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name)
+        throw error;
+      result = await run();
+    }
     await bumpBoardVersions(super.ops, changed.values());
     return result;
   }
@@ -1536,7 +1601,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async #listWithOps(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<Card[]> {
-    const rows = await new Cards(ops).findMany(
+    const rows = await new Cards(ops, this.#legacyMode).findMany(
       { org_id: orgId, factory_project_id: factoryProjectId },
       {
         orderBy: [
@@ -1603,7 +1668,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ids: string[];
   }): Promise<Card[]> {
     if (ids.length === 0) return [];
-    const rows = await new Cards(this.#db).findMany({
+    const rows = await new Cards(this.#db, this.#legacyMode).findMany({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       id: { in: [...new Set(ids)] },
@@ -1617,13 +1682,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * ponytail: org-wide scan per session delete; JSON-path query if it measures.
    */
   async clearSessionReferences({ orgId, sessionId }: { orgId: string; sessionId: string }): Promise<number> {
-    const rows = await new Cards(this.#db).findMany({ org_id: orgId });
+    const rows = await new Cards(this.#db, this.#legacyMode).findMany({ org_id: orgId });
     const holding = rows.filter(row => Object.values(row.sessions).some(ref => ref.sessionId === sessionId));
     let cleared = 0;
     for (const row of holding) {
       let changed = false;
       await this.#withTransaction(ops =>
-        new Cards(ops).updateAtomic({ id: row.id }, current => {
+        new Cards(ops, this.#legacyMode).updateAtomic({ id: row.id }, current => {
           const kept = Object.entries(current.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
           if (kept.length === Object.keys(current.sessions).length) return null;
           changed = true;
@@ -1644,7 +1709,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     source: ExternalWorkItemSource;
   }): Promise<Card | null> {
-    const row = await new Cards(this.#db).findOne({
+    const row = await new Cards(this.#db, this.#legacyMode).findOne({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       source_key: externalSourceKey(source),
@@ -1653,7 +1718,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async get({ orgId, id }: { orgId: string; id: string }): Promise<Card | null> {
-    const row = await new Cards(this.#db).findOne({ org_id: orgId, id });
+    const row = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
     return row ? toWorkItem(row) : null;
   }
 
@@ -1664,7 +1729,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * `workspaceId` instead. Ambiguous matches resolve to nothing, not a guess.
    */
   async getBySource(source: ExternalWorkItemSource): Promise<Card | null> {
-    const rows = await new Cards(this.#db).findMany({ source_key: externalSourceKey(source) });
+    const rows = await new Cards(this.#db, this.#legacyMode).findMany({ source_key: externalSourceKey(source) });
     return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
@@ -1675,7 +1740,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * consults this before creating another.
    */
   async listBySource({ orgId, source }: { orgId: string; source: ExternalWorkItemSource }): Promise<Card[]> {
-    const rows = await new Cards(this.#db).findMany({
+    const rows = await new Cards(this.#db, this.#legacyMode).findMany({
       org_id: orgId,
       source_key: externalSourceKey(source),
     });
@@ -1683,7 +1748,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<Card | null> {
-    const row = await new Cards(this.#db).findOne({
+    const row = await new Cards(this.#db, this.#legacyMode).findOne({
       id,
       org_id: orgId,
       factory_project_id: factoryProjectId,
@@ -1715,7 +1780,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (prior) {
           // Read through the transaction: on a single-connection database the
           // root client waits for this transaction, which would never finish.
-          const row = await new Cards(ops).findOne({
+          const row = await new Cards(ops, this.#legacyMode).findOne({
             id: input.workItemId,
             org_id: input.orgId,
             factory_project_id: input.factoryProjectId,
@@ -1728,7 +1793,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         let code: string | null = null;
         let reason: string | null = null;
         let result: Record<string, unknown>;
-        const updated = await new Cards(ops).updateAtomic(
+        const updated = await new Cards(ops, this.#legacyMode).updateAtomic(
           {
             id: input.workItemId,
             org_id: input.orgId,
@@ -1896,7 +1961,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               sourceKey: string;
               idempotencyKey: string;
             };
-            const item = await new Cards(ops).findOne({
+            const item = await new Cards(ops, this.#legacyMode).findOne({
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
               source_key: externalSourceKey(
@@ -1930,7 +1995,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           return { status: 'replayed' as const, result };
         }
         const itemRow = input.workItemId
-          ? await new Cards(ops).findOne({
+          ? await new Cards(ops, this.#legacyMode).findOne({
               id: input.workItemId,
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
@@ -2508,7 +2573,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const record = toDeferredDecision(row);
       await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
       if (record.workItemId) {
-        await new Cards(ops).updateAtomic({ org_id: orgId, id: record.workItemId }, current =>
+        await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id: record.workItemId }, current =>
           current.autonomy_armed_at ? null : { autonomy_armed_at: now },
         );
       }
@@ -3087,7 +3152,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           const itemRow =
             bindingRow &&
-            (await new Cards(ops).findOne({
+            (await new Cards(ops, this.#legacyMode).findOne({
               id: String(bindingRow.work_item_id),
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
@@ -3114,13 +3179,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const now = new Date();
         const create = input.workItem.input;
         let row = input.workItem.id
-          ? await new Cards(ops).findOne({
+          ? await new Cards(ops, this.#legacyMode).findOne({
               id: input.workItem.id,
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             })
           : externalSourceKey(create.externalSource)
-            ? await new Cards(ops).findOne({
+            ? await new Cards(ops, this.#legacyMode).findOne({
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
                 source_key: externalSourceKey(create.externalSource),
@@ -3128,7 +3193,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             : null;
         let item: Card;
         if (row) {
-          row = await new Cards(ops).updateAtomic({ id: row.id }, current => {
+          row = await new Cards(ops, this.#legacyMode).updateAtomic({ id: row.id }, current => {
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
             // The binding below shares this clock, so a run started on an existing card
@@ -3145,7 +3210,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           if (create.parentWorkItemId)
             validateParentRelation(
               (
-                await new Cards(ops).findMany({
+                await new Cards(ops, this.#legacyMode).findMany({
                   org_id: input.orgId,
                   factory_project_id: input.factoryProjectId,
                 })
@@ -3153,7 +3218,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               undefined,
               create.parentWorkItemId,
             );
-          row = await new Cards(ops).insertOne({
+          row = await new Cards(ops, this.#legacyMode).insertOne({
             org_id: input.orgId,
             created_by: input.userId,
             factory_project_id: input.factoryProjectId,
@@ -3317,7 +3382,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const key = externalSourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
-      const existing = await new Cards(ops).findOne({
+      const existing = await new Cards(ops, this.#legacyMode).findOne({
         org_id: orgId,
         factory_project_id: factoryProjectId,
         source_key: key,
@@ -3328,7 +3393,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
 
       let previous = emptyPrior();
-      const updated = await new Cards(ops).updateAtomic(
+      const updated = await new Cards(ops, this.#legacyMode).updateAtomic(
         { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
         async current => {
           previous = priorState(current);
@@ -3368,7 +3433,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       undefined,
       input.parentWorkItemId ?? null,
     );
-    const row = await new Cards(ops).insertOne({
+    const row = await new Cards(ops, this.#legacyMode).insertOne({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       board: input.board ?? null,
@@ -3399,11 +3464,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId: string;
     parentWorkItemId: string;
   }): Promise<Card | null> {
-    const candidate = await new Cards(this.#db).findOne({ org_id: orgId, id });
+    const candidate = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
     if (!candidate) return null;
 
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
-      const row = await new Cards(ops).updateAtomic({ org_id: orgId, id }, async current => {
+      const row = await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id }, async current => {
         if (current.parent_work_item_id !== null) return current;
         validateParentRelation(
           await this.#listWithOps(ops, orgId, current.factory_project_id),
@@ -3433,7 +3498,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
-      const row = await new Cards(ops).updateAtomic({ org_id: orgId, id }, async current => {
+      const row = await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id }, async current => {
         previous = priorState(current);
         if (expectedBoard !== undefined && current.board !== expectedBoard) {
           throw new WorkItemUpdateConflictError('board');
@@ -3454,7 +3519,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     };
 
     if (patch.parentWorkItemId === undefined) return this.#withTransaction(run);
-    const candidate = await new Cards(this.#db).findOne({ org_id: orgId, id });
+    const candidate = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
     if (!candidate) return null;
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
   }
@@ -3646,13 +3711,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     id: string;
     purgeRuleState?: boolean;
   }): Promise<Card | null> {
-    const candidate = await new Cards(this.#db).findOne({ org_id: orgId, id });
+    const candidate = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
     if (!candidate) return null;
 
     const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
-      const existing = await new Cards(ops).findOne({ org_id: orgId, id });
+      const existing = await new Cards(ops, this.#legacyMode).findOne({ org_id: orgId, id });
       if (!existing) return null;
-      const deleted = await new Cards(ops).deleteMany({ org_id: orgId, id });
+      const deleted = await new Cards(ops, this.#legacyMode).deleteMany({ org_id: orgId, id });
       if (deleted === 0) return null;
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
@@ -3663,7 +3728,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           sourceKeys: [existing.external_source.externalId],
         });
       }
-      await new Cards(ops).updateMany(
+      await new Cards(ops, this.#legacyMode).updateMany(
         { org_id: orgId, parent_work_item_id: id },
         { parent_work_item_id: null, updated_at: new Date() },
       );

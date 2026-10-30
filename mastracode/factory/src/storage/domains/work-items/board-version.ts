@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
-import { FACTORY_BOARD_ITEMS_SCHEMA, FACTORY_WORK_ITEMS_SCHEMA } from './work-item-schema.js';
+import {
+  FACTORY_BOARD_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+} from './work-item-schema.js';
 
 /**
  * One row per project whose `version` is replaced after every committed write to that project's
@@ -27,12 +31,14 @@ export interface BoardScope {
 }
 
 /** The tables a card is stored in. */
-const CARD_TABLES = new Set([FACTORY_BOARD_ITEMS_SCHEMA.name, FACTORY_WORK_ITEMS_SCHEMA.name]);
+const CARD_TABLES = new Set([
+  FACTORY_BOARD_ITEMS_SCHEMA.name,
+  FACTORY_WORK_ITEMS_SCHEMA.name,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+  'work_items',
+]);
 function isCardTable(collection: string): boolean {
-  return (
-    CARD_TABLES.has(collection) ||
-    (collection === 'work_items' && process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run')
-  );
+  return CARD_TABLES.has(collection);
 }
 
 const scopeKey = (scope: BoardScope) => `${scope.orgId}\u0000${scope.factoryProjectId ?? ''}`;
