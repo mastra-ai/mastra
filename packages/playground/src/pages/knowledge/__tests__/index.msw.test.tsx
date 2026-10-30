@@ -154,6 +154,31 @@ describe('Knowledge page', () => {
     });
   });
 
+  describe('when a page is clicked in the graph', () => {
+    const paymentsNode = async () => {
+      const nodes = await screen.findAllByTestId('knowledge-page-node');
+      const node = nodes.find(n => n.dataset.pageId === 'page-payments');
+      if (!node) throw new Error('Payments Service not drawn');
+      return node;
+    };
+
+    it('selects it on the first click and opens it on the second', async () => {
+      withInstance();
+      server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
+      renderPage('/knowledge?view=graph');
+      fireEvent.click(await paymentsNode());
+      await waitFor(async () =>
+        expect((await paymentsNode()).querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(true),
+      );
+      expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+      expect(screen.getByTestId('knowledge-graph-container')).toBeTruthy();
+
+      fireEvent.click(await paymentsNode());
+      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      expect(await within(detail).findByText('Retries card charges three times before failing.')).toBeTruthy();
+    });
+  });
+
   describe('when a linked page is opened', () => {
     it('shows it as a page with a safe markdown body, path and activity', async () => {
       withInstance();
