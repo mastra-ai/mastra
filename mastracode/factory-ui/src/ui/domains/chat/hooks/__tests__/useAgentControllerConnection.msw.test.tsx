@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
+import { HIDDEN_STREAM_GRACE_MS } from '../../../../lib/hooks/useDocumentVisible';
 
 const controllerId = 'code';
 // A Factory session: addressed by its own id, running under its Factory's shared resource.
@@ -551,9 +552,10 @@ describe('useAgentControllerConnection', () => {
     expect(observedStatuses).not.toContain('reconnecting');
   });
 
-  it('given an active stream, when the tab is hidden, then the stream is released and reconnects once visible', async () => {
+  it('given an active stream, when the tab is hidden briefly, then the stream stays open; when hidden past the grace period, then it is released and reconnects once visible', async () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();
+    const observedStatuses: string[] = [];
 
     const setDocumentVisibility = (state: 'visible' | 'hidden') => {
       Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
@@ -582,19 +584,35 @@ describe('useAgentControllerConnection', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+    const { result } = renderHookWithProviders(() => {
+      const connection = useAgentControllerConnection({ ...hookArgs, onEvent });
+      observedStatuses.push(connection.status);
+      return connection;
+    });
     await waitFor(() => expect(result.current.status).toBe('ready'));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
 
     try {
-      setDocumentVisibility('hidden');
-      // The stream is torn down and nothing reconnects while hidden.
+      // A quick tab switch keeps the stream and never reports a reconnect.
+      observedStatuses.length = 0;
+      act(() => setDocumentVisibility('hidden'));
+      act(() => vi.advanceTimersByTime(HIDDEN_STREAM_GRACE_MS - 1_000));
+      act(() => setDocumentVisibility('visible'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onStream).toHaveBeenCalledTimes(1);
+      expect(observedStatuses).not.toContain('reconnecting');
+
+      // A tab left hidden releases the stream and nothing reconnects while hidden.
+      act(() => setDocumentVisibility('hidden'));
+      act(() => vi.advanceTimersByTime(HIDDEN_STREAM_GRACE_MS));
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(onStream).toHaveBeenCalledTimes(1);
 
-      setDocumentVisibility('visible');
+      act(() => setDocumentVisibility('visible'));
       await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(result.current.status).toBe('ready'));
     } finally {
+      vi.useRealTimers();
       setDocumentVisibility('visible');
     }
   });
