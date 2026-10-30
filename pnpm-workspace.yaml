@@ -335,6 +335,9 @@ trustPolicyExclude:
   # Sandbox.filesystem). 0.10.1 is published by Modal's GitHub Actions workflow but
   # pnpm reports it without the trust evidence older modal versions had.
   - 'modal@0.10.1'
+  # Same trusted publisher (Modal GitHub Actions OIDC config f7b14146) as 0.10.1; pnpm
+  # flags it because modal stopped attaching provenance after 0.7.2.
+  - 'modal@0.11.1'
 overrides:
   # The Lance adapter supplies vectors; its optional embedding providers are unused here.
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
