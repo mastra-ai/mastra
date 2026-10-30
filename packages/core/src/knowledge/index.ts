@@ -311,6 +311,19 @@ export class Knowledge extends MastraBase {
       })),
     };
   }
+
+  /**
+   * The display label for a canonical scope address (template children included), with the
+   * declaration's `$params` filled in from the address's decoded values: `'$orgId policy'` on
+   * `policy:$orgId` gives `'acme policy'` for `policy:acme`. A concrete address's own `displayLabel`
+   * wins over its pattern's. `undefined` when the address matches no declaration or has no label.
+   */
+  scopeLabel(address: string): string | undefined {
+    const match = this.#runtime.compiled.match(address);
+    const label = match?.concrete?.displayLabel ?? match?.compiled.declaration.displayLabel;
+    if (label === undefined) return undefined;
+    return label.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (token, name: string) => match!.params[name] ?? token);
+  }
 }
 
 export * from '../storage/domains/knowledge';

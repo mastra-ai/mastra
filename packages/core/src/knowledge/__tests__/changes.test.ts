@@ -167,3 +167,27 @@ describe('Knowledge scopeDeclaration', () => {
     expect(knowledge.scopeDeclaration('team:$teamId')).toBeUndefined();
   });
 });
+
+describe('Knowledge scopeLabel', () => {
+  it("fills a label's params from the address, for patterns, template children and concrete addresses", () => {
+    const knowledge = new Knowledge({
+      id: 'kb',
+      storage: new InMemoryStore(),
+      scopes: {
+        'policy:$orgId:$teamId': {
+          displayLabel: '$teamId policy at $orgId ($unknown)',
+          children: [{ name: 'drafts', displayLabel: '$teamId drafts' }, { name: 'archive' }],
+        },
+        'policy:globex:sales': { displayLabel: 'Globex sales' },
+        'user:$userId': {},
+      },
+    });
+    expect(knowledge.scopeLabel('policy:acme:support')).toBe('support policy at acme ($unknown)');
+    expect(knowledge.scopeLabel('policy:acme:a%2Fb')).toBe('a/b policy at acme ($unknown)');
+    expect(knowledge.scopeLabel('policy:acme:support/drafts')).toBe('support drafts');
+    expect(knowledge.scopeLabel('policy:globex:sales')).toBe('Globex sales');
+    expect(knowledge.scopeLabel('policy:acme:support/archive')).toBeUndefined();
+    expect(knowledge.scopeLabel('user:u-1')).toBeUndefined();
+    expect(knowledge.scopeLabel('team:t-1')).toBeUndefined();
+  });
+});
