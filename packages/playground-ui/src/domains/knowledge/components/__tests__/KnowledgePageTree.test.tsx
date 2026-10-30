@@ -113,6 +113,18 @@ describe('KnowledgePageTree scope rows and pins', () => {
     expect(within(row).getByText('org:acme')).toBeTruthy();
   });
 
+  it('lets a long address shrink so the scope name keeps its room', () => {
+    const project = page('project', null, 'a0', {
+      name: 'Support desk',
+      address: 'project:9efdb859-2ce6-4e4b-83ce-971a7e41bec5',
+    });
+    renderWithProviders(<KnowledgePageTree pages={[project]} onSelect={() => {}} />);
+    const address = screen.getByTestId('knowledge-tree-address');
+    expect(address.className).not.toMatch(/\bshrink-0\b/);
+    expect(address.className).toMatch(/\bmin-w-0\b/);
+    expect(address.className).toMatch(/\bmax-w-1\/2\b/);
+  });
+
   it('marks pinned pages', () => {
     renderWithProviders(<KnowledgePageTree pages={pages} pinnedIds={['refunds']} onSelect={() => {}} />);
     const pinned = screen.getAllByRole('treeitem').filter(row => within(row).queryByLabelText('Pinned'));
