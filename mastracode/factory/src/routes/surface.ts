@@ -837,6 +837,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          intakeRoutes: deps.storedBoards?.storage,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,

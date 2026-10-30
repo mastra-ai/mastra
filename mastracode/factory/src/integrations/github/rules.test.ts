@@ -69,6 +69,7 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     workItems,
     projects: seeded.projects,
     intake: seeded.intake,
+    boards: seeded.boards,
     project,
     projectRepository,
     github,
@@ -3625,6 +3626,88 @@ describe('GithubRules label routes', () => {
     const onPullRequest = issueAssignees('assigned', ['alice'], 'pr-assigned');
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
     await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
+  });
+});
+
+describe('GithubRules with intake routes', () => {
+  const TRUSTED = {
+    operator: 'AND',
+    conditions: [{ field: 'author.trusted', operator: 'equals', value: true }],
+  } as const;
+
+  /** GitHub rules, a real dispatcher and transition service, the old label routes and the new intake routes. */
+  async function setupIntake(permission: string) {
+    const base = await setup(permission);
+    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    const configVersion = 'intake-routes';
+    await base.intake.setLabelRoute({
+      orgId: 'org-1',
+      factoryProjectId: base.project.id,
+      integrationId: 'github',
+      label: 'release',
+      board: 'release',
+      userId: 'user-1',
+    });
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards,
+      configVersion,
+      intake: base.intake,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({ storage: base.workItems, configVersion, boards }),
+      storage: base.workItems,
+      boards,
+      intakeRoutes: base.boards,
+      isAutoRunEnabled: async () => false,
+      ownerId: 'worker-intake-routes',
+    });
+    const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    await base.boards.createIntakeRoute(
+      scope,
+      { name: 'Trusted to triage', when: TRUSTED, target: { boardKey: 'work', phaseKey: 'triage' } },
+      'admin',
+    );
+    const open = async (deliveryId: string, labels: string[] = []) => {
+      const ingress = issueOpened(deliveryId);
+      (ingress.payload.issue as Record<string, unknown>).labels = labels.map(name => ({ name }));
+      await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    return { ...base, scope, open };
+  }
+
+  it("files a trusted maintainer's issue in Work › Triage, through Intake", async () => {
+    const { open } = await setupIntake('write');
+    const item = await open('trusted-routed');
+    expect(item).toMatchObject({ board: 'work', stages: ['triage'], metadata: { authorTrusted: true } });
+    expect(item?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'triage']);
+  });
+
+  it("leaves an outside author's issue in Work › Intake", async () => {
+    const { open } = await setupIntake('read');
+    expect(await open('untrusted-unrouted')).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false },
+    });
+  });
+
+  it('still files on the label route board when no intake route matches', async () => {
+    const { open } = await setupIntake('read');
+    expect(await open('label-routed', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it('lets a matching intake route win over the label route', async () => {
+    const { open } = await setupIntake('write');
+    expect(await open('intake-over-label', ['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
   });
 });
 
