@@ -249,6 +249,9 @@ describe('StepExecutor', () => {
           stepResults: {},
           state: {},
           requestContext,
+          ...(mode === 'nested'
+            ? { parentWorkflow: { workflowId: 'parent', runId: 'parent-run', executionPath: [0] } }
+            : {}),
         });
         if (mode === 'fenced' || mode === 'nested') {
           await expect(execution).rejects.toBe(interruption);

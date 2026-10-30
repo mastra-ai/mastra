@@ -11,10 +11,10 @@ import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
-import { resolveRunFence, RUN_FENCE_CONFLICT_ERROR_ID } from '../../storage/run-fencing';
+import { resolveRunFence, runOutsideRunFenceScope, RUN_FENCE_CONFLICT_ERROR_ID } from '../../storage/run-fencing';
 import type { RunFence } from '../../storage/run-fencing';
 import { createTool } from '../../tools';
-import { createWorkflow } from '../../workflows/evented';
+import { createStep, createWorkflow } from '../../workflows/evented';
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -125,8 +125,15 @@ it.each([
         prevResult: { status: 'success', output: {}, payload: {}, startedAt: 1, endedAt: 2 },
       },
     };
+    const published = vi.spyOn(pubsub, 'publish');
+    const followed = vi.spyOn(ExecutionFence, 'follow');
     try {
+      expect(await participateInDurableExecution(mastra, event, async () => 'delivered')).toBe('delivered');
+      expect(followed.mock.calls.map(([, runId]) => runId)).toEqual(directClaim ? ['run'] : []);
       expect(await new WorkflowEventProcessor({ mastra }).handle(event)).toEqual({ ok: true });
+      expect(
+        published.mock.calls.some(([topic, delivery]) => topic === 'workflows-finish' && delivery.runId === 'run'),
+      ).toBe(true);
       expect(mastra.__hasInternalWorkflow(workflow.id, 'run')).toBe(false);
       expect(await pubsub.getLeaseOwner(executionLeaseKey('agent', 'run'))).toBe(coordinator.executionId);
       await coordinator.settle(async () => {});
@@ -134,6 +141,8 @@ it.each([
     } finally {
       coordinator.stopHeartbeat();
       await stopDurableExecutionParticipants(mastra);
+      published.mockRestore();
+      followed.mockRestore();
       await pubsub.close();
       await rm(directory, { recursive: true, force: true });
     }
@@ -243,7 +252,9 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
     const handleSpy = vi.spyOn(WorkflowEventProcessor.prototype, 'handle').mockImplementation(function (event) {
       const context = new RequestContext(Object.entries(event.data?.requestContext ?? {}));
       const claimRunId = getExecutionClaimScope(context, event.runId, event.data?.parentWorkflow)?.runId;
-      return delivery.run({ deliveryRunId: event.runId, claimRunId }, () => handle.call(this, event));
+      return runOutsideRunFenceScope(() =>
+        delivery.run({ deliveryRunId: event.runId, claimRunId }, () => handle.call(this, event)),
+      );
     });
     const updateResults = workflows.updateWorkflowResults.bind(workflows);
     const resultsSpy = vi.spyOn(workflows, 'updateWorkflowResults').mockImplementation(args => {
@@ -260,6 +271,7 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
         await parentEntered.promise;
         const second = await child.stream('Answer concurrently.', { requestContext, runId: 'child-run' });
         const secondAnswer = readAnswer(second);
+        await vi.waitFor(() => expect(childModel.prompts.length).toBeGreaterThan(0), { timeout: 2_000 });
         await childEntered.promise;
         releaseParent.resolve();
         expect(await firstAnswer).toBe('parent answer');
@@ -274,7 +286,11 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
         releaseChild.resolve();
         expect(await secondAnswer).toBe('child answer');
       } else {
-        expect(await readAnswer(first)).toBe('parent answer');
+        const firstAnswer = readAnswer(first);
+        if (composition === 'nested') {
+          await vi.waitFor(() => expect(childModel.prompts.length).toBeGreaterThan(0), { timeout: 2_000 });
+        }
+        expect(await firstAnswer).toBe('parent answer');
         if (composition === 'nested') {
           expect(parentModel.prompts).toHaveLength(2);
           expect(parentModel.prompts[1]).toContain('child answer');
@@ -292,7 +308,19 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
           }
         } else {
           const second = await child.stream('Answer the next question.', { requestContext, runId: 'child-run' });
-          expect(await readAnswer(second)).toBe('child answer');
+          const secondAnswer = readAnswer(second);
+          await vi.waitFor(() => expect(childModel.prompts.length).toBeGreaterThan(0), { timeout: 2_000 });
+          expect(await secondAnswer).toBe('child answer');
+          const childWrites = writes.filter(write => write.claimRunId === 'child-run');
+          expect(childWrites.length).toBeGreaterThan(0);
+          const ownership = await workflows.getRunOwnership({ runId: 'child-run' });
+          for (const write of childWrites) {
+            expect(write.fence).toEqual({
+              runId: 'child-run',
+              ownerId: ownership!.ownerId,
+              generation: ownership!.generation,
+            });
+          }
         }
       }
       expect(childModel.prompts).toHaveLength(1);
@@ -426,26 +454,29 @@ it('does not classify a claim without an agent identity as a storage-fenced deli
   );
 });
 
-it('rejects a stale root terminal before its handler can mutate a successor', async () => {
-  const { workflowsStore, pubsub, mastra, event } = await createExecution();
-  await participateInDurableExecution(mastra, event, async () => {});
-  const successor = await ExecutionFence.claim({
-    workflowsStore,
-    leaseProvider: pubsub,
-    agentId: 'agent',
-    runId: 'run',
-    mode: 'takeover',
-  });
-  const handler = vi.fn(async () => {});
-  await expect(
-    participateInDurableExecution(mastra, { ...event, type: 'workflow.end' }, handler),
-  ).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
-  expect(handler).not.toHaveBeenCalled();
-  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
-    ownerId: successor.executionId,
-    live: true,
-  });
-});
+it.each(['workflow.end', 'workflow.cancel'])(
+  'rejects stale %s before its handler can mutate a successor',
+  async type => {
+    const { workflowsStore, pubsub, mastra, event } = await createExecution();
+    await participateInDurableExecution(mastra, event, async () => {});
+    const successor = await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'agent',
+      runId: 'run',
+      mode: 'takeover',
+    });
+    const handler = vi.fn(async () => {});
+    await expect(participateInDurableExecution(mastra, { ...event, type }, handler)).rejects.toMatchObject({
+      id: EXECUTION_SUPERSEDED_ERROR_ID,
+    });
+    expect(handler).not.toHaveBeenCalled();
+    expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+      ownerId: successor.executionId,
+      live: true,
+    });
+  },
+);
 
 it('retries conditional terminal cleanup after release without renewing or transferring ownership', async () => {
   const { workflowsStore, mastra, event, coordinator } = await createExecution();
@@ -476,6 +507,373 @@ it('retries thread cleanup on a fresh worker after interruption between terminal
   await expect(retrySettledDurableExecution(freshWorker, terminal)).resolves.toBe(true);
   expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
   expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({ leaseExpiresAt: null });
+});
+
+it('finalizes cancellation of a suspended run after its execution claim is released', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-cancel-released-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const workflow = createWorkflow({ id: 'durable-agentic-loop', inputSchema: z.object({}), outputSchema: z.object({}) })
+    .then(
+      createStep({
+        id: 'approval',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ suspend }) => suspend({}),
+      }),
+    )
+    .commit();
+  const mastra = new Mastra({ storage, pubsub, workflows: { workflow }, logger: false });
+  instances.push(mastra);
+  const workflows = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore: workflows,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'suspended-run',
+    mode: 'acquire',
+  });
+  const requestContext = new RequestContext([[MASTRA_DURABLE_EXECUTIONS_KEY, { 'suspended-run': coordinator.claim }]]);
+  const published = vi.spyOn(pubsub, 'publish');
+  try {
+    const run = await workflow.createRun({ runId: 'suspended-run' });
+    await mastra.startWorkers();
+    expect((await run.start({ inputData: {}, requestContext })).status).toBe('suspended');
+    await vi.waitFor(async () => {
+      expect(await workflows.getRunOwnership({ runId: run.runId })).toMatchObject({ leaseExpiresAt: null });
+    });
+    published.mockClear();
+    const renewed = vi.spyOn(workflows, 'renewRunOwnership');
+    const followed = vi.spyOn(ExecutionFence, 'follow');
+    await run.cancel();
+    await vi.waitFor(
+      () => {
+        expect(
+          published.mock.calls.some(
+            ([topic, event]) =>
+              topic === 'workflows-finish' &&
+              event.type === 'workflow.end' &&
+              event.runId === run.runId &&
+              event.data?.prevResult?.status === 'canceled',
+          ),
+        ).toBe(true);
+      },
+      { timeout: 2_000 },
+    );
+    expect(renewed).not.toHaveBeenCalled();
+    expect(followed).not.toHaveBeenCalled();
+    expect(published.mock.calls).toContainEqual([
+      'workflow.control',
+      expect.objectContaining({ type: 'workflow.control.abort', runId: run.runId }),
+    ]);
+    expect(published.mock.calls).toContainEqual([
+      'workflows',
+      expect.objectContaining({
+        runId: run.runId,
+        type: 'workflow.end',
+        data: expect.objectContaining({ prevResult: expect.objectContaining({ status: 'canceled' }) }),
+      }),
+    ]);
+    expect(await workflows.getRunOwnership({ runId: run.runId })).toMatchObject({
+      ownerId: coordinator.executionId,
+      generation: coordinator.generation,
+      leaseExpiresAt: null,
+      live: false,
+    });
+  } finally {
+    coordinator.stopHeartbeat();
+    await mastra.shutdown();
+    published.mockRestore();
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+it('does not admit a late step after the execution claim is released', async () => {
+  const { mastra, event, coordinator } = await createExecution();
+  await coordinator.settle(async () => true);
+  let executed = false;
+  await expect(
+    participateInDurableExecution(mastra, event, async () => {
+      executed = true;
+    }),
+  ).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  expect(executed).toBe(false);
+});
+
+it('does not abort local or remote successors when cancellation races a takeover', async () => {
+  const { mastra, workflowsStore, pubsub, event, coordinator } = await createExecution();
+  const local = new WorkflowEventProcessor({ mastra });
+  const remote = new WorkflowEventProcessor({ mastra });
+  await remote['ensureControlSubscription']();
+  const releaseRemote = remote['retainRunsForStep'](['run']);
+  const published = vi.spyOn(pubsub, 'publish');
+  await coordinator.settle(async () => true);
+  try {
+    await participateInDurableExecution(mastra, { ...event, type: 'workflow.cancel' }, async () => {
+      const successor = await ExecutionFence.claim({
+        workflowsStore,
+        leaseProvider: pubsub,
+        agentId: 'agent',
+        runId: 'run',
+        mode: 'takeover',
+      });
+      const [localController, remoteController] = successor.run(
+        () => [local['getOrCreateAbortController']('run'), remote['getOrCreateAbortController']('run')] as const,
+      );
+      await expect(
+        local['processWorkflowCancel']({
+          ...event.data,
+          workflow: createWorkflow({
+            id: event.data.workflowId,
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+          }).commit(),
+          workflowId: event.data.workflowId,
+          runId: 'run',
+          executionPath: [],
+          activeStepsPath: {},
+          stepResults: {},
+          resumeSteps: [],
+          prevResult: { status: 'suspended', suspendPayload: {} },
+          requestContext: event.data.requestContext,
+        }),
+      ).rejects.toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+      expect(localController.signal.aborted).toBe(false);
+      expect(remoteController.signal.aborted).toBe(false);
+      expect(published.mock.calls.some(([, delivery]) => delivery.type === 'workflow.end')).toBe(false);
+      expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+        ownerId: successor.executionId,
+        generation: successor.generation,
+        live: true,
+      });
+    });
+  } finally {
+    releaseRemote();
+    published.mockRestore();
+  }
+});
+
+it.each(['local', 'remote'] as const)(
+  'cancels independently claimed children without aborting successor attachments (%s)',
+  async mode => {
+    const { mastra, workflowsStore, pubsub, coordinator } = await createExecution();
+    const processor = new WorkflowEventProcessor({ mastra });
+    const release = processor['retainRunsForStep'](['run', 'child']);
+    const parentWorkflow = { workflowId: 'durable-agentic-loop', runId: 'run', executionPath: [] };
+    const firstChild = await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'child',
+      runId: 'child',
+      mode: 'acquire',
+    });
+    const child = await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'child',
+      runId: 'child',
+      mode: 'takeover',
+    });
+    firstChild.stopHeartbeat();
+    const context = { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim, child: child.claim } };
+    const cancel = () =>
+      mode === 'local'
+        ? processor['cancelRunAndChildren']('run', coordinator.generation)
+        : processor['abortRunFromControl']('run', coordinator.generation);
+    try {
+      expect(child.generation).not.toBe(coordinator.generation);
+      const controller = child.run(() => processor['getOrCreateAbortController']('child', context, parentWorkflow));
+      processor['parentChildRelationships'].set('child', 'run');
+      cancel();
+      expect(controller.signal.aborted).toBe(true);
+
+      const parentSuccessor = await ExecutionFence.claim({
+        workflowsStore,
+        leaseProvider: pubsub,
+        agentId: 'agent',
+        runId: 'run',
+        mode: 'takeover',
+      });
+      const childSuccessor = await ExecutionFence.claim({
+        workflowsStore,
+        leaseProvider: pubsub,
+        agentId: 'child',
+        runId: 'child',
+        mode: 'takeover',
+      });
+      const successorController = childSuccessor.run(() =>
+        processor['getOrCreateAbortController'](
+          'child',
+          {
+            [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: parentSuccessor.claim, child: childSuccessor.claim },
+          },
+          parentWorkflow,
+        ),
+      );
+      cancel();
+      expect(successorController.signal.aborted).toBe(false);
+      expect(() => child.run(() => processor['getOrCreateAbortController']('child', context, parentWorkflow))).toThrow(
+        expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }),
+      );
+    } finally {
+      release();
+    }
+  },
+);
+
+it.each(['local', 'remote'] as const)(
+  'refreshes child attachments when only its parent takes over (%s)',
+  async mode => {
+    const { mastra, workflowsStore, pubsub, coordinator } = await createExecution();
+    const processor = new WorkflowEventProcessor({ mastra });
+    const release = processor['retainRunsForStep'](['run', 'child']);
+    const parentWorkflow = { workflowId: 'durable-agentic-loop', runId: 'run', executionPath: [] };
+    const child = await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'child',
+      runId: 'child',
+      mode: 'acquire',
+    });
+    const context = { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim, child: child.claim } };
+    const rootController = coordinator.run(() => processor['getOrCreateAbortController']('run', context));
+    const original = child.run(() => processor['getOrCreateAbortController']('child', context, parentWorkflow));
+    processor['parentChildRelationships'].set('child', 'run');
+    await processor['ensureControlSubscription']();
+    const cancel = async (generation: number) => {
+      if (mode === 'local') processor['cancelRunAndChildren']('run', generation);
+      else
+        await pubsub.publish('workflow.control', {
+          type: 'workflow.control.abort',
+          runId: 'run',
+          data: { generation },
+        });
+    };
+    try {
+      const parent = await ExecutionFence.claim({
+        workflowsStore,
+        leaseProvider: pubsub,
+        agentId: 'agent',
+        runId: 'run',
+        mode: 'takeover',
+      });
+      const attached = child.run(() =>
+        processor['getOrCreateAbortController'](
+          'child',
+          {
+            [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: parent.claim, child: child.claim },
+          },
+          parentWorkflow,
+        ),
+      );
+      expect(attached).not.toBe(original);
+      await cancel(coordinator.generation!);
+      await vi.waitFor(() => expect(rootController.signal.aborted).toBe(true));
+      expect(attached.signal.aborted).toBe(false);
+      expect(() => child.run(() => processor['getOrCreateAbortController']('child', context, parentWorkflow))).toThrow(
+        expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }),
+      );
+      await cancel(parent.generation!);
+      await vi.waitFor(() => expect(attached.signal.aborted).toBe(true));
+      // A stale root controller must not hide an eligible descendant on this replica.
+      expect(rootController.signal.aborted).toBe(true);
+    } finally {
+      release();
+    }
+  },
+);
+
+it('does not announce snapshot cleanup when takeover rejects the canceled-end deletion', async () => {
+  const { mastra, workflowsStore, pubsub, coordinator, event } = await createExecution();
+  const processor = new WorkflowEventProcessor({ mastra });
+  const workflow = createWorkflow({ id: event.data.workflowId, inputSchema: z.any(), outputSchema: z.any() }).commit();
+  await coordinator.settle(async () => true);
+  const remove = workflowsStore.deleteWorkflowRunById.bind(workflowsStore);
+  const deletion = vi.spyOn(workflowsStore, 'deleteWorkflowRunById').mockImplementationOnce(async args => {
+    await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'agent',
+      runId: 'run',
+      mode: 'takeover',
+    });
+    return remove(args);
+  });
+  const published = vi.spyOn(pubsub, 'publish');
+  const end = {
+    ...event,
+    type: 'workflow.end',
+    data: { ...event.data, prevResult: { status: 'canceled' }, deleteSnapshotAfterEnd: true },
+  };
+  try {
+    await expect(
+      participateInDurableExecution(mastra, end, () =>
+        processor['processWorkflowEnd']({
+          ...end.data,
+          workflow,
+          runId: 'run',
+          executionPath: [],
+          activeStepsPath: {},
+          stepResults: {},
+          resumeSteps: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+    expect(deletion).toHaveBeenCalled();
+    expect(published.mock.calls.some(([, delivery]) => delivery.type === 'workflow.finish-cleanup-complete')).toBe(
+      false,
+    );
+  } finally {
+    deletion.mockRestore();
+    published.mockRestore();
+  }
+});
+
+it('preserves a successor registration when canceled-end publication races a takeover', async () => {
+  const { mastra, workflowsStore, pubsub, coordinator, event } = await createExecution();
+  const processor = new WorkflowEventProcessor({ mastra });
+  const workflow = createWorkflow({ id: event.data.workflowId, inputSchema: z.any(), outputSchema: z.any() }).commit();
+  const successorWorkflow = createWorkflow({
+    id: event.data.workflowId,
+    inputSchema: z.any(),
+    outputSchema: z.any(),
+  }).commit();
+  mastra.__registerInternalWorkflow(workflow, 'run');
+  await coordinator.settle(async () => true);
+  const publish = pubsub.publish.bind(pubsub);
+  const published = vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, delivery) => {
+    if (topic === 'workflows-finish' && delivery.type === 'workflow.end') {
+      await ExecutionFence.claim({
+        workflowsStore,
+        leaseProvider: pubsub,
+        agentId: 'agent',
+        runId: 'run',
+        mode: 'takeover',
+      });
+      mastra.__registerInternalWorkflow(successorWorkflow, 'run');
+    }
+    return publish(topic, delivery);
+  });
+  const end = { ...event, type: 'workflow.end', data: { ...event.data, prevResult: { status: 'canceled' } } };
+  try {
+    await expect(
+      participateInDurableExecution(mastra, end, () =>
+        processor['processWorkflowEnd']({
+          ...end.data,
+          workflow,
+          runId: 'run',
+          executionPath: [],
+          activeStepsPath: {},
+          stepResults: {},
+          resumeSteps: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+    expect(mastra.__getInternalWorkflow(event.data.workflowId, 'run')).toBe(successorWorkflow);
+  } finally {
+    published.mockRestore();
+  }
 });
 
 it('keeps cancellation alive until its committed end delivery is handled', async () => {

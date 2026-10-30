@@ -15,6 +15,7 @@ import {
   isExecutionFenceError,
   getExecutionClaimScope,
 } from './execution-fence';
+import { runInRunFenceScope } from './run-fence-scope';
 import { emitErrorEvent } from './stream-adapter';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
@@ -45,6 +46,28 @@ export async function participateInDurableExecution<T>(
   const execution = getExecutionClaimScope(context, event.runId, event.data?.parentWorkflow);
   if (!execution?.claim.agentId) return execute();
   const { runId, claim, nestedRunIds } = execution;
+  if (
+    (event.type === 'workflow.cancel' ||
+      (event.type === 'workflow.end' && event.data?.prevResult?.status === 'canceled')) &&
+    event.data?.workflowId === DurableStepIds.AGENTIC_LOOP &&
+    !event.data?.parentWorkflow &&
+    !event.data?.perStep &&
+    claim.generation !== undefined
+  ) {
+    const store = await mastra.getStorage()?.getStore('workflows');
+    const fence = { runId, ownerId: claim.executionId, generation: claim.generation };
+    const record = await store?.getRunOwnership({ runId });
+    if (record?.leaseExpiresAt === null && matchesRunFence(record, fence)) {
+      // Cancellation may finalize a suspended run, but must not renew it or write over a successor.
+      return runInRunFenceScope(
+        {
+          fenceFor: (target, targetRunId) => (target === store && targetRunId === runId ? fence : undefined),
+          generationFor: targetRunId => (targetRunId === runId ? claim.generation : undefined),
+        },
+        execute,
+      );
+    }
+  }
   const scope = mastra.__createRunScope(runId);
   try {
     let participants = scope.get(PARTICIPANTS);
@@ -117,6 +140,8 @@ export async function participateInDurableExecution<T>(
 /** Retry only conditional cleanup after a terminal delivery released its claim before broker acknowledgement. */
 export async function retrySettledDurableExecution(mastra: Mastra, event: Event): Promise<boolean> {
   if (!isRootTerminal(event)) return false;
+  // Cancellation of a suspended run must still deliver its terminal notification.
+  if (event.type === 'workflow.end' && event.data?.prevResult?.status === 'canceled') return false;
   const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
   const claim = getExecutionClaim(context, event.runId);
   if (claim?.generation === undefined) return false;
