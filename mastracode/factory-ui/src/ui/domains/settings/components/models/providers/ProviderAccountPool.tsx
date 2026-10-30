@@ -72,19 +72,22 @@ function moved(accounts: readonly PoolAccountSummary[], from: number, to: number
 
 /**
  * The accounts pooled under one connected provider at one scope. Routing tries
- * them in the listed order. Only rendered for viewers who can manage the pool:
- * the server serves org pools to org admins only.
+ * them in the listed order. `readOnly` (org members viewing the org pool) shows
+ * the order, Active badge and status without any controls; only org admins can
+ * change the org pool.
  */
 export function ProviderAccountPool({
   provider,
   displayName,
   scope,
   disabled,
+  readOnly = false,
 }: {
   provider: string;
   displayName: string;
   scope: AccountScope;
   disabled: boolean;
+  readOnly?: boolean;
 }) {
   const accountsQuery = useProviderAccountsQuery(provider, scope);
   const activate = useActivateProviderAccount(provider, scope);
@@ -110,19 +113,34 @@ export function ProviderAccountPool({
   const renderRow = (account: PoolAccountSummary, index: number, dragHandleProps?: DragHandleProps | null) => (
     <AccountRow
       account={account}
-      disabled={busy}
-      dragHandleProps={dragHandleProps}
-      onMoveUp={index > 0 ? () => saveOrder(moved(accounts, index, index - 1)) : undefined}
-      onMoveDown={index < accounts.length - 1 ? () => saveOrder(moved(accounts, index, index + 1)) : undefined}
-      onActivate={() =>
-        activate.mutate(account.id, { onError: error => toast.error(error.message || 'Failed to switch account') })
-      }
-      onRename={() => setRenaming(account)}
-      onRemove={() =>
-        remove.mutate(account.id, { onError: error => toast.error(error.message || 'Failed to remove account') })
-      }
+      actions={{
+        disabled: busy,
+        dragHandleProps,
+        onMoveUp: index > 0 ? () => saveOrder(moved(accounts, index, index - 1)) : undefined,
+        onMoveDown: index < accounts.length - 1 ? () => saveOrder(moved(accounts, index, index + 1)) : undefined,
+        onActivate: () =>
+          activate.mutate(account.id, { onError: error => toast.error(error.message || 'Failed to switch account') }),
+        onRename: () => setRenaming(account),
+        onRemove: () =>
+          remove.mutate(account.id, { onError: error => toast.error(error.message || 'Failed to remove account') }),
+      }}
     />
   );
+
+  if (readOnly) {
+    return (
+      <div className="flex flex-col gap-1 pb-1.5 pl-9" role="group" aria-label={`${displayName} accounts`}>
+        <div className="flex min-w-0 flex-col">
+          {saved.map(account => (
+            <AccountRow key={account.id} account={account} />
+          ))}
+        </div>
+        <Txt as="p" variant="meta" tone="muted">
+          When the active account is rate limited, routing switches to the next one in this order.
+        </Txt>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1 pb-1.5 pl-9" role="group" aria-label={`${displayName} accounts`}>
@@ -162,25 +180,23 @@ export function ProviderAccountPool({
   );
 }
 
+/** Omit `actions` for a read-only row: no drag handle, move buttons or menu. */
 function AccountRow({
   account,
-  disabled,
-  dragHandleProps,
-  onMoveUp,
-  onMoveDown,
-  onActivate,
-  onRename,
-  onRemove,
+  actions,
 }: {
   account: PoolAccountSummary;
-  disabled: boolean;
-  dragHandleProps: DragHandleProps | null | undefined;
-  onMoveUp: (() => void) | undefined;
-  onMoveDown: (() => void) | undefined;
-  onActivate: () => void;
-  onRename: () => void;
-  onRemove: () => void;
+  actions?: {
+    disabled: boolean;
+    dragHandleProps: DragHandleProps | null | undefined;
+    onMoveUp: (() => void) | undefined;
+    onMoveDown: (() => void) | undefined;
+    onActivate: () => void;
+    onRename: () => void;
+    onRemove: () => void;
+  };
 }) {
+  const { disabled = true, dragHandleProps, onMoveUp, onMoveDown, onActivate, onRename, onRemove } = actions ?? {};
   const reorderable = onMoveUp !== undefined || onMoveDown !== undefined;
   return (
     <div className="flex min-h-8 items-center gap-2" role="group" aria-label={account.label}>
@@ -231,20 +247,22 @@ function AccountRow({
           </Button>
         </>
       )}
-      <DropdownMenu>
-        <DropdownMenu.Trigger
-          render={
-            <Button variant="ghost" size="icon-sm" aria-label={`${account.label} actions`} disabled={disabled}>
-              <MoreHorizontal />
-            </Button>
-          }
-        />
-        <DropdownMenu.Content align="end">
-          {!account.active && <DropdownMenu.Item onClick={onActivate}>Make active</DropdownMenu.Item>}
-          <DropdownMenu.Item onClick={onRename}>Rename</DropdownMenu.Item>
-          <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>
+      {actions && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button variant="ghost" size="icon-sm" aria-label={`${account.label} actions`} disabled={disabled}>
+                <MoreHorizontal />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end">
+            {!account.active && <DropdownMenu.Item onClick={onActivate}>Make active</DropdownMenu.Item>}
+            <DropdownMenu.Item onClick={onRename}>Rename</DropdownMenu.Item>
+            <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
     </div>
   );
 }

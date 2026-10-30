@@ -3,7 +3,8 @@
  *
  * A pool is the ordered list of accounts (OAuth subscriptions and API keys)
  * held for one provider in one scope: the caller's own pool (`?scope=user`,
- * the default) or the org's shared pool (`?scope=org`, org admins only).
+ * the default) or the org's shared pool (`?scope=org`). Any org member can
+ * list the org pool (read-only); only org admins can change it.
  * Requests use the active account; the rest are switched to in priority order.
  *
  * Every response is `{ accounts: PoolAccountSummary[] }` in pool order
@@ -106,7 +107,7 @@ export class ProviderAccountRoutes extends Route<ProviderAccountRoutesDeps> {
     const { auth, authStorage, modelCredentials } = this.deps;
     const onCredentialsChanged = this.deps.onCredentialsChanged ?? (() => {});
 
-    const resolvePool = async (c: Context): Promise<PoolResolution> => {
+    const resolvePool = async (c: Context, access: 'read' | 'write'): Promise<PoolResolution> => {
       const ctx = await resolveCredentialContext({ c, auth, credentials: modelCredentials });
       if ('response' in ctx) return ctx;
       const providerId = getAuthProviderId(c.req.param('provider') ?? '');
@@ -118,7 +119,7 @@ export class ProviderAccountRoutes extends Route<ProviderAccountRoutesDeps> {
         if (!authStorage) return { response: c.json({ error: 'Credential storage is not available' }, 503) };
         return { pool: localPool(authStorage, providerId) };
       }
-      if (scope === 'org' && !(await auth.isOrganizationAdmin(c, ctx.orgId))) {
+      if (scope === 'org' && access === 'write' && !(await auth.isOrganizationAdmin(c, ctx.orgId))) {
         return {
           response: c.json({ error: 'forbidden', message: "Only org admins can manage the org's accounts" }, 403),
         };
@@ -133,7 +134,7 @@ export class ProviderAccountRoutes extends Route<ProviderAccountRoutesDeps> {
       c: Context,
       write: (pool: PoolHandle, accountId: string) => Promise<Response | void>,
     ): Promise<Response> => {
-      const resolved = await resolvePool(c);
+      const resolved = await resolvePool(c, 'write');
       if ('response' in resolved) return resolved.response;
       const { pool } = resolved;
       const accountId = c.req.param('accountId') ?? '';
@@ -155,7 +156,7 @@ export class ProviderAccountRoutes extends Route<ProviderAccountRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const resolved = await resolvePool(loose(c));
+          const resolved = await resolvePool(loose(c), 'read');
           if ('response' in resolved) return resolved.response;
           try {
             return c.json({ accounts: await resolved.pool.list() });
@@ -170,7 +171,7 @@ export class ProviderAccountRoutes extends Route<ProviderAccountRoutesDeps> {
         method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          const resolved = await resolvePool(loose(c));
+          const resolved = await resolvePool(loose(c), 'write');
           if ('response' in resolved) return resolved.response;
           const { pool } = resolved;
           const body = await readJsonBody(loose(c));

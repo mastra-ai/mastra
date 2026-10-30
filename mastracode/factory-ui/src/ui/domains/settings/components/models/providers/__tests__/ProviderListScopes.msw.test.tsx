@@ -244,8 +244,8 @@ describe('ProviderList credential scopes', () => {
       expect(within(lists.factory()).queryByText(ORG_SHARED_CAPTION)).not.toBeInTheDocument();
       expect(within(lists.factory()).getByRole('button', { name: 'Add provider' })).toBeDisabled();
       expect(
-        within(rowFor('anthropic', lists.factory())).getByRole('button', { name: 'Anthropic actions' }),
-      ).toBeDisabled();
+        within(rowFor('anthropic', lists.factory())).queryByRole('button', { name: 'Anthropic actions' }),
+      ).not.toBeInTheDocument();
       expect(within(lists.personal()).getByRole('button', { name: 'Add provider' })).toBeEnabled();
     });
   });

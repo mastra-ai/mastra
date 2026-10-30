@@ -93,17 +93,43 @@ describe('GET /accounts', () => {
     expect(json.accounts).toEqual([]);
   });
 
-  it('lists the org pool with ?scope=org for admins and 403s non-admins', async () => {
+  it('lists the org pool with ?scope=org, separate from the user pool', async () => {
     await seedPool(ORG);
     const ok = await buildApp(userA).request(`${base}?scope=org`);
     expect(ok.status).toBe(200);
     expect((await ok.json()).accounts).toHaveLength(3);
-    // The user pool is separate from the org pool.
     expect((await (await buildApp(userA).request(base)).json()).accounts).toEqual([]);
+  });
 
+  it('shows org members who are not admins the org pool read-only, without token fields', async () => {
+    const [one, two, three] = await seedPool(ORG);
+    await seed.credentials.markAccountStatus(ORG, two!, 'cooldown', Date.now() + 60_000);
     isOrganizationAdmin.mockResolvedValue(false);
-    const denied = await buildApp(userA).request(`${base}?scope=org`);
-    expect(denied.status).toBe(403);
+    const res = await buildApp(userB).request(`${base}?scope=org`);
+    expect(res.status).toBe(200);
+    const { accounts } = await res.json();
+    expect(accounts.map((a: { id: string }) => a.id)).toEqual([one, two, three]);
+    expect(accounts[0]).toMatchObject({ label: 'one', active: true, status: 'ok' });
+    expect(accounts[1]).toMatchObject({ label: 'two', active: false, status: 'cooldown' });
+    for (const account of accounts) {
+      expect(Object.keys(account).sort()).toEqual(
+        expect.arrayContaining(['active', 'createdAt', 'id', 'label', 'priority', 'providerId', 'status', 'type']),
+      );
+      for (const key of ['access', 'refresh', 'key', 'credential', 'identity', 'data']) {
+        expect(account).not.toHaveProperty(key);
+      }
+    }
+    const raw = JSON.stringify(accounts);
+    expect(raw).not.toContain('access-');
+    expect(raw).not.toContain('refresh-');
+    expect(raw).not.toContain('identity-');
+  });
+
+  it("does not show another org's pool", async () => {
+    await seedPool(ORG);
+    isOrganizationAdmin.mockResolvedValue(false);
+    const outsider = { workosId: 'user-c', organizationId: 'org2' };
+    expect((await (await buildApp(outsider).request(`${base}?scope=org`)).json()).accounts).toEqual([]);
   });
 
   it('400s an unknown scope and 401s unauthenticated callers', async () => {
@@ -232,6 +258,61 @@ describe('PUT /accounts/order', () => {
     const [, two] = await seedPool(ORG);
     isOrganizationAdmin.mockResolvedValue(false);
     expect((await send(buildApp(userA), 'PUT', `${base}/order?scope=org`, { orderedIds: [two] })).status).toBe(403);
+  });
+});
+
+describe('members who are not org admins', () => {
+  it('manage their own pool end to end, without touching other pools or asking for admin', async () => {
+    isOrganizationAdmin.mockResolvedValue(false);
+    const [one, two, three] = await seedPool(USER_A);
+    const [otherOne] = await seedPool({ orgId: 'org1', userId: 'user-b' });
+    const [orgOne] = await seedPool(ORG);
+    const app = buildApp(userA);
+    const ids = async (res: Response) => {
+      expect(res.status).toBe(200);
+      return (await res.json()).accounts.map((a: { id: string; active: boolean; label: string }) => [
+        a.id,
+        a.active,
+        a.label,
+      ]);
+    };
+
+    expect(await ids(await app.request(base))).toEqual([
+      [one, true, 'one'],
+      [two, false, 'two'],
+      [three, false, 'three'],
+    ]);
+    expect(await ids(await send(app, 'POST', accountPath(two!, '/activate')))).toEqual([
+      [one, false, 'one'],
+      [two, true, 'two'],
+      [three, false, 'three'],
+    ]);
+    expect((await ids(await send(app, 'PATCH', accountPath(one!), { label: 'Mine' })))[0]).toEqual([
+      one,
+      false,
+      'Mine',
+    ]);
+    expect(
+      (await ids(await send(app, 'PUT', `${base}/order`, { orderedIds: [three] }))).map((a: string[]) => a[0]),
+    ).toEqual([three, one, two]);
+    expect((await ids(await send(app, 'DELETE', accountPath(one!)))).map((a: string[]) => a[0])).toEqual([three, two]);
+
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+    expect(onCredentialsChanged).toHaveBeenCalledTimes(4);
+    const other = await seed.credentials.listAccounts({ orgId: 'org1', userId: 'user-b' }, 'openai-codex');
+    expect(other.map(a => [a.label, a.active])).toEqual([
+      ['one', true],
+      ['two', false],
+      ['three', false],
+    ]);
+    expect(other[0]!.id).toBe(otherOne);
+    const org = await seed.credentials.listAccounts(ORG, 'openai-codex');
+    expect(org.map(a => [a.label, a.active])).toEqual([
+      ['one', true],
+      ['two', false],
+      ['three', false],
+    ]);
+    expect(org[0]!.id).toBe(orgOne);
   });
 });
 

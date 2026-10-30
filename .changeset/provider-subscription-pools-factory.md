@@ -10,9 +10,9 @@ Each user and org can now keep several accounts per model provider, and Factory 
 
 **Removing credentials.** `DELETE /web/config/providers/:provider/key` now removes only an API-key account (the active one, else the first by priority) and returns 404 `api_key_not_found` when the pool holds no key. `DELETE /web/config/providers/:provider/oauth` (sign out) removes only an OAuth account the same way and leaves API keys in place. The next account takes over.
 
-**Model settings.** Once a provider has two or more accounts, its pool is shown under Personal defaults and Factory defaults: each account's name, whether it is a sign-in or a key, which one is active, and whether it is ready, cooling down (with the time it is back) or failing to authenticate. You can make an account active, rename it, remove it, and reorder it by dragging or with the move buttons. Only organization admins see and manage the Factory defaults pool.
+**Model settings.** Once a provider has two or more accounts, its pool is shown under Personal defaults and Factory defaults: each account's name, whether it is a sign-in or a key, which one is active, and whether it is ready, cooling down (with the time it is back) or failing to authenticate. You can make an account active, rename it, remove it, and reorder it by dragging or with the move buttons. Every member manages their own Personal defaults pool. Org members who are not admins see the Factory defaults pool read-only (which account is active and its status) with no controls; only organization admins can change it.
 
-**API.** New routes under `/web/config/providers/:provider/accounts` list the pool and activate, rename, remove and reorder accounts. Every route takes `?scope=user|org` (default `user`); `org` requires an org admin. Responses contain account metadata only, never tokens or keys.
+**API.** New routes under `/web/config/providers/:provider/accounts` list the pool and activate, rename, remove and reorder accounts. Every route takes `?scope=user|org` (default `user`). Any org member can list the `org` pool; changing it requires an org admin (403 otherwise). Responses contain account metadata only, never tokens or keys.
 
 ```http
 GET    /web/config/providers/openai/accounts?scope=org

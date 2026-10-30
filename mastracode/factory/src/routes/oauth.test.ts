@@ -402,6 +402,32 @@ describe('session cancel and sign-out', () => {
 
 // ── Org-scoped sign-in ───────────────────────────────────────────────────
 
+describe('members who are not org admins', () => {
+  it('sign in to and sign out of their own pool without touching the org pool', async () => {
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = buildApp(userA, { isOrganizationAdmin });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', {
+      type: 'oauth',
+      ...ANTHROPIC_CREDS,
+      refresh: 'r-org',
+    });
+
+    for (const refresh of ['r-first', 'r-second']) {
+      completeAnthropicLogin.mockResolvedValueOnce({ ...ANTHROPIC_CREDS, refresh });
+      const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+      const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+      expect(res.status).toBe(200);
+    }
+    expect((await seed.credentials.listAccounts(TENANT_A, 'anthropic')).map(a => a.active)).toEqual([false, true]);
+
+    const out = await app.request('/web/config/providers/anthropic/oauth', { method: 'DELETE' });
+    expect(out.status).toBe(200);
+    expect((await seed.credentials.listAccounts(TENANT_A, 'anthropic')).map(a => a.active)).toEqual([true]);
+    expect(await seed.credentials.listAccounts({ orgId: 'org1' }, 'anthropic')).toHaveLength(1);
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+  });
+});
+
 describe('provider login preserves OM selection intent', () => {
   it('leaves automatic roles unset after paste-code completion', async () => {
     const app = buildApp(userA);

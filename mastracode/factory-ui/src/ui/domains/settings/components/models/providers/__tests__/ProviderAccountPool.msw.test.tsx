@@ -8,7 +8,15 @@ import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
 import type { PoolAccountSummary, ProviderInfo } from '../../../../../../../api/types';
 import { ProviderList } from '../ProviderList';
-import { PROVIDERS_URL, keyUrl, openAddProvider, rowFor, saveKey, stubProviders } from './provider-list-test-utils';
+import {
+  PROVIDERS_URL,
+  keyUrl,
+  openAddProvider,
+  pickRowAction,
+  rowFor,
+  saveKey,
+  stubProviders,
+} from './provider-list-test-utils';
 
 const ACCOUNTS_URL = `${PROVIDERS_URL}/:provider/accounts`;
 
@@ -365,24 +373,74 @@ describe('provider account pools', () => {
       expect(requests.map(request => `${request.method} ${request.scope}`)).toEqual(['GET org', 'POST org']);
     });
 
-    it('does not ask for the org pool for members, since the server serves it to admins only', async () => {
+    it('shows members the org pool read-only, with the Active badge and status but no controls', async () => {
       enableAuth();
       stubProviders([{ provider: 'openai', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }], false);
-      const poolRequest = vi.fn();
-      server.use(
-        http.get(ACCOUNTS_URL, ({ request }) => {
-          poolRequest(new URL(request.url).searchParams.get('scope'));
-          return HttpResponse.json({ error: 'forbidden' }, { status: 403 });
-        }),
-      );
+      const requests = stubPools({
+        org: [WORK, account({ ...SIDE, type: 'oauth', status: 'cooldown', cooldownUntil: Date.now() + 60_000 })],
+      });
+      const { client } = renderWithProviders(<ProviderList credentialScope="org" />);
+
+      const accounts = await pool();
+      await waitForMutationsIdle(client);
+      expect(labelsInOrder(accounts)).toEqual(['Work key', 'Side key']);
+      expect(within(accountRow('Work key')).getByText('Active')).toBeInTheDocument();
+      expect(within(accountRow('Side key')).getByText(/^Cooling down until /)).toBeInTheDocument();
+      // No make-active, rename, remove, reorder, sign-out or Remove API key for members.
+      expect(within(rowFor('openai')).queryAllByRole('button')).toEqual([]);
+      expect(within(accounts).queryByLabelText(/^Drag /)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add provider' })).toBeDisabled();
+      expect(requests.map(request => `${request.method} ${request.scope}`)).toEqual(['GET org']);
+    });
+
+    it('shows a member a single org account as the provider row, with no pool list', async () => {
+      enableAuth();
+      stubProviders([{ provider: 'openai', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }], false);
+      const requests = stubPools({ org: [WORK] });
       const { client } = renderWithProviders(<ProviderList credentialScope="org" />);
 
       const row = await waitFor(() => rowFor('openai'));
+      await waitFor(() => expect(requests).toHaveLength(1));
       await waitForMutationsIdle(client);
       expect(within(row).getByText('Key saved')).toBeInTheDocument();
-      expect(within(row).getByRole('button', { name: 'OpenAI actions' })).toBeDisabled();
+      expect(within(row).queryAllByRole('button')).toEqual([]);
       expect(screen.queryByRole('group', { name: 'OpenAI accounts' })).not.toBeInTheDocument();
-      expect(poolRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('personal scope for members who are not org admins', () => {
+    it('gives members every pool control on their own pool', async () => {
+      enableAuth();
+      stubProviders([{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }], false);
+      const requests = stubPools({ user: [WORK, SIDE] });
+      const user = userEvent.setup();
+      renderWithProviders(<ProviderList credentialScope="user" />);
+      const accounts = await pool();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Add provider' })).toBeEnabled());
+      expect(within(accounts).getByRole('button', { name: 'Move Side key up' })).toBeEnabled();
+      expect(within(accounts).getByLabelText('Drag Side key')).toBeInTheDocument();
+
+      await pickRowAction(user, 'openai', 'Remove API key');
+      await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+      await pickRowAction(user, 'openai', 'Add account');
+      await user.keyboard('{Escape}');
+
+      await pickAccountAction(user, 'Side key', 'Make active');
+      await waitFor(() => expect(within(accountRow('Side key')).getByText('Active')).toBeInTheDocument());
+      await pickAccountAction(user, 'Work key', 'Rename');
+      expect(await screen.findByRole('dialog', { name: 'Rename account' })).toBeInTheDocument();
+      await user.keyboard('{Escape}');
+      await user.click(within(accounts).getByRole('button', { name: 'Move Side key up' }));
+      await waitFor(() => expect(requests.some(request => request.method === 'PUT')).toBe(true));
+      await pickAccountAction(user, 'Work key', 'Remove');
+
+      await waitFor(() =>
+        expect(requests.map(request => `${request.method} ${request.scope}`)).toEqual(
+          expect.arrayContaining(['POST user', 'PUT user', 'DELETE user']),
+        ),
+      );
+      expect(requests.every(request => request.scope === 'user')).toBe(true);
     });
   });
 });

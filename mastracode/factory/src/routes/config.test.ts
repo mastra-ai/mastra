@@ -526,6 +526,25 @@ describe('provider key routes with a tenant', () => {
     expect(isOrganizationAdmin).not.toHaveBeenCalled();
   });
 
+  it('lets non-admin members add keys to and remove keys from their own pool only', async () => {
+    await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
+    isOrganizationAdmin.mockClear();
+    isOrganizationAdmin.mockResolvedValue(false);
+    const userPool = { orgId: 'org1', userId: 'user-a' };
+
+    expect((await putKey(buildApp(userA), { key: 'sk-one' })).status).toBe(200);
+    expect((await putKey(buildApp(userA), { key: 'sk-two' })).status).toBe(200);
+    expect((await seed.credentials.listAccounts(userPool, 'anthropic')).map(a => a.active)).toEqual([false, true]);
+
+    const res = await buildApp(userA).request('/web/config/providers/anthropic/key', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const left = await seed.credentials.listAccounts(userPool, 'anthropic');
+    expect(left.map(a => a.active)).toEqual([true]);
+    expect(await seed.credentials.getAccountCredential(userPool, left[0]!.id)).toMatchObject({ key: 'sk-one' });
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toMatchObject({ key: 'sk-shared' });
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+  });
+
   it("lists the caller's user key when both scopes exist", async () => {
     await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     await putKey(buildApp(userA), { key: 'sk-mine' });
