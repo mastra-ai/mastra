@@ -3,7 +3,7 @@
  */
 
 import { TripWire } from '../../agent/trip-wire';
-import { MASTRA_AUTH_TOKEN_KEY } from '../../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, MASTRA_NORMALIZED_USER_KEY } from '../../request-context';
 
 /**
  * Returns a copy of a serialized request context without the framework-managed
@@ -16,6 +16,17 @@ export function withoutAuthToken<T extends Record<string, any> | undefined>(requ
   }
   const { [MASTRA_AUTH_TOKEN_KEY]: _authToken, ...rest } = requestContext;
   return rest as T;
+}
+
+/**
+ * Returns a snapshot's request context without the keys that are only valid for the
+ * request that wrote it: the bearer token and the normalized authenticated user.
+ * Resume, restart and time travel take those from the request doing the resuming,
+ * so a resume without a signed-in user can't act as the user who started the run.
+ */
+export function withoutLiveRequestKeys(requestContext: Record<string, any> | undefined): Record<string, any> {
+  const { [MASTRA_AUTH_TOKEN_KEY]: _authToken, [MASTRA_NORMALIZED_USER_KEY]: _user, ...rest } = requestContext ?? {};
+  return rest;
 }
 
 export function restoreLiveRequestContext(
