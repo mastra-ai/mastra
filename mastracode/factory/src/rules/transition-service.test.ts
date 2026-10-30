@@ -563,7 +563,7 @@ describe('installed board transition policies', () => {
       ).toMatchObject({ status: 'accepted' });
       item = (await storage.get({ orgId: 'org-1', id: item.id }))!;
     }
-    expect(await service.transition({ ...request(item), triageType: 'feature request' })).toMatchObject({
+    expect(await service.transition(request(item))).toMatchObject({
       status: 'accepted',
     });
     expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
@@ -844,7 +844,6 @@ describe('FactoryTransitionService', () => {
       ...request(bug, { stage: 'planning', identity: 'bug-plan' }),
       actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
       ingress: { type: 'agent', identity: 'bug-plan' },
-      triageType: 'bug',
     });
     const executed = await service.transition({
       ...request(
@@ -869,7 +868,6 @@ describe('FactoryTransitionService', () => {
         ...request(closed, { stage: 'done', identity: 'feature-close' }),
         actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
         ingress: { type: 'agent', identity: 'feature-close' },
-        triageType: 'feature request',
       }),
     ).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
   });
@@ -1069,7 +1067,6 @@ describe('FactoryTransitionService', () => {
       ...request(item, { stage: 'planning' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
       ingress: { type: 'agent', identity: 'triage-verdict' },
-      triageType: 'bug',
     });
 
     expect(result.status).toBe('accepted');
@@ -2295,7 +2292,6 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const result = await service.transition({
       ...planAgentToExecute(item, `${role}-execute`),
       actor: { type: 'agent', bindingId: `${role}-binding`, role },
-      ...(role === 'triage' ? { triageType: 'bug' as const } : {}),
     });
 
     expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
@@ -2680,6 +2676,50 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       const service = new FactoryTransitionService({ configVersion: 'work-rules', storage });
       return { storage, item, service };
     }
+
+    it('lets the triage agent send an open non-bug back to Intake, and a person moving it on is the approval', async () => {
+      const { storage, item } = await card('triage');
+      const onAccepted = vi.fn();
+      const service = new FactoryTransitionService({ configVersion: 'work-rules', storage, onAccepted });
+      await expect(
+        service.transition({
+          ...request(item, { orgId: org, stage: 'intake' }),
+          ...agent('triage', 'feature-request'),
+        }),
+      ).resolves.toMatchObject({ status: 'accepted', stage: 'intake' });
+      const resting = await storage.get({ orgId: org, id: item.id });
+      expect(resting).toMatchObject({ stages: ['intake'], triageType: null, acceptedAt: null });
+      expect(onAccepted).not.toHaveBeenCalled();
+
+      await expect(
+        service.transition({ ...request(resting!, { orgId: org, stage: 'planning', identity: 'approve' }) }),
+      ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
+      await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(1));
+      expect(onAccepted.mock.calls[0]![0]).toMatchObject({ orgId: org, workItemId: item.id });
+      expect(await storage.get({ orgId: org, id: item.id })).toMatchObject({
+        stages: ['planning'],
+        triageType: null,
+        acceptedAt: null,
+      });
+    });
+
+    it('fires the approval hook only for a person, not for an agent or a board rule moving the card on', async () => {
+      for (const mover of [
+        agent('work', 'agent-plan'),
+        {
+          actor: { type: 'system' as const, id: 'factory-rule-dispatcher' },
+          ingress: { type: 'rule' as const, identity: 'rule-plan' },
+        },
+      ]) {
+        const { storage, item } = await card('intake');
+        const onAccepted = vi.fn();
+        const service = new FactoryTransitionService({ configVersion: 'work-rules', storage, onAccepted });
+        await expect(
+          service.transition({ ...request(item, { orgId: org, stage: 'planning' }), ...mover }),
+        ).resolves.toMatchObject({ status: 'accepted' });
+        expect(onAccepted).not.toHaveBeenCalled();
+      }
+    });
 
     it.each([
       ['with no pull request', 'execute', {}],

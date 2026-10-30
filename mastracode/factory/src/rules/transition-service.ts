@@ -16,7 +16,6 @@ import type {
   FactoryRuleCausalEntry,
   FactoryRuleRejectionCode,
   FactoryRuleStage,
-  FactoryTriageType,
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
@@ -60,8 +59,6 @@ export interface FactoryTransitionRequest {
   initialEntry?: boolean;
   /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
-  /** Structured verdict required from a bound triage-agent terminal request. */
-  triageType?: FactoryTriageType;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
 }
@@ -538,7 +535,7 @@ export class FactoryTransitionService {
                 isHumanTransition: isHumanTransition(request),
                 plansAutoApproved,
                 planApproved: request.planApproved === true,
-                requestedTriageType: request.triageType,
+                requestedTriageType: undefined,
               }),
             ),
           );

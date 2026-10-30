@@ -38,18 +38,13 @@ export function externalSourceForWorkItem(
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
-// The label only holds a card at rest: once a person accepted it, or it sits in a working
-// lane only a person could have moved it into, the label is stale until the source catches up.
-export function needsApproval(item: {
-  metadata: Record<string, unknown> | null;
-  stages?: readonly string[];
-  acceptedAt?: Date | string | null;
-}): boolean {
+// The label only holds a card at rest: once a person moves it into a working lane, the
+// label is stale until the source catches up (Factory removes it on that move).
+export function needsApproval(item: { metadata: Record<string, unknown> | null; stages?: readonly string[] }): boolean {
   const labels = item.metadata?.labels;
   if (!Array.isArray(labels)) return false;
   return (
     labels.some(label => typeof label === 'string' && label.toLowerCase() === NEEDS_APPROVAL_LABEL) &&
-    !item.acceptedAt &&
     (item.stages ?? ['intake']).every(stage => stage === 'intake' || stage === 'triage')
   );
 }
@@ -213,6 +208,10 @@ export interface FactoryRuleItemContext {
   title: string;
   url: string | null;
   stages: readonly string[];
+  /**
+   * @deprecated Factory no longer records triage acceptance; this is the value stamped on older
+   * cards, and `null` for every card since. A person moving the card on is the approval.
+   */
   acceptedAt: Date | null;
   /** Intake-stamped facts about the source — repository id, reporter login, labels. */
   metadata: Record<string, unknown> | null;
