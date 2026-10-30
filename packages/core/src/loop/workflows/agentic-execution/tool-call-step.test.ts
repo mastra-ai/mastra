@@ -228,6 +228,9 @@ describe('createToolCallStep delegated run identity provenance', () => {
     expect(failureChunk).toBeDefined();
     expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
     expect(failureChunk.payload.error.cause).toBeInstanceOf(Error);
+    // The chunk names the call that failed to persist, so a parallel call that already
+    // suspended keeps its parked state instead of being retracted with the run.
+    expect(failureChunk.payload.toolCallId).toBe('call-suspend-1');
   });
 
   it('delivers the flush failure directly when the writer rejects it', async () => {
@@ -270,6 +273,8 @@ describe('createToolCallStep delegated run identity provenance', () => {
     // The fallback skips the processors that ran on the chunk, so it must not hand the
     // client a storage error they would have redacted.
     expect(failureChunk.payload.error.cause).toBeUndefined();
+    // Both paths carry the failing call, so the retraction stays scoped to it.
+    expect(failureChunk.payload.toolCallId).toBe('call-suspend-2');
   });
 
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {

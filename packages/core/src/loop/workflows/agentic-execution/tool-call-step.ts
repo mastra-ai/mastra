@@ -414,11 +414,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // the client sees why there is no suspension event.
           const flushFailureMessage =
             'Failed to save the suspended tool call to memory before suspending; no suspension event was published';
+          // `toolCallId` scopes the signal to this call: the consumer must not retract
+          // suspensions parked for sibling calls of the same run, which were saved and
+          // announced before this flush failed.
           const failureChunk = {
             type: 'error',
             runId,
             from: ChunkFrom.AGENT,
-            payload: { error: new Error(flushFailureMessage, { cause: error }) },
+            payload: { error: new Error(flushFailureMessage, { cause: error }), toolCallId: inputData.toolCallId },
           } as ChunkType<OUTPUT>;
           try {
             if (outputWriter) {
@@ -441,7 +444,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               type: 'error',
               runId,
               from: ChunkFrom.AGENT,
-              payload: { error: new Error(flushFailureMessage) },
+              payload: { error: new Error(flushFailureMessage), toolCallId: inputData.toolCallId },
             } as ChunkType<OUTPUT>);
           }
           return false;
