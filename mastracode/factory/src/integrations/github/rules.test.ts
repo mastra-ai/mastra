@@ -4861,11 +4861,16 @@ describe('pull request cards on the Work board', () => {
     ).item;
   }
 
-  it.each(['work', 'review'] as const)(
-    'refiles a pull request opened again onto the %s card it already has instead of failing',
-    async board => {
+  it.each([
+    ['work', 'intake'],
+    ['review', 'intake'],
+    ['review', 'review'],
+    ['review', 'done'],
+  ] as const)(
+    'refiles a pull request opened again onto the %s card it already has in %s, leaving it there',
+    async (board, stage) => {
       const harness = await workBoardHarness('write');
-      const card = await lonePullRequestCard(harness, board, 'intake');
+      const card = await lonePullRequestCard(harness, board, stage);
 
       // A feed listing or backlog ingest re-emits "opened" under a new delivery id.
       await harness.service.ingest(pullRequest('opened', 'poll:10:pull-request:17'));
@@ -4873,7 +4878,7 @@ describe('pull request cards on the Work board', () => {
 
       const cards = await harness.cards();
       expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: card.id, board, stages: ['intake'] });
+      expect(cards[0]).toMatchObject({ id: card.id, board, stages: [stage] });
       const upserts = (await harness.decisions()).filter(entry => entry.decision.type === 'upsertLinkedWorkItem');
       expect(upserts.map(entry => entry.status)).toEqual(['succeeded']);
     },

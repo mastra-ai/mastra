@@ -1411,7 +1411,7 @@ export class FactoryDecisionDispatcher {
         ? itemBoard
         : decision.board;
     if (!skipRules && itemBoard !== board) {
-      throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
+      throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
     // "opened") resolves the card itself as the triggering item; it is not
