@@ -2,6 +2,7 @@ import { ChevronRight, Pin } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
+import { authorLabel } from '../lib/authorLabel';
 import { parseRecordSegments } from '../lib/recordText';
 import type {
   KnowledgeActivityAction,
@@ -68,9 +69,16 @@ function When({ iso }: { iso: string }) {
   );
 }
 
+/** An author as readers know them; the raw actor stays in the tooltip when it was renamed. */
+function Author({ author }: { author: string }) {
+  const label = authorLabel(author);
+  return <span title={label === author ? undefined : author}>{label}</span>;
+}
+
 /** A small round mark with the author's initial, tinted per author so a page's writers tell apart. */
 function AuthorMark({ author }: { author: string }) {
-  const name = author.includes(':') ? author.slice(author.indexOf(':') + 1) : author;
+  const label = authorLabel(author);
+  const name = label !== author || !author.includes(':') ? label : author.slice(author.indexOf(':') + 1);
   let hash = 0;
   for (const char of author) hash = (hash * 31 + char.charCodeAt(0)) | 0;
   const hues = ['--chart-blue', '--chart-purple', '--chart-green', '--chart-orange', '--chart-pink'];
@@ -175,7 +183,7 @@ export function KnowledgeNoteItem({
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <Txt as="span" variant="label" tone="ink" className="[overflow-wrap:anywhere]">
-            {note.provenance.author}
+            <Author author={note.provenance.author} />
           </Txt>
           <Txt as="span" variant="caption" tone="muted">
             <When iso={note.updatedAt} />
@@ -350,7 +358,8 @@ export function KnowledgePageDetail({
                 className="[overflow-wrap:anywhere]"
                 data-testid="knowledge-page-version"
               >
-                Version {page.version} · updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
+                Version {page.version} · updated <When iso={page.updatedAt} /> by{' '}
+                <Author author={page.updatedBy.author} />
               </Txt>
             </dd>
           </div>
@@ -436,7 +445,7 @@ export function KnowledgePageDetail({
                       {ACTIVITY_LABELS[event.action] ?? event.action}
                     </Txt>
                     <Txt as="span" variant="caption" tone="muted" className="[overflow-wrap:anywhere]">
-                      {event.provenance.author} · <When iso={event.createdAt} />
+                      <Author author={event.provenance.author} /> · <When iso={event.createdAt} />
                     </Txt>
                   </li>
                 ))}

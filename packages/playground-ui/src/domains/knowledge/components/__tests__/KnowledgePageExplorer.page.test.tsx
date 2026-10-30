@@ -90,6 +90,8 @@ const levels: Record<string, KnowledgeExplorerTreeLevel> = {
   'refund@refund-2': { pages: children.slice(2) },
 };
 
+const IMPORTER_ACTOR = 'importer:connect:linear:lin_01ABCDEFGHJKMNPQRSTVWXYZ00';
+
 const source: KnowledgeExplorerSource = {
   usePage: (pageId, noteCursor) => (pageId ? ok(detail(pageId, noteCursor)) : idle),
   useSearch: () => ({ data: { results: [] } }),
@@ -107,6 +109,14 @@ const source: KnowledgeExplorerSource = {
           pageId: 'refund',
           provenance: { author: 'admin' },
           createdAt: '2026-10-29T10:00:00.000Z',
+        },
+        {
+          id: 'a2',
+          action: 'page-created',
+          scopeId: 'org',
+          pageId: 'refund',
+          provenance: { author: IMPORTER_ACTOR },
+          createdAt: '2026-10-29T09:00:00.000Z',
         },
       ],
     }),
@@ -222,6 +232,16 @@ describe('KnowledgePageExplorer page view', () => {
       const activity = within(within(pageView()).getByRole('region', { name: 'Activity' }));
       expect(activity.getByText('Page edited')).toBeTruthy();
       expect(activity.getByText('Page edited').parentElement?.textContent).toMatch(/Page editedadmin · /);
+    });
+
+    it('names an importer by its provider, keeping the raw actor in the tooltip', () => {
+      renderWithProviders(<Host initial="refund" initialView="page" />);
+      const activity = within(within(pageView()).getByRole('region', { name: 'Activity' }));
+      const author = activity.getByText('Linear importer');
+      expect(author.getAttribute('title')).toBe(IMPORTER_ACTOR);
+      expect(activity.queryByText(IMPORTER_ACTOR)).toBeNull();
+      // Long actor ids must wrap inside the narrow aside rather than push the pane sideways.
+      expect(author.parentElement?.className).toContain('[overflow-wrap:anywhere]');
     });
   });
 
