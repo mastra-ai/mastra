@@ -418,11 +418,21 @@ function KnowledgePageGraphInner({
   const selectedHere = useRef<string | null>(null);
   const selectedIsLoaded = !!selectedPageId && pagesById.has(selectedPageId);
   const initialized = useRef(false);
+
+  // Until the user pans, zooms or picks a page, the view follows the graph as it grows (an import adding
+  // pages), easing to frame every page after each update. Once they take the view, or a selected page is
+  // framed, it stays put until they press Fit view; another Knowledge instance remounts the graph.
+  const userMoved = useRef(false);
+  useEffect(() => {
+    if (!initialized.current || userMoved.current) return;
+    fit(false, 300);
+  }, [laidOut, fit]);
   useEffect(() => {
     if (!initialized.current || !selectedIsLoaded || !selectedPageId) return;
     const fromGraph = selectedHere.current === selectedPageId;
     selectedHere.current = null;
     if (fromGraph) return;
+    userMoved.current = true;
     fit(true, 300);
   }, [selectedPageId, selectedIsLoaded, fit]);
 
@@ -430,6 +440,7 @@ function KnowledgePageGraphInner({
   const activate = (page: KnowledgePagePayload) => {
     if (page.id === selectedPageId && onOpen) return onOpen(page);
     selectedHere.current = page.id;
+    userMoved.current = true;
     onSelect(page);
   };
   // React Flow focuses nodes but only toggles its own selection on Enter or Space; route them like a click.
@@ -462,7 +473,12 @@ function KnowledgePageGraphInner({
         edgeTypes={edgeTypes}
         onInit={() => {
           initialized.current = true;
+          userMoved.current = !!fitState.current.selectedPageId;
           fit(true);
+        }}
+        // React Flow passes the input event for a pan or zoom the user made, and null for `setViewport`.
+        onMoveStart={event => {
+          if (event) userMoved.current = true;
         }}
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
@@ -485,7 +501,14 @@ function KnowledgePageGraphInner({
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
         <Controls showInteractive={false} showFitView={false}>
-          <ControlButton onClick={() => fit(false, 300)} title="Fit view" aria-label="Fit view">
+          <ControlButton
+            onClick={() => {
+              userMoved.current = false;
+              fit(false, 300);
+            }}
+            title="Fit view"
+            aria-label="Fit view"
+          >
             <Maximize aria-hidden />
           </ControlButton>
         </Controls>

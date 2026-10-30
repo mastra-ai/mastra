@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
@@ -115,6 +115,71 @@ describe('KnowledgePageGraph inside a host that hides or resizes it', () => {
       flushFrames();
     });
     expect(setViewport).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('KnowledgePageGraph while pages keep arriving', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const pagesUpTo = (count: number) => [
+    page('org', null),
+    ...Array.from({ length: count }, (_, i) => page(`page-${i}`, 'org')),
+  ];
+
+  async function renderGrowing() {
+    const view = renderWithProviders(<KnowledgePageGraph pages={pagesUpTo(1)} edges={[]} onSelect={() => {}} />);
+    const container = await screen.findByTestId('knowledge-page-graph');
+    act(() => {
+      resize(container, 800, 600);
+      flushFrames();
+    });
+    setViewport.mockClear();
+    const grow = (count: number) =>
+      view.rerender(<KnowledgePageGraph pages={pagesUpTo(count)} edges={[]} onSelect={() => {}} />);
+    return { container, grow };
+  }
+
+  it('eases the view to frame every page after each update', async () => {
+    const { grow } = await renderGrowing();
+    grow(5);
+    grow(12);
+    expect(setViewport).toHaveBeenCalledTimes(2);
+    expect(setViewport).toHaveBeenLastCalledWith(expect.anything(), { duration: 300 });
+    // The later fit frames more pages, so it zooms out further.
+    const [[first], [second]] = setViewport.mock.calls as unknown as Array<[{ zoom: number }]>;
+    expect(second.zoom).toBeLessThan(first.zoom);
+  });
+
+  it('stops following once the user clicks a page, until they press Fit view', async () => {
+    const { grow } = await renderGrowing();
+    const [node] = await screen.findAllByTestId('knowledge-page-node');
+    if (!node) throw new Error('no page node');
+    fireEvent.click(node);
+    setViewport.mockClear();
+    grow(5);
+    expect(setViewport).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fit view' }));
+    setViewport.mockClear();
+    grow(12);
+    expect(setViewport).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops following once the user pans or zooms the view', async () => {
+    const { container, grow } = await renderGrowing();
+    const pane = container.querySelector('.react-flow__pane');
+    if (!pane) throw new Error('no React Flow pane');
+    act(() => {
+      fireEvent.wheel(pane, { deltaY: -120, clientX: 400, clientY: 300 });
+    });
+    setViewport.mockClear();
+    grow(5);
+    expect(setViewport).not.toHaveBeenCalled();
   });
 });
 

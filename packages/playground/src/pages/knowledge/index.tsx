@@ -177,7 +177,7 @@ export default function KnowledgePage() {
             descriptionSlot="Agents add pages and notes to Knowledge as they run. They will appear here."
           />
         ) : (
-          <Explorer knowledgeKey={knowledgeKey} live={live} graph={graph.data} />
+          <Explorer key={knowledgeKey} knowledgeKey={knowledgeKey} live={live} graph={graph.data} />
         )}
       </div>
     </Shell>
