@@ -4,6 +4,7 @@
  * which resolves its source-control provider; individual-session routes resolve
  * the provider from the durable session row.
  */
+import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/';
@@ -71,13 +72,13 @@ export type CreateUserSessionOptions = (
 
 /**
  * A draft's session failed to start after its thread opened. The thread route
- * sends the person back to the draft with this prompt; the draft's images stay
- * stashed under its id.
+ * sends the person back to the draft with what they had picked; the draft's
+ * images stay stashed under its id.
  */
 export class DraftSessionCreateError extends Error {
   constructor(
     message: string,
-    readonly prompt: string,
+    readonly draft: FailedDraft,
     readonly draftPath: string,
     options?: ErrorOptions,
   ) {

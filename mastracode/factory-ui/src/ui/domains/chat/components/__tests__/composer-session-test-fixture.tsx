@@ -323,8 +323,8 @@ function UserThreadRouteSurface() {
   const { threadId } = useParams<{ threadId: string }>();
   const workspace = useThreadWorkspacePath();
   if (workspace.error instanceof DraftSessionCreateError) {
-    const { draftPath, prompt, message } = workspace.error;
-    return <Navigate replace to={draftPath} state={failedDraftState(prompt, message)} />;
+    const { draftPath, draft, message } = workspace.error;
+    return <Navigate replace to={draftPath} state={failedDraftState(draft, message)} />;
   }
   if (workspace.error) return <output aria-label="Session unavailable">{workspace.error.message}</output>;
   if (workspace.isPending) return <output aria-label="Loading session" />;

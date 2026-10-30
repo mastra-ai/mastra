@@ -19,23 +19,26 @@ interface ChatModelsProviderProps {
   children: ReactNode;
 }
 
-export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
+export function ChatModelsProvider({
+  children,
+  initialDraftModelId,
+}: ChatModelsProviderProps & { initialDraftModelId?: string }) {
   const { draftSessionId } = useChatSessionContext();
   return draftSessionId ? (
-    <DraftChatModelsProvider>{children}</DraftChatModelsProvider>
+    <DraftChatModelsProvider initialModelId={initialDraftModelId}>{children}</DraftChatModelsProvider>
   ) : (
     <LiveChatModelsProvider>{children}</LiveChatModelsProvider>
   );
 }
 
-function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
+function DraftChatModelsProvider({ children, initialModelId }: ChatModelsProviderProps & { initialModelId?: string }) {
   const { factoryId, projectQuery: factoryProjectQuery, modelScope, catalogTarget } = useChatModelScope();
   const { kind } = useChatSessionContext();
   const { baseUrl, client } = useApiConfig();
   const queryClient = useQueryClient();
   const defaultModelQuery = useDefaultModelQuery();
   const fallbackModelQuery = useFallbackModelQuery(catalogTarget);
-  const [draftModelId, setDraftModelId] = useState<string>();
+  const [draftModelId, setDraftModelId] = useState(initialModelId);
   const defaultModelId = routedDefaultModelId(modelScope, {
     factory: factoryProjectQuery.data?.defaultModelId,
     personal: defaultModelQuery.data?.modelId,

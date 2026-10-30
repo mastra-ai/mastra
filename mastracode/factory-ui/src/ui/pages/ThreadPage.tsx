@@ -56,7 +56,7 @@ export function ThreadPage() {
         <Navigate
           replace
           to={workspace.error.draftPath}
-          state={failedDraftState(workspace.error.prompt, workspace.error.message)}
+          state={failedDraftState(workspace.error.draft, workspace.error.message)}
         />
       ) : workspace.error ? (
         <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />

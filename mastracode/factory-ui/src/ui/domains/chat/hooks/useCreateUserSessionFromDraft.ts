@@ -62,11 +62,9 @@ export function useCreateUserSessionFromDraft() {
             const message = error instanceof Error ? error.message : 'Session creation failed';
             throw new DraftSessionCreateError(
               `Could not create the session: ${message}. Try again.`,
-              prompt,
+              { prompt, modelId: handoffModelId, thinkingLevel: thinkingLevelOverride },
               draftPath,
-              {
-                cause: error,
-              },
+              { cause: error },
             );
           }
           addCachedSession(queryClient, factoryId, session);

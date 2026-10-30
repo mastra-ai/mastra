@@ -39,6 +39,8 @@ interface DraftRouteOptions {
   modelDefaultsGate?: Promise<void>;
   /** Holds the session create response until it settles. */
   createGate?: Promise<void>;
+  /** Answers this many session creates with a server error before accepting one. */
+  failedCreates?: number;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
@@ -54,6 +56,7 @@ function readSentMessage(body: unknown): string {
 export function stubDraftRoute({
   modelDefaultsGate,
   createGate,
+  failedCreates = 0,
   defaultModelId = null,
   persistedMessages = [],
   workItems = [],
@@ -127,7 +130,10 @@ export function stubDraftRoute({
     }),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
-        models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
+        models: [
+          { id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true },
+          { id: 'openai/gpt-5.4-mini', provider: 'openai', modelName: 'gpt-5.4-mini', hasApiKey: true },
+        ],
         fallbackModelId: 'openai/gpt-4o-mini',
       }),
     ),
@@ -135,6 +141,9 @@ export function stubDraftRoute({
     http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, async ({ request }) => {
       route.createBodies.push(await request.json());
       await createGate;
+      if (route.createBodies.length <= failedCreates) {
+        return HttpResponse.json({ message: 'Database unavailable' }, { status: 500 });
+      }
       return HttpResponse.json({ session: createdSession });
     }),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),

@@ -1,3 +1,6 @@
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+
 import type { PendingImage } from '../context/ComposerImagesContext';
 
 // Attachments for a session's first prompt cross the draft -> thread navigation
@@ -21,23 +24,33 @@ export function takeHandoffFiles(resourceId: string): PendingImage[] {
   return files;
 }
 
+/** What a draft whose session failed to start goes back to: its prompt and the model and thinking level picked for it. */
+export interface FailedDraft {
+  prompt: string;
+  modelId?: string;
+  thinkingLevel?: ThinkingLevelSetting;
+}
+
 /**
  * Route state that returns a draft whose session failed to start to its
  * composer. Its images stay stashed under the draft's id, so they are read
  * without taking: state initializers can run more than once.
  */
-export function failedDraftState(prompt: string, routeErrorNotice: string) {
-  return { failedDraftPrompt: prompt, routeErrorNotice };
+export function failedDraftState(failedDraft: FailedDraft, routeErrorNotice: string) {
+  return { failedDraft, routeErrorNotice };
 }
 
 export function readFailedDraft(
   state: unknown,
   draftSessionId: string | undefined,
-): { prompt: string; files: PendingImage[] } | undefined {
-  if (!draftSessionId || typeof state !== 'object' || state === null || !('failedDraftPrompt' in state)) {
+): (FailedDraft & { files: PendingImage[] }) | undefined {
+  if (!draftSessionId || typeof state !== 'object' || state === null || !('failedDraft' in state)) return undefined;
+  const draft: unknown = state.failedDraft;
+  if (typeof draft !== 'object' || draft === null || !('prompt' in draft) || typeof draft.prompt !== 'string') {
     return undefined;
   }
-  const prompt: unknown = state.failedDraftPrompt;
-  if (typeof prompt !== 'string') return undefined;
-  return { prompt, files: peekHandoffFiles(draftSessionId) };
+  const modelId = 'modelId' in draft && typeof draft.modelId === 'string' ? draft.modelId : undefined;
+  const thinkingLevel =
+    'thinkingLevel' in draft && isThinkingLevelSetting(draft.thinkingLevel) ? draft.thinkingLevel : undefined;
+  return { prompt: draft.prompt, modelId, thinkingLevel, files: peekHandoffFiles(draftSessionId) };
 }

@@ -248,4 +248,40 @@ describe('a user session draft on the real thread route', () => {
     route.finishWorkspace();
     await waitForMutationsIdle(client);
   });
+
+  it('retries a failed start on the model and thinking level picked in the draft', async () => {
+    const route = stubDraftRoute({ failedCreates: 1, defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    const modelPicker = await screen.findByLabelText('Session model');
+    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
+    await user.click(modelPicker);
+    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    await user.click(await screen.findByRole('button', { name: /^Thinking: Medium/ }));
+    const ramp = screen.getByRole('slider', { name: 'Thinking' });
+    fireEvent.change(ramp, { target: { value: '3' } });
+    fireEvent.keyUp(ramp);
+    await user.type(message, 'fix the login bug');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText(/Could not create the session/, undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`);
+    const restored = screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(restored).toBeEnabled());
+    restored.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
+    expect(route.createBodies).toHaveLength(2);
+    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-5.4-mini thinking:high']);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
 });
