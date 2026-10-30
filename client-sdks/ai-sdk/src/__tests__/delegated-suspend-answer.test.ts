@@ -295,15 +295,28 @@ describe.each<Engine>(['plain', 'durable', 'evented'])('delegated suspend answer
 
     const { result, chunks: initialChunks } = await startDelegation(scenario);
 
-    // The inner tool's suspension is surfaced on the delegation id, on the UI stream.
+    // The inner tool's suspension is surfaced on the delegation id, on the UI stream,
+    // and names the worker's own suspended call so the client can render it as that tool (#28583).
     const initialSuspensions = initialChunks.filter(chunk => chunk.type === 'data-tool-call-suspended');
     expect(initialSuspensions).toHaveLength(1);
     expect(initialSuspensions[0].data).toMatchObject({
       toolCallId: DELEGATION_TOOL_CALL_ID,
       toolName: 'agent-worker',
+      delegatedToolCallId: INNER_TOOL_CALL_ID,
+      delegatedToolName: 'confirm',
       suspendPayload: { question: 'Pay 42?' },
     });
     expect(initialChunks.some(chunk => chunk.type === 'tool-output-available')).toBe(false);
+
+    // A reload while still suspended keeps the same identity.
+    const suspendedReload = allUiParts(toAISdkMessages((await recallThread(scenario)).messages, { version: 'v6' }));
+    const reloadedSuspensions = suspendedReload.filter(part => part.type === 'data-tool-call-suspended');
+    expect(reloadedSuspensions).toHaveLength(1);
+    expect(reloadedSuspensions[0].data).toMatchObject({
+      toolCallId: DELEGATION_TOOL_CALL_ID,
+      delegatedToolCallId: INNER_TOOL_CALL_ID,
+      delegatedToolName: 'confirm',
+    });
 
     const resumeChunks = await resumeDelegation(scenario, result, DELEGATION_TOOL_CALL_ID);
 
@@ -313,6 +326,7 @@ describe.each<Engine>(['plain', 'durable', 'evented'])('delegated suspend answer
     expect(resumeSuspensions).toHaveLength(1);
     expect(resumeSuspensions[0].data).toMatchObject({
       toolCallId: DELEGATION_TOOL_CALL_ID,
+      delegatedToolCallId: INNER_TOOL_CALL_ID,
       resumed: true,
     });
     const wrapperOutputs = resumeChunks.filter(
