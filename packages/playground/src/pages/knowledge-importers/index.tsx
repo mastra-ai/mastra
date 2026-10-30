@@ -7,15 +7,16 @@ import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from 
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { ImporterDetail } from '@/domains/knowledge-importers/components/importer-detail';
-import { ImportersTable } from '@/domains/knowledge-importers/components/importers-table';
+import { ImporterList } from '@/domains/knowledge-importers/components/importer-list';
+import { isConnected } from '@/domains/knowledge-importers/status';
 import { useImporterSummaries } from '@/domains/knowledge-importers/use-knowledge-importers';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/knowledge'), navCrumb('/knowledge/importers')];
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, fit = false }: { children: React.ReactNode; fit?: boolean }) {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant={fit ? 'fit' : 'container'} breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Knowledge importers</h1>
       {children}
     </PageLayout>
@@ -77,7 +78,10 @@ export default function KnowledgeImportersPage() {
   }
 
   const requested = searchParams.get('importer');
-  const selected = summaries.data.find(summary => summary.importerId === requested) ?? summaries.data[0];
+  const selected =
+    summaries.data.find(summary => summary.importerId === requested) ??
+    summaries.data.find(isConnected) ??
+    summaries.data[0];
 
   const select = (importerId: string) => {
     const next = new URLSearchParams(searchParams);
@@ -86,10 +90,16 @@ export default function KnowledgeImportersPage() {
   };
 
   return (
-    <Shell>
-      <div className="flex flex-col gap-8 pb-8">
-        <ImportersTable summaries={summaries.data} selectedId={selected.importerId} onSelect={select} />
-        <ImporterDetail key={selected.importerId} summary={selected} />
+    <Shell fit>
+      <div className="grid h-full min-h-0 grid-cols-1 gap-4 overflow-y-auto md:grid-cols-[18rem_minmax(0,1fr)] md:overflow-hidden">
+        <aside className="px-3 pt-4 md:min-h-0 md:overflow-y-auto md:border-r md:border-border">
+          <ImporterList summaries={summaries.data} selectedId={selected.importerId} onSelect={select} />
+        </aside>
+        <div className="px-4 pt-4 md:min-h-0 md:overflow-y-auto">
+          <div className="mx-auto flex max-w-4xl flex-col pb-6">
+            <ImporterDetail key={selected.importerId} summary={selected} />
+          </div>
+        </div>
       </div>
     </Shell>
   );

@@ -11,11 +11,13 @@ import { STOPS_NEW_IMPORTS_NOTE, describeAllowlist } from '../settings';
 export interface OptionFieldsProps {
   schema: KnowledgeImporterOptionField[];
   values: Record<string, KnowledgeImporterOptionValue>;
+  /** Last saved values — narrowing against these is what earns the "stops new imports" note. */
+  saved: Record<string, KnowledgeImporterOptionValue>;
   disabled?: boolean;
   onChange: (values: Record<string, KnowledgeImporterOptionValue>) => void;
 }
 
-export function OptionFields({ schema, values, disabled, onChange }: OptionFieldsProps) {
+export function OptionFields({ schema, values, saved, disabled, onChange }: OptionFieldsProps) {
   const set = (key: string, value: KnowledgeImporterOptionValue | undefined) => {
     const { [key]: _previous, ...rest } = values;
     onChange(value === undefined ? rest : { ...rest, [key]: value });
@@ -24,7 +26,14 @@ export function OptionFields({ schema, values, disabled, onChange }: OptionField
   return (
     <div className="flex flex-col gap-4">
       {schema.map(field => (
-        <OptionField key={field.key} field={field} value={values[field.key]} disabled={disabled} onChange={set} />
+        <OptionField
+          key={field.key}
+          field={field}
+          value={values[field.key]}
+          savedValue={saved[field.key]}
+          disabled={disabled}
+          onChange={set}
+        />
       ))}
     </div>
   );
@@ -33,11 +42,14 @@ export function OptionFields({ schema, values, disabled, onChange }: OptionField
 interface OptionFieldProps {
   field: KnowledgeImporterOptionField;
   value: KnowledgeImporterOptionValue | undefined;
+  savedValue: KnowledgeImporterOptionValue | undefined;
   disabled?: boolean;
   onChange: (key: string, value: KnowledgeImporterOptionValue | undefined) => void;
 }
 
-function OptionField({ field, value, disabled, onChange }: OptionFieldProps) {
+const asList = (value: KnowledgeImporterOptionValue | undefined) => (Array.isArray(value) ? value : []);
+
+function OptionField({ field, value, savedValue, disabled, onChange }: OptionFieldProps) {
   const envHint = field.envVar ? `Defaults to the ${field.envVar} environment variable when not saved.` : undefined;
 
   switch (field.type) {
@@ -54,13 +66,15 @@ function OptionField({ field, value, disabled, onChange }: OptionFieldProps) {
             disabled={disabled}
             onCheckedChange={checked => onChange(field.key, checked)}
           />
+          {savedValue === true && value !== true ? <NarrowingNote /> : null}
         </Field>
       );
     case 'list':
       return (
         <ListOptionField
           field={field}
-          values={Array.isArray(value) ? value : []}
+          values={asList(value)}
+          narrowed={asList(savedValue).some(entry => !asList(value).includes(entry))}
           disabled={disabled}
           envHint={envHint}
           onChange={next => onChange(field.key, next)}
@@ -99,6 +113,14 @@ function OptionField({ field, value, disabled, onChange }: OptionFieldProps) {
   }
 }
 
+function NarrowingNote() {
+  return (
+    <Txt variant="caption" tone="muted">
+      {STOPS_NEW_IMPORTS_NOTE}
+    </Txt>
+  );
+}
+
 function FieldHelp({ help, envHint }: { help?: string; envHint?: string }) {
   if (!help && !envHint) return null;
   return (
@@ -119,13 +141,14 @@ const splitEntries = (text: string) =>
 interface ListOptionFieldProps {
   field: KnowledgeImporterOptionField;
   values: string[];
+  narrowed: boolean;
   disabled?: boolean;
   envHint?: string;
   onChange: (values: string[]) => void;
 }
 
 /** Allowlist editor: Enter or comma adds an entry; pasted lists are split on newlines and commas. */
-function ListOptionField({ field, values, disabled, envHint, onChange }: ListOptionFieldProps) {
+function ListOptionField({ field, values, narrowed, disabled, envHint, onChange }: ListOptionFieldProps) {
   const [pending, setPending] = useState('');
   const summaryId = useId();
 
@@ -181,11 +204,9 @@ function ListOptionField({ field, values, disabled, envHint, onChange }: ListOpt
         onBlur={() => add(pending)}
       />
       <Txt id={summaryId} variant="caption" tone={values.length === 0 ? 'ink' : 'muted'}>
-        {describeAllowlist(values)}
+        {describeAllowlist(values, field.label)}
       </Txt>
-      <Txt variant="caption" tone="muted">
-        {STOPS_NEW_IMPORTS_NOTE}
-      </Txt>
+      {narrowed ? <NarrowingNote /> : null}
       <FieldHelp help={field.help} envHint={envHint} />
     </Field>
   );

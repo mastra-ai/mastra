@@ -1,4 +1,5 @@
 import type { KnowledgeImporterSummary, SaveKnowledgeImporterSettingsParams } from '@mastra/client-js';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -8,6 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import KnowledgeImportersPage from '..';
 import {
   buildListImportersResponse,
+  buildNotionPreview,
   buildNotionSummary,
   buildRun,
   buildSlackSummary,
@@ -39,37 +41,57 @@ const renderPage = (initialEntry = '/knowledge/importers') =>
         <Routes>
           <Route path="/knowledge/importers" element={<KnowledgeImportersPage />} />
         </Routes>
+        <Toaster />
       </LinkComponentProvider>
     </TooltipProvider>,
     { router: { initialEntries: [initialEntry] } },
   );
 
-describe('Knowledge importers page', () => {
-  describe('when the server lists a connected and an unconnected importer', () => {
-    beforeEach(() => useSummaries([buildNotionSummary(), buildSlackSummary()]));
+const addTeamspace = async (name: string) => {
+  const input = await screen.findByLabelText('Add to Teamspaces');
+  fireEvent.change(input, { target: { value: name } });
+  fireEvent.keyDown(input, { key: 'Enter' });
+};
 
-    it('shows the effective schedule in plain words', async () => {
+describe('Knowledge importers page', () => {
+  describe('when the server lists an unconnected importer before a connected one', () => {
+    beforeEach(() => useSummaries([buildSlackSummary(), buildNotionSummary()]));
+
+    it('opens the first connected importer', async () => {
+      renderPage();
+      expect(await screen.findByRole('heading', { name: 'Notion' })).toBeTruthy();
+    });
+
+    it('shows the importer description in the detail header', async () => {
+      renderPage();
+      expect(
+        await screen.findByText('Pages from each teamspace; each teamspace lands in its own container.'),
+      ).toBeTruthy();
+    });
+
+    it('summarises the schedule in the list row', async () => {
       renderPage();
       const row = await screen.findByTestId('importer-row-notion');
-      expect(within(row).getByText('every 15 minutes')).toBeTruthy();
+      expect(within(row).getByText(/Every 15 min · last run/)).toBeTruthy();
     });
 
-    it('shows a disabled importer as paused', async () => {
+    it('keeps the unconnected importer in a collapsed group', async () => {
       renderPage();
-      const row = await screen.findByTestId('importer-row-slack');
-      expect(within(row).getByText('paused')).toBeTruthy();
+      await screen.findByTestId('importer-row-notion');
+      expect(screen.queryByTestId('importer-row-slack')).toBeNull();
     });
 
-    it('marks the unconnected importer as not connected to this project', async () => {
+    it('marks the unconnected importer once the group is opened', async () => {
       renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: /Not connected · 1/ }));
       const row = await screen.findByTestId('importer-row-slack');
       expect(within(row).getByText('Not connected to this project')).toBeTruthy();
     });
 
-    it('hides run controls for the unconnected importer', async () => {
+    it('hides import controls for the unconnected importer', async () => {
       renderPage('/knowledge/importers?importer=slack');
       await screen.findByRole('heading', { name: 'Slack' });
-      expect(screen.queryByRole('button', { name: 'Dry run' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Preview import' })).toBeNull();
     });
   });
 
@@ -82,9 +104,70 @@ describe('Knowledge importers page', () => {
       ]),
     );
 
-    it('says the importer imports nothing', async () => {
+    it('says the importer imports nothing until an entry is added', async () => {
       renderPage();
-      expect(await screen.findByText('Empty — imports nothing. Add at least one entry.')).toBeTruthy();
+      expect(await screen.findByText('Imports nothing until you add teamspaces.')).toBeTruthy();
+    });
+  });
+
+  describe('when the settings have not been edited', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('shows no save bar', async () => {
+      renderPage();
+      await screen.findByLabelText('Add to Teamspaces');
+      expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+    });
+
+    it('does not warn about narrowing', async () => {
+      renderPage();
+      await screen.findByLabelText('Add to Teamspaces');
+      expect(screen.queryByText(NARROWING_COPY)).toBeNull();
+    });
+  });
+
+  describe('when a saved allowlist entry is removed', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('says narrowing keeps knowledge already imported', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Remove Engineering' }));
+      expect(await screen.findByText(NARROWING_COPY)).toBeTruthy();
+    });
+  });
+
+  describe('when the schedule is switched off', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('says knowledge already imported stays', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('radio', { name: 'Off' }));
+      expect(await screen.findByText(`Off — only manual imports. ${NARROWING_COPY}`)).toBeTruthy();
+    });
+
+    it('offers to save the change', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('radio', { name: 'Off' }));
+      expect(await screen.findByRole('region', { name: 'Unsaved changes' })).toBeTruthy();
+    });
+  });
+
+  describe('when a custom cron expression is invalid', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('explains the problem inline', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('radio', { name: 'Custom' }));
+      fireEvent.change(screen.getByLabelText('Cron expression'), { target: { value: '0 25 * * *' } });
+      expect(await screen.findByText(/Hour must be 0–23/)).toBeTruthy();
+    });
+
+    it('disables saving', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('radio', { name: 'Custom' }));
+      fireEvent.change(screen.getByLabelText('Cron expression'), { target: { value: '0 25 * * *' } });
+      const bar = await screen.findByRole('region', { name: 'Unsaved changes' });
+      expect(within(bar).getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
     });
   });
 
@@ -109,10 +192,10 @@ describe('Knowledge importers page', () => {
 
     it('sends the edited allowlist with the version it was based on', async () => {
       renderPage();
-      const input = await screen.findByLabelText('Add to Teamspaces');
-      fireEvent.change(input, { target: { value: 'Design' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await addTeamspace('Design');
+      fireEvent.click(
+        within(await screen.findByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Save' }),
+      );
 
       await waitFor(() => expect(saved).toBeDefined());
       expect(saved).toEqual({
@@ -122,6 +205,29 @@ describe('Knowledge importers page', () => {
         options: { teamspaces: ['Engineering', 'Design'] },
         expectedVersion: 3,
       });
+    });
+
+    it('clears the save bar once saved', async () => {
+      renderPage();
+      await addTeamspace('Design');
+      fireEvent.click(
+        within(await screen.findByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Save' }),
+      );
+      await waitFor(() => expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull());
+    });
+  });
+
+  describe('when discarding unsaved changes', () => {
+    beforeEach(() => useSummaries([buildNotionSummary()]));
+
+    it('restores the saved allowlist', async () => {
+      renderPage();
+      await addTeamspace('Design');
+      fireEvent.click(
+        within(await screen.findByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Discard' }),
+      );
+      const entries = screen.getByRole('list', { name: 'Teamspaces entries' });
+      await waitFor(() => expect(within(entries).queryByText('Design')).toBeNull());
     });
   });
 
@@ -153,15 +259,15 @@ describe('Knowledge importers page', () => {
 
     const saveEdit = async () => {
       renderPage();
-      const input = await screen.findByLabelText('Add to Teamspaces');
-      fireEvent.change(input, { target: { value: 'Design' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await addTeamspace('Design');
+      fireEvent.click(
+        within(await screen.findByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Save' }),
+      );
     };
 
-    it('tells the user someone else changed the settings', async () => {
+    it('tells the user someone else changed it', async () => {
       await saveEdit();
-      expect(await screen.findByText('Someone else changed these settings')).toBeTruthy();
+      expect(await screen.findByText('Someone else changed this — reloaded')).toBeTruthy();
     });
 
     it('reloads the form with the latest saved values', async () => {
@@ -171,7 +277,7 @@ describe('Knowledge importers page', () => {
     });
   });
 
-  describe('when a dry run of unsaved settings succeeds', () => {
+  describe('when a preview of unsaved settings succeeds', () => {
     let dryRunBody: unknown;
     let polls = 0;
 
@@ -186,30 +292,19 @@ describe('Knowledge importers page', () => {
         }),
         http.get(`${API}/runs/run_dry`, () => {
           polls += 1;
-          return HttpResponse.json(
-            polls === 1
-              ? buildRun()
-              : buildRun({
-                  status: 'succeeded',
-                  completedAt: '2026-10-29T13:00:05.000Z',
-                  counts: { nodesCreated: 12, skipped: 3 },
-                  skipped: [{ reason: 'slack-private-conversation', count: 3 }],
-                }),
-          );
+          return HttpResponse.json(polls === 1 ? buildRun() : buildNotionPreview());
         }),
       );
     });
 
-    const startDryRun = async () => {
+    const startPreview = async () => {
       renderPage();
-      const input = await screen.findByLabelText('Add to Teamspaces');
-      fireEvent.change(input, { target: { value: 'Design' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      fireEvent.click(screen.getByRole('button', { name: 'Dry run' }));
+      await addTeamspace('Design');
+      fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
     };
 
     it('previews the unsaved form values', async () => {
-      await startDryRun();
+      await startPreview();
       await waitFor(() => expect(dryRunBody).toBeDefined());
       expect(dryRunBody).toEqual({
         settings: {
@@ -221,21 +316,40 @@ describe('Knowledge importers page', () => {
       });
     });
 
-    it('polls until the run settles and shows its counts', async () => {
-      await startDryRun();
+    it('shows progress while the preview runs', async () => {
+      await startPreview();
+      expect(await screen.findByTestId('run-in-progress')).toBeTruthy();
+    });
+
+    it('polls until the preview settles and says what it would import', async () => {
+      await startPreview();
       expect(
-        await screen.findByText(/Dry run — nothing was written\. 12 created · 3 skipped/, undefined, POLL_TIMEOUT),
+        await screen.findByText('Would import 12 pages and 30 records · 3 items skipped', undefined, POLL_TIMEOUT),
       ).toBeTruthy();
     });
 
-    it('lists why items were skipped', async () => {
-      await startDryRun();
-      const skipped = await screen.findByRole('rowgroup', { name: 'Skipped items' }, POLL_TIMEOUT);
-      expect(within(skipped).getByText('slack-private-conversation')).toBeTruthy();
+    it('names where each part lands without claiming who can read it', async () => {
+      await startPreview();
+      const destinations = await screen.findByRole('list', { name: 'Destinations' }, POLL_TIMEOUT);
+      expect(
+        ['Org-wide area', 'Own container: Engineering'].map(copy => within(destinations).queryByText(copy) !== null),
+      ).toEqual([true, true]);
+    });
+
+    it('lists sample page titles for each destination', async () => {
+      await startPreview();
+      const samples = await screen.findByRole('list', { name: 'Sample pages in Engineering' }, POLL_TIMEOUT);
+      expect(within(samples).getByText('Release checklist')).toBeTruthy();
+    });
+
+    it('explains skipped items in plain words', async () => {
+      await startPreview();
+      const skipped = await screen.findByRole('list', { name: 'Skipped items' }, POLL_TIMEOUT);
+      expect(within(skipped).getByText('Private Notion pages are never imported')).toBeTruthy();
     });
   });
 
-  describe('when a dry run fails', () => {
+  describe('when a preview fails', () => {
     beforeEach(() => {
       useSummaries([buildNotionSummary()]);
       server.use(
@@ -250,14 +364,13 @@ describe('Knowledge importers page', () => {
 
     it('shows the run error', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }));
-      await waitFor(() =>
-        expect(within(screen.getByTestId('run-result')).getByText('Notion API returned 401')).toBeTruthy(),
-      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Preview import' }));
+      const report = await screen.findByTestId('run-report', undefined, POLL_TIMEOUT);
+      expect(within(report).getByText('Notion API returned 401')).toBeTruthy();
     });
   });
 
-  describe('when a run is already in progress', () => {
+  describe('when an import is already in progress', () => {
     beforeEach(() => {
       useSummaries([buildNotionSummary()]);
       server.use(
@@ -267,41 +380,55 @@ describe('Knowledge importers page', () => {
       );
     });
 
-    it('explains that a run is already going', async () => {
+    it('explains that an import is already running', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Preview import' }));
       expect(
-        await screen.findByText('A run is already in progress for this importer. Wait for it to finish.'),
+        await screen.findByText('An import is already running for this importer. Wait for it to finish.'),
       ).toBeTruthy();
     });
   });
 
-  describe('when the allowlist has entries', () => {
-    beforeEach(() => useSummaries([buildNotionSummary()]));
+  describe('when importing now after a preview', () => {
+    let runStarted = false;
 
-    it('says narrowing it keeps knowledge already imported', async () => {
+    beforeEach(() => {
+      runStarted = false;
+      useSummaries([buildNotionSummary()]);
+      server.use(
+        http.get(`${API}/notion/runs`, () => HttpResponse.json({ runs: [buildNotionPreview()] })),
+        http.post(`${API}/notion/run`, () => {
+          runStarted = true;
+          return HttpResponse.json({ runId: 'run_real' }, { status: 202 });
+        }),
+        http.get(`${API}/runs/run_real`, () =>
+          HttpResponse.json(buildRun({ id: 'run_real', kind: 'run', status: 'running' })),
+        ),
+      );
+    });
+
+    it('names where the last preview put pages before importing', async () => {
       renderPage();
-      const field = (await screen.findByLabelText('Add to Teamspaces')).closest('[data-slot="field"]');
-      expect(field).not.toBeNull();
-      expect(within(field as HTMLElement).getByText(NARROWING_COPY)).toBeTruthy();
+      fireEvent.click(await screen.findByRole('button', { name: 'Import now' }));
+      const dialog = await screen.findByRole('alertdialog');
+      expect(within(dialog).getByText(/Notion · Wiki \(5 pages\), Engineering \(7 pages\)/)).toBeTruthy();
+    });
+
+    it('starts the import once confirmed', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Import now' }));
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Import now' }));
+      await waitFor(() => expect(runStarted).toBe(true));
     });
   });
 
-  describe('when turning off automatic imports', () => {
+  describe('when the settings have unsaved changes', () => {
     beforeEach(() => useSummaries([buildNotionSummary()]));
 
-    it('confirms that knowledge already imported stays', async () => {
+    it('holds back importing until they are saved', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('switch', { name: 'Automatic imports' }));
-      const dialog = await screen.findByRole('alertdialog');
-      expect(within(dialog).getByText(NARROWING_COPY, { exact: false })).toBeTruthy();
-    });
-
-    it('turns them off once confirmed', async () => {
-      renderPage();
-      fireEvent.click(await screen.findByRole('switch', { name: 'Automatic imports' }));
-      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Turn off' }));
-      expect(await screen.findByText('Off — only manual runs.')).toBeTruthy();
+      await addTeamspace('Design');
+      expect(screen.getByRole('button', { name: 'Import now' })).toHaveProperty('disabled', true);
     });
   });
 
@@ -313,17 +440,17 @@ describe('Knowledge importers page', () => {
       expect(await screen.findByText(READ_ONLY_COPY)).toBeTruthy();
     });
 
-    it('hides save, reset, dry run and run now', async () => {
+    it('hides preview, import and reset', async () => {
       renderPage();
       await screen.findByText(READ_ONLY_COPY);
-      const names = ['Save', 'Reset to environment', 'Dry run', 'Run now'];
+      const names = ['Preview import', 'Import now', 'Reset to environment defaults'];
       expect(names.filter(name => screen.queryByRole('button', { name }))).toEqual([]);
     });
 
-    it('hides the automatic imports switch', async () => {
+    it('shows the schedule as text instead of a control', async () => {
       renderPage();
       await screen.findByText(READ_ONLY_COPY);
-      expect(screen.queryByRole('switch', { name: 'Automatic imports' })).toBeNull();
+      expect(screen.queryByRole('radiogroup', { name: 'Schedule' })).toBeNull();
     });
   });
 
@@ -339,15 +466,15 @@ describe('Knowledge importers page', () => {
 
     it('switches the page to read-only', async () => {
       renderPage();
-      const input = await screen.findByLabelText('Add to Teamspaces');
-      fireEvent.change(input, { target: { value: 'Design' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await addTeamspace('Design');
+      fireEvent.click(
+        within(await screen.findByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Save' }),
+      );
       expect(await screen.findByText(READ_ONLY_COPY)).toBeTruthy();
     });
   });
 
-  describe('when the server forbids a dry run', () => {
+  describe('when the server forbids a preview', () => {
     beforeEach(() => {
       useSummaries([buildNotionSummary()]);
       server.use(
@@ -357,11 +484,11 @@ describe('Knowledge importers page', () => {
       );
     });
 
-    it('hides the run controls', async () => {
+    it('hides the import controls', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Preview import' }));
       await screen.findByText(READ_ONLY_COPY);
-      expect(screen.queryByRole('button', { name: 'Dry run' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Preview import' })).toBeNull();
     });
   });
 });
