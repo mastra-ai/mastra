@@ -1705,7 +1705,35 @@ export class DurableAgent<
     }
     executionFence.throwIfLost();
 
+    const persistedCompletion = workflowInput.options?.isTaskComplete;
+    const configuredCompletion = persistedCompletion?.fromAgentDefaults
+      ? (await wrapped.getDefaultOptions({ requestContext }))?.isTaskComplete
+      : undefined;
+    const completionScorers = configuredCompletion?.scorers;
+    const completionNames = completionScorers?.map(s => s.name).filter((name): name is string => !!name);
+    const restoredCompletion =
+      persistedCompletion?.fromAgentDefaults &&
+      completionScorers &&
+      JSON.stringify(completionNames) === JSON.stringify(persistedCompletion.scorerNames)
+        ? {
+            scorers: completionScorers,
+            onComplete: configuredCompletion?.onComplete,
+            strategy: persistedCompletion.strategy,
+            timeout: persistedCompletion.timeout,
+            parallel: persistedCompletion.parallel,
+            suppressFeedback: persistedCompletion.suppressFeedback,
+          }
+        : undefined;
+    if (persistedCompletion && !restoredCompletion) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(
+          `[DurableAgent] Cannot restore isTaskComplete for recovered run ${runId}; completion checks will not run`,
+        );
+    }
+
     const registryEntry = {
+      isTaskComplete: restoredCompletion,
       // Call-time toolset tools died with the original process. Mark the entry
       // as a placeholder so the first step rebuilds tools and fails loudly
       // (DURABLE_AGENT_TOOLSETS_UNAVAILABLE) instead of running without them.

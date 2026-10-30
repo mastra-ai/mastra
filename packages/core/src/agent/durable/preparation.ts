@@ -873,6 +873,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 12. Resolve memory persistence flags
   const savePerStep = execOptions?.savePerStep;
   const observationalMemory = isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
+  if (execOptions.isTaskComplete) await loadDefaultOptions();
 
   // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
   // into the workflow input so each durable step can rebuild them. No-ops when
@@ -953,6 +954,18 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       transform: toolPayloadTransform?.targets ? { targets: toolPayloadTransform.targets } : undefined,
       isTaskComplete: execOptions?.isTaskComplete
         ? {
+            fromAgentDefaults: (() => {
+              const configured = defaultOptions?.isTaskComplete;
+              const active = execOptions.isTaskComplete;
+              return (
+                !!configured &&
+                !!active.scorers &&
+                !!configured.scorers &&
+                active.scorers.length === configured.scorers.length &&
+                active.scorers.every((scorer, index) => scorer === configured.scorers?.[index]) &&
+                active.onComplete === configured.onComplete
+              );
+            })(),
             scorerNames: execOptions.isTaskComplete.scorers?.map(s => s.name).filter((n): n is string => !!n),
             strategy: execOptions.isTaskComplete.strategy,
             timeout: execOptions.isTaskComplete.timeout,

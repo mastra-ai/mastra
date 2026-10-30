@@ -307,6 +307,7 @@ export interface SerializableDurableOptions {
    * observability and cross-process engines.
    */
   isTaskComplete?: {
+    fromAgentDefaults?: boolean;
     scorerNames?: string[];
     strategy?: 'all' | 'any';
     timeout?: number;
