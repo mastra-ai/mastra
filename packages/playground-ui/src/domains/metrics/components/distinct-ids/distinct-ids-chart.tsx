@@ -105,7 +105,7 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
   return (
     <ChartCard {...layout} isUpdating={series.isPlaceholderData || totals.isPlaceholderData}>
       <ChartArea
-        isEmpty={!isLoading && shown.length === 0}
+        isEmpty={!isLoading && !error && shown.length === 0}
         emptyMessage="No traces in this range set a resource, thread, user or session id."
       >
         <MetricsLineChart

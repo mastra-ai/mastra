@@ -252,6 +252,9 @@ describe('when the server answers aggregateTraces()', () => {
     });
     expect(screen.queryByText(ERROR)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    // The totals are in error, so they carry no data to show; without the error gate that would
+    // read as an empty range and claim the range sets no ids, which is not known yet.
+    expect(screen.queryByText(/No traces in this range/)).toBeNull();
 
     card.release();
     expect(await screen.findByText(ERROR, undefined, { timeout: 5000 })).toBeDefined();
