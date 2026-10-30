@@ -485,7 +485,6 @@ describe('work item read wire', () => {
     expect(FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema.parse(created)).toEqual(created);
     expect(created.workItem.workItem).toMatchObject({
       provider: 'github',
-      kind: 'issue',
       key: 'acme/app#42',
       title: 'Fix the login flow',
       state: 'closed',
@@ -505,6 +504,12 @@ describe('work item read wire', () => {
     expect(FACTORY_ROUTE_CONTRACTS.workItemUpdate.responseSchema.parse(updated)).toEqual(updated);
     expect(updated.workItem.workItem.title).toBe('Updated title');
     expect(updated.workItem.title).toBe('Updated title');
+    for (const card of [created.workItem, listed.workItems[0], updated.workItem]) {
+      expect(card.workItem).not.toHaveProperty('kind');
+      expect(card.workItem.sources).toHaveLength(1);
+      expect(card.workItem.sources[0]).toMatchObject({ provider: 'github', sourceType: 'issue' });
+      expect(card.workItem.sources[0]).not.toHaveProperty('kind');
+    }
   });
 
   it('keeps internal tokens in storage and out of every read', async () => {
@@ -716,7 +721,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
       orgId: 'org1',
       id: item.id,
       userId: 'u2',
-      patch: { title: 'Concurrent edit' },
+      patch: { metadata: { reviewVerdict: 'approved' } },
     });
 
     await expect(

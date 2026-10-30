@@ -44,10 +44,7 @@ export interface WorkItemStageEntry {
 
 export interface WorkItem {
   /** Optional during the one-release legacy wire migration. */
-  workItem?: Pick<
-    WorkItemRow,
-    'provider' | 'kind' | 'key' | 'url' | 'title' | 'state' | 'labels' | 'author' | 'metadata'
-  >;
+  workItem?: Pick<WorkItemRow, 'provider' | 'key' | 'url' | 'title' | 'state' | 'labels' | 'author' | 'metadata'>;
   id: string;
   orgId: string;
   createdBy: string;
