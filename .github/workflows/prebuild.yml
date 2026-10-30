@@ -607,3 +607,5 @@ jobs:
         with:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           text: ${{ steps.state.outputs.text }}
+          # #eng-release-alerts
+          channel: 'C0CD83111EX'
