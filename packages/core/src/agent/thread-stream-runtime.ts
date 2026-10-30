@@ -943,6 +943,10 @@ export class AgentThreadStreamRuntime {
     if (!stalled) this.#stalledLeaseReads.set(provider, (stalled = new Map()));
     if (this.#isLeaseReadStalled(provider, key)) return;
     const since = Date.now();
+    // Reads that never settle never clear their own mark; drop expired marks so they can't pile up.
+    for (const [staleKey, staleSince] of stalled) {
+      if (since - staleSince >= AGENT_THREAD_LEASE_TTL_MS) stalled.delete(staleKey);
+    }
     stalled.set(key, since);
     const clear = () => {
       if (stalled.get(key) === since) stalled.delete(key);
