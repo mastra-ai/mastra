@@ -724,6 +724,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           }
           await this.#releaseIntakeSources(tenant.orgId, id);
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
+          // A binding saved while the delete ran passed its project check; clear it too.
+          await this.#releaseIntakeSources(tenant.orgId, id);
           await this.#dropSchedule(id);
           return context.body(null, 204);
         },

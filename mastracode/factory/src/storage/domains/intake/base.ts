@@ -372,37 +372,42 @@ export class IntakeStorage extends FactoryStorageDomain {
    * boot finished.
    */
   async #copyLegacyBindings(): Promise<void> {
-    await this.storage.withTransaction(
-      async ops => {
-        if (await ops.findOne('intake_data_migrations', { name: COPY_LEGACY_BINDINGS_MIGRATION })) return;
-        const legacyRows = await ops.findMany<IntakeSourceBindingRow & { updated_at: Date }>(
-          'intake_source_bindings',
-          {},
-        );
-        for (const row of legacyRows) {
-          const key = {
-            org_id: row.org_id,
-            integration_id: row.integration_id,
-            source_id: row.source_id,
-            factory_project_id: row.factory_project_id,
-          };
-          if (await ops.findOne('intake_source_subscriptions', key)) continue;
-          await ops.insertOne('intake_source_subscriptions', {
-            ...key,
-            board: row.board ?? null,
-            labels: null,
-            created_by_user_id: row.created_by_user_id ?? null,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+    try {
+      await this.storage.withTransaction(
+        async ops => {
+          if (await ops.findOne('intake_data_migrations', { name: COPY_LEGACY_BINDINGS_MIGRATION })) return;
+          const legacyRows = await ops.findMany<IntakeSourceBindingRow & { updated_at: Date }>(
+            'intake_source_bindings',
+            {},
+          );
+          for (const row of legacyRows) {
+            const key = {
+              org_id: row.org_id,
+              integration_id: row.integration_id,
+              source_id: row.source_id,
+              factory_project_id: row.factory_project_id,
+            };
+            if (await ops.findOne('intake_source_subscriptions', key)) continue;
+            await ops.insertOne('intake_source_subscriptions', {
+              ...key,
+              board: row.board ?? null,
+              labels: null,
+              created_by_user_id: row.created_by_user_id ?? null,
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+            });
+          }
+          await ops.insertOne('intake_data_migrations', {
+            name: COPY_LEGACY_BINDINGS_MIGRATION,
+            completed_at: new Date(),
           });
-        }
-        await ops.insertOne('intake_data_migrations', {
-          name: COPY_LEGACY_BINDINGS_MIGRATION,
-          completed_at: new Date(),
-        });
-      },
-      { isolationLevel: 'serializable' },
-    );
+        },
+        { isolationLevel: 'serializable' },
+      );
+    } catch (error) {
+      // Postgres can report the boot that lost the race as a unique violation instead of a serialization failure.
+      if (!(error instanceof UniqueViolationError)) throw error;
+    }
   }
 
   async #foldLegacyUserSelections(): Promise<void> {
