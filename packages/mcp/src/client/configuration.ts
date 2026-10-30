@@ -69,6 +69,8 @@ export type MCPServerSettledResult<T> =
 export interface MCPDiscoveryOptions<T = unknown> {
   /** Maximum time to wait for each server's discovery operation, in milliseconds. */
   perServerTimeoutMs?: number;
+  /** Only discover these configured servers. Unknown names are ignored. Defaults to every server. */
+  serverNames?: string[];
   /**
    * Called as soon as each server's discovery succeeds, fails, or times out, before the
    * aggregate result resolves. Lets callers report each server independently instead of
@@ -1576,7 +1578,8 @@ To fix this you have three different options:
     onError: { errorId: Uppercase<string>; logMessage: string },
     options?: MCPDiscoveryOptions<T>,
   ): Promise<Array<ServerDiscoveryResult<T>>> {
-    const serverNames = Object.keys(this.serverConfigs);
+    const only = options?.serverNames;
+    const serverNames = Object.keys(this.serverConfigs).filter(name => !only || only.includes(name));
     const onServerSettled = options?.onServerSettled;
     const notifySettled = (result: ServerDiscoveryResult<T>): ServerDiscoveryResult<T> => {
       if (!onServerSettled) return result;

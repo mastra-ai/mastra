@@ -625,6 +625,16 @@ await mcp.listToolsetsWithErrors({
 
 Errors thrown by the callback are logged and don't affect discovery.
 
+#### Discover only some servers
+
+Pass `serverNames` to discover only the named servers, for example to retry the ones that timed out without starting every other server again. Names that aren't configured are ignored. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+const { errors } = await mcp.listToolsetsWithErrors({ perServerTimeoutMs: 3_000 })
+
+const retry = await mcp.listToolsetsWithErrors({ serverNames: Object.keys(errors) })
+```
+
 ### `listToolDefinitions()`
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).

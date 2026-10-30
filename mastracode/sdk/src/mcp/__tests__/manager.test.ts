@@ -28,9 +28,11 @@ vi.mock('@mastra/mcp', () => {
     new Proxy(listing, {
       apply(target, thisArg, args) {
         const onServerSettled = args[0]?.onServerSettled;
+        const only: string[] | undefined = args[0]?.serverNames;
         return Promise.resolve(Reflect.apply(target, thisArg, args)).then((result: any) => {
           const names = new Set([...Object.keys(result?.toolsets ?? {}), ...Object.keys(result?.errors ?? {})]);
           for (const name of names) {
+            if (only && !only.includes(name)) continue;
             const error = result.errors?.[name];
             onServerSettled?.(
               name,
@@ -874,6 +876,9 @@ describe('createMcpManager', () => {
       const result = await manager.reconnectServer('fs');
 
       expect(mockReconnectServer).toHaveBeenCalledWith('fs');
+      expect(mockInstance.listToolsetsWithErrors).toHaveBeenLastCalledWith(
+        expect.objectContaining({ serverNames: ['fs'] }),
+      );
       expect(result.connected).toBe(true);
       expect(result.toolCount).toBe(3);
       expect(result.toolNames).toEqual(['fs_read', 'fs_write', 'fs_list']);

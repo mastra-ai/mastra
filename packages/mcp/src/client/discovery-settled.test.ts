@@ -108,4 +108,18 @@ describe('MCPClient discovery onServerSettled', () => {
     expect(Object.keys(result.tools)).toEqual(['healthy_ping']);
     expect(result.errors).toEqual({ stalled: 'Discovery timed out after 2000ms' });
   }, 20_000);
+
+  it('discovers only the servers named in serverNames', async () => {
+    const settled: string[] = [];
+    const started = Date.now();
+    const result = await client!.listToolsetsWithErrors({
+      serverNames: ['healthy'],
+      onServerSettled: name => settled.push(name),
+    });
+
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(settled).toEqual(['healthy']);
+    expect(Object.keys(result.toolsets)).toEqual(['healthy']);
+    expect(result.errors).toEqual({});
+  }, 20_000);
 });

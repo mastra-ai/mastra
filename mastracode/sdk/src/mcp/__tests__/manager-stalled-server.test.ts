@@ -53,6 +53,13 @@ if (process.argv[2]) appendFileSync(process.argv[2], process.pid + '\\n');
 process.stdin.resume();
 `;
 
+// Exits at once, like a server that fails on start. Each spawn appends its pid to argv[2].
+const FAILING_SERVER = `
+import { appendFileSync } from 'node:fs';
+appendFileSync(process.argv[2], process.pid + '\\n');
+process.exit(1);
+`;
+
 const isAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
@@ -74,6 +81,7 @@ describe('MCP manager with a stalled server', () => {
     vi.stubEnv('CODEX_HOME', join(dir, '.codex'));
     await fs.writeFile(join(dir, 'healthy.mjs'), HEALTHY_SERVER);
     await fs.writeFile(join(dir, 'stalled.mjs'), STALLED_SERVER);
+    await fs.writeFile(join(dir, 'failing.mjs'), FAILING_SERVER);
   });
 
   afterEach(async () => {
@@ -96,10 +104,33 @@ describe('MCP manager with a stalled server', () => {
   const statusOf = (m: McpManager, name: string): McpServerStatus | undefined =>
     m.getServerStatuses().find(s => s.name === name);
 
-  const stalledPids = async (): Promise<number[]> => {
-    const text = await fs.readFile(join(dir, 'stalled.pids'), 'utf8').catch(() => '');
+  const pidsIn = async (file: string): Promise<number[]> => {
+    const text = await fs.readFile(join(dir, file), 'utf8').catch(() => '');
     return text.split('\n').filter(Boolean).map(Number);
   };
+  const stalledPids = () => pidsIn('stalled.pids');
+
+  it('does not restart a failed server when a sibling times out or is reconnected', async () => {
+    manager = createManager(1_000, {
+      healthy: { command: process.execPath, args: [join(dir, 'healthy.mjs')] },
+      failing: { command: process.execPath, args: [join(dir, 'failing.mjs'), join(dir, 'failing.pids')] },
+      slow: { command: process.execPath, args: [join(dir, 'healthy.mjs'), '2000'] },
+    });
+    await manager.initInBackground();
+    expect(statusOf(manager, 'failing')).toMatchObject({ connected: false });
+    expect(statusOf(manager, 'slow')?.error).toMatch(/Timed out after 1s/);
+    const spawnedAtInit = (await pidsIn('failing.pids')).length;
+    expect(spawnedAtInit).toBeGreaterThan(0);
+
+    // The timed-out server is rediscovered on its own once it is ready.
+    await vi.waitFor(() => expect(statusOf(manager!, 'slow')?.connected).toBe(true), { timeout: 15_000 });
+    expect(await pidsIn('failing.pids')).toHaveLength(spawnedAtInit);
+
+    // Reconnecting a sibling only lists that sibling.
+    await manager.reconnectServer('healthy');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(await pidsIn('failing.pids')).toHaveLength(spawnedAtInit);
+  }, 30_000);
 
   it('reconnects a healthy server while another server is still stalled', async () => {
     manager = createManager(60_000);

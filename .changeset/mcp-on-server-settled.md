@@ -6,6 +6,8 @@ Added an `onServerSettled` option to `listToolsWithErrors()`, `listToolsetsWithE
 
 A server that hits `perServerTimeoutMs` now reports an error with `code: MCP_DISCOVERY_TIMEOUT_CODE` (exported from `@mastra/mcp`), so you can tell a slow server apart from one that failed.
 
+Added a `serverNames` option to the same methods to discover only the named servers. Use it to retry the servers that timed out without starting every other server again.
+
 ```ts
 await mcp.listToolsetsWithErrors({
   perServerTimeoutMs: 60_000,

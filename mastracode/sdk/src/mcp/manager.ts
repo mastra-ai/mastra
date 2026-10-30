@@ -535,14 +535,12 @@ export function createMcpManager(
     }
 
     // A timed-out server's connect keeps running (a cold `npx` install can take a
-    // while). Discover again without a cap so it still connects once it is ready.
+    // while). Discover those servers again without a cap so they still connect once ready.
     if (timedOut.length > 0) {
-      const late = new Set(timedOut);
       void attemptClient
         .listToolsetsWithErrors({
-          onServerSettled: (name, result) => {
-            if (late.has(name)) record(name, outcomeOf(result));
-          },
+          serverNames: timedOut,
+          onServerSettled: (name, result) => record(name, outcomeOf(result)),
         })
         .catch(() => {});
     }
@@ -605,16 +603,14 @@ export function createMcpManager(
       await connect(attemptClient);
       if (isCurrent(name, attempt, attemptClient)) captureStderr(name);
 
-      // Discovery lists every server; settle on this one instead of waiting for the slowest.
-      return new Promise<ServerOutcome>((resolve, reject) => {
-        attemptClient
-          .listToolsetsWithErrors({
-            onServerSettled: (settledName, result) => {
-              if (settledName === name) resolve(outcomeOf(result));
-            },
-          })
-          .then(() => resolve({ error: 'Failed to connect' }), reject);
+      let outcome: ServerOutcome = { error: 'Failed to connect' };
+      await attemptClient.listToolsetsWithErrors({
+        serverNames: [name],
+        onServerSettled: (_, result) => {
+          outcome = outcomeOf(result);
+        },
       });
+      return outcome;
     })().catch((error): ServerOutcome => ({ error: error instanceof Error ? error.message : String(error) }));
 
     const record = (outcome: ServerOutcome): McpServerStatus | undefined =>
