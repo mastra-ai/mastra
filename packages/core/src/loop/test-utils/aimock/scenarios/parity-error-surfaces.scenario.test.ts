@@ -26,7 +26,13 @@ import { MockMemory } from '../../../../memory/mock';
 import { MessageHistory } from '../../../../processors/memory';
 import type { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  getScenarioEngineHost,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 import {
   type EngineParityScenario,
   type EngineParityResults,
@@ -305,10 +311,10 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
   );
 
   // The tool ignores cancellation and finishes after the deadline. The run already reported the
-  // timeout, but the agent still saves what it did. Inngest only: the plain loop drops the step at
-  // the deadline, and durable/evented release their claim there. Both predate this test.
-  it.skipIf(engine !== 'inngest').each([false, true])(
-    'a tool that finishes after the deadline still saves its step (savePerStep: %s)',
+  // timeout. Inngest still saves the step that ran it. The other engines do not: the plain loop drops
+  // the step at the deadline, and durable/evented release their claim there, so storage rejects it.
+  it.each([false, true])(
+    'a tool that finishes after the deadline is saved only on Inngest (savePerStep: %s)',
     async savePerStep => {
       const memory = new MockMemory();
       const threadId = `late-tool-${engine}-${savePerStep}`;
@@ -349,18 +355,30 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
       await toolFinished.promise;
-      // Give the settled tool's write time to land before recalling.
-      await new Promise(resolve => setTimeout(resolve, 3_000));
 
-      expect(result.requests).toHaveLength(1);
-      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
-      const saved = JSON.stringify(messages);
-      expect(saved.includes('Check the slow courier.')).toBe(true);
+      if (engine !== 'inngest') {
+        // Absence can't be polled for; give a late write time to land.
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
+        expect(JSON.stringify(messages).includes('call_slow')).toBe(false);
+        return;
+      }
+
       // The step that ran the tool is saved. The tool outlived the abort grace period, so its
       // result is recorded as aborted rather than as its late return value.
-      expect(saved.includes('call_slow')).toBe(true);
-      expect(saved.includes('Tool execution was aborted while running.')).toBe(true);
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+          const saved = JSON.stringify(messages);
+          expect(saved.includes('Check the slow courier.')).toBe(true);
+          expect(saved.includes('call_slow')).toBe(true);
+          expect(saved.includes('Tool execution was aborted while running.')).toBe(true);
+        },
+        { timeout: 10_000, interval: 100 },
+      );
+      expect(result.requests).toHaveLength(1);
     },
     TEST_TIMEOUT_MS + 5_000,
   );
@@ -371,7 +389,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     ['before', 1],
     ['during', DEADLINE_MS],
   ] as const)(
-    'a deadline %s a slow input save stops the run before it starts and keeps the input',
+    'a deadline %s a slow input save stops the run before it starts',
     async (_when, totalMs) => {
       const memory = new MockMemory();
       const saveMessages = memory.saveMessages.bind(memory);
@@ -424,6 +442,63 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       }
     },
     TEST_TIMEOUT_MS + 5_000,
+  );
+
+  it.skipIf(engine !== 'inngest')(
+    'a deadline during the running-snapshot write stops the run before it starts',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `slow-running-row-${engine}`;
+      // The Inngest host's store, which the caller writes the running row to.
+      const workflowsStore = (await getScenarioEngineHost()!.getMastra().getStorage()!.getStore('workflows'))!;
+      const persistSnapshot = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
+      const heldWrites: Promise<unknown>[] = [];
+      const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot').mockImplementation(args => {
+        if (args.snapshot.status !== 'running') return persistSnapshot(args);
+        // Land the row only after the deadline has fired and cleared the run's rows.
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => persistSnapshot(args));
+        heldWrites.push(held.catch(() => {}));
+        return held;
+      });
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Start me slowly.',
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        await Promise.all(heldWrites);
+        // Give a run started after the deadline time to reach the model and write its rows.
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+        expect(getMock().getRequests()).toHaveLength(0);
+        // The deadline cleared the run's rows. The late running row is removed, and no run is
+        // started to write new ones.
+        const workflows = await result.mastra.getStorage()!.getStore('workflows');
+        for (const name of ['durable-agentic-loop', 'durable-agentic-execution']) {
+          const snapshot = await workflows!.loadWorkflowSnapshot({
+            workflowName: `inngest:${name}`,
+            runId: result.output.runId,
+          });
+          expect(snapshot).toBeNull();
+        }
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
+      } finally {
+        persistSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 10_000,
   );
 
   it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(

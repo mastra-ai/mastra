@@ -1449,6 +1449,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           if (isMastraTimeoutError(registryEntry.abortSignal?.reason)) return;
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
+          // The deadline can also fire while that row is being written; its cleanup may have run first.
+          if (isMastraTimeoutError(registryEntry.abortSignal?.reason)) {
+            if (persistedRunning) await deleteRunSnapshots(runId);
+            return;
+          }
           try {
             await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
           } catch (error) {
