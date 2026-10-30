@@ -162,6 +162,11 @@ export class ProjectBoardCache implements ProjectBoardSource {
     return this.codeRegistry;
   }
 
+  /** The code skills stored runners may name. */
+  get codeSkills(): readonly InlineSkill[] {
+    return this.#codeSkills;
+  }
+
   /** Makes the next load reread the project. The loaded boards keep serving sync reads until then. */
   invalidate(scope: StoredBoardScope): void {
     const key = scopeKey(scope);

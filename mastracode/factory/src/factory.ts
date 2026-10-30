@@ -48,6 +48,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { isDefinedBoard } from './boards/define-board.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
@@ -307,7 +308,13 @@ export interface MastraFactoryConfig {
    * Default: `factory-config-v1`.
    */
   configVersion?: string;
-  /** Board definitions installed for this Factory instance. */
+  /**
+   * Boards served to every project, read-only, next to the boards each project stored.
+   *
+   * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
+   * (README § Stored boards). Boards passed here still work: code boards are read-only and served
+   * alongside each project's stored boards.
+   */
   boards?: readonly InstalledBoard[];
   /**
    * App skills written in code with `createSkill()` from `@mastra/core/skills`.
@@ -316,7 +323,12 @@ export interface MastraFactoryConfig {
    * a bundled skill of the same name. Names must be unique.
    */
   skills?: readonly InlineSkill[];
-  /** Whether the built-in Work and Review boards are installed. Default: true. */
+  /**
+   * Whether every project gets the built-in Work and Review boards, read-only. Default: true.
+   *
+   * @deprecated Will be replaced by a one-time copy of the built-in boards into each project's
+   * database (mastra-ai/mastra#28920). It still decides whether projects get them until then.
+   */
   includeDefaultBoards?: boolean;
 
   /**
@@ -428,6 +440,17 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
+let warnedDefinedBoards = false;
+
+/** Warns once per process when the app declares boards in code; Factory's own boards never warn. */
+function warnDefinedBoards(boards: BoardRegistry): void {
+  if (warnedDefinedBoards || ![...boards.values()].some(isDefinedBoard)) return;
+  warnedDefinedBoards = true;
+  console.warn(
+    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and these definitions are served read-only next to the boards each project stores. Manage boards through the boards API; see the README "Stored boards" section.',
+  );
+}
+
 /**
  * The fleet-era `sandbox` options and what replaced each one. Only the keys
  * the host actually passed are explained, so a host that never used the fleet
@@ -492,10 +515,11 @@ export class MastraFactory {
       boards: config.boards,
       includeDefaultBoards: config.includeDefaultBoards,
     });
+    warnDefinedBoards(this.#boards);
     if ('rules' in config) {
       throw new Error(
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
-          'rules on the owning board via defineBoard({ tools }).',
+          'rules on the owning board (`tools`).',
       );
     }
     this.#skills = assertFactorySkills(config.skills);
@@ -1765,6 +1789,9 @@ export class MastraFactory {
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: boards,
+            ...(this.#projectBoards
+              ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
+              : {}),
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
