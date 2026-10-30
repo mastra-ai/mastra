@@ -36,7 +36,7 @@ export interface CommandsApi {
 
 /**
  * Attaching sets no deadline of its own: without one the SDK cuts the stream
- * after 60s, and the process's own timeout was set when it was spawned.
+ * after 60s, and the manager enforces the process's own timeout by killing it.
  */
 export const ATTACH_TIMEOUT_MS = 0;
 
@@ -90,6 +90,9 @@ export class CommandsApiProcessHandle extends ProcessHandle {
   readonly pid: string;
   /** The exit code `wait()` saw, for a handle that doesn't update its own. */
   private waitedExitCode?: number;
+  /** Set once the process was killed for running past its timeout. */
+  private timedOutAfter?: number;
+  private timeoutTimer?: ReturnType<typeof setTimeout>;
   constructor(
     protected inner: CommandsApiHandle,
     protected readonly manager: CommandsApiProcessManager<any>,
@@ -103,7 +106,24 @@ export class CommandsApiProcessHandle extends ProcessHandle {
 
   /** Read from the commands handle, so it reflects server-side state without `wait()`. */
   get exitCode(): number | undefined {
-    return this.inner.exitCode ?? this.waitedExitCode;
+    const exitCode = this.inner.exitCode ?? this.waitedExitCode;
+    return exitCode !== undefined && this.timedOutAfter !== undefined ? 124 : exitCode;
+  }
+
+  /** Kill the process once `ms` pass, reported the way the local sandbox reports a timeout. */
+  expireAfter(ms: number): void {
+    this.timeoutTimer = setTimeout(() => {
+      if (this.exitCode !== undefined) return;
+      this.timedOutAfter = ms;
+      void this.kill()
+        .then(killed => {
+          if (!killed) this.timedOutAfter = undefined;
+        })
+        .catch(() => {
+          this.timedOutAfter = undefined;
+        });
+    }, ms);
+    this.timeoutTimer.unref?.();
   }
 
   /** Wait for the process to exit. Providers whose output stream can drop while the process runs override this. */
@@ -112,6 +132,15 @@ export class CommandsApiProcessHandle extends ProcessHandle {
   }
 
   async wait(): Promise<CommandResult> {
+    const result = await this.waitUntimed();
+    clearTimeout(this.timeoutTimer);
+    if (this.timedOutAfter === undefined) return result;
+    const timeoutMsg = `Process timed out after ${this.timedOutAfter}ms`;
+    if (!this.stderr.includes(timeoutMsg)) this.emitStderr(`\n${timeoutMsg}`);
+    return { ...result, success: false, exitCode: 124, stderr: this.stderr, killed: true, timedOut: true };
+  }
+
+  private async waitUntimed(): Promise<CommandResult> {
     try {
       const result = await this.waitForExit();
       this.waitedExitCode = result.exitCode;
@@ -233,14 +262,19 @@ export abstract class CommandsApiProcessManager<
         stdin: options.stdinMode !== 'ignore',
         cwd: options.cwd ?? this.defaultCwd(),
         envs,
-        // Without this the SDK falls back to its own 60s connection deadline,
-        // which bounds the whole command and kills anything that runs longer.
-        timeoutMs: options.timeout ?? this.defaultTimeout,
+        // The SDK's `timeoutMs` is a deadline on the output stream, not the
+        // process: without one it falls back to 60s, and once it passes the
+        // process can live on with nothing reading its output, dying unseen
+        // on its next write. So the stream stays open and the timeout is
+        // enforced below.
+        timeoutMs: 0,
         onStdout: output.onStdout,
         onStderr: output.onStderr,
       });
       const handle = output.handledBy(this.createHandle(inner, options.stdinMode, options));
       this._tracked.set(handle.pid, handle);
+      const timeout = options.timeout ?? this.defaultTimeout;
+      if (timeout) handle.expireAfter(timeout);
       return handle;
     });
   }
