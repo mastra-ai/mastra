@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.4.1
+
+### Patch Changes
+
+- The region prompt now defaults to `us` instead of `eu`. Pass `--region eu` or pick `eu` in the prompt to keep using the EU region. ([#28748](https://github.com/mastra-ai/mastra/pull/28748))
+
+- Updated dependencies [[`7488ca1`](https://github.com/mastra-ai/mastra/commit/7488ca1716b3d921bcb9b02cb2fb3ceddfdd0686), [`8175b28`](https://github.com/mastra-ai/mastra/commit/8175b28bb5d2df864567771f774bf388bcbcf70c), [`5cc1e6a`](https://github.com/mastra-ai/mastra/commit/5cc1e6a4cd0bd8bee3eda69bb502ba4d12513752), [`4eeccd5`](https://github.com/mastra-ai/mastra/commit/4eeccd5c5168a4745cfc497882e620d4b1ab236b), [`ad0a796`](https://github.com/mastra-ai/mastra/commit/ad0a79694c714fd378d2ba7254571e8fc6371996), [`2c6da6f`](https://github.com/mastra-ai/mastra/commit/2c6da6f449f7385475a843e26e05834450303a89), [`436b734`](https://github.com/mastra-ai/mastra/commit/436b734df58a5ec82bf4450b24da193cd8d27e24), [`436b734`](https://github.com/mastra-ai/mastra/commit/436b734df58a5ec82bf4450b24da193cd8d27e24), [`d27c394`](https://github.com/mastra-ai/mastra/commit/d27c3943e802dff2628f33702bd8f4d922219a04), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff)]:
+  - mastra@1.37.0
+
 ## 0.4.1-alpha.3
 
 ### Patch Changes

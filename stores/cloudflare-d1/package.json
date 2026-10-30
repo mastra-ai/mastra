@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare-d1",
-  "version": "1.5.0-alpha.0",
+  "version": "1.5.0",
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "license": "Apache-2.0",
   "type": "module",

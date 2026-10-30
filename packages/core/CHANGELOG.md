@@ -1,5 +1,500 @@
 # @mastra/core
 
+## 1.81.0
+
+### Minor Changes
+
+- Added schemas for saved observability list views. Use `savedViewStateSchema` to validate a saved traces, spans, threads or logs view: its filters, time range, sort, columns and page options. A service that only stores views can use `savedViewStateEnvelopeSchema` instead. It checks the version, the page and the 16 KiB size limit. Dashboards can reuse the filter shape through `filterNodeSchema`. It accepts any operator id, so new operators don't need a schema change. ([#28715](https://github.com/mastra-ai/mastra/pull/28715))
+
+  ```ts
+  import { savedViewStateSchema } from '@mastra/core/storage';
+
+  savedViewStateSchema.parse({
+    schemaVersion: 1,
+    page: 'traces',
+    filters: [{ fieldId: 'status', value: 'error' }],
+    dateRange: { preset: 'last-24h' },
+    sort: { field: 'startedAt', direction: 'desc' },
+  });
+  ```
+
+- Channel agents with a workspace can now open binary file attachments, such as ZIP and DOCX files, that need an authenticated download (for example Slack files). The file is downloaded through the adapter and saved under `channel-attachments/` in the agent's workspace. The agent gets the workspace path instead of a private URL it can't open. ([#28913](https://github.com/mastra-ai/mastra/pull/28913))
+
+  This covers attachments that `inlineMedia` doesn't send to the model as file parts. PDFs are sent inline by default.
+
+  When the workspace uses `mounts`, the file is saved in the first writable mount other than `/`. Saving follows the workspace's write-file tool policy: if `mastra_workspace_write_file` is disabled or needs approval, the file isn't saved. Adapters whose links don't need a token also get the workspace path. For example, a Discord agent with a writable workspace now gets the workspace path instead of the CDN URL, which expires.
+
+  The agent still gets the URL for files over 10 MiB, failed downloads, read-only workspaces, workspaces where writes are disabled or need approval, and agents without a workspace.
+
+  `channel-attachments/` is capped at 100 MiB per workspace so channel participants can't fill the disk. Once a file would go over the cap, the agent gets the URL instead and nothing is written. Change the cap with `maxAttachmentStorageBytes`:
+
+  ```ts
+  new Agent({
+    // ...
+    channels: { adapters: { slack }, maxAttachmentStorageBytes: 500 * 1024 * 1024 },
+  });
+  ```
+
+- Added `setCookies()` to `MastraBrowser`, so your app can sign a thread's browser in to a site the agent can't sign in to itself, such as a preview behind your own login. The cookie value never passes through the model. Cookies set before the browser opens are added when it does. ([#28631](https://github.com/mastra-ai/mastra/pull/28631))
+
+  ```ts
+  await browser.setCookies([{ name: 'my_app_session', value: token, domain: 'app.example.com', path: '/' }], threadId);
+  ```
+
+  Browser providers that don't support cookies throw. Custom providers can add support by overriding `addCookiesToOpenBrowser()` and calling `addPendingCookies(threadId)` once a thread's browser opens, before it loads a page.
+
+- Added factory-scoped sandbox environment. A deployment that hosts several factories can now give a credential to one factory's sessions only: every Factory sandbox provider accepts `env` as a function of the session's sandbox context, which carries the new `factoryId` and `factoryName` fields. Scope secrets by `factoryId`, because names can be edited and aren't unique. ([#28767](https://github.com/mastra-ai/mastra/pull/28767))
+
+  ```ts
+  new PlatformFactorySandbox({
+    env: ctx => (ctx.factoryId === PLATFORM_FACTORY_ID ? { PLATFORM_TOKEN } : {}),
+  });
+  ```
+
+  Platform and Docker sandboxes keep the environment they started with when they resume. When you remove a credential from a factory, recreate its running sandboxes.
+
+- Added execution outcomes and typed stop-reason details to agent, model, tool, and workflow traces. Traces distinguish failures, cancellations, limits, guardrail blocks, and observer interruptions; TripWire errors now use the name `TripWire` instead of `Error`, including in string representations, stacks, and serialized errors, so they can be identified across workers. ([#28703](https://github.com/mastra-ai/mastra/pull/28703))
+
+  Custom spans can record an outcome with a compact stop-reason context:
+
+  ```ts
+  import { SpanType, type ObservabilityInstance } from '@mastra/core/observability';
+
+  function recordGuardrailBlock(observability: ObservabilityInstance, processorId: string) {
+    const span = observability.startSpan({ name: 'policy check', type: SpanType.GENERIC });
+    span.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { processorId } });
+  }
+  ```
+
+  The public `outcome`, `stopReason`, and `stopReasonContext` fields now also allow `null`. Exporter and other consumer types must handle `null` alongside an absent value; arbitrary custom outcome strings and context objects remain supported. Workflow events and durable snapshots can now include tripwire details, including processor-supplied metadata.
+
+  Agent and generation spans also close when the internal workflow fails without a finish callback, while errors followed by a finish retain their final usage and output.
+
+- Added an optional `inputAccepted` field to `OutputResult`, the `result` argument of `processOutputResult`. It is set only when `finishReason` is `'error'`, and is `true` when the run accepted the turn's input before it failed. `MessageHistory` uses it to keep the user message of a failed turn that produced no output, so an accepted turn is not lost from history. Failed turns without the flag are still dropped, as before. ([#28988](https://github.com/mastra-ai/mastra/pull/28988))
+
+  ```ts
+  import type { Processor } from '@mastra/core/processors';
+
+  const processor: Processor = {
+    id: 'accepted-turns',
+    async processOutputResult({ messages, result }) {
+      if (result.finishReason === 'error' && result.inputAccepted) {
+        // The run failed after accepting this turn's input
+      }
+      return messages;
+    },
+  };
+  ```
+
+- Added an optional `getRoutes()` method to `SignalProvider`. Routes it returns are added to `server.apiRoutes` automatically when the agent is registered, so webhook and OAuth routes for a signal provider no longer need manual server config. ([#28575](https://github.com/mastra-ai/mastra/pull/28575))
+
+  ```ts
+  class AcmeSignals extends SignalProvider<'acme'> {
+    readonly id = 'acme' as const;
+
+    getRoutes() {
+      return [registerApiRoute('/acme/webhook', { method: 'POST', handler: async c => c.json({ ok: true }) })];
+    }
+  }
+
+  // Before: server: { apiRoutes: acme.getRoutes() }
+  // After: just add the provider to the agent
+  const agent = new Agent({ /* ... */ signals: [new AcmeSignals()] });
+  export const mastra = new Mastra({ agents: { agent } });
+  ```
+
+- Fixed resumed runs losing the link to the run they continue. When you resume an agent, durable agent or workflow run, its span now sets `resumedFromSpanId` to the span id of the first run. This stays true after several resumes and after a durable agent recovers. A resumed run also keeps the external parent span of the run it continues. ([#28849](https://github.com/mastra-ai/mastra/pull/28849))
+
+  A resume that passes only `tracingOptions.parentSpanId` now stays in the original trace under the first run, and uses that id as its external parent. Before, it started a new trace.
+
+  ```ts
+  await agent.resumeGenerate({ approved: true }, { runId, toolCallId, tracingOptions: { parentSpanId: callerSpanId } });
+  // The resumed run stays in the first run's trace.
+  // resumedFromSpanId is the first run's span id, externalParentSpanId is callerSpanId.
+  ```
+
+  The `resumedFromSpanId` option of `getOrCreateSpan` is deprecated. Use `resumeFrom` with the saved tracing context instead.
+
+- Span aggregates can now group by `model` and `provider` and count their distinct values with `countDistinct.model` and `countDistinct.provider`. Stores opt in with the new `span-aggregate-model-dimensions` feature. ([#28908](https://github.com/mastra-ai/mastra/pull/28908))
+
+  ```typescript
+  const { rows } = await mastraClient.aggregateSpans({
+    timeRange,
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+    groupBy: ['provider', 'model'],
+    measures: ['count', 'tokens.total.sum', 'cost.sum'],
+  });
+  ```
+
+- Span queries and span aggregates now accept `model` and `provider` filters. Stores opt in with the new `span-query-model-fields` feature. ([#28859](https://github.com/mastra-ai/mastra/pull/28859))
+
+  ```typescript
+  const { spans } = await mastraClient.querySpans({
+    timeRange,
+    where: { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+  });
+  ```
+
+- Fixed the browser failing with `ECONNREFUSED` when launched again on a profile it had used before. ([#28675](https://github.com/mastra-ai/mastra/pull/28675))
+
+  Before launching Chrome on a local profile, Mastra now clears the launcher logs left by earlier launches (`chrome-err.log`, `chrome-out.log`), which made the next launch connect to the old, dead DevTools port. It also removes a Chrome profile lock left by a browser that is no longer running. Stagehand does this for every thread-scoped browser too, not only on the first launch. Remote browsers (`cdpUrl`, Browserbase) are not affected.
+
+  If a browser that is still running holds the profile, launch now fails with a `BrowserProfileInUseError` that names the profile and the holding process:
+
+  ```ts
+  import { BrowserProfileInUseError } from '@mastra/core/browser';
+
+  try {
+    await browser.launch();
+  } catch (error) {
+    if (error instanceof BrowserProfileInUseError) {
+      // Another Chrome is using the profile: close it, or use a different profile.
+      console.error(error.message);
+    }
+    throw error;
+  }
+  ```
+
+  Added `browser.retire()` and `browser.killProcesses()` for code that replaces one browser with another. `close()` lets the browser relaunch the next time something uses it; `retire()` closes it for good, so a tool call still holding the old browser gets an error instead of starting an untracked Chrome. `killProcesses()` force-kills the browser's processes when `close()` fails or hangs. It works on macOS and Linux; it cannot force-kill Chrome on Windows.
+
+  ```ts
+  // Replace oldBrowser with newBrowser without leaving its Chrome running.
+  const retired = oldBrowser.retire();
+  const timedOut = await Promise.race([
+    retired.then(() => false),
+    new Promise<boolean>(resolve => setTimeout(() => resolve(true), 5000)),
+  ]).catch(() => true);
+  if (timedOut) oldBrowser.killProcesses();
+  ```
+
+  A browser that finishes closing after another browser took its profile no longer deletes the new browser's lock.
+
+  A lock whose holder is a live local process that has not started listening yet (Chrome creates the lock first) is no longer removed as stale; Mastra waits up to 3 seconds for it.
+
+- Added schemas for custom dashboard definitions. These are schemas only: `@mastra/core` adds no storage methods for dashboards, and no store persists them. ([#28714](https://github.com/mastra-ai/mastra/pull/28714))
+
+  **Layout**
+
+  - A definition lays out rows of widgets on a 12-column grid.
+  - Each widget stores its own trace aggregate, span aggregate, metrics, or scores queries. Queries have no time range; the page supplies it.
+  - A view can set its own `description`, `scope`, and `drilldown`, overriding the widget's. A drilldown has an `action` target and a `click` target.
+
+  **Queries**
+
+  - A query can have an optional `id`. It starts with a letter, uses only letters, digits, `_` and `-`, and is unique within its view. Column ids are also unique within a view.
+  - Set `compare: 'previousWindow'` on any query to compare with the previous window.
+  - A scores query without `scorerId` covers every scorer, with one series per scorer.
+
+  **Filters**
+
+  - `defaults.filters` and drilldown `filters` use the same filter node schema as saved views (`filterNodeSchema`).
+  - Filter groups can nest at most 12 levels deep (`DASHBOARD_MAX_FILTER_DEPTH`).
+  - The page's filters are combined with each query's own. `where` clauses are ANDed. If both set the same metrics or scores filter field, the values must agree (arrays intersect). A contradiction returns no data.
+
+  **Validation**
+
+  - `dashboardDefinitionSchema` validates a whole definition.
+  - `dashboardDefinitionEnvelopeSchema` checks only what a service storing dashboards needs: a known `schemaVersion`, at most 20 widgets, 1 to 8 queries per view, at most 64 KiB serialized, unique widget ids, and `kind` and `views` on every widget. New widget kinds can be stored without upgrading that service.
+
+  **New widget kinds**
+
+  - Widget `kind` accepts any non-empty string. View `options` are passed through for each kind to validate, so new widget kinds need no `@mastra/core` upgrade.
+  - `DASHBOARD_WIDGET_KINDS` lists the built-in kinds: `kpis`, `table`, `timeseries` and `scores`.
+
+  **Versions**
+
+  - Adding an optional field keeps `schemaVersion` the same.
+  - A breaking change bumps `schemaVersion` and adds an upgrade step to `migrateDashboardDefinition`. That function brings any stored version up to the current one before parsing.
+
+  **Browser apps**
+
+  - Import the dashboard schemas from `@mastra/core/storage/dashboards`. It loads no Node built-ins and uses no Node globals such as `process` or `Buffer`.
+  - `@mastra/core/storage` reaches agent code that reads `process` when it loads, so it fails in the browser.
+
+  ```ts
+  import { dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
+
+  const result = dashboardDefinitionSchema.safeParse({
+    schemaVersion: 1,
+    rows: [
+      {
+        widgets: [
+          {
+            id: 'agents',
+            span: 6,
+            kind: 'table',
+            views: [
+              {
+                queries: [
+                  {
+                    source: 'traceAggregate',
+                    measures: ['count', 'errorRate'],
+                    groupBy: ['rootEntityName'],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  ```
+
+- Added `outcome` and `stopReason` to advanced span and trace queries. You can now filter, group, and discover values by how a span ended and why, separately from `status`. Span and trace results also return `stopReasonContext`. ([#28884](https://github.com/mastra-ai/mastra/pull/28884))
+
+  At trace scope the fields read the root span. Use `spans.some` to find traces where any span hit a limit:
+
+  ```ts
+  const { traces } = await client.queryTraces({
+    timeRange,
+    where: { spans: { some: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } } } },
+  });
+  ```
+
+  A missing outcome means "not recorded", never success. Stores opt in through the new `span-query-outcome-fields` and `trace-query-outcome-fields` features.
+
+- Trace, span and thread queries can now return and filter by `timeToFirstTokenMs`, the time from the start of the model call to its first streamed chunk. Trace and span queries can also sort by it. Trace rows use the root span's value, and thread rows use the first trace's root agent. Missing values sort last. Stores that support it declare the `trace-query-time-to-first-token` and `trace-query-time-to-first-token-sort` features. ([#28699](https://github.com/mastra-ai/mastra/pull/28699))
+
+  ```typescript
+  const page = await storage.queryTraces(
+    planTraceQuery(
+      parseTraceQueryRequest({ timeRange, orderBy: [{ field: 'timeToFirstTokenMs', direction: 'desc' }] }),
+    ),
+  );
+  ```
+
+  Durable agents now carry the time to first token of the model call that streamed the run's first chunk across steps, so their generation and agent run spans report it too.
+
+  A model call that fails before a fallback model, or a durable agent's retry, takes over now ends its model inference span with that error.
+
+- Added support for background tasks owned by code other than agents, such as MCP servers. ([#28425](https://github.com/mastra-ai/mastra/pull/28425))
+
+  **Per-task retention.** Tasks accept optional `expiresAt` and `metadata` fields. When the `cleanup` option is set, cleanup deletes a finished task once its own `expiresAt` passes instead of using `completedTtlMs` or `failedTtlMs`. Pending, running, and suspended tasks are never deleted. `metadata` is stored with the task and not read by the manager.
+
+  ```ts
+  await mastra.backgroundTaskManager.enqueue({
+    agentId: 'mcp-server:ops',
+    toolName: 'mcp-server:ops:deploy',
+    toolCallId,
+    runId,
+    args,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    metadata: { ttlMs: 86_400_000 },
+  });
+  ```
+
+  **Per-owner concurrency.** `perOwnerConcurrency` overrides `perAgentConcurrency` for specific owners, keyed by `agentId`. Each value must be a number of at least 1. These tasks still count toward `globalConcurrency`.
+
+  ```ts
+  new Mastra({
+    backgroundTasks: { enabled: true, globalConcurrency: 60, perOwnerConcurrency: { 'mcp-server:ops': 50 } },
+  });
+  ```
+
+  **Queued resume.** `resume()` still throws when no concurrency slot is free. Pass `{ onNoSlot: 'queue' }` to keep the task suspended and resume it once a slot frees up. The queue is held in memory by the calling process, so a queued resume is lost if that process exits; the task stays suspended and can be resumed again. A queued resume is dropped if the task is cancelled or resumed elsewhere first.
+
+  ```ts
+  await mastra.backgroundTaskManager.resume(taskId, resumeData, { onNoSlot: 'queue' });
+  ```
+
+  Storage adapters need a matching release to store `expiresAt` and `metadata`. With an older adapter, cleanup detects that expiry is unsupported and keeps using only the global retention settings, as before.
+
+- Added the experimental `getTasksInfo()` and `getTasksInspector()` methods to MCP servers, so tools like Studio can see which tools run as MCP tasks and list, cancel or answer a server's tasks. ([#28629](https://github.com/mastra-ai/mastra/pull/28629))
+
+  ```ts
+  const inspector = server.getTasksInspector();
+  const { tasks } = (await inspector?.list({ status: 'input_required' })) ?? { tasks: [] };
+  if (tasks[0]) await inspector?.cancel(tasks[0].taskKey);
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#28223](https://github.com/mastra-ai/mastra/pull/28223))
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.63` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.63) (from `npm:@ai-sdk/provider-utils@5.0.62`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.30` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.30) (from `npm:@ai-sdk/provider@4.0.29`, in `dependencies`)
+
+- dependencies updates: ([#28928](https://github.com/mastra-ai/mastra/pull/28928))
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.62` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.62) (from `npm:@ai-sdk/provider-utils@4.0.61`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.69` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.69) (from `npm:@ai-sdk/provider-utils@5.0.63`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.34` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.34) (from `npm:@ai-sdk/provider@4.0.30`, in `dependencies`)
+
+- Fixed resuming suspended agent runs across server instances when a process retains an earlier run segment. ([#29061](https://github.com/mastra-ai/mastra/pull/29061))
+
+- Update provider registry and model documentation with latest models and providers ([`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74))
+
+- Fixed recovered durable agents skipping configured completion checks ([#29037](https://github.com/mastra-ai/mastra/pull/29037))
+
+- Fixed background tasks staying locked to a worker after it shut down gracefully. A worker that stops with `mastra.shutdown()` now releases the tasks it was running right away, so another worker can pick them up immediately instead of waiting for the lease to expire. ([#28719](https://github.com/mastra-ai/mastra/pull/28719))
+
+- Fixed provider-reported cost on model generation spans when an agent run pauses on a tool approval or `suspend()` and then resumes. The paused part of the run now records its own cost, and the resumed part no longer repeats the cost of the steps that ran before the pause. ([#28955](https://github.com/mastra-ai/mastra/pull/28955))
+
+- Fixed `@mastra/core/loop/server` failing to load with a module-not-found error. The `createRunCommandTool` export is now importable at runtime. Also removed the `@mastra/core/network/vNext` and `@mastra/core/telemetry/otel-vendor` subpaths, which pointed to files that no longer ship. Fixes [#29014](https://github.com/mastra-ai/mastra/issues/29014). ([#29056](https://github.com/mastra-ai/mastra/pull/29056))
+
+- `PROCESSOR_WORKFLOW_FAILED` now keeps the underlying error as its `cause`. Previously the failure text included the error message but dropped the error object, so callers could not inspect the original stack, error type or provider fields; the failed workflow's error (or the failed step's error) is now attached. ([#28831](https://github.com/mastra-ai/mastra/pull/28831))
+
+- Fixed `POST /agents/:agentId/runs/:runId/abort` answering `{ aborted: false }` when it reached a server that does not own the run. The run stopped, but the client kept retrying for 10 seconds and then reported that cancellation was not acknowledged. The route now waits up to 2 seconds for the server executing the run to confirm the abort, and answers `{ aborted: true }` once it does. A run whose owner has gone still answers `{ aborted: false }` after that wait. ([#28522](https://github.com/mastra-ai/mastra/pull/28522))
+
+- Flush observability exporters before closing storage on Mastra shutdown, so final spans persist when using DuckDB. Release DuckDB file locks on shutdown, including composed observability storage, concurrent operations, and public connection cleanup. Prevent closed DuckDB connections from reopening, and avoid leaving a connection open while checking Mastra Code's local observability store. ([#28656](https://github.com/mastra-ai/mastra/pull/28656))
+
+- Fixed `output.request` and `onFinish.request` for durable and evented agents. Fresh, uninterrupted `stream()` and `generate()` runs that finish normally in the same process now expose the final provider request body. If a local run fails on a provider error, `output.request` reports the failing attempt's request, when available, rather than an earlier step's request. Provider request bodies are kept out of workflow events and snapshots. ([#28674](https://github.com/mastra-ai/mastra/pull/28674))
+
+  **Unchanged cases**
+
+  - Remote workers
+  - Resumed, recovered, or observed runs
+  - Suspended, aborted, or tripwire runs
+  - Historical request metadata in `output.steps`
+
+- Fixed agents treating `observationalMemory: { enabled: false }` as if observational memory were on. This now behaves the same as having no observational memory configured, on every engine: ([#28922](https://github.com/mastra-ai/mastra/pull/28922))
+
+  - `agent.stream()` and `agent.generate()` with `savePerStep` save each step before the next one runs.
+  - Durable and evented agents title the thread, save each step with `savePerStep`, and save the turn when the run finishes.
+
+- Fixed `resumeStream()` on evented workflows rejecting its `result` with "promise 'result' was not resolved or rejected when stream finished". The stream now stays open until the resumed run's result is set. ([#28871](https://github.com/mastra-ai/mastra/pull/28871))
+
+- Added an `expectedSuspendedAt` condition to background task updates. A write fenced on a suspension time is only applied while the task is still in that same suspension, so an answer meant for an earlier suspension can no longer overwrite a later one. ([#28590](https://github.com/mastra-ai/mastra/pull/28590))
+
+  ```ts
+  const task = await storage.getTask(taskId);
+  const applied = await storage.updateTask(
+    taskId,
+    { status: 'running', suspendPayload: undefined },
+    { expectedStatus: 'suspended', expectedSuspendedAt: task?.suspendedAt ?? null },
+  );
+  // `applied` is false when the task suspended again in the meantime.
+  ```
+
+  Fixed a delayed background task resume answering the wrong suspension. If a task was resumed another way and suspended again before a resume request was processed, that request used to resume the new suspension with the old data. It is now dropped.
+
+- Added a `pinToWorker` option to `backgroundTaskManager.enqueue()` for tasks whose work is already running in the current process. Other processes no longer pick up the queued task and run it a second time while that process is alive. If the process dies, the task uses a retry or fails, so a task with `maxRetries: 0` never runs twice. Running processes check for these tasks every `leaseDurationMs`, so they're recovered without a restart. Pinned work should be idempotent: a lapsed lease doesn't prove the original process stopped. ([#28507](https://github.com/mastra-ai/mastra/pull/28507))
+
+  ```ts
+  await mastra.backgroundTaskManager?.enqueue(payload, { executor }, { pinToWorker: true });
+  ```
+
+- Fixed nested evented workflows running without the caller's `workflows:execute` permission on the child workflow. When a fine-grained authorization (FGA) provider is configured, non-internal nested workflows now require an authenticated user with that permission, or a trusted actor with tenant scope subject to the provider's actor policy. Internal child workflows remain exempt from this check. ([#28669](https://github.com/mastra-ai/mastra/pull/28669))
+
+  Schedule-triggered runs carry no user identity or trusted actor by default. Scheduled workflows containing non-internal nested children therefore now fail closed when FGA is configured, matching the default engine's behavior.
+
+- Added the internal support `@mastra/memory` needs to delete a thread's event stream when the thread is deleted. ([#28968](https://github.com/mastra-ai/mastra/pull/28968))
+
+- Fixed durable runs stopping when a lease renewal queued behind other storage writes still belongs to the same execution. The run now waits up to one lease TTL past its deadline for the renewal result, then stops as before if the renewal has still not returned. ([#28936](https://github.com/mastra-ai/mastra/pull/28936))
+
+- Fixed trace trees for agents whose model call is rejected and handled by an error processor (for example a retry on a rate limit). The "request error processor" spans now sit inside the model step whose call failed, next to that step's other processor spans, instead of showing up as a flat list under the agent run. ([#28745](https://github.com/mastra-ai/mastra/pull/28745))
+
+- Inngest durable agents no longer block memory writes after `modelSettings.timeout.totalMs` expires. When a tool is still running at the deadline, its step is now saved to memory with the tool call. A tool that outlives the abort grace period is recorded as aborted rather than with its late return value. The run still stops with one `MastraTimeoutError` at the deadline in the process that started it; steps already running on a separate Inngest worker are not signalled. The user's message is still saved before the run starts. Durable and evented agents are unchanged: they release their execution claim at the deadline, so a late step, or a user message whose save is still in flight, is not saved. ([#28926](https://github.com/mastra-ai/mastra/pull/28926))
+
+  Errors with the id `DURABLE_AGENT_EXECUTION_TIMED_OUT` are no longer thrown, because Inngest durable agents no longer refuse memory writes after the deadline. Remove any checks for that id. The deadline is still reported as a `MastraTimeoutError`.
+
+  ```ts
+  // Before
+  if (error.id === 'DURABLE_AGENT_EXECUTION_TIMED_OUT') {
+    // handle the deadline
+  }
+
+  // After
+  import { isMastraTimeoutError } from '@mastra/core/loop';
+
+  if (isMastraTimeoutError(error)) {
+    // handle the deadline
+  }
+  ```
+
+- Fixed thread-message listeners accumulating while durable runs wait for approval. ([#29046](https://github.com/mastra-ai/mastra/pull/29046))
+
+- Fixed tracing for runs that continue in another process. A durable agent run resumed after a restart or on another server now stays on its original trace instead of opening a second trace that never ends. Evented workflow runs restarted after a crash, or time-travelled, now trace their steps, so scores of a recovered agent run link to the run's trace. ([#28832](https://github.com/mastra-ai/mastra/pull/28832))
+
+- Fixed supervisor agents losing track of which subagent tool paused. When a subagent's tool suspends or needs approval, the supervisor's `tool-call-suspended` and `tool-call-approval` chunks now include `delegatedToolCallId` and `delegatedToolName`. UIs can label each pause with the subagent tool that caused it and tell apart several pauses from the same delegation, including after reloading the conversation from memory. With nested delegation, the fields name the deepest tool call that paused. Keep using `toolCallId` to approve, decline, or resume. Fixes #28583. ([#28991](https://github.com/mastra-ai/mastra/pull/28991))
+
+  ```ts
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+      chunk.payload.toolCallId; // the supervisor's call to the subagent, use it to resume
+      chunk.payload.delegatedToolCallId; // the subagent's own tool call that paused
+      chunk.payload.delegatedToolName; // e.g. "ask"
+    }
+  }
+  ```
+
+- Improved `Mastra` deployer compatibility: the `deployer` option now accepts any object that implements the `IDeployer` interface (exported from `@mastra/core/deployer`), not only subclasses of `MastraDeployer`. `getDeployer()` now returns `IDeployer | undefined`. ([#28428](https://github.com/mastra-ai/mastra/pull/28428))
+
+  This keeps deployers from `@mastra/deployer` (such as `VercelDeployer`) assignable to `Mastra` even when they are built on a separate copy of the base classes.
+
+  ```ts
+  // Before: deployer had to be typed as MastraDeployer
+  const deployer: MastraDeployer | undefined = mastra.getDeployer();
+
+  // After
+  import type { IDeployer } from '@mastra/core/deployer';
+  const deployer: IDeployer | undefined = mastra.getDeployer();
+  ```
+
+- Retry policies that match bad-request errors no longer retry a 400 that rejects the model or a parameter, such as `model_not_found`. These requests fail the same way on every retry. ([#28786](https://github.com/mastra-ai/mastra/pull/28786))
+
+- Fixed thread stream topics using far more memory than needed for agents without memory, such as the observational memory observer and reflector. The output of their finished runs, successful or failed, stayed on the topic until the stream length cap pushed it out. It is now removed 30 seconds after the run ends. Each run's final outcome stays on the topic, so subscribers that reconnect can still see how it ended. ([#28746](https://github.com/mastra-ai/mastra/pull/28746))
+
+- Fixed channel tool approval actions on tool calls whose ID contains a colon. `tool_approve:<toolCallId>` and `tool_deny:<toolCallId>` now take everything after the first colon as the tool call ID, so a click no longer resolves to the wrong pending approval. ([#28728](https://github.com/mastra-ai/mastra/pull/28728))
+
+- Inngest durable agents now save the accepted user message before the run starts, as the other durable engines do. A run that times out or fails keeps the user's turn in history, even when the deadline fires before that save finishes. ([#28747](https://github.com/mastra-ai/mastra/pull/28747))
+
+- Clarify that `FileStat.path` is a path within the filesystem namespace. ([#28819](https://github.com/mastra-ai/mastra/pull/28819))
+
+- Fixed `subscribeToThread({ withInitialHistory: true })` hanging or rejecting when the lease backend (for example Redis) is slow or unavailable, which also kept `AgentController` sessions from opening. The subscription now opens anyway. If the lease read doesn't answer in time, `activeRunId` in the `thread-history` chunk comes from this process's own view of the thread, and a warning is logged. A run that is still live in another process keeps streaming to the subscriber once the backend answers again. Fixes #28750. ([#28924](https://github.com/mastra-ai/mastra/pull/28924))
+
+- Fixed provider-executed tool results that stream partial values, such as OpenAI `image_generation` partial images with AI SDK v6. Partial results now keep `preliminary: true` on `tool-result` chunks and on the `tool-output-available` UI chunks sent to `useChat`, so they stay visible in the stream. Tool-result processing, `toolResults`, saved messages and tracing spans now use only the final result. ([#28903](https://github.com/mastra-ai/mastra/pull/28903))
+
+- Fixed signals and notifications that arrive while a run is finishing. If the run ended before the signal or notification was routed, the agent woke the thread without the session's request context, so a model resolved from that context failed with "No model available". Both now start their run with the session's full stream options. In Mastra Code's Factory, this failure repeated on every retry of a rule-driven run until the process restarted. ([#29015](https://github.com/mastra-ai/mastra/pull/29015))
+
+- Fixed AgentController sessions getting stuck as "running" after a failed tool answer. If answering a suspended tool call or a tool approval fails before the run restarts, the session now goes back to idle. The tool call stays waiting, and you can retry it. Fixes #26870. ([#29005](https://github.com/mastra-ai/mastra/pull/29005))
+
+- Fixed workspace sandbox tools (`execute_command`, `get_process_output`, `kill_process`) sending an empty tool result to the model when a `beforeToolCall` hook blocked the call with `{ error: reason }`. The model now receives the reason as an error result, so it no longer assumes a blocked command ran. Mastra Code's `PreToolUse` hooks block tools this way. ([#28919](https://github.com/mastra-ai/mastra/pull/28919))
+
+- Fixed channel agents being unable to read text attachments such as `.txt`, CSV, JSON, YAML or log files shared in Slack. Previously the agent only received the file's private Slack URL, which can't be opened without Slack credentials. The file is now downloaded through the adapter's authenticated fetch and its contents (up to 128 KB) are given to the agent as text. Fixes #28854. ([#28901](https://github.com/mastra-ai/mastra/pull/28901))
+
+- Studio's model provider picker now lists Mastra Gateway even when `MASTRA_GATEWAY_API_KEY` isn't set. Without the key it shows as disconnected, the same way other providers without an API key do. Existing provider policies such as `AUTO_BLOCK_EXTERNAL_PROVIDERS` and model policy still decide what Studio shows. ([#28824](https://github.com/mastra-ai/mastra/pull/28824))
+
+- Publish tool suspension and approval events only after the parked tool call is saved to memory, so a client that reacts to the event — resuming it, or aborting the run — finds the tool call already persisted instead of racing the save still in flight. When memory is writable and that save fails, the suspension or approval event is withheld, the run remains suspended, and the stream attempts to report the save failure, scoped to the tool call that failed so other tool calls already suspended in the same run stay resumable; read-only memory, and runs without a save queue or thread, behave as before. An approval or error chunk that an output processor rejects is now also written straight to the stream as a fallback, instead of only being logged. ([#28839](https://github.com/mastra-ai/mastra/pull/28839))
+
+- Limit memory used when publishing stalls. Durable agent history keeps less data for each tool result. Tool calls and results are still kept. ([#28652](https://github.com/mastra-ai/mastra/pull/28652))
+
+- Added the saved view schemas (`savedViewStateSchema`, `savedViewStateEnvelopeSchema`, `SAVED_VIEW_STATE_MAX_BYTES` and related types) to the browser-safe `@mastra/core/storage/dashboards` entry, so browser apps can validate a saved view before sending it. ([#29001](https://github.com/mastra-ai/mastra/pull/29001))
+
+  ```ts
+  import { savedViewStateSchema } from '@mastra/core/storage/dashboards';
+
+  const result = savedViewStateSchema.safeParse({
+    schemaVersion: 1,
+    page: 'traces',
+    filters: [{ fieldId: 'status', value: 'error' }],
+  });
+  if (!result.success) console.error(result.error.issues);
+  ```
+
+- Fixed agent runs that hit `modelSettings.timeout.totalMs` losing the user's message from memory. The default and filesystem engines now save the accepted user message when the deadline is reached, as the durable and evented engines already did. Completed steps are still saved only when `savePerStep` is on, unfinished steps are never saved, and read-only memory is respected. ([#28668](https://github.com/mastra-ai/mastra/pull/28668))
+
+- Updated the AI SDK v5 compatibility dependencies so they resolve @ai-sdk/provider-utils 3.0.42, which blocks `.internal` hostnames in download URL validation and encodes provider-returned identifiers in request paths. This patch-level update replaces 3.0.41 (Aikido findings AIKIDO-2026-10990 and AIKIDO-2026-10981): ai 5.0.282, @ai-sdk/gateway 2.0.173, anthropic 2.0.110, google 2.0.106, groq 2.0.59, openai 2.0.137, openai-compatible 1.0.59, and xai 2.0.100. ([#28716](https://github.com/mastra-ai/mastra/pull/28716))
+
+- Fixed `LocalSandbox.executeCommand(command, args)` on native Windows. Arguments are quoted for a POSIX shell, but commands ran through `cmd.exe`, so paths like `C:\Users\First Last\repo` were split or kept their quote characters, and tools like `mkdir -p` and `find` resolved to Windows builtins. Argv commands, including `sh -c` scripts, now run through Git Bash, found via `MASTRA_WINDOWS_SHELL`, next to `git.exe` on `PATH`, or at `%ProgramFiles%\Git\bin\bash.exe`. Fixes #28866. ([#28900](https://github.com/mastra-ai/mastra/pull/28900))
+
+- Workspace tools now save their `data-workspace-metadata` chunks to the current response message. Previously, after a task signal rotated the response message id, the chunk was saved under the previous id and replaced that assistant message, losing its reasoning, text, and tool calls from stored history. ([#28853](https://github.com/mastra-ai/mastra/pull/28853))
+
+- Workspace file-modification protection is now off by default and only applies when `requireReadBeforeWrite` is enabled. Previously `write_file`, `edit_file` and `apply_patch` always rejected a file that changed on disk after it was read, with `StaleFileError`, even when `requireReadBeforeWrite` was unset or `false`. Now, with the option unset or `false`, a write succeeds even if the file was changed by another process (`sed -i`, formatters, git) after a read, and `write_file` can overwrite that change. `edit_file` still fails if the text it replaces is gone, and `apply_patch` still rejects a file that changed between its own validation and commit. Set `requireReadBeforeWrite: true` to keep the protection; its behavior is unchanged. ([#28935](https://github.com/mastra-ai/mastra/pull/28935))
+
+  To keep the protection:
+
+  ```ts
+  new Workspace({
+    filesystem,
+    tools: {
+      [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: true },
+      [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireReadBeforeWrite: true },
+    },
+  });
+  ```
+
+- `write_file` now names the real file location when the filesystem maps an absolute path somewhere else. In a Factory sandbox, writing `/tmp/x` stores the file at `<workspace>/tmp/x`; the tool result now says `Wrote 5 bytes to /tmp/x (resolved to <workspace>/tmp/x)` so follow-up shell commands look in the right place. Fixes #28862. ([#28902](https://github.com/mastra-ai/mastra/pull/28902))
+
 ## 1.81.0-alpha.2
 
 ### Minor Changes
