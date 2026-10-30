@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
@@ -396,6 +397,91 @@ describe('tracing when a tool call suspends', () => {
       { estimatedCost: 0.5, reportedStepCount: 1 },
       { estimatedCost: 2, reportedStepCount: 1 },
     ]);
+  });
+
+  it('leaves provider cost to the resumed leg when a retry before the suspension left the leg without usage', async () => {
+    const exporter = new TestExporter();
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        calls++;
+        if (calls === 1) {
+          throw new APICallError({
+            message: 'rate limited',
+            url: 'https://example.test',
+            requestBodyValues: {},
+            statusCode: 429,
+            isRetryable: true,
+          });
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream<any>(
+            calls === 2
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'approve',
+                    input: '{}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: SUSPENDED_STEP_USAGE,
+                    providerMetadata: gatewayCost('0.5'),
+                  },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 't' },
+                  { type: 'text-delta', id: 't', delta: 'done' },
+                  { type: 'text-end', id: 't' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: RESUMED_STEP_USAGE,
+                    providerMetadata: gatewayCost('2'),
+                  },
+                ],
+          ),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'usage-agent',
+      name: 'usage-agent',
+      instructions: 'use the tool',
+      model,
+      tools: { approve: approvalTool },
+    });
+    observability = new Observability({
+      configs: { default: { serviceName: 'suspended-usage', exporters: [exporter] } },
+    });
+    new Mastra({ logger: false, agents: { agent }, storage: new InMemoryStore(), observability });
+
+    const output = await agent.stream('Hello');
+    await output.consumeStream();
+    expect(output.status).toBe('suspended');
+    const resumed = await agent.approveToolCall({ runId: output.runId, toolCallId: 'call-1' });
+    await resumed.consumeStream();
+    expect(resumed.status).toBe('success');
+    expect(calls).toBe(3);
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const generations = exporter
+      .getByEventType(TracingEventType.SPAN_ENDED)
+      .filter(event => event.exportedSpan.type === SpanType.MODEL_GENERATION)
+      .map(event => event.exportedSpan.attributes);
+    expect(generations).toHaveLength(2);
+    // The retried attempt reported no usage, so the suspended leg records no tokens and the
+    // resumed leg records the tokens of both model calls. Its cost must cover both calls too.
+    expect(generations[0]?.usage?.inputTokens).toBeUndefined();
+    expect(generations[1]?.usage).toMatchObject({ inputTokens: 107, outputTokens: 23 });
+    expect(generationCosts(exporter)).toEqual([undefined, undefined]);
   });
 
   it('records no new provider-reported cost for a later approval request from the same step', async () => {
