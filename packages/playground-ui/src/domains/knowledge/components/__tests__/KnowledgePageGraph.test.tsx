@@ -150,6 +150,7 @@ describe('KnowledgePageGraph', () => {
         source: expect.objectContaining({ id: 'refunds' }),
         target: expect.objectContaining({ id: 'billing' }),
         point: { x: expect.any(Number), y: expect.any(Number) },
+        pane: { width: expect.any(Number), height: expect.any(Number) },
       });
     });
   });
