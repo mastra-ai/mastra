@@ -10,6 +10,7 @@ import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type {
   FactoryProject,
   FactoryProjectsStorage,
@@ -197,6 +198,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   sandbox?: FactorySandbox;
   /** Environment builds, present only when the sandbox has a `builds` capability. */
   environmentBuilds?: EnvironmentBuildRunner;
+  /** Intake bindings, released when their Factory project is deleted. */
+  intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
 }
 
 /** Provider output is shown to the user; strip any clone credential from it first. */
@@ -281,6 +284,13 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   async #sourceControl(): Promise<SourceControlStorage> {
     await this.deps.sourceControl.ensureReady();
     return this.deps.sourceControl;
+  }
+
+  async #releaseIntakeSources(orgId: string, factoryProjectId: string): Promise<void> {
+    const { intake } = this.deps;
+    if (!intake) return;
+    await intake.ensureReady();
+    await intake.clearProjectBindings({ orgId, factoryProjectId });
   }
 
   async #handles(): Promise<SourceControlStorageHandle[]> {
@@ -714,6 +724,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           }
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
           await this.#dropSchedule(id);
+          await this.#releaseIntakeSources(tenant.orgId, id);
           return context.body(null, 204);
         },
       }),
