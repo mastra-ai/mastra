@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +12,7 @@ import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { resolveRunFence, RUN_FENCE_CONFLICT_ERROR_ID } from '../../storage/run-fencing';
+import type { RunFence } from '../../storage/run-fencing';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows/evented';
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
@@ -30,6 +32,7 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   getExecutionOwnershipGuard,
+  getExecutionClaimScope,
   isStorageFencedExecution,
   withExecutionFence,
   executionLeaseKey,
@@ -191,6 +194,7 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
       agent: new Agent({ id: 'child', name: 'child', instructions: 'Answer.', model: childModel.model }),
       pubsub,
     });
+    let delegatedRunId: string | undefined;
     const completedRunIds = new Set<string>();
     const readAnswer = async (output: Awaited<ReturnType<typeof child.stream>>) => {
       completedRunIds.add(output.runId);
@@ -207,6 +211,7 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
       outputSchema: z.object({ answer: z.string() }),
       execute: async (_input, context) => {
         const output = await child.stream('Answer the child question.', { requestContext: context?.requestContext });
+        delegatedRunId = output.runId;
         return { answer: await readAnswer(output) };
       },
     });
@@ -231,6 +236,23 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
       pubsub,
     });
     const mastra = new Mastra({ agents: { parent, child }, storage, pubsub, logger: false });
+    const workflows = (await storage.getStore('workflows'))!;
+    const delivery = new AsyncLocalStorage<{ deliveryRunId: string; claimRunId: string | undefined }>();
+    const writes: { deliveryRunId: string; claimRunId: string | undefined; fence: RunFence | undefined }[] = [];
+    const handle = WorkflowEventProcessor.prototype.handle;
+    const handleSpy = vi.spyOn(WorkflowEventProcessor.prototype, 'handle').mockImplementation(function (event) {
+      const context = new RequestContext(Object.entries(event.data?.requestContext ?? {}));
+      const claimRunId = getExecutionClaimScope(context, event.runId, event.data?.parentWorkflow)?.runId;
+      return delivery.run({ deliveryRunId: event.runId, claimRunId }, () => handle.call(this, event));
+    });
+    const updateResults = workflows.updateWorkflowResults.bind(workflows);
+    const resultsSpy = vi.spyOn(workflows, 'updateWorkflowResults').mockImplementation(args => {
+      const current = delivery.getStore();
+      if (current?.deliveryRunId === args.runId) {
+        writes.push({ ...current, fence: resolveRunFence(workflows, args.fence, args.runId) });
+      }
+      return updateResults(args);
+    });
     try {
       const first = await parent.stream('Answer the parent question.', { requestContext, runId: 'parent-run' });
       if (composition === 'concurrent') {
@@ -256,13 +278,24 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
         if (composition === 'nested') {
           expect(parentModel.prompts).toHaveLength(2);
           expect(parentModel.prompts[1]).toContain('child answer');
+          const nestedWrites = writes.filter(
+            write => write.claimRunId === delegatedRunId && write.deliveryRunId !== delegatedRunId,
+          );
+          expect(nestedWrites.length).toBeGreaterThan(0);
+          const ownership = await workflows.getRunOwnership({ runId: delegatedRunId! });
+          for (const write of nestedWrites) {
+            expect(write.fence).toEqual({
+              runId: delegatedRunId,
+              ownerId: ownership!.ownerId,
+              generation: ownership!.generation,
+            });
+          }
         } else {
           const second = await child.stream('Answer the next question.', { requestContext, runId: 'child-run' });
           expect(await readAnswer(second)).toBe('child answer');
         }
       }
       expect(childModel.prompts).toHaveLength(1);
-      const workflows = (await storage.getStore('workflows'))!;
       expect(completedRunIds.size).toBe(2);
       await vi.waitFor(async () => {
         for (const runId of completedRunIds) {
@@ -273,6 +306,9 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
       releaseParent.resolve();
       releaseChild.resolve();
       await mastra.shutdown();
+      handleSpy.mockRestore();
+      resultsSpy.mockRestore();
+      delivery.disable();
       await pubsub.close();
       await rm(directory, { recursive: true, force: true });
     }
