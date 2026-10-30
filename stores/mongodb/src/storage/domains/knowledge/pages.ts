@@ -251,7 +251,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         await this.#drop(name);
       }
     }
-    await (await this.#c('state')).updateOne(
+    await (
+      await this.#c('state')
+    ).updateOne(
       { id: 'knowledge' },
       { $setOnInsert: { id: 'knowledge', schemaVersion: KNOWLEDGE_PAGES_SCHEMA_VERSION } },
       { upsert: true },
