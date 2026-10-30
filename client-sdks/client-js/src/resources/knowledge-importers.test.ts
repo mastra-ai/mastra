@@ -73,6 +73,27 @@ describe('KnowledgeImporters', () => {
     });
   });
 
+  describe('when reading a run log', () => {
+    it('pages after a seq, escaping the key and run id', async () => {
+      respond = (_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({ events: [{ seq: 4, at: 'x', level: 'info', type: 'fetch', message: 'm' }], done: false }),
+        );
+      };
+
+      const page = await importers('/api').listRunEvents('linear:conn_1', 'run/1', 3);
+      await importers().listRunEvents('linear:conn_1', 'run_2');
+
+      expect(page.events.map(e => e.seq)).toEqual([4]);
+      expect(page.done).toBe(false);
+      expect(seen.map(r => r.url)).toEqual([
+        '/knowledge-importers/linear%3Aconn_1/runs/run%2F1/events?after=3',
+        '/knowledge-importers/linear%3Aconn_1/runs/run_2/events',
+      ]);
+    });
+  });
+
   describe('when saving settings', () => {
     it('sends the settings and expected version as a JSON PUT', async () => {
       await importers().saveSettings('slack', {

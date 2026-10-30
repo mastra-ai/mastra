@@ -8,6 +8,7 @@ import { ChevronRight } from 'lucide-react';
 import { RUN_KIND_LABEL, describeDuration, describeOutcome, runTime } from '../runs';
 import { readApiError } from '../settings';
 import { isRunActive, useImporterRuns } from '../use-knowledge-importers';
+import { RunLogButton } from './run-log-button';
 import { RunReport } from './run-report';
 import { RunStatusBadge } from './status-badges';
 
@@ -42,41 +43,44 @@ export function RunHistory({ importerKey }: { importerKey: string }) {
   return (
     <ul aria-label="Activity" className="flex flex-col divide-y divide-border">
       {runs.data.map(run => (
-        <RunHistoryItem key={run.id} run={run} />
+        <RunHistoryItem key={run.id} importerKey={importerKey} run={run} />
       ))}
     </ul>
   );
 }
 
-function RunHistoryItem({ run }: { run: KnowledgeImporterRunSummary }) {
+function RunHistoryItem({ importerKey, run }: { importerKey: string; run: KnowledgeImporterRunSummary }) {
   const when = runTime(run);
   return (
     <li>
       <Collapsible>
-        <CollapsibleTrigger
-          disabled={isRunActive(run)}
-          className="group flex w-full items-center gap-3 py-2.5 text-left hover:bg-fill-subtle"
-        >
-          <ChevronRight
-            aria-hidden
-            className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]:rotate-90"
-          />
-          <span className="flex w-28 shrink-0 flex-col">
-            <Txt as="span" variant="label">
-              {RUN_KIND_LABEL[run.kind]}
+        <div className="flex items-center gap-2" data-testid={`run-row-${run.id}`}>
+          <CollapsibleTrigger
+            disabled={isRunActive(run)}
+            className="group flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left hover:bg-fill-subtle"
+          >
+            <ChevronRight
+              aria-hidden
+              className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]:rotate-90"
+            />
+            <span className="flex w-28 shrink-0 flex-col">
+              <Txt as="span" variant="label">
+                {RUN_KIND_LABEL[run.kind]}
+              </Txt>
+              <Txt as="span" variant="caption" tone="muted">
+                {when ? <RelativeTimestamp value={when} /> : 'Not started'}
+              </Txt>
+            </span>
+            <RunStatusBadge status={run.status} />
+            <Txt as="span" variant="body-sm" tone="muted" className="min-w-0 flex-1 truncate">
+              {isRunActive(run) ? 'In progress…' : describeOutcome(run)}
             </Txt>
-            <Txt as="span" variant="caption" tone="muted">
-              {when ? <RelativeTimestamp value={when} /> : 'Not started'}
+            <Txt as="span" variant="caption" tone="muted" className="shrink-0 tabular-nums">
+              {describeDuration(run)}
             </Txt>
-          </span>
-          <RunStatusBadge status={run.status} />
-          <Txt as="span" variant="body-sm" tone="muted" className="min-w-0 flex-1 truncate">
-            {isRunActive(run) ? 'In progress…' : describeOutcome(run)}
-          </Txt>
-          <Txt as="span" variant="caption" tone="muted" className="shrink-0 tabular-nums">
-            {describeDuration(run)}
-          </Txt>
-        </CollapsibleTrigger>
+          </CollapsibleTrigger>
+          <RunLogButton importerKey={importerKey} run={run} />
+        </div>
         <CollapsibleContent>
           <div className="pt-1 pb-4 pl-6.5">
             <RunReport run={run} />

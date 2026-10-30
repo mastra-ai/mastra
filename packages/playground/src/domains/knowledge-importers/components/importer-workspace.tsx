@@ -198,6 +198,7 @@ export function ImporterWorkspace({ summary }: { summary: KnowledgeImporterSumma
 
       <SectionCard title="Preview" description={dirty ? 'Previews use your unsaved changes.' : undefined}>
         <PreviewPanel
+          importerKey={importerKey}
           run={activeRun.data}
           started={activeRunId !== undefined || startRun.isPending}
           lastPreview={lastPreview}

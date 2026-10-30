@@ -128,6 +128,36 @@ export interface ListKnowledgeImporterRunsResponse {
   runs: KnowledgeImporterRunSummary[];
 }
 
+export type KnowledgeImporterRunEventLevel = 'info' | 'warn' | 'error';
+
+/** One plain-English line of a run's log. Messages never carry tokens, emails or private names. */
+export interface KnowledgeImporterRunEvent {
+  /** 1-based and increasing within the run; gaps follow an `omitted` marker. */
+  seq: number;
+  at: string;
+  level: KnowledgeImporterRunEventLevel;
+  type:
+    | 'started'
+    | 'fetch'
+    | 'item'
+    | 'skipped'
+    | 'placed'
+    | 'retry'
+    | 'rate_limited'
+    | 'error'
+    | 'omitted'
+    | 'finished';
+  message: string;
+  data?: Record<string, unknown>;
+}
+
+export interface ListKnowledgeImporterRunEventsResponse {
+  /** Events after the requested `after` seq, oldest first (one page). */
+  events: KnowledgeImporterRunEvent[];
+  /** The run has finished and this page reached its last event; stop polling. */
+  done: boolean;
+}
+
 /**
  * Settings, dry runs and run history for the knowledge importers deployment.
  *
@@ -184,5 +214,11 @@ export class KnowledgeImporters extends BaseResource {
   /** Newest-first run history for one entry. */
   runs(key: string, limit = 20): Promise<ListKnowledgeImporterRunsResponse> {
     return this.request(`${this.#path(key, 'runs')}?limit=${limit}`);
+  }
+
+  /** A run's log after `after` (a seq; omit for the start). Poll with the last seq until `done`. */
+  listRunEvents(key: string, runId: string, after?: number): Promise<ListKnowledgeImporterRunEventsResponse> {
+    const query = after === undefined ? '' : `?after=${after}`;
+    return this.request(`${this.#path(key, `runs/${encodeURIComponent(runId)}/events`)}${query}`);
   }
 }

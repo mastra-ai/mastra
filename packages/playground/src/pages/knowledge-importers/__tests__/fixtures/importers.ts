@@ -1,4 +1,5 @@
 import type {
+  KnowledgeImporterRunEvent,
   KnowledgeImporterRunSummary,
   KnowledgeImporterSummary,
   ListKnowledgeImportersResponse,
@@ -121,3 +122,22 @@ export const buildNotionPreview = (overrides: Partial<KnowledgeImporterRunSummar
     },
     ...overrides,
   });
+
+const RUN_START_MS = Date.parse('2026-10-29T13:00:00.000Z');
+
+/** One log line, `afterMs` after the fixture runs start. */
+export const buildRunEvent = (
+  seq: number,
+  message: string,
+  overrides: Partial<KnowledgeImporterRunEvent> & { afterMs?: number } = {},
+): KnowledgeImporterRunEvent => {
+  const { afterMs = (seq - 1) * 500, ...rest } = overrides;
+  return {
+    seq,
+    at: new Date(RUN_START_MS + afterMs).toISOString(),
+    level: 'info',
+    type: 'item',
+    message,
+    ...rest,
+  };
+};
