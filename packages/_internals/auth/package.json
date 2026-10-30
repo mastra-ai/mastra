@@ -1,6 +1,6 @@
 {
   "name": "@internal/auth",
-  "version": "0.0.34",
+  "version": "0.0.35",
   "description": "Internal Mastra auth primitives and utilities",
   "private": true,
   "type": "module",
@@ -88,10 +88,10 @@
     "@internal/lint": "workspace:*",
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

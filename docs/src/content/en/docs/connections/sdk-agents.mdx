@@ -36,7 +36,7 @@ Use `@mastra/claude` for Claude Code runtime configuration, permissions, tools, 
 Install the Mastra package and the Claude Agent SDK peer dependency:
 
 ```bash npm2yarn
-npm install @mastra/claude @anthropic-ai/claude-agent-sdk
+npm install @mastra/claude @anthropic-ai/claude-agent-sdk zod
 ```
 
 Set the Claude SDK credential:
@@ -65,12 +65,23 @@ export const claudeSDKAgent = new ClaudeSDKAgent({
 
 ### Add Claude SDK tools
 
-Claude Agent SDK tools are provided through Claude SDK Model Context Protocol (MCP) servers. Create the server with the Claude SDK, then pass it through `sdkOptions.mcpServers`.
+Claude Agent SDK custom tools are provided through Claude SDK Model Context Protocol (MCP) servers. `ClaudeSDKAgent` doesn't accept Mastra's `tools` option, and tools created with Mastra's `createTool()` aren't automatically available to it because the Claude SDK owns the agent loop. A Mastra tool can't be passed directly to `createSdkMcpServer()`.
+
+Create a tool with the Claude Agent SDK's `tool()` helper, add it to a server, then pass the server through `sdkOptions.mcpServers`. The helper takes a raw Zod shape, not a `z.object()`, and a handler that returns MCP content. This example returns sample temperature data:
 
 ```typescript title="src/mastra/agents/claude-sdk-agent.ts"
-import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeSDKAgent } from '@mastra/claude'
-import { getTemperature } from '../tools/get-temperature'
+import { z } from 'zod'
+
+const getTemperature = tool(
+  'get_temperature',
+  'Get the temperature for a city using sample data.',
+  { city: z.string() },
+  async ({ city }) => ({
+    content: [{ type: 'text', text: `${city}: 27 C` }],
+  }),
+)
 
 const weatherServer = createSdkMcpServer({
   name: 'weather',

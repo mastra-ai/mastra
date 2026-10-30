@@ -33,6 +33,20 @@ Configuring a filesystem gives the agent these tools:
 | `mastra_workspace_mkdir` | Creates a directory and any missing parent directories. |
 | `mastra_workspace_grep` | Searches file contents with a regular expression. |
 | `mastra_workspace_ast_edit` | Applies structural code edits. Available when `@ast-grep/napi` is installed. |
+| `mastra_workspace_apply_patch` | Creates, updates, moves, and deletes several files in one call. Off by default. |
+
+The `apply_patch` tool is opt-in. Enable it with its own entry in `tools`. Setting the top-level `tools.enabled` doesn't turn it on. The tool checks every change in the patch before it writes any file:
+
+```typescript title="src/mastra/workspaces/index.ts"
+import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+export const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH]: { enabled: true },
+  },
+})
+```
 
 ## Supported filesystems
 
@@ -227,6 +241,8 @@ const workspace = new Workspace({
 ```
 
 Each user gets a separate filesystem view, and file tools resolve the provider from the request context automatically.
+
+When the workspace has [skills](/docs/skills) and no `skillSource`, Mastra reads skills from the resolved filesystem when the agent runs. Agent metadata routes, such as `GET /api/agents/:agentId`, don't call the filesystem resolver. Their skill lists leave out skills read from it.
 
 `mounts` doesn't accept a resolver and can't be combined with a sandbox resolver. When each user or thread needs separate storage inside a separate sandbox, create and mount the provider inside the sandbox resolver. See [Sandboxes per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
 

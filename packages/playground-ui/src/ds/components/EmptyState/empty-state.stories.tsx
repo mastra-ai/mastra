@@ -19,7 +19,7 @@ export const Default: Story = {
   args: {
     titleSlot: 'No items yet',
     descriptionSlot: 'Get started by creating your first item.',
-    actionSlot: <Button>Create Item</Button>,
+    actionSlot: <Button>Create item</Button>,
   },
 };
 
@@ -35,7 +35,7 @@ export const NoFiles: Story = {
   args: {
     titleSlot: 'No files',
     descriptionSlot: 'Upload your first file to get started.',
-    actionSlot: <Button>Upload File</Button>,
+    actionSlot: <Button>Upload file</Button>,
   },
 };
 
@@ -43,7 +43,7 @@ export const NoTeamMembers: Story = {
   args: {
     titleSlot: 'No team members',
     descriptionSlot: 'Invite your team members to collaborate on this project.',
-    actionSlot: <Button>Invite Members</Button>,
+    actionSlot: <Button>Invite members</Button>,
   },
 };
 
@@ -61,7 +61,7 @@ export const CustomHeading: Story = {
     iconSlot: <Inbox />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
-    actionSlot: <Button>Get Started</Button>,
+    actionSlot: <Button>Get started</Button>,
   },
 };
 

@@ -345,6 +345,38 @@ describe('scores storage domain', () => {
     const listed = await scores!.listScoresByRunId({ runId: 'run-1', pagination: { page: 0, perPage: 10 } });
     expect(listed.scores).toEqual([]);
   });
+
+  it('uses the configured storage scores domain when persistence is enabled', async () => {
+    const injectedStorage = new InMemoryStore({ id: 'persistent-scores' });
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
+    const { createMastraCode } = await import('./index.js');
+
+    const result = await createMastraCode({
+      storage: injectedStorage,
+      storageBackend: 'libsql',
+      disableScoreStorage: false,
+    });
+    const scores = await result.storage.getStore('scores');
+
+    expect(scores).not.toBeInstanceOf(DiscardingScoresStorage);
+    const saved = await scores!.saveScore({
+      scorerId: 'outcome',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+      traceId: 'trace-1',
+      spanId: 'span-1',
+    });
+    expect(await scores!.getScoreById({ id: saved.score.id })).toMatchObject({
+      scorerId: 'outcome',
+      traceId: 'trace-1',
+      spanId: 'span-1',
+    });
+  });
 });
 
 describe('Kimi startup access', () => {

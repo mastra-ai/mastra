@@ -1,4 +1,5 @@
-import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon } from 'lucide-react';
+import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon, SplitIcon } from 'lucide-react';
+import { Fragment } from 'react';
 import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
@@ -98,6 +99,7 @@ const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
   workflow_step: { label: 'Step', Icon: WorkflowIcon },
   tool: { label: 'Tool', Icon: ToolsIcon },
   scorer: { label: 'Scorer', Icon: ScorersIcon },
+  classifier: { label: 'Classifier', Icon: SplitIcon },
   memory: { label: 'Memory', Icon: MemoryIcon },
   mcp_server: { label: 'MCP Server', Icon: McpServerIcon },
   input_processor: { label: 'Processor', Icon: ProcessorIcon },
@@ -160,6 +162,107 @@ export function TracesDataListStatusCell({ status }: TracesDataListStatusCellPro
       <Badge size="xs" variant={config.variant}>
         {config.label}
       </Badge>
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OutcomeCell
+// ---------------------------------------------------------------------------
+
+const OUTCOME_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
+  success: { label: 'OK', variant: 'success' },
+  error: { label: 'ERR', variant: 'destructive' },
+  abort: { label: 'Abort', variant: 'warning' },
+  interrupted: { label: 'Interrupted', variant: 'warning' },
+  limit: { label: 'Limit', variant: 'orange' },
+  blocked: { label: 'Blocked', variant: 'orange' },
+  suspend: { label: 'Suspend', variant: 'info' },
+  unknown: { label: 'Unknown', variant: 'neutral' },
+};
+
+const formatContextValue = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value));
+
+export interface TracesDataListOutcomeCellProps {
+  outcome?: string | null;
+  /** Error-based status, shown when no outcome was recorded. */
+  status?: string | null;
+}
+
+export function TracesDataListOutcomeCell({ outcome, status }: TracesDataListOutcomeCellProps) {
+  if (!outcome) {
+    const config = STATUS_CONFIG[(status ?? 'unset').toLowerCase()] ?? UNSET_STATUS_CONFIG;
+    const badge = (
+      <Badge size="xs" variant={config.variant}>
+        {config.label}
+      </Badge>
+    );
+    return (
+      <DataListCell>
+        {config === UNSET_STATUS_CONFIG ? (
+          badge
+        ) : (
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex" />}>{badge}</TooltipTrigger>
+            <TooltipContent>Outcome not recorded; status from error</TooltipContent>
+          </Tooltip>
+        )}
+      </DataListCell>
+    );
+  }
+
+  const config = OUTCOME_CONFIG[outcome.toLowerCase()] ?? { label: outcome, variant: 'neutral' };
+  return (
+    <DataListCell>
+      <Badge size="xs" variant={config.variant}>
+        {config.label}
+      </Badge>
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StopReasonCell
+// ---------------------------------------------------------------------------
+
+export interface TracesDataListStopReasonCellProps {
+  stopReason?: string | null;
+  /** Listed as key/value pairs when hovering the stop reason. */
+  stopReasonContext?: Record<string, unknown> | null;
+}
+
+export function TracesDataListStopReasonCell({ stopReason, stopReasonContext }: TracesDataListStopReasonCellProps) {
+  // Empty, so DataListCell shows its own placeholder.
+  if (!stopReason) return <DataListCell />;
+
+  const contextEntries = stopReasonContext ? Object.entries(stopReasonContext) : [];
+  if (contextEntries.length === 0) {
+    return <DataListTextCell font="mono">{stopReason}</DataListTextCell>;
+  }
+
+  return (
+    <DataListCell className="flex items-center">
+      <Tooltip>
+        <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
+          <Txt as="span" variant="body-sm" tone="muted" font="mono" className="truncate">
+            {stopReason}
+          </Txt>
+        </TooltipTrigger>
+        <TooltipContent>
+          {/* The cell can truncate long reasons like `context_window_exceeded`, so name it here too. */}
+          <Txt as="p" variant="body-sm" font="mono" className="mb-1">
+            {stopReason}
+          </Txt>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            {contextEntries.map(([key, value]) => (
+              <Fragment key={key}>
+                <dt>{key}</dt>
+                <dd>{formatContextValue(value)}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </TooltipContent>
+      </Tooltip>
     </DataListCell>
   );
 }

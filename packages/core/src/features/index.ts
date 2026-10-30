@@ -24,10 +24,13 @@ export const coreFeatures = new Set<string>([
   'dataset-item-purge',
   'observability:v1.13.2',
   'observability-delta-polling',
+  // Shared span-type-aware input, output, and error preview formatting.
+  'observability-span-previews',
   'observability-trace-query-tenant-scope',
   'channels',
   'deploy-diagnosis',
   'model-inference-span',
+  'execution-outcomes',
   'internal-usage-rollup',
   'json-prompt-injection:inline',
   'observability-signal-deletion',

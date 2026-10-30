@@ -36,42 +36,37 @@ await session.sendMessage({ content: 'Explain the auth module' })
 
 ## Custom modes
 
-Override the default Build/Plan/Fast modes by passing a `modes` array:
+Override the default Build/Plan/Explore modes by passing a `modes` array:
 
 ```typescript title="src/custom-modes.ts"
 import { createMastraCode } from 'mastracode'
-import { Agent } from '@mastra/core/agent'
-
-const reviewAgent = new Agent({
-  id: 'review-agent',
-  name: 'Review Agent',
-  instructions:
-    'You are a code review specialist. Analyze code for bugs, security issues, and best practices.',
-  model: 'anthropic/claude-sonnet-4-6',
-})
 
 const { controller } = await createMastraCode({
   modes: [
     {
       id: 'review',
       name: 'Review',
-      default: true,
       defaultModelId: 'anthropic/claude-sonnet-4-6',
-      color: '#f59e0b',
-      agent: reviewAgent,
+      metadata: {
+        default: true,
+        color: '#f59e0b',
+      },
     },
     {
       id: 'build',
       name: 'Build',
-      defaultModelId: 'anthropic/claude-opus-4-7',
-      color: '#7c3aed',
-      agent: reviewAgent,
+      defaultModelId: 'anthropic/claude-opus-4-6',
+      metadata: {
+        color: '#7c3aed',
+      },
     },
   ],
 })
 ```
 
-Each mode requires an `id` and an `agent`. The `name`, `defaultModelId`, and `color` fields control how the mode appears in the TUI.
+Each mode requires an `id`. The `name` and `defaultModelId` fields control the mode's label and starting model. Put TUI display options such as `color` and the default-mode marker in `metadata`. All modes share the backing agent.
+
+Passing `modes: false` runs every session as a single Build agent with no mode switching.
 
 ## Extra tools
 
@@ -102,21 +97,14 @@ Extra tools are merged with the dynamic tool set and are available to the agent 
 
 ## Custom subagents
 
-Override the default Explore/Plan/Execute subagents. Each subagent receives its own set of tools, scoping what it can do:
+Mastra Code registers no subagents by default. Pass the subagents you want with `subagents`. Spread `builtinSubagents` to keep the built-in Explore, Plan and Execute subagents alongside your own. Each subagent receives its own set of tools, scoping what it can do:
 
 ```typescript title="src/custom-subagents.ts"
-import { createMastraCode } from 'mastracode'
-import { createTool } from '@mastra/core/tools'
+import { builtinSubagents, createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
   subagents: [
-    {
-      id: 'explore',
-      name: 'Explore',
-      description: 'Read-only codebase exploration',
-      instructions:
-        'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
-    },
+    ...builtinSubagents,
     {
       id: 'test-writer',
       name: 'Test Writer',
@@ -175,10 +163,11 @@ Mastra Code exports the `MastraTUI` class from `mastracode/tui` for building cus
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { controller, mcpManager, hookManager, authStorage } = await createMastraCode()
+const { controller, session, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
   controller,
+  session,
   hookManager,
   authStorage,
   mcpManager,

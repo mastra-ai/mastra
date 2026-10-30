@@ -46,10 +46,27 @@ export type {
   QueryTracesPaginatedInput,
 } from './resources/observability';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
+export type {
+  DashboardColumn,
+  DashboardDefaults,
+  DashboardDefinition,
+  DashboardDefinitionEnvelope,
+  DashboardDrilldown,
+  DashboardDrilldownTarget,
+  DashboardQuery,
+  DashboardRow,
+  DashboardWidget,
+  DashboardBuiltInWidgetKind,
+  DashboardWidgetView,
+  NormalizedDashboardDefinition,
+  NormalizedDashboardQuery,
+} from '@mastra/core/storage';
 export type { GetMetricTimeSeriesResponse } from './types';
 export type {
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   TraceAggregateDiscovery,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,

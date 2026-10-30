@@ -359,7 +359,7 @@ export class InngestPubSub extends PubSub {
     this.subscriptions.set(topic, {
       unsubscribe: () => {
         try {
-          void subscription.close();
+          subscription.close();
         } catch (err) {
           console.error('InngestPubSub unsubscribe error:', err);
         }

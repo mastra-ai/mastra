@@ -132,7 +132,7 @@ npx mastra api trace query '{
 }'
 ```
 
-Choose a time range containing your exported traces, up to 31 days. Results appear in `data.traces`.
+Choose a time range containing your exported traces. Any range works as long as `from` is earlier than `to`, with no maximum duration. Results appear in `data.traces`.
 
 Mastra Platform uses the same trace-query endpoints and request format as Mastra Server. Use the [Advanced trace queries reference](/reference/observability/tracing/advanced-queries#send-an-http-request) for HTTP requests, supported filters, pagination, polling, and field discovery.
 
@@ -249,7 +249,7 @@ Set `SINCE` and `UNTIL` to ISO 8601 dates or timestamps. The following rules app
 - The selected window can't exceed 30 days.
 - If only `--until` is set, the default start is the later of 30 days before `--until` and the current retention boundary.
 
-Commands written with the earlier `--from` and `--to` names still work.
+The earlier `--from` and `--to` names still work, but they're deprecated hidden aliases of `--since` and `--until` and don't appear in the command help. Use `--since` and `--until` in new commands.
 
 Trace eligibility is based on the root observation's start time. The Langfuse adapter discovers roots in the selected window and then reads all currently available observations for each selected trace. It skips the complete trace if the available parent-child tree or timestamps are invalid.
 

@@ -44,7 +44,14 @@ import type {
   NotificationRecord,
   SendNotificationSignalInput,
 } from '../notifications/types';
-import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
+import type {
+  Span,
+  SpanType,
+  TracingOptions,
+  TracingPolicy,
+  ObservabilityContext,
+  SpanTermination,
+} from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -58,6 +65,7 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
   ThreadHistoryChunk,
+  ThreadRunStatusChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -424,13 +432,23 @@ export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOption
    * chunks are always emitted.
    */
   withInitialHistory?: boolean | { perPage?: number };
+  /** Emit ordered thread-run-status chunks, including retained outcomes. Defaults to false. */
+  withRunStatus?: boolean;
   /** Request context used to resolve the agent's memory when loading initial history. */
   requestContext?: RequestContext;
 }
 
-export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+export interface AgentThreadSubscription<
+  OUTPUT = unknown,
+  WITH_HISTORY extends boolean = false,
+  WITH_RUN_STATUS extends boolean = false,
+> {
   /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
-  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
+  stream: AsyncIterable<
+    | AgentChunkType<OUTPUT>
+    | (WITH_RUN_STATUS extends true ? ThreadRunStatusChunk : never)
+    | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)
+  >;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
@@ -1265,6 +1283,8 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
+  /** Runtime terminal cause, applied only once finish-time work has completed. */
+  termination?: SpanTermination;
   runId: string;
   result: MastraOnFinishCallbackArgs & { object?: unknown };
   thread: StorageThreadType | null | undefined;
@@ -1342,9 +1362,16 @@ export interface DurableAgentLike {
    */
   __subscribeToRunStream?(
     runId: string,
-    options: { offset?: number },
+    options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
+  /**
+   * Abort `runId` and resolve whether the abort was confirmed: by a local close
+   * in this process, or by the process executing the run answering over
+   * `pubsub`. Used by the server's run abort route.
+   * @internal
+   */
+  __abortRunAcknowledged?(runId: string): Promise<boolean>;
   /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.

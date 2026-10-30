@@ -20,10 +20,10 @@ export function DataPanelNextPrevNav({
 }: DataPanelNextPrevNavProps) {
   return (
     <>
-      <Button size="sm" variant={variant} tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
+      <Button size="icon-sm" variant={variant} tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
         <ArrowUpIcon />
       </Button>
-      <Button size="sm" variant={variant} tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
+      <Button size="icon-sm" variant={variant} tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
         <ArrowDownIcon />
       </Button>
     </>

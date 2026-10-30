@@ -1,6 +1,8 @@
 import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
+import type { Tool } from '@mastra/core/tools';
 import type {
+  CallToolResult,
   StreamableHTTPClientTransportOptions,
   ClientCapabilities,
   ElicitRequestParams,
@@ -11,6 +13,56 @@ import type {
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import type { MCPTraceContext } from '../shared/trace-context';
+import type { EventsWebhookSetup } from './events/types';
+
+/** Published tool input and structured-output snapshot for each configured server. */
+export type MCPServerMap = Record<string, { tools: Record<string, { input: unknown; output: unknown }> }>;
+
+/**
+ * Constraint for a supplied server snapshot. Mapping over the given keys lets concrete
+ * generated interfaces satisfy it without declaring an index signature.
+ */
+export type MCPClientServers<TServers> = { [Server in keyof TServers]: MCPServerMap[string] };
+
+type MCPClientTool<Input, Output> = Omit<Tool<Input, Output | CallToolResult, any, any>, 'execute'> & {
+  execute?: (
+    input: Input,
+    context?: Parameters<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>[1],
+  ) => ReturnType<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>;
+};
+
+/** Flat discovery remains partial because servers and tools may be unavailable. */
+export type MCPClientTools<TServers extends MCPClientServers<TServers>> =
+  string extends keyof TServers
+    ? Record<string, Tool<any, any, any, any>>
+    : Partial<{
+        [
+          Entry in {
+            [Server in keyof TServers & string]: {
+              [Name in keyof TServers[Server]['tools'] & string]: {
+                key: `${Server}_${Name}`;
+                tool: MCPClientTool<
+                  TServers[Server]['tools'][Name]['input'],
+                  TServers[Server]['tools'][Name]['output']
+                >;
+              };
+            }[keyof TServers[Server]['tools'] & string];
+          }[keyof TServers & string] as Entry['key']
+        ]: Entry['tool'];
+      }>;
+
+/** Grouped discovery preserves raw tool names and potentially absent servers. */
+export type MCPClientToolsets<TServers extends MCPClientServers<TServers>> =
+  string extends keyof TServers
+    ? Record<string, Record<string, Tool<any, any, any, any>>>
+    : Partial<{
+        [Server in keyof TServers]: Partial<{
+          [Name in keyof TServers[Server]['tools'] & string]: MCPClientTool<
+            TServers[Server]['tools'][Name]['input'],
+            TServers[Server]['tools'][Name]['output']
+          >;
+        }>;
+      }>;
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
@@ -333,7 +385,56 @@ export type BaseServerOptions = {
    * ```
    */
   inputRequests?: MCPInputRequestHandler;
+  /**
+   * Lets this server answer tool calls with an MCP task (SEP-2663) instead of a result.
+   *
+   * When enabled, the client declares the `io.modelcontextprotocol/tasks` extension. A server may
+   * then turn any tool call into a task; Mastra polls it until it finishes and returns the final
+   * result, so tool calls keep their shape but may take much longer. A task asking for input is
+   * answered through `inputRequests`. Aborting the call cancels the remote task.
+   *
+   * On an agent with background tasks enabled, this server's tools run as background tasks, so
+   * the agent keeps working while a remote task runs.
+   *
+   * @experimental SEP-2663 extension; this API may change.
+   *
+   * @example
+   * ```typescript
+   * { url: new URL('https://example/mcp'), tasks: { maxWaitMs: 30 * 60_000 } }
+   * ```
+   */
+  tasks?: boolean | MCPClientTasksOptions;
 };
+
+/**
+ * Written to a task-backed tool's output stream when its MCP task is created and whenever its
+ * status changes, so UIs (like Studio's tool-call card) can show the remote task while it runs.
+ *
+ * @experimental SEP-2663 extension; this API may change.
+ */
+export interface MCPTaskProgress {
+  type: 'mcp-task';
+  /** The MCP task id issued by the server (not the Mastra background-task id). */
+  taskId: string;
+  status: 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+  createdAt: string;
+  serverName: string;
+}
+
+/**
+ * Options for consuming MCP tasks from one server.
+ *
+ * @experimental SEP-2663 extension; this API may change.
+ */
+export interface MCPClientTasksOptions {
+  /** Poll interval when the server suggests none. @default 5000 */
+  pollIntervalMs?: number;
+  /**
+   * Stops waiting for a task, and cancels it, after this long. Defaults to no limit; the server's
+   * TTL still applies.
+   */
+  maxWaitMs?: number;
+}
 
 /**
  * Configuration for MCP servers using stdio (subprocess) transport.
@@ -521,6 +622,10 @@ export type InternalMastraMCPClientOptions = {
   clientInfo?: MCPClientInfo;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /** Install process exit and signal hooks (default: true). */
+  registerProcessHooks?: boolean;
+  /** Webhook settings and receiver shared by the owning `MCPClient`'s servers. */
+  webhook?: EventsWebhookSetup;
 };
 
 /**

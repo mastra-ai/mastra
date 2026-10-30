@@ -17,7 +17,7 @@
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",
     "ai": "^6.0.1",
-    "@hono/node-server": "^1.19.15",
+    "@hono/node-server": "^2.1.5",
     "@hono/node-ws": "^1.1.1",
     "hono": "^4.13.5",
     "@mastra/client-js": "beta",
@@ -76,7 +76,7 @@
       "yargs@<18.1.0": "18.2.0",
       "@ai-sdk/provider-utils@>=4.0.0 <4.0.56": "4.0.56",
       "@ai-sdk/provider-utils@>=5.0.0 <5.0.52": "5.0.52",
-      "undici@<8.11.2": "8.11.2"
+      "undici@<8.12.2": "8.12.2"
     }
   },
   "keywords": [],

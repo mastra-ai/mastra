@@ -101,7 +101,7 @@ function renderSection() {
 }
 
 const iconFor = async (name: string) =>
-  (await screen.findByRole('button', { name })).querySelector('[data-source]')?.getAttribute('data-source');
+  (await screen.findByRole('link', { name })).querySelector('[data-source]')?.getAttribute('data-source');
 
 describe('Sessions sidebar source icons', () => {
   it('marks each session with where it came from', async () => {

@@ -822,6 +822,24 @@ describe('Sidebar', () => {
     expect(screen.getByText('Grouped navigation')).toBeDefined();
   });
 
+  it('renders only the active takeover page once its exit finishes', async () => {
+    mockMatchMedia(false);
+    render(
+      <Sidebar.Provider storageKey="sidebar-unmount-test">
+        <SidebarStackFixture />
+      </Sidebar.Provider>,
+    );
+    expect(screen.queryByText('Account navigation')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
+    await screen.findByText('Account navigation');
+    await waitFor(() => expect(screen.queryByText('Grouped navigation')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to main navigation: Account settings' }));
+    await screen.findByText('Grouped navigation');
+    await waitFor(() => expect(screen.queryByText('Account navigation')).toBeNull());
+  });
+
   it('closes an active takeover with Escape and returns focus', async () => {
     mockMatchMedia(false);
     render(

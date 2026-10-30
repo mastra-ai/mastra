@@ -8,10 +8,14 @@ import type { InternalCoreTool, MCPToolType } from '../tools';
 import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
+  MCPServerEventInfo,
+  MCPServerEventsInspector,
   MCPServerHonoSSEOptions,
   MCPServerIcon,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
+  MCPServerTasksInfo,
+  MCPServerTasksInspector,
   PackageInfo,
   RemoteInfo,
   Repository,
@@ -372,4 +376,32 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
       _meta?: Record<string, unknown>;
     }>;
   }>;
+
+  /**
+   * The event types this server declares, or `undefined` when it has none.
+   * Optional: implementations without events omit it.
+   * @experimental
+   */
+  public getEventsInfo?(): { events: MCPServerEventInfo[] } | undefined;
+
+  /**
+   * Polls, streams, and test-emits this server's events in-process (used by Studio),
+   * or `undefined` when it has none.
+   * @experimental
+   */
+  public getEventsInspector?(): MCPServerEventsInspector | undefined;
+
+  /**
+   * How this server runs MCP tasks, or `undefined` when it doesn't support them.
+   * Optional: implementations without tasks omit it.
+   * @experimental
+   */
+  public getTasksInfo?(): MCPServerTasksInfo | undefined;
+
+  /**
+   * Lists, cancels and answers this server's MCP tasks in-process (used by Studio), or
+   * `undefined` when tasks are off or the task store can't list them.
+   * @experimental
+   */
+  public getTasksInspector?(): MCPServerTasksInspector | undefined;
 }

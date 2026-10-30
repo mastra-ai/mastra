@@ -62,11 +62,11 @@ export function SessionChatSurface({
                 <ChatMessageBoundary showPreparation={false}>
                   <TranscriptHistoryLoader />
                   {transcript.entries.length === 0 && emptyState}
-                  <Transcript tail={<ActivityLine />} />
+                  <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
                 </ChatMessageBoundary>
               </ChatShell.Column>
             </ChatShell.Content>
-            <ChatShell.Dock>
+            <ChatShell.Dock className="pb-[calc(var(--chat-gutter)+env(safe-area-inset-bottom))]">
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />

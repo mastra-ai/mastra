@@ -174,6 +174,7 @@ describeParity('stop-when parity', target => {
     },
   );
 
+  // #26921: durable transports must reject, not turn a thrown predicate into an error chunk.
   it('a throwing stopWhen rejects the stream identically on every engine', async () => {
     const { results, commits, calls } = await runT23(target, 'throws');
 
@@ -193,11 +194,6 @@ describeParity('stop-when parity', target => {
     }
 
     expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
-    if (target === 'durable') {
-      expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
-    } else {
-      // COR-1466: evented retries a throwing loop condition up to its delivery-attempt limit.
-      expect(calls.get('evented')!.length, 'evented: the predicate was consulted three times').toBe(3);
-    }
+    expect(calls.get(target)!.length, `${target}: the predicate was consulted once`).toBe(1);
   });
 });

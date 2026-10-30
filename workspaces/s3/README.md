@@ -1,6 +1,6 @@
 # @mastra/s3
 
-S3-compatible filesystem provider for Mastra workspaces. Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, and other S3-compatible storage services.
+S3-compatible filesystem provider for Mastra workspaces. Works with AWS S3, Cloudflare R2, Neon Object Storage, MinIO, DigitalOcean Spaces, and other S3-compatible storage services.
 
 ## Installation
 
@@ -34,6 +34,7 @@ const agent = new Agent({
 ## Documentation
 
 - [Amazon S3 integration guide](https://mastra.ai/integrations/file-storage/amazon-s3)
+- [Neon Object Storage integration guide](https://mastra.ai/integrations/file-storage/neon)
 - [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog

@@ -33,7 +33,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-import type { ChunkType, ThreadHistoryChunk } from '@mastra/core/stream';
+import type { ChunkType, ThreadHistoryChunk, ThreadRunStatusChunk } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { SerializedStepFlowEntry, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -147,6 +147,8 @@ export interface SubscribeAgentThreadParams {
    * run parts; parts already covered by that history are not replayed.
    */
   withInitialHistory?: boolean | { perPage?: number };
+  /** Emit thread-run-status chunks, including retained outcomes. Defaults to false. */
+  withRunStatus?: boolean;
 }
 
 export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
@@ -171,9 +173,11 @@ export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
 
-export interface ProcessAgentThreadStreamOptions {
-  /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
-  onChunk: (chunk: ChunkType | ThreadHistoryChunk) => void | Promise<void>;
+export interface ProcessAgentThreadStreamOptions<WITH_RUN_STATUS extends boolean = false> {
+  /** Receives history and run status chunks only when requested by the subscription. */
+  onChunk: (
+    chunk: ChunkType | ThreadHistoryChunk | (WITH_RUN_STATUS extends true ? ThreadRunStatusChunk : never),
+  ) => void | Promise<void>;
   reconnect?:
     | boolean
     | {
@@ -674,6 +678,36 @@ export type McpServerToolListResponse = GeneratedResponse<'GET /mcp/:serverId/to
  * when the tool asked for input (answer with `resumeData` and the echoed `suspendPayload`).
  */
 export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>;
+
+/** Event types an MCP server declares, plus whether test emit is served (experimental). */
+export type McpServerEventListResponse = GeneratedResponse<'GET /mcp/:serverId/events'>;
+
+/** One declared MCP server event type (experimental). */
+export type McpServerEventInfo = McpServerEventListResponse['events'][number];
+
+/** Result of polling an MCP server event type (experimental). */
+export type McpServerEventPollResponse = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/poll'>;
+
+/** One occurrence of an MCP server event (experimental). */
+export type McpServerEventOccurrence = McpServerEventPollResponse['events'][number];
+
+/** A frame yielded by `streamMcpServerEvent` (experimental). */
+export type McpServerEventStreamFrame = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/stream'>;
+
+/** Task surfaces of an MCP server and its recent tasks across principals (experimental). */
+export type McpServerTaskListResponse = GeneratedResponse<'GET /mcp/:serverId/tasks'>;
+
+/** A tool, workflow or agent an MCP server runs as a task (experimental). */
+export type McpServerTaskSurface = McpServerTaskListResponse['surfaces'][number];
+
+/**
+ * One MCP server task as Studio sees it: identified by `taskKey` (a hash of the task id) and a
+ * hashed principal, never by the task id itself (experimental).
+ */
+export type McpServerTask = McpServerTaskListResponse['tasks'][number];
+
+/** Answers to a task's open input requests, keyed by request (experimental). */
+export type McpServerTaskInputResponses = Body<'POST /mcp/:serverId/tasks/:taskKey/input'>['inputResponses'];
 
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
@@ -2491,7 +2525,7 @@ export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['ag
 
 export type CreateAgentControllerSessionResponse = GeneratedResponse<'POST /agent-controller/:controllerId/sessions'>;
 
-export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId'>;
 
 /**
  * Agent behavior settings, mirroring the TUI's `/settings` toggles. An absent
@@ -2524,24 +2558,36 @@ export type AgentControllerActiveRun =
  * sharing the resourceId.
  */
 export type AgentControllerThreadInfo =
-  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number];
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/threads'>['threads'][number];
 
 /** A thread as returned by `createThread()` and `cloneThread()`. */
 export type CreateAgentControllerThreadResponse =
-  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/threads'>;
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/threads'>;
 
 export type AgentControllerWorkspaceStatus = GeneratedResponse<'GET /agent-controller/:controllerId/workspace'>;
 
 export type AgentControllerGoalRecord = NonNullable<
-  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>['goal']
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/goal'>['goal']
 >;
 
 /** Per-category and per-tool approval policies. */
-export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/permissions'>;
+export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/permissions'>;
 
 export type SendNotificationInput = GeneratedRequest<
-  Body<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>
+  Body<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>
 >;
 
 export type SendNotificationResult =
-  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>;
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>;
+
+// Saved views: a named copy of an observability list page's URL state.
+export type {
+  FilterGroup,
+  FilterNode,
+  FilterToken,
+  SavedViewColumn,
+  SavedViewDateRange,
+  SavedViewPage,
+  SavedViewSort,
+  SavedViewState,
+} from '@mastra/core/storage';

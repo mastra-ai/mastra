@@ -73,6 +73,15 @@ const agentsOnlyCapabilities: AuthCapabilities = {
   access: { roles: ['member'], permissions: ['agents:read'] },
 };
 
+// An authenticated, RBAC-enabled user that can read agents and observability data.
+const observabilityReaderCapabilities: AuthCapabilities = {
+  enabled: true,
+  login: { type: 'credentials' },
+  user: { id: 'user-3', email: 'observer@example.com' },
+  capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+  access: { roles: ['observer'], permissions: ['agents:read', 'observability:read'] },
+};
+
 // An authenticated, RBAC-enabled user with no gated-route permissions at all.
 const noAccessCapabilities: AuthCapabilities = {
   enabled: true,
@@ -163,5 +172,31 @@ describe('RoutePermissionGuard', () => {
     expect(await screen.findByTestId('protected-content')).toBeTruthy();
     expect(navigateSpy).not.toHaveBeenCalled();
     expect(screen.getByTestId('pathname').textContent).toBe('/resources');
+  });
+
+  describe.each(['/traces', '/spans', '/threads'])('when the user opens the %s observability page', path => {
+    describe('when the user cannot read observability data', () => {
+      it('redirects them to their first accessible route', async () => {
+        server.use(authHandler(agentsOnlyCapabilities));
+
+        renderGuard(path);
+
+        await waitFor(() => {
+          expect(navigateSpy).toHaveBeenCalledWith('/agents');
+        });
+        expect(screen.queryByTestId('protected-content')).toBeNull();
+      });
+    });
+
+    describe('when the user can read observability data', () => {
+      it('renders the page', async () => {
+        server.use(authHandler(observabilityReaderCapabilities));
+
+        renderGuard(path);
+
+        expect(await screen.findByTestId('protected-content')).toBeTruthy();
+        expect(navigateSpy).not.toHaveBeenCalled();
+      });
+    });
   });
 });

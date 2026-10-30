@@ -536,6 +536,53 @@ describe('Schedules handlers', () => {
     });
   });
 
+  describe('ifIdle.requireClaimedOwner round-trip', () => {
+    // Mirrors the adapter: bodies are parsed through the route's bodySchema
+    // before the handler sees them, and clients read the responseSchema shape.
+    const callWithBody = async (route: any, body: Record<string, unknown>, params: Record<string, unknown> = {}) => {
+      const parsedBody = await route.bodySchema.parseAsync(body);
+      const result = await route.handler({ mastra, ...params, ...parsedBody, ...baseCtx() });
+      return route.responseSchema.parse(result);
+    };
+
+    it('keeps the flag through create, read, and PATCH', async () => {
+      const created = await callWithBody(CREATE_SCHEDULE_ROUTE, {
+        agentId: 'agent-1',
+        cron: '0 * * * *',
+        prompt: 'Check in',
+        threadId: 'thread-owned',
+        resourceId: 'resource-1',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      });
+      expect(created.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const stored = await schedulesStore.getSchedule(created.id);
+      expect((stored!.target as any).ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      const read: any = GET_SCHEDULE_ROUTE.responseSchema!.parse(
+        await GET_SCHEDULE_ROUTE.handler({ mastra, scheduleId: created.id, ...baseCtx() } as any),
+      );
+      expect(read.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      // PATCH another field only.
+      const renamed = await callWithBody(UPDATE_SCHEDULE_ROUTE, { name: 'renamed' }, { scheduleId: created.id });
+      expect(renamed.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      // Read-modify-write: a client sends back the ifIdle it read alongside the change.
+      const rewritten = await callWithBody(
+        UPDATE_SCHEDULE_ROUTE,
+        { prompt: 'Check in again', ifIdle: read.ifIdle },
+        { scheduleId: created.id },
+      );
+      expect(rewritten.prompt).toBe('Check in again');
+      expect(rewritten.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      const finalStored = await schedulesStore.getSchedule(created.id);
+      expect((finalStored!.target as any).ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+    });
+  });
+
   describe('DELETE_SCHEDULE_ROUTE', () => {
     it('deletes the schedule and removes the row', async () => {
       const schedulesStore = (await storage.getStore('schedules'))!;

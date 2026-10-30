@@ -6,7 +6,7 @@ import { ArrowRight } from 'lucide-react';
 
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../hooks/useLinearData';
 import { isLinearReauthError } from '../../../factory/services/linear';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
 export interface CreateFactoryLinearRowsProps {
@@ -35,7 +35,7 @@ export function CreateFactoryLinearRows({ query, onConnect, onSelectProject, onS
   );
 
   if (linearStatus.isPending || (connected && projects.isPending)) {
-    return <SkeletonRows label="Loading Linear projects" rows={2} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading Linear projects" rows={2} />;
   }
 
   if (!connected) {

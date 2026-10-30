@@ -22,8 +22,6 @@ import { Readable } from 'node:stream';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_STT_MODEL, resolveSTTModel } from '@mastra/code-sdk/voice/stt-registry';
 import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
-import { DeepgramVoice } from '@mastra/voice-deepgram';
-import { OpenAIVoice } from '@mastra/voice-openai';
 
 /**
  * The minimal surface of a `MastraVoice` we use here. Declared structurally to
@@ -79,13 +77,16 @@ export function resolveProviderApiKey(provider: string, authStorage?: AuthStorag
  * - everything else: `OpenAIVoice`, where `listeningModel.name` is the model id
  *   and `options.baseURL` redirects OpenAI-compatible hosts at their endpoint.
  */
-function buildVoice(entry: STTModel, apiKey: string): VoiceListener {
+async function buildVoice(entry: STTModel, apiKey: string): Promise<VoiceListener> {
+  // The voice SDKs load on first dictation, not with every session.
   if (entry.resolver === 'deepgram') {
+    const { DeepgramVoice } = await import('@mastra/voice-deepgram');
     return new DeepgramVoice({
       // `name` is typed for Deepgram's own ids; the model string is passed verbatim.
       listeningModel: { name: entry.model as never, apiKey },
     });
   }
+  const { OpenAIVoice } = await import('@mastra/voice-openai');
   return new OpenAIVoice({
     // `name`/`options` are typed for OpenAI's own ids, but the underlying client
     // accepts any model string + baseURL — both are passed through verbatim.
@@ -116,7 +117,7 @@ export async function transcribeAudio(audio: Buffer, options: TranscribeOptions 
     throw new VoiceCredentialError(entry.provider);
   }
 
-  const voice = buildVoice(entry, apiKey);
+  const voice = await buildVoice(entry, apiKey);
   const result = await voice.listen(Readable.from(audio), { filetype: 'wav' });
   return normalizeTranscript(result);
 }
@@ -145,9 +146,11 @@ export function createTranscriber(options: TranscribeOptions = {}): ReusableTran
     throw new VoiceCredentialError(entry.provider);
   }
   const voice = buildVoice(entry, apiKey);
+  // A failed load surfaces from transcribe(); don't also report it as unhandled.
+  voice.catch(() => {});
   return {
     async transcribe(audio: Buffer): Promise<string> {
-      const result = await voice.listen(Readable.from(audio), { filetype: 'wav' });
+      const result = await (await voice).listen(Readable.from(audio), { filetype: 'wav' });
       return normalizeTranscript(result);
     },
   };

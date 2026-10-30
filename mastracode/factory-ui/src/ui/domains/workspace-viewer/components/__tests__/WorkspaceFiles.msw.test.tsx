@@ -11,7 +11,6 @@ import { useWorkspacePanel } from '../../context/useWorkspacePanel';
 import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 
-const LIST_URL = `${TEST_BASE_URL}/web/workspace/files`;
 const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
 const WORKSPACE = 'session-1';
 
@@ -81,23 +80,12 @@ afterEach(() => {
 });
 
 function renderPanel() {
-  const listRequests: Array<{ workspacePath: string | null; threadId: string | null }> = [];
+  const changesRequests: Array<string | null> = [];
   server.use(
-    http.get(LIST_URL, ({ request }) => {
-      const url = new URL(request.url);
-      listRequests.push({
-        workspacePath: url.searchParams.get('workspacePath'),
-        threadId: url.searchParams.get('threadId'),
-      });
-      return HttpResponse.json({
-        workspacePath: WORKSPACE,
-        threadId: 'thread-1',
-        files: [],
-      });
+    http.get(CHANGES_URL, ({ request }) => {
+      changesRequests.push(new URL(request.url).searchParams.get('workspacePath'));
+      return HttpResponse.json({ workspacePath: WORKSPACE, available: true, additions: 0, deletions: 0, changes: [] });
     }),
-    http.get(CHANGES_URL, () =>
-      HttpResponse.json({ workspacePath: WORKSPACE, available: true, additions: 0, deletions: 0, changes: [] }),
-    ),
   );
 
   const { client } = renderWithProviders(
@@ -117,7 +105,7 @@ function renderPanel() {
     </MemoryRouter>,
   );
 
-  return { client, listRequests };
+  return { client, changesRequests };
 }
 
 describe('WorkspaceFiles on a user session route', () => {
@@ -141,11 +129,10 @@ describe('WorkspaceFiles on a user session route', () => {
             materializedAt: null,
             createdAt: '2026-10-15T00:00:00.000Z',
             updatedAt: '2026-10-15T00:00:00.000Z',
-            capabilities: { recreateSandbox: true },
+            capabilities: { recreateSandbox: true, takeOwnership: false },
           },
         }),
       ),
-      http.get(LIST_URL, () => HttpResponse.json({ workspacePath: sessionId, threadId: sessionId, files: [] })),
       http.get(CHANGES_URL, () =>
         HttpResponse.json({ workspacePath: sessionId, available: true, additions: 0, deletions: 0, changes: [] }),
       ),
@@ -178,20 +165,20 @@ describe('WorkspaceFiles', () => {
     it('leaves the card closed and off the network until the header toggle asks for it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
-      const { client, listRequests } = renderPanel();
+      const { client, changesRequests } = renderPanel();
 
       const card = await screen.findByTestId('workspace-files-card');
       const toggle = screen.getByRole('button', { name: 'Workspace files' });
       expect(card).toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'false');
-      expect(listRequests).toEqual([]);
+      expect(changesRequests).toEqual([]);
 
       await user.click(toggle);
 
       expect(card).not.toHaveAttribute('inert');
-      expect(await screen.findByRole('button', { name: /^Files\s?No files/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
       await waitForMutationsIdle(client);
-      expect(listRequests).toEqual([{ workspacePath: WORKSPACE, threadId: 'thread-1' }]);
+      expect(changesRequests).toEqual([WORKSPACE]);
     });
   });
 
@@ -234,7 +221,7 @@ describe('WorkspaceFiles', () => {
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
 
-      expect(await screen.findByRole('button', { name: /^Files\s?No files/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
     });
   });
 });

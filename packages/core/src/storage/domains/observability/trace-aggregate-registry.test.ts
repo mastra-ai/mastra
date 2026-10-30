@@ -30,8 +30,11 @@ const TRACE_DIMENSIONS = [
   'entityName',
   'name',
   'spanType',
+  'entityId',
   'environment',
   'status',
+  'outcome',
+  'stopReason',
   'serviceName',
   'executionSource',
   'threadId',
@@ -150,9 +153,11 @@ describe('trace aggregate dimension registry', () => {
   it('allows traceId for countDistinct but no other identity field', () => {
     expect(isTraceAggregateDimension('traceId')).toBe(false);
     expect(isTraceAggregateCountDistinctField('traceId')).toBe(true);
-    for (const field of ['spanId', 'runId', 'requestId']) {
+    for (const field of ['spanId', 'runId', 'requestId', 'stopReasonContext']) {
       expect(isTraceAggregateCountDistinctField(field), field).toBe(false);
     }
+    expect(isTraceAggregateDimension('stopReasonContext')).toBe(false);
+    expect(isTraceAggregateCountDistinctField('outcome')).toBe(true);
     expect(isTraceAggregateCountDistinctField('metadata.tenant')).toBe(true);
     expect(isTraceAggregateCountDistinctField('metadata.a.b')).toBe(false);
   });

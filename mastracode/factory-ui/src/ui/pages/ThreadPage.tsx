@@ -1,8 +1,11 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { MessageSquareOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
@@ -25,6 +28,8 @@ import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThr
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
+import { useRefreshWorkspaceFilesOnToolCalls } from '../domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls';
+import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths';
 
 import '../domains/chat/components/chat-enter.css';
 
@@ -41,7 +46,9 @@ export function ThreadPage() {
 
   return (
     <>
-      {resolvingSession ? (
+      {workspace.error ? (
+        <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />
+      ) : resolvingSession ? (
         <ResolvingSessionMain />
       ) : (
         <ChatSessionBoundary threadId={threadId}>
@@ -66,6 +73,49 @@ function ResolvingSessionMain() {
   );
 }
 
+function SessionUnavailableMain({
+  error,
+  factoryId,
+  onRetry,
+}: {
+  error: Error;
+  factoryId: string | undefined;
+  onRetry: () => void;
+}) {
+  const navigate = useNavigate();
+  // The server answers a missing session and a teammate's private one with the same 404.
+  const notFound = (error as { status?: number }).status === 404;
+  return (
+    <ChatPageLayout>
+      <div className="grid min-h-0 place-items-center">
+        <EmptyState
+          as="h1"
+          iconSlot={<MessageSquareOff />}
+          titleSlot={notFound ? 'Session not found' : 'Could not load this session'}
+          descriptionSlot={
+            notFound
+              ? 'This session does not exist, or it is private to another user.'
+              : `Failed to load the session: ${error.message}`
+          }
+          actionSlot={
+            notFound ? (
+              factoryId && (
+                <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
+                  Start a new session
+                </Button>
+              )
+            ) : (
+              <Button variant="primary" onClick={onRetry}>
+                Retry
+              </Button>
+            )
+          }
+        />
+      </div>
+    </ChatPageLayout>
+  );
+}
+
 function ThreadPageMain({
   workspacePath,
   threadId,
@@ -80,7 +130,7 @@ function ThreadPageMain({
   const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
-    <ThreadSessionEffects workspacePath={workspacePath} threadId={threadId}>
+    <ThreadSessionEffects workspacePath={workspacePath}>
       <FactorySessionPage>
         <SessionChatSurface
           secondaryBar={<GoalPanel />}
@@ -97,16 +147,9 @@ function ThreadPageMain({
   );
 }
 
-function ThreadSessionEffects({
-  workspacePath,
-  threadId,
-  children,
-}: {
-  workspacePath: string | undefined;
-  threadId: string | undefined;
-  children: ReactNode;
-}) {
-  const { busy } = useChatTranscript();
-  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, threadId, busy);
+function ThreadSessionEffects({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+  const { busy, transcript } = useChatTranscript();
+  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
+  useRefreshWorkspaceFilesOnToolCalls(workspacePath, transcript.entries);
   return children;
 }

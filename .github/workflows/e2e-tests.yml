@@ -31,7 +31,6 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
-      MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
       MASTRA_E2E_REGISTRY_PORT: '4873'
 
     steps:
@@ -74,7 +73,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Upload E2E registry artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -104,7 +103,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -129,7 +128,6 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-e2e-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
@@ -137,7 +135,7 @@ jobs:
 
       - name: Upload experiments reports and transcripts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiments-pr-reports
           path: ${{ runner.temp }}/experiments-reports
@@ -169,7 +167,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: '1.2.15'
+          bun-version: '1.4.3'
 
       - name: Build
         run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
@@ -179,7 +177,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -191,54 +189,6 @@ jobs:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
-          MASTRA_E2E_REGISTRY_PORT: '4873'
-
-  e2e-softwarefactory:
-    needs: publish-e2e-registry
-    name: E2E softwarefactory template
-    runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          ref: ${{ inputs.head_sha }}
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Install and build the CLI
-        run: |
-          pnpm install --frozen-lockfile --filter ./mastracode/mastra-factory...
-          pnpm --filter ./mastracode/mastra-factory build
-
-      - name: Install e2e test dependencies
-        working-directory: ./e2e-tests/softwarefactory
-        run: pnpm install
-
-      - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: e2e-verdaccio-registry
-          path: ${{ runner.temp }}/mastra-e2e-registry
-
-      - name: Test
-        working-directory: ./e2e-tests/softwarefactory
-        run: pnpm test
-        env:
-          MASTRA_TELEMETRY_DISABLED: '1'
-          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
-          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: softwarefactory-e2e-test
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-no-bundling:
@@ -271,7 +221,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -283,7 +233,6 @@ jobs:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-mcp-compat:
@@ -345,7 +294,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -357,7 +306,6 @@ jobs:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-commonjs:
@@ -390,7 +338,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -401,7 +349,6 @@ jobs:
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-deployers:
@@ -434,7 +381,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -446,7 +393,6 @@ jobs:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-type-check:
@@ -479,7 +425,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -490,7 +436,6 @@ jobs:
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-kitchen-sink:

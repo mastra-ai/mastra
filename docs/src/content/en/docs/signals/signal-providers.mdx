@@ -1,0 +1,281 @@
+---
+title: 'Signal providers | Signals'
+description: 'Build Mastra signal providers that monitor external systems through polling or webhooks and deliver notifications into long-running agent threads.'
+packages:
+  - '@mastra/core'
+---
+
+# Signal providers
+
+A signal provider watches an external system and sends [notifications](/docs/signals/notifications) to subscribed agent threads. For example, a provider can watch a build pipeline and notify each thread that has subscribed to that pipeline when a build fails.
+
+Use a provider when your application needs to manage which threads receive events from which sources. The [`SignalProvider`](/reference/signals/signal-provider) base class tracks those subscriptions, runs polling, and forwards notifications to the agent. Your provider supplies the code that reads the external system and matches events to subscriptions. It can also supply tools and processors to the agent.
+
+If your server already receives an event and knows its target thread, call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) directly. For changing application context, use a [state signal](/docs/signals/state-signals). For context needed by one model request, use a [transient reactive signal](/docs/signals/sending-signals#send-context-from-a-system).
+
+## How a provider works
+
+Register a provider in the agent's `signals` array. It receives events in one of two ways:
+
+- **Polling:** [`poll()`](/reference/signals/signal-provider#polling) checks the external system at regular intervals.
+- **Webhooks:** your server passes incoming events to [`handleWebhook()`](/reference/signals/signal-provider#webhooks).
+
+For each matching subscription, your provider calls the protected [`notify()`](/reference/signals/signal-provider#notifications) method. This forwards the event to `Agent.sendNotificationSignal()`, using the notification delivery policy, retries, and inbox.
+
+## Map external identities to threads
+
+Use the target thread's [`resourceId` and `threadId`](/docs/memory/message-history#threads-and-resources) to route notifications. The provider also needs an `externalResourceId` to identify what the thread watches, such as the pipeline `acme-app-main`. Choose a stable value that you can match to incoming events.
+
+A subscription is keyed by all three values, so one thread can watch several resources and several threads can watch the same one. Store extra data in `metadata` rather than in the external id. For webhooks, match the payload to `externalResourceId`, then use the subscription's `resourceId` and `threadId` as the target.
+
+## Quickstart
+
+This example checks a pipeline's build status and notifies subscribed threads when it fails. The `builds` map stands in for your CI service. Replace `fetchBuildStatus()` with a call to that service.
+
+Configure [notification storage on your `Mastra` instance](/docs/signals/notifications#storage-and-dispatcher-setup) before using the provider. Without it, `notify()` can't create records.
+
+```typescript title="src/mastra/signals/ci-signals.ts"
+import { SignalProvider } from '@mastra/core/signals'
+import type { SignalProviderTarget, SignalSubscription } from '@mastra/core/signals'
+
+type BuildStatus = {
+  id: string
+  status: 'passed' | 'failed'
+}
+
+const builds = new Map<string, BuildStatus>([
+  ['acme-app-main', { id: 'build_123', status: 'failed' }],
+])
+
+async function fetchBuildStatus(pipeline: string): Promise<BuildStatus> {
+  return builds.get(pipeline) ?? { id: 'build_unknown', status: 'passed' }
+}
+
+export class CiSignals extends SignalProvider<'ci-signals'> {
+  readonly id = 'ci-signals' as const
+  readonly pollInterval = 30_000
+
+  watch(target: SignalProviderTarget, pipeline: string) {
+    return this.subscribe(target, pipeline)
+  }
+
+  unwatch(target: SignalProviderTarget, pipeline: string) {
+    return this.unsubscribe(target, pipeline)
+  }
+
+  async poll(subscriptions: SignalSubscription[]) {
+    for (const sub of subscriptions) {
+      const build = await fetchBuildStatus(sub.externalResourceId)
+
+      if (build.status !== 'failed') continue
+
+      await this.notify(
+        {
+          source: this.id,
+          kind: 'ci-status',
+          priority: 'high',
+          summary: `Build failed for ${sub.externalResourceId}`,
+          payload: build,
+          dedupeKey: `${this.id}:${sub.externalResourceId}:${build.id}`,
+        },
+        { resourceId: sub.resourceId, threadId: sub.threadId },
+      )
+    }
+  }
+}
+```
+
+Register the provider with an agent, then subscribe a thread to the pipeline it should watch:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { CiSignals } from '../signals/ci-signals'
+
+export const ciSignals = new CiSignals()
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user triage CI updates.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  signals: [ciSignals],
+})
+
+ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
+```
+
+The agent connects it, polls, and sends a notification when the pipeline fails. Register `supportAgent` on your `Mastra` instance so `notify()` can reach its notification storage.
+
+## Build a provider
+
+### Connect and subscriptions
+
+Override [`connect()`](/reference/signals/signal-provider#connection) only when you need setup that depends on the connected agent. Always call `super.connect(agent)` first.
+
+Subscriptions live behind protected methods:
+
+- `subscribe(target, externalResourceId, metadata?)` adds a subscription or merges metadata into an existing one.
+- `unsubscribe(target, externalResourceId)` removes one, and `unsubscribeAll(target)` removes every subscription for a thread.
+- `getSubscriptions()`, `getSubscriptionsForResource()`, `getSubscriptionsForThread()`, `hasSubscription()`, and `subscriptionCount` read the registry for diagnostics and guards.
+
+Expose only what your application needs. The CI example wraps `subscribe()` and `unsubscribe()` in public `watch()` and `unwatch()` methods.
+
+### Polling
+
+Set `pollInterval` in milliseconds and implement `poll(subscriptions)` when the source can't push events.
+
+The base class handles the timer:
+
+- It skips a cycle when there are no subscriptions and never overlaps cycles, so a slow `poll()` doesn't run concurrently with itself.
+- It catches and logs errors from `poll()`, then waits for the next cycle.
+- It calls `unref()` on the timer so polling alone doesn't keep the process alive.
+
+The base class doesn't retry a failed poll immediately. Let the next interval retry, or add your own backoff inside `poll()`.
+
+### Webhooks
+
+Use webhooks when the source can call your app. Override `handleWebhook(request)` to parse the payload, look up subscriptions, and call `notify()` for each match:
+
+```typescript title="src/mastra/signals/ci-signals.ts"
+import { SignalProvider } from '@mastra/core/signals'
+import type { SignalProviderWebhookRequest } from '@mastra/core/signals'
+
+export class CiSignals extends SignalProvider<'ci-signals'> {
+  readonly id = 'ci-signals' as const
+
+  async handleWebhook(request: SignalProviderWebhookRequest) {
+    const payload = request.body as { pipeline: string; status: string }
+    const subscriptions = this.getSubscriptionsForResource(payload.pipeline)
+
+    for (const sub of subscriptions) {
+      await this.notify(
+        {
+          source: this.id,
+          kind: 'ci-status',
+          priority: 'high',
+          summary: `Build ${payload.status} for ${payload.pipeline}`,
+          payload,
+        },
+        { resourceId: sub.resourceId, threadId: sub.threadId },
+      )
+    }
+
+    return { status: 200, body: { matched: subscriptions.length } }
+  }
+}
+```
+
+`handleWebhook()` is a provider method. Call it from your own endpoint and verify the source's signature against the raw body before parsing where the source requires it.
+
+### Durable subscriptions
+
+The base registry is in-memory and belongs to one provider instance in one process. It doesn't survive a restart or cross instance boundaries.
+
+If subscriptions must survive a restart, persist them in your own storage and rehydrate them in [`start()`](/reference/signals/signal-provider#start). A second process has an empty registry until it rehydrates its own copy.
+
+### Lifecycle hooks
+
+The agent calls `connect()` when constructed, starts polling, then invokes `start()` without awaiting it. Keep `start()` independent of the first poll cycle and handle its errors.
+
+[`stop()`](/reference/signals/signal-provider#stop) is synchronous. The default implementation stops polling and clears every subscription index. Override it for cleanup, but call `super.stop()` so the registry is released:
+
+```typescript oxfmt:false
+override stop() {
+  this.closeClient()
+  super.stop()
+}
+```
+
+Call `stop()` from your shutdown path. The agent doesn't. If closing a client is asynchronous, expose an async shutdown method and await it before calling `stop()`.
+
+### Processors and tools
+
+Providers can contribute behavior to the connected agent:
+
+- Return input processors from `getInputProcessors()` and output processors from `getOutputProcessors()`.
+- Return agent-callable tools from `getTools()`.
+
+The agent resolves these once after `connect()` and registers the processors with the Mastra instance.
+
+### Send notifications
+
+[`notify()`](/reference/signals/signal-provider#notifications) wraps the connected agent's `sendNotificationSignal()` and accepts the same fields: `source`, `kind`, `summary`, optional `priority`, `payload`, `dedupeKey`, `coalesceKey`, and `attributes`.
+
+Use `dedupeKey` for one event that may arrive twice, such as the same failing build on consecutive polls, and `coalesceKey` when related events should merge into one pending record. The [Notifications guide](/docs/signals/notifications#create-and-coalesce-records) covers the merge rules.
+
+`notify()` throws when the provider isn't connected. It also propagates storage errors, so let those reach your poll or webhook error handling.
+
+### Shut down cleanly
+
+During shutdown:
+
+1. Stop accepting new webhook work.
+1. Stop polling with `stopPolling()` or `stop()`.
+1. Clear the subscription registry.
+1. Close or release external clients and connections.
+1. Let in-flight `notify()` calls finish where your runtime allows it.
+
+The base class clears the registry in `stop()`. It can't drain an in-flight webhook handler or close an async client, so coordinate those in your shutdown path.
+
+## Built-in providers
+
+### Task signal provider
+
+[`TaskSignalProvider`](/reference/signals/task-signal-provider) bundles the task tools and the `TaskStateProcessor` behind one registration. Add it when you want the agent to maintain a task list across turns:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { TaskSignalProvider } from '@mastra/core/signals'
+
+const agent = new Agent({
+  // ...
+  signals: [new TaskSignalProvider()],
+})
+```
+
+It contributes `task_write`, `task_update`, `task_complete`, and `task_check`, plus the processor that projects the task list onto a state-signal lane. Task tracking requires a memory-backed thread and a `storage` instance. Without memory, the tools report that tracking needs agent memory.
+
+### Webhook signal provider
+
+For generic webhook sources, use [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) instead of writing a subclass. Configure a function that extracts the resource id and an optional one that builds the notification:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { WebhookSignalProvider } from '@mastra/core/signals'
+
+const webhooks = new WebhookSignalProvider({
+  extractResourceId: payload => (payload as { repository: string }).repository,
+  buildNotification: (payload, sub) => ({
+    source: 'ci',
+    kind: 'build-status',
+    priority: 'medium',
+    summary: `Build ${(payload as { status: string }).status} for ${sub.externalResourceId}`,
+  }),
+})
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user triage updates.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  signals: [webhooks],
+})
+
+webhooks.subscribeThread({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app')
+```
+
+Call `webhooks.handleWebhook({ body, headers })` from your route. The provider matches the extracted resource id against its subscriptions and notifies each matching thread.
+
+Without `extractResourceId`, it reads `resource` or `externalResourceId` from the payload. Without `buildNotification`, it sends a `webhook-event` notification at `medium` priority.
+
+## Production checklist
+
+Before deploying:
+
+- **Deduplicate retries:** give every event a stable `dedupeKey` or `coalesceKey`. Webhook deliveries and poll cycles repeat, and the provider doesn't deduplicate before `notify()`.
+- **Verify webhooks:** check signatures against the raw body before parsing and reject invalid requests at your HTTP endpoint.
+- **Handle source outages:** polling retries on the next interval, so add backoff inside `poll()` if needed. Webhook sources usually retry their side, so return a non-2xx status when you couldn't accept the event.
+- **Persist subscriptions if they matter:** the registry is in-memory. Rehydrate it in `start()` when a restart must preserve watches.
+- **Use shared storage:** notification records and delivery policy depend on the agent's Mastra storage.
+- **Plan shutdown:** stop accepting webhooks, stop polling, close clients, and let in-flight notifications settle.
+- **Watch the notification queue:** summaries and deferred deliveries rely on the [notification dispatcher](/docs/signals/notifications#dispatch), especially across shared storage.

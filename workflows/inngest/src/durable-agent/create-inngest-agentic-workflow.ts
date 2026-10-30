@@ -1,6 +1,8 @@
-import { buildDeferredStepFinishChunk } from '@internal/core/durable';
+import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
+  createDurableGoalStep,
+  createDurableIsTaskCompleteStep,
   createDurableLLMExecutionStep,
   createDurableLLMMappingStep,
   createDurableToolCallStep,
@@ -19,6 +21,7 @@ import {
   executeDurableAgentScorers,
   getRunRegistryEntry,
   loadRunStoredMessages,
+  takeRunScorerInstances,
   pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
@@ -39,6 +42,7 @@ import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
+import { agentLoopTermination, generationUsage } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
@@ -73,6 +77,7 @@ const durableAgenticInputSchema = z.object({
   // steps on a separate worker process, so this snapshot is the only way the
   // rebuild path can recover request-scoped configuration.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
   // Observability fields (Inngest-specific)
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
@@ -193,12 +198,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Pass the request context snapshot so dynamic model/tool resolvers
           // see the caller's context on every iteration, not just the first.
           requestContextEntries: state.requestContextEntries,
+          inputTripwire: state.inputTripwire,
           // Pass agent span data so model spans can use it as parent
           agentSpanData: state.agentSpanData,
           // Pass model span data (ONE span for entire agent run)
           modelSpanData: state.modelSpanData,
           // First-chunk clock carried from earlier iterations (first write wins)
           completionStartTime: state.completionStartTime,
+          timeToFirstTokenMs: state.timeToFirstTokenMs,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
           accumulatedSteps: state.accumulatedSteps,
@@ -216,6 +223,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
+          timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
+          stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -253,7 +262,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           toolResults,
           runId: initData.runId,
           agentId: initData.agentId,
-          messageId: initData.messageId,
+          // A processor retry rotates the response message id; carry it forward as core does.
+          messageId: llmOutput?.stepResult?.messageId ?? initData.messageId,
           state: llmOutput?.state ?? initData.state,
         };
       },
@@ -291,6 +301,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       },
       { id: 'update-iteration-state' },
     )
+    // Step 8: isTaskComplete scorers, then goal evaluation, as in core's durable loop.
+    // Both read their closures from the in-process run registry and no-op without them.
+    .then(createDurableIsTaskCompleteStep(maxSteps))
+    .then(createDurableGoalStep())
     .commit();
 
   // Create the main agentic loop workflow with dowhile
@@ -352,6 +366,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .dowhile(singleIterationWorkflow, async params => {
         const { inputData, engine, mastra } = params;
         const state = inputData as IterationState;
+        const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const { step } = engine as { step: BaseContext<Inngest>['step'] };
 
@@ -362,6 +377,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
+            // Carry the step's response messages so `onStepFinish(event).response.messages` and
+            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
+            try {
+              const list = new MessageList({}).deserialize(state.messageListState);
+              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+            } catch (error) {
+              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+            }
             await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
               await emitChunkEvent(pubsub, state.runId, deferredChunk);
             });
@@ -372,6 +395,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
+          if (tracingRegistry)
+            tracingRegistry.tracingStopCause = state.lastStepResult?.isContinued ? 'delegation' : 'model_finished';
           await emitStepFinish(false);
           return false;
         }
@@ -383,6 +408,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
+          if (tracingRegistry) {
+            tracingRegistry.tracingStopCause = shouldContinue ? 'max_steps' : 'model_finished';
+          }
           await emitStepFinish(false);
           return false;
         }
@@ -400,7 +428,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           if (!stopWhen || state.accumulatedSteps.length === 0) {
             return false;
           }
-          const steps = state.accumulatedSteps as any;
+          // Hand stopWhen the full step content stream.steps reports, not the
+          // compacted snapshot records (tool-result outputs restored).
+          const steps = expandDurableSteps(state.accumulatedSteps) as any;
           const conditions = await Promise.all(
             (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
               try {
@@ -423,6 +453,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return conditions.some(Boolean);
         });
 
+        if (stopped && tracingRegistry) tracingRegistry.tracingStopCause = 'stop_condition';
         await emitStepFinish(!stopped);
         return !stopped;
       })
@@ -431,6 +462,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         async params => {
           const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
+          const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
           // Access pubsub via symbol to emit finish event
@@ -481,6 +513,19 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             }
           }
 
+          // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
+          // transient chunk so consumers see it before the stream closes (as core does).
+          if (pubsub && !tripwire && finishResult.titleForStream) {
+            const title = await finishResult.titleForStream;
+            if (title && initData.state?.threadId) {
+              await emitChunkEvent(pubsub, state.runId, {
+                type: 'data-thread-title',
+                data: { threadId: initData.state.threadId, title },
+                transient: true,
+              });
+            }
+          }
+
           const finalOutput = {
             messageListState: finishResult.messageListState,
             messageId: state.messageId,
@@ -505,13 +550,25 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
-          // Rebuilt spans end from snapshots taken at run start, so the clock the
-          // steps carried through the loop state is applied here.
-          const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
+          // Resumed segments carry their own clocks beside their fresh spans.
+          const registry = getRunRegistryEntry(state.runId, mastra);
+          const completionClock = registry?.resumeModelSpanData
+            ? registry.resumeCompletionStartTime
+            : state.completionStartTime;
+          const timeToFirstTokenMs = registry?.resumeModelSpanData
+            ? registry.resumeTimeToFirstTokenMs
+            : state.timeToFirstTokenMs;
+          const clocks = {
+            ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
+            ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
+          };
           if (state.modelSpanData) {
-            const modelSpan = observability?.rebuildSpan(
-              state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
-            ) as AIModelGenerationSpan | undefined;
+            const modelSpan =
+              registry?.resumeModelSpan ??
+              registry?.modelSpan ??
+              (observability?.rebuildSpan(state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
+                | AIModelGenerationSpan
+                | undefined);
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -519,22 +576,45 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                 args: tc.args,
               })),
             );
+            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
+              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
-                ...(completionStartTime ? { completionStartTime } : {}),
+                ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                ...clocks,
               },
-              usage: state.accumulatedUsage,
+              usage,
             });
           }
 
           // End AGENT_RUN span with final output
           if (state.agentSpanData) {
-            const agentSpan = observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+            const agentSpan =
+              registry?.resumeAgentSpan ??
+              registry?.agentSpan ??
+              observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
+              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText },
-              ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+              ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });
           }
 
@@ -554,13 +634,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .map(
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          const initData = getInitData() as DurableAgenticWorkflowInput;
           void executeDurableAgentScorers({
-            initData: getInitData() as DurableAgenticWorkflowInput,
+            initData,
             finalOutput: inputData,
             mastra,
             requestContext,
             tracingContext,
             loadStoredMessages: loadRunStoredMessages(params),
+            // Call-time and defaultOptions scorers are parked in-process by instance; name
+            // resolution alone misses any scorer Mastra never registered (#27579).
+            scorerInstances: takeRunScorerInstances(initData.runId, mastra),
           }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
 
           return inputData;

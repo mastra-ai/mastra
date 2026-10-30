@@ -12,6 +12,7 @@ import { ChatAgentContext, useChatRunning, useChatSend } from '@/domains/chat/co
 import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
 import { ObservationMarkerBadge } from '@/domains/chat/tools/badges/observation-marker-badge';
+import { ConnectPromptTool } from '@/domains/chat/tools/connect-prompt-tool';
 import {
   badgeStatus,
   codeModeCall,
@@ -36,6 +37,10 @@ export interface ToolCardProps {
   input: any;
   output: any;
   modelOutput?: unknown;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
+  /** The background task's status in the part's metadata: `running` until the part holds its result. */
+  backgroundTaskStatus?: string;
   toolCallId: string;
   /** Part state: v5 `output-available`/`output-error`/`input-available`, or v4 `result`/`call`. */
   state?: string;
@@ -54,7 +59,7 @@ const stripPrefix = (toolName: string, prefix: string): string =>
 /** Its own workflow run scope, so a streaming workflow result can drive a live graph inside the card. */
 export const ToolCard = (props: ToolCardProps) => {
   return (
-    <PlaygroundWorkflowRunProvider workflowId={''} withoutTimeTravel>
+    <PlaygroundWorkflowRunProvider workflowId="" withoutTimeTravel>
       <ToolCardInner {...props} />
     </PlaygroundWorkflowRunProvider>
   );
@@ -65,6 +70,8 @@ export const ToolCardInner = ({
   input,
   output,
   modelOutput,
+  backgroundTaskId,
+  backgroundTaskStatus,
   toolCallId,
   state,
   errorText,
@@ -106,6 +113,8 @@ export const ToolCardInner = ({
         return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
       }
       break;
+    case 'connect_prompt':
+      return <ConnectPromptTool output={output} readOnly={readOnly} />;
     case 'submit_plan':
       return (
         <SubmitPlanTool
@@ -135,6 +144,8 @@ export const ToolCardInner = ({
           toolCalled={toolCalled}
           withoutArgs={isAgent || isWorkflow}
           status={status}
+          backgroundTaskId={backgroundTaskId}
+          backgroundTaskStatus={backgroundTaskStatus}
         />
       );
     }
@@ -239,6 +250,8 @@ export const ToolCardInner = ({
         isNetwork={isNetwork}
         toolCalled={toolCalled}
         status={status}
+        backgroundTaskId={backgroundTaskId}
+        backgroundTaskStatus={backgroundTaskStatus}
       />
       <ToolResultMedia modelOutput={modelOutput} />
       {mcpAppInfo && output !== undefined && (

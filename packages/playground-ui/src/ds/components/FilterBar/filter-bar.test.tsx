@@ -400,6 +400,25 @@ describe('FilterBar', () => {
         expect(committed.hasAttribute('data-shine')).toBe(false);
       });
 
+      // Chips already there when the bar mounts (a page opening with its filters) must sit still:
+      // growing them from zero width would slide every control after them across the toolbar.
+      it('skips the entrance animation for chips present when the bar mounts', async () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'Failed' }]} />);
+        const preexisting = screen.getByRole('group', { name: 'Status is Failed' });
+        expect(preexisting.hasAttribute('data-initial')).toBe(true);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        key('Enter');
+
+        expect(screen.getByRole('group', { name: 'Status is Running' }).hasAttribute('data-initial')).toBe(false);
+        expect(preexisting.hasAttribute('data-initial')).toBe(true);
+      });
+
       it('keeps the draft chip element when the consumer derives item ids itself', async () => {
         // Consumers that round-trip filters through a URL rebuild items on every change, so the
         // id they hand back is theirs, not ours. `createItemId` lets the draft carry that id up front.
@@ -866,6 +885,35 @@ describe('FilterBar', () => {
       { id: 'a', fieldId: 'status', operatorId: 'is', value: 'running' },
       { id: 'b', fieldId: 'traceId', operatorId: 'is', value: 'x' },
     ];
+
+    describe('when a field relabels an operator', () => {
+      const relabeled: FilterBarField[] = [
+        { ...FIELDS[0], operatorLabels: { 'is-empty': 'is not recorded' } },
+        { id: 'note', label: 'Note', operators: ['is', 'is-empty'] },
+      ];
+
+      it('uses the label on that field only, in the operator list and on the chip', async () => {
+        const onChange = vi.fn();
+        render(<Harness fields={relabeled} onChange={onChange} />);
+
+        getInput().focus();
+        type('status');
+        await screen.findByRole('option', { name: 'Status' });
+        key('Enter');
+        expect(await screen.findByRole('option', { name: 'is not recorded' })).toBeDefined();
+        expect(screen.queryByRole('option', { name: 'is empty' })).toBeNull();
+        type('is not recorded');
+        key('Enter');
+
+        expect(argAt(onChange, 0, 0)).toMatchObject([{ fieldId: 'status', operatorId: 'is-empty' }]);
+        expect(screen.getByRole('group', { name: 'Status is not recorded' })).toBeDefined();
+
+        type('note');
+        await screen.findByRole('option', { name: 'Note' });
+        key('Enter');
+        expect(await screen.findByRole('option', { name: 'is empty' })).toBeDefined();
+      });
+    });
 
     it('renders an accessible label per chip', () => {
       render(<Harness initial={INITIAL} />);
@@ -1605,6 +1653,36 @@ describe('FilterBar', () => {
       key('Enter', { ctrlKey: true });
 
       expect(chipLabels()).toEqual(['Tags prod, staging']);
+    });
+
+    it('drops an added filter that the consumer later removes', async () => {
+      function ReplacedByHost() {
+        const [items, setItems] = useState<FilterBarItem[]>([]);
+        return (
+          <>
+            <button type="button" onClick={() => setItems([])}>
+              Pick another view
+            </button>
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={setItems}
+              createItemId={fieldId => fieldId}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          </>
+        );
+      }
+      render(<ReplacedByHost />);
+      await addStatus(0, 'err');
+      expect(chipLabels()).toEqual(['Status is Error']);
+
+      fireEvent.click(screen.getByText('Pick another view'));
+
+      await waitFor(() => expect(chipLabels()).toEqual([]));
     });
 
     it('replaces the value when the operators cannot be combined', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/spanner",
-  "version": "1.10.0-alpha.1",
+  "version": "1.10.1",
   "description": "Google Cloud Spanner provider for Mastra - db storage capabilities (GoogleSQL dialect)",
   "type": "module",
   "main": "dist/index.js",
@@ -22,28 +22,27 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
-    "pretest": "docker compose up -d && (for i in $(seq 1 30); do nc -z localhost 9010 && exit 0; sleep 1; done; echo 'Spanner emulator did not become ready on localhost:9010 within 30s' >&2; exit 1)",
     "test": "vitest run",
-    "posttest": "docker compose down -v",
-    "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
-    "posttest:watch": "docker compose down -v",
+    "pretest:integration": "docker compose up -d && (for i in $(seq 1 30); do nc -z localhost 9010 && exit 0; sleep 1; done; echo 'Spanner emulator did not become ready on localhost:9010 within 30s' >&2; exit 1)",
+    "test:integration": "ENABLE_TESTS=true vitest run",
+    "posttest:integration": "docker compose down -v",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@google-cloud/spanner": "^8.10.0"
+    "@google-cloud/spanner": "^8.13.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

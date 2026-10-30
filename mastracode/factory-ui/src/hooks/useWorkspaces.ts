@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { stripCachedSessionRefs } from './useWorkItems';
 import {
   createUserSession,
@@ -15,11 +16,6 @@ import {
   SLACK_SESSION_BRANCH_PREFIX,
 } from '../ui/domains/workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
-
-interface AgentControllerThreadsScope {
-  agentControllerId?: string;
-  resourceId?: string;
-}
 
 export interface WorkspacesData {
   workspaces: FactoryUserSession[];
@@ -111,19 +107,10 @@ export async function updateCachedSessionTitle(
   });
 }
 
-function invalidateSessionQueries(
-  queryClient: QueryClient,
-  factoryId: string | undefined,
-  scope?: AgentControllerThreadsScope,
-  projectPath?: string,
-) {
+function invalidateSessionQueries(queryClient: QueryClient, factoryId: string | undefined, sessionId: string) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-  if (projectPath) {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
-    });
-  }
+  void queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId) });
 }
 
 const UNMATERIALIZED_POLL_MS = 15_000;
@@ -167,14 +154,13 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.userSession(sessionId),
     queryFn: sessionId ? () => getUserSession(baseUrl, sessionId) : skipToken,
+    // A lazy page mounting after the session read failed must not read it again;
+    // reopening the session still does, since its key changes.
+    retryOnMount: false,
   });
 }
 
-export function useCreateWorkspaceMutation(
-  factoryId: string | undefined,
-  projectRepositoryId: string | undefined,
-  scope?: AgentControllerThreadsScope,
-) {
+export function useCreateWorkspaceMutation(factoryId: string | undefined, projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -187,7 +173,7 @@ export function useCreateWorkspaceMutation(
       return createUserSession(baseUrl, projectRepositoryId, { branch: trimmedBranch });
     },
     onSuccess: session => {
-      invalidateSessionQueries(queryClient, factoryId, scope, session.sessionId);
+      invalidateSessionQueries(queryClient, factoryId, session.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(session.sessionId) });
       void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}`);
     },
@@ -195,7 +181,7 @@ export function useCreateWorkspaceMutation(
   });
 }
 
-export function useDeleteWorkspaceMutation(factoryId: string | undefined, scope?: AgentControllerThreadsScope) {
+export function useDeleteWorkspaceMutation(factoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -214,11 +200,8 @@ export function useDeleteWorkspaceMutation(factoryId: string | undefined, scope?
       // The server strips the work-item refs with the row; mirror it in the cache
       // so the board's cards drop their session links before the next poll.
       if (factoryId) stripCachedSessionRefs(queryClient, factoryId, workspace.sessionId);
-      invalidateSessionQueries(queryClient, factoryId, scope, workspace.sessionId);
+      invalidateSessionQueries(queryClient, factoryId, workspace.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, workspace.sessionId),
-      });
       if (workspace.sessionId === viewedSessionId) void navigate(`/factories/${factoryId}/new`);
       toast('Workspace deleted');
     },

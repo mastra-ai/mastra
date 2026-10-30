@@ -11,14 +11,12 @@ import { createUserSession } from '../../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 
-const FILES_URL = `${TEST_BASE_URL}/web/workspace/files`;
 const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
 const SESSION_ID = 'session-public-1';
 const SESSION_URL = `${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`;
 const RECREATE_URL = `${SESSION_URL}/sandbox/recreate`;
 const FACTORY_ID = 'factory-1';
 const WORKSPACE = 'session-1';
-const THREAD = 'thread-1';
 
 Object.defineProperty(CSSStyleSheet.prototype, 'replaceSync', { value: () => {} });
 
@@ -62,12 +60,8 @@ function installHandlers({
   changes?: () => Response;
   recreate?: () => Response;
 } = {}) {
-  const counts = { files: 0, changes: 0, session: 0, recreate: 0 };
+  const counts = { changes: 0, session: 0, recreate: 0 };
   server.use(
-    http.get(FILES_URL, () => {
-      counts.files += 1;
-      return HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [{ path: 'src/agent.ts' }] });
-    }),
     http.get(CHANGES_URL, () => {
       counts.changes += 1;
       return changes();
@@ -89,7 +83,6 @@ function renderPanel(sessionId: string | null = SESSION_ID, client?: Parameters<
     <>
       <WorkspaceViewerPanel
         workspacePath={WORKSPACE}
-        threadId={THREAD}
         factoryProjectId={FACTORY_ID}
         sessionId={sessionId ?? undefined}
       />
@@ -108,7 +101,7 @@ async function openDialog() {
 describe('Recreate sandbox in the workspace panel', () => {
   it.each([
     ['has no capabilities', undefined],
-    ['is not allowed to recreate', { recreateSandbox: false }],
+    ['is not allowed to recreate', { recreateSandbox: false, takeOwnership: false }],
   ])('hides the action when the session %s', async (_label, capabilities) => {
     const counts = installHandlers({ capabilities });
     const { client } = renderPanel();
@@ -120,7 +113,7 @@ describe('Recreate sandbox in the workspace panel', () => {
   });
 
   it('hides the action when the panel has no session', async () => {
-    const counts = installHandlers({ capabilities: { recreateSandbox: true } });
+    const counts = installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false } });
     const { client } = renderPanel(null);
 
     await screen.findByRole('button', { name: /Changes/ });
@@ -130,7 +123,7 @@ describe('Recreate sandbox in the workspace panel', () => {
   });
 
   it('warns how many uncommitted changes will be lost and that a running agent stops', async () => {
-    installHandlers({ capabilities: { recreateSandbox: true } });
+    installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false } });
     renderPanel();
     await screen.findByText('+5');
 
@@ -148,7 +141,7 @@ describe('Recreate sandbox in the workspace panel', () => {
       () => HttpResponse.json({ workspacePath: WORKSPACE, available: false, additions: 0, deletions: 0, changes: [] }),
     ],
   ])('warns that changes could not be checked when the changes query %s', async (_label, changes) => {
-    installHandlers({ capabilities: { recreateSandbox: true }, changes });
+    installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false }, changes });
     const { client } = renderPanel();
     await screen.findByRole('button', { name: /Recreate sandbox/ });
     await waitForMutationsIdle(client);
@@ -159,12 +152,12 @@ describe('Recreate sandbox in the workspace panel', () => {
   });
 
   it('recreates, refetches the workspace and session, and confirms with a toast', async () => {
-    const counts = installHandlers({ capabilities: { recreateSandbox: true } });
+    const counts = installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false } });
     const { client } = renderPanel();
     client.setQueryData(queryKeys.sessions(FACTORY_ID), { sessions: [] });
     // Listings and file contents from other threads of the same workspace.
-    client.setQueryData(queryKeys.workspaceFiles(WORKSPACE, 'thread-other'), { files: [{ path: 'old.ts' }] });
-    client.setQueryData(queryKeys.workspaceFile(WORKSPACE, 'old.ts', 'thread-other'), { path: 'old.ts' });
+    client.setQueryData(queryKeys.workspaceTree(WORKSPACE, 'src'), { entries: [] });
+    client.setQueryData(queryKeys.workspaceFile(WORKSPACE, 'old.ts'), { path: 'old.ts' });
     await screen.findByText('+5');
     await waitForMutationsIdle(client);
     const before = { ...counts };
@@ -175,20 +168,17 @@ describe('Recreate sandbox in the workspace panel', () => {
 
     expect(counts.recreate).toBe(1);
     expect(counts.changes).toBeGreaterThan(before.changes);
-    expect(counts.files).toBeGreaterThan(before.files);
     expect(counts.session).toBeGreaterThan(before.session);
     expect(client.getQueryState(queryKeys.sessions(FACTORY_ID))?.isInvalidated).toBe(true);
-    expect(client.getQueryState(queryKeys.workspaceFiles(WORKSPACE, 'thread-other'))?.isInvalidated).toBe(true);
-    expect(client.getQueryState(queryKeys.workspaceFile(WORKSPACE, 'old.ts', 'thread-other'))?.isInvalidated).toBe(
-      true,
-    );
+    expect(client.getQueryState(queryKeys.workspaceTree(WORKSPACE, 'src'))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.workspaceFile(WORKSPACE, 'old.ts'))?.isInvalidated).toBe(true);
     expect(await screen.findByText('Sandbox recreated. Send a message to continue.')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   });
 
   it('keeps the dialog open and shows the server error when recreate fails', async () => {
     const counts = installHandlers({
-      capabilities: { recreateSandbox: true },
+      capabilities: { recreateSandbox: true, takeOwnership: false },
       recreate: () => HttpResponse.json({ error: 'Platform proxy unavailable' }, { status: 500 }),
     });
     const { client } = renderPanel();
@@ -205,10 +195,7 @@ describe('Recreate sandbox in the workspace panel', () => {
     let sessionFetches = 0;
     server.use(
       http.post(`${TEST_BASE_URL}/web/source-control/projects/link-1/sessions`, () =>
-        HttpResponse.json({ session: sessionPayload({ recreateSandbox: true }) }),
-      ),
-      http.get(FILES_URL, () =>
-        HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [{ path: 'src/agent.ts' }] }),
+        HttpResponse.json({ session: sessionPayload({ recreateSandbox: true, takeOwnership: false }) }),
       ),
       http.get(CHANGES_URL, () => HttpResponse.json(twoChanges)),
       // The refetch never answers, so the row can only come from the seeded create response.

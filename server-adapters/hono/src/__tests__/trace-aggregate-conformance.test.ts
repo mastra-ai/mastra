@@ -29,6 +29,7 @@ const AGGREGATE_STORE_FEATURES = [
   'trace-query-context-ids',
   'trace-query-time-to-first-chunk',
   'trace-query-root-span-fields',
+  'trace-query-root-entity-id',
   'trace-query-tenant-scope',
 ];
 

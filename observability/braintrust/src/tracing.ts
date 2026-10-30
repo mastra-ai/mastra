@@ -338,14 +338,12 @@ export class BraintrustExporter extends TrackingExporter<
         // External span detected - attach Mastra traces to it
         this.#externalSpan = externalSpan;
         return externalSpan;
-      } else {
-        // No external span - use provided logger
-        return this.#providedLogger!;
       }
-    } else {
-      // Use the local logger
-      return this.getLocalLogger();
+      // No external span - use provided logger
+      return this.#providedLogger!;
     }
+    // Use the local logger
+    return this.getLocalLogger();
   }
 
   protected override async _buildSpan(args: {
@@ -741,6 +739,19 @@ export class BraintrustExporter extends TrackingExporter<
       // Usage/token info goes to metrics
       payload.metrics = formatUsageMetrics(modelAttr.usage);
 
+      // The provider's charge replaces Braintrust's registry price. A zero charge is
+      // skipped, because AI Gateway reports 0 for bring-your-own-key calls.
+      const costContext = modelAttr.costContext;
+      if (
+        costContext?.costMetadata?.source === 'provider_reported' &&
+        costContext.costUnit === 'USD' &&
+        typeof costContext.estimatedCost === 'number' &&
+        Number.isFinite(costContext.estimatedCost) &&
+        costContext.estimatedCost > 0
+      ) {
+        payload.metrics.estimated_cost = costContext.estimatedCost;
+      }
+
       // Time to first token (TTFT) for streaming responses
       // Braintrust expects TTFT in seconds (not milliseconds)
       if (modelAttr.completionStartTime) {
@@ -760,6 +771,7 @@ export class BraintrustExporter extends TrackingExporter<
         'usage',
         'parameters',
         'completionStartTime',
+        'timeToFirstTokenMs',
       ]);
       payload.metadata = {
         ...payload.metadata,
@@ -769,7 +781,7 @@ export class BraintrustExporter extends TrackingExporter<
       // For non-LLM spans, put all attributes in metadata
       payload.metadata = {
         ...payload.metadata,
-        ...attributes,
+        ...omitKeys(attributes, ['timeToFirstTokenMs']),
       };
     }
 

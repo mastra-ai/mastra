@@ -3,7 +3,7 @@ services:
     # MinIO's community images were pulled from Docker Hub/Quay (source-only
     # since Oct 2025); Chainguard maintains free builds. Pinned by digest for
     # reproducible CI — bump deliberately. Free tier publishes no version tags.
-    image: cgr.dev/chainguard/minio@sha256:709099319add48dfb44aa596a7070d3ddd8dd04d7ae881765719aec29df9e510
+    image: cgr.dev/chainguard/minio@sha256:e234321fd3abff7fb968b0674056e883b702aa1ad93a0d4d795cb6c21fa46407
     ports:
       - '9000:9000'
       - '9001:9001'
@@ -20,7 +20,7 @@ services:
   # Create test bucket on MinIO startup (distroless Chainguard images have no
   # shell, so bucket creation uses aws-cli instead of minio/mc)
   minio-setup:
-    image: amazon/aws-cli:2.36.44
+    image: amazon/aws-cli:2.39.1
     depends_on:
       minio:
         condition: service_healthy

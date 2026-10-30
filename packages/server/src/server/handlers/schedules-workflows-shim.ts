@@ -36,6 +36,6 @@ export const validateCron: any =
   exportedValidate ??
   (() => {
     throw new Error(
-      '`validateCron` is not available in this version of @mastra/core. ' + 'Schedules require @mastra/core >= 1.32.0.',
+      '`validateCron` is not available in this version of @mastra/core. Schedules require @mastra/core >= 1.32.0.',
     );
   });

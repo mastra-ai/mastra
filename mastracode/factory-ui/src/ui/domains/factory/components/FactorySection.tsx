@@ -8,6 +8,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
+import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -22,7 +23,9 @@ export function FactorySection() {
         <Sidebar.NavHeader className="mt-0">Boards</Sidebar.NavHeader>
         <Sidebar.NavList>
           {catalog.isPending ? (
-            <li role="status">Loading boards…</li>
+            <li>
+              <SidebarNavigationSkeleton label="Loading boards" rows={2} />
+            </li>
           ) : catalog.isError ? (
             <li role="alert">Unable to load boards.</li>
           ) : catalog.data.length === 0 ? (

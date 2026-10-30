@@ -38,10 +38,16 @@ function isModelNotAllowedError(error: unknown): error is ModelNotAllowedErrorLi
   return error instanceof Error && (error as { code?: unknown }).code === MODEL_NOT_ALLOWED_CODE;
 }
 
-const WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE = 'WORKFLOW_SCHEMA_VALIDATION_FAILED';
+// Input the caller sent failed a workflow or agent schema (including an agent's requestContextSchema),
+// so it is a bad request, not a server fault.
+const SCHEMA_VALIDATION_FAILED_CODES = new Set([
+  'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+]);
 
-function isWorkflowSchemaValidationError(error: unknown): error is Error {
-  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
+function isSchemaValidationError(error: unknown): error is Error {
+  const id = (error as { id?: unknown } | undefined)?.id;
+  return error instanceof Error && typeof id === 'string' && SCHEMA_VALIDATION_FAILED_CODES.has(id);
 }
 
 // A resume or time travel the run can't accept: another caller claimed it, it is still running,
@@ -55,7 +61,7 @@ const RUN_CLAIM_CONFLICT_CODES = new Set([
   'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
 ]);
 
-function isRunClaimConflictError(error: unknown): error is Error {
+function isRunClaimConflictError(error: unknown): error is Error & { id: string } {
   return error instanceof Error && RUN_CLAIM_CONFLICT_CODES.has((error as { id?: unknown }).id as string);
 }
 
@@ -70,6 +76,7 @@ const DURABLE_RUN_CONFLICT_CODES = new Set([
   'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY',
   'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
   'DURABLE_AGENT_RECOVER_RUN_SUSPENDED',
+  'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE',
   'DURABLE_AGENT_EXECUTION_CONFLICT',
 ]);
 
@@ -160,7 +167,14 @@ export function handleError(error: unknown, defaultMessage: string): never {
   // a conflict on run state, not a malformed request, so it maps to 409 and clients can
   // distinguish it from a 400/500 and re-read the run.
   if (isRunClaimConflictError(error) || isDurableRunConflictError(error)) {
+    const res = isRunClaimConflictError(error)
+      ? new Response(JSON.stringify({ error: error.message, code: error.id }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        })
+      : undefined;
     throw new HTTPException(409, {
+      res,
       message: error.message,
       stack: error.stack,
       cause: error,
@@ -177,7 +191,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  if (isWorkflowSchemaValidationError(error)) {
+  if (isSchemaValidationError(error)) {
     throw new HTTPException(400, {
       message: error.message,
       stack: error.stack,

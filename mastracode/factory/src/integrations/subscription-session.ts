@@ -100,7 +100,6 @@ export async function createSessionAsRowOwner(
     ownerResourceId: string;
     row: FactorySessionOwner;
     tags: Record<string, string>;
-    scope?: string;
     /** Bind this exact thread at creation instead of resuming or creating another. */
     threadId?: string;
   },
@@ -111,7 +110,6 @@ export async function createSessionAsRowOwner(
     id: args.sessionId,
     ownerId: args.row.userId,
     resourceId: args.ownerResourceId,
-    scope: args.scope,
     tags: args.tags,
     ...(args.threadId ? { threadId: args.threadId } : {}),
     requestContext,
@@ -139,14 +137,13 @@ export async function resolveSubscriptionSession(
   // fabricate a session for a thread that lives somewhere else.
   //
   // Second: which resource owns it? The subscription records the Factory project
-  // as its `resourceId`, but an unscoped session is registered under its own id,
-  // so the stored value routinely names a resource that does not own the thread.
+  // as its `resourceId`, but the session may run under a different resource
+  // (its own id, for sessions created before Factory resources were shared).
   // The thread row is the authoritative answer; the stored id is only a fallback.
   const thread = await controller.queryThreadById({ threadId });
   if (!thread) return undefined;
   const ownerResourceId = thread.resourceId || resourceId;
-  const scope = subscription.sessionScope || undefined;
-  let session = await controller.getSessionByResource(ownerResourceId, scope);
+  let session = await controller.getSession(sessionId);
   if (!session) {
     const tags = {
       factoryProjectId: resourceId,
@@ -165,7 +162,6 @@ export async function resolveSubscriptionSession(
       sessionId,
       ownerResourceId,
       row: sessionRow,
-      scope,
       tags,
     });
   } else if (!hasResolvedOrg(session.state?.get()?.factoryOrgId)) {

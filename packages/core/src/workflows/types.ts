@@ -7,7 +7,14 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, ObservabilityContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
+import type {
+  AnySpan,
+  ObservabilityContext,
+  ResumeTracingContext,
+  TracingOptions,
+  TracingPolicy,
+  TracingProperties,
+} from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
 import type { OutputSchema } from '../stream';
@@ -56,6 +63,7 @@ export type RestartExecutionParams = {
   stepExecutionPath?: string[];
   isPreFirstStepRestart?: boolean;
   isParallelOrConditionalRestarted?: boolean;
+  isForeachRestarted?: boolean;
 };
 
 export type TimeTravelExecutionParams = {
@@ -329,11 +337,7 @@ export type WorkflowStateSingleStepResult = {
 
 export type WorkflowStateStepResult = WorkflowStateSingleStepResult | WorkflowStateSingleStepResult[];
 
-export type WorkflowStateTracingContext = {
-  traceId?: string;
-  spanId?: string;
-  parentSpanId?: string;
-};
+export type WorkflowStateTracingContext = ResumeTracingContext;
 
 /**
  * Unified workflow state that combines metadata with processed execution state.
@@ -424,6 +428,15 @@ export interface WorkflowRunState {
    * @internal
    */
   resumeClaimedAt?: number;
+  /**
+   * The `resumeClaimedAt` of an agent resume that started running while holding a run-ownership
+   * lease on its claim. Only such a `running` claim can be taken over once its lease lapses, so a
+   * resume started by a process that holds no lease is never taken over.
+   * @internal
+   */
+  resumeLeasedClaimAt?: number;
+  /** @internal Snapshot created only to guard evented step deliveries. */
+  guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];
@@ -573,6 +586,14 @@ export interface WorkflowOptions {
    * for reduced snapshot writes and serialize their own resumes.
    */
   allowUnclaimedResumes?: boolean;
+
+  /**
+   * Writes the resume claim (`suspended -> running`) even when `shouldPersistSnapshot`
+   * excludes `running`, so a resumed run stops reading back as `suspended` while it runs.
+   *
+   * @internal Set by durable agent loops, whose suspended-run listing reads the stored status.
+   */
+  persistResumeClaim?: boolean;
 
   /**
    * Identifies step errors raised because this execution lost, or could not

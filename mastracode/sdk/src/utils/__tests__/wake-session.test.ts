@@ -29,7 +29,7 @@ const threads: Thread[] = [
 
 describe('findWakeSession', () => {
   const a = session('team', { projectPath: '/homes/a' }, threads);
-  const controller = (found?: Session<unknown>) => ({ getSessionByResource: async () => found });
+  const controller = (found?: Session<unknown>) => ({ getSession: async () => found });
   const scopeA = threadScopeKey({ projectPath: '/homes/a' });
 
   it('runs a thread as the session whose project it belongs to, under its project dispatch lease', async () => {

@@ -131,6 +131,47 @@ describeForAllEngines('AIMock loop scenario: abort callbacks', engine => {
     expect(payload.text.length).toBeGreaterThan(0);
   });
 
+  it('cancelling a streaming reply does not call onError', async () => {
+    const llm = getMock();
+    llm.on({ endpoint: 'chat' }, { content: REPLY }, slowStream);
+    const { agent } = await createSharedAgent(llm, { engine });
+    const onAbort = vi.fn();
+    const onError = vi.fn();
+
+    const { deltas } = await streamAndAbortOnFirstText(agent, { onAbort, onError });
+
+    expect(deltas.join('').length).toBeLessThan(REPLY.length);
+    await vi.waitFor(() => expect(onAbort).toHaveBeenCalledTimes(1));
+    // Give a late onError (fired after onAbort) the chance to land before asserting.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('cancelling the second model call does not call onError', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_step', name: 'step', arguments: {} }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: REPLY }, slowStream);
+    const step = createTool({
+      id: 'step',
+      description: 'Take a step',
+      inputSchema: z.object({}),
+      execute: async () => 'done',
+    });
+    const { agent } = await createSharedAgent(llm, { engine, tools: { step } });
+    const onAbort = vi.fn();
+    const onError = vi.fn();
+
+    await streamAndAbortOnFirstText(agent, { onAbort, onError });
+
+    await vi.waitFor(() => expect(onAbort).toHaveBeenCalledTimes(1));
+    expect(llm.getRequests()).toHaveLength(2);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('a provider failure fires onError and skips onFinish', async () => {
     const llm = getMock();
     llm.on(

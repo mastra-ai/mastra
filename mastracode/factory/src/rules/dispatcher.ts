@@ -1,15 +1,14 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
+import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import {
-  boardForWorkItem,
-  createBoardRegistry,
-  resolvePhaseSemantics,
-  workItemPhaseSemantics,
-} from '../boards/index.js';
+import { boardForWorkItem, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
@@ -90,7 +89,45 @@ const RECONCILE_INTERVAL_MS = 30_000;
 class FactoryDecisionSuperseded extends Error {}
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
-class RunEndedInError extends Error {}
+class RunEndedInError extends FactoryDispatchError {}
+
+// The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
+const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
+// The resolver's reason when the request context has no user; it recurs on every retry of the same start.
+const NO_AUTHENTICATED_USER = 'the request has no authenticated user';
+
+function httpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  if ('statusCode' in error && typeof error.statusCode === 'number') return error.statusCode;
+  return 'status' in error && typeof error.status === 'number' ? error.status : undefined;
+}
+
+function causeOf(error: unknown): unknown {
+  return error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
+}
+
+function isProviderCallError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ('name' in error && typeof error.name === 'string' && PROVIDER_CALL_ERROR_NAME.test(error.name)) return true;
+  return 'statusCode' in error || 'responseBody' in error;
+}
+
+function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
+  const lower = message.toLowerCase();
+  if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
+    return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
+  }
+  const status = httpStatus(error) ?? httpStatus(causeOf(error));
+  if (status === 401 || status === 403) return 'run_credentials_unavailable';
+  const providerCall = isProviderCallError(error) || isProviderCallError(causeOf(error));
+  return providerCall && classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
+}
+
+function runErrorFailure(label: string, error: unknown): RunEndedInError {
+  const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
+  if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
+  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
+}
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
@@ -147,12 +184,15 @@ function watchRun(
   // reason — so without this the true cause (e.g. a provider rejecting the OM
   // model) is lost and the abort is retried blindly.
   let omFailure: string | undefined;
+  // The run's own error event precedes its `agent_end: 'error'` and is the only place the cause appears.
+  let runError: unknown;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
     endReason = undefined;
     supersededAtEnd = undefined;
     omFailure = undefined;
+    runError = undefined;
     agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
     });
@@ -163,6 +203,10 @@ function watchRun(
       endReason = event.reason;
       supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
+      return;
+    }
+    if (event.type === 'error') {
+      runError = event.error;
       return;
     }
     if (event.type === 'om_observation_failed' || event.type === 'om_buffering_failed') {
@@ -222,7 +266,7 @@ function watchRun(
           `${label} terminal event was not observed before timeout.`,
         );
       }
-      if (endReason === 'error') throw new RunEndedInError(`${label} ended in error.`);
+      if (endReason === 'error') throw runErrorFailure(label, runError);
       if (endReason === 'aborted') {
         // An abort that follows an observational-memory failure is not the
         // usual "process went away" case — the OM stream deliberately aborted
@@ -287,14 +331,20 @@ interface DispatcherSession extends SkillSession {
   stream: { isActive(): boolean };
   abort(): void;
   sendSignal(
-    input: { id: string; type: 'user'; tagName: 'user'; contents: string },
+    input: {
+      id: string;
+      type: 'user' | 'reactive';
+      tagName: string;
+      attributes?: { name: string };
+      contents: string;
+    },
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
   subscribe(listener: AgentControllerEventListener): () => void;
   respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
 }
 
-type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource' | 'listActiveThreadRuns'>;
+type FactoryController = Pick<AgentController<MastraCodeState>, 'getSession' | 'listActiveThreadRuns'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
 function factoryRequestContext(input: {
@@ -309,6 +359,7 @@ function factoryRequestContext(input: {
   requestContext.set('controller', {
     state: session.state.get(),
     getState: () => session.state.get(),
+    sessionId: binding.sessionId,
     threadId: binding.threadId,
     resourceId: binding.resourceId,
     session: {
@@ -333,7 +384,7 @@ export interface FactoryDecisionDispatcherOptions {
   transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   storage: WorkItemsStorage;
   /** Installed boards; defaults to the built-in Work and Review boards. */
-  boards?: BoardRegistry;
+  boards?: BoardRegistry | ProjectBoardSource;
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -357,6 +408,8 @@ export interface FactoryDecisionDispatcherOptions {
     factoryProjectId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
   }) => Promise<string | null>;
+  /** `false` spends a linked-card decision unfiled: its Factory project was deleted after the decision committed. */
+  factoryProjectExists?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -375,11 +428,43 @@ function positiveMs(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+// Provider and source-control key prefixes; run errors carry provider text verbatim.
+const KEY_SHAPED_TOKEN =
+  /\b(?:sk-[A-Za-z0-9_-]{3,}|gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}|xox[abprs]-[A-Za-z0-9-]{10,})/g;
+
+// Mixed-case alphanumeric runs read as keys; lowercase hex SHAs, UUIDs, path segments and
+// hyphenated names such as branches stay readable.
+function looksLikeSecret(token: string): boolean {
+  return /[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token) && /[A-Za-z0-9]{16,}/.test(token);
+}
+
+// Base64 keys can contain `/`. A `/`-joined token is redacted whole unless one of its pieces is a
+// plain word, which paths and branches nearly always have (`fix`, `cache`, `Users`, `Documents`);
+// those are redacted piece by piece instead.
+function redactSecretRun(token: string): string {
+  if (looksLikeSecret(token) && !token.split('/').some(piece => /^[A-Za-z][a-z]+$/.test(piece))) return '[redacted]';
+  return token.replace(/[A-Za-z0-9_+=-]{24,}/g, piece =>
+    looksLikeSecret(piece) || isGroupedKey(piece) ? '[redacted]' : piece,
+  );
+}
+
+// Keys printed in `-`/`_` groups (`x7Kp9-Qm2Rt-…`) have no long unbroken run, but every group mixes
+// upper, lower and digits; branch and identifier words such as `Parked-snapshot-lease2-loss` do not.
+function isGroupedKey(token: string): boolean {
+  const groups = token.split(/[-_]/);
+  return groups.length >= 4 && groups.every(group => /[A-Z]/.test(group) && /[a-z]/.test(group) && /\d/.test(group));
+}
+
 function sanitizeDispatchError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replace(/\b(?:bearer|token|api[-_ ]?key|authorization)\s*[:=]?\s*[^\s,;]+/gi, '[redacted]')
-    .slice(0, MAX_ERROR_LENGTH);
+  return (
+    message
+      .replace(KEY_SHAPED_TOKEN, '[redacted]')
+      .replace(/\b[A-Za-z0-9_+=/-]{24,}/g, redactSecretRun)
+      // `Authorization: Bearer <value>` names the scheme first; consume it so the value goes too.
+      .replace(/\b(?:bearer|token|api[-_ ]?key|authorization)\s*[:=]?\s*(?:bearer\s+)?[^\s,;]+/gi, '[redacted]')
+      .slice(0, MAX_ERROR_LENGTH)
+  );
 }
 
 function retryAt(now: Date, attempts: number): Date {
@@ -500,7 +585,7 @@ export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
-  readonly #boards: BoardRegistry;
+  readonly #boards: ProjectBoardSource;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -512,6 +597,7 @@ export class FactoryDecisionDispatcher {
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
+  readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -534,7 +620,7 @@ export class FactoryDecisionDispatcher {
     this.#audit = options.audit;
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
-    this.#boards = options.boards ?? createBoardRegistry();
+    this.#boards = toBoardSource(options.boards);
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
@@ -546,6 +632,7 @@ export class FactoryDecisionDispatcher {
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
+    this.#factoryProjectExists = options.factoryProjectExists;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -679,7 +766,7 @@ export class FactoryDecisionDispatcher {
         // suspension and run state belong to that thread. Lookup failures revoke.
         keep: async binding => {
           try {
-            const session = await this.#controller.getSessionByResource(binding.resourceId);
+            const session = await this.#controller.getSession(binding.sessionId);
             if (session?.thread.getId() !== binding.threadId) return false;
             return session.suspensions.hasPending() || session.run.isRunning();
           } catch {
@@ -768,7 +855,7 @@ export class FactoryDecisionDispatcher {
     if (!record.workItemId) return;
     try {
       const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
-      if (!item || workItemPhaseSemantics(this.#boards, item)?.kind !== 'terminal') return;
+      if (!item || workItemPhaseSemantics(await this.#boards.load(record), item)?.kind !== 'terminal') return;
       await this.#storage.supersedeDecisionsForWorkItem({
         orgId: record.orgId,
         factoryProjectId: record.factoryProjectId,
@@ -807,7 +894,9 @@ export class FactoryDecisionDispatcher {
   // Effects a person owns: starting a run (compute + code execution), and an
   // external event pulling a card back into a working lane.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
-    if (record.approvedAt !== null || !requestsConsent(this.#boards, record, decision)) return false;
+    if (record.approvedAt !== null) return false;
+    const boards = await this.#boards.load(record);
+    if (!requestsConsent(boards, record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
@@ -817,6 +906,7 @@ export class FactoryDecisionDispatcher {
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
+    if (item && startsInAutoPhase(boards, item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
@@ -835,7 +925,7 @@ export class FactoryDecisionDispatcher {
           record.factoryProjectId,
           `decision:${record.idempotencyKey}`,
         );
-        if (!replay) assertFactoryDecisionTarget(decision, this.#boards, item.board ?? undefined);
+        if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
         const result = await this.#transitionService.transition({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
@@ -927,17 +1017,17 @@ export class FactoryDecisionDispatcher {
           const resolved =
             decision.skillName === undefined
               ? await resolvePromptInvocation(this.#controller, {
-                  resourceId: binding.resourceId,
+                  sessionId: binding.sessionId,
                   prompt: decision.prompt,
                 })
               : decision.resume === true
                 ? await resolveSkillResumeInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   })
                 : await resolveSkillInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
@@ -999,8 +1089,19 @@ export class FactoryDecisionDispatcher {
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
             { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.message,
+            resolved.contents,
           );
+          // A skill kickoff is system-generated, not something the human typed: send it
+          // as a typed `skill` signal so the model sees `<skill name="…">` and traces
+          // record the skill name. Plain-prompt kickoffs stay user messages.
+          const kickoffSignal =
+            resolved.skillName !== undefined
+              ? {
+                  type: 'reactive' as const,
+                  tagName: 'skill',
+                  attributes: { name: resolved.skillName },
+                }
+              : { type: 'user' as const, tagName: 'user' };
           // The feed read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) return;
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
@@ -1044,8 +1145,7 @@ export class FactoryDecisionDispatcher {
             const result = session.sendSignal(
               {
                 id: deliveryId,
-                type: 'user',
-                tagName: 'user',
+                ...kickoffSignal,
                 contents: kickoffContents,
               },
               // Without `requireDelivery` the session resolves `accepted` on the
@@ -1201,6 +1301,12 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
+    if (
+      this.#factoryProjectExists &&
+      !(await this.#factoryProjectExists({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }))
+    ) {
+      return;
+    }
     // A lost completion acknowledgement must not reinterpret a committed
     // materialization against a replacement installation.
     const existing = await this.#storage.getByProjectSource({
@@ -1222,8 +1328,9 @@ export class FactoryDecisionDispatcher {
         if (replay?.status === 'accepted' && replay.stage === decision.stage) return;
       }
     }
-    assertFactoryDecisionTarget(decision, this.#boards);
-    const definition = this.#boards.get(decision.board);
+    const boards = await this.#boards.load(record);
+    assertFactoryDecisionTarget(decision, boards);
+    const definition = boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
     const initialPhase = definition.initialPhase;
     // `skipRules` files the card at the stage the decision names, as its first
@@ -1240,9 +1347,8 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    let result: UpsertWorkItemResult;
-    try {
-      result = await this.#storage.upsert({
+    const upsert = () =>
+      this.#storage.upsert({
         orgId: record.orgId,
         userId: 'factory-rule-dispatcher',
         factoryProjectId: record.factoryProjectId,
@@ -1258,20 +1364,33 @@ export class FactoryDecisionDispatcher {
         },
         reuseMode: 'preserve',
       });
+    let result: UpsertWorkItemResult;
+    try {
+      result = await upsert().catch(async error => {
+        if (
+          error instanceof WorkItemClaimConflictError &&
+          (await this.#releaseDeletedProjectClaim(record.orgId, decision.claimKey))
+        ) {
+          return upsert();
+        }
+        throw error;
+      });
     } catch (error) {
-      // Another Factory project in the org holds the live card for this record.
+      // Another live Factory project in the org holds the card for this record.
       // The decision is spent, not failed: retrying would only be refused again.
       if (error instanceof WorkItemClaimConflictError) return;
       throw error;
     }
-    if (!result.created && decision.claimKey && !result.item.claimKey) {
+    const { claimKey } = decision;
+    if (!result.created && claimKey && !result.item.claimKey) {
       // A card filed before claims existed adopts the claim now; a refusal means
-      // another project already owns the record, and this card stays as it is.
-      const claimed = await this.#storage.claimWorkItem({
-        orgId: record.orgId,
-        id: result.item.id,
-        claimKey: decision.claimKey,
-      });
+      // another live project already owns the record, and this card stays as it is.
+      const claim = { orgId: record.orgId, id: result.item.id, claimKey };
+      const claimed =
+        (await this.#storage.claimWorkItem(claim)) ??
+        ((await this.#releaseDeletedProjectClaim(record.orgId, claimKey))
+          ? await this.#storage.claimWorkItem(claim)
+          : null);
       if (claimed) result = { ...result, item: claimed };
     }
     const itemBoard = boardForWorkItem(result.item);
@@ -1320,7 +1439,7 @@ export class FactoryDecisionDispatcher {
       if (!result.created) {
         await moveCardToBoard({
           workItems: this.#storage,
-          boardRegistry: this.#boards,
+          boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
           item: result.item,
           targetBoard: decision.board,
@@ -1371,6 +1490,16 @@ export class FactoryDecisionDispatcher {
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+  }
+
+  /** Drops `claimKey` when the card holding it belongs to a deleted Factory project; true when it is free again. */
+  async #releaseDeletedProjectClaim(orgId: string, claimKey: string | undefined): Promise<boolean> {
+    if (!claimKey || !this.#factoryProjectExists) return false;
+    const holder = await this.#storage.getByClaimKey({ orgId, claimKey });
+    if (!holder) return true;
+    if (await this.#factoryProjectExists({ orgId, factoryProjectId: holder.factoryProjectId })) return false;
+    await this.#storage.releaseProjectClaims({ orgId, factoryProjectId: holder.factoryProjectId });
+    return true;
   }
 
   async #requireItem(record: FactoryDeferredDecisionRecord) {
@@ -1434,7 +1563,7 @@ export class FactoryDecisionDispatcher {
       this.#storage.get({ orgId: record.orgId, id: record.workItemId }),
       this.#storage.listDecisionsForEvaluations(record.orgId, record.factoryProjectId, [record.evaluationId]),
     ]);
-    return decisionOvertaken({ boards: this.#boards, item, record, role, siblings });
+    return decisionOvertaken({ boards: await this.#boards.load(record), item, record, role, siblings });
   }
 
   async #roleSuperseded(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
@@ -1449,7 +1578,7 @@ export class FactoryDecisionDispatcher {
     // out from under the run by terminal-stage cleanup. Treat the decision as
     // superseded so it stops retrying to MAX_ATTEMPTS as `session_unavailable`.
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
-    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') return true;
+    if (item && workItemPhaseSemantics(await this.#boards.load(record), item)?.kind === 'terminal') return true;
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&
@@ -1472,7 +1601,7 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
-      const session = await this.#controller.getSessionByResource(binding.resourceId);
+      const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
     }
     if (!this.#prepareBinding) {
@@ -1487,20 +1616,29 @@ export class FactoryDecisionDispatcher {
   }
 
   async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
-    const session = await this.#controller.getSessionByResource(binding.resourceId);
+    const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
     await this.#switchThread(session, binding);
     return session;
   }
 
-  /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
+  /**
+   * Whether the run answers its plan approvals itself: the project says so, or the card's phase
+   * ends with an auto-approved `submit_plan`. Unset means off: a plan nobody asked us to answer is
+   * a plan someone should see.
+   */
   async #plansAreAutoApproved({
     orgId,
     factoryProjectId,
+    workItemId,
   }: {
     orgId: string;
     factoryProjectId: string;
+    workItemId: string | null;
   }): Promise<boolean> {
+    const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
+    if (item && autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan')
+      return true;
     return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
   }
 
@@ -1697,7 +1835,7 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

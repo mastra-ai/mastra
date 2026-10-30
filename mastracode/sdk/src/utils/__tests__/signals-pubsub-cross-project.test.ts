@@ -107,7 +107,7 @@ function createProject(
     },
   } as unknown as Session<unknown>;
   const sessions = {
-    getSessionByResource: async (id: string) => (sessionLive && id === resourceId ? session : undefined),
+    getSession: async (id: string) => (sessionLive && id === resourceId ? session : undefined),
   };
   let toolRunning = 0;
   let calls = 0;
@@ -416,11 +416,17 @@ describe('processes in different directories that share one resource', () => {
   }
 
   it("delivers a thread in its own project's process while another project's process holds the resource", async () => {
-    const { notifications, work, main, round } = await setUpCheckouts();
+    const { notifications, work, main, feature, round } = await setUpCheckouts();
     await notifications.createNotification(dueNotification(main.resourceId, 'feature-thread', { id: 'for-feature' }));
 
     for (let index = 0; index < 3 && work.ran.length === 0; index++) await round();
-    await waitFor(() => work.inFlight === 0, 'runs to settle');
+    // Steps leave the work log between a model call and its tool call, so wait for the run itself to end.
+    await waitFor(
+      () =>
+        work.inFlight === 0 &&
+        feature.agent.getActiveThreadRunId({ resourceId: main.resourceId, threadId: 'feature-thread' }) === undefined,
+      'the feature run to end',
+    );
 
     const record = await notifications.getNotification({ threadId: 'feature-thread', id: 'for-feature' });
     expect(record?.status, "the feature project's notification was never delivered").toBe('delivered');

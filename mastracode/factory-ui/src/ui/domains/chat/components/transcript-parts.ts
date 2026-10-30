@@ -1,6 +1,5 @@
-import { groupConsecutive, isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ConsecutiveGroups } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolInvocationPart } from '@mastra/react/ui';
+import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ReasoningPart, ToolInvocationPart } from '@mastra/react/ui';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
 
 import { isTerminalInvocationState } from '../services/transcript';
@@ -10,9 +9,17 @@ import { isRecord } from './transcript-shared';
 export type MessagePart = MessageEntry['message']['content']['parts'][number];
 export type ToolPart = Extract<MessagePart, { type: 'tool-invocation' }>;
 
+/**
+ * Whether text shows anything. Models told to end a turn with an empty message
+ * often send a zero-width space, which `trim()` keeps.
+ */
+export function hasVisibleText(text: string): boolean {
+  return /[^\s\u200B-\u200D\u2060\uFEFF]/.test(text);
+}
+
 export function messageText(parts: MessagePart[]): string {
   return parts
-    .flatMap(part => (isRecord(part) && part.type === 'text' ? [part.text] : []))
+    .flatMap(part => (isRecord(part) && part.type === 'text' && hasVisibleText(part.text) ? [part.text] : []))
     .join('\n\n')
     .trim();
 }
@@ -58,20 +65,25 @@ function keepsSlot(part: MessagePart): boolean {
   }
 }
 
+/** Persisted reasoning carries no state; it is streaming exactly while its message is. */
+export function reasoningWithState(part: ReasoningPart, streaming: boolean): ReasoningPart {
+  return { ...part, state: part.state ?? (streaming ? 'streaming' : 'done') };
+}
+
 export function draws(
   part: MessagePart,
+  entry: MessageEntry,
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
-  runtimeTools: MessageEntry['runtimeTools'],
 ): boolean {
   if (!isRecord(part)) return false;
 
   switch (part.type) {
     case 'text':
-      return part.text.trim().length > 0;
+      return hasVisibleText(part.text);
     case 'reasoning':
-      return getReasoningContent(part) !== undefined;
+      return getReasoningContent(reasoningWithState(part, Boolean(entry.streaming))) !== undefined;
     case 'tool-invocation':
-      return !isTaskTool(part.toolInvocation.toolName) && !awaitsPrompt(part, suspensions, runtimeTools);
+      return !isTaskTool(part.toolInvocation.toolName) && !awaitsPrompt(part, suspensions, entry.runtimeTools);
     case 'file':
       return true;
     case 'error':
@@ -88,21 +100,6 @@ function awaitsPrompt(
 ): boolean {
   const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
   return tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
-}
-
-const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
-
-export function collectToolGroups(
-  parts: readonly MessagePart[],
-  suspensions: ReadonlyMap<string, SuspensionPrompt>,
-): ConsecutiveGroups<ToolPart> {
-  return groupConsecutive(parts, {
-    key: part => part.toolInvocation.toolCallId,
-    joins: (part): part is ToolPart =>
-      part.type === 'tool-invocation' &&
-      !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
-      !suspensions.has(part.toolInvocation.toolCallId),
-  });
 }
 
 export function toolFromInvocationPart(

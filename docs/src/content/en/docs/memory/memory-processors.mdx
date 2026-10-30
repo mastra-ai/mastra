@@ -19,13 +19,13 @@ Memory processors are [processors](/docs/agents/processors) that operate specifi
 
 ## Built-in memory processors
 
-Mastra automatically adds these processors when memory is enabled:
+Mastra automatically adds these processors when memory is enabled. `MemoryInputFilter` is added only when a memory store is available and stored history will be loaded:
 
 ### `MemoryInputFilter`
 
-Trims client-echoed history before memory loaders run. For an existing thread, it keeps only the current user turn or new tool results. For an empty thread, it keeps the full initial input and removes provider item metadata from assistant parts that could refer to items that don't exist in storage.
+Trims client-echoed history before memory loaders run. For an existing thread, it keeps only the current user turn or new tool results. For an empty thread, it keeps the full initial input and removes provider item metadata from assistant parts that could refer to items that don't exist in storage. When `retainFullInput: true` is set, it skips both the trim and the metadata strip and processes the input exactly as supplied, while stored history still loads.
 
-This processor runs first so `MessageHistory`, `SemanticRecall`, and Observational Memory receive only the new input they need.
+By default, this processor runs first so `MessageHistory`, `SemanticRecall`, and Observational Memory receive only the new input they need.
 
 ### `MessageHistory`
 
@@ -35,13 +35,15 @@ Retrieves message history and persists new messages.
 
 ```typescript
 memory: new Memory({
-  lastMessages: 10,
+  options: {
+    lastMessages: 10,
+  },
 })
 ```
 
 **Mastra internally:**
 
-1. Creates a `MessageHistory` processor with `limit: 10`
+1. Creates a `MessageHistory` processor with `lastMessages: 10`
 1. Adds it to the agent's input processors (runs before the LLM)
 1. Adds it to the agent's output processors (runs after the LLM)
 
@@ -68,7 +70,9 @@ const agent = new Agent({
       id: 'memory-store',
       url: 'file:memory.db',
     }),
-    lastMessages: 10, // MessageHistory processor automatically added
+    options: {
+      lastMessages: 10, // MessageHistory processor automatically added
+    },
   }),
 })
 ```
@@ -92,7 +96,7 @@ memory: new Memory({
 1. Creates a `SemanticRecall` processor
 1. Adds it to the agent's input processors (runs before the LLM)
 1. Adds it to the agent's output processors (runs after the LLM)
-1. Requires both a vector store and embedder to be configured
+1. Requires a vector store, plus an embedder unless the vector store generates embeddings itself
 
 **What it does:**
 
@@ -197,7 +201,9 @@ const agent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
-    lastMessages: 10, // This would normally add MessageHistory(10)
+    options: {
+      lastMessages: 10, // This would normally add MessageHistory(10)
+    },
   }),
   inputProcessors: [
     customMessageHistory, // Your custom one is used instead
@@ -266,7 +272,7 @@ const agent = new Agent({
   name: 'safe-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
+  memory: new Memory({ options: { lastMessages: 10 } }),
   // Your guardrail runs BEFORE memory saves
   outputProcessors: [contentBlocker],
 })
@@ -306,7 +312,7 @@ const agent = new Agent({
   name: 'validated-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
+  memory: new Memory({ options: { lastMessages: 10 } }),
   // Your guardrail runs AFTER memory loads history
   inputProcessors: [inputValidator],
 })
@@ -320,6 +326,52 @@ const agent = new Agent({
 | Output | Before memory saves | Nothing saved to storage |
 
 Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
+
+## Aborted runs and saved messages
+
+Cancelling a run and blocking it with a processor `abort()` both stop generation, but they save different things:
+
+| What stops the run | Memory processors | What's persisted |
+| - | - | - |
+| `abortSignal` from the caller | Still run | The user message and the assistant text the user already saw |
+| `abort()` inside a processor | Skipped | Nothing; the tripwire blocks the save |
+
+A caller cancellation goes through output processors like any other run, so the built-in `MessageHistory` processor saves the thread. The partial answer is stored as an ordinary assistant message with no error part, which means the next turn starts from what the user actually read.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({ options: { lastMessages: 20 } })
+const agent = new Agent({
+  id: 'writer',
+  name: 'writer',
+  instructions: 'You write step-by-step migration guides.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory,
+})
+
+const controller = new AbortController()
+const stream = await agent.stream('Write the migration guide.', {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+  abortSignal: controller.signal,
+  onAbort: ({ steps, text }) => {
+    console.log(`Aborted after ${steps.length} steps with ${text?.length ?? 0} characters streamed`)
+  },
+})
+
+let streamed = ''
+for await (const chunk of stream.fullStream) {
+  if (chunk.type !== 'text-delta') continue
+  streamed += chunk.payload.text
+  if (streamed.length > 200) controller.abort()
+}
+
+// The partial answer is already in the thread
+const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1' })
+```
+
+`onAbort` receives the steps that completed before the cancellation and the assistant text streamed for the in-flight step. For the abort lifecycle itself, including durable runs aborted by `runId`, see the [`stream()` reference](/reference/streaming/agents/stream#aborting-a-run).
 
 ## Handling large attachments
 
@@ -383,7 +435,7 @@ export const supportAgent = new Agent({
   name: 'Support agent',
   instructions: 'Answer customer support questions.',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
+  memory: new Memory({ options: { lastMessages: 10 } }),
   inputProcessors: [new AttachmentUploader()],
 })
 ```

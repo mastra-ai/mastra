@@ -2,7 +2,12 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * Token usage when a tool call suspends (#27232).
@@ -70,16 +75,11 @@ const lookupTool = createTool({
 
 type RunHandle = { output?: any; fullStream: AsyncIterable<ChunkType>; runId: string };
 
-// A durable stream stays open while suspended, so its result promises never
-// settle. Give up after a moment so those engines fail on the assertion.
 const settled = <T>(value: Promise<T> | T) =>
   Promise.race([Promise.resolve(value), new Promise<undefined>(r => setTimeout(() => r(undefined), 1000))]);
 
 describeForAllEngines('AIMock loop scenario: token usage when a tool call suspends', engine => {
   const getMock = useLoopScenarioAimock();
-  // Durable and evented streams stay open while a tool call is suspended, so their
-  // stream() usage promises do not settle until the run resumes. See #27440.
-  const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
 
   async function setup(kind: Kind, { withPriorStep = false } = {}) {
     const llm = getMock();
@@ -114,10 +114,39 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
   const resume = (agent: any, kind: Kind, runId: string, toolCallId: string, answer = 'blue'): Promise<RunHandle> =>
     kind === 'suspend' ? agent.resumeStream({ answer }, { runId }) : agent.approveToolCall({ runId, toolCallId });
 
+  if (engine === 'inngest') {
+    for (const kind of ['suspend', 'approval'] as const) {
+      it(`[${kind}] Inngest forwards the suspending step's tokens through the tool-call boundary`, async () => {
+        const { agent, toolCallId } = await setup(kind, { withPriorStep: true });
+        const first: RunHandle = await agent.stream('go');
+        const firstOutput = first.output ?? first;
+        const heldUsage = firstOutput.usage;
+        const heldTotalUsage = firstOutput.totalUsage;
+        let suspension: ChunkType | undefined;
+        for await (const chunk of first.fullStream) {
+          if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+            suspension = chunk;
+            break;
+          }
+        }
+
+        expect(suspension).toBeDefined();
+        expect(tokens(suspension?.payload.usage)).toEqual(SUSPENDED);
+        expect(tokens(await settled(heldUsage))).toEqual(add(PRIOR, SUSPENDED));
+        expect(tokens(await settled(heldTotalUsage))).toEqual(add(PRIOR, SUSPENDED));
+
+        const resumed = await drain(await resume(agent, kind, first.runId, toolCallId));
+        expect(await resumed.text).toBe('done');
+        expect(tokens(await resumed.totalUsage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+      });
+    }
+  }
+
   for (const kind of ['suspend', 'approval'] as const) {
-    itFailsOnDurable(`[${kind}] stream() reports the suspended step usage`, async () => {
+    it(`[${kind}] stream() reports the suspended step usage`, async () => {
       const { agent } = await setup(kind);
-      const output = await drain(await agent.stream('go'));
+      const run = await agent.stream('go');
+      const output = await drain(run);
 
       expect(tokens(await settled(output.usage))).toEqual(SUSPENDED);
       expect(tokens(await settled(output.totalUsage))).toEqual(SUSPENDED);
@@ -143,15 +172,31 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
       expect(tokens(await resumed.totalUsage)).toEqual(add(SUSPENDED, RESUMED));
     });
 
-    itFailsOnDurable(`[${kind}] steps before the suspension count in both suspended and resumed totals`, async () => {
+    it(`[${kind}] exposes prior and suspended usage before resume, then counts the step once`, async () => {
       const { agent, toolCallId } = await setup(kind, { withPriorStep: true });
       const first: RunHandle = await agent.stream('go');
-      const firstOutput = await drain(first);
-      expect(tokens(await settled(firstOutput.totalUsage))).toEqual(add(PRIOR, SUSPENDED));
+      const firstOutput = first.output ?? first;
+      const heldUsage = firstOutput.usage;
+      const heldTotalUsage = firstOutput.totalUsage;
+      const heldFinishReason = firstOutput.finishReason;
+      await drain(first);
+
+      expect(tokens(await settled(heldUsage))).toEqual(add(PRIOR, SUSPENDED));
+      expect(tokens(await settled(heldTotalUsage))).toEqual(add(PRIOR, SUSPENDED));
+      expect(await settled(heldFinishReason)).toBe('suspended');
 
       const resumed = await drain(await resume(agent, kind, first.runId, toolCallId));
       expect(await resumed.text).toBe('done');
       expect(tokens(await resumed.totalUsage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+
+      if (isDurableEngineVariant(engine)) {
+        expect(tokens(await firstOutput.usage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+        expect(tokens(await firstOutput.totalUsage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+        expect(await firstOutput.finishReason).toBe('stop');
+        expect(tokens(await heldUsage)).toEqual(add(PRIOR, SUSPENDED));
+        expect(tokens(await heldTotalUsage)).toEqual(add(PRIOR, SUSPENDED));
+        expect(await heldFinishReason).toBe('suspended');
+      }
     });
   }
 

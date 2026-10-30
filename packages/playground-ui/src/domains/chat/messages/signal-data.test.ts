@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   formatSignalValue,
+  getMcpEventSignalInfo,
   getNotificationMetadata,
   getSignalType,
   isRecord,
@@ -213,6 +214,37 @@ describe('getNotificationMetadata', () => {
       priority: undefined,
       status: undefined,
       pending: undefined,
+    });
+  });
+});
+
+describe('getMcpEventSignalInfo', () => {
+  describe('when the signal is an MCP event notification', () => {
+    it('returns the server, event and gap flag from the attributes', () => {
+      expect(
+        getMcpEventSignalInfo({
+          type: 'notification',
+          attributes: { kind: 'mcp-event', server: 'tickets', event: 'ticket.created', truncated: true },
+        }),
+      ).toEqual({ kind: 'mcp-event', server: 'tickets', event: 'ticket.created', truncated: true });
+    });
+  });
+
+  describe('when the kind comes from notification metadata', () => {
+    it('recognizes an ended subscription', () => {
+      expect(
+        getMcpEventSignalInfo({
+          type: 'notification',
+          metadata: { notification: { kind: 'mcp-event-subscription-ended' } },
+          attributes: { server: 'tickets', event: 'ticket.created' },
+        }),
+      ).toEqual({ kind: 'mcp-event-subscription-ended', server: 'tickets', event: 'ticket.created', truncated: false });
+    });
+  });
+
+  describe('when the signal is another notification', () => {
+    it('returns undefined', () => {
+      expect(getMcpEventSignalInfo({ type: 'notification', attributes: { kind: 'issue-opened' } })).toBeUndefined();
     });
   });
 });

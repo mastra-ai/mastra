@@ -86,7 +86,7 @@ export function useStartFactoryRun() {
 
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
+          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId),
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
         // The session was just minted. Without this the sidebar keeps serving

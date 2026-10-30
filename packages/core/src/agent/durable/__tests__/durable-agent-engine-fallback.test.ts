@@ -1,5 +1,7 @@
 /**
- * Pins the storage-capability fallback for durable agents.
+ * Pins the storage-capability fallback for durable agents (COR-1410, harness T9).
+ * The harness uses LibSQL with a capability override; these tests use the existing
+ * MockStore supportsConcurrentUpdates spy, not real-adapter atomicity coverage.
  *
  * The evented engine advances a run from concurrent workers, so its `createRun()`
  * refuses to start on a store that cannot apply concurrent updates atomically
@@ -19,6 +21,7 @@ import { noopLogger } from '../../../logger/noop-logger';
 import { Mastra } from '../../../mastra';
 import { MockStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
 /**
@@ -61,17 +64,19 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
     // The agent resolved onto the default engine rather than throwing.
     expect((agent.getWorkflow() as any).engineType).toBe('default');
 
-    // The degradation is visible and names the capability, and is memoized so it
-    // warns once rather than on every read.
-    const capabilityWarnings = warn.mock.calls.filter((c: any[]) => String(c[0]).includes('supportsConcurrentUpdates'));
-    expect(capabilityWarnings).toHaveLength(1);
-
-    // Most importantly: the agent still runs. This is the regression being prevented.
     const { output, cleanup } = await agent.stream('Hi');
-    await output.consumeStream();
-    expect(await output.text).toBe('hello');
-
-    cleanup();
+    try {
+      await output.consumeStream();
+      expect(await output.text).toBe('hello');
+      const capabilityWarnings = warn.mock.calls.filter(([message]) =>
+        String(message).includes('supportsConcurrentUpdates'),
+      );
+      expect(capabilityWarnings).toHaveLength(1);
+      expect(String(capabilityWarnings[0]![0])).toMatch(/will not resume on their own/);
+      expect(warn.mock.calls.filter(([message]) => String(message).includes('no Mastra host'))).toHaveLength(0);
+    } finally {
+      await cleanup();
+    }
   }, 30_000);
 
   it('stays on the evented engine when the store supports atomic concurrent updates', async () => {
@@ -82,6 +87,42 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
     new Mastra({ storage: new MockStore(), agents: { 'atomic-store-agent': agent }, logger: false });
 
     expect((agent.getWorkflow() as any).engineType).toBe('evented');
-    expect(warn.mock.calls.filter((c: any[]) => String(c[0]).includes('supportsConcurrentUpdates'))).toHaveLength(0);
+    const { output, cleanup } = await agent.stream('Hi');
+    try {
+      await output.consumeStream();
+      expect(await output.text).toBe('hello');
+      expect(warn.mock.calls.filter(([message]) => String(message).includes('supportsConcurrentUpdates'))).toHaveLength(
+        0,
+      );
+      expect(warn.mock.calls.filter(([message]) => String(message).includes('no Mastra host'))).toHaveLength(0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('keeps an ordinary hosted DurableAgent on the default engine without fallback warnings', async () => {
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'durable-default',
+        name: 'durable-default',
+        instructions: 'Say hello',
+        model: createTextStreamModel('hello'),
+      }),
+    });
+    const warn = captureWarnings(agent);
+    new Mastra({ storage: new MockStore(), agents: { agent }, logger: false });
+
+    expect(agent.getWorkflow().engineType).toBe('default');
+    const { output, cleanup } = await agent.stream('Hi');
+    try {
+      await output.consumeStream();
+      expect(await output.text).toBe('hello');
+      expect(warn.mock.calls.filter(([message]) => String(message).includes('supportsConcurrentUpdates'))).toHaveLength(
+        0,
+      );
+      expect(warn.mock.calls.filter(([message]) => String(message).includes('no Mastra host'))).toHaveLength(0);
+    } finally {
+      await cleanup();
+    }
   });
 });

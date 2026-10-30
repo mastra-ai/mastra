@@ -39,13 +39,13 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "deepseek/deepseek-v4-flash": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["high", "max"]

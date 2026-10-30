@@ -227,6 +227,22 @@ describe('factory_list_work_items', () => {
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
   });
 
+  it('links each card on its board when a public URL is configured', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+    try {
+      const { run } = setup({ items: rows });
+      const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
+      expect(result.items.find(row => row.id === 'a')?.url).toBe(
+        'https://factory.example.com/factories/project-1/work?item=a',
+      );
+      expect(result.items.find(row => row.id === 'c')?.url).toBe(
+        'https://factory.example.com/factories/project-1/review?item=c',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('defaults to 25 rows, caps at 50 and flags truncation', async () => {
     const many = Array.from({ length: 60 }, (_, index) => item({ id: `m${index}` }));
     const { run } = setup({ items: many });
@@ -303,6 +319,23 @@ describe('factory_inspect_work_item', () => {
     const decisions = byId.decisions as Array<{ error: string }>;
     expect(decisions[0]!.error).toHaveLength(MAX_ERROR);
     expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
+  });
+
+  it('shows whether each session is mid-run and when its thread last moved (#27742)', async () => {
+    const { run, deps } = setup({ items: [target], bindings: [binding(TARGET, 'work')] });
+    const lastMoved = new Date('2026-10-20T01:38:00Z');
+    deps.messaging = async () => ({
+      controller: {
+        getSession: async (sessionId: string) =>
+          sessionId === `session-${TARGET}` ? { stream: { isActive: () => true } } : undefined,
+        queryThreadById: async ({ threadId }: { threadId: string }) =>
+          threadId === 't' ? { id: 't', updatedAt: lastMoved } : null,
+      } as never,
+    });
+    const result = await run<{ sessions: unknown[] }>('factory_inspect_work_item', { workItem: TARGET });
+    expect(result.sessions).toEqual([
+      expect.objectContaining({ role: 'work', active: true, running: true, lastActivityAt: lastMoved.toISOString() }),
+    ]);
   });
 
   it('lists the sessions following the item and marks the caller', async () => {

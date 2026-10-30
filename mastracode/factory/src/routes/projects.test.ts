@@ -73,6 +73,38 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
+  it("hands a deleted factory's Jira projects back so another factory can take all their issues", async () => {
+    const seed = await createFactoryStorageForTests();
+    const create = (name: string) => seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name } });
+    const platform = await create('Platform');
+    const payments = await create('Payments');
+    const growth = await create('Growth');
+    const bind = (factoryProjectId: string, labels: string[] | null) =>
+      seed.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId: '10000',
+        factoryProjectId,
+        board: 'work',
+        labels,
+      });
+    await bind(platform.id, null);
+    await bind(payments.id, ['payments']);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, undefined, undefined, undefined, { intake: seed.intake }));
+
+    expect((await app.request(`/web/factory/projects/${platform.id}`, { method: 'DELETE' })).status).toBe(204);
+
+    expect(await bind(growth.id, null)).toEqual({ conflicts: [] });
+    expect(
+      (await seed.intake.listBindings({ orgId: 'org-1' })).map(({ factoryProjectId }) => factoryProjectId).sort(),
+    ).toEqual([payments.id, growth.id].sort());
+  });
+
   it('treats the removed slackWorkItemsEnabled setting from an old client as an unknown field', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
@@ -325,7 +357,7 @@ describe('ProjectRoutes', () => {
       const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
       const sessions = new Map([
         [
-          'resource-applied',
+          'session-thread-applied',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -333,10 +365,13 @@ describe('ProjectRoutes', () => {
             },
           },
         ],
-        ['resource-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
-        ['resource-mode-unknown', { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } }],
+        ['session-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
         [
-          'resource-apply-failed',
+          'session-thread-mode-unknown',
+          { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } },
+        ],
+        [
+          'session-thread-apply-failed',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -350,7 +385,7 @@ describe('ProjectRoutes', () => {
         get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
       const controller = {
-        getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId) ?? null),
+        getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null),
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
 
       const response = await mount(seed, { workItems, controller }).request(

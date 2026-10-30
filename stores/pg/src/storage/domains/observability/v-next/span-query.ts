@@ -9,7 +9,14 @@ import type {
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
-import { compileSpanQueryPredicate, timeToFirstChunkSupported, runWithPostgresTraceQueryTimeout } from './trace-query';
+import {
+  compileSpanQueryPredicate,
+  keysetSortBounds,
+  timeToFirstChunkSupported,
+  timeToFirstTokenSupported,
+  runWithPostgresTraceQueryTimeout,
+  spanQueryOutcomeFieldsSupported,
+} from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const fields = [
@@ -39,6 +46,9 @@ const fields = [
   'environment',
   'executionSource',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -61,11 +71,13 @@ function selectedKeys(rows: SpanQueryIdentity[], values: unknown[]): string {
 function afterCursor(plan: TrustedSpanQueryPlan, values: unknown[]): string {
   if (!plan.cursor) return 'TRUE';
   const cursor = plan.cursor;
-  values.push(cursor.sortValue);
-  const timestamp = `$${values.length}::timestamptz`;
-  const field = `s."${plan.orderBy.field}"`;
-  const terms = [`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${timestamp}`];
-  const equal = [`${field} = ${timestamp}`];
+  const { past: terms, level } = keysetSortBounds(
+    `s."${plan.orderBy.field}"`,
+    plan.orderBy.direction,
+    cursor.sortValue,
+    values,
+  );
+  const equal = [level];
   for (const key of identityFields) {
     const ref = `s."${key}" COLLATE "C"`;
     const value = cursor[key];
@@ -81,7 +93,15 @@ function afterCursor(plan: TrustedSpanQueryPlan, values: unknown[]): string {
   return `(${terms.join(' OR ')})`;
 }
 
-export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryPlan) {
+/**
+ * The spans `querySpans()` pages through, as a `selected` CTE: the latest completed copy of each
+ * span that starts in the window and matches `where`. `aggregateSpans()` groups the same CTE.
+ * `values` holds the CTEs' parameters; callers append their own.
+ */
+export function compilePostgresSpanSelection(
+  schema: string,
+  plan: Pick<TrustedSpanQueryPlan, 'timeRange' | 'scope' | 'where'>,
+): { ctes: string[]; values: unknown[] } {
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
   const scope: string[] = [];
   if (plan.scope) {
@@ -94,26 +114,21 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   }
   const predicate = plan.where ? compileSpanQueryPredicate(plan.where, values.length + 1) : { sql: 'TRUE', values: [] };
   values.push(...predicate.values);
-  const after = afterCursor(plan, values);
-  values.push(plan.limit + 1);
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-  // Older core still accepts model/provider predicates. Keep their source fields available
-  // for that contract; newer core rejects them and only extracts values for the selected page.
-  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
-    ? ''
-    : `CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
-       CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,`;
   // Completed records win; the greatest end time follows existing getSpan semantics.
+  // `model` and `provider` filters read only their dedicated columns, never span attributes.
   // Payload columns are read only after page selection, inside the same snapshot.
   // A completed span ends at or after it starts, so the end-time bound only prunes partitions.
-  const text = `WITH candidate_ids AS MATERIALIZED (
+  const ctes = [
+    `candidate_ids AS MATERIALIZED (
     SELECT DISTINCT ${identities} FROM ${table}
     WHERE "startedAt" >= $1 AND "startedAt" < $2 AND "endedAt" >= $1 AND NOT "isPending"
       ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
-  ), current_spans AS MATERIALIZED (
+  )`,
+    `current_spans AS MATERIALIZED (
     SELECT DISTINCT ON (${identities})
       ${fields.map(field => `"${field}"`).join(', ')}, "startedAt", "endedAt", "cursorId"::text AS version,
-      ${legacyModelFields}
+      "model", "provider",
       (EXTRACT(EPOCH FROM ("endedAt" - "startedAt")) * 1000)::float8 AS "durationMs",
       CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
       error IS NOT NULL AS "hasError"
@@ -124,12 +139,25 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
       SELECT "organizationId" IS NULL, COALESCE("organizationId", ''), "resourceId" IS NULL, COALESCE("resourceId", ''), "traceId", "spanId" FROM candidate_ids
     ) ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
     ORDER BY ${identities}, "endedAt" DESC, "cursorId" DESC
-  ), candidates AS (
+  )`,
+    `candidates AS (
     SELECT *, CASE WHEN "hasError" THEN 'error' ELSE NULL END AS error FROM current_spans
-  )
+  )`,
+    `selected AS (
+    SELECT * FROM candidates s WHERE s."startedAt" >= $1 AND s."startedAt" < $2 AND (${predicate.sql})
+  )`,
+  ];
+  return { ctes, values };
+}
+
+export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryPlan) {
+  const { ctes, values } = compilePostgresSpanSelection(schema, plan);
+  const after = afterCursor(plan, values);
+  values.push(plan.limit + 1);
+  const text = `WITH ${ctes.join(', ')}
   SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'version'].map(field => `s."${field}"`).join(', ')}
-  FROM candidates s WHERE s."startedAt" >= $1 AND s."startedAt" < $2 AND (${predicate.sql}) AND ${after}
-  ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityOrder}
+  FROM selected s WHERE ${after}
+  ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityOrder}
   LIMIT $${values.length}`;
   return { text, values };
 }
@@ -175,12 +203,25 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
     async tx => {
       const query = compilePostgresSpanQuery(schema, plan);
       const rows = await tx.any<Selected>(query.text, query.values);
-      const selected = rows.map(({ version: _version, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
-        ...row,
-        ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
-        startedAt: startedAt.toISOString(),
-        endedAt: endedAt.toISOString(),
-      }));
+      const selected = rows.map(
+        ({
+          version: _version,
+          startedAt,
+          endedAt,
+          timeToFirstChunkMs,
+          timeToFirstTokenMs,
+          outcome,
+          stopReason,
+          ...row
+        }) => ({
+          ...row,
+          ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
+          ...(timeToFirstTokenSupported && { timeToFirstTokenMs }),
+          ...(spanQueryOutcomeFieldsSupported && { outcome, stopReason }),
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString(),
+        }),
+      );
       const page = rows.slice(0, plan.limit);
       if (!page.length) return buildSpanQueryResponse(plan, [], []);
       const remaining = async () => {
@@ -198,24 +239,35 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
         })
         .join(' OR ');
       // Stored previews, plus the payload only where its preview is NULL (a row written before the
-      // preview columns existed), so new rows never read their payloads here.
+      // preview columns existed), so new rows never read their payloads here. Model and provider
+      // fall back to span attributes for rows written before their columns existed; that fallback
+      // is returned, never filtered on.
       const payloadRows = await tx.any<
-        SpanQueryIdentity & Record<string, unknown> & { model: string | null; provider: string | null }
+        SpanQueryIdentity &
+          Record<string, unknown> & {
+            model: string | null;
+            provider: string | null;
+            stopReasonContext: Record<string, unknown> | null;
+          }
       >(
-        `SELECT ${identities},
-      CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
-      CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,
+        `SELECT ${identities}, "stopReasonContext",
+      COALESCE("model", CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END) AS model,
+      COALESCE("provider", CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END) AS provider,
       ${PREVIEW_PAYLOADS.map(([preview, payload]) => `"${preview}", CASE WHEN ${missingPreviewSql(`"${preview}"`)} THEN "${payload}" END AS "${payload}"`).join(',\n      ')}
       FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} WHERE ${payloadWhere}`,
         payloadValues,
       );
       const payloads = payloadRows.map(toSpanQueryPayload);
       const metadata = new Map(payloadRows.map(row => [coreStorage.spanQueryIdentityKey(row), row]));
-      const hydrated = selected.map(row => ({
-        ...row,
-        model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
-        provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
-      }));
+      const hydrated = selected.map(row => {
+        const stored = metadata.get(coreStorage.spanQueryIdentityKey(row));
+        return {
+          ...row,
+          model: stored?.model ?? null,
+          provider: stored?.provider ?? null,
+          ...(spanQueryOutcomeFieldsSupported && { stopReasonContext: stored?.stopReasonContext ?? null }),
+        };
+      });
       // Preserve costs only for older core contracts that still return them.
       let metrics: SpanQueryCostMetric[] = [];
       if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY) {

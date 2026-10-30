@@ -39,7 +39,7 @@ const uppercaser = (onCall: () => void) => ({
   },
 });
 
-void runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
+runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
   const { agentId, engine, finalText, prompt, runId } = peer.args;
   let processorResolutions = 0;
   let processorCalls = 0;

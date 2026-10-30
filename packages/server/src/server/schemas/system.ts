@@ -49,6 +49,16 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryRootSpanFields: z
     .boolean()
     .describe('Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`'),
+  traceQueryRootEntityId: z
+    .boolean()
+    .describe('Root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`'),
+  traceQueryTimeToFirstChunkSort: z.boolean().describe('Sorting trace and span queries by `timeToFirstChunkMs`'),
+  traceQueryTimeToFirstToken: z
+    .boolean()
+    .describe(
+      '`timeToFirstTokenMs` in trace, thread and span query results, and predicates on it in trace, thread and span queries',
+    ),
+  traceQueryTimeToFirstTokenSort: z.boolean().describe('Sorting trace and span queries by `timeToFirstTokenMs`'),
   traceQueryDiscovery: z
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
@@ -58,6 +68,11 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable.',
     ),
+  spanAggregate: z
+    .boolean()
+    .describe(
+      'Span aggregation (POST /observability/spans/aggregate). Unlike `spanQuery`, clients should treat a missing value as unavailable.',
+    ),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
   threadQueryRows: z
     .boolean()
@@ -66,6 +81,36 @@ export const observabilityStorageCapabilitiesSchema = z.object({
       'Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable.',
     ),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
+  spanQueryContextFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable.',
+    ),
+  spanQueryModelFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable.',
+    ),
+  spanAggregateModelDimensions: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`model` and `provider` in span aggregate `groupBy` and `countDistinct`. Treat a missing value as unavailable.',
+    ),
+  spanQueryOutcomeFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`outcome` and `stopReason` predicates in span queries and span aggregates (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows. Treat a missing value as unavailable.',
+    ),
+  traceQueryOutcomeFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      "The root span's `outcome` and `stopReason` in trace-scope predicates and trace aggregates, both fields in `spans.some`/`spans.none` predicates and value discovery, and the root span's `outcome`, `stopReason` and `stopReasonContext` on trace rows. Treat a missing value as unavailable.",
+    ),
   traceRetentionDays: z
     .number()
     .int()

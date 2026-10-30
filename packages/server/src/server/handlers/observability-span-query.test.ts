@@ -68,6 +68,24 @@ function strictValidationError(request: unknown) {
   return QUERY_SPANS.onValidationError?.(parsed.error, 'body');
 }
 
+const TIMING_FIELDS = [
+  {
+    field: 'timeToFirstChunkMs',
+    name: 'Time to first chunk',
+    feature: 'trace-query-time-to-first-chunk',
+    sortFeature: 'trace-query-time-to-first-chunk-sort',
+  },
+  {
+    field: 'timeToFirstTokenMs',
+    name: 'Time to first token',
+    feature: 'trace-query-time-to-first-token',
+    sortFeature: 'trace-query-time-to-first-token-sort',
+  },
+] as const;
+/** The storage features of every other timing field, so a test proves each field is gated on its own. */
+const otherTimingFeatures = (field: string, key: 'feature' | 'sortFeature') =>
+  TIMING_FIELDS.filter(timing => timing.field !== field).map(timing => timing[key]);
+
 describe('QUERY_SPANS', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -113,6 +131,32 @@ describe('QUERY_SPANS', () => {
     await QUERY_SPANS.handler(params(updated.mastra, request));
     expect(updated.observabilityStore.querySpans).toHaveBeenCalledOnce();
   });
+
+  it.each(['model', 'provider'])(
+    'returns 501 for %s predicates before calling an adapter without dedicated columns',
+    async field => {
+      const request = {
+        timeRange: TIME_RANGE,
+        where: { op: 'not', arg: { op: 'eq', left: { path: field }, right: { literal: 'value' } } },
+      };
+      const { mastra, observabilityStore } = createHarness(['span-query', 'span-query-context-fields']);
+      const error = await captureHttpException(QUERY_SPANS.handler(params(mastra, request)));
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: 'Model and provider span predicates are not supported by the configured observability store',
+      });
+      expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+
+      const updated = createHarness(['span-query', 'span-query-context-fields', 'span-query-model-fields']);
+      await QUERY_SPANS.handler(params(updated.mastra, request));
+      expect(updated.observabilityStore.querySpans).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { type: 'not', arg: { type: 'comparison', field, operator: 'eq', value: 'value' } },
+        }),
+      );
+    },
+  );
 
   it('keeps existing predicates usable with an older adapter', async () => {
     const { mastra, observabilityStore } = createHarness(['span-query']);
@@ -317,8 +361,8 @@ describe('QUERY_SPANS', () => {
     expect(observabilityStore.querySpans).not.toHaveBeenCalled();
   });
 
-  it('returns 501 before calling an older store for time to first chunk predicates', async () => {
-    const { mastra, observabilityStore } = createHarness();
+  it.each(TIMING_FIELDS)('returns 501 before calling an older store for $field predicates', async ({ field, name }) => {
+    const { mastra, observabilityStore } = createHarness(['span-query', ...otherTimingFeatures(field, 'feature')]);
     const error = await captureHttpException(
       QUERY_SPANS.handler(
         params(mastra, {
@@ -327,7 +371,7 @@ describe('QUERY_SPANS', () => {
             op: 'and',
             args: [
               { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
-              { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+              { op: 'gt', left: { path: field }, right: { literal: 500 } },
             ],
           },
         }),
@@ -337,24 +381,104 @@ describe('QUERY_SPANS', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'SPAN_QUERY_UNSUPPORTED',
-      message: 'Time to first chunk predicates are not supported by the configured observability store',
+      message: `${name} predicates are not supported by the configured observability store`,
     });
     expect(observabilityStore.querySpans).not.toHaveBeenCalled();
   });
 
-  it('passes time to first chunk predicates to stores that advertise support', async () => {
-    const { mastra, observabilityStore } = createHarness(['span-query', 'trace-query-time-to-first-chunk']);
+  it.each(TIMING_FIELDS)('passes $field predicates to stores that advertise support', async ({ field, feature }) => {
+    const { mastra, observabilityStore } = createHarness(['span-query', feature]);
 
     await QUERY_SPANS.handler(
       params(mastra, {
         timeRange: TIME_RANGE,
-        where: { op: 'lte', left: { path: 'timeToFirstChunkMs' }, right: { literal: 0 } },
+        where: { op: 'lte', left: { path: field }, right: { literal: 0 } },
       }),
     );
 
     expect(observabilityStore.querySpans).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'lte', value: 0 },
+        where: { type: 'comparison', field, operator: 'lte', value: 0 },
+      }),
+    );
+  });
+
+  it.each(TIMING_FIELDS)(
+    'returns 501 before calling an older store for a $field sort',
+    async ({ field, name, feature }) => {
+      const { mastra, observabilityStore } = createHarness([
+        'span-query',
+        feature,
+        ...otherTimingFeatures(field, 'sortFeature'),
+      ]);
+      const error = await captureHttpException(
+        QUERY_SPANS.handler(params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field, direction: 'asc' }] })),
+      );
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: `Sorting by ${name.toLowerCase()} is not supported by the configured observability store`,
+      });
+      expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(TIMING_FIELDS)('passes a $field sort to stores that advertise support', async ({ field, sortFeature }) => {
+    const { mastra, observabilityStore } = createHarness(['span-query', sortFeature]);
+
+    await QUERY_SPANS.handler(params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field, direction: 'desc' }] }));
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { field, direction: 'desc' } }),
+    );
+  });
+
+  it.each(['outcome', 'stopReason'])('returns 501 before calling an older store for %s predicates', async field => {
+    const { mastra, observabilityStore } = createHarness(['span-query', 'span-query-context-fields']);
+    const error = await captureHttpException(
+      QUERY_SPANS.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: { op: 'not', arg: { op: 'in', value: { path: field }, set: ['limit', 'my-custom-outcome'] } },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_QUERY_UNSUPPORTED',
+      message: 'Outcome and stop reason span fields are not supported by the configured observability store',
+    });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  });
+
+  it('passes outcome predicates to stores that advertise span-query-outcome-fields', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-query', 'span-query-outcome-fields']);
+
+    await QUERY_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+            { op: 'notExists', path: 'stopReason' },
+          ],
+        },
+      }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          type: 'boolean',
+          operator: 'and',
+          args: [
+            { type: 'comparison', field: 'outcome', operator: 'eq', value: 'limit' },
+            { type: 'presence', field: 'stopReason', operator: 'notExists' },
+          ],
+        },
       }),
     );
   });

@@ -8,15 +8,15 @@
  * on the unmaintained npm `fastembed` package.
  */
 
-import { AddedToken, Tokenizer } from '@anush008/tokenizers';
 import fs from 'node:fs';
 import type { PathLike } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
-import * as ort from 'onnxruntime-node';
+import { AddedToken, Tokenizer } from '@anush008/tokenizers';
 import { downloadFile } from '@huggingface/hub';
+import * as ort from 'onnxruntime-node';
 
 export enum ExecutionProvider {
   CPU = 'cpu',
@@ -81,17 +81,30 @@ interface SparseModelInfo {
 type ModelInput = Record<string, ort.Tensor>;
 
 function normalize(v: number[]): number[] {
+  if (v.some(val => !Number.isFinite(val))) {
+    throw new Error('Model produced a non-finite dense embedding value');
+  }
   const norm = Math.sqrt(v.reduce((acc, val) => acc + val * val, 0));
   const epsilon = 1e-12;
   return v.map(val => val / Math.max(norm, epsilon));
 }
 
-function getEmbeddings(data: number[], dimensions: [number, number, number]): number[][] {
-  const [x, _y, z] = dimensions;
-  return new Array(x).fill(undefined).map((_, index) => {
-    const startIndex = index * _y * z;
-    const endIndex = startIndex + z;
-    return data.slice(startIndex, endIndex);
+function getEmbeddings(data: number[], dimensions: [number, number, number], masks?: bigint[][]): number[][] {
+  const [batchSize, sequenceLength, hiddenSize] = dimensions;
+  return Array.from({ length: batchSize }, (_, batchIndex) => {
+    const start = batchIndex * sequenceLength * hiddenSize;
+    if (!masks) return data.slice(start, start + hiddenSize);
+
+    const embedding = new Array<number>(hiddenSize).fill(0);
+    let tokenCount = 0;
+    for (let tokenIndex = 0; tokenIndex < sequenceLength; tokenIndex++) {
+      if (masks[batchIndex]![tokenIndex] === 0n) continue;
+      tokenCount++;
+      for (let dimension = 0; dimension < hiddenSize; dimension++) {
+        embedding[dimension]! += data[start + tokenIndex * hiddenSize + dimension]!;
+      }
+    }
+    return embedding.map(value => value / Math.max(tokenCount, 1));
   });
 }
 
@@ -174,7 +187,7 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
     throw new Error(`Tokenizer config file not found at ${tokenizerFilePath}`);
   }
   const tokenizerConfig = JSON.parse(fs.readFileSync(tokenizerFilePath, 'utf-8'));
-  maxLength = Math.min(maxLength, tokenizerConfig['model_max_length']);
+  maxLength = Math.min(maxLength, tokenizerConfig['model_max_length'] ?? maxLength);
 
   const tokensMapPath = path.join(modelDir.toString(), 'special_tokens_map.json');
   if (!fs.existsSync(tokensMapPath)) {
@@ -185,10 +198,11 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
   const tokenizer = Tokenizer.fromFile(tokenizerPath);
 
   tokenizer.setTruncation(maxLength);
+  const padToken = tokenizerConfig['pad_token'];
   tokenizer.setPadding({
     maxLength,
     padId: config['pad_token_id'],
-    padToken: tokenizerConfig['pad_token'],
+    padToken: isAddedTokenMap(padToken) ? padToken.content : padToken,
   });
 
   for (const token of Object.values(tokensMap)) {
@@ -205,6 +219,46 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
     }
   }
   return tokenizer;
+}
+
+function assertValidBatchSize(batchSize: number): void {
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+    throw new RangeError(`batchSize must be a positive safe integer, received ${String(batchSize)}`);
+  }
+}
+
+function assertValidMaxLength(maxLength: number): void {
+  if (!Number.isSafeInteger(maxLength) || maxLength <= 0) {
+    throw new RangeError(`maxLength must be a positive safe integer, received ${String(maxLength)}`);
+  }
+}
+
+function getRequiredOutput(outputs: Record<string, ort.Tensor>, outputName: string): ort.Tensor {
+  const tensor = outputs[outputName];
+  if (!tensor) {
+    throw new Error(
+      `Expected model output "${outputName}" was not found. Available outputs: ${Object.keys(outputs).join(', ') || '(none)'}`,
+    );
+  }
+  return tensor;
+}
+
+// Pooling indexes token-level [batch, sequence, features] output with one row per input text; other ranks would
+// silently yield empty vectors, and other batch sizes would yield the wrong number of vectors or read missing masks.
+function getOutputDimensions(
+  outputName: string,
+  tensor: ort.Tensor,
+  expectedBatchSize: number,
+): [number, number, number] {
+  if (tensor.dims.length !== 3) {
+    throw new Error(`Expected model output "${outputName}" to have 3 dimensions, received [${tensor.dims.join(', ')}]`);
+  }
+  if (tensor.dims[0] !== expectedBatchSize) {
+    throw new Error(
+      `Expected model output "${outputName}" to have batch size ${expectedBatchSize}, received ${tensor.dims[0]}`,
+    );
+  }
+  return tensor.dims as [number, number, number];
 }
 
 export class FlagEmbedding extends Embedding {
@@ -227,6 +281,7 @@ export class FlagEmbedding extends Embedding {
     modelAbsoluteDirPath = '',
     modelName = '',
   }: Partial<InitOptions> = {}) {
+    assertValidMaxLength(maxLength);
     if (model === EmbeddingModel.CUSTOM) {
       if (!modelAbsoluteDirPath) {
         throw new Error('For custom model, modelAbsoluteDirPath is required in FlagEmbedding.init');
@@ -261,6 +316,7 @@ export class FlagEmbedding extends Embedding {
    * Counts texts longer than the model's token window. `embed()` silently truncates these to `maxLength`.
    */
   async countTruncated(textStrings: string[], batchSize: number = 256): Promise<{ count: number; maxLength: number }> {
+    assertValidBatchSize(batchSize);
     let count = 0;
     let maxLength = 0;
     for (let i = 0; i < textStrings.length; i += batchSize) {
@@ -327,6 +383,7 @@ export class FlagEmbedding extends Embedding {
   }
 
   async *embed(textStrings: string[], batchSize: number = 256) {
+    assertValidBatchSize(batchSize);
     for (let i = 0; i < textStrings.length; i += batchSize) {
       const batchTexts = textStrings.slice(i, i + batchSize);
 
@@ -373,10 +430,11 @@ export class FlagEmbedding extends Embedding {
 
       const output = await this.session.run(inputs);
 
-      const lastHiddenState = output.last_hidden_state!;
+      const lastHiddenState = getRequiredOutput(output, 'last_hidden_state');
       const embeddings = getEmbeddings(
         lastHiddenState.data as unknown[] as number[],
-        lastHiddenState.dims as [number, number, number],
+        getOutputDimensions('last_hidden_state', lastHiddenState, batchTexts.length),
+        this.model === EmbeddingModel.AllMiniLML6V2 || this.model === EmbeddingModel.MLE5Large ? maskArray : undefined,
       );
 
       yield embeddings.map(normalize);
@@ -429,6 +487,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
     modelAbsoluteDirPath = '',
     modelName = '',
   }: Partial<InitSparseOptions> = {}) {
+    assertValidMaxLength(maxLength);
     if (model === SparseEmbeddingModel.CUSTOM) {
       if (!modelAbsoluteDirPath) {
         throw new Error('For custom model, modelAbsoluteDirPath is required in SparseTextEmbedding.init');
@@ -471,7 +530,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
     _showDownloadProgress: boolean = true,
   ): Promise<PathLike> {
     if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { mode: 0o755 });
+      fs.mkdirSync(cacheDir, { recursive: true, mode: 0o755 });
     }
 
     const modelDir = path.join(cacheDir.toString(), model.replace('/', '_'));
@@ -479,8 +538,6 @@ export class SparseTextEmbedding extends SparseEmbedding {
     if (fs.existsSync(modelDir)) {
       return modelDir;
     }
-
-    fs.mkdirSync(modelDir, { mode: 0o755 });
 
     const filesToDownload = [
       'onnx/model.onnx',
@@ -490,27 +547,35 @@ export class SparseTextEmbedding extends SparseEmbedding {
       'special_tokens_map.json',
     ];
 
-    for (const fileName of filesToDownload) {
-      const outputPath = path.join(modelDir, fileName);
-      const outputDir = path.dirname(outputPath);
+    const tmpDir = fs.mkdtempSync(`${modelDir}.tmp-`);
+    try {
+      for (const fileName of filesToDownload) {
+        const outputPath = path.join(tmpDir, fileName);
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true, mode: 0o755 });
 
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true, mode: 0o755 });
+        const downloaded = await downloadFile({ repo: model, path: fileName });
+        if (!downloaded) throw new Error(`Model file not found in ${model}: ${fileName}`);
+        await pipeline(Readable.fromWeb(downloaded.stream() as ReadableStream), fs.createWriteStream(outputPath));
       }
 
-      const downloaded = await downloadFile({
-        repo: model,
-        path: fileName,
-      });
-
-      if (!downloaded) throw new Error(`Model file not found in ${model}: ${fileName}`);
-      await pipeline(Readable.fromWeb(downloaded.stream() as ReadableStream), fs.createWriteStream(outputPath));
+      try {
+        fs.renameSync(tmpDir, modelDir);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if ((code === 'EEXIST' || code === 'ENOTEMPTY') && fs.existsSync(modelDir)) {
+          return modelDir;
+        }
+        throw error;
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
 
     return modelDir;
   }
 
   async *embed(textStrings: string[], batchSize: number = 256) {
+    assertValidBatchSize(batchSize);
     for (let i = 0; i < textStrings.length; i += batchSize) {
       const batchTexts = textStrings.slice(i, i + batchSize);
 
@@ -554,11 +619,14 @@ export class SparseTextEmbedding extends SparseEmbedding {
       const output = await this.session.run(inputs);
 
       // SPLADE postprocessing: log(1 + ReLU(logits))
-      const outputTensor = output.output!;
+      const outputTensor = getRequiredOutput(output, 'output');
       // @ts-expect-error cpuData exists at runtime on onnxruntime Tensor
       const logits = outputTensor.cpuData as Float32Array;
-      const dims = outputTensor.dims as [number, number, number];
-      const [currentBatchSize, seqLen, currentVocabSize] = dims;
+      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions(
+        'output',
+        outputTensor,
+        batchTexts.length,
+      );
 
       const sparseVectors: SparseVector[] = [];
 
@@ -572,6 +640,9 @@ export class SparseTextEmbedding extends SparseEmbedding {
             for (let vocabIdx = 0; vocabIdx < currentVocabSize; vocabIdx++) {
               const logitIdx = batchIdx * seqLen * currentVocabSize + seqIdx * currentVocabSize + vocabIdx;
               const logitValue = logits[logitIdx]!;
+              if (!Number.isFinite(logitValue)) {
+                throw new Error(`Model produced a non-finite sparse embedding value at index ${logitIdx}`);
+              }
               const reluValue = Math.max(0, logitValue);
               const logValue = Math.log(1 + reluValue);
               valuesArr[vocabIdx] = Math.max(valuesArr[vocabIdx]!, logValue);

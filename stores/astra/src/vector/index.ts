@@ -159,7 +159,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
         limit: topK,
         includeSimilarity: true,
         projection: {
-          $vector: includeVector ? true : false,
+          $vector: !!includeVector,
         },
       });
 

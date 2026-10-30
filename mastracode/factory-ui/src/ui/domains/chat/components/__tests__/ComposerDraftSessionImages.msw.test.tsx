@@ -101,7 +101,7 @@ describe('Starting a user session with images attached', () => {
       await user.keyboard('{Enter}');
 
       await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent(THREAD_URL));
-      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'what is wrong here' }]);
+      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'what is wrong here', visibility: 'private' }]);
       await waitFor(() => expect(preparation.posted).toEqual(['what is wrong here']));
       expect(preparation.postedFiles).toEqual([SENT_SHOT]);
       expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
@@ -122,7 +122,7 @@ describe('Starting a user session with images attached', () => {
       await user.click(screen.getByRole('button', { name: 'Send message' }));
 
       await waitFor(() => expect(preparation.posted).toEqual(['']));
-      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: '' }]);
+      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: '', visibility: 'private' }]);
       expect(preparation.postedFiles).toEqual([SENT_SHOT]);
 
       preparation.finishWorkspace();
