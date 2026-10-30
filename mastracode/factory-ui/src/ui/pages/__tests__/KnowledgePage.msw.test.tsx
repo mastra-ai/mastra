@@ -241,9 +241,12 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   });
 
-  it('selects a graph page on the first click and opens it on the second', async () => {
+  it.each([
+    ['with ?view=graph', '?view=graph'],
+    ['with no query params', ''],
+  ])('selects a graph page on the first click and opens it on the second (%s)', async (_, query) => {
     stubKnowledge();
-    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?view=graph`);
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge${query}`);
     const runbookNode = async () => {
       const nodes = await screen.findAllByTestId('knowledge-page-node');
       const node = nodes.find(n => n.dataset.pageId === 'runbook');
