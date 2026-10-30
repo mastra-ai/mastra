@@ -42,7 +42,7 @@ const results = await vectorStore.query({
 
 ## Documentation
 
-- [@mastra/turbopuffer documentation](https://mastra.ai/reference/vectors/turbopuffer)
+- [@mastra/turbopuffer documentation](https://mastra.ai/integrations/vectors/turbopuffer)
 
 ## Changelog
 

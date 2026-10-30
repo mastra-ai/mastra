@@ -86,6 +86,6 @@ describe('persisted terminal error parts', () => {
   });
 
   it('draws immediately, with nothing to wait for', () => {
-    expect(draws(errorPart(), new Map(), undefined)).toBe(true);
+    expect(draws(errorPart(), entry([errorPart()]), new Map())).toBe(true);
   });
 });

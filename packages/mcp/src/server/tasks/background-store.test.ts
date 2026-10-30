@@ -12,6 +12,7 @@ import type { BackgroundTaskEnvelope } from './background-store';
 import type { MCPTaskAttempt, MCPTaskWork } from './store';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const elicitRequest = { method: 'elicitation/create', params: {} };
 
 const envelope: BackgroundTaskEnvelope = {
   v: 1,
@@ -119,8 +120,124 @@ describe('BackgroundTaskMCPTaskStore', () => {
       status: 'failed',
       error: { message: 'Input request key "same" was already used by this task' },
     });
-    store.close();
+    await store.close();
   });
+
+  it('acknowledges a cancel without waiting for onCancel, and calls it with the task context', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const contexts: unknown[] = [];
+    const store = new BackgroundTaskMCPTaskStore({
+      manager: mastra.backgroundTaskManager!,
+      serverId: 's',
+      workFor: () => async () => ({ status: 'input_required', inputRequests: { who: elicitRequest } }),
+      recoverFor: () => false,
+      // Never settles, like a hook stuck on a slow storage.
+      onCancel: context => (contexts.push(context), new Promise(() => {})),
+    });
+    store.registerTool('tool');
+    const access = { principal: 'alice' };
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool', id: 1 } });
+    store.run(task.taskId, async () => ({ status: 'input_required', inputRequests: { who: elicitRequest } }));
+    let current = await store.get(task.taskId, access);
+    for (let i = 0; i < 100 && current?.status !== 'input_required'; i++) {
+      await sleep(20);
+      current = await store.get(task.taskId, access);
+    }
+
+    expect(await store.cancel(task.taskId, access)).toBe(true);
+    expect(await store.get(task.taskId, access)).toMatchObject({ status: 'cancelled' });
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 1 }]));
+    await store.close();
+  });
+
+  it('calls onCancel when core times out a running attempt at its TTL', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const contexts: unknown[] = [];
+    // Runs until stopped, like a workflow run executing in this process.
+    const work: MCPTaskWork = () => new Promise(() => {});
+    const store = new BackgroundTaskMCPTaskStore({
+      manager: mastra.backgroundTaskManager!,
+      serverId: 's',
+      workFor: () => work,
+      recoverFor: () => false,
+      onCancel: context => void contexts.push(context),
+    });
+    store.registerTool('tool');
+    const access = { principal: 'alice' };
+    const task = await store.create({ ttlMs: 300, principal: 'alice', context: { toolName: 'tool', id: 2 } });
+    store.run(task.taskId, work);
+
+    const timedOut = await until(
+      () => store.get(task.taskId, access),
+      t => t?.status === 'failed',
+    );
+    expect(timedOut).toMatchObject({ status: 'failed' });
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 2 }]));
+    await store.close();
+  });
+
+  it('calls onCancel when core takes longer than a second to record a timeout', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const storage = await manager.getStorage();
+    const updateTask = storage.updateTask.bind(storage);
+    vi.spyOn(storage, 'updateTask').mockImplementation(async (id, update, options) => {
+      if (update.status === 'timed_out') await sleep(1_500);
+      return updateTask(id, update, options);
+    });
+    const contexts: unknown[] = [];
+    const work: MCPTaskWork = () => new Promise(() => {});
+    const store = new BackgroundTaskMCPTaskStore({
+      manager,
+      serverId: 's',
+      workFor: () => work,
+      recoverFor: () => false,
+      onCancel: context => void contexts.push(context),
+    });
+    store.registerTool('tool');
+    const task = await store.create({ ttlMs: 300, principal: 'alice', context: { toolName: 'tool', id: 3 } });
+    store.run(task.taskId, work);
+
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 3 }]), { timeout: 4_000 });
+    await store.close();
+  }, 10_000);
+
+  it('keeps checking an aborted attempt after a failed read of its row', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const contexts: unknown[] = [];
+    let started!: () => void;
+    const running = new Promise<void>(resolve => (started = resolve));
+    const work: MCPTaskWork = () => {
+      started();
+      return new Promise(() => {});
+    };
+    const store = new BackgroundTaskMCPTaskStore({
+      manager,
+      serverId: 's',
+      workFor: () => work,
+      recoverFor: () => false,
+      onCancel: context => void contexts.push(context),
+    });
+    store.registerTool('tool');
+    const task = await store.create({ ttlMs: 1_000, principal: 'alice', context: { toolName: 'tool', id: 4 } });
+    store.run(task.taskId, work);
+    // Once the work runs, the next read of the row is the check after core aborts it at its TTL: fail it.
+    await running;
+    const listTasks = manager.listTasks.bind(manager);
+    let failed = false;
+    vi.spyOn(manager, 'listTasks').mockImplementation(async filter => {
+      if (!failed && filter.toolCallId) {
+        failed = true;
+        throw new Error('storage unavailable');
+      }
+      return listTasks(filter);
+    });
+
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 4 }]), { timeout: 5_000 });
+    expect(failed).toBe(true);
+    await store.close();
+  }, 10_000);
 
   async function setup(work: MCPTaskWork, recover = false, backgroundTasks: Record<string, unknown> = {}) {
     mastra = new Mastra({
@@ -138,6 +255,82 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.registerTool('tool');
     return { manager, store, storage: await manager.getStorage() };
   }
+
+  it('lists a full page of tasks when newer rows are not readable as tasks', async () => {
+    const work: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { who: { method: 'elicitation/create', params: {} } },
+    });
+    const { store, storage, manager } = await setup(work);
+    const keys: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      keys.push(taskKeyOf(task.taskId));
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    // The two newest rows lose their envelope, like rows written before the principal was hashed.
+    const { tasks: rows } = await manager.listTasks({ agentId: 'mcp-server:s' });
+    for (const row of rows.filter(row => row.toolCallId === keys[2] || row.toolCallId === keys[3])) {
+      const { principalKey: _dropped, ...metadata } = row.metadata as Record<string, unknown>;
+      await storage.updateTask(row.id, { metadata });
+    }
+
+    const { listings: listed } = await store.list({ limit: 2 });
+
+    expect(listed.map(listing => listing.taskKey)).toEqual([keys[1], keys[0]]);
+    store.close();
+  });
+
+  describe('listing by status', () => {
+    const hang: MCPTaskWork = ({ signal }) =>
+      new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+
+    async function rowsOf(manager: Awaited<ReturnType<typeof setup>>['manager']) {
+      return (await manager.listTasks({ agentId: 'mcp-server:s' })).tasks;
+    }
+
+    it('reads only rows that can have the status, not every row on the server', async () => {
+      const { store, storage, manager } = await setup(hang);
+      for (let i = 0; i < 12; i++) {
+        await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      }
+      for (const row of await rowsOf(manager)) await storage.updateTask(row.id, { status: 'completed' });
+      const listTasks = vi.spyOn(manager, 'listTasks');
+
+      const { listings } = await store.list({ status: 'cancelled', limit: 2 });
+
+      expect(listings).toEqual([]);
+      // Pages of the listing itself (limit + 1 rows each), not the sweep's.
+      const pages = listTasks.mock.calls.filter(([query]) => query?.perPage === 3);
+      expect(pages).toHaveLength(1);
+      expect(pages[0]![0]).toMatchObject({ status: ['cancelled'] });
+      store.close();
+    });
+
+    it('still lists an expired running row as failed, and an answered suspended row as working', async () => {
+      const { store, storage, manager } = await setup(hang);
+      const expired = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      const answered = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      for (const row of await rowsOf(manager)) {
+        if (row.toolCallId === taskKeyOf(expired.taskId)) {
+          await storage.updateTask(row.id, { status: 'running', expiresAt: new Date(Date.now() - 1_000) });
+        } else {
+          const metadata = {
+            ...(row.metadata as Record<string, unknown>),
+            inputRequests: { who: { method: 'elicitation/create' } },
+            inputResponses: { who: { action: 'accept' } },
+          };
+          await storage.updateTask(row.id, { status: 'suspended', metadata });
+        }
+      }
+
+      const failed = await store.list({ status: 'failed' });
+      expect(failed.listings.map(listing => listing.taskKey)).toEqual([taskKeyOf(expired.taskId)]);
+      const working = await store.list({ status: 'working' });
+      expect(working.listings.map(listing => listing.taskKey)).toEqual([taskKeyOf(answered.taskId)]);
+      store.close();
+    });
+  });
 
   it("gives a task's trace only to its caller, and each attempt its number", async () => {
     const attempts: MCPTaskAttempt[] = [];
@@ -189,16 +382,21 @@ describe('BackgroundTaskMCPTaskStore', () => {
       'metadata' in change ? Promise.resolve(false) : update(id, change, options),
     );
 
-    await expect(store.update(task.taskId, { who: { action: 'accept', content: {} } }, access)).rejects.toThrow(
-      'Could not store the input responses',
+    const refused = await store.update(task.taskId, { who: { action: 'accept', content: {} } }, access).then(
+      () => undefined,
+      (error: Error) => error,
     );
+    expect(refused?.message).toContain('Could not store the input responses');
+    // The task id is a bearer token: the error names the task by its key only.
+    expect(refused?.message).toContain(taskKeyOf(task.taskId));
+    expect(refused?.message).not.toContain(task.taskId);
     expect(await store.get(task.taskId, access)).toMatchObject({
       status: 'input_required',
       inputRequests: { who: {} },
     });
     // Answers for keys that aren't open are ignored, as before.
     expect(await store.update(task.taskId, { other: { action: 'accept', content: {} } }, access)).toBe(true);
-    store.close();
+    await store.close();
   });
 
   it('drops an answer whose suspension ended before it was written, instead of storing it on the next one', async () => {
@@ -248,7 +446,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       status: 'input_required',
       inputRequests: { second: {} },
     });
-    store.close();
+    await store.close();
   });
 
   async function rowOf(manager: NonNullable<Mastra['backgroundTaskManager']>) {
@@ -290,7 +488,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       n => n > 0,
     );
     expect(aborted).toHaveLength(1);
-    store.close();
+    await store.close();
   });
 
   it('sweeps a task waiting for input past its TTL to failed', async () => {
@@ -321,7 +519,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     // An answer arriving now is not taken.
     expect(await store.update(task.taskId, { k: { action: 'accept', content: {} } }, access)).toBe(true);
     expect((await rowOf(manager)).status).toBe('failed');
-    store.close();
+    await store.close();
   });
 
   it('stops counting a task waiting for input once its TTL passes, before the sweep fails it', async () => {
@@ -345,7 +543,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     const next = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' }, limits });
     store.run(next.taskId, ask);
     expect(next.status).toBe('working');
-    store.close();
+    await store.close();
   });
 
   it.each([
@@ -384,7 +582,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       await sleep(100);
       expect(attempts).toBe(runs);
       release.forEach(resolve => resolve());
-      store.close();
+      await store.close();
     },
   );
 
@@ -434,7 +632,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     expect(Math.max(...perSweep)).toBeLessThanOrEqual(100);
     const { total: done } = await manager.listTasks({ agentId: 'mcp-server:s', status: 'completed' });
     expect(done).toBe(250);
-    store.close();
+    await store.close();
   });
 
   it('restarts only as many abandoned rows as there are free slots', async () => {
@@ -457,7 +655,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     await store.sweep();
     expect(restart).toHaveBeenCalledTimes(3);
     release.forEach(resolve => resolve());
-    store.close();
+    await store.close();
   });
 
   /** A task waiting for input whose TTL has passed, so the next sweep would fail it. */
@@ -588,7 +786,7 @@ describe.each([
 
     await store.sweep();
     expect(await storage.getTask(row.id)).toBeNull();
-    store.close();
+    await store.close();
   });
 
   it('keeps a finished task inside its TTL, and through the retention after it', async () => {
@@ -600,7 +798,7 @@ describe.each([
     await store.sweep();
     expect(await storage.getTask(fresh.id)).toMatchObject({ status: 'completed' });
     expect(await storage.getTask(retained.id)).toMatchObject({ status: 'completed' });
-    store.close();
+    await store.close();
   });
 
   it("leaves another server's rows and an agent's rows alone", async () => {
@@ -617,7 +815,7 @@ describe.each([
     expect(await storage.getTask('mine')).toBeNull();
     expect(await storage.getTask('other-server')).toMatchObject({ status: 'completed' });
     expect(await storage.getTask('agent')).toMatchObject({ status: 'completed' });
-    store.close();
+    await store.close();
   });
 
   it('keeps sweeping when the delete fails', async () => {
@@ -630,7 +828,7 @@ describe.each([
     await expect(store.sweep()).resolves.toBeUndefined();
     // The later step of the same sweep still ran: the open task past its TTL is failed.
     expect(await storage.getTask(row.id)).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
-    store.close();
+    await store.close();
   });
 
   it('fails an open task past its TTL instead of deleting it', async () => {
@@ -658,6 +856,6 @@ describe.each([
     // Its new deadline keeps the failure readable through the retention, sweep after sweep.
     await store.sweep();
     expect(await storage.getTask(open!.id)).toMatchObject({ status: 'failed' });
-    store.close();
+    await store.close();
   });
 });

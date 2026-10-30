@@ -111,6 +111,18 @@ const connect = (overrides: Record<string, any> = {}) =>
     ...overrides,
   });
 
+const createProject = async (id: string) => {
+  const now = new Date();
+  await seed.storage.ops.insertOne('factory_projects', {
+    id,
+    org_id: 'org1',
+    created_by: 'u1',
+    name: id,
+    created_at: now,
+    updated_at: now,
+  });
+};
+
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   linear = new LinearIntegration({ clientId: 'lin_client', clientSecret: 'lin_secret' });
@@ -258,6 +270,7 @@ describe('issues route', () => {
     await connect();
     const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
+    await createProject(factoryProjectId);
     await seed.intake.setBinding({
       orgId: 'org1',
       integrationId: 'linear',
@@ -285,6 +298,7 @@ describe('issues route', () => {
     await connect();
     const teamSourceId = 'linear-team:team-1';
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
+    await createProject(factoryProjectId);
     await seed.intake.saveConfig({
       orgId: 'org1',
       userId: 'u1',
@@ -343,8 +357,8 @@ describe('issues route', () => {
     const projectB = '22222222-2222-4222-8222-222222222222';
 
     const seedProjects = async (count: number) => {
-      for (let i = 0; i < count; i += 1) {
-        await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: `project-${i}` } });
+      for (const id of [projectA, projectB].slice(0, count)) {
+        await createProject(id);
       }
     };
 
@@ -662,7 +676,7 @@ describe('issue detail route', () => {
 
   beforeEach(async () => {
     await connect();
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-0' } });
+    await createProject(projectA);
     await seed.intake.setBinding({
       orgId: 'org1',
       integrationId: 'linear',
@@ -734,7 +748,7 @@ describe('issue detail route', () => {
 
   it('hides a project issue from a team routed to another Factory project', async () => {
     const teamSourceId = 'linear-team:team-1';
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await createProject(projectB);
     await seed.intake.saveConfig({
       orgId: 'org1',
       userId: 'u1',
@@ -757,7 +771,7 @@ describe('issue detail route', () => {
   });
   it('keeps serving a card the Factory holds after its winning source moved to another Factory', async () => {
     const teamSourceId = 'linear-team:team-1';
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await createProject(projectB);
     await seed.intake.saveConfig({
       orgId: 'org1',
       userId: 'u1',
@@ -800,7 +814,7 @@ describe('issue detail route', () => {
 
   it('finds the held card by stable issue id after Linear renamed the identifier', async () => {
     const teamSourceId = 'linear-team:team-1';
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await createProject(projectB);
     await seed.intake.saveConfig({
       orgId: 'org1',
       userId: 'u1',
@@ -838,7 +852,7 @@ describe('issue detail route', () => {
 
   it('stops serving a held card once it is finished', async () => {
     const teamSourceId = 'linear-team:team-1';
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await createProject(projectB);
     await seed.intake.saveConfig({
       orgId: 'org1',
       userId: 'u1',
@@ -872,7 +886,7 @@ describe('issue detail route', () => {
   });
 
   it("hides an issue outside the Factory project's own sources", async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await createProject(projectB);
     await seed.intake.setBinding({
       orgId: 'org1',
       integrationId: 'linear',
