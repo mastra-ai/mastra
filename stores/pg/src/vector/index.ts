@@ -1325,7 +1325,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           }
 
           if (metadataIndexes?.length) {
-            await this.createMetadataIndexes(tableName, indexName, metadataIndexes);
+            await this.createMetadataIndexes(client, tableName, indexName, metadataIndexes);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
@@ -1532,7 +1532,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     });
   }
 
-  private async createMetadataIndexes(tableName: string, indexName: string, metadataFields: string[]) {
+  private async createMetadataIndexes(
+    client: pg.PoolClient,
+    tableName: string,
+    indexName: string,
+    metadataFields: string[],
+  ) {
     const hasher = await this.hasher;
     for (const field of metadataFields) {
       // Hash the field to produce a safe, fixed-length suffix for the index name.
@@ -1544,9 +1549,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // DDL statements don't support bind parameters, so we must interpolate
       // the field name as a literal. Escape single quotes to prevent SQL injection.
       const escapedField = field.replace(/'/g, "''");
-      // Use CONCURRENTLY to avoid blocking writers on large existing tables.
-      // This must run outside a transaction, so we use pool.query() directly.
-      await this.pool.query(
+      // CONCURRENTLY avoids blocking writers on large tables. It can't run inside a transaction, and the
+      // caller's client isn't in one. Reusing it keeps a single-connection pool from deadlocking.
+      await client.query(
         `
         CREATE INDEX CONCURRENTLY IF NOT EXISTS ${metadataIdxName}
         ON ${tableName} ((metadata->>'${escapedField}'))

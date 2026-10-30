@@ -49,3 +49,25 @@ it('supports cold-cache vector operations with a single-connection pool', async 
     await admin.disconnect();
   }
 });
+
+it('creates metadata indexes with a single-connection pool', async () => {
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  const indexName = `pool_${randomUUID().replaceAll('-', '')}`;
+  const vector = new PgVector({
+    id: 'pool-capacity-metadata-indexes',
+    connectionString,
+    pgPoolOptions: { max: 1, connectionTimeoutMillis: 500 },
+  });
+
+  try {
+    await vector.createIndex({ indexName, dimension: 3, metadataIndexes: ['resource_id', 'thread_id'] });
+
+    const { rows } = await vector.pool.query(`SELECT indexdef FROM pg_indexes WHERE tablename = $1`, [indexName]);
+    const indexDefs = rows.map(row => row.indexdef).join('\n');
+    expect(indexDefs).toContain(`(metadata ->> 'resource_id'::text)`);
+    expect(indexDefs).toContain(`(metadata ->> 'thread_id'::text)`);
+  } finally {
+    await vector.deleteIndex({ indexName });
+    await vector.disconnect();
+  }
+});
