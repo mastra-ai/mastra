@@ -1200,7 +1200,10 @@ export const mastra = new Mastra({
       const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
       const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
       try {
-        await writeFile(mastraConfigPath, originalMastraConfig.replace('bundler: {', 'bundler: {\n    sourcemap: true,'));
+        await writeFile(
+          mastraConfigPath,
+          originalMastraConfig.replace('bundler: {', 'bundler: {\n    sourcemap: true,'),
+        );
         await runBuild(fixturePath);
       } finally {
         await writeFile(mastraConfigPath, originalMastraConfig);
