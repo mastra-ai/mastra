@@ -535,8 +535,19 @@ export async function runDurableDeadlineOutputPass({
         error,
       });
     } catch (processorError) {
-      // A tripwire rejects the turn, as it does at finish.
-      if (processorError instanceof TripWire) return;
+      // A tripwire rejects the turn, as it does at finish: remove response messages already saved.
+      if (processorError instanceof TripWire) {
+        await undoSavedResponseMessages({
+          memory: entry.memory,
+          threadId: durableState?.threadId,
+          memoryConfig: durableState?.memoryConfig,
+          messageList,
+          saveQueueManager: entry.saveQueueManager,
+          logger,
+          runId,
+        });
+        return;
+      }
       logger.warn('[DurableAgent] Error running output processors at the total deadline', {
         runId,
         error: processorError,

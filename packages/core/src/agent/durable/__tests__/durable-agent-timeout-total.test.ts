@@ -377,6 +377,59 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
+  it('removes per-step saves when an output processor trips at the total deadline', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const firstStep = toolCallingModel('lookup');
+    let calls = 0;
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-tripwire',
+        name: 'Timeout tripwire',
+        instructions: 'Look up the city.',
+        memory,
+        model: new MockLanguageModelV2({
+          doStream: async options => {
+            if (++calls === 1) return firstStep.doStream(options);
+            return new Promise<never>(() => {});
+          },
+        }),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async () => 'Found NYC',
+          }),
+        },
+        outputProcessors: [
+          {
+            id: 'timeout-blocking-output-processor',
+            processOutputResult: ({ abort }: { abort: (reason?: string) => never }) => abort('blocked'),
+          } as any,
+        ],
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const threadId = 'timeout-tripwire-thread';
+    const result = await agent.stream('hello', {
+      memory: { thread: threadId, resource: 'timeout-resource' },
+      savePerStep: true,
+      modelSettings: { timeout: { totalMs: 1000 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'tool-result')).toBe(true);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const { messages } = await memory.recall({ threadId });
+      expect(JSON.stringify(messages)).not.toContain('Found NYC');
+    } finally {
+      result.cleanup();
+    }
+  });
+
   it('does not save a raw late tool result that a processToolResult hook would have seen', async () => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });
