@@ -111,6 +111,8 @@ describe('Importer run log', () => {
       renderPage();
 
       const drawer = await openLog('run_live');
+      expect(within(drawer).getByRole('heading', { name: 'Import log' })).toBeTruthy();
+      expect(within(drawer).getByText('Every step of this import, as it happens.')).toBeTruthy();
       expect(await within(drawer).findByText('Fetching from Notion: 1 request')).toBeTruthy();
       expect(within(drawer).getByText('+1.2s')).toBeTruthy();
       expect(within(drawer).getByTestId('run-log-live')).toBeTruthy();
@@ -155,6 +157,8 @@ describe('Importer run log', () => {
       const progress = await screen.findByTestId('run-in-progress');
       fireEvent.click(await within(progress).findByRole('button', { name: 'View log' }));
       const drawer = await screen.findByRole('dialog');
+      expect(within(drawer).getByRole('heading', { name: 'Preview log' })).toBeTruthy();
+      expect(within(drawer).getByText('Every step of this preview, as it happens.')).toBeTruthy();
 
       await waitFor(() => expect(screen.queryByTestId('run-in-progress')).toBeNull(), POLL_TIMEOUT);
       expect(await within(drawer).findByTestId('run-log-outcome', {}, POLL_TIMEOUT)).toBeTruthy();

@@ -17,7 +17,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { buildRunLogRows, EMPTY_FILTER_COPY, hasRequestLines } from '../run-log';
 import type { RunLogFilter } from '../run-log';
-import { RUN_KIND_LABEL } from '../runs';
 import { readApiError } from '../settings';
 import { useImporterRunEvents } from '../use-knowledge-importers';
 import { RunLogLines } from './run-log-lines';
@@ -30,12 +29,13 @@ export interface RunLogDrawerProps {
 }
 
 export function RunLogDrawer({ importerKey, run, open, onOpenChange }: RunLogDrawerProps) {
+  const noun = run.kind === 'dry-run' ? 'preview' : 'import';
   return (
     <Drawer side="right" size="lg" open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DrawerHeader>
-          <DrawerTitle>{RUN_KIND_LABEL[run.kind]} log</DrawerTitle>
-          <DrawerDescription>Every step of this run, as it happens.</DrawerDescription>
+          <DrawerTitle>{noun === 'preview' ? 'Preview' : 'Import'} log</DrawerTitle>
+          <DrawerDescription>Every step of this {noun}, as it happens.</DrawerDescription>
         </DrawerHeader>
         {/* Interactive region: otherwise swipe-to-dismiss captures mouse presses, swallowing filter clicks and text selection. */}
         <DrawerInteractive render={<DrawerBody className="flex min-h-0 flex-col gap-3" />}>
