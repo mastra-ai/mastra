@@ -490,8 +490,9 @@ function useLazyTree(
 /**
  * Search, the page tree, and either the page graph or the selected page, kept in sync on one selection.
  * Wide screens show the tree beside the graph or the page; below `lg` one toggle picks tree, graph or page.
- * Clicking a page in the graph or a search result opens it as a page; selecting in the tree keeps the
- * current view, so the graph frames the page instead.
+ * A first click on a page in the graph selects it; clicking it again opens it as a page. A search result
+ * opens it as a page straight away. Selecting in the tree keeps the current view, so the graph frames the
+ * page instead.
  */
 export function KnowledgePageExplorer({
   graph,
@@ -655,7 +656,8 @@ export function KnowledgePageExplorer({
                 edges={mentionEdges}
                 pinnedIds={graph.pinnedIds}
                 selectedPageId={selectedPageId}
-                onSelect={page => openPage(page.id)}
+                onSelect={page => onSelect(page.id)}
+                onOpen={page => openPage(page.id)}
                 onMentionSelect={setMention}
               />
             ) : null}

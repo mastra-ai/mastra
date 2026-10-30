@@ -226,14 +226,42 @@ describe('KnowledgePageExplorer page view', () => {
   });
 
   describe('when a page is clicked in the graph', () => {
-    it('opens it as a page', async () => {
-      renderWithProviders(<Host />);
+    const escalationNode = async () => {
       const nodes = await screen.findAllByTestId('knowledge-page-node');
-      const escalationNode = nodes.find(node => node.textContent?.includes('Escalation Process'));
-      if (!escalationNode) throw new Error('no Escalation Process node');
-      fireEvent.click(escalationNode);
+      const node = nodes.find(n => n.textContent?.includes('Escalation Process'));
+      if (!node) throw new Error('no Escalation Process node');
+      return node;
+    };
+
+    it('selects it on the first click and stays on the graph', async () => {
+      renderWithProviders(<Host />);
+      fireEvent.click(await escalationNode());
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+      expect((await escalationNode()).querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(true);
+      const row = screen.getByRole('treeitem', { selected: true });
+      expect(row.textContent).toContain('Escalation Process');
+    });
+
+    it('opens it as a page on the second click', async () => {
+      renderWithProviders(<Host />);
+      fireEvent.click(await escalationNode());
+      fireEvent.click(await escalationNode());
       expect(screen.getByTestId('view').textContent).toBe('page');
       expect(within(pageView()).getByRole('heading', { name: 'Escalation Process' })).toBeTruthy();
+    });
+
+    it('selects then opens it with Enter on the focused node', async () => {
+      renderWithProviders(<Host />);
+      const wrapper = async () => {
+        const node = (await escalationNode()).closest('.react-flow__node');
+        if (!node) throw new Error('no node wrapper');
+        return node;
+      };
+      fireEvent.keyDown(await wrapper(), { key: 'Enter' });
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      fireEvent.keyDown(await wrapper(), { key: ' ' });
+      expect(screen.getByTestId('view').textContent).toBe('page');
     });
   });
 
