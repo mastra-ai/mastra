@@ -168,6 +168,7 @@ describe('getSourceMapNodeArgs', () => {
     const { getSourceMapNodeArgs } = await import('./utils');
 
     expect(getSourceMapNodeArgs(true, '--max-old-space-size=4096 --no-enable-source-maps')).toEqual([]);
+    expect(getSourceMapNodeArgs(true, '--no-enable_source_maps')).toEqual([]);
     expect(getSourceMapNodeArgs(true, '--max-old-space-size=4096')).toEqual(['--enable-source-maps']);
   });
 });

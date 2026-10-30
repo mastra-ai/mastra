@@ -101,7 +101,9 @@ export function shouldSkipDotenvLoading(): boolean {
  * before user-supplied args so `--no-enable-source-maps` in those still wins.
  */
 export function getSourceMapNodeArgs(sourcemapEnabled: boolean, nodeOptions: string | undefined): string[] {
-  return sourcemapEnabled && !nodeOptions?.includes('enable-source-maps') ? ['--enable-source-maps'] : [];
+  // Node accepts underscores in option names, e.g. `--no-enable_source_maps`.
+  const setInNodeOptions = nodeOptions?.replaceAll('_', '-').includes('enable-source-maps');
+  return sourcemapEnabled && !setInNodeOptions ? ['--enable-source-maps'] : [];
 }
 
 /**
