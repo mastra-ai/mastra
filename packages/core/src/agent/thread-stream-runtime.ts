@@ -6510,16 +6510,20 @@ export class AgentThreadStreamRuntime {
             }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
         );
         let leaseError: unknown;
-        const readOwner = (): Promise<string | null | undefined | typeof unreachable> => {
-          if (hasFallbackLeaseProvider) return Promise.resolve(activeRunId());
-          if (this.#isLeaseReadStalled(leaseProvider, key)) return Promise.resolve(unreachable);
+        const readOwner = async (): Promise<string | null | undefined | typeof unreachable> => {
+          if (hasFallbackLeaseProvider) return activeRunId();
+          if (this.#isLeaseReadStalled(leaseProvider, key)) return unreachable;
           const read = leaseProvider.getLeaseOwner(key);
           let settled = false;
+          let reply: { owner: string | null | undefined } | undefined;
           void read.then(
-            () => (settled = true),
+            owner => {
+              settled = true;
+              reply = { owner };
+            },
             () => (settled = true),
           );
-          return Promise.race([
+          const owner = await Promise.race([
             read.catch((error): typeof unreachable => {
               leaseError = error;
               return unreachable;
@@ -6529,6 +6533,8 @@ export class AgentThreadStreamRuntime {
               return timedOut;
             }),
           ]);
+          // A read that answered by the time the deadline fired still wins, even when the deadline settles the race.
+          return owner === unreachable && reply ? reply.owner : owner;
         };
         let leaseOwner: string | null | undefined | typeof unreachable;
         try {
@@ -6540,6 +6546,8 @@ export class AgentThreadStreamRuntime {
             // issue a read that would get no time and be noted as a stall on a healthy backend.
             if (expired) break;
             const nextOwner = await readOwner();
+            // A re-read that got no answer in the time left keeps the answer the backend already gave.
+            if (nextOwner === unreachable) break;
             const stable = nextOwner === leaseOwner && tail === eventTail;
             leaseOwner = nextOwner;
             if (stable) break;

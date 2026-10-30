@@ -182,6 +182,41 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  // A read that answers in the same timer batch as the deadline, or a re-read that runs out of time after the
+  // backend already answered, must not throw the answer away for local state.
+  it.each(['answered as the deadline fired', 'stability re-read timed out'] as const)(
+    'keeps a lease owner the backend answered when the %s',
+    async race => {
+      const { pubsub, subscribe } = setup(() => []);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        let calls = 0;
+        vi.spyOn(pubsub, 'getLeaseOwner').mockImplementation(() => {
+          calls++;
+          if (race === 'answered as the deadline fired') {
+            return new Promise(resolve => setTimeout(() => resolve(runId), AGENT_LEASE_RENEW_INTERVAL_MS));
+          }
+          return calls === 1 ? Promise.resolve(runId) : new Promise(() => {});
+        });
+        const subscribing = subscribe();
+        const reads = race === 'answered as the deadline fired' ? 1 : 2;
+        for (let i = 0; i < 500 && calls < reads; i++) await new Promise(resolve => setImmediate(resolve));
+        expect(calls).toBe(reads);
+        // Fire the deadline and the read's answer in one synchronous batch, as vi.advanceTimersByTime does.
+        vi.advanceTimersByTime(AGENT_LEASE_RENEW_INTERVAL_MS);
+        const { subscription, collected, consumed } = await subscribing;
+        expect(vi.getTimerCount()).toBe(0);
+        vi.useRealTimers();
+        await nextTicks(10);
+        expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: runId } });
+        subscription.unsubscribe();
+        await consumed;
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   // Events delivered during the first read can take the stability check past the shared deadline. A healthy
   // backend already answered, so the snapshot keeps that answer instead of falling back to local state.
   it('keeps an answered lease owner when events outlast the deadline before the stability read', async () => {
