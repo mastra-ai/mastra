@@ -5,10 +5,12 @@ import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-con
 import { MockStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { getEffectivePermission } from '../server-adapter/routes/permissions';
 import {
   BACKGROUND_TASK_STREAM_ROUTE,
   LIST_BACKGROUND_TASKS_ROUTE,
   GET_BACKGROUND_TASK_ROUTE,
+  RESUME_BACKGROUND_TASK_ROUTE,
 } from './background-tasks';
 
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -476,6 +478,132 @@ describe('Background Tasks handlers', () => {
           abortSignal: new AbortController().signal,
         } as any),
       ).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
+  // A chat answers a deferred background tool's input request over HTTP. (#28986)
+  describe('RESUME_BACKGROUND_TASK_ROUTE', () => {
+    function approvalTask(seen: unknown[]) {
+      return ctx(async (_args, opts) => {
+        if (opts?.resumeData === undefined) {
+          await opts?.suspend?.({ question: 'Approve the refund?' });
+          return undefined;
+        }
+        seen.push(opts.resumeData);
+        return { refunded: (opts.resumeData as { approved: boolean }).approved };
+      });
+    }
+
+    async function suspendedTask(seen: unknown[], resourceId?: string) {
+      const { task } = await bgManager.enqueue(
+        { toolName: 'refund', toolCallId: 'call-1', args: {}, agentId: 'a1', runId: 'run-1', resourceId },
+        approvalTask(seen),
+      );
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.status).toBe('suspended'));
+      return (await bgManager.getTask(task.id))!;
+    }
+
+    const resume = (backgroundTaskId: string, body: Record<string, unknown>, requestContext = new RequestContext()) =>
+      RESUME_BACKGROUND_TASK_ROUTE.handler({
+        mastra,
+        backgroundTaskId,
+        ...body,
+        requestContext,
+        abortSignal: new AbortController().signal,
+      } as any);
+
+    it('answers a suspended task and the tool finishes with the answer', async () => {
+      const seen: unknown[] = [];
+      const task = await suspendedTask(seen);
+      expect(task.suspendPayload).toEqual({ question: 'Approve the refund?' });
+
+      const returned = await resume(task.id, {
+        resumeData: { approved: true },
+        suspendedAt: task.suspendedAt!.toISOString(),
+      });
+      expect(returned.id).toBe(task.id);
+      expect(returned.status).not.toBe('suspended');
+
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.status).toBe('completed'));
+      expect((await bgManager.getTask(task.id))?.result).toEqual({ refunded: true });
+      expect(seen).toEqual([{ approved: true }]);
+    });
+
+    it('accepts the suspension timestamp as epoch milliseconds', async () => {
+      const task = await suspendedTask([]);
+      await resume(task.id, { resumeData: { approved: false }, suspendedAt: task.suspendedAt!.getTime() });
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.result).toEqual({ refunded: false }));
+    });
+
+    it('returns 404 for an unknown task', async () => {
+      await expect(resume('missing-task', { resumeData: {} })).rejects.toMatchObject({ status: 404 });
+    });
+
+    it("returns 404 for another resource's task and leaves it suspended", async () => {
+      const task = await suspendedTask([], 'user-2');
+      await expect(resume(task.id, { resumeData: { approved: true } }, scopedContext('user-1'))).rejects.toMatchObject({
+        status: 404,
+      });
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+    });
+
+    it('returns 409 for a task that is not suspended', async () => {
+      const { task } = await bgManager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(vi.fn().mockResolvedValue('done')),
+      );
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.status).toBe('completed'));
+      await expect(resume(task.id, { resumeData: {} })).rejects.toMatchObject({
+        status: 409,
+        message: 'Background task is completed, not suspended',
+      });
+    });
+
+    it("returns 409 while the agent's background slots are full, and the task stays answerable", async () => {
+      const task = await suspendedTask([]);
+      let release!: () => void;
+      const blocker = new Promise<void>(resolve => (release = resolve));
+      // perAgentConcurrency is 3: occupy every slot for the same agent.
+      for (const id of ['busy-1', 'busy-2', 'busy-3']) {
+        await bgManager.enqueue(
+          { toolName: 'busy', toolCallId: id, args: {}, agentId: 'a1', runId: `run-${id}` },
+          ctx(() => blocker),
+        );
+      }
+      await vi.waitFor(async () =>
+        expect((await bgManager.listTasks({ agentId: 'a1', status: 'running' })).total).toBe(3),
+      );
+
+      await expect(resume(task.id, { resumeData: { approved: true } })).rejects.toMatchObject({
+        status: 409,
+        message: expect.stringContaining('Concurrency limit reached'),
+      });
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+      release();
+    });
+
+    it.each([
+      ['ISO', (d: Date) => new Date(d.getTime() - 1000).toISOString()],
+      ['epoch', (d: Date) => d.getTime() - 1000],
+    ])('returns 409 for a stale %s suspendedAt and leaves the task suspended', async (_label, stale) => {
+      const seen: unknown[] = [];
+      const task = await suspendedTask(seen);
+      await expect(
+        resume(task.id, { resumeData: { approved: true }, suspendedAt: stale(task.suspendedAt!) }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+      expect(seen).toEqual([]);
+    });
+
+    it('requires resumeData in the body', () => {
+      const schema = RESUME_BACKGROUND_TASK_ROUTE.bodySchema!;
+      expect(schema.safeParse({}).success).toBe(false);
+      expect(schema.safeParse({ resumeData: null }).success).toBe(true);
+      expect(schema.safeParse({ resumeData: {}, suspendedAt: 'yesterday' }).success).toBe(false);
+    });
+
+    it('requires the background-tasks:execute permission', () => {
+      expect(getEffectivePermission(RESUME_BACKGROUND_TASK_ROUTE)).toBe('background-tasks:execute');
     });
   });
 });

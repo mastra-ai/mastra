@@ -510,6 +510,8 @@ export interface ToolExecutor {
       resumeData?: unknown;
       /** Framework-resolved delegated run ID recovered from persisted suspension state. */
       suspendedToolRunId?: string;
+      /** On resume, the payload the task suspended with. Undefined on the initial execution. */
+      suspendPayload?: unknown;
     },
   ): Promise<unknown>;
 }
@@ -545,6 +547,8 @@ export type ToolExecutionInjector = (params: {
   resourceId?: string;
   startedAt: Date;
   suspendedAt?: Date;
+  /** The payload the task suspended with; set together with `suspendedAt`. */
+  suspendPayload?: unknown;
 }) => void | Promise<void>;
 
 // --- Per-task context ---

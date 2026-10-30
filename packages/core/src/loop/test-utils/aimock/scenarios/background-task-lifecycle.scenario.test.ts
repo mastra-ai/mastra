@@ -431,6 +431,125 @@ describeForAllEngines(
       );
       expect((done as any).result).toEqual({ summary: 'Research on "solana": looks promising' });
     }, 30_000);
+
+    // A chat that reloads the thread while a deferred background tool waits for input must
+    // still see the open request on the tool call, and the resumed tool must know which
+    // request it is answering. (#28986)
+    function makeSuspendingResearchTool(seenOnResume: unknown[]) {
+      return createTool({
+        id: 'research-with-approval',
+        description: 'Research a topic after analyst approval',
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+        background: { enabled: true },
+        execute: async ({ topic }, options) => {
+          const resumeData = options?.agent?.resumeData as { notes?: string } | undefined;
+          if (!resumeData) {
+            return options?.agent?.suspend?.({ awaiting: 'analyst-approval', topic }) as any;
+          }
+          seenOnResume.push(options?.agent?.suspendPayload);
+          return { summary: `Research on "${topic}": ${resumeData.notes}` };
+        },
+      });
+    }
+
+    async function storedToolCall(memory: MockMemory, thread: { threadId: string; resourceId: string }) {
+      const { messages } = await memory.recall(thread);
+      const message = messages.find(
+        m =>
+          m.role === 'assistant' &&
+          m.content.parts?.some(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === 'call-bg-1'),
+      );
+      const part = message?.content.parts?.find(
+        p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === 'call-bg-1',
+      ) as any;
+      return {
+        suspended: (message?.content.metadata as any)?.suspendedTools?.['call-bg-1'],
+        invocation: part?.toolInvocation,
+      };
+    }
+
+    async function startSuspendingResearch(seenOnResume: unknown[], threadId: string) {
+      const memory = new MockMemory();
+      const thread = { threadId, resourceId: `${threadId}-user` };
+      const { chunks, mastra } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research solana',
+        tools: { researchWithApproval: makeSuspendingResearchTool(seenOnResume) },
+        agentBackgroundTasks: { tools: { researchWithApproval: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'solana' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Waiting for the analyst.' });
+        },
+      });
+      const manager = mastra.backgroundTaskManager!;
+      const started = chunks!.find(c => c.type === 'background-task-started') as Chunk | undefined;
+      const taskId = started!.payload.taskId as string;
+      const suspendedTask = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status === 'suspended',
+      )) as any;
+      return { memory, thread, manager, taskId, suspendedTask };
+    }
+
+    it('keeps a suspended deferred tool call answerable from memory, then clears it once answered (#28986)', async () => {
+      const seenOnResume: unknown[] = [];
+      const { memory, thread, manager, taskId, suspendedTask } = await startSuspendingResearch(
+        seenOnResume,
+        'bg-suspend-memory-thread',
+      );
+
+      const open = await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.suspended !== undefined,
+      );
+      expect(open.suspended).toMatchObject({
+        toolCallId: 'call-bg-1',
+        toolName: 'researchWithApproval',
+        args: { topic: 'solana' },
+        suspendPayload: { awaiting: 'analyst-approval', topic: 'solana' },
+        taskId,
+        runId: suspendedTask.runId,
+      });
+      expect(new Date(open.suspended.suspendedAt).getTime()).toBe(new Date(suspendedTask.suspendedAt).getTime());
+
+      await manager.resume(taskId, { notes: 'looks promising' });
+      await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'solana' }]);
+
+      const answered = await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.invocation?.state === 'result' && s.suspended === undefined,
+      );
+      expect(answered.invocation.result).toEqual({ summary: 'Research on "solana": looks promising' });
+    }, 30_000);
+
+    it('clears the open request from memory when a suspended deferred task is cancelled (#28986)', async () => {
+      const { memory, thread, manager, taskId } = await startSuspendingResearch([], 'bg-suspend-cancel-thread');
+      await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.suspended !== undefined,
+      );
+
+      await manager.cancel(taskId);
+      expect(await manager.getTask(taskId)).toMatchObject({ status: 'cancelled' });
+      await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.suspended === undefined,
+      );
+    }, 30_000);
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
   { skip: ['inngest'] },

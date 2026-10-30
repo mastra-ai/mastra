@@ -4753,6 +4753,7 @@ type Shared_Type_98 = {
   maxRetries: number;
   timeoutMs: number;
   suspendPayload?: unknown | undefined;
+  suspendedAt?: Date | undefined;
 };
 
 type Shared_Type_99 =
@@ -21862,6 +21863,39 @@ export interface GetBackgroundTasksBackgroundTaskId_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /background-tasks/:backgroundTaskId/resume
+// ============================================================================
+export type PostBackgroundTasksBackgroundTaskIdResume_PathParams = GetBackgroundTasksBackgroundTaskId_PathParams;
+
+export type PostBackgroundTasksBackgroundTaskIdResume_Body = {
+  resumeData: unknown;
+  suspendedAt?: (string | number) | undefined;
+};
+
+export type PostBackgroundTasksBackgroundTaskIdResume_Response = GetBackgroundTasksBackgroundTaskId_Response;
+
+export type PostBackgroundTasksBackgroundTaskIdResume_Request = Simplify<
+  (PostBackgroundTasksBackgroundTaskIdResume_PathParams extends never
+    ? {}
+    : { params: PostBackgroundTasksBackgroundTaskIdResume_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostBackgroundTasksBackgroundTaskIdResume_Body extends never
+      ? {}
+      : {} extends PostBackgroundTasksBackgroundTaskIdResume_Body
+        ? { body?: PostBackgroundTasksBackgroundTaskIdResume_Body }
+        : { body: PostBackgroundTasksBackgroundTaskIdResume_Body })
+>;
+
+export interface PostBackgroundTasksBackgroundTaskIdResume_RouteContract {
+  pathParams: PostBackgroundTasksBackgroundTaskIdResume_PathParams;
+  queryParams: never;
+  body: PostBackgroundTasksBackgroundTaskIdResume_Body;
+  request: PostBackgroundTasksBackgroundTaskIdResume_Request;
+  response: PostBackgroundTasksBackgroundTaskIdResume_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /editor/builder/settings
 // ============================================================================
 export type GetEditorBuilderSettings_Response = {
@@ -25207,6 +25241,7 @@ export interface RouteTypes {
   'GET /background-tasks/stream': GetBackgroundTasksStream_RouteContract;
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
+  'POST /background-tasks/:backgroundTaskId/resume': PostBackgroundTasksBackgroundTaskIdResume_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
   'GET /editor/workflow-builder/settings': GetEditorWorkflowBuilderSettings_RouteContract;
   'POST /editor/workflow-builder/stream': PostEditorWorkflowBuilderStream_RouteContract;
@@ -25637,6 +25672,9 @@ export interface Client {
   };
   '/background-tasks/:backgroundTaskId': {
     GET: GetBackgroundTasksBackgroundTaskId_RouteContract;
+  };
+  '/background-tasks/:backgroundTaskId/resume': {
+    POST: PostBackgroundTasksBackgroundTaskIdResume_RouteContract;
   };
   '/background-tasks/stream': {
     GET: GetBackgroundTasksStream_RouteContract;

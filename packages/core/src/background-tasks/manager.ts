@@ -576,6 +576,9 @@ export class BackgroundTaskManager {
             ?.getLogger?.()
             ?.warn(`background-task cancellation callback failed for ${taskId}:`, error as any);
         }
+        // Cancelling answers nothing, but the open request on the tool call
+        // must go so a client doesn't offer to answer a dead task.
+        if (previousStatus === 'suspended') await this.runLocalExecutionHook(cancelledTask);
       }
       this.deregisterTaskContext(taskId);
 
@@ -1583,6 +1586,9 @@ export class BackgroundTaskManager {
     const resumedTask = await storage.getTask(taskId);
     if (resumedTask) {
       await this.publishLifecycleEvent('task.resumed', resumedTask);
+      // The suspension is answered: let the caller drop its open request from
+      // the tool call before the run can suspend again.
+      await this.runLocalExecutionHook(resumedTask);
     }
 
     if (!this.#mastra) {
@@ -1807,10 +1813,10 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Per-task suspend hooks. Fires `ctx.onResult({ status: 'suspended', ... })`
-   * so the message list / memory pick up the suspension as the tool's
-   * current invocation state. Does NOT deregister the task context — resume
-   * needs the executor closure intact.
+   * Per-task suspend hooks. Fires `ctx.onExecution({ suspendedAt, suspendPayload, ... })`
+   * so the message list / memory record the open suspension on the tool
+   * call. Does NOT deregister the task context — resume needs the executor
+   * closure intact.
    *
    * @internal — called by the workflow-engine step bodies in workflow.ts
    */
@@ -1827,6 +1833,7 @@ export class BackgroundTaskManager {
       resourceId: task.resourceId,
       startedAt: task.startedAt!,
       suspendedAt: task.suspendedAt,
+      suspendPayload: task.suspendPayload,
     });
   }
 

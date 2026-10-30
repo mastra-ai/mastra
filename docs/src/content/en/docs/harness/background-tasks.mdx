@@ -308,6 +308,31 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 })
 ```
 
+On the resumed run, `context.agent.suspendPayload` holds the `data` the tool suspended with. Use it to tell which request an answer belongs to without encoding that in `resumeData`.
+
+### Answer a suspended task from a client
+
+While an agent's background tool call is suspended, the assistant message that holds the call records the open request under `metadata.suspendedTools[toolCallId]`. The entry carries `toolName`, `args`, `suspendPayload`, `taskId`, `runId`, and `suspendedAt`, so a chat that reloads the thread can still show the request. The entry is removed when the task resumes or is cancelled.
+
+The entry is written by the process that dispatched the tool call, the same process that writes the task's result into the thread. A task that a worker picks up after a restart has no such process, so neither the open request nor the result reaches the thread.
+
+To answer the request over HTTP, call `POST /api/background-tasks/:backgroundTaskId/resume` with the answer in `resumeData`. The [client SDK](/reference/client-js/mastra-client) wraps the route as `resumeBackgroundTask()`:
+
+```typescript title="src/client/answer-request.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+
+const task = await client.getBackgroundTask(taskId)
+await client.resumeBackgroundTask(
+  taskId,
+  { reviewer: 'alice@example.com' },
+  { suspendedAt: task.suspendedAt },
+)
+```
+
+Pass the `suspendedAt` you read from the task or the `suspendedTools` entry. When the task has resumed or suspended again since, the server returns `409 Conflict` instead of delivering a stale answer. The route also returns `409` when the task isn't suspended or no concurrency slot is free, and `404` when the task doesn't exist or belongs to another resource. Calling it requires the `background-tasks:execute` permission.
+
 ### Resume when no slot is free
 
 By default, `resume()` throws `Concurrency limit reached` when every concurrency slot is in use. Pass `{ onNoSlot: 'queue' }` to queue the resume instead:

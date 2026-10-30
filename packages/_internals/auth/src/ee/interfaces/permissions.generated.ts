@@ -181,6 +181,8 @@ export const PERMISSION_PATTERNS = {
   'agents:write': 'agents:write',
   /** View auth */
   'auth:read': 'auth:read',
+  /** Execute background tasks */
+  'background-tasks:execute': 'background-tasks:execute',
   /** View background tasks */
   'background-tasks:read': 'background-tasks:read',
   /** View channels */
@@ -370,6 +372,7 @@ export const PERMISSIONS = [
   'agents:read',
   'agents:write',
   'auth:read',
+  'background-tasks:execute',
   'background-tasks:read',
   'channels:read',
   'channels:write',
@@ -484,6 +487,8 @@ export const MastraFGAPermissions = {
   AGENTS_WRITE: 'agents:write',
   /** View auth */
   AUTH_READ: 'auth:read',
+  /** Execute background tasks */
+  BACKGROUND_TASKS_EXECUTE: 'background-tasks:execute',
   /** View background tasks */
   BACKGROUND_TASKS_READ: 'background-tasks:read',
   /** View channels */
