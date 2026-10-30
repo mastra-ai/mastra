@@ -1,5 +1,144 @@
 # @mastra/factory
 
+## 0.26.0-alpha.2
+
+### Minor Changes
+
+- Added factory-scoped sandbox environment. A deployment that hosts several factories can now give a credential to one factory's sessions only: every Factory sandbox provider accepts `env` as a function of the session's sandbox context, which carries the new `factoryId` and `factoryName` fields. Scope secrets by `factoryId`, because names can be edited and aren't unique. ([#28767](https://github.com/mastra-ai/mastra/pull/28767))
+
+  ```ts
+  new PlatformFactorySandbox({
+    env: ctx => (ctx.factoryId === PLATFORM_FACTORY_ID ? { PLATFORM_TOKEN } : {}),
+  });
+  ```
+
+  Platform and Docker sandboxes keep the environment they started with when they resume. When you remove a credential from a factory, recreate its running sandboxes.
+
+### Patch Changes
+
+- Factory no longer reports a stalled sandbox as "git is not installed". When the `git --version` check times out (exit 124), the failure is now reported as an unresponsive sandbox that can be retried. A genuinely missing git includes the real exit code and output. Sandbox start failures also name the provider's VM id, so they can be matched against provider logs even after the sandbox is recreated. ([#28792](https://github.com/mastra-ai/mastra/pull/28792))
+
+- Linking a GitHub repository to a Factory is faster: it now looks up the one selected repository instead of listing every repository the GitHub App can see. On accounts with hundreds of repositories this cuts several seconds from each link. The repository row also goes straight from "Linking…" to linked instead of briefly showing "Link" again. ([#28551](https://github.com/mastra-ai/mastra/pull/28551))
+
+- Updated dependencies [[`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990), [`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990)]:
+  - @mastra/code-sdk@1.16.1-alpha.1
+  - @mastra/core@1.81.0-alpha.1
+  - @mastra/platform-workspace@1.11.0-alpha.0
+
+## 0.26.0-alpha.1
+
+### Minor Changes
+
+- Board phases can now say who runs them and when they start. `defineBoard()` accepts `name`, `description` and `nextPhases`, and working phases accept a `runner` (`{ agentId, skill, context, instructions }`), `autoStart` with an optional `autoStartWhen` rule, and an `exitTool` that ends the phase: once it succeeds, the agent moves the card to one of `nextPhases` with `factory_transition_work_item`. `autoApprove` and `autoApproveWhen` let a phase accept a `submit_plan` plan without a person. ([#28604](https://github.com/mastra-ai/mastra/pull/28604))
+
+  ```typescript
+  planning: {
+    name: 'Planning',
+    kind: 'working',
+    runner: { context: 'build', skill: 'plan' }, // a skill that ends by calling submit_plan
+    autoStart: true,
+    autoStartWhen: LOW_EFFORT,
+    exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
+    nextPhases: ['execute', 'canceled'],
+  },
+  ```
+
+  Existing board declarations keep working: `defineBoard()` maps the deprecated `title`, `role` and `next` to `name`, `runner.context` and `nextPhases` and logs a warning listing them. The board it returns has only the new fields, so code reading `board.title`, `phase.title` or `phase.role` must read `name` and `runner.context` instead. The board catalog keeps sending `title` and `role` for older clients. It also sends each working phase's `autoStartWhen` and `exitTool.autoApproveWhen`, so a client can tell which cards a phase starts or approves on its own.
+
+  The built-in Work and Review boards now use the new fields, with `nextPhases` instead of `outcomes`.
+
+  Integration rule contexts describe the card's phase with `nextPhases` and `context` beside `outcomes`; `role` stays as a deprecated alias of `context`. Built-in phases declare no outcome names, so rules that tested `context.phase?.outcomes` should test `context.phase?.nextPhases`.
+
+- Custom boards can now run your own skills. Pass skills to `new MastraFactory({ skills })`, or add `factory-skills/<name>/SKILL.md` to your app, and name one in a phase's `runner.skill`. Your skill replaces a built-in skill of the same name. ([#28823](https://github.com/mastra-ai/mastra/pull/28823))
+
+  ```typescript
+  import { createSkill } from '@mastra/core/skills';
+
+  const releaseNotes = createSkill({
+    name: 'release-notes',
+    description: 'Draft release notes for a work item',
+    instructions: 'Group the release notes by package and end with a one-line summary.',
+  });
+
+  const notesBoard = defineBoard({
+    id: 'notes',
+    name: 'Notes',
+    initialPhase: 'backlog',
+    phases: {
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['drafting'] },
+      drafting: { name: 'Drafting', kind: 'working', runner: { skill: 'release-notes' }, nextPhases: ['published'] },
+      published: { name: 'Published', kind: 'terminal' },
+    },
+  });
+
+  new MastraFactory({ ...config, boards: [notesBoard], skills: [releaseNotes] });
+  ```
+
+  Settings › Skills now lists your app's skills and shows the skill each custom phase runs. The board catalog sends each working phase's `skill`. The constructor warns when a phase names a skill that does not exist, or runs a review skill outside the `review` context.
+
+- Factory app skills can live in `src/mastra/factory-skills/<name>/SKILL.md`, next to the rest of your Mastra code, instead of under `src/mastra/public/factory-skills`. `mastra dev` reads the folder directly and `mastra build` copies it into the build output. The `public/` folder still works; when both exist, `src/mastra/factory-skills` wins. ([#28838](https://github.com/mastra-ai/mastra/pull/28838))
+
+  ```ts
+  const releaseBoard = defineBoard({
+    id: 'release',
+    initialPhase: 'backlog',
+    phases: {
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['drafting'] },
+      drafting: {
+        name: 'Drafting',
+        kind: 'working',
+        // Runs src/mastra/factory-skills/release-notes/SKILL.md
+        runner: { context: 'writer', skill: 'release-notes' },
+        nextPhases: ['published'],
+      },
+      published: { name: 'Published', kind: 'terminal' },
+    },
+  });
+  ```
+
+- Planning and Building on the Work board now run in one `work` session, so the builder keeps the plan's reasoning, branch and sandbox. When the planner moves the card to Building, the build prompt is queued onto its own run. ([#28721](https://github.com/mastra-ai/mastra/pull/28721))
+
+  This replaces the fallback that let a build borrow the plan or triage session. Triage no longer hands its session to later phases. Runs and API calls that name the `plan` role still start Planning, in a `plan` session the build then continues in; cards planned before this change keep using their `plan` session the same way. Self-review keeps its own `review` session.
+
+  `invokeSkill` decisions accept `startsAfterOwnMove: true` to start a run even when the agent of the same session moved the card. Custom board phases with a `runner.skill` set it when a card enters from another phase, so moving a card between phases that share a context now starts the next phase's skill.
+
+  ```ts
+  phases: {
+    building: {
+      kind: 'working',
+      name: 'Building',
+      runner: { context: 'builder' },
+      onEnter: {
+        issue: context => ({
+          type: 'invokeSkill',
+          role: 'builder',
+          idempotencyKey: `${context.ingress.id}:build`,
+          prompt: 'Build the approved plan.',
+          // The planner shares this session and moved the card itself; start the build anyway.
+          startsAfterOwnMove: true,
+        }),
+      },
+    },
+  },
+  ```
+
+### Patch Changes
+
+- Anonymous callers can no longer browse files, list artifacts or resolve codebase paths in a Factory deployment with authentication enabled; those routes now require a signed-in user. Factories running without authentication, such as local installs, are unchanged. ([#28829](https://github.com/mastra-ai/mastra/pull/28829))
+
+- Updated Factory's browser tab icon to use the same black tile as Studio and Platform in both light and dark mode, including the session status icons. ([#28840](https://github.com/mastra-ai/mastra/pull/28840))
+
+- Browser screenshots now show as images in the session transcript instead of their raw base64 data. Click a screenshot to see it at full size. ([#28503](https://github.com/mastra-ai/mastra/pull/28503))
+
+- Brought back the **+** next to Sessions in the Factory sidebar, beside the properties menu. It opens a new session draft, same as the **New session** row. ([#28761](https://github.com/mastra-ai/mastra/pull/28761))
+
+- Improved type declaration formatting. Published `.d.ts` files are now generated with TypeScript 7, so some literal types use single quotes and some union members appear in a different order. The types themselves are unchanged. ([#28726](https://github.com/mastra-ai/mastra/pull/28726))
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`ddcc955`](https://github.com/mastra-ai/mastra/commit/ddcc95533487a7e5de10073dc163b5c78fd2168b), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`d91fe23`](https://github.com/mastra-ai/mastra/commit/d91fe2386a1b40722599670faccf08b1f180fb55), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d)]:
+  - @mastra/core@1.81.0-alpha.0
+  - @mastra/code-sdk@1.16.1-alpha.0
+  - @mastra/mcp@2.6.0
+
 ## 0.26.0-alpha.0
 
 ### Minor Changes

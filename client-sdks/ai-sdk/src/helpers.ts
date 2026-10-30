@@ -423,6 +423,8 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         // Carries the `toModelOutput` projection as `mastra.modelOutput`; dropping it sent
         // the raw tool output back into the prompt on a `useChat` round trip (issue #22012).
         ...(chunk.payload.providerMetadata != null ? { providerMetadata: chunk.payload.providerMetadata } : {}),
+        // Partial provider results (e.g. OpenAI image_generation partial images); the final result follows.
+        ...('preliminary' in chunk.payload && chunk.payload.preliminary === true ? { preliminary: true } : {}),
       };
     case 'tool-error':
       return {
@@ -860,6 +862,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         // `resultProviderMetadata`, so `mastra.modelOutput` survives the trip (issue #22012).
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+        ...(part.preliminary != null ? { preliminary: part.preliminary } : {}),
       };
     }
 

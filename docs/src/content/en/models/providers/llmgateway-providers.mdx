@@ -7,7 +7,7 @@ description: "Browse LLM Gateway model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/llmgateway-providers.svg" alt="LLM Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LLM Gateway
 
-Access 410 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 418 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [LLM Gateway documentation](https://llmgateway.io/docs).
 
@@ -2014,18 +2014,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "llmgateway-providers/entrim/deepseek-v4.1-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 384000,
-    "inputCost": 0.2,
-    "outputCost": 0.6
-  },
-  {
     "model": "llmgateway-providers/entrim/deepseek-v4.1-flash-1017",
     "imageInput": true,
     "audioInput": false,
@@ -3774,8 +3762,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 393216,
-    "inputCost": 0.16,
-    "outputCost": 0.64
+    "inputCost": 0.2,
+    "outputCost": 0.8
   },
   {
     "model": "llmgateway-providers/reka-ai/glm-5.3",
@@ -3796,10 +3784,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 1048576,
     "maxOutput": 262144,
-    "inputCost": 0.09,
-    "outputCost": 0.28
+    "inputCost": 0.11,
+    "outputCost": 0.33
   },
   {
     "model": "llmgateway-providers/reka-ai/reka-edge-2603",
@@ -4158,8 +4146,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 393216,
-    "inputCost": 0.14,
-    "outputCost": 0.28
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "llmgateway-providers/tencent/deepseek-v4-pro",
@@ -4170,8 +4158,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 393216,
-    "inputCost": 0.435,
-    "outputCost": 0.87
+    "inputCost": 0.66,
+    "outputCost": 1.98
+  },
+  {
+    "model": "llmgateway-providers/tencent/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 393216,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "llmgateway-providers/tencent/deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 393216,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "llmgateway-providers/tencent/glm-5",
@@ -4220,6 +4232,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.4,
     "outputCost": 4.4
+  },
+  {
+    "model": "llmgateway-providers/tencent/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 1.4,
+    "outputCost": 4.4
+  },
+  {
+    "model": "llmgateway-providers/tencent/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
+    "model": "llmgateway-providers/tencent/glm-5.3-flashx",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.37,
+    "outputCost": 1.25
   },
   {
     "model": "llmgateway-providers/tencent/glm-5v-turbo",
@@ -4306,6 +4354,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 8
   },
   {
+    "model": "llmgateway-providers/tencent/kimi-k2.8-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 1000000,
+    "inputCost": 1,
+    "outputCost": 4
+  },
+  {
     "model": "llmgateway-providers/tencent/kimi-k3",
     "imageInput": true,
     "audioInput": false,
@@ -4316,6 +4376,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "llmgateway-providers/tencent/mimo-v2.6-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.28
+  },
+  {
+    "model": "llmgateway-providers/tencent/mimo-v2.6-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.435,
+    "outputCost": 0.87
   },
   {
     "model": "llmgateway-providers/tencent/minimax-m2.7",
@@ -4340,6 +4424,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "llmgateway-providers/tencent/step-5-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 1,
+    "outputCost": 2.7
   },
   {
     "model": "llmgateway-providers/together-ai/deepseek-v4-pro",

@@ -38,6 +38,7 @@ import {
   SAVE_QUEUE_MANAGER_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
+  STEP_RESPONSE_MESSAGE_ID_KEY,
   STEP_TOOLS_KEY,
   STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
@@ -909,6 +910,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             ? undefined
             : resumeData;
 
+        // Everything the tool writes goes through the step's response message, not the
+        // run-level id: a signal or retry rotated the response id mid-run, and a chunk
+        // persisted under the stale run id replaces an earlier sealed assistant row.
+        const stepResponseMessageId = readScoped(scopeCtx, STEP_RESPONSE_MESSAGE_ID_KEY, 'stepResponseMessageId');
+        const stepOutputWriter = outputWriter
+          ? (chunk: any, writerOptions?: { messageId?: string }) =>
+              outputWriter(chunk, { messageId: writerOptions?.messageId ?? stepResponseMessageId })
+          : undefined;
+
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal,
           toolCallId: inputData.toolCallId,
@@ -918,7 +928,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
             : messageList.get.input.aiV5.model(),
           getMessages: () => messageList.get.all.db(),
-          outputWriter,
+          outputWriter: stepOutputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from the run scope (set by llmExecutionStep via prepareStep/processInputStep)

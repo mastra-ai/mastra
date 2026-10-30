@@ -25,6 +25,18 @@ export interface FactorySandboxContext {
   /** Stable session id, the sandbox identity. */
   sessionId: string;
   /**
+   * Id of the factory the session belongs to. Hosts use it to scope what a
+   * sandbox receives to one factory, e.g. a credential only one factory's
+   * sessions should see. Absent for a session created before factories.
+   */
+  factoryId?: string;
+  /**
+   * Display name of the factory the session belongs to, for logs and readable
+   * config. Names can be edited and are not unique, so scope secrets by
+   * `factoryId`, never by name. Absent when `factoryId` is.
+   */
+  factoryName?: string;
+  /**
    * The provider's physical sandbox id persisted from a prior start, when the
    * session has been started before. Providers that reattach by physical id
    * (e.g. Railway) MUST forward it to the sandbox constructor so resume

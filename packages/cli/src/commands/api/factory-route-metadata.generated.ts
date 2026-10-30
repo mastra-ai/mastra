@@ -884,6 +884,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "role": {
                       "type": "string"
                     },
+                    "skill": {
+                      "type": "string"
+                    },
                     "autoStart": {
                       "type": "boolean"
                     },

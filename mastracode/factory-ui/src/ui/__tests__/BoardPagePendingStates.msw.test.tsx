@@ -1510,6 +1510,27 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(getPlanningTrigger()).toHaveFocus());
   });
 
+  it('offers Intake card creation while the external intake feed is still loading', async () => {
+    stubBoardEndpoints();
+    stubJiraCandidate();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/jira/issues`, async () => {
+        await delay('infinite');
+        return HttpResponse.json({ issues: [], nextCursor: null });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const intakeColumn = await screen.findByTestId('board-column-intake');
+    expect(await within(intakeColumn).findByRole('status', { name: 'Loading Intake column' })).toBeInTheDocument();
+
+    await user.click(await screen.findByRole('button', { name: 'Create work item in Intake' }));
+    const composer = await within(intakeColumn).findByRole('form', { name: 'New work item in Intake' });
+    expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
+    expect(within(intakeColumn).getByRole('status', { name: 'Loading Intake column' })).toBeInTheDocument();
+  });
+
   it('keeps transition errors inline and retries the same manual work item', async () => {
     stubBoardEndpoints();
     let created = false;

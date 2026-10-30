@@ -8,7 +8,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3": [
+    "k3.1-pro-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-for-coding": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -20,13 +26,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "k3.1-pro-highspeed": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-for-coding": [
+    "k3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
