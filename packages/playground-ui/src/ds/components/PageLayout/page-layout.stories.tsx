@@ -229,21 +229,24 @@ export const Fit: Story = {
 export const FullPage: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout
-        breadcrumbs={crumbs}
-        headerActions={headerActions}
-        actionRow={
-          <ActionRow>
-            <ActionRow.Start>
-              <Input placeholder="Filter resources" className="max-w-120" />
-            </ActionRow.Start>
-            <ActionRow.End>
-              <Button>Sort</Button>
-            </ActionRow.End>
-          </ActionRow>
-        }
-      >
-        {resourceList}
+      <PageLayout breadcrumbs={crumbs} headerActions={headerActions}>
+        <ActionRow>
+          <ActionRow.Start>
+            <Input placeholder="Filter resources" className="max-w-120" />
+          </ActionRow.Start>
+          <ActionRow.End>
+            <Button>Sort</Button>
+          </ActionRow.End>
+        </ActionRow>
+        <PageLayout.Fill>
+          <ul className="grid min-h-0 gap-2 overflow-y-auto">
+            {longResources.map(resource => (
+              <li key={resource} className="rounded border border-border px-3 py-2">
+                {resource}
+              </li>
+            ))}
+          </ul>
+        </PageLayout.Fill>
       </PageLayout>
     </StoryFrame>
   ),

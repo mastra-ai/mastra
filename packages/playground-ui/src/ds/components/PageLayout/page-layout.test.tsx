@@ -27,21 +27,20 @@ describe('PageLayout', () => {
     });
   });
 
-  describe('when an action row is provided', () => {
-    it('pins it between the header and the scrollable body', () => {
+  describe('when the body holds a toolbar and a list', () => {
+    it('scrolls them together, in order', () => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
-          <p>Body</p>
+        <PageLayout breadcrumbs={<span>Crumbs</span>}>
+          <input aria-label="Filter" />
+          <PageLayout.Fill>
+            <p>Body</p>
+          </PageLayout.Fill>
         </PageLayout>,
       );
 
-      const row = screen.getByLabelText('Filter').closest('[data-slot="page-layout-action-row"]');
-      const main = screen.getByRole('main');
-      expect(row).not.toBeNull();
-      if (!row) return;
-      expect(main.contains(row)).toBe(false);
-      expect(screen.getByRole('banner').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(row.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const filter = screen.getByLabelText('Filter');
+      expect(filter.closest('[style*="overflow"]')).toBe(viewportOf('Body'));
+      expect(filter.compareDocumentPosition(screen.getByText('Body')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 

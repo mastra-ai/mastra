@@ -70,7 +70,7 @@ function Spinner({
 
   if (fill) {
     return (
-      <div data-slot="spinner-fill" className="flex h-full items-center-safe justify-center-safe">
+      <div data-slot="spinner-fill" className="flex h-full flex-1 items-center-safe justify-center-safe">
         {svg}
       </div>
     );

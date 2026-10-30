@@ -14,16 +14,12 @@ type MetricsPageLayoutProps = {
 /** URL controls do not need storage access and remain usable on unsupported stores. */
 export function MetricsPageLayout({ children, filterFields }: MetricsPageLayoutProps) {
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <MetricsFilterBar fields={filterFields} />
-          </ActionRow.Start>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <MetricsFilterBar fields={filterFields} />
+        </ActionRow.Start>
+      </ActionRow>
       <h1 className="sr-only">Metrics</h1>
       {children}
     </PageLayout>

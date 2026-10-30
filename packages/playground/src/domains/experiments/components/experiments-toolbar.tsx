@@ -31,7 +31,7 @@ export function ExperimentsToolbar({
   comparableDataset,
 }: ExperimentsToolbarProps) {
   return (
-    <>
+    <div className="flex flex-col gap-2">
       <ActionRow>
         <ActionRow.Start>
           <ExperimentsFilterBar
@@ -53,6 +53,6 @@ export function ExperimentsToolbar({
           <ExperimentsBulkActions {...selection} />
         </ActionRow.End>
       </ActionRow>
-    </>
+    </div>
   );
 }

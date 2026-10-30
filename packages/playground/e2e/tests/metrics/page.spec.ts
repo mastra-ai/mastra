@@ -38,6 +38,24 @@ test.describe('Metrics dashboard page', () => {
     });
   });
 
+  test.describe('when the page is scrolled', () => {
+    test('scrolls the filter bar away with the cards', async ({ page }) => {
+      await page.goto('/metrics');
+
+      const datePreset = page.getByRole('button', { name: 'Value: Last 24 hours' });
+      const card = page.getByText('Token usage', { exact: true });
+      await card.or(page.getByText('Metrics are not available with your current storage')).first().waitFor();
+      test.skip(!(await card.isVisible()), 'Metrics are not available with the current kitchen-sink storage');
+
+      const top = (await datePreset.boundingBox())?.y ?? 0;
+      await card.hover();
+      await page.mouse.wheel(0, 200);
+
+      // Pinned, it would stay at `top` while the cards scroll under it.
+      await expect.poll(async () => (await datePreset.boundingBox())?.y ?? top).toBeLessThan(top - 100);
+    });
+  });
+
   test.describe('when a dimensional filter is present in the URL', () => {
     test('persists the dimensional filter as a URL param', async ({ page }) => {
       await page.goto('/metrics?filterEnvironment=production');

@@ -103,35 +103,32 @@ export default function PromptBlocks() {
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      headerActions={<PromptBlocksHeaderCreateAction />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <div className="max-w-120 flex-1">
-              <ListSearch
-                onSearch={handleSearchChange}
-                label="Filter prompts"
-                placeholder="Filter by name or description"
-              />
-            </div>
-          </ActionRow.Start>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<PromptBlocksHeaderCreateAction />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <div className="max-w-120 flex-1">
+            <ListSearch
+              onSearch={handleSearchChange}
+              label="Filter prompts"
+              placeholder="Filter by name or description"
+            />
+          </div>
+        </ActionRow.Start>
+      </ActionRow>
       <h1 className="sr-only">Prompts</h1>
-      <PromptsList
-        promptBlocks={promptBlocks}
-        isLoading={isLoading}
-        search={search}
-        currentPage={page}
-        hasMore={hasMore}
-        onNextPage={handleNextPage}
-        onPrevPage={handlePrevPage}
-        updatedSort={sort?.direction}
-        onSortChange={handleSortChange}
-      />
+      <PageLayout.Fill>
+        <PromptsList
+          promptBlocks={promptBlocks}
+          isLoading={isLoading}
+          search={search}
+          currentPage={page}
+          hasMore={hasMore}
+          onNextPage={handleNextPage}
+          onPrevPage={handlePrevPage}
+          updatedSort={sort?.direction}
+          onSortChange={handleSortChange}
+        />
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

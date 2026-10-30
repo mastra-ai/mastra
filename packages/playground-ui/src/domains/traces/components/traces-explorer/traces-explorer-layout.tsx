@@ -8,13 +8,13 @@ export type { TracesExplorerErrorRenderArgs } from './traces-explorer-body';
 
 export type TracesExplorerLayoutProps = TracesExplorerBodyProps & {
   breadcrumbs?: ReactNode;
-  /** Navigation pinned under the header (e.g. view tabs). Unlike `actionRow`, it stays up while filter fields load. */
+  /** Navigation under the header (e.g. view tabs). Unlike `actionRow`, it stays up while filter fields load. */
   tabs?: ReactNode;
-  /** Controls pinned under the header, hidden while filter fields load. */
+  /** Controls under the header, hidden while filter fields load. */
   actionRow?: ReactNode;
 };
 
-/** The traces page: `TracesExplorer.Body` inside a page frame with breadcrumbs and pinned controls. */
+/** The traces page: `TracesExplorer.Body` inside a page frame with breadcrumbs and controls above the list. */
 export function TracesExplorerLayout({
   breadcrumbs,
   tabs,
@@ -28,19 +28,22 @@ export function TracesExplorerLayout({
 
   // Like the toolbar, the action row waits for the body's loading skeleton to clear; the tabs do not.
   const visibleActionRow = isBodyLoading ? undefined : actionRow;
-  const pinned =
+  const controls =
     tabs || visibleActionRow ? (
-      <>
+      <div className="flex flex-col gap-2">
         {tabs}
         {visibleActionRow}
-      </>
+      </div>
     ) : undefined;
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={pinned}>
-      <TracesExplorerBody toolbar={toolbar} chart={chart} renderError={renderError}>
-        {children}
-      </TracesExplorerBody>
+    <PageLayout breadcrumbs={breadcrumbs}>
+      {controls}
+      <PageLayout.Fill>
+        <TracesExplorerBody toolbar={toolbar} chart={chart} renderError={renderError}>
+          {children}
+        </TracesExplorerBody>
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

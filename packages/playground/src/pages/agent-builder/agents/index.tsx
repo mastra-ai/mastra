@@ -100,41 +100,38 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <PageLayout
-      actionRow={
-        <>
-          <ActionRow className="items-start">
-            <ActionRow.Start>
-              <PageHeader>
-                <PageHeader.Title>
-                  <AgentIcon /> My agents
-                </PageHeader.Title>
-                <PageHeader.Description>Agents you've created.</PageHeader.Description>
-              </PageHeader>
-            </ActionRow.Start>
-            {agents.length > 0 && canWrite && (
-              <ActionRow.End>
-                <Button
-                  render={<FrameworkLink href="/agent-builder/agents/create" />}
-                  variant="primary"
-                  icon={<PlusIcon />}
-                >
-                  New agent
-                </Button>
-              </ActionRow.End>
-            )}
-          </ActionRow>
-          <ActionRow>
-            <ActionRow.Start>
-              <div className="max-w-120 flex-1">
-                <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
-              </div>
-            </ActionRow.Start>
-          </ActionRow>
-        </>
-      }
-    >
-      {body}
+    <PageLayout>
+      <div className="flex flex-col gap-2">
+        <ActionRow className="items-start">
+          <ActionRow.Start>
+            <PageHeader>
+              <PageHeader.Title>
+                <AgentIcon /> My agents
+              </PageHeader.Title>
+              <PageHeader.Description>Agents you've created.</PageHeader.Description>
+            </PageHeader>
+          </ActionRow.Start>
+          {agents.length > 0 && canWrite && (
+            <ActionRow.End>
+              <Button
+                render={<FrameworkLink href="/agent-builder/agents/create" />}
+                variant="primary"
+                icon={<PlusIcon />}
+              >
+                New agent
+              </Button>
+            </ActionRow.End>
+          )}
+        </ActionRow>
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+            </div>
+          </ActionRow.Start>
+        </ActionRow>
+      </div>
+      <PageLayout.Fill>{body}</PageLayout.Fill>
     </PageLayout>
   );
 }

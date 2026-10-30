@@ -57,26 +57,24 @@ export function Processors() {
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
-            </div>
-          </ActionRow.Start>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
+          </div>
+        </ActionRow.Start>
+      </ActionRow>
       <h1 className="sr-only">Processors</h1>
-      <ProcessorsList
-        processors={processors}
-        isLoading={isLoading}
-        search={search}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
-      />
+      <PageLayout.Fill>
+        <ProcessorsList
+          processors={processors}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

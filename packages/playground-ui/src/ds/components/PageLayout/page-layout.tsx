@@ -5,13 +5,15 @@ import type { ScrollAreaMask } from '../ScrollArea';
 import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
+  /**
+   * The page body. Everything in it scrolls together, toolbars included. Without a `header`, `container`
+   * children stack 16px apart; wrap a list that scrolls on its own in `PageLayout.Fill`.
+   */
   children: ReactNode;
   /** Left side of the page header row. */
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
   headerActions?: ReactNode;
-  /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
-  actionRow?: ReactNode;
   /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
   header?: ReactNode;
   /**
@@ -27,11 +29,10 @@ export interface PageLayoutProps {
   mask?: ScrollAreaMask;
 }
 
-export function PageLayout({
+export function PageLayoutRoot({
   children,
   breadcrumbs,
   headerActions,
-  actionRow,
   header,
   variant = 'container',
   mask = false,
@@ -52,17 +53,14 @@ export function PageLayout({
           )}
         </Header>
       )}
-      {actionRow && (
-        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
-          {actionRow}
-        </div>
-      )}
       <main className="flex min-h-0 flex-1 flex-col">
         <ScrollArea mask={mask} className="min-h-0 flex-1">
           <ScrollAreaViewport
             className={cn(variant === 'container' && 'p-4')}
             contentClassName={cn(
-              variant === 'container' && 'h-full min-h-min',
+              // At least the page's height so `h-full` children and `PageLayout.Fill` have room to fill;
+              // taller content grows it and the page scrolls. A `header` brings its own spacing below it.
+              variant === 'container' && cn('flex h-full min-h-min flex-col', !header && 'gap-4'),
               variant === 'narrow' && 'grid min-h-full grid-cols-1',
               // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
               variant === 'fit' &&
@@ -93,6 +91,23 @@ export function PageLayout({
           </ScrollAreaViewport>
         </ScrollArea>
       </main>
+    </div>
+  );
+}
+
+export interface PageLayoutFillProps {
+  children: ReactNode;
+  className?: string;
+}
+
+/**
+ * Takes the body height left under the content above it, for a list or panel that scrolls on its own
+ * (e.g. `DataList`): the toolbar above it stays in view while its rows scroll.
+ */
+export function PageLayoutFill({ children, className }: PageLayoutFillProps) {
+  return (
+    <div data-slot="page-layout-fill" className={cn('flex min-h-0 grow basis-0 flex-col', className)}>
+      {children}
     </div>
   );
 }

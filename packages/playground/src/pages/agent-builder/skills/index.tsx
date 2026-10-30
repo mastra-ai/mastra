@@ -110,46 +110,43 @@ export default function AgentBuilderSkillsPage() {
 
   return (
     <>
-      <PageLayout
-        actionRow={
-          <>
-            <ActionRow className="items-start">
-              <ActionRow.Start>
-                <PageHeader>
-                  <PageHeader.Title>
-                    <SparklesIcon /> My skills
-                  </PageHeader.Title>
-                  <PageHeader.Description>Skills you've created.</PageHeader.Description>
-                </PageHeader>
-              </ActionRow.Start>
-              {skills.length > 0 && canWriteSkills && (
-                <ActionRow.End>
-                  {enabledRegistry && (
-                    <Button
-                      variant="default"
-                      onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
-                      icon={<DownloadIcon />}
-                    >
-                      Browse registry
-                    </Button>
-                  )}
-                  <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
-                    New skill
+      <PageLayout>
+        <div className="flex flex-col gap-2">
+          <ActionRow className="items-start">
+            <ActionRow.Start>
+              <PageHeader>
+                <PageHeader.Title>
+                  <SparklesIcon /> My skills
+                </PageHeader.Title>
+                <PageHeader.Description>Skills you've created.</PageHeader.Description>
+              </PageHeader>
+            </ActionRow.Start>
+            {skills.length > 0 && canWriteSkills && (
+              <ActionRow.End>
+                {enabledRegistry && (
+                  <Button
+                    variant="default"
+                    onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
+                    icon={<DownloadIcon />}
+                  >
+                    Browse registry
                   </Button>
-                </ActionRow.End>
-              )}
-            </ActionRow>
-            <ActionRow>
-              <ActionRow.Start>
-                <div className="max-w-120 flex-1">
-                  <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
-                </div>
-              </ActionRow.Start>
-            </ActionRow>
-          </>
-        }
-      >
-        {body}
+                )}
+                <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
+                  New skill
+                </Button>
+              </ActionRow.End>
+            )}
+          </ActionRow>
+          <ActionRow>
+            <ActionRow.Start>
+              <div className="max-w-120 flex-1">
+                <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
+              </div>
+            </ActionRow.Start>
+          </ActionRow>
+        </div>
+        <PageLayout.Fill>{body}</PageLayout.Fill>
       </PageLayout>
 
       {registryDialog && (

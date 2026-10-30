@@ -240,47 +240,47 @@ export default function Experiments() {
           New experiment
         </Button>
       }
-      actionRow={
-        <ExperimentsToolbar
-          search={search}
-          statusFilter={statusFilter}
-          datasetFilter={datasetFilter}
-          datasetOptions={experimentDatasetOptions}
-          targetType={targetType}
-          targetId={targetId}
-          onFiltersChange={handleFiltersChange}
-          selection={{
-            selectedIds,
-            onClearSelection: () => setSelectedExperimentIds([]),
-            onCompare: executeCompare,
-            compareDisabledReason,
-          }}
-          comparableDataset={comparableDataset}
-        />
-      }
     >
-      <h1 className="sr-only">Experiments</h1>
-      <ExperimentsList
-        experiments={experiments}
-        datasets={namedDatasets}
-        reviewByExperiment={reviewByExperiment}
-        metricsByExperiment={metricsByExperiment}
-        isLoading={isLoading}
+      <ExperimentsToolbar
         search={search}
         statusFilter={statusFilter}
         datasetFilter={datasetFilter}
-        isFetchingNextPage={isFetchingNextPage}
-        hasNextPage={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        sort={sort}
-        onSortChange={onSortChange}
+        datasetOptions={experimentDatasetOptions}
+        targetType={targetType}
+        targetId={targetId}
+        onFiltersChange={handleFiltersChange}
         selection={{
-          selectedExperimentIds: selectedIds,
-          onToggleSelection: toggleExperimentSelection,
-          onToggleAll: toggleAllExperiments,
-          comparableDatasetId,
+          selectedIds,
+          onClearSelection: () => setSelectedExperimentIds([]),
+          onCompare: executeCompare,
+          compareDisabledReason,
         }}
+        comparableDataset={comparableDataset}
       />
+      <h1 className="sr-only">Experiments</h1>
+      <PageLayout.Fill>
+        <ExperimentsList
+          experiments={experiments}
+          datasets={namedDatasets}
+          reviewByExperiment={reviewByExperiment}
+          metricsByExperiment={metricsByExperiment}
+          isLoading={isLoading}
+          search={search}
+          statusFilter={statusFilter}
+          datasetFilter={datasetFilter}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          setEndOfListElement={setEndOfListElement}
+          sort={sort}
+          onSortChange={onSortChange}
+          selection={{
+            selectedExperimentIds: selectedIds,
+            onToggleSelection: toggleExperimentSelection,
+            onToggleAll: toggleAllExperiments,
+            comparableDatasetId,
+          }}
+        />
+      </PageLayout.Fill>
 
       {runDialog}
     </PageLayout>

@@ -176,11 +176,12 @@ export default function LogsPage() {
 
   if (logsError) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        {actionRow}
         <h1 className="sr-only">Logs</h1>
-        <div className="flex h-full items-center justify-center">
+        <PageLayout.Fill className="items-center justify-center">
           <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
-        </div>
+        </PageLayout.Fill>
       </PageLayout>
     );
   }
@@ -189,7 +190,8 @@ export default function LogsPage() {
 
   if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        {actionRow}
         <h1 className="sr-only">Logs</h1>
         <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
@@ -197,20 +199,23 @@ export default function LogsPage() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      {actionRow}
       <h1 className="sr-only">Logs</h1>
-      <LogsListView
-        logs={logs}
-        isLoading={isLoadingLogs}
-        isFetchingNextPage={isFetchingNextPage}
-        hasNextPage={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        logIdMap={logIdMap}
-        featuredLogId={url.featuredLogId}
-        onLogClick={handleLogClick}
-        timestampSort={sort?.direction}
-        onSortChange={onSortChange}
-      />
+      <PageLayout.Fill>
+        <LogsListView
+          logs={logs}
+          isLoading={isLoadingLogs}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          setEndOfListElement={setEndOfListElement}
+          logIdMap={logIdMap}
+          featuredLogId={url.featuredLogId}
+          onLogClick={handleLogClick}
+          timestampSort={sort?.direction}
+          onSortChange={onSortChange}
+        />
+      </PageLayout.Fill>
       <LogDataPanel
         log={featuredLog ?? undefined}
         onClose={handleLogClose}

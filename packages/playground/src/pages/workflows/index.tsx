@@ -60,31 +60,29 @@ function Workflows() {
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
-            </div>
-          </ActionRow.Start>
-          <ActionRow.End>
-            <Button render={<Link to="/workflows/schedules" />} variant="primary" icon={<CalendarClockIcon />}>
-              Schedules
-            </Button>
-          </ActionRow.End>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
+          </div>
+        </ActionRow.Start>
+        <ActionRow.End>
+          <Button render={<Link to="/workflows/schedules" />} variant="primary" icon={<CalendarClockIcon />}>
+            Schedules
+          </Button>
+        </ActionRow.End>
+      </ActionRow>
       <h1 className="sr-only">Workflows</h1>
-      <WorkflowsList
-        workflows={workflows || {}}
-        isLoading={isLoading}
-        search={search}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
-      />
+      <PageLayout.Fill>
+        <WorkflowsList
+          workflows={workflows || {}}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

@@ -66,28 +66,26 @@ export default function Tools() {
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
-            </div>
-          </ActionRow.Start>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
+          </div>
+        </ActionRow.Start>
+      </ActionRow>
       <h1 className="sr-only">Tools</h1>
-      <ToolsList
-        tools={tools}
-        agents={agentsRecord}
-        isLoading={isLoading}
-        search={search}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
-        selectedToolId={openToolId}
-      />
+      <PageLayout.Fill>
+        <ToolsList
+          tools={tools}
+          agents={agentsRecord}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+          selectedToolId={openToolId}
+        />
+      </PageLayout.Fill>
       <ToolDrawer>
         <ToolsPageDrawerBody />
       </ToolDrawer>
