@@ -155,6 +155,8 @@ export interface OutputResult {
   finishReason: string;
   /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
   steps: LLMStepResult[];
+  /** The error that ended the run, when `finishReason` is 'error' and the error is known */
+  error?: Error;
 }
 
 /**

@@ -301,11 +301,14 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       // The durable engines persist the input through agent memory regardless of the configured
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
       const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
-      const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      const inputSaved =
+        !readOnly && !(historyStore && engine === 'inngest') && !((customHistory || historyOff) && !durable);
+      // The lookup step completed before the deadline, so the deadline saves it with the input.
+      const completedStepSaved = inputSaved || (savePerStep && !readOnly);
       const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
       expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
-      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
+      expect(saved.includes('The order lookup is complete.')).toBe(completedStepSaved);
       expect(saved.includes('Checking the courier now.')).toBe(false);
     },
     TEST_TIMEOUT_MS,

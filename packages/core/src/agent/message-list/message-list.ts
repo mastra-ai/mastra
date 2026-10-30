@@ -1036,11 +1036,21 @@ export class MessageList {
 
     // Drop the marker itself along with the step it opened, so the next iteration's
     // openStepBoundary() writes a fresh marker for the retry rather than reusing the rejected one.
-    parts.splice(boundaryIndex);
+    this.#truncateParts(message, boundaryIndex);
+    return true;
+  }
+
+  /**
+   * Cut a message back to its first `length` parts, removing it when none remain, and keep the
+   * mirrors `MessageMerger` maintains beside the parts in step with what survived.
+   */
+  #truncateParts(message: MastraDBMessage, length: number): void {
+    const parts = message.content.parts;
+    parts.splice(length);
 
     if (parts.length === 0) {
-      this.removeByIds([messageId]);
-      return true;
+      this.removeByIds([message.id]);
+      return;
     }
 
     // `content.toolInvocations` is the legacy AIV4 mirror of the tool-invocation parts, also
@@ -1087,8 +1097,36 @@ export class MessageList {
       this.stateManager.removeMessage(message);
       this.stateManager.addToSource(message, 'response');
     }
+  }
 
-    return true;
+  /** Response parts per message as of the last completed step; undefined until a step completes. */
+  #completedStepParts: Map<string, number> | undefined;
+
+  /**
+   * Record the response as it stands now as the end of a completed step. Called by the loop when a
+   * step finishes, before the next one can add to the response.
+   * @internal
+   */
+  public markStepCompleted(): void {
+    this.#completedStepParts = new Map(
+      this.get.response.db().map(message => [message.id, message.content.parts?.length ?? 0]),
+    );
+  }
+
+  /**
+   * A copy of this list holding the input and only the response of completed steps: the parts and
+   * messages a step still in flight added since the last {@link markStepCompleted} are left out.
+   * @internal
+   */
+  public cloneWithCompletedSteps(): MessageList {
+    const clone = this.clone();
+    const completed = this.#completedStepParts;
+    for (const message of clone.get.response.db()) {
+      const length = completed?.get(message.id);
+      if (length === undefined) clone.removeByIds([message.id]);
+      else if ((message.content.parts?.length ?? 0) > length) clone.#truncateParts(message, length);
+    }
+    return clone;
   }
 
   private all = {

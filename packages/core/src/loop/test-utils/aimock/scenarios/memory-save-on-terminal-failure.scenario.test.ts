@@ -1,11 +1,15 @@
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { Memory } from '../../../../../../memory/src';
 import type { MastraDBMessage } from '../../../../agent/message-list';
 import { assertNoDuplicateParts } from '../../../../agent/test-utils';
 import { MockMemory } from '../../../../memory/mock';
+import type { MastraMemory } from '../../../../memory';
 import type { Processor } from '../../../../processors';
 import { MessageHistory } from '../../../../processors/memory/message-history';
+import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -44,7 +48,7 @@ function toolResultIds(messages: MastraDBMessage[]) {
 
 type Probe = { hook: string; finishReason?: string };
 
-function createProbes(memory: MockMemory) {
+function createProbes(memory: MastraMemory) {
   const calls: Probe[] = [];
   const saves: string[][] = [];
   const probe: Processor = {
@@ -79,7 +83,12 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     vi.restoreAllMocks();
   });
 
-  async function expectTurnSavedAndRecalled(memory: MockMemory, label: string, threadId: string) {
+  async function expectTurnSavedAndRecalled(
+    memory: MastraMemory,
+    label: string,
+    threadId: string,
+    memoryOptions?: { observationalMemory: boolean },
+  ) {
     const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
     const users = messages.filter(message => message.role === 'user');
     expect(users, `${label}: saved user messages`).toHaveLength(1);
@@ -93,6 +102,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       memory,
       threadId,
       resourceId: RESOURCE,
+      memoryOptions,
       tools: { echoTool },
       fixtures: llm => {
         llm.on({ endpoint: 'chat', userMessage: 'What did the tool return?' }, { content: 'It returned "first".' });
@@ -196,6 +206,138 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       await expectTurnSavedAndRecalled(memory, 'provider-error', threadId);
       expect(calls.map(call => call.hook)).toContain('MessageHistory.processOutputResult');
       expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Durable engines save the input before the run starts; a deadline during that save must not lose it.
+  // On normal/fs the held save is the deadline pass's own write.
+  it(
+    'total-timeout while the input save is still in flight keeps the user message once',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-held-input-${engine}`;
+      const store = (await memory.storage.getStore('memory'))!;
+      const saveMessages = store.saveMessages.bind(store);
+      const heldSaves: Promise<unknown>[] = [];
+      vi.spyOn(store, 'saveMessages').mockImplementation(args => {
+        if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => saveMessages(args));
+        heldSaves.push(held.catch(() => {}));
+        return held;
+      });
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Save me slowly.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] });
+          },
+        });
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        // A save queued behind a held one is held in turn, so wait until no new save starts.
+        for (let drained = 0; drained < heldSaves.length;) {
+          const held = heldSaves.slice(drained);
+          drained = heldSaves.length;
+          await Promise.all(held);
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        expect(heldSaves.length, 'a user-message save was attempted').toBeGreaterThan(0);
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
+        for (const message of messages) assertNoDuplicateParts(message.content.parts);
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  // With observational memory on, its processor owns history writes instead of MessageHistory.
+  it(
+    'total-timeout after a completed tool step, observational memory',
+    async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          generateTitle: false,
+          semanticRecall: false,
+          observationalMemory: {
+            enabled: true,
+            scope: 'thread',
+            observation: {
+              model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat('gpt-4o-mini'),
+              messageTokens: 100_000,
+              bufferTokens: false,
+            },
+            reflection: { observationTokens: 100_000 },
+          },
+        },
+      });
+      const threadId = `${THREAD}-timeout-om-${engine}`;
+      const { probe, calls } = createProbes(memory);
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then wait.',
+          memory,
+          memoryOptions: { observationalMemory: true },
+          threadId,
+          resourceId: RESOURCE,
+          agentOutputProcessors: [probe],
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            echoTool,
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        console.info(`[terminal-save probe] engine=${engine} case=total-timeout-om`, JSON.stringify({ calls }));
+
+        await expectTurnSavedAndRecalled(memory, 'total-timeout-om', threadId, { observationalMemory: true });
+        expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+      } finally {
+        hang.resolve({});
+      }
     },
     TEST_TIMEOUT_MS,
   );

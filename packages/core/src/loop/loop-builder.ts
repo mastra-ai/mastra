@@ -668,6 +668,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
+        if (typedInputData.stepResult?.reason !== 'retry') messageList.markStepCompleted();
         await outputWriter({
           type: 'step-finish',
           runId,

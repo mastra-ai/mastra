@@ -8,6 +8,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import { isMastraTimeoutError } from '../../loop/timeout';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
@@ -2080,6 +2081,38 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
               self.#error = error;
               self.#status = 'failed';
+              // A total deadline closes the stream without a finish chunk, so the output processors
+              // (and with them memory) get their one pass here, over the steps that completed in time.
+              if (
+                isMastraTimeoutError(error) &&
+                error.timeoutType === 'total' &&
+                self.processorRunner &&
+                !self.#options.isLLMExecutionStep
+              ) {
+                try {
+                  await self.processorRunner.runOutputProcessors(
+                    self.messageList.cloneWithCompletedSteps(),
+                    resolveObservabilityContext(options),
+                    self.#options.requestContext,
+                    0,
+                    {
+                      custom: async (data: { type: string; data?: unknown; transient?: boolean }) => {
+                        self.#emitChunk(data as ChunkType<OUTPUT>);
+                        controller.enqueue(data as ChunkType<OUTPUT>);
+                      },
+                    },
+                    {
+                      text: self.#bufferedSteps.map(step => step.text).join(''),
+                      usage: self.#usageCount,
+                      finishReason: 'error',
+                      steps: [...self.#bufferedSteps] as LLMStepResult[],
+                      error,
+                    },
+                  );
+                } catch (processorError) {
+                  self.logger?.error('Output processors failed at the total deadline', { error: processorError });
+                }
+              }
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
               Object.values(self.#delayedPromises).forEach(promise => {

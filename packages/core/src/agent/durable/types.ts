@@ -825,6 +825,8 @@ export interface RunRegistryEntry {
   runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Message list as of the last completed step; memory saves this when a total deadline ends the run */
+  completedStepsState?: SerializedMessageListState;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**

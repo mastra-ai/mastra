@@ -119,6 +119,7 @@ import type {
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
+import { runDurableDeadlineOutputPass } from './workflows/finalize-run';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
@@ -876,6 +877,11 @@ export class DurableAgent<
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
   #timedOutExecutions = new WeakSet<ExecutionFence>();
+  /**
+   * Accepted input of stream()/generate() executions. A total deadline that
+   * settles the execution saves the turn from it as a terminal write.
+   */
+  #runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
 
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
@@ -2775,6 +2781,9 @@ export class DurableAgent<
     // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
     // find them.
     const finished = totalTimeout || (status !== undefined && status !== 'suspended');
+    const runInput = totalTimeout && fence ? this.#runInputs.get(fence) : undefined;
+    // Captured before the error below lets the caller clean the run up.
+    const runInputEntry = runInput && getRunRegistryEntry(runId, this.#mastra);
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
@@ -2782,6 +2791,25 @@ export class DurableAgent<
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
+      if (runInput && runInputEntry && !runInputEntry.tripwire) {
+        // The run never reaches its finish step, so the output processors get their pass here, over the
+        // steps that completed in time (or just the accepted request). Saves made under the claim the
+        // deadline replaced are rejected; this one writes under the replacement. Saves upsert by ID.
+        this.#runInputs.delete(fence!);
+        try {
+          await runDurableDeadlineOutputPass({
+            runId,
+            initData: runInput,
+            messageListState: runInputEntry.completedStepsState ?? runInput.messageListState,
+            entry: runInputEntry,
+            error: error!,
+            mastra: this.#mastra,
+            logger: this.logger,
+          });
+        } catch (saveError) {
+          this.logger.warn(`Failed to save run ${runId} at its total deadline`, { runId, error: saveError });
+        }
+      }
     };
 
     if (!fence) return writeTerminalState();
@@ -3143,6 +3171,7 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
+    this.#runInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -4776,6 +4805,7 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
+    this.#runInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,

@@ -422,6 +422,96 @@ export async function runDurableFinishSideEffects({
   };
 }
 
+/**
+ * Give the output processors (and with them memory) their one pass when a total deadline ends a
+ * durable run. The run never reaches its finish step, so this runs over the message list as of the
+ * last completed step, the same input a provider error's finish pass would see.
+ */
+export async function runDurableDeadlineOutputPass({
+  runId,
+  initData,
+  messageListState,
+  entry,
+  error,
+  mastra,
+  logger,
+}: {
+  runId: string;
+  initData: Pick<DurableAgenticWorkflowInput, 'agentId' | 'agentName' | 'state' | 'options' | 'requestContextEntries'>;
+  messageListState: SerializedMessageListState;
+  entry: RunRegistryEntry;
+  error: Error;
+  mastra?: Mastra;
+  logger: IMastraLogger;
+}): Promise<void> {
+  const durableState = initData.state;
+  const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
+  if (!requestContext.has('MastraMemory') && durableState?.threadId) {
+    requestContext.set('MastraMemory', {
+      thread: { id: durableState.threadId },
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
+  const messageList = new MessageList({
+    threadId: durableState?.threadId,
+    resourceId: durableState?.resourceId,
+  }).deserialize(messageListState);
+
+  if (entry.outputProcessors?.length) {
+    const runner = new ProcessorRunner({
+      inputProcessors: entry.inputProcessors ?? [],
+      outputProcessors: entry.outputProcessors,
+      errorProcessors: entry.errorProcessors ?? [],
+      logger,
+      agentName: initData.agentName ?? initData.agentId,
+      agent: entry.agent,
+      processorStates: entry.processorStates,
+    });
+    try {
+      await runner.runOutputProcessors(messageList, createObservabilityContext(), requestContext, 0, undefined, {
+        text: resolveOutputText(messageList),
+        usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+        finishReason: 'error',
+        steps: [],
+        error,
+      });
+    } catch (processorError) {
+      // A tripwire rejects the turn, as it does at finish.
+      if (processorError instanceof TripWire) return;
+      logger.warn('[DurableAgent] Error running output processors at the total deadline', {
+        runId,
+        error: processorError,
+      });
+      if (durableState?.observationalMemory) return;
+    }
+  }
+
+  if (
+    !entry.saveQueueManager ||
+    !entry.memory ||
+    !durableState?.threadId ||
+    !durableState.resourceId ||
+    durableState.observationalMemory ||
+    durableState.memoryConfig?.readOnly
+  ) {
+    return;
+  }
+  await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
+    mastra,
+    user: requestContext.get('user'),
+    threadId: durableState.threadId,
+    resourceId: durableState.resourceId,
+    agentId: initData.agentId,
+    requestContext,
+    permission: MastraFGAPermissions.MEMORY_WRITE,
+    actor: initData.options?.actor,
+  });
+  await entry.saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
+    throwOnError: true,
+  });
+}
+
 class StructuringPassError extends Error {
   constructor(message: string, cause?: unknown) {
     super(message, { cause });
