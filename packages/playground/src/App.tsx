@@ -59,6 +59,7 @@ import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
 import ConnectionsPage from './pages/connections';
 import Datasets from './pages/datasets';
+import KnowledgePage from './pages/knowledge';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
@@ -460,6 +461,8 @@ export const routes: RouteObject[] = [
           { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
+
+      { path: '/knowledge', element: <KnowledgePage /> },
 
       ...(isExperimentalFeatures
         ? [
