@@ -84,7 +84,7 @@ import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { HAND_BACK_STATE_SYMBOL, PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
-import { withoutAuthToken } from './evented/helpers';
+import { withoutAuthToken, withoutLiveRequestKeys } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import {
@@ -5683,7 +5683,7 @@ export class Run<
 
     const requestContextToUse = params.requestContext ?? new RequestContext();
 
-    Object.entries(snapshot?.requestContext ?? {}).forEach(([key, value]) => {
+    Object.entries(withoutLiveRequestKeys(snapshot?.requestContext)).forEach(([key, value]) => {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
@@ -6039,7 +6039,7 @@ export class Run<
     }
 
     const requestContextToUse = requestContext ?? new RequestContext();
-    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+    for (const [key, value] of Object.entries(withoutLiveRequestKeys(snapshot.requestContext))) {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
@@ -6192,7 +6192,7 @@ export class Run<
     });
 
     const requestContextToUse = requestContext ?? new RequestContext();
-    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+    for (const [key, value] of Object.entries(withoutLiveRequestKeys(snapshot.requestContext))) {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
