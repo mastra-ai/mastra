@@ -359,6 +359,45 @@ describe('session cancel and sign-out', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
     expect(authStorage.logout).not.toHaveBeenCalled();
   });
+
+  describe('in a pool that also holds API keys', () => {
+    const key = { type: 'api_key' as const, key: 'sk-ant' };
+    const oauthCred = (refresh: string) => ({ type: 'oauth' as const, ...ANTHROPIC_CREDS, refresh });
+    const signOut = () => buildApp(userA).request('/web/config/providers/anthropic/oauth', { method: 'DELETE' });
+    const pool = async () => (await seed.credentials.listAccounts(TENANT_A, 'anthropic')).map(a => [a.type, a.active]);
+
+    it('removes the OAuth account and keeps an active API key', async () => {
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: oauthCred('r-1') });
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: key, activate: true });
+
+      expect((await signOut()).status).toBe(200);
+      expect(await pool()).toEqual([['api-key', true]]);
+    });
+
+    it('removes the active OAuth account when there are several', async () => {
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: oauthCred('r-1') });
+      const active = await seed.credentials.addAccount(TENANT_A, 'anthropic', {
+        credential: oauthCred('r-2'),
+        activate: true,
+      });
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: key });
+
+      expect((await signOut()).status).toBe(200);
+      const left = await seed.credentials.listAccounts(TENANT_A, 'anthropic');
+      expect(left.map(a => a.id)).not.toContain(active.id);
+      expect(left.map(a => [a.type, a.active])).toEqual([
+        ['oauth', true],
+        ['api-key', false],
+      ]);
+    });
+
+    it('is a no-op when the pool holds no OAuth account', async () => {
+      await seed.credentials.addAccount(TENANT_A, 'anthropic', { credential: key });
+
+      expect((await signOut()).status).toBe(200);
+      expect(await pool()).toEqual([['api-key', true]]);
+    });
+  });
 });
 
 // ── Org-scoped sign-in ───────────────────────────────────────────────────

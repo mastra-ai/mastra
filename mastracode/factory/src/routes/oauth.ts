@@ -529,8 +529,16 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
                 return c.json({ error: 'forbidden', message: 'Only org admins can remove an org-wide sign-in' }, 403);
               }
               const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
-              await ctx.storage.removeCredential(tenant, authProviderId);
-              onCredentialsChanged(tenant);
+              // Sign-out removes one OAuth account and never an API key in the
+              // same pool: the active account when it is OAuth, otherwise the
+              // first OAuth account in pool order. No OAuth account is a no-op.
+              const accounts = await ctx.storage.listAccounts(tenant, authProviderId);
+              const oauthAccounts = accounts.filter(account => account.type === 'oauth');
+              const target = oauthAccounts.find(account => account.active) ?? oauthAccounts[0];
+              if (target) {
+                await ctx.storage.removeAccount(tenant, target.id);
+                onCredentialsChanged(tenant);
+              }
             } else {
               if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
               authStorage.logout(authProviderId);
