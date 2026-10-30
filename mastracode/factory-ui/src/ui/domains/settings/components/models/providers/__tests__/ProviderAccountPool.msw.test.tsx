@@ -225,7 +225,9 @@ describe('provider account pools', () => {
 
     await user.click(within(accountRow('Spare key')).getByRole('button', { name: 'Move Spare key up' }));
     await waitForMutationsIdle(client);
-    expect(requests.at(-1)?.body).toEqual({ orderedIds: ['openai-codex:spare', 'openai-codex:work', 'openai-codex:side'] });
+    expect(requests.at(-1)?.body).toEqual({
+      orderedIds: ['openai-codex:spare', 'openai-codex:work', 'openai-codex:side'],
+    });
   });
 
   it('adds an account to an already-connected provider’s pool from "Add provider"', async () => {
@@ -237,7 +239,10 @@ describe('provider account pools', () => {
     server.use(
       http.put(keyUrl('openai'), async ({ request }) => {
         putBody = await request.json();
-        pools.user = [WORK, account({ id: 'openai-codex:new', label: 'OpenAI account 2', priority: 1, createdAt: 5_000 })];
+        pools.user = [
+          WORK,
+          account({ id: 'openai-codex:new', label: 'OpenAI account 2', priority: 1, createdAt: 5_000 }),
+        ];
         return HttpResponse.json({ ok: true });
       }),
     );
