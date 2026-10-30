@@ -245,7 +245,10 @@ describe('starterPrompts', () => {
     ];
 
     expect(promptFor('review', cards)).toMatchObject({ value: 3, unit: 'days' });
+    expect(promptFor('review', cards).prompt).toContain('Intake on the Work board');
     expect(promptFor('feedback', cards)).toMatchObject({ value: 1 });
+    const stale = [onWork(3, ['intake'], { sourceCreatedAt: daysAgo(40) })];
+    expect(promptFor('stale', stale).prompt).toContain('Intake on the Work board');
     const kinds = build(cards).map(({ kind }) => kind);
     expect(kinds).not.toContain('triage');
     expect(kinds).not.toContain('decide');
