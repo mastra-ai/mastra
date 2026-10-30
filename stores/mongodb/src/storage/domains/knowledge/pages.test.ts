@@ -331,6 +331,12 @@ describe('MongoKnowledgePages (schema 4)', () => {
     expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 4 });
   });
 
+  it('starts while another process has created the page collections but not yet its version row', async () => {
+    await (await connector.getCollection('mastra_knowledge_access_state')).deleteMany({});
+    await expect(store.init()).resolves.toBeUndefined();
+    expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 4 });
+  });
+
   it('lists pages across every scope a prefix read reaches, in name order, and nothing else', async () => {
     const decl = 'reach:$o/thread:$t';
     const mk = async (address: string) =>

@@ -6,14 +6,18 @@
  *   1. Inline-only agents (no workspace)
  *   2. Agents with both inline skills and workspace skills (merge path)
  */
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeWithContext, initContextStorage } from '../../observability/context-storage';
 import { RequestContext } from '../../request-context';
 import { createSkill } from '../../skills/create-skill';
+import { LocalFilesystem } from '../../workspace/filesystem';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
-import type { Workspace } from '../../workspace/workspace';
+import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../index';
 
 // =============================================================================
@@ -453,6 +457,49 @@ describe('Agent-level skills wiring', () => {
       await agent.listSkills();
 
       expect(seen).toHaveProperty('currentSpan', undefined);
+    });
+  });
+  describe('workspace skills from a filesystem resolver', () => {
+    let dir: string;
+
+    beforeEach(async () => {
+      dir = await mkdtemp(join(tmpdir(), 'resolver-skills-'));
+      await mkdir(join(dir, 'skills', 'greet'), { recursive: true });
+      await writeFile(
+        join(dir, 'skills', 'greet', 'SKILL.md'),
+        '---\nname: greet\ndescription: Greets people.\n---\n\nSay hello.\n',
+      );
+    });
+
+    afterEach(async () => {
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    function createAgent(filesystemResolver: () => LocalFilesystem) {
+      return new Agent({
+        id: 'resolver-skills',
+        instructions: 'You have workspace skills.',
+        model: mockModel,
+        workspace: new Workspace({ id: 'resolver-ws', filesystem: filesystemResolver, skills: ['skills'] }),
+      });
+    }
+
+    it('exposes resolver-backed skills to the model during generate', async () => {
+      const agent = createAgent(() => new LocalFilesystem({ basePath: dir }));
+
+      await agent.generate('Hello');
+
+      expect(getSystemMessages(capturedPrompt).join('\n')).toContain('greet');
+    });
+
+    it('skips the resolver when listSkills is called with resolveDynamicProviders: false', async () => {
+      const filesystemResolver = vi.fn(() => new LocalFilesystem({ basePath: dir }));
+      const agent = createAgent(filesystemResolver);
+
+      const skills = await agent.listSkills({ resolveDynamicProviders: false });
+
+      expect(skills.map(skill => skill.name)).toEqual([]);
+      expect(filesystemResolver).not.toHaveBeenCalled();
     });
   });
 });
