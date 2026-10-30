@@ -57,6 +57,29 @@ function isEmptyPlainObject(value: unknown): boolean {
 }
 
 /**
+ * Rebuilds a patch from the validated merged document: patched fields take their validated value, fields the
+ * validator dropped are left out, and nulls stay as deletions. Nested objects recurse so only patched leaves are sent.
+ */
+function patchFromValidated(
+  patch: Record<string, unknown>,
+  validated: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      result[key] = null;
+    } else if (!Object.prototype.hasOwnProperty.call(validated, key)) {
+      continue;
+    } else if (isPlainObject(value) && isPlainObject(validated[key])) {
+      result[key] = patchFromValidated(value, validated[key]);
+    } else {
+      result[key] = validated[key];
+    }
+  }
+  return result;
+}
+
+/**
  * Resource-scoped working memory is shared by every thread of the resource, and thread-scoped Observers of
  * sibling threads can run at the same time. Asking for the full document there means the last writer silently
  * drops what the others saved, so schema-based resource-scoped working memory is updated with a patch instead.
@@ -161,32 +184,39 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
           }
 
           // Validate the document the patch produces, so required fields, types and null deletions are checked
-          // as a whole. The patch itself is what gets merged, so fields a sibling thread saved meanwhile survive.
+          // as a whole, and so validator output (transforms, stripped unknown keys) is what gets saved.
           const validateMergedDocument = async () => {
             const existing = await memory!.getWorkingMemory({ threadId, resourceId, memoryConfig });
             const merged = deepMergeWorkingMemory(parseWorkingMemoryJson(existing), current);
-            await validateAgainstConfiguredSchema(configuredSchema, merged);
-            return merged;
+            return validateAgainstConfiguredSchema(configuredSchema, merged);
           };
 
           if (await memory!.supportsAtomicWorkingMemoryMerge()) {
-            await validateMergedDocument();
-            await memory!.mergeWorkingMemory({ threadId, resourceId, workingMemory: current, memoryConfig });
-          } else {
-            // Without an atomic storage merge, serialize the read-merge-write so sibling threads in this process
-            // cannot overwrite each other. Other processes are only protected by stores with an atomic merge.
-            await withPatchLock(resourceId ?? threadId, async () => {
-              const merged = await validateMergedDocument();
-              await memory!.updateWorkingMemory({
-                threadId,
-                resourceId,
-                workingMemory: JSON.stringify(merged),
-                memoryConfig,
-              });
-            });
+            const validated = await validateMergedDocument();
+            // Merge only the patched fields, taking their values from the validator output, so fields a sibling
+            // thread saved meanwhile survive the row-locked merge.
+            const patch = isPlainObject(validated) ? patchFromValidated(current, validated) : current;
+            if (isEmptyPlainObject(patch)) {
+              return undefined;
+            }
+            await memory!.mergeWorkingMemory({ threadId, resourceId, workingMemory: patch, memoryConfig });
+            return patch;
           }
 
-          return current;
+          // Without an atomic storage merge, serialize the read-merge-write so sibling threads in this process
+          // cannot overwrite each other. Other processes are only protected by stores with an atomic merge.
+          let document: unknown;
+          await withPatchLock(resourceId ?? threadId, async () => {
+            document = await validateMergedDocument();
+            await memory!.updateWorkingMemory({
+              threadId,
+              resourceId,
+              workingMemory: JSON.stringify(document),
+              memoryConfig,
+            });
+          });
+          const effectivePatch = isPlainObject(document) ? patchFromValidated(current, document) : current;
+          return isEmptyPlainObject(effectivePatch) ? undefined : effectivePatch;
         }
 
         let document: unknown = current;

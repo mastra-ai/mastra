@@ -4,6 +4,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { deepMergeWorkingMemory } from '../../../tools/working-memory';
 import { composeObservationExtractors, composeReflectionExtractors } from '../built-in-extractors';
 import {
   applyExtractorHooks,
@@ -1036,5 +1037,137 @@ describe('WorkingMemoryExtractor schema enforcement for thread-scoped working me
     expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
     expect(result.values).toEqual({ topic: 'paint' });
     expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('preferredColor') }]);
+  });
+});
+
+describe.each([
+  ['an atomic storage merge', true],
+  ['a read-merge-write fallback', false],
+])('WorkingMemoryExtractor schema enforcement for resource-scoped working memory with %s', (_label, atomic) => {
+  const colorSchema = z.strictObject({
+    preferredColor: z.enum(['blue', 'green']),
+    budget: z.number().nullable(),
+  });
+
+  function createSchemaMemory(schema: unknown, stored: Record<string, unknown>) {
+    return {
+      // No scope: working memory defaults to resource scope.
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => JSON.stringify(stored)),
+      supportsAtomicWorkingMemoryMerge: vi.fn(async () => atomic),
+      mergeWorkingMemory: vi.fn(async () => undefined),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+  }
+
+  async function runWorkingMemoryHook(schema: unknown, stored: Record<string, unknown>, patch: unknown) {
+    const memory = createSchemaMemory(schema, stored);
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': patch },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    // The document storage ends up with: the merged patch, or the document the fallback wrote.
+    const persisted = () => {
+      if (atomic) {
+        const [call] = memory.mergeWorkingMemory.mock.calls;
+        return call ? deepMergeWorkingMemory(stored, call[0].workingMemory) : stored;
+      }
+      const [call] = memory.updateWorkingMemory.mock.calls;
+      return call ? JSON.parse(call[0].workingMemory) : stored;
+    };
+    const saveCount = () => memory.mergeWorkingMemory.mock.calls.length + memory.updateWorkingMemory.mock.calls.length;
+    return { memory, result, persisted, saveCount };
+  }
+
+  it('merges a valid patch into the stored document', async () => {
+    const { result, persisted } = await runWorkingMemoryHook(
+      colorSchema,
+      { preferredColor: 'blue', budget: 100 },
+      { preferredColor: 'green' },
+    );
+
+    expect(persisted()).toEqual({ preferredColor: 'green', budget: 100 });
+    expect(result.values).toEqual({ 'working-memory': { preferredColor: 'green' } });
+    expect(result.failures).toBeUndefined();
+  });
+
+  it.each([
+    ['a value outside the enum', { preferredColor: 'red' }, 'preferredColor'],
+    ['a field with the wrong type', { budget: '200' }, 'budget'],
+    ['a deleted required field', { preferredColor: null }, 'preferredColor'],
+    ['an unknown field', { nickname: 'Ty' }, 'nickname'],
+  ])('does not save a patch with %s', async (_label, patch, invalidField) => {
+    const { result, saveCount } = await runWorkingMemoryHook(
+      colorSchema,
+      { preferredColor: 'blue', budget: 100 },
+      patch,
+    );
+
+    expect(saveCount()).toBe(0);
+    expect(result.values).toBeUndefined();
+    expect(result.failures).toEqual([
+      {
+        slug: 'working-memory',
+        error: expect.stringContaining('Working memory update does not match the configured schema'),
+      },
+    ]);
+    expect(result.failures![0]!.error).toContain(invalidField);
+  });
+
+  it('persists the validator output and drops fields the schema does not declare', async () => {
+    const schema = z.object({ name: z.string().trim(), city: z.string().optional() });
+
+    const { result, persisted } = await runWorkingMemoryHook(
+      schema,
+      { name: 'Tyler', city: 'Oslo' },
+      { name: '  Neo ', extra: true },
+    );
+
+    expect(persisted()).toEqual({ name: 'Neo', city: 'Oslo' });
+    expect(result.values).toEqual({ 'working-memory': { name: 'Neo' } });
+  });
+
+  it('only sends the patched nested fields, transformed by the validator', async () => {
+    const schema = z.object({
+      profile: z.object({ nickname: z.string().trim().optional(), age: z.number().optional() }).optional(),
+    });
+
+    const { memory, persisted } = await runWorkingMemoryHook(
+      schema,
+      { profile: { age: 3 } },
+      { profile: { nickname: ' Ty ' } },
+    );
+
+    expect(persisted()).toEqual({ profile: { nickname: 'Ty', age: 3 } });
+    if (atomic) {
+      expect(memory.mergeWorkingMemory).toHaveBeenCalledWith(
+        expect.objectContaining({ workingMemory: { profile: { nickname: 'Ty' } } }),
+      );
+    }
+  });
+
+  it('deletes an optional field set to null', async () => {
+    const schema = z.object({ name: z.string(), city: z.string().optional() });
+
+    const { persisted } = await runWorkingMemoryHook(schema, { name: 'Tyler', city: 'Oslo' }, { city: null });
+
+    expect(persisted()).toEqual({ name: 'Tyler' });
+  });
+
+  it.each([null, {}])('does not save the no-op patch %j', async patch => {
+    const { saveCount } = await runWorkingMemoryHook(colorSchema, { preferredColor: 'blue', budget: 100 }, patch);
+
+    expect(saveCount()).toBe(0);
   });
 });
