@@ -24,8 +24,8 @@ describe('MCP tasks as agent background tasks', () => {
     await server?.close();
   });
 
-  /** Model calls `reports_gated` on turn 1; `onSecondTurn` runs while turn 2 is being generated. */
-  async function runAgent(onSecondTurn: (remoteTaskId: string) => Promise<void>) {
+  /** Model calls `toolName` on turn 1; `onSecondTurn` runs while turn 2 is being generated. */
+  async function runAgent(onSecondTurn: (remoteTaskId: string) => Promise<void>, toolName = 'reports_gated') {
     server = await startTasksFixtureServer();
     mcp = new MCPClient({ id: `tasks-bg-${Math.random()}`, servers: { reports: { url: server.url, tasks: true } } });
     mastra = new Mastra({ logger: false, storage: new MockStore(), backgroundTasks: { enabled: true } });
@@ -40,7 +40,7 @@ describe('MCP tasks as agent background tasks', () => {
         const parts =
           turn === 1
             ? [
-                { type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'reports_gated', input: '{}' },
+                { type: 'tool-call' as const, toolCallId: 'call-1', toolName, input: '{}' },
                 { type: 'finish' as const, finishReason: 'tool-calls' as const, usage: usage() },
               ]
             : [
@@ -107,7 +107,53 @@ describe('MCP tasks as agent background tasks', () => {
     expect(server.requests.find(request => request.method === 'tasks/cancel')!.params.taskId).toBe(remoteTaskId);
     expect((await server.store.get(remoteTaskId, { principal: 'anonymous' }))?.status).toBe('cancelled');
   });
+
+  // Blocked on core: a resumed background task doesn't hand the tool the payload it suspended with
+  // (`background-tasks/workflow.ts` passes only `resumeData` to the executor, so
+  // `context.agent.suspendPayload` is undefined). The tool then can't tell which MCP task to answer,
+  // calls the tool again and suspends on a new task. Unskip once background resume passes
+  // `suspendPayload` (core fix in the PR 1 stack, issue #28986).
+  it.skip('parks the background task on MCP task input and completes it when the chat answers', async () => {
+    await runAgent(async () => {}, 'reports_confirm');
+
+    const manager = mastra.backgroundTaskManager!;
+    const { tasks } = await manager.listTasks({ toolCallId: 'call-1' });
+    const taskId = tasks[0]!.id;
+    const suspended = await waitForValue(
+      () => manager.getTask(taskId),
+      task => task?.status === 'suspended',
+    );
+    const remoteTaskId = server.requests.find(request => request.method === 'tasks/get')!.params.taskId as string;
+    expect(suspended!.suspendPayload).toMatchObject({
+      type: 'mcp-input-request',
+      serverName: 'reports',
+      toolName: 'confirm',
+      taskId: remoteTaskId,
+      requests: { approve: { method: 'elicitation/create' } },
+    });
+    expect((await server.store.get(remoteTaskId, { principal: 'anonymous' }))?.status).toBe('input_required');
+
+    await manager.resume(taskId, { inputResponses: { approve: { action: 'accept', content: { ok: true } } } });
+
+    const done = await waitForValue(
+      () => manager.getTask(taskId),
+      task => task?.status === 'completed',
+    );
+    expect(done!.result).toMatchObject({ content: [{ type: 'text', text: 'sent' }] });
+    expect(server.requests.filter(request => request.method === 'tools/call')).toHaveLength(1);
+    expect(server.requests.find(request => request.method === 'tasks/update')!.params.taskId).toBe(remoteTaskId);
+  }, 15_000);
 });
+
+async function waitForValue<T>(read: () => Promise<T>, done: (value: T) => boolean, timeoutMs = 5_000): Promise<T> {
+  const started = Date.now();
+  for (;;) {
+    const value = await read();
+    if (done(value)) return value;
+    if (Date.now() - started > timeoutMs) throw new Error('condition not met');
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
 
 async function waitUntil(condition: () => boolean, timeoutMs = 2_000) {
   const started = Date.now();
