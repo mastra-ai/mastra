@@ -25,6 +25,7 @@ describe('shipped provider registry', () => {
       'incident-io',
       'jira',
       'linear',
+      'microsoft-excel',
       'microsoft-powerpoint',
       'microsoft-teams',
       'microsoft-word',
