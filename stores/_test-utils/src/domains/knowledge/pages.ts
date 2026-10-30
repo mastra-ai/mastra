@@ -232,6 +232,21 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(await store.renameScopeDeclaration({ from: 'gone:$x', to: ORG, check: () => {} })).toBe(0);
         expect(await store.listScopeDeclarations()).toEqual(before);
       });
+
+      it('matches the key literally, so _ and % in it are not wildcards', async () => {
+        await scope('a_c:1', 'a_c:$id');
+        await scope('abc:1/internal', 'abc:$id/internal');
+        await scope('a%c:1', 'a%c');
+        await scope('axyc:1', 'axyc');
+        expect(await store.renameScopeDeclaration({ from: 'a_c:$id', to: 'ac:$id', check: () => {} })).toBe(1);
+        expect(await store.renameScopeDeclaration({ from: 'a%c', to: 'ac2', check: () => {} })).toBe(1);
+        expect(await store.listScopeDeclarations()).toEqual([
+          { declaration: 'abc:$id/internal', scopes: 1 },
+          { declaration: 'ac2', scopes: 1 },
+          { declaration: 'ac:$id', scopes: 1 },
+          { declaration: 'axyc', scopes: 1 },
+        ]);
+      });
     });
 
     describe('key paths', () => {
