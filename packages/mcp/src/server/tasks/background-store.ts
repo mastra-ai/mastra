@@ -457,13 +457,17 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     abort(reason);
   }
 
-  /** Unregisters this store's executors. Rows stay in storage. */
-  close(): void {
+  /**
+   * Stops sweeping, waits for a sweep already running to stop at its next step, then unregisters
+   * this store's executors. Rows stay in storage.
+   */
+  async close(): Promise<void> {
     this.#closed = true;
-    for (const key of this.#executors) this.#manager.unregisterStaticExecutor(key);
-    this.#executors.clear();
     clearInterval(this.#sweepTimer);
     this.#sweepTimer = undefined;
+    await this.#sweeping?.catch(() => {});
+    for (const key of this.#executors) this.#manager.unregisterStaticExecutor(key);
+    this.#executors.clear();
   }
 
   /**
@@ -472,6 +476,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * already running (the manager itself only recovers rows when it starts).
    */
   sweep(): Promise<void> {
+    if (this.#closed) return Promise.resolve();
     this.#sweeping ??= this.#sweep().finally(() => (this.#sweeping = undefined));
     return this.#sweeping;
   }
@@ -481,11 +486,11 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * left behind even if no client ever asks it about a task. Does nothing once the store is closed.
    */
   startSweeping(): void {
-    if (!this.#closed) this.#startSweeping();
+    this.#startSweeping();
   }
 
   #startSweeping(): void {
-    if (this.#sweepTimer) return;
+    if (this.#sweepTimer || this.#closed) return;
     // Once per lease: a dead worker's rows are noticed about a lease after it stops renewing.
     this.#sweepTimer = setInterval(() => {
       this.sweep().catch(error => this.#getLogger?.().debug('MCP task sweep failed', { error }));
@@ -499,17 +504,21 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * on the next tick. Rows that need a restart are restarted only while slots are free.
    */
   async #sweep(): Promise<void> {
+    // Each step checks `#closed`: a store closed mid-sweep touches no more rows.
     const storage = await this.#manager.getStorage();
     const now = Date.now();
     const lease = this.#manager.config.leaseDurationMs;
     // A first attempt running here whose row another instance cancelled or expired.
     for (const rowId of this.#firstAttempts.keys()) {
+      if (this.#closed) return;
       const current = await storage.getTask(rowId).catch(() => undefined);
-      if (current && isTerminalRow(current)) this.#abortFirstAttempt(rowId, new Error('Task cancelled'));
+      if (current && isTerminalRow(current) && !this.#closed)
+        this.#abortFirstAttempt(rowId, new Error('Task cancelled'));
     }
 
     // Finished rows past their TTL and retention. The manager only deletes rows when
     // `backgroundTasks.cleanup` is set; `ttlMs: null` rows carry the `NEVER` deadline and stay.
+    if (this.#closed) return;
     if (storage.supportsTaskExpiry) {
       await storage
         .deleteTasks({
@@ -521,6 +530,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         .catch(error => this.#getLogger?.().debug('Could not delete expired MCP tasks', { error }));
     }
 
+    if (this.#closed) return;
     const { tasks: expired } = await this.#manager.listTasks({
       agentId: this.#owner,
       status: OPEN_ROW_STATUSES,
@@ -529,12 +539,14 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       perPage: SWEEP_BATCH,
     });
     for (const row of expired) {
+      if (this.#closed) return;
       if (!envelopeOf(row)) continue;
       await this.#expire(storage, row).catch(error =>
         this.#getLogger?.().debug('Could not expire MCP task', { error }),
       );
     }
 
+    if (this.#closed) return;
     const { tasks: rows } = await this.#manager.listTasks({
       agentId: this.#owner,
       status: OPEN_ROW_STATUSES,
@@ -546,13 +558,14 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     this.#sweepPage = rows.length < SWEEP_BATCH ? 0 : this.#sweepPage + 1;
     const restarts: string[] = [];
     for (const row of rows) {
+      if (this.#closed) return;
       const envelope = envelopeOf(row);
       if (!envelope || isExpired(row, now)) continue;
       try {
         if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
         // No lease at all: a worker that shut down gracefully handed it back, leaving the row running.
         else if (isOwned(row) && (!row.leaseExpiresAt || row.leaseExpiresAt.getTime() <= now)) {
-          if (await this.#reclaim(storage, row, envelope)) restarts.push(row.id);
+          if ((await this.#reclaim(storage, row, envelope)) && !this.#closed) restarts.push(row.id);
         } else if (row.status === 'pending' && !row.ownerId && now - row.createdAt.getTime() >= lease) {
           // Never started, or reclaimed for another attempt, and still waiting a lease on: it may
           // be queued in a process that died, and the manager only dispatches such rows when it
@@ -563,10 +576,13 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         this.#getLogger?.().debug('Could not sweep MCP task', { error });
       }
     }
-    if (restarts.length === 0) return;
+    if (restarts.length === 0 || this.#closed) return;
     // Rows without a slot stay pending for a later sweep, instead of each costing a failed restart.
     const free = await this.#freeSlots(storage);
-    for (const rowId of restarts.slice(0, free)) await this.#restart(rowId);
+    for (const rowId of restarts.slice(0, free)) {
+      if (this.#closed) return;
+      await this.#restart(rowId);
+    }
   }
 
   /** Slots this server's rows can take now, by the manager's global and per-owner limits. */
