@@ -36,13 +36,14 @@ export function prepareWidget(
   registry: ReadonlyMap<string, AnyWidgetKind>,
   scope: DashboardScope,
 ): PreparedWidget {
-  const kind = registry.get(stored.kind);
-  if (!kind) return { ok: false, message: 'This widget needs a newer version.' };
   if (!isDashboardWidget(stored)) {
     return { ok: false, message: describeIssue(dashboardWidgetSchema.safeParse(stored).error?.issues[0]) };
   }
   const widget: DashboardWidget = stored;
+  // A widget for the other scope stays hidden, whether or not this version knows its kind.
   if (!inScope(widget, scope)) return { ok: 'hidden' };
+  const kind = registry.get(widget.kind);
+  if (!kind) return { ok: false, message: 'This widget needs a newer version.' };
 
   const views: ResolvedView<unknown>[] = [];
   const tabs = new Set<string>();

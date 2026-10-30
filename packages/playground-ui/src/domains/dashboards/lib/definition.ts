@@ -68,7 +68,7 @@ export function dashboardDefaults(definition: Pick<DashboardDefinition, 'default
 } {
   const preset = definition.defaults?.datePreset;
   return {
-    ...(isValidPreset(preset) ? { preset } : {}),
+    preset: isValidPreset(preset) ? preset : undefined,
     filterTokens: (definition.defaults?.filters ?? [])
       .filter(isToken)
       .map(({ fieldId, value }) => ({ fieldId, value })),

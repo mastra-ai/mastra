@@ -1,3 +1,4 @@
+import type { DashboardQuery } from '@mastra/client-js';
 import { z } from 'zod/v4';
 import type { BucketLabels } from '../../metrics/lib/bucket-labels';
 import { bucketGrid, bucketPlan, gridIndex, intervalHours } from '../../metrics/lib/metrics-buckets';
@@ -150,7 +151,8 @@ export function shapeTimeseries({
         const i = indexOf(p);
         if (i === undefined) continue;
         const v = ref.field === 'estimatedCost' ? (p.estimatedCost ?? 0) : p.value;
-        values[i] = merged ? (values[i] ?? 0) + v : v;
+        // Every series the ref matches adds up (e.g. a grouped count); `api` buckets stay unset until one answers.
+        values[i] = (values[i] ?? 0) + v;
       }
     }
     cache.set(key, values);
@@ -192,8 +194,8 @@ export function shapeTimeseries({
     data,
     series: shown.map((p, i) => ({
       ...p.s,
-      ...(options.emphasizeFirst ? { emphasis: i === 0 } : {}),
-      ...(p.legend === undefined ? {} : { legend: p.legend }),
+      emphasis: options.emphasizeFirst ? i === 0 : p.s.emphasis,
+      legend: p.legend,
     })),
     stepHours,
     summary,
@@ -202,17 +204,45 @@ export function shapeTimeseries({
   };
 }
 
-/** Query ids the view's options read that it doesn't have. */
-export function timeseriesIssues(options: TimeseriesOptions, queries: readonly { id?: string }[]): string[] {
-  const exprs = options.series.flatMap(s => [s.value, ...(s.legendValue ? [s.legendValue] : [])]);
+/**
+ * What the schema can't say: query ids the view has, bucketed queries that leave their interval to the
+ * chart's grid, and refs that pick one percentile when their query asks for several.
+ */
+export function timeseriesIssues(options: TimeseriesOptions, queries: readonly DashboardQuery[]): string[] {
+  const exprs = options.series.flatMap(s => (s.legendValue ? [s.value, s.legendValue] : [s.value]));
   const summary = options.summary?.value;
   if (summary && summary !== 'total' && !('peak' in summary)) exprs.push(summary);
   if (options.emptyWhenZero) exprs.push(options.emptyWhenZero);
+  const refs = exprs.flatMap(exprRefs);
+  const totals = new Set(options.totals ?? []);
+  const byId = new Map(queries.map(q => [q.id, q]));
+
+  // The chart lays every query on one grid built from the page's range; a query's own interval would
+  // land its points in the wrong buckets.
+  const ownIntervals = queries
+    .filter(q => q.id !== undefined && !totals.has(q.id) && 'interval' in q && q.interval !== undefined)
+    .map(q => `query '${q.id}' sets its own interval; the chart's buckets follow the page's range`);
+  // Percentiles of one metric can't be added up, so a ref must pick one when its query asks for several.
+  const ambiguousPercentiles = refs
+    .filter(r => {
+      const query = byId.get(r.query);
+      return (
+        r.percentile === undefined &&
+        query !== undefined &&
+        'request' in query &&
+        query.request === 'percentiles' &&
+        query.percentiles.length > 1
+      );
+    })
+    .map(r => `a value reading query '${r.query}' must pick one of its percentiles`);
+
   return [
     ...unknownQueryIssues(
-      exprs.flatMap(exprRefs).map(r => r.query),
+      refs.map(r => r.query),
       queries,
     ),
     ...unknownQueryIssues(options.totals ?? [], queries, 'options.totals'),
+    ...ownIntervals,
+    ...new Set(ambiguousPercentiles),
   ];
 }

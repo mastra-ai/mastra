@@ -2,6 +2,9 @@ import { MastraClient } from '@mastra/client-js';
 import type { DashboardQuery } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { kpisIssues } from '../kinds/kpis/options';
+import type { KpisOptions } from '../kinds/kpis/options';
+import type { ResolvedView } from '../widget-kind';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
 import { buildPreviousRequest, buildRequest, sendRequest } from './requests';
@@ -18,6 +21,8 @@ import {
   valueChange,
 } from './table';
 import type { TableColumn, TableOptions, ValueColumn } from './table';
+import { shapeTimeseries, timeseriesIssues } from './timeseries';
+import type { TimeseriesOptions } from './timeseries';
 import { answersById, evaluate, matchesGroups, unknownQueryIssues, valueExprSchema } from './values';
 import type { ValueExpr, ValueRef } from './values';
 
@@ -520,5 +525,114 @@ describe('openingView', () => {
 
   it('opens on the first view when a passed-over openWhen view is last', () => {
     expect(openingView([view(), view({ minRows: 2 })], 0)).toBe(0);
+  });
+});
+
+describe('shapeTimeseries', () => {
+  const runs: DashboardQuery = {
+    id: 'runs',
+    source: 'metrics',
+    request: 'timeSeries',
+    name: ['mastra_agent_duration_ms'],
+    aggregation: 'count',
+    groupBy: ['entityName'],
+  };
+  const options = (value: ValueExpr): TimeseriesOptions => ({
+    chart: 'line',
+    format: 'count',
+    buckets: 'api',
+    series: [{ dataKey: 'runs', label: 'Runs', color: 'green', value }],
+  });
+  const at = '2026-10-28T09:00:00Z';
+
+  describe('when a ref with no group matches several series on API buckets', () => {
+    it('adds them up in each bucket, as chart buckets do', () => {
+      const answer: DashboardAnswer = {
+        method: 'getMetricTimeSeries',
+        data: {
+          series: [
+            { name: 'alpha', points: [{ timestamp: at, value: 3 }] },
+            { name: 'beta', points: [{ timestamp: at, value: 4 }] },
+          ],
+        },
+      };
+      const shaped = shapeTimeseries({
+        options: options({ query: 'runs' }),
+        responses: new Map([['runs', answer]]),
+        window,
+        hasTraceQueries: false,
+      });
+      expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.runs).toBe(7);
+      // A bucket no series answers stays unset rather than zero.
+      expect(shaped.data.filter(b => b.runs !== undefined)).toHaveLength(1);
+    });
+  });
+});
+
+describe('timeseriesIssues', () => {
+  const options = (value: ValueExpr): TimeseriesOptions => ({
+    chart: 'line',
+    format: 'duration',
+    buckets: 'api',
+    series: [{ dataKey: 'latency', label: 'Latency', color: 'green', value }],
+  });
+  const latency: DashboardQuery = {
+    id: 'latency',
+    source: 'metrics',
+    request: 'percentiles',
+    name: 'mastra_agent_duration_ms',
+    percentiles: [0.5, 0.95],
+  };
+
+  it('reports a ref that reads several percentiles without picking one', () => {
+    expect(timeseriesIssues(options({ query: 'latency' }), [latency])).toEqual([
+      "a value reading query 'latency' must pick one of its percentiles",
+    ]);
+  });
+
+  it('takes a ref that picks one of the percentiles', () => {
+    expect(timeseriesIssues(options({ query: 'latency', percentile: 0.95 }), [latency])).toEqual([]);
+  });
+
+  it("reports a bucketed query that sets its own interval, since the chart's grid follows the page's range", () => {
+    expect(timeseriesIssues(options({ query: 'latency', percentile: 0.5 }), [{ ...latency, interval: '1d' }])).toEqual([
+      "query 'latency' sets its own interval; the chart's buckets follow the page's range",
+    ]);
+  });
+
+  it('takes an interval on a query sent over the whole range', () => {
+    const totals: TimeseriesOptions = { ...options({ query: 'latency', percentile: 0.5 }), totals: ['latency'] };
+    expect(timeseriesIssues(totals, [{ ...latency, interval: '1d' }])).toEqual([]);
+  });
+});
+
+describe('kpisIssues', () => {
+  const kpi = (queries: DashboardQuery[]): ResolvedView<KpisOptions> => ({
+    queries,
+    options: { items: [{ label: 'Runs', icon: 'bot', format: 'count', value: { query: 'runs' }, detail: 'runs' }] },
+  });
+
+  it('reports a KPI reading a query that is not an aggregate', () => {
+    const series: DashboardQuery = {
+      id: 'runs',
+      source: 'metrics',
+      request: 'timeSeries',
+      name: ['mastra_agent_duration_ms'],
+      aggregation: 'count',
+    };
+    expect(kpisIssues(kpi([series]))).toEqual([
+      "KPI 'Runs' reads query 'runs', which is not a metrics or scores aggregate",
+    ]);
+  });
+
+  it('takes a KPI reading a metrics aggregate', () => {
+    const aggregate: DashboardQuery = {
+      id: 'runs',
+      source: 'metrics',
+      request: 'aggregate',
+      name: ['mastra_agent_duration_ms'],
+      aggregation: 'count',
+    };
+    expect(kpisIssues(kpi([aggregate]))).toEqual([]);
   });
 });

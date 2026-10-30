@@ -1,3 +1,4 @@
+import type { DashboardQuery } from '@mastra/client-js';
 import { z } from 'zod/v4';
 import type { AggregateValue } from '../../lib/answers';
 import { exprRefs, unknownQueryIssues, valueExprSchema } from '../../lib/values';
@@ -62,13 +63,24 @@ export function kpiFigures(expr: ValueExpr, responses: ReadonlyMap<string, Aggre
 const readsAggregates = (expr: ValueExpr): boolean =>
   'query' in expr || ('sum' in expr && expr.sum.every(readsAggregates));
 
-/** What the schema can't say: query ids the view has, and only aggregates or sums. */
-export const kpisIssues = (view: ResolvedView<KpisOptions>) => [
-  ...unknownQueryIssues(
-    view.options.items.flatMap(i => exprRefs(i.value).map(r => r.query)),
-    view.queries,
-  ),
-  ...view.options.items
-    .filter(i => !readsAggregates(i.value))
-    .map(i => `KPI '${i.label}' can only read an aggregate or sum several`),
-];
+const isAggregate = (query: DashboardQuery | undefined) =>
+  (query?.source === 'metrics' || query?.source === 'scores') && query.request === 'aggregate';
+
+/** What the schema can't say: query ids the view has, and only metrics or scores aggregates, or sums of them. */
+export const kpisIssues = (view: ResolvedView<KpisOptions>) => {
+  const byId = new Map(view.queries.map(q => [q.id, q]));
+  return [
+    ...unknownQueryIssues(
+      view.options.items.flatMap(i => exprRefs(i.value).map(r => r.query)),
+      view.queries,
+    ),
+    ...view.options.items
+      .filter(i => !readsAggregates(i.value))
+      .map(i => `KPI '${i.label}' can only read an aggregate or sum several`),
+    ...view.options.items.flatMap(i =>
+      exprRefs(i.value)
+        .filter(r => byId.has(r.query) && !isAggregate(byId.get(r.query)))
+        .map(r => `KPI '${i.label}' reads query '${r.query}', which is not a metrics or scores aggregate`),
+    ),
+  ];
+};

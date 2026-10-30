@@ -16,7 +16,9 @@ import type { TraceAggregateRequest } from '../../metrics/components/__tests__/m
 import { MetricsProvider, useMetrics } from '../../metrics/hooks/use-metrics';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
-import type { DashboardScope } from '../lib/definition';
+import { DrilldownAction, ViewTabs } from '../components/widget-controls';
+import { useViewTabs } from '../hooks/use-widget-views';
+import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
 import type { AnyWidgetKind } from '../widget-kind';
 import { agentRunsWidget, distinctIdsWidget, kpisWidget, modelsWidget } from './fixtures/metrics-widgets';
@@ -53,6 +55,21 @@ const unfilteredFailsKind = defineWidgetKind({
   },
 });
 
+/** A kind built on the shared controls: its tabs and its action button. */
+const controlsKind = defineWidgetKind({
+  kind: 'controls',
+  optionsSchema: z.object({}),
+  component: function Controls({ widget, views, onDrilldown }) {
+    const { view, index, choose } = useViewTabs(views);
+    return (
+      <div>
+        <ViewTabs views={views} index={index} onChoose={choose} />
+        <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
+      </div>
+    );
+  },
+});
+
 /** Note views carry a query, as every view must; the note kind never sends it. */
 const unused: DashboardQuery = { source: 'metrics', request: 'aggregate', name: ['unused'], aggregation: 'count' };
 
@@ -71,8 +88,10 @@ function renderDashboard(
     scope,
     environment,
     filterTokens = environment ? [{ fieldId: 'environment', value: environment }] : [],
+    onDrilldown,
   }: {
     kinds?: AnyWidgetKind[];
+    onDrilldown?: OnDashboardDrilldown;
     scope?: { metrics: MetricsScope; dashboard: DashboardScope };
     environment?: string;
     filterTokens?: { fieldId: string; value: string }[];
@@ -90,7 +109,14 @@ function renderDashboard(
     </MetricsProvider>
   );
   return renderWithProviders(
-    wrap(<DashboardRenderer definition={definition} kinds={kinds} scope={scope?.dashboard ?? 'project'} />),
+    wrap(
+      <DashboardRenderer
+        definition={definition}
+        kinds={kinds}
+        scope={scope?.dashboard ?? 'project'}
+        onDrilldown={onDrilldown}
+      />,
+    ),
   );
 }
 
@@ -279,6 +305,47 @@ describe('DashboardRenderer', () => {
     });
   });
 
+  describe('when a kind uses the shared tabs and action button', () => {
+    const controls = (extra: Partial<DashboardWidget>): DashboardWidget => ({
+      id: 'c',
+      span: 6,
+      kind: 'controls',
+      views: [{ queries: [unused] }],
+      ...extra,
+    });
+
+    it('names a tab whose label is blank by its position', () => {
+      renderDashboard(
+        definition(
+          controls({
+            views: [
+              { label: 'Agents', queries: [unused] },
+              { label: '  ', queries: [unused] },
+            ],
+          }),
+        ),
+        { kinds: [controlsKind] },
+      );
+      expect(screen.getByRole('tab', { name: 'Agents' })).toBeDefined();
+      expect(screen.getByRole('tab', { name: 'View 2' })).toBeDefined();
+    });
+
+    it('offers errors in Logs only when the target keeps to errors', () => {
+      const onDrilldown = vi.fn();
+      const support = { fieldId: 'entityName', value: 'support' };
+      const target = (id: string, filters: { fieldId: string; value: string }[]) =>
+        controls({ id, drilldown: { action: { page: 'logs', filters } } });
+      const errors = target('error', [support, { fieldId: 'status', value: 'error' }]);
+      const { container } = renderDashboard(definition(errors, target('any', [support])), {
+        kinds: [controlsKind],
+        onDrilldown,
+      });
+      expect(within(cell(container, 'error')).getByRole('button', { name: 'View errors in logs' })).toBeDefined();
+      fireEvent.click(within(cell(container, 'any')).getByRole('button', { name: 'View in logs' }));
+      expect(onDrilldown).toHaveBeenCalledWith('logs', { entityName: 'support' });
+    });
+  });
+
   describe('scope', () => {
     const scoped = definition(
       note('org', 'Org only', { scope: 'org' }),
@@ -306,6 +373,15 @@ describe('DashboardRenderer', () => {
       expect(container.querySelector('[data-widget-id="project"]')).toBeNull();
       expect(screen.getByTestId('note-org')).toBeDefined();
       expect(screen.getByTestId('note-tabs').textContent).toBe('projects / agents');
+    });
+
+    it("hides an org widget on a project page even when this version doesn't know its kind", () => {
+      const { container } = renderDashboard(
+        definition({ ...note('org-heatmap', 'x', { scope: 'org' }), kind: 'heatmap' }, note('b', 'Still here')),
+      );
+      expect(container.querySelector('[data-widget-id="org-heatmap"]')).toBeNull();
+      expect(screen.queryByText('This widget needs a newer version.')).toBeNull();
+      expect(screen.getByTestId('note-b').textContent).toBe('Still here');
     });
 
     it('draws no row for a row whose widgets are all hidden, so the grid keeps no gap for it', () => {

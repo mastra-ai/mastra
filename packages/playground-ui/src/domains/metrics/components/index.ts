@@ -1,6 +1,6 @@
 export { DateRangeSelector } from './date-range-selector';
 export { MetricsTimeRangeChip } from './metrics-time-range-chip';
-export { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-buttons';
+export { OpenErrorsInLogsButton, OpenInLogsButton, OpenInTracesButton } from './card-action-buttons';
 export { ChartArea, type ChartAreaProps } from './chart-area';
 export { ChartCard, type ChartCardProps } from './chart-card';
 export { ChartCardError } from './chart-card-error';

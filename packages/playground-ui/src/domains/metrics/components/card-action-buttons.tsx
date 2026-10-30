@@ -30,3 +30,13 @@ export function OpenErrorsInLogsButton({ onClick }: CardActionButtonProps) {
     </Button>
   );
 }
+
+/** Icon button in a MetricsCard top bar that opens the Logs page scoped to
+ *  the card's current dimensions, whatever their status. */
+export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
+  return (
+    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in logs" aria-label="View in logs">
+      <LogsIcon />
+    </Button>
+  );
+}
