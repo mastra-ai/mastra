@@ -9,6 +9,7 @@ import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createFactoryRouteAuth } from '../auth.js';
 import { __clearSessionSandboxesForTests } from '../sandbox/session-sandbox.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
@@ -821,6 +822,43 @@ describe('project skill edit routes', () => {
     expect((await save(ADMIN, elsewhere.id, 'factory-plan', editedPlan('# Our Plan'))).status).toBe(404);
     expect((await save(ADMIN, 'not-a-uuid', 'factory-plan', editedPlan('# Our Plan'))).status).toBe(404);
     expect(await seed.skillOverrides.list({ orgId: 'org-2', projectId: elsewhere.id })).toEqual([]);
+    expect(await seed.skillOverrides.list({ orgId: 'org-1', projectId: projectA.id })).toEqual([]);
+  });
+
+  it('with auth disabled, lists skills but answers project edits like the project routes: 401', async () => {
+    const { projectA, seed } = await setup();
+    // A Factory without an auth provider has no tenant, so it has no projects to
+    // edit skills for: ProjectRoutes answers its project requests with 401 too.
+    const auth = createFactoryRouteAuth(undefined);
+    const app = new Hono();
+    mountApiRoutes(
+      app as never,
+      new SkillRoutes({
+        auth,
+        controllerId: 'code',
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        overrides: {
+          projects: seed.projects,
+          storage: seed.skillOverrides,
+          audit: new AuditDomain({ auth, audit: seed.audit, projects: seed.projects }),
+        },
+      }).routes(),
+    );
+    const path = `/web/factory/projects/${projectA.id}/skills/factory-plan`;
+
+    const catalog = await app.request('/web/factory/skills');
+    expect(catalog.status).toBe(200);
+    expect(((await catalog.json()) as { skills: { name: string }[] }).skills.map(s => s.name)).toContain(
+      'factory-plan',
+    );
+    expect((await app.request(`/web/factory/skills?projectId=${projectA.id}`)).status).toBe(401);
+    const saved = await app.request(path, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: editedPlan('# Our Plan') }),
+    });
+    expect(saved.status).toBe(401);
+    expect((await app.request(path, { method: 'DELETE' })).status).toBe(401);
     expect(await seed.skillOverrides.list({ orgId: 'org-1', projectId: projectA.id })).toEqual([]);
   });
 });
