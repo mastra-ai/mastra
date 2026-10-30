@@ -267,6 +267,9 @@ describe('createToolCallStep delegated run identity provenance', () => {
     expect(suspend).toHaveBeenCalled();
     const failureChunk = enqueue.mock.calls.map(([chunk]: [any]) => chunk).find(chunk => chunk.type === 'error');
     expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
+    // The fallback skips the processors that ran on the chunk, so it must not hand the
+    // client a storage error they would have redacted.
+    expect(failureChunk.payload.error.cause).toBeUndefined();
   });
 
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {

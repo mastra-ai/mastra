@@ -411,16 +411,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Suspending silently would leave the caller with a normal completion while the
           // run stays parked on a call memory never received. Surface it on the stream so
           // the client sees why there is no suspension event.
+          const flushFailureMessage =
+            'Failed to save the suspended tool call to memory before suspending; no suspension event was published';
           const failureChunk = {
             type: 'error',
             runId,
             from: ChunkFrom.AGENT,
-            payload: {
-              error: new Error(
-                'Failed to save the suspended tool call to memory before suspending; no suspension event was published',
-                { cause: error },
-              ),
-            },
+            payload: { error: new Error(flushFailureMessage, { cause: error }) },
           } as ChunkType<OUTPUT>;
           try {
             if (outputWriter) {
@@ -432,11 +429,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // A rejecting writer only fails before enqueuing, so the failure chunk never
             // reached the client. Fall back to the step controller; otherwise the caller
             // sees a normal completion with neither a suspension event nor an error.
+            // No processor saw this chunk, so none could redact the storage error it
+            // carries: the fallback keeps the message but drops the cause, which stays in
+            // the log above.
             logger?.error(
               'Error publishing the suspension flush failure; delivering it directly instead:',
               publishError,
             );
-            safeEnqueue(controller, failureChunk);
+            safeEnqueue(controller, {
+              ...failureChunk,
+              payload: { ...failureChunk.payload, error: new Error(flushFailureMessage) },
+            } as ChunkType<OUTPUT>);
           }
           return false;
         }
