@@ -31,6 +31,7 @@ const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 const RECHECK_MS = 1000;
 const ADMIN = 'admin-user';
 const MEMBER = 'member-user';
+const SIGNED_OUT = 'signed-out';
 
 /** An app board from `MastraFactory({ boards })`. */
 function releaseBoard(): InstalledBoard {
@@ -101,7 +102,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const audit = new AuditDomain({ auth, audit: domains.audit, projects: domains.projects });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: c.req.header('x-user') ?? ADMIN, organizationId: orgId } as never);
+      const user = c.req.header('x-user') ?? ADMIN;
+      if (user !== SIGNED_OUT) c.set('factoryAuthUser' as never, { workosId: user, organizationId: orgId } as never);
       await next();
     });
     mountApiRoutes(app, [
@@ -326,6 +328,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(await getBoard(replicaA.send, base, 'bugs')).toMatchObject({ name: 'Bugs', revision: 1 });
     // Reading needs only membership.
     expect((await replicaA.send('GET', `${base}/bugs`, undefined, MEMBER)).status).toBe(200);
+  });
+
+  it('refuses a request with no signed-in user, as the other project routes do', async () => {
+    const { a, scope, base, replicaA } = await setup();
+    expect(await replicaA.send('GET', `${base}/work`, undefined, SIGNED_OUT)).toEqual({
+      status: 401,
+      body: { error: 'unauthorized' },
+    });
+    expect((await replicaA.send('POST', base, bugsBoard, SIGNED_OUT)).status).toBe(401);
+    expect((await replicaA.send('GET', base, undefined, SIGNED_OUT)).status).toBe(401);
+    expect(await a.boards.list(scope)).toEqual([]);
   });
 
   it('needs no admin in local mode', async () => {

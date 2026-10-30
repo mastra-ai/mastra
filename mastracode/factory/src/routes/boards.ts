@@ -47,7 +47,7 @@ type Resolved = StoredBoardScope & { userId: string };
 /** A response the handler returns as is: a refusal or an error. */
 class Refusal {
   constructor(
-    readonly status: 400 | 403 | 404 | 409 | 422,
+    readonly status: 400 | 401 | 403 | 404 | 409 | 422,
     readonly body: Record<string, unknown>,
   ) {}
 }
@@ -69,7 +69,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     const { auth, projects } = this.deps;
     await auth.ensureUser(c);
     const tenant = auth.tenant(c);
-    if (!tenant) throw new Refusal(403, { error: 'unauthorized' });
+    if (!tenant) throw new Refusal(401, { error: 'unauthorized' });
     if (!tenant.orgId) {
       throw new Refusal(403, { error: 'organization_required', message: 'Boards belong to an organization.' });
     }
