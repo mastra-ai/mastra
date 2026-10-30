@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "paths": {
+      "@mastra/core/*": ["../../packages/core/src/*"]
+    }
+  },
+  "include": ["test-fixtures/agent-thread-worker.entry.ts"],
+  "exclude": ["node_modules"]
+}
