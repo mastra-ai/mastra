@@ -135,6 +135,26 @@ describe('defineBoard phase fields', () => {
     }
   });
 
+  it('keeps agentEnterWhen on any phase kind, as a condition or false, and rejects anything else', () => {
+    const board = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['building'], agentEnterWhen: LOW_EFFORT },
+      building: { name: 'Building', kind: 'working', nextPhases: ['shipped'], agentEnterWhen: LOW_EFFORT },
+      shipped: { name: 'Shipped', kind: 'terminal', agentEnterWhen: false },
+    });
+
+    expect(board.phases.backlog.agentEnterWhen).toEqual(LOW_EFFORT);
+    expect(board.phases.building.agentEnterWhen).toEqual(LOW_EFFORT);
+    expect(board.phases.shipped.agentEnterWhen).toBe(false);
+    for (const agentEnterWhen of [
+      true,
+      { operator: 'AND', conditions: [{ field: 'item.nope', operator: 'exists' }] },
+    ]) {
+      expect(() => release({ backlog: { name: 'Backlog', kind: 'resting', agentEnterWhen } })).toThrow(
+        'Phase "backlog" agentEnterWhen is not a valid condition',
+      );
+    }
+  });
+
   it('starts a phase on its own only when autoStart is set and its condition matches the card', () => {
     const board = release({
       backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['always', 'lowEffort', 'manual'] },
@@ -142,8 +162,18 @@ describe('defineBoard phase fields', () => {
       lowEffort: { name: 'Low effort', kind: 'working', autoStart: true, autoStartWhen: LOW_EFFORT },
       manual: { name: 'Manual', kind: 'working' },
     });
-    const lowEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:low'] }, externalSource: null });
-    const highEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:high'] }, externalSource: null });
+    const lowEffort = cardRuleFacts({
+      title: 'Fix',
+      metadata: { labels: ['effort:low'] },
+      externalSource: null,
+      stages: ['backlog'],
+    });
+    const highEffort = cardRuleFacts({
+      title: 'Fix',
+      metadata: { labels: ['effort:high'] },
+      externalSource: null,
+      stages: ['backlog'],
+    });
 
     expect(board.startsAutomatically('always')).toBe(true);
     expect(board.startsAutomatically('lowEffort', lowEffort)).toBe(true);

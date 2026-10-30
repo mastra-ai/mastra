@@ -41,6 +41,8 @@ export const FACTORY_BOARD_PHASES_SCHEMA: CollectionSchema = {
     auto_start: { type: 'boolean', default: false },
     auto_start_when: { type: 'json', nullable: true },
     exit_tool: { type: 'json', nullable: true },
+    // A rule group, or `false` when agents may never move a card in.
+    agent_enter_when: { type: 'json', nullable: true },
   },
   uniqueIndexes: [
     {

@@ -2,7 +2,7 @@ import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
-import type { BoardRegistry } from './registry.js';
+import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { boardForWorkItem } from './semantics.js';
 
 type Card = Pick<WorkItemRow, 'board' | 'externalSource' | 'stages' | 'title' | 'metadata'>;
@@ -19,6 +19,13 @@ export function startsInAutoPhase(boards: BoardRegistry, item: Card, decision: F
   const board = boards.get(boardForWorkItem(item));
   const stage = item.stages[0]!;
   return board?.roleForPhase(stage) === decision.role && board.startsAutomatically(stage, cardRuleFacts(item));
+}
+
+/** Whether an agent may move the card into `phase` under the phase's `agentEnterWhen`. */
+export function agentMayEnter(board: InstalledBoard, phase: string, item: Card): boolean {
+  const condition = board.phases[phase]?.agentEnterWhen;
+  if (condition === undefined) return true;
+  return condition !== false && evaluateRuleGroup(condition, cardRuleFacts(item));
 }
 
 /** The exit tool of the card's phase when it is approved without a person for this card. */

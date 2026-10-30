@@ -33,6 +33,7 @@ export const storedPhaseInputSchema = z
     autoStart: z.boolean().optional(),
     autoStartWhen: cardRuleGroupSchema.nullish(),
     exitTool: storedExitToolSchema.nullish(),
+    agentEnterWhen: z.union([cardRuleGroupSchema, z.literal(false)]).nullish(),
   })
   .strict();
 
@@ -97,6 +98,7 @@ export function compileStoredBoard(board: StoredBoardInput): InstalledBoard {
       autoStart: phase.autoStart ? true : undefined,
       autoStartWhen: phase.autoStartWhen ?? undefined,
       exitTool,
+      agentEnterWhen: phase.agentEnterWhen ?? undefined,
     }) as BoardPhaseDefinition<string>;
   }
   return compileBoardDefinition({
@@ -129,6 +131,7 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
     description: phase.description,
     kind: phase.kind,
     nextPhases: [...phase.nextPhases],
+    agentEnterWhen: phase.agentEnterWhen,
     ...(phase.kind === 'working'
       ? {
           runner: withoutUndefined({
