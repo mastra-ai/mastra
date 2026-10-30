@@ -49,7 +49,7 @@ const results = await vectorStore.query({
 
 ## Documentation
 
-- [@mastra/libsql documentation](https://mastra.ai/reference/vectors/libsql)
+- [@mastra/libsql documentation](https://mastra.ai/integrations/vectors/libsql)
 
 ## Changelog
 

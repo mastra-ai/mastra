@@ -7,7 +7,6 @@ export { ChartCardError } from './chart-card-error';
 export { AggregateLimiterProvider } from '../hooks/aggregate-limiter-provider';
 export { KpiCard, type KpiCardProps } from './kpi-card';
 export { MetricsGrid, type MetricsGridProps, type MetricsGridItemProps } from './metrics-grid/metrics-grid';
-export { MetricsKpis } from './metrics-kpis';
 export { TokenUsageCard, type TokenUsageCardProps } from './token-usage-card';
 export { AgentRunsCard, type AgentRunsCardProps } from './agent-runs-card';
 export { FailureRateCard, type FailureRateCardProps } from './failure-rate-card';

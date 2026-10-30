@@ -739,6 +739,19 @@ export class BraintrustExporter extends TrackingExporter<
       // Usage/token info goes to metrics
       payload.metrics = formatUsageMetrics(modelAttr.usage);
 
+      // The provider's charge replaces Braintrust's registry price. A zero charge is
+      // skipped, because AI Gateway reports 0 for bring-your-own-key calls.
+      const costContext = modelAttr.costContext;
+      if (
+        costContext?.costMetadata?.source === 'provider_reported' &&
+        costContext.costUnit === 'USD' &&
+        typeof costContext.estimatedCost === 'number' &&
+        Number.isFinite(costContext.estimatedCost) &&
+        costContext.estimatedCost > 0
+      ) {
+        payload.metrics.estimated_cost = costContext.estimatedCost;
+      }
+
       // Time to first token (TTFT) for streaming responses
       // Braintrust expects TTFT in seconds (not milliseconds)
       if (modelAttr.completionStartTime) {

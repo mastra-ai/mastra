@@ -26,5 +26,7 @@ export function spanToListRow(span: SpanRow): TracesListViewTrace {
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     createdAt: span.startedAt,
+    timeToFirstChunkMs: span.timeToFirstChunkMs,
+    timeToFirstTokenMs: span.timeToFirstTokenMs,
   };
 }

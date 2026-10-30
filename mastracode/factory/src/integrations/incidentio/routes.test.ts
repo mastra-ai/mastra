@@ -85,6 +85,17 @@ function buildApp(
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 const projectA = '11111111-1111-4111-8111-111111111111';
+const createProject = async (id: string) => {
+  const now = new Date();
+  await seed.storage.ops.insertOne('factory_projects', {
+    id,
+    org_id: 'org1',
+    created_by: 'u1',
+    name: id,
+    created_at: now,
+    updated_at: now,
+  });
+};
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
@@ -167,7 +178,7 @@ describe('status route', () => {
 
 describe('issues route', () => {
   beforeEach(async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await createProject(projectA);
   });
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
@@ -289,7 +300,7 @@ describe('issue detail route', () => {
   };
 
   beforeEach(async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await createProject(projectA);
   });
 
   it('returns the description for a follow-up from a source routed to the Factory', async () => {

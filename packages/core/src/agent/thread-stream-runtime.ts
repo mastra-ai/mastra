@@ -34,6 +34,7 @@ import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, C
 import { applyStateSignal } from './state-signals';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
+import { AGENT_THREAD_KEY_SEPARATOR, agentThreadStreamKey, agentThreadStreamTopicForKey } from './thread-stream-topic';
 import type {
   AgentAbortThreadOptions,
   AgentClaimThreadPeerOptions,
@@ -81,7 +82,6 @@ function userMessageSignalId(part: unknown): string | undefined {
   return 'id' in part.data && typeof part.data.id === 'string' ? part.data.id : undefined;
 }
 
-const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const TERMINAL_STORED_RUN_STATUSES = new Set<WorkflowRunStatus>([
   'success',
   'failed',
@@ -116,7 +116,6 @@ function describeThreadKey(key: string): string {
   return resourceId ? `thread ${threadId} (resource ${resourceId})` : `thread ${threadId}`;
 }
 
-const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /**
  * Per-attempt window for a claimed thread owner to answer a discovery request.
@@ -1846,7 +1845,7 @@ export class AgentThreadStreamRuntime {
   }
 
   #threadKey(resourceId: string | undefined, threadId: string): string {
-    return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    return agentThreadStreamKey(resourceId, threadId);
   }
 
   #parseThreadKey(key: string): { resourceId?: string; threadId: string } {
@@ -1856,7 +1855,7 @@ export class AgentThreadStreamRuntime {
   }
 
   #threadTopic(key: string): string {
-    return `${AGENT_THREAD_STREAM_TOPIC_PREFIX}.${encodeURIComponent(key)}`;
+    return agentThreadStreamTopicForKey(key);
   }
 
   /**

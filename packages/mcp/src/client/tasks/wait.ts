@@ -33,6 +33,8 @@ export interface TaskWaitOptions {
    * The wait also ends earlier at `maxWaitMs` or the task's TTL. Default 5 minutes.
    */
   maxOutageMs?: number;
+  /** Called with the created task, then whenever a poll reports a different status. */
+  onStatus?: (task: MCPTask) => void;
   /** For tests. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   now?: () => number;
@@ -130,7 +132,12 @@ export async function waitForTask(
   deadlineTimer?.unref?.();
 
   try {
+    let reported: MCPTask['status'] | undefined;
     for (;;) {
+      if (task.status !== reported) {
+        reported = task.status;
+        options.onStatus?.(task);
+      }
       stop.signal.throwIfAborted();
       if (isTerminalTaskStatus(task.status)) return task as MCPTerminalTask;
 

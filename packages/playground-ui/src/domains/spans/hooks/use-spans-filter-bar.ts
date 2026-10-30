@@ -38,12 +38,14 @@ export type UseSpansFilterBarFieldsOptions = {
 
 /**
  * The fields the spans filter bar offers: the time range plus the fields `querySpans()` accepts.
- * Context fields are only included when the store declares `spanQueryContextFields`.
+ * Context fields and streaming timings are only included when the store declares them.
  */
 export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOptions): FilterBarField[] {
   const client = useMastraClient();
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
+  const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
   const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
   const { data: entityNames = NO_SUGGESTIONS } = useEntityNames();
   const { data: environments = NO_SUGGESTIONS } = useEnvironments();
@@ -55,13 +57,24 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
       TRACE_TIME_RANGE_FIELD,
       ...createSpanFilterBarFields({
         withContextFields,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
         withOutcomeFields,
         entityNames,
         environments,
         valueSuggestions: path => createTraceQueryValuesResolver(client, timeRange, 'spans', path),
       }),
     ],
-    [withContextFields, withOutcomeFields, entityNames, environments, client, timeRange],
+    [
+      withContextFields,
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+      withOutcomeFields,
+      entityNames,
+      environments,
+      client,
+      timeRange,
+    ],
   );
 }
 
