@@ -165,6 +165,19 @@ When [server authentication](/docs/auth/overview) is configured, the same config
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
+import { createTool } from '@mastra/core/tools'
+import { getRequestUser } from '@mastra/core/utils'
+import { z } from 'zod'
+
+const accountTool = createTool({
+  id: 'get-account',
+  description: "Look up the signed-in user's account",
+  inputSchema: z.object({}),
+  execute: async (inputData, context) => {
+    const user = getRequestUser(context?.requestContext)
+    return { userId: user?.id, email: user?.email }
+  },
+})
 
 export const supportAgent = new Agent({
   id: 'support-agent',
