@@ -410,6 +410,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('preserves classification, acceptance, autonomy and plan grants on the board placement', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     const id = cards.get('github issue')!;
     const process = {
       triage_type: 'feature request',
