@@ -24,8 +24,10 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
+import { WORKSPACE_TOOLS } from '../workspace/constants';
 import { CompositeFilesystem } from '../workspace/filesystem/composite-filesystem';
 import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
+import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
@@ -1485,6 +1487,23 @@ export class AgentChannels {
       return;
     }
 
+    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
+      chatThread,
+      platform,
+      eventType,
+      messageId: message.id,
+      actor: message.author,
+    });
+
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here. Set it before thread mapping and attachments: the
+    // workspace caches the filesystem it resolves per request context, so a
+    // channel-aware resolver must see the channel on its first call, even
+    // from a resolveResourceId/resolveThreadId hook.
+    requestContext.set('channel', channelContext);
+
     // Map to a Mastra thread for memory/history.
     // chatThread.id encodes channel + threadTs, so it's stable per conversation:
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
@@ -1524,22 +1543,6 @@ export class AgentChannels {
         this.log('warn', `Could not record channel facts on thread ${mastraThread.id}: ${String(error)}`),
       );
     }
-
-    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
-      chatThread,
-      platform,
-      eventType,
-      messageId: message.id,
-      actor: message.author,
-    });
-
-    // NOTE: `requestContext` is constructed per message at the handler boundary
-    // (see `beginMessage` in initialize) so a custom handler can contribute to
-    // it — e.g. stamping the tenant — before the run dispatches. Core only
-    // enriches it here. Set it before attachments are handled: the workspace
-    // caches the filesystem it resolves per request context, so a
-    // channel-aware resolver must see the channel on its first call.
-    requestContext.set('channel', channelContext);
 
     // On a non-DM first mention (not yet subscribed), persist the platform
     // thread's prior messages into the Mastra thread as individual attributed
@@ -1809,11 +1812,22 @@ export class AgentChannels {
     return parts;
   }
 
-  /** The agent's workspace filesystem when one is configured and writable. */
+  /**
+   * The agent's workspace filesystem when one is configured and writable, and
+   * the workspace lets the agent write files without approval. Saving follows
+   * the same policy as the write tool so a deployer who disables or gates
+   * writes doesn't get channel participants' files written anyway.
+   */
   private async resolveAttachmentFilesystem(requestContext: RequestContext): Promise<WorkspaceFilesystem | undefined> {
     try {
       const workspace = await this.getDispatchAgent()?.getWorkspace?.({ requestContext });
-      const fs = workspace ? await workspace.resolveFilesystem({ requestContext }) : undefined;
+      if (!workspace) return undefined;
+      const writeConfig = await resolveToolConfig(workspace.getToolsConfig(), WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE, {
+        requestContext: Object.fromEntries(requestContext.entries()),
+        workspace,
+      });
+      if (!writeConfig.enabled || writeConfig.requireApproval !== false) return undefined;
+      const fs = await workspace.resolveFilesystem({ requestContext });
       return fs && !fs.readOnly ? fs : undefined;
     } catch (err) {
       this.log('warn', 'Could not resolve the agent workspace for attachments', { error: err });
@@ -2715,9 +2729,9 @@ function parseLastSender(value: unknown): LastSender | undefined {
  */
 function attachmentDirFor(fs: WorkspaceFilesystem): string | undefined {
   if (!(fs instanceof CompositeFilesystem)) return ATTACHMENT_DIR;
-  const mount = fs.mountPaths.find(path => !fs.mounts.get(path)?.readOnly);
-  if (mount === undefined) return undefined;
-  return mount === '/' ? `/${ATTACHMENT_DIR}` : `${mount}/${ATTACHMENT_DIR}`;
+  // A "/" mount is skipped: CompositeFilesystem only routes the exact path "/" to it.
+  const mount = fs.mountPaths.find(path => path !== '/' && !fs.mounts.get(path)?.readOnly);
+  return mount === undefined ? undefined : `${mount}/${ATTACHMENT_DIR}`;
 }
 
 /** Total size of the files under `dir` (0 when the folder doesn't exist yet). */

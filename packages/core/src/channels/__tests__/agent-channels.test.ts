@@ -18,12 +18,12 @@ import type { IMastraLogger, LogFilter } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
-import { LocalFilesystem, Workspace } from '../../workspace';
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '../../workspace';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
-import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler } from '../types';
+import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -4128,6 +4128,7 @@ describe('per-sender handler runs end to end', () => {
       disableMention?: boolean;
       workspace?: Workspace;
       maxAttachmentStorageBytes?: number;
+      resolveResourceId?: ResolveResourceId;
     } = {},
   ) {
     const { Mastra } = await import('../../mastra');
@@ -4175,6 +4176,7 @@ describe('per-sender handler runs end to end', () => {
       ...(options.maxAttachmentStorageBytes !== undefined
         ? { maxAttachmentStorageBytes: options.maxAttachmentStorageBytes }
         : {}),
+      ...(options.resolveResourceId ? { resolveResourceId: options.resolveResourceId } : {}),
       handlers: {
         onDirectMessage: options.disableDirect ? false : handle('direct'),
         onMention: options.disableMention ? false : handle('mention'),
@@ -4580,6 +4582,21 @@ describe('per-sender handler runs end to end', () => {
       expect(await readFile(join(root, 'per-channel', zipPath!))).toEqual(ZIP_BYTES);
     });
 
+    it('sets the channel in the request context before resolveResourceId runs', async () => {
+      const seen: unknown[] = [];
+      const h = await createHarness({
+        hold: false,
+        resolveResourceId: ({ requestContext, defaultResourceId }) => {
+          seen.push(requestContext.get('channel'));
+          return defaultResourceId;
+        },
+      });
+      await deliverFiles(h, []);
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ platform: 'slack', channelId: expect.any(String) });
+    });
+
     it('saves into the first writable mount of a mounted workspace', async () => {
       const codeDir = await mkdtemp(join(tmpdir(), 'channel-attachments-code-'));
       const dataDir = await mkdtemp(join(tmpdir(), 'channel-attachments-data-'));
@@ -4600,6 +4617,42 @@ describe('per-sender handler runs end to end', () => {
       expect(zipPath).toMatch(/^\/data\/channel-attachments\/[0-9a-f]+\/report\.zip$/);
       expect(await readFile(join(dataDir, zipPath!.slice('/data/'.length)))).toEqual(ZIP_BYTES);
       expect(await readdir(codeDir)).toEqual([]);
+    });
+
+    it('follows the workspace write-file policy before saving', async () => {
+      for (const tools of [
+        { [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: false } },
+        { [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval: true } },
+        { requireApproval: true },
+      ]) {
+        const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+        tempDirs.push(dir);
+        const h = await createHarness({
+          hold: false,
+          workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }), tools }),
+        });
+        const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+        const userTurn = await deliverFiles(h, [zip]);
+
+        expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
+        expect(zip.fetchData).not.toHaveBeenCalled();
+        expect(await readdir(dir)).toEqual([]);
+      }
+    });
+
+    it('does not save into a root mount', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-root-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ mounts: { '/': new LocalFilesystem({ basePath: dir }) } }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
+      expect(zip.fetchData).not.toHaveBeenCalled();
+      expect(await readdir(dir)).toEqual([]);
     });
 
     it('keeps attachments without a URL apart when they share a name, type and size', async () => {
