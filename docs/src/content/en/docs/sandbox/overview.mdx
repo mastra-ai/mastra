@@ -236,7 +236,7 @@ Your application owns sandboxes returned by a resolver. Destroy them and call `w
 
 An agent's `workspace` option also accepts a function that returns a `Workspace`. Mastra calls this function whenever it needs the agent's workspace, not only when the agent runs. This includes registering the agent at startup and reading agent metadata, such as `GET /api/agents` and `GET /api/agents/:agentId`, which Studio calls when it lists agents. These calls aren't cached.
 
-Keep the function cheap. Don't start a sandbox or other paid infrastructure inside it. Return a workspace that uses `filesystem` and `sandbox` resolvers instead. Mastra calls the sandbox resolver only when a tool needs the provider, and calls the filesystem resolver when a tool needs it or when the agent's workspace skills are read, including on the agent metadata routes.
+Keep the function cheap. Don't start a sandbox or other paid infrastructure inside it. Return a workspace that uses `filesystem` and `sandbox` resolvers instead. Mastra calls the filesystem resolver when it builds the workspace instructions for a run, when a tool needs the provider, and when the agent's workspace skills are read, including on the agent metadata routes. It calls the sandbox resolver only when a tool needs the provider, unless you set `instructions.dynamicSandbox` to `'resolve'`.
 
 ### Tool availability
 
