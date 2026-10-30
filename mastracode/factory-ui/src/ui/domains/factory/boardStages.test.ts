@@ -2,7 +2,13 @@ import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
 
 import { describe, expect, it } from 'vitest';
 
-import { boardStages, currentItemStageLabel, itemAppearsInStage } from './boardStages';
+import {
+  boardStages,
+  currentItemStageLabel,
+  itemAppearsInStage,
+  itemStageOptions,
+  pullRequestMayEnter,
+} from './boardStages';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
@@ -69,5 +75,26 @@ describe('itemAppearsInStage', () => {
     const canceled = workItem('github-pr', ['canceled']);
     expect(itemAppearsInStage(canceled, 'canceled', stages)).toBe(true);
     expect(itemAppearsInStage(canceled, 'intake', stages)).toBe(false);
+  });
+});
+
+describe('pull request cards on the Work board', () => {
+  it.each(['github-pr', 'gitlab-pr'] as const)('moves a %s card only through the lanes that review it', source => {
+    const card = { ...workItem(source, ['intake']), board: 'work' };
+    expect(itemStageOptions(card).map(stage => stage.id)).toEqual(['intake', 'review', 'done', 'canceled']);
+    // Work labels the lane Review; only the Review board calls it Reviewing.
+    expect(itemStageOptions(card).find(stage => stage.id === 'review')?.label).not.toBe('Reviewing');
+    for (const stage of ['triage', 'planning', 'execute'])
+      expect(pullRequestMayEnter('work', source, stage)).toBe(false);
+    for (const stage of ['intake', 'review', 'done', 'canceled']) {
+      expect(pullRequestMayEnter('work', source, stage)).toBe(true);
+    }
+  });
+
+  it('leaves issues on Work and cards on other boards their full lanes', () => {
+    expect(itemStageOptions({ ...workItem('github-issue', ['intake']), board: 'work' })).toBe(boardStages('work'));
+    expect(itemStageOptions(workItem('github-pr', ['intake']))).toBe(boardStages('review'));
+    expect(pullRequestMayEnter('work', 'github-issue', 'execute')).toBe(true);
+    expect(pullRequestMayEnter('release', 'github-pr', 'execute')).toBe(true);
   });
 });
