@@ -5259,6 +5259,8 @@ describe('FactoryDecisionDispatcher', () => {
         metadata: {},
       },
     });
+    // The other project's card was filed while claims were enforced and still holds the record's claim.
+    await seeded.storage.ops.updateMany('work_items', { id: elsewhere.item.id }, { claim_key: 'linear:issue:1' });
     const parent = await createItem(storage);
     const boards = createLifecycleTestRegistry({
       execute: {
@@ -5315,7 +5317,10 @@ describe('FactoryDecisionDispatcher', () => {
       item => item.externalSource?.externalId === 'linear:ENG-1',
     );
     expect(filedHere).toMatchObject([{ parentWorkItemId: parent.id, stages: ['intake'] }]);
-    expect(filedHere[0]).not.toHaveProperty('claimKey', 'linear:issue:1');
+    const filedRow = await seeded.storage.ops.findOne<{ claim_key: string | null }>('work_items', {
+      id: filedHere[0]!.id,
+    });
+    expect(filedRow?.claim_key).toBeNull();
     expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
     expect(await storage.get({ orgId: 'org-1', id: elsewhere.item.id })).toEqual(elsewhere.item);
   });
