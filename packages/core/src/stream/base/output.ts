@@ -2144,7 +2144,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         },
                       },
                       {
-                        text: self.#bufferedSteps.map(step => step.text).join(''),
+                        text: self.#bufferedText.join(''),
                         usage: self.#usageCount,
                         finishReason: 'error',
                         steps: [...self.#bufferedSteps] as LLMStepResult[],

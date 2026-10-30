@@ -51,7 +51,7 @@ function toolResultIds(messages: MastraDBMessage[]) {
     .map(part => (part as Extract<typeof part, { type: 'tool-invocation' }>).toolInvocation.toolCallId);
 }
 
-type Probe = { hook: string; finishReason?: string };
+type Probe = { hook: string; finishReason?: string; text?: string };
 
 function createProbes(memory: MastraMemory) {
   const calls: Probe[] = [];
@@ -59,7 +59,7 @@ function createProbes(memory: MastraMemory) {
   const probe: Processor = {
     id: 'terminal-save-probe',
     processOutputResult: async ({ messageList, result }) => {
-      calls.push({ hook: 'probe.processOutputResult', finishReason: result?.finishReason });
+      calls.push({ hook: 'probe.processOutputResult', finishReason: result?.finishReason, text: result?.text });
       return messageList;
     },
   };
@@ -478,6 +478,8 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         'Answer slowly.',
       ]);
       expect(calls.find(call => call.hook === 'probe.processOutputResult')?.finishReason).toBe('error');
+      // Processors see the streamed text that is saved with the turn.
+      expect(calls.find(call => call.hook === 'probe.processOutputResult')?.text).toMatch(/^(PARTIAL )+/);
     },
     TEST_TIMEOUT_MS,
   );
