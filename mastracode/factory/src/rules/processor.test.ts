@@ -579,6 +579,77 @@ describe('FactoryPhaseStateProcessor', () => {
       );
     });
 
+    it('lets a custom exit tool’s own success move the card on, but not an agent or a failed call', async () => {
+      const release = defineBoard({
+        id: 'release',
+        name: 'Release',
+        initialPhase: 'intake',
+        phases: {
+          intake: { name: 'Intake', kind: 'resting', nextPhases: ['drafting'] },
+          drafting: {
+            name: 'Drafting',
+            kind: 'working',
+            runner: { context: 'work' },
+            exitTool: 'publish_draft',
+            nextPhases: ['shipping'],
+          },
+          shipping: { name: 'Shipping', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+          shipped: { name: 'Shipped', kind: 'terminal' },
+        },
+        tools: {
+          publish_draft: {
+            onResult: context =>
+              context.result.status === 'success' && context.item.stages[0] === 'drafting'
+                ? {
+                    type: 'transition',
+                    idempotencyKey: `${context.ingress.id}:published`,
+                    board: 'release',
+                    stage: 'shipping',
+                  }
+                : undefined,
+          },
+        },
+      });
+      const setup = async () => {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const prepared = await prepare(storage, 'work', 'issue', { id: 'release', stage: 'drafting' });
+        const boards = createBoardRegistry({ boards: [release] });
+        const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+        const processor = new FactoryPhaseStateProcessor({
+          configVersion: 'rules-v1',
+          boards,
+          storage,
+          transitionService,
+        });
+        return { storage, prepared, transitionService, processor };
+      };
+
+      const failed = await setup();
+      await failed.processor.processInputStep(
+        inputArgs(requestContext(), [toolMessage({ toolName: 'publish_draft', state: 'error', result: 'boom' })]),
+      );
+      expect(await stageOf(failed.storage, failed.prepared.item.id)).toEqual(['drafting']);
+      const byAgent = await failed.transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: failed.prepared.item.id,
+        board: 'release',
+        stage: 'shipping',
+        expectedRevision: failed.prepared.item.revision,
+        actor: { type: 'agent', bindingId: failed.prepared.binding.id, role: 'work' },
+        ingress: { type: 'agent', identity: 'agent-skips-the-exit-tool' },
+        cause: 'test',
+      });
+      expect(byAgent).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      expect(byAgent.status === 'rejected' && byAgent.reason).toContain('Drafting ends when publish_draft succeeds');
+
+      const succeeded = await setup();
+      await succeeded.processor.processInputStep(
+        inputArgs(requestContext(), [toolMessage({ toolName: 'publish_draft', result: { content: 'Published.' } })]),
+      );
+      expect(await stageOf(succeeded.storage, succeeded.prepared.item.id)).toEqual(['shipping']);
+    });
+
     it('fails closed when the item’s board is not installed', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepare(storage, 'plan');
@@ -1107,7 +1178,7 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
-  it('tells the planner the approved plan moves the card, not to move it itself', async () => {
+  it('tells the planner an approved plan moves the card, and it may move it only when plans are auto-approved', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'planning' });
     const boards = createBoardRegistry();
@@ -1116,7 +1187,12 @@ describe('FactoryPhaseStateProcessor', () => {
       boards,
       storage,
     }).computeStateSignal(stateArgs(requestContext()));
-    expect(signal?.contents).toContain('This phase ends when submit_plan succeeds; Factory then moves the card on.');
+    expect(signal?.contents).toContain(
+      'This phase ends when submit_plan succeeds and is approved; that moves the card on.',
+    );
+    expect(signal?.contents).toContain(
+      'You can move it on to a working phase yourself with factory_transition_work_item only when submit_plan is auto-approved for this card; otherwise a person approves the handoff.',
+    );
     expect(signal?.contents).not.toContain('Then move the card with factory_transition_work_item');
   });
 
