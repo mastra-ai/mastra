@@ -87,7 +87,7 @@ Reads a page: its body, notes, child pages, and the notes on other pages that me
 
 ## `knowledge_page`
 
-Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits, merges and deletes take no `scope`: they act on the page's own scope.
+Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`: they act on the page's own scope. A delete acts on the page's own scope and ignores `scope`.
 
 <PropertiesTable
   content={[
