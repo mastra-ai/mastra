@@ -96,7 +96,8 @@ export function ProviderAccountPool({
   const [renaming, setRenaming] = useState<PoolAccountSummary>();
 
   const saved = accountsQuery.data ?? [];
-  if (saved.length === 0) return null;
+  // A single account is the provider row itself; the pool list starts at two.
+  if (saved.length < 2) return null;
 
   // Show the order being saved so a dropped row does not snap back while the request is in flight.
   const pendingOrder = reorder.isPending ? reorder.variables : undefined;
@@ -128,7 +129,7 @@ export function ProviderAccountPool({
 
   return (
     <div className="flex flex-col gap-1 pb-1.5 pl-9" role="group" aria-label={`${displayName} accounts`}>
-      {manageable && accounts.length > 1 ? (
+      {manageable ? (
         <ContentBlocks
           items={accounts}
           onChange={next => saveOrder(next.map(account => account.id))}
@@ -147,11 +148,11 @@ export function ProviderAccountPool({
           ))}
         </div>
       )}
-      {accounts.length > 1 && (
-        <Txt as="p" variant="meta" tone="muted">
-          When the active account is rate limited, routing switches to the next one in this order.
-        </Txt>
-      )}
+      <Txt as="p" variant="meta" tone="muted">
+        When the active account is rate limited, routing switches to the next one in this order. Signing out removes
+        only the active account, and removing a key removes only an API key, never a sign-in. The next account in this
+        order takes over.
+      </Txt>
       {renaming && (
         <RenameAccountDialog
           account={renaming}

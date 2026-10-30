@@ -1,3 +1,4 @@
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Status } from '@mastra/playground-ui/components/StatusIndicators';
@@ -6,6 +7,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Box, MoreHorizontal } from 'lucide-react';
+import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import {
@@ -13,6 +15,7 @@ import {
   useSignOutProviderOAuth,
   useStartProviderOAuth,
 } from '../../../../../../hooks/use-providers';
+import { useProviderAccountsQuery } from '../../../../../../hooks/use-provider-accounts';
 import type { AccountScope } from '../../../../../../hooks/use-provider-accounts';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { signInRequest } from '../../provider-credential';
@@ -77,6 +80,14 @@ export function ConnectedProviderRow({
   const signOutMutation = useSignOutProviderOAuth();
   const removeKeyMutation = useRemoveProviderKey();
   const startOAuthMutation = useStartProviderOAuth();
+  const accountsQuery = useProviderAccountsQuery(provider.provider, accountScope, credential !== undefined);
+  const accounts = accountsQuery.data ?? [];
+  const active = accounts.length > 1 ? accounts.find(account => account.active) : undefined;
+  // With several pooled accounts, signing out drops only the active one.
+  const activeLabel = active?.label;
+  // Removing a key only ever drops an API key, never a sign-in account.
+  const keyLabel = active?.type === 'api-key' ? active.label : `the ${displayName} API key`;
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const pending = pendingStatus({
     signingOut: signOutMutation.isPending,
     removing: removeKeyMutation.isPending,
@@ -98,6 +109,7 @@ export function ConnectedProviderRow({
   };
 
   const removeKey = () => {
+    setConfirmingRemoval(false);
     removeKeyMutation.mutate(
       { provider: provider.provider, scope: requestScope },
       { onError: error => toast.error(error.message || 'Failed to remove API key') },
@@ -122,13 +134,31 @@ export function ConnectedProviderRow({
             onSignInAgain={signInExpired && provider.oauth?.supported === true ? signInAgain : undefined}
             onSignOut={signOut}
             onUpdateKey={onUpdateKey}
-            onRemoveKey={removeKey}
+            onRemoveKey={() => setConfirmingRemoval(true)}
             onAddAccount={provider.oauth?.supported === true ? signInAgain : onUpdateKey}
+            activeLabel={activeLabel}
           />
         ) : (
           <span aria-hidden="true" className="size-control-sm shrink-0" />
         )}
       </div>
+      <AlertDialog open={confirmingRemoval} onOpenChange={setConfirmingRemoval}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Remove {keyLabel}?</AlertDialog.Title>
+            <AlertDialog.Description>
+              This removes only this API key. {displayName} sign-ins stay connected.
+              {accounts.length > 1 && ' The next account in the order becomes active.'}
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <Button variant="destructive" size="md" onClick={removeKey}>
+              Remove key
+            </Button>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
       {credential && (
         <ProviderAccountPool
           provider={provider.provider}
@@ -151,6 +181,7 @@ function CredentialMenu({
   onUpdateKey,
   onRemoveKey,
   onAddAccount,
+  activeLabel,
 }: {
   displayName: string;
   credential: ProviderCredential;
@@ -160,6 +191,8 @@ function CredentialMenu({
   onUpdateKey: () => void;
   onRemoveKey: () => void;
   onAddAccount: () => void;
+  /** Set when the pool holds several accounts, so the menu names the one sign-out drops. */
+  activeLabel: string | undefined;
 }) {
   return (
     <DropdownMenu>
@@ -175,12 +208,14 @@ function CredentialMenu({
         {credential === 'oauth' ? (
           <>
             {onSignInAgain && <DropdownMenu.Item onClick={onSignInAgain}>Sign in again</DropdownMenu.Item>}
-            <DropdownMenu.Item onClick={onSignOut}>Sign out</DropdownMenu.Item>
+            <DropdownMenu.Item onClick={onSignOut}>
+              {activeLabel ? `Sign out of ${activeLabel}` : 'Sign out'}
+            </DropdownMenu.Item>
           </>
         ) : (
           <>
             <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>
-            <DropdownMenu.Item onClick={onRemoveKey}>Remove key</DropdownMenu.Item>
+            <DropdownMenu.Item onClick={onRemoveKey}>Remove API key</DropdownMenu.Item>
           </>
         )}
       </DropdownMenu.Content>

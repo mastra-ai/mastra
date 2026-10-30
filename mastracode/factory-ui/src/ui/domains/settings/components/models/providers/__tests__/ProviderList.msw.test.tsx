@@ -143,7 +143,8 @@ describe('ProviderList', () => {
     renderWithProviders(<ProviderList credentialScope="user" />);
 
     await screen.findByText('OpenAI');
-    await pickRowAction(user, 'openai', 'Remove key');
+    await pickRowAction(user, 'openai', 'Remove API key');
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove key' }));
 
     await waitFor(() => expect(removed).toBe(true));
     expect(within(rowFor('openai')).getByText('Removing…')).toBeInTheDocument();

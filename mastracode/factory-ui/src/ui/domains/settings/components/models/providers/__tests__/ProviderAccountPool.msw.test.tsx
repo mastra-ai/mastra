@@ -176,9 +176,9 @@ describe('provider account pools', () => {
     });
   });
 
-  it('removes an account', async () => {
+  it('removes an account and folds the pool back into the provider row at one account', async () => {
     stubProviders([{ provider: 'openai', source: 'stored' }]);
-    const requests = stubPools({ user: [WORK, SIDE] });
+    const requests = stubPools({ user: [WORK, SIDE, SPARE] });
     const user = userEvent.setup();
     renderWithProviders(<ProviderList credentialScope="user" />);
     await pool();
@@ -187,6 +187,12 @@ describe('provider account pools', () => {
 
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Side key' })).not.toBeInTheDocument());
     expect(accountRow('Work key')).toBeInTheDocument();
+    expect(accountRow('Spare key')).toBeInTheDocument();
+
+    await pickAccountAction(user, 'Spare key', 'Remove');
+
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'OpenAI accounts' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('group', { name: 'Work key' })).not.toBeInTheDocument();
     expect(requests).toContainEqual(
       expect.objectContaining({
         method: 'DELETE',
@@ -226,7 +232,7 @@ describe('provider account pools', () => {
     let putBody: unknown;
     server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ providers })));
     const pools = { user: [WORK] };
-    stubPools(pools);
+    const requests = stubPools(pools);
     server.use(
       http.put(keyUrl('openai'), async ({ request }) => {
         putBody = await request.json();
@@ -236,8 +242,9 @@ describe('provider account pools', () => {
     );
     const user = userEvent.setup();
     renderWithProviders(<ProviderList credentialScope="user" />);
-    await pool();
-    expect(screen.queryByRole('group', { name: 'OpenAI account 2' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'OpenAI actions' })).toBeInTheDocument();
+    await waitFor(() => expect(requests.map(request => request.method)).toEqual(['GET']));
+    expect(screen.queryByRole('group', { name: 'OpenAI accounts' })).not.toBeInTheDocument();
 
     const dialog = await openAddProvider(user);
     await user.type(within(dialog).getByLabelText('Search providers'), 'openai');
@@ -247,6 +254,64 @@ describe('provider account pools', () => {
     await waitFor(() => expect(putBody).toMatchObject({ key: 'sk-second' }));
     expect(await screen.findByRole('group', { name: 'OpenAI account 2' })).toBeInTheDocument();
     expect(accountRow('Work key')).toBeInTheDocument();
+  });
+
+  it('names the active account in sign-out once several accounts share the pool', async () => {
+    const signedIn: ProviderInfo = {
+      provider: 'openai',
+      source: 'oauth-user',
+      userCredential: 'oauth',
+      oauth: { supported: true, modes: ['paste-code'] },
+    };
+    server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ providers: [signedIn] })));
+    const pools = { user: [account({ id: 'openai:max', label: 'Work Max', type: 'oauth', active: true })] };
+    stubPools(pools);
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await user.click(await screen.findByRole('button', { name: 'OpenAI actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
+    pools.user = [...pools.user, SIDE];
+    await client.invalidateQueries({ queryKey: ['providers'] });
+    await pool();
+
+    await user.click(screen.getByRole('button', { name: 'OpenAI actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Sign out of Work Max' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByText(/Signing out removes only the active account/)).toBeInTheDocument();
+  });
+
+  it('confirms that removing a key drops only that API key, never a sign-in', async () => {
+    stubProviders([{ provider: 'openai', source: 'stored' }]);
+    stubPools({ user: [WORK, SIDE] });
+    const deletes: string[] = [];
+    server.use(
+      http.delete(keyUrl('openai'), ({ request }) => {
+        deletes.push(new URL(request.url).searchParams.get('scope') ?? '');
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<ProviderList credentialScope="user" />);
+    await pool();
+
+    await user.click(screen.getByRole('button', { name: 'OpenAI actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove API key' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Remove Work key?' });
+    expect(within(dialog).getByText(/removes only this API key. OpenAI sign-ins stay connected./)).toBeInTheDocument();
+    expect(within(dialog).getByText(/next account in the order becomes active/)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(deletes).toEqual([]);
+
+    await user.click(screen.getByRole('button', { name: 'OpenAI actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove API key' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove key' }));
+    await waitForMutationsIdle(client);
+    expect(deletes).toHaveLength(1);
   });
 
   describe('org scope', () => {
