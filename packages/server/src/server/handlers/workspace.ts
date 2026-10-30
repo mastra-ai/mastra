@@ -288,8 +288,8 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
             source,
             ...(source === 'agent' && agentId ? { agentId, ...(agentName != null ? { agentName } : {}) } : {}),
             capabilities: {
-              hasFilesystem: !!ws.filesystem,
-              hasSandbox: !!ws.sandbox,
+              hasFilesystem: ws.hasFilesystemConfig(),
+              hasSandbox: ws.hasSandboxConfig(),
               canBM25: ws.canBM25,
               canVector: ws.canVector,
               canHybrid: ws.canHybrid,
@@ -313,8 +313,8 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
             status: globalWorkspace.status,
             source: 'mastra',
             capabilities: {
-              hasFilesystem: !!globalWorkspace.filesystem,
-              hasSandbox: !!globalWorkspace.sandbox,
+              hasFilesystem: globalWorkspace.hasFilesystemConfig(),
+              hasSandbox: globalWorkspace.hasSandboxConfig(),
               canBM25: globalWorkspace.canBM25,
               canVector: globalWorkspace.canVector,
               canHybrid: globalWorkspace.canHybrid,
@@ -341,8 +341,8 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
                   agentId,
                   agentName: (agent as any).name,
                   capabilities: {
-                    hasFilesystem: !!agentWorkspace.filesystem,
-                    hasSandbox: !!agentWorkspace.sandbox,
+                    hasFilesystem: agentWorkspace.hasFilesystemConfig(),
+                    hasSandbox: agentWorkspace.hasSandboxConfig(),
                     canBM25: agentWorkspace.canBM25,
                     canVector: agentWorkspace.canVector,
                     canHybrid: agentWorkspace.canHybrid,
@@ -434,8 +434,8 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         name: workspace.name,
         status: workspace.status,
         capabilities: {
-          hasFilesystem: !!workspace.filesystem,
-          hasSandbox: !!workspace.sandbox,
+          hasFilesystem: workspace.hasFilesystemConfig(),
+          hasSandbox: workspace.hasSandboxConfig(),
           canBM25: workspace.canBM25,
           canVector: workspace.canVector,
           canHybrid: workspace.canHybrid,
