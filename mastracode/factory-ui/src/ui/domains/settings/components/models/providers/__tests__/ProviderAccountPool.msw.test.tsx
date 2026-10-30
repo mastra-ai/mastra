@@ -329,24 +329,24 @@ describe('provider account pools', () => {
       expect(requests.map(request => `${request.method} ${request.scope}`)).toEqual(['GET org', 'POST org']);
     });
 
-    it('shows members the org pool without any controls', async () => {
+    it('does not ask for the org pool for members, since the server serves it to admins only', async () => {
       enableAuth();
       stubProviders([{ provider: 'openai', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }], false);
-      const mutation = vi.fn();
-      stubPools({ org: [WORK, SIDE] });
+      const poolRequest = vi.fn();
       server.use(
-        http.post(`${ACCOUNTS_URL}/:accountId/activate`, mutation),
-        http.put(`${ACCOUNTS_URL}/order`, mutation),
+        http.get(ACCOUNTS_URL, ({ request }) => {
+          poolRequest(new URL(request.url).searchParams.get('scope'));
+          return HttpResponse.json({ error: 'forbidden' }, { status: 403 });
+        }),
       );
-      renderWithProviders(<ProviderList credentialScope="org" />);
+      const { client } = renderWithProviders(<ProviderList credentialScope="org" />);
 
-      const accounts = await pool();
-      await waitFor(() => expect(labelsInOrder(accounts)).toEqual(['Work key', 'Side key']));
-      expect(within(accounts).queryByRole('button', { name: /actions$/ })).not.toBeInTheDocument();
-      expect(within(accounts).queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
-      expect(within(accounts).queryByLabelText(/^Drag /)).not.toBeInTheDocument();
-      expect(within(rowFor('openai')).getByRole('button', { name: 'OpenAI actions' })).toBeDisabled();
-      expect(mutation).not.toHaveBeenCalled();
+      const row = await waitFor(() => rowFor('openai'));
+      await waitForMutationsIdle(client);
+      expect(within(row).getByText('Key saved')).toBeInTheDocument();
+      expect(within(row).getByRole('button', { name: 'OpenAI actions' })).toBeDisabled();
+      expect(screen.queryByRole('group', { name: 'OpenAI accounts' })).not.toBeInTheDocument();
+      expect(poolRequest).not.toHaveBeenCalled();
     });
   });
 });

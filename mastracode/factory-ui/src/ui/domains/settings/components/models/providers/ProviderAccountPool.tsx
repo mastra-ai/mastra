@@ -72,20 +72,18 @@ function moved(accounts: readonly PoolAccountSummary[], from: number, to: number
 
 /**
  * The accounts pooled under one connected provider at one scope. Routing tries
- * them in the listed order; `manageable` is false for members viewing the org
- * pool, which shows the pool without its controls.
+ * them in the listed order. Only rendered for viewers who can manage the pool:
+ * the server serves org pools to org admins only.
  */
 export function ProviderAccountPool({
   provider,
   displayName,
   scope,
-  manageable,
   disabled,
 }: {
   provider: string;
   displayName: string;
   scope: AccountScope;
-  manageable: boolean;
   disabled: boolean;
 }) {
   const accountsQuery = useProviderAccountsQuery(provider, scope);
@@ -112,7 +110,6 @@ export function ProviderAccountPool({
   const renderRow = (account: PoolAccountSummary, index: number, dragHandleProps?: DragHandleProps | null) => (
     <AccountRow
       account={account}
-      manageable={manageable}
       disabled={busy}
       dragHandleProps={dragHandleProps}
       onMoveUp={index > 0 ? () => saveOrder(moved(accounts, index, index - 1)) : undefined}
@@ -129,25 +126,17 @@ export function ProviderAccountPool({
 
   return (
     <div className="flex flex-col gap-1 pb-1.5 pl-9" role="group" aria-label={`${displayName} accounts`}>
-      {manageable ? (
-        <ContentBlocks
-          items={accounts}
-          onChange={next => saveOrder(next.map(account => account.id))}
-          className="flex min-w-0 flex-col"
-        >
-          {accounts.map((account, index) => (
-            <ContentBlock key={account.id} draggableId={account.id} index={index}>
-              {dragHandleProps => renderRow(account, index, dragHandleProps)}
-            </ContentBlock>
-          ))}
-        </ContentBlocks>
-      ) : (
-        <div className="flex min-w-0 flex-col">
-          {accounts.map((account, index) => (
-            <div key={account.id}>{renderRow(account, index)}</div>
-          ))}
-        </div>
-      )}
+      <ContentBlocks
+        items={accounts}
+        onChange={next => saveOrder(next.map(account => account.id))}
+        className="flex min-w-0 flex-col"
+      >
+        {accounts.map((account, index) => (
+          <ContentBlock key={account.id} draggableId={account.id} index={index}>
+            {dragHandleProps => renderRow(account, index, dragHandleProps)}
+          </ContentBlock>
+        ))}
+      </ContentBlocks>
       <Txt as="p" variant="meta" tone="muted">
         When the active account is rate limited, routing switches to the next one in this order. Signing out removes
         only the active account, and removing a key removes only an API key, never a sign-in. The next account in this
@@ -175,7 +164,6 @@ export function ProviderAccountPool({
 
 function AccountRow({
   account,
-  manageable,
   disabled,
   dragHandleProps,
   onMoveUp,
@@ -185,7 +173,6 @@ function AccountRow({
   onRemove,
 }: {
   account: PoolAccountSummary;
-  manageable: boolean;
   disabled: boolean;
   dragHandleProps: DragHandleProps | null | undefined;
   onMoveUp: (() => void) | undefined;
@@ -194,7 +181,7 @@ function AccountRow({
   onRename: () => void;
   onRemove: () => void;
 }) {
-  const reorderable = manageable && (onMoveUp !== undefined || onMoveDown !== undefined);
+  const reorderable = onMoveUp !== undefined || onMoveDown !== undefined;
   return (
     <div className="flex min-h-8 items-center gap-2" role="group" aria-label={account.label}>
       {reorderable && dragHandleProps && (
@@ -222,46 +209,42 @@ function AccountRow({
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">
         <Status presentation={accountStatus(account)} />
       </Txt>
-      {manageable && (
+      {reorderable && (
         <>
-          {reorderable && (
-            <>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Move ${account.label} up`}
-                disabled={disabled || !onMoveUp}
-                onClick={onMoveUp}
-              >
-                <ArrowUp />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Move ${account.label} down`}
-                disabled={disabled || !onMoveDown}
-                onClick={onMoveDown}
-              >
-                <ArrowDown />
-              </Button>
-            </>
-          )}
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={
-                <Button variant="ghost" size="icon-sm" aria-label={`${account.label} actions`} disabled={disabled}>
-                  <MoreHorizontal />
-                </Button>
-              }
-            />
-            <DropdownMenu.Content align="end">
-              {!account.active && <DropdownMenu.Item onClick={onActivate}>Make active</DropdownMenu.Item>}
-              <DropdownMenu.Item onClick={onRename}>Rename</DropdownMenu.Item>
-              <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Move ${account.label} up`}
+            disabled={disabled || !onMoveUp}
+            onClick={onMoveUp}
+          >
+            <ArrowUp />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Move ${account.label} down`}
+            disabled={disabled || !onMoveDown}
+            onClick={onMoveDown}
+          >
+            <ArrowDown />
+          </Button>
         </>
       )}
+      <DropdownMenu>
+        <DropdownMenu.Trigger
+          render={
+            <Button variant="ghost" size="icon-sm" aria-label={`${account.label} actions`} disabled={disabled}>
+              <MoreHorizontal />
+            </Button>
+          }
+        />
+        <DropdownMenu.Content align="end">
+          {!account.active && <DropdownMenu.Item onClick={onActivate}>Make active</DropdownMenu.Item>}
+          <DropdownMenu.Item onClick={onRename}>Rename</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
     </div>
   );
 }

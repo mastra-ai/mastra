@@ -69,7 +69,7 @@ export function ConnectedProviderRow({
   requestScope: CredentialScope | undefined;
   /** Scope the provider's account pool is read and managed at. */
   accountScope: AccountScope;
-  /** False for members viewing org credentials: the pool shows without its controls. */
+  /** False for members viewing org credentials; the server serves org pools to admins only, so members get no pool. */
   manageable: boolean;
   disabled: boolean;
   onUpdateKey: () => void;
@@ -80,7 +80,11 @@ export function ConnectedProviderRow({
   const signOutMutation = useSignOutProviderOAuth();
   const removeKeyMutation = useRemoveProviderKey();
   const startOAuthMutation = useStartProviderOAuth();
-  const accountsQuery = useProviderAccountsQuery(provider.provider, accountScope, credential !== undefined);
+  const accountsQuery = useProviderAccountsQuery(
+    provider.provider,
+    accountScope,
+    manageable && credential !== undefined,
+  );
   const accounts = accountsQuery.data ?? [];
   const active = accounts.length > 1 ? accounts.find(account => account.active) : undefined;
   // With several pooled accounts, signing out drops only the active one.
@@ -159,12 +163,11 @@ export function ConnectedProviderRow({
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
-      {credential && (
+      {credential && manageable && (
         <ProviderAccountPool
           provider={provider.provider}
           displayName={displayName}
           scope={accountScope}
-          manageable={manageable}
           disabled={disabled}
         />
       )}
