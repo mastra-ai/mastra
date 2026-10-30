@@ -273,7 +273,7 @@ const results = await pgVector.query({
 })
 ```
 
-With an HNSW index on pgvector 0.8.0 or newer, PostgreSQL searches the index and skips rows that don't match the filter. If it finds fewer than `topK` rows, pgVector reruns the query as an exact search.
+With an HNSW index on pgvector 0.8.0 or newer, PostgreSQL searches the index and skips rows that don't match the filter. When the index search can't fill `topK`, pgVector reruns the query as an exact search.
 
 With IVFFlat, or HNSW on older pgvector versions, pgVector compares the query vector against every matching row. Results are exact, but the work grows with the number of matching rows.
 
