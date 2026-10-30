@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
+import { toPersistedErrorIdentity } from '../error';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -114,6 +115,38 @@ describe('AgentController OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
     expect(session.run.isAbortRequested()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
+  });
+
+  it('tells a session consumer which provider status refused the Observer', async () => {
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    session.run.ensureAbortController();
+
+    await session.processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-observation-failed',
+          data: {
+            cycleId: 'c-limit',
+            operationType: 'observation',
+            error: 'Rate limit reached for requests: HTTP 429',
+            durationMs: 50,
+            failurePolicy: 'abort',
+            failureKind: 'observer-model',
+            providerError: { statusCode: 429, codes: ['requests', 'rate_limit_exceeded'] },
+          },
+        };
+      })(),
+    });
+
+    const error = (events.find(e => e.type === 'error') as Extract<AgentControllerEvent, { type: 'error' }>).error;
+    expect(toPersistedErrorIdentity(error)).toMatchObject({
+      statusCode: 429,
+      codes: ['requests', 'rate_limit_exceeded'],
+    });
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
   });
 
   it('continues the stream after an observer model buffering failure under continue policy', async () => {

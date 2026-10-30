@@ -8,6 +8,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import type { Memory } from '../..';
+import type { OmProviderError } from './error';
 import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 
@@ -621,6 +622,9 @@ export interface DataOmObservationFailedPart {
     /** Machine-readable failure classification when the observer/provider call failed. */
     failureKind?: 'observer-model' | 'reflector-model';
 
+    /** HTTP status and codes the model provider returned, when its call failed. */
+    providerError?: OmProviderError;
+
     /** Set when this attempt failed but the runner is retrying the same cycle, so the failure is not final. */
     retrying?: true;
 
@@ -811,6 +815,9 @@ export interface DataOmBufferingFailedPart {
 
     /** Machine-readable failure classification when the observer/provider call failed. */
     failureKind?: 'observer-model' | 'reflector-model';
+
+    /** HTTP status and codes the model provider returned, when its call failed. */
+    providerError?: OmProviderError;
 
     /** The OM record ID */
     recordId: string;

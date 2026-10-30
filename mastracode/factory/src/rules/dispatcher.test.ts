@@ -54,7 +54,7 @@ function createSession(
     agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
     /** Emitted on the run's event stream just before each `agent_end`, modelling an OM failure that aborted the run. */
     omObservationError?: string;
-    /** Emitted as the run's `error` event just before an `agent_end: 'error'`, as the session does. */
+    /** Emitted as the run's `error` event just before an `agent_end: 'error'` or `'aborted'`, as the session does. */
     runError?: string | Error;
     /** Models a signal queued onto an in-flight run that ends before draining it. */
     dropDeliveredSignal?: boolean;
@@ -93,7 +93,7 @@ function createSession(
   const settings: Record<string, unknown> = {};
   const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: unknown }) => void>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
-    if (reason === 'error' && options?.runError) {
+    if ((reason === 'error' || reason === 'aborted') && options?.runError) {
       for (const listener of agentEndListeners) {
         listener({
           type: 'error',
@@ -1802,6 +1802,34 @@ describe('FactoryDecisionDispatcher', () => {
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
         status: 'retry',
         lastError: expect.stringContaining('network timeout while observing'),
+      });
+    });
+
+    it('parks the card for a person when the OM model call hit a provider rate limit', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-rate-limited'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'Rate limit reached for requests: HTTP 429',
+        runError: new Error('Observational memory observation run failed: Rate limit reached for requests: HTTP 429', {
+          cause: { statusCode: 429, codes: ['requests', 'rate_limit_exceeded'] },
+        }),
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        failureCode: 'run_provider_limited',
+        attempts: 1,
       });
     });
 

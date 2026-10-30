@@ -1,3 +1,5 @@
+import { toPersistedErrorIdentity } from '@mastra/core/error';
+
 import { hasAbortInChain, isTransientLLMError } from './retry';
 
 const AI_API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
@@ -50,11 +52,21 @@ export function isOmModelExecutionError(error: unknown): error is OmModelExecuti
   }
 }
 
+export interface OmProviderError {
+  statusCode?: number;
+  codes?: string[];
+}
+
 export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
-  return {
-    failurePolicy,
-    ...(isOmModelExecutionError(error) ? { failureKind: error.failureKind } : {}),
-  };
+  if (!isOmModelExecutionError(error)) return { failurePolicy };
+  const providerError = readProviderError(error);
+  return { failurePolicy, failureKind: error.failureKind, ...(providerError ? { providerError } : {}) };
+}
+
+function readProviderError(error: OmModelExecutionError): OmProviderError | undefined {
+  const { statusCode, codes } = toPersistedErrorIdentity(error);
+  if (statusCode === undefined && codes === undefined) return undefined;
+  return { ...(statusCode !== undefined ? { statusCode } : {}), ...(codes ? { codes } : {}) };
 }
 
 /** Keep provider diagnostics in streamed/persisted markers, not whole API request/response objects. */

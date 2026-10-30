@@ -513,10 +513,23 @@ export class SessionRunEngine {
     });
   }
 
-  private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
+  private abortForOmFailure({
+    operationType,
+    stage,
+    error,
+    providerError,
+  }: {
+    operationType: string;
+    stage: string;
+    error: string;
+    providerError?: Record<string, unknown>;
+  }) {
     this.#session.emit({
       type: 'error',
-      error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
+      error: new Error(
+        `Observational memory ${operationType} ${stage} failed: ${error}`,
+        providerError ? { cause: providerError } : undefined,
+      ),
     });
     this.#session.abortRun();
   }
@@ -1431,7 +1444,12 @@ export class SessionRunEngine {
               payload.failurePolicy !== 'continue' ||
               payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model'))
           ) {
-            this.abortForOmFailure({ operationType, stage: 'run', error });
+            this.abortForOmFailure({
+              operationType,
+              stage: 'run',
+              error,
+              providerError: getRecord(payload.providerError),
+            });
             return { message: state.currentMessage };
           }
         }
