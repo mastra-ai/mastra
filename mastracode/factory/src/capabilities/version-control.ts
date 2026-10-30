@@ -268,6 +268,8 @@ export interface WorkflowRun {
   id: number;
   workflowName: string | null;
   headBranch: string | null;
+  /** `owner/name` of the repository the head commit came from; differs from the target for fork PRs. */
+  headRepository: string | null;
   headSha: string;
   event: string;
   status: string | null;

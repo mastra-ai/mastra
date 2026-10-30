@@ -374,8 +374,14 @@ export async function createSourceControlTools({
     if (mismatches.length > 0) {
       throw new Error(`Workflow run ${input.runId} does not match the request: its ${mismatches.join(', ')}.`);
     }
-    if (run.headBranch !== target.session.branch) {
-      throw new Error(`Only runs of this session's branch (${target.session.branch}) can be re-run.`);
+    // A fork PR can use the same branch name, so the branch alone does not identify the session's commits.
+    if (
+      run.headBranch !== target.session.branch ||
+      run.headRepository?.toLowerCase() !== target.repository.slug.toLowerCase()
+    ) {
+      throw new Error(
+        `Only runs of this session's branch (${target.session.branch}) in ${target.repository.slug} can be re-run.`,
+      );
     }
     if (!RERUNNABLE_EVENTS.has(run.event)) {
       throw new Error(`Runs triggered by '${run.event}' cannot be re-run from a session.`);

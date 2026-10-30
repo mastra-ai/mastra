@@ -1931,6 +1931,7 @@ function parseWorkflowRun(run: {
   id: number;
   name?: string | null;
   head_branch: string | null;
+  head_repository?: { full_name: string } | null;
   head_sha: string;
   event: string;
   status: string | null;
@@ -1941,6 +1942,7 @@ function parseWorkflowRun(run: {
     id: run.id,
     workflowName: run.name ?? null,
     headBranch: run.head_branch,
+    headRepository: run.head_repository?.full_name ?? null,
     headSha: run.head_sha,
     event: run.event,
     status: run.status,

@@ -1231,6 +1231,7 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
     id: 123,
     workflowName: 'Test Suite',
     headBranch: branch,
+    headRepository: 'acme/repo',
     headSha: 'a'.repeat(40),
     event: 'pull_request',
     status: 'completed',
@@ -1329,6 +1330,25 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
       "Only runs of this session's branch",
     );
     expect(rerunWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a fork with the same branch name', 'someone/repo'],
+    ['an unknown head repository', null],
+  ])('refuses before approval a run whose head comes from %s', async (_label, headRepository) => {
+    const { built, rerunWorkflowRun } = await githubTools({ run: { headRepository } });
+    const tool = built.source_control_rerun_workflow_run as any;
+    await expect(beforeApproval(tool, rerunInput)).resolves.toEqual({
+      proceed: false,
+      output: { error: expect.stringContaining("Only runs of this session's branch (factory/issue-1) in acme/repo") },
+    });
+    await expect(tool.execute(rerunInput, {})).rejects.toThrow("Only runs of this session's branch");
+    expect(rerunWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it('accepts the session repository whatever its letter case', async () => {
+    const { built } = await githubTools({ run: { headRepository: 'Acme/Repo' } });
+    await expect(beforeApproval(built.source_control_rerun_workflow_run, rerunInput)).resolves.toBeUndefined();
   });
 
   it('refuses a re-run whose arguments are too long to show for approval', async () => {
