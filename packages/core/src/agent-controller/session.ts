@@ -2010,10 +2010,19 @@ export interface ApprovalResponse {
   declineContext?: { reason?: string; message?: string };
 }
 
-/** Set only when a tool-call answer created the run controller itself. */
+/** Tool-call answers that armed an idle run and have not settled yet. */
+interface AnswerArms {
+  /** {@link SessionRun.armCount} right after the latest of these answers armed the run. */
+  armCount: number;
+  /** Answers still in flight. */
+  pending: number;
+  /** Set once any of these answers dispatched without failing. */
+  dispatched: boolean;
+}
+
+/** Set only when a tool-call answer armed an idle run, or joined answers that did. */
 interface ArmedRun {
-  /** {@link SessionRun.armCount} right after this answer armed the run. */
-  armCount?: number;
+  arms?: AnswerArms;
 }
 
 /** A single parked interactive approval gate, scoped to the call that opened it. */
@@ -4197,6 +4206,8 @@ export class Session<TState = unknown> {
   readonly subagents = new SessionSubagents(this.#bus);
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
+  /** Tool-call answers currently holding {@link run} armed; see `#armRun`. */
+  #answerArms: AnswerArms | undefined;
   /** Live subscription to the active thread's agent event stream. */
   readonly stream = new SessionStream(() => ({
     sessionId: this.identity.getId(),
@@ -6006,14 +6017,29 @@ export class Session<TState = unknown> {
   }
 
   /**
-   * Arm the session run for an answer to a parked tool call. Records the arm
-   * count in `armed` only when this call created the controller, so a failed
-   * start can disarm it without touching a run another caller armed.
+   * Arm the session run for an answer to a parked tool call. Records the arm in
+   * `armed` only when this call armed an idle run, or joined other answers that
+   * did, so a failed start can disarm it without touching a run another caller
+   * armed.
    */
   #armRun(armed?: ArmedRun): AbortSignal {
     const wasRunning = this.run.isRunning();
+    const armCountBefore = this.run.armCount();
     const signal = this.run.ensureAbortController().signal;
-    if (!wasRunning && armed) armed.armCount = this.run.armCount();
+    if (!armed) return signal;
+    // Answers in flight together share one record, as long as nothing else
+    // armed the run between them.
+    const arms = !wasRunning
+      ? { armCount: 0, pending: 0, dispatched: false }
+      : this.#answerArms?.armCount === armCountBefore
+        ? this.#answerArms
+        : undefined;
+    if (arms) {
+      arms.armCount = this.run.armCount();
+      arms.pending += 1;
+      this.#answerArms = arms;
+      armed.arms = arms;
+    }
     return signal;
   }
 
@@ -6026,11 +6052,27 @@ export class Session<TState = unknown> {
     const armed: ArmedRun = {};
     try {
       await answer(armed);
+      if (armed.arms) {
+        armed.arms.pending -= 1;
+        armed.arms.dispatched = true;
+      }
     } catch (error) {
-      // Anyone else holding the run armed it again: the subscription arms the
-      // run as it starts, and so does a message or signal joining it. Only a
-      // run nobody else armed is reset.
-      if (armed.armCount !== undefined && this.run.armCount() === armed.armCount) this.run.reset();
+      const arms = armed.arms;
+      if (arms) {
+        arms.pending -= 1;
+        // Anyone else holding the run armed it again: the subscription arms the
+        // run as it starts, and so does a message or signal joining it. Only the
+        // last failed answer of a run nobody else armed resets it.
+        if (
+          arms.pending === 0 &&
+          !arms.dispatched &&
+          this.#answerArms === arms &&
+          this.run.armCount() === arms.armCount
+        ) {
+          this.#answerArms = undefined;
+          this.run.reset();
+        }
+      }
       throw error;
     }
   }
