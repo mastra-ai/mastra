@@ -13,7 +13,7 @@ import {
   ExecutionFence,
   getExecutionClaim,
   isExecutionFenceError,
-  MASTRA_DURABLE_EXECUTIONS_KEY,
+  getExecutionClaimScope,
 } from './execution-fence';
 import { emitErrorEvent } from './stream-adapter';
 
@@ -42,79 +42,75 @@ export async function participateInDurableExecution<T>(
   execute: () => Promise<T>,
 ): Promise<T> {
   const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
-  const claims = context.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY);
-  const releases: (() => void)[] = [];
-  let invoke = execute;
+  const execution = getExecutionClaimScope(context, event.runId, event.data?.parentWorkflow);
+  if (!execution?.claim.agentId) return execute();
+  const { runId, claim, nestedRunIds } = execution;
+  const scope = mastra.__createRunScope(runId);
   try {
-    for (const runId of Object.keys(claims ?? {})) {
-      const claim = getExecutionClaim(context, runId);
-      if (!claim?.agentId) continue;
-      const scope = mastra.__createRunScope(runId);
-      releases.push(() => mastra.__releaseRunScope(runId));
-      let participants = scope.get(PARTICIPANTS);
-      if (!participants) scope.set(PARTICIPANTS, (participants = new Map()));
-      let participant = participants.get(claim.executionId);
-      if (!participant) {
-        // Hold a reference across broker handoff gaps, not just while an invocation is active.
-        mastra.__createRunScope(runId);
-        const owner = unwrapMastraTracingProxy(mastra);
-        let stops = participantStops.get(owner);
-        if (!stops) participantStops.set(owner, (stops = new Set()));
-        let stopped = false;
-        let unsubscribeLoss: (() => void) | undefined;
-        const current: Participant = {
-          fence: Promise.resolve(undefined),
-          stop: async (interrupt = false) => {
-            if (stopped) return;
-            stopped = true;
-            unsubscribeLoss?.();
-            stops.delete(current.stop);
-            if (participants.get(claim.executionId) === current) participants.delete(claim.executionId);
-            void current.fence.then(
-              fence => {
-                scope.get(DURABLE_PARTICIPANT_FENCES)?.delete(claim.executionId);
-                if (interrupt) fence?.interruptParticipant();
-                else fence?.stopHeartbeat();
-              },
-              () => {},
-            );
-            mastra.__releaseRunScope(runId);
-          },
-        };
-        current.fence = (async () => {
-          try {
-            const fence = await ExecutionFence.follow(mastra, runId, claim);
-            if (fence) {
-              let fences = scope.get(DURABLE_PARTICIPANT_FENCES);
-              if (!fences) scope.set(DURABLE_PARTICIPANT_FENCES, (fences = new Map()));
-              fences.set(claim.executionId, fence);
-              unsubscribeLoss = fence.onLost(() => {
-                void current
-                  .stop()
-                  .catch(error => mastra.getLogger()?.warn('Failed to detach durable participant', { runId, error }));
-              });
-            }
-            return fence;
-          } catch (error) {
-            await current.stop();
-            throw error;
+    let participants = scope.get(PARTICIPANTS);
+    if (!participants) scope.set(PARTICIPANTS, (participants = new Map()));
+    let participant = participants.get(claim.executionId);
+    if (!participant) {
+      // Hold a reference across broker handoff gaps, not just while an invocation is active.
+      mastra.__createRunScope(runId);
+      const owner = unwrapMastraTracingProxy(mastra);
+      let stops = participantStops.get(owner);
+      if (!stops) participantStops.set(owner, (stops = new Set()));
+      let stopped = false;
+      let unsubscribeLoss: (() => void) | undefined;
+      const current: Participant = {
+        fence: Promise.resolve(undefined),
+        stop: async (interrupt = false) => {
+          if (stopped) return;
+          stopped = true;
+          unsubscribeLoss?.();
+          stops.delete(current.stop);
+          if (participants.get(claim.executionId) === current) participants.delete(claim.executionId);
+          void current.fence.then(
+            fence => {
+              scope.get(DURABLE_PARTICIPANT_FENCES)?.delete(claim.executionId);
+              if (interrupt) fence?.interruptParticipant();
+              else fence?.stopHeartbeat();
+            },
+            () => {},
+          );
+          mastra.__releaseRunScope(runId);
+        },
+      };
+      current.fence = (async () => {
+        try {
+          const fence = await ExecutionFence.follow(mastra, runId, claim);
+          if (fence) {
+            let fences = scope.get(DURABLE_PARTICIPANT_FENCES);
+            if (!fences) scope.set(DURABLE_PARTICIPANT_FENCES, (fences = new Map()));
+            fences.set(claim.executionId, fence);
+            unsubscribeLoss = fence.onLost(() => {
+              void current
+                .stop()
+                .catch(error => mastra.getLogger()?.warn('Failed to detach durable participant', { runId, error }));
+            });
           }
-        })();
-        stops.add(current.stop);
-        participants.set(claim.executionId, current);
-        participant = current;
-      }
-      const fence = await participant.fence;
-      if (fence) {
-        await fence.verify();
-        fence.coverNestedRun(runId, event.runId);
-        const next = invoke;
-        invoke = () => fence.run(next);
-      }
+          return fence;
+        } catch (error) {
+          await current.stop();
+          throw error;
+        }
+      })();
+      stops.add(current.stop);
+      participants.set(claim.executionId, current);
+      participant = current;
     }
-    return await invoke();
+    const fence = await participant.fence;
+    if (!fence) return await execute();
+    await fence.verify();
+    let parentRunId = runId;
+    for (const nestedRunId of nestedRunIds) {
+      fence.coverNestedRun(parentRunId, nestedRunId);
+      parentRunId = nestedRunId;
+    }
+    return await fence.run(execute);
   } finally {
-    for (const release of releases) release();
+    mastra.__releaseRunScope(runId);
   }
 }
 

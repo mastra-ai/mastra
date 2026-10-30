@@ -225,14 +225,34 @@ export function getExecutionClaim(
   };
 }
 
-/** A direct claim takes precedence over ancestor claims carried by nested workflow events. */
-export function isStorageFencedExecution(requestContext: RequestContext, runId: string): boolean {
-  const currentClaim = getExecutionClaim(requestContext, runId);
-  return currentClaim
-    ? currentClaim.generation !== undefined
-    : Object.keys(requestContext.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY) ?? {}).some(
-        claimedRunId => getExecutionClaim(requestContext, claimedRunId)?.generation !== undefined,
-      );
+type ExecutionParentWorkflow = { runId: string; parentWorkflow?: ExecutionParentWorkflow };
+
+/** Select only the delivering run or its nearest explicitly declared workflow ancestor. */
+export function getExecutionClaimScope(
+  requestContext: RequestContext,
+  runId: string,
+  parentWorkflow?: ExecutionParentWorkflow,
+): { runId: string; claim: DurableExecutionClaim; nestedRunIds: string[] } | undefined {
+  const nestedRunIds: string[] = [];
+  let currentRunId = runId;
+  let parent = parentWorkflow;
+  while (true) {
+    const claim = getExecutionClaim(requestContext, currentRunId);
+    if (claim) return { runId: currentRunId, claim, nestedRunIds: nestedRunIds.reverse() };
+    nestedRunIds.push(currentRunId);
+    if (!parent) return undefined;
+    currentRunId = parent.runId;
+    parent = parent.parentWorkflow;
+  }
+}
+
+export function isStorageFencedExecution(
+  requestContext: RequestContext,
+  runId: string,
+  parentWorkflow?: ExecutionParentWorkflow,
+): boolean {
+  const claim = getExecutionClaimScope(requestContext, runId, parentWorkflow)?.claim;
+  return !!claim?.agentId && claim.generation !== undefined;
 }
 
 /**

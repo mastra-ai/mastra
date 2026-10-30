@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -9,9 +10,13 @@ import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
+import { resolveRunFence, RUN_FENCE_CONFLICT_ERROR_ID } from '../../storage/run-fencing';
+import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows/evented';
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
+import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { createEventedAgent } from './create-evented-agent';
 import {
   participateInDurableExecution,
   retrySettledDurableExecution,
@@ -25,6 +30,7 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   getExecutionOwnershipGuard,
+  isStorageFencedExecution,
   withExecutionFence,
   executionLeaseKey,
   MASTRA_DURABLE_EXECUTIONS_KEY,
@@ -63,9 +69,14 @@ it('detaches a registered shared coordinator on API shutdown without releasing i
   }
 });
 
-it.each([false, true])(
-  'acknowledges unfenced terminal redelivery without releasing the coordinator lease (stale fenced context=%s)',
-  async staleContext => {
+it.each([
+  { staleContext: false, directClaim: true },
+  { staleContext: true, directClaim: true },
+  { staleContext: false, directClaim: false },
+  { staleContext: true, directClaim: false },
+])(
+  'handles unfenced terminal redelivery without releasing the coordinator lease ($staleContext stale, $directClaim direct)',
+  async ({ staleContext, directClaim }) => {
     const directory = await mkdtemp(join(tmpdir(), 'mastra-unfenced-'));
     const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
     const storage = new InMemoryStore();
@@ -105,7 +116,7 @@ it.each([false, true])(
         requestContext: {
           [MASTRA_DURABLE_EXECUTIONS_KEY]: {
             ...(staleContext ? { 'previous-run': previous.claim } : {}),
-            run: coordinator.claim,
+            ...(directClaim ? { run: coordinator.claim } : {}),
           },
         },
         prevResult: { status: 'success', output: {}, payload: {}, startedAt: 1, endedAt: 2 },
@@ -124,6 +135,149 @@ it.each([false, true])(
       await rm(directory, { recursive: true, force: true });
     }
   },
+);
+
+function deliveryModel(text: string, toolName?: string, beforeReply?: () => Promise<void>) {
+  const prompts: string[] = [];
+  const model = new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      const call = prompts.push(JSON.stringify(prompt));
+      await beforeReply?.();
+      const callsTool = call === 1 && toolName;
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          ...(callsTool
+            ? [{ type: 'tool-call' as const, toolCallId: 'call-1', toolName, input: '{}' }]
+            : [
+                { type: 'text-start' as const, id: 'text' },
+                { type: 'text-delta' as const, id: 'text', delta: text },
+                { type: 'text-end' as const, id: 'text' },
+              ]),
+          {
+            type: 'finish',
+            finishReason: callsTool ? 'tool-calls' : 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          },
+        ]),
+      };
+    },
+  });
+  return { model, prompts };
+}
+
+it.each(['nested', 'sequential', 'concurrent'] as const)(
+  'completes %s durable runs sharing context over the socket broker',
+  async composition => {
+    const directory = await mkdtemp(join(tmpdir(), 'mastra-composition-'));
+    const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+    const storage = new InMemoryStore();
+    const requestContext = new RequestContext();
+    const parentEntered = Promise.withResolvers<void>();
+    const childEntered = Promise.withResolvers<void>();
+    const releaseParent = Promise.withResolvers<void>();
+    const releaseChild = Promise.withResolvers<void>();
+    const childModel = deliveryModel(
+      'child answer',
+      undefined,
+      composition === 'concurrent'
+        ? async () => {
+            childEntered.resolve();
+            await releaseChild.promise;
+          }
+        : undefined,
+    );
+    const child = createEventedAgent({
+      agent: new Agent({ id: 'child', name: 'child', instructions: 'Answer.', model: childModel.model }),
+      pubsub,
+    });
+    const completedRunIds = new Set<string>();
+    const readAnswer = async (output: Awaited<ReturnType<typeof child.stream>>) => {
+      completedRunIds.add(output.runId);
+      let answer = '';
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'text-delta') answer += chunk.payload.text;
+        if (chunk.type === 'error') throw chunk.payload.error;
+      }
+      return answer;
+    };
+    const delegate = createTool({
+      id: 'delegate',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ answer: z.string() }),
+      execute: async (_input, context) => {
+        const output = await child.stream('Answer the child question.', { requestContext: context?.requestContext });
+        return { answer: await readAnswer(output) };
+      },
+    });
+    const parentModel = deliveryModel(
+      'parent answer',
+      composition === 'nested' ? 'delegate' : undefined,
+      composition === 'concurrent'
+        ? async () => {
+            parentEntered.resolve();
+            await releaseParent.promise;
+          }
+        : undefined,
+    );
+    const parent = createEventedAgent({
+      agent: new Agent({
+        id: 'parent',
+        name: 'parent',
+        instructions: 'Answer.',
+        model: parentModel.model,
+        tools: composition === 'nested' ? { delegate } : {},
+      }),
+      pubsub,
+    });
+    const mastra = new Mastra({ agents: { parent, child }, storage, pubsub, logger: false });
+    try {
+      const first = await parent.stream('Answer the parent question.', { requestContext, runId: 'parent-run' });
+      if (composition === 'concurrent') {
+        const firstAnswer = readAnswer(first);
+        await parentEntered.promise;
+        const second = await child.stream('Answer concurrently.', { requestContext, runId: 'child-run' });
+        const secondAnswer = readAnswer(second);
+        await childEntered.promise;
+        releaseParent.resolve();
+        expect(await firstAnswer).toBe('parent answer');
+        await vi.waitFor(async () => {
+          expect(await (await storage.getStore('workflows'))!.getRunOwnership({ runId: 'parent-run' })).toMatchObject({
+            live: false,
+          });
+        });
+        expect(await (await storage.getStore('workflows'))!.getRunOwnership({ runId: 'child-run' })).toMatchObject({
+          live: true,
+        });
+        releaseChild.resolve();
+        expect(await secondAnswer).toBe('child answer');
+      } else {
+        expect(await readAnswer(first)).toBe('parent answer');
+        if (composition === 'nested') {
+          expect(parentModel.prompts).toHaveLength(2);
+          expect(parentModel.prompts[1]).toContain('child answer');
+        } else {
+          const second = await child.stream('Answer the next question.', { requestContext, runId: 'child-run' });
+          expect(await readAnswer(second)).toBe('child answer');
+        }
+      }
+      expect(childModel.prompts).toHaveLength(1);
+      const workflows = (await storage.getStore('workflows'))!;
+      expect(completedRunIds.size).toBe(2);
+      await vi.waitFor(async () => {
+        for (const runId of completedRunIds) {
+          expect(await workflows.getRunOwnership({ runId })).toMatchObject({ live: false });
+        }
+      });
+    } finally {
+      releaseParent.resolve();
+      releaseChild.resolve();
+      await mastra.shutdown();
+      await pubsub.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  15_000,
 );
 
 const instances: Mastra[] = [];
@@ -186,6 +340,54 @@ it("keeps a remote claim alive across broker gaps, ignoring a different executio
   expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({ live: true });
   await settleEventedDurableExecution(mastra, { ...event, type: 'workflow.end' });
   expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({ live: false });
+});
+
+it('fences only the explicitly declared ancestor chain, including unclaimed intermediate workflows', async () => {
+  const { workflowsStore, pubsub, mastra, coordinator, event } = await createExecution();
+  const descendant: Event = {
+    ...event,
+    runId: 'leaf',
+    data: {
+      ...event.data,
+      parentWorkflow: { runId: 'middle', parentWorkflow: { runId: 'run' } },
+    },
+  };
+  await participateInDurableExecution(mastra, descendant, async () => {
+    for (const runId of ['run', 'middle', 'leaf']) {
+      expect(resolveRunFence(workflowsStore, undefined, runId)).toEqual({
+        runId: 'run',
+        generation: coordinator.generation,
+        ownerId: coordinator.executionId,
+      });
+    }
+    expect(resolveRunFence(workflowsStore, undefined, 'unrelated')).toBeUndefined();
+    await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'agent',
+      runId: 'run',
+      mode: 'takeover',
+    });
+    await expect(workflowsStore.deleteWorkflowRunById({ workflowName: 'nested', runId: 'leaf' })).rejects.toMatchObject(
+      {
+        id: RUN_FENCE_CONFLICT_ERROR_ID,
+      },
+    );
+  });
+});
+
+it('does not classify a claim without an agent identity as a storage-fenced delivery', async () => {
+  const { mastra, workflowsStore, event, coordinator } = await createExecution();
+  const claim = { executionId: coordinator.executionId, generation: coordinator.generation };
+  const requestContext = new RequestContext([[MASTRA_DURABLE_EXECUTIONS_KEY, { run: claim }]]);
+  expect(isStorageFencedExecution(requestContext, 'run')).toBe(false);
+  await participateInDurableExecution(
+    mastra,
+    { ...event, data: { ...event.data, requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: claim } } } },
+    async () => {
+      expect(resolveRunFence(workflowsStore, undefined, 'run')).toBeUndefined();
+    },
+  );
 });
 
 it('rejects a stale root terminal before its handler can mutate a successor', async () => {

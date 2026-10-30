@@ -3071,6 +3071,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           entry: leaf,
           runId,
+          parentWorkflow: toStepExecutionParentWorkflow(parentWorkflow),
           stepResults,
           state: currentState,
           requestContext: rc,
@@ -4443,7 +4444,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     if (this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub) return this.#handleDelivery(event);
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
-    if (!isStorageFencedExecution(context, event.runId)) return this.#handleDelivery(event);
+    if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) return this.#handleDelivery(event);
     try {
       if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
       const execute = async () => {
