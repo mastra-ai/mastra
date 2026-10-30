@@ -24,8 +24,7 @@ export interface CardMove {
 }
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
-export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
-  Partial<Pick<WorkItem, 'board' | 'stages' | 'acceptedAt'>>;
+export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> & Partial<Pick<WorkItem, 'board' | 'stages'>>;
 
 const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
 const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
@@ -88,20 +87,20 @@ export function resumeStage(
 }
 
 /**
- * Triage classified the card as something other than a bug, so the rules hold
- * it until a person moves it forward. The card then asks for that decision
- * instead of offering a run that would only advance it as a side effect.
+ * Triage looked at the card and left it in Intake, so the next move is a
+ * person's decision. The card then asks for that decision instead of offering
+ * a run that would only advance it as a side effect. A card that has been past
+ * Triage since (a parked build, say) resumes instead.
  */
 export function awaitsTriageDecision(
-  item: Pick<WorkItem, 'triageType' | 'acceptedAt'> & Partial<Pick<WorkItem, 'board'>>,
+  item: Pick<WorkItem, 'sessions'> & Partial<Pick<WorkItem, 'board' | 'stageHistory'>>,
   columnStage: BoardStageId,
 ) {
   return (
     (item.board == null || item.board === 'work') &&
-    (columnStage === 'intake' || columnStage === 'triage') &&
-    item.triageType !== null &&
-    item.triageType !== 'bug' &&
-    item.acceptedAt === null
+    columnStage === 'intake' &&
+    item.sessions.triage !== undefined &&
+    (resumeStage(columnStage, item) ?? 'triage') === 'triage'
   );
 }
 

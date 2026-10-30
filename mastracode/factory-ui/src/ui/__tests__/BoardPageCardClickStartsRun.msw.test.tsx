@@ -495,15 +495,13 @@ describe('Board card buttons move the card', () => {
     expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
   });
 
-  it('offers the ordinary runs once a labelled card sits in a working lane, even before acceptance was recorded', async () => {
+  it('offers the ordinary runs once a person moved a labelled card into a working lane, before the label catches up', async () => {
     stubBoardEndpoints({
       workItems: [
         {
           ...issueWorkItem,
           metadata: { number: 7, labels: ['status: needs approval'] },
           stages: ['planning'],
-          triageType: 'feature request',
-          acceptedAt: null,
         },
       ],
     });

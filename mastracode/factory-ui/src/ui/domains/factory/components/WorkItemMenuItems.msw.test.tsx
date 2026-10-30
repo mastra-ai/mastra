@@ -108,7 +108,12 @@ describe('custom-board card menu', () => {
 });
 
 describe('held card menu', () => {
-  const held: WorkItem = { ...item, board: 'work', stages: ['triage'], triageType: 'feature request' };
+  const held: WorkItem = {
+    ...item,
+    board: 'work',
+    stages: ['intake'],
+    sessions: { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+  };
   const proposal = { id: 'd-1', role: 'plan' } as NonNullable<WorkItemMenuProps['proposal']>;
   const choices = ['Accept and plan', 'Accept and build', 'Close', 'Dismiss suggested run', 'Remove'];
 
@@ -117,7 +122,7 @@ describe('held card menu', () => {
     ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, true, false, false, false]],
     ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true, true]],
   ])('keeps Close, Dismiss and Remove open unless your own request is in flight: %s', async (_, owner, disabled) => {
-    const { client } = renderMenu('triage', builtinBoardCatalog.boards, { item: held, owner, proposal });
+    const { client } = renderMenu('intake', builtinBoardCatalog.boards, { item: held, owner, proposal });
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(
       choices.map(name => screen.getByRole('menuitem', { name }).getAttribute('aria-disabled') === 'true'),
