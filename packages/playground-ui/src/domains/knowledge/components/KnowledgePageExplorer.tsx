@@ -1,6 +1,8 @@
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { mentionPopupPlacement } from '../lib/popupPlacement';
+
 import type {
   KnowledgeActivityPayload,
   KnowledgeNotePayload,
@@ -229,6 +231,7 @@ interface MentionSelection {
   source: KnowledgePagePayload;
   target: KnowledgePagePayload;
   point: { x: number; y: number };
+  pane: { width: number; height: number };
 }
 
 /** What a clicked mention line stands for: the notes on one page that mention the other. */
@@ -259,11 +262,8 @@ function MentionPopup({
       role="dialog"
       aria-label={`${mention.source.name} mentions ${mention.target.name}`}
       data-testid="knowledge-mention-popup"
-      className="absolute z-20 flex max-h-80 w-80 max-w-[calc(100%-1rem)] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 shadow-overlay"
-      style={{
-        left: `clamp(0.5rem, ${mention.point.x}px - 10rem, calc(100% - 20.5rem))`,
-        top: `clamp(0.5rem, ${mention.point.y + 12}px, calc(100% - 12rem))`,
-      }}
+      className="absolute z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 shadow-overlay"
+      style={mentionPopupPlacement(mention)}
     >
       <div className="flex items-start gap-2">
         <Txt as="h3" variant="card-title" className="min-w-0 flex-1">

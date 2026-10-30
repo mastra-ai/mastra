@@ -74,9 +74,9 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       >
         <Txt
           as="span"
-          variant="eyebrow"
+          variant="meta"
           tone={page.isScope ? undefined : 'muted'}
-          className="pointer-events-none line-clamp-2 max-w-full break-words uppercase"
+          className="pointer-events-none line-clamp-2 max-w-full tracking-wide uppercase"
           style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
           data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
         >
@@ -247,6 +247,8 @@ export interface KnowledgePageGraphProps {
     source: KnowledgePagePayload;
     target: KnowledgePagePayload;
     point: { x: number; y: number };
+    /** The graph's own size, so a popup can open on whichever side of `point` has room. */
+    pane: { width: number; height: number };
   }) => void;
 }
 
@@ -460,6 +462,7 @@ function KnowledgePageGraphInner({
             source,
             target,
             point: { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) },
+            pane: { width: box?.width ?? 0, height: box?.height ?? 0 },
           });
         }}
       >
