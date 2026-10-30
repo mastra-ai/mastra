@@ -205,8 +205,11 @@ When a deferred task finishes and no `untilIdle` stream is open for its thread, 
 
 - If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome.
 - If a run is already active on the thread, the signal is delivered to that run's next model request, and no other run starts.
+- If the run that dispatched the task is still going, no signal is sent, because the result is already merged into that run's messages.
 - If an `untilIdle` stream is open for the thread, no signal is sent, because that stream runs its own follow-up turn.
 - If the caller cancelled or aborted the `untilIdle` stream that was waiting for the task, no signal is sent either: stopping the stream means the caller doesn't want a reply for that work. A task that suspended and is answered later isn't covered by this, because the stream stopped waiting for it when it suspended.
+
+A run that a signal starts on an idle thread, such as a message sent with `agent.sendSignal()`, ends after its own turn instead of waiting for the tasks it dispatched. Those tasks report back with this signal when they finish. To keep a woken run open until its tasks finish, pass `untilIdle: true` in `ifIdle.streamOptions`.
 
 The signal needs memory with a thread and resource. A task dispatched without them only writes its result to the task record. Awaited tasks don't send the signal, because the run that dispatched them waits for the result.
 

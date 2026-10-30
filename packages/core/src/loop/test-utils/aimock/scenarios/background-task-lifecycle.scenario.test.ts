@@ -91,6 +91,36 @@ function makeResearchTool(gate?: Promise<void>) {
   });
 }
 
+// The aimock instance is shared across a describe block, and a background task or wake run left
+// over from an earlier test can still reach it. Match turns on this test's prompt instead of
+// on request order so a stray request can't shift them.
+const FINISH_SIGNAL = 'Tell the user the outcome.';
+function hasToolResult(req: unknown) {
+  return ((req as any)?.messages ?? []).some((m: any) => m.role === 'tool');
+}
+function onReportTurns(
+  mock: { on: (match: any, response: any) => unknown },
+  prompt: string,
+  turns: { dispatch: { toolCalls: unknown[] }; ack: string; report: string },
+) {
+  const mentions = (req: unknown, text: string) => JSON.stringify(req).includes(text);
+  mock.on(
+    { endpoint: 'chat', predicate: (req: unknown) => mentions(req, prompt) && !hasToolResult(req) },
+    turns.dispatch,
+  );
+  mock.on(
+    {
+      endpoint: 'chat',
+      predicate: (req: unknown) => mentions(req, prompt) && hasToolResult(req) && !mentions(req, FINISH_SIGNAL),
+    },
+    { content: turns.ack },
+  );
+  mock.on(
+    { endpoint: 'chat', predicate: (req: unknown) => mentions(req, prompt) && mentions(req, FINISH_SIGNAL) },
+    { content: turns.report },
+  );
+}
+
 const greetTool = createTool({
   id: 'greet',
   description: 'Greet a person by name',
@@ -493,15 +523,15 @@ describeForAllEngines(
         ...thread,
         stopWhen: stepCountIs(3),
         collectChunks: true,
-        fixtures: llm => {
-          llm.on(
-            { endpoint: 'chat', sequenceIndex: 0 },
-            { toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'solana' } }] },
-          );
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Waiting for the analyst.' });
-          // Answering the request finishes the task, which wakes the agent to report it.
-          llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The analyst answered.' });
-        },
+        // Answering the request finishes the task, which wakes the agent to report it.
+        fixtures: llm =>
+          onReportTurns(llm, 'Research solana', {
+            dispatch: {
+              toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'solana' } }],
+            },
+            ack: 'Waiting for the analyst.',
+            report: 'The analyst answered.',
+          }),
       });
       const manager = mastra.backgroundTaskManager!;
       const started = chunks!.find(c => c.type === 'background-task-started') as Chunk | undefined;
@@ -522,7 +552,7 @@ describeForAllEngines(
 
       const open = await waitFor(
         () => storedToolCall(memory, thread),
-        s => s.suspended !== undefined,
+        s => s.suspended?.taskId !== undefined,
       );
       expect(open.suspended).toMatchObject({
         toolCallId: 'call-bg-1',
@@ -602,14 +632,12 @@ describeForAllEngines(
         ...thread,
         stopWhen: stepCountIs(3),
         collectChunks: true,
-        fixtures: mock => {
-          mock.on(
-            { endpoint: 'chat', sequenceIndex: 0 },
-            { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'quantum computing' } }] },
-          );
-          mock.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Working on it.' });
-          mock.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The quantum research is finished.' });
-        },
+        fixtures: mock =>
+          onReportTurns(mock, 'Research quantum computing', {
+            dispatch: { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'quantum computing' } }] },
+            ack: 'Working on it.',
+            report: 'The quantum research is finished.',
+          }),
       });
       const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
       expect(requestsFor(llm, 'Research quantum computing')).toHaveLength(2);
@@ -659,16 +687,26 @@ describeForAllEngines(
       });
       manager = shared.mastra.backgroundTaskManager!;
 
+      const mentions = (req: unknown, text: string) => JSON.stringify(req).includes(text);
+      // The tool description shares this text, so look for it as a user message.
+      const secondRun = (req: unknown) =>
+        ((req as any)?.messages ?? []).some((m: any) => m.role === 'user' && m.content === 'Let the research finish');
       llm.on(
-        { endpoint: 'chat', sequenceIndex: 0 },
+        { endpoint: 'chat', predicate: (req: unknown) => !secondRun(req) && !hasToolResult(req) },
         { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'quantum computing' } }] },
       );
-      llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Working on it.' });
       llm.on(
-        { endpoint: 'chat', sequenceIndex: 2 },
+        { endpoint: 'chat', predicate: (req: unknown) => !secondRun(req) && hasToolResult(req) },
+        { content: 'Working on it.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => secondRun(req) && !mentions(req, 'call-fg-1') },
         { toolCalls: [{ id: 'call-fg-1', name: 'finishResearch', arguments: {} }] },
       );
-      llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'The research finished while we talked.' });
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => secondRun(req) && mentions(req, 'call-fg-1') },
+        { content: 'The research finished while we talked.' },
+      );
 
       const first = await runLoopScenario({
         engine,
@@ -719,14 +757,14 @@ describeForAllEngines(
         ...thread,
         stopWhen: stepCountIs(3),
         collectChunks: true,
-        fixtures: mock => {
-          mock.on(
-            { endpoint: 'chat', sequenceIndex: 0 },
-            { toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'solana' } }] },
-          );
-          mock.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Waiting for the analyst.' });
-          mock.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The analyst approved; solana looks promising.' });
-        },
+        fixtures: mock =>
+          onReportTurns(mock, 'Research solana, then wait for the analyst', {
+            dispatch: {
+              toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'solana' } }],
+            },
+            ack: 'Waiting for the analyst.',
+            report: 'The analyst approved; solana looks promising.',
+          }),
       });
       const manager = mastra.backgroundTaskManager!;
       const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
@@ -744,6 +782,120 @@ describeForAllEngines(
       const requests = requestsFor(llm, 'Research solana, then wait for the analyst');
       expect(requests).toHaveLength(3);
       expect(toolResultSentToModel(requests[2])).toEqual({ summary: 'Research on "solana": looks promising' });
+    }, 30_000);
+
+    function requestsMentioning(llm: { getRequests: () => Array<{ body: unknown }> }, text: string) {
+      return llm.getRequests().filter(r => JSON.stringify((r.body as any)?.messages ?? []).includes(text));
+    }
+
+    function settlesWithin(promise: Promise<unknown>, ms: number) {
+      return Promise.race([
+        promise.then(() => true),
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), ms)),
+      ]);
+    }
+
+    it('ends a signal-woken run without waiting for its deferred task, then wakes the thread when it finishes (#28986)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const llm = getMock();
+      const thread = { threadId: 'bg-signal-thread', resourceId: 'bg-signal-user' };
+      const prompt = 'Research fusion over a signal';
+      const shared = await createSharedAgent(llm, {
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        engine,
+      });
+      onReportTurns(llm, prompt, {
+        dispatch: { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'fusion' } }] },
+        ack: 'Started the fusion research.',
+        report: 'The fusion research is finished.',
+      });
+
+      const sent = shared.agent.sendSignal(
+        { type: 'user-message', contents: prompt },
+        { ...thread, ifIdle: { behavior: 'wake', streamOptions: { stopWhen: stepCountIs(3) } as any } },
+      );
+      const accepted = await sent.accepted;
+      expect(accepted.action).toBe('wake');
+
+      // The woken run ends after its own turn; the task keeps running in the background.
+      expect(await settlesWithin((accepted as any).output.consumeStream(), 5_000)).toBe(true);
+      const [task] = (await shared.mastra.backgroundTaskManager!.listTasks({ threadId: thread.threadId })).tasks;
+      expect(task?.status).toBe('running');
+      expect(requestsMentioning(llm, prompt)).toHaveLength(2);
+
+      release();
+      await waitFor(storedText(memory, thread), s => s.includes('The fusion research is finished.'));
+      const requests = requestsMentioning(llm, prompt);
+      expect(requests).toHaveLength(3);
+      expect(toolResultSentToModel(requests[2])).toEqual({ summary: 'Research complete on "fusion"' });
+      // Reported by the finish signal, not by the woken run waiting for the task.
+      expect(JSON.stringify((requests[2]!.body as any).messages)).toContain(
+        `Background task ${task!.id} for tool call call-bg-1 (research) has completed`,
+      );
+    }, 30_000);
+
+    it('reports deferred tasks that finish together without a turn per duplicate (#28986)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-cluster-thread', resourceId: 'bg-cluster-user' };
+      const prompt = 'Research tides and winds';
+      const { chunks, mastra, llm } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt,
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: mock =>
+          onReportTurns(mock, prompt, {
+            dispatch: {
+              toolCalls: [
+                { id: 'call-bg-1', name: 'research', arguments: { topic: 'tides' } },
+                { id: 'call-bg-2', name: 'research', arguments: { topic: 'winds' } },
+              ],
+            },
+            ack: 'Started both.',
+            report: 'Both research tasks are finished.',
+          }),
+      });
+      const taskIds = chunks!.filter(c => c.type === 'background-task-started').map(c => c.payload.taskId as string);
+      expect(taskIds).toHaveLength(2);
+
+      release();
+      for (const id of taskIds) {
+        await waitFor(
+          () => mastra.backgroundTaskManager!.getTask(id),
+          (t: any) => t?.status === 'completed',
+        );
+      }
+      await waitFor(storedText(memory, thread), s => s.includes('Both research tasks are finished.'));
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // One signal per task: the first wakes the thread, the second joins that run or the one after it.
+      const followUps = requestsFor(llm, prompt).slice(2);
+      expect(followUps.length).toBeGreaterThanOrEqual(1);
+      expect(followUps.length).toBeLessThanOrEqual(2);
+      const lastToolResults = ((followUps.at(-1)!.body as any).messages as any[])
+        .filter(m => m.role === 'tool')
+        .map(m => m.content)
+        .join('\n');
+      expect(lastToolResults).toContain('tides');
+      expect(lastToolResults).toContain('winds');
+      for (const id of taskIds) {
+        expect(
+          followUps.filter(r => JSON.stringify((r.body as any).messages).includes(`Background task ${id} `)),
+        ).not.toHaveLength(0);
+      }
     }, 30_000);
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.

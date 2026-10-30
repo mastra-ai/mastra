@@ -1507,7 +1507,7 @@ describe('AgentControllerChannels thread history', () => {
     // and the trigger wakes the session instead of attaching to an existing run.
     expect(events.slice(0, 2)).toEqual(['save:3', 'send']);
     expect(sends).toHaveLength(1);
-    expect(sends[0].options).toMatchObject({ requireDelivery: true });
+    expect(sends[0].options).toMatchObject({ requireDelivery: true, untilIdle: true });
     expect(JSON.stringify(sends[0].input.contents)).not.toContain('[Thread context');
     await expect(sends[0].result.accepted).resolves.toMatchObject({ action: 'wake' });
 

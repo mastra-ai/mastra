@@ -10006,7 +10006,8 @@ export class Agent<
    * finished and its result is now on the tool call. An open `untilIdle` stream
    * for the thread already reports it with its own follow-up turn, and a caller
    * that stopped the stream waiting for the task doesn't want a reply, so this
-   * does nothing then. Otherwise it sends a signal to the thread: an active run gets
+   * does nothing then. Neither does a dispatching run that is still active: the result is
+   * merged into its own messages. Otherwise it sends a signal to the thread: an active run gets
    * it on its next step, and an idle thread wakes so the agent can report the
    * outcome. The signal names the tool call, never the result: the result is
    * already in the thread, and tool output may hold data that must not be
@@ -10019,9 +10020,19 @@ export class Agent<
     toolCallId: string;
     toolName: string;
     status: 'completed' | 'failed';
+    /** The run that dispatched the task. */
+    originRunId: string;
   }): Promise<void> {
-    const { threadId, resourceId, taskId, toolCallId, toolName, status } = params;
+    const { threadId, resourceId, taskId, toolCallId, toolName, status, originRunId } = params;
     if (this.__untilIdleHandlesBackgroundTask(threadId, resourceId, taskId)) return;
+    // The dispatching run is still going and reads the result where it was merged. A run parked on
+    // a suspension still counts as the thread's run but won't read anything until it resumes.
+    if (
+      this.getActiveThreadRunId({ threadId, resourceId }) === originRunId &&
+      !agentThreadStreamRuntime.isRunParked(originRunId, this.getPubSub())
+    ) {
+      return;
+    }
     const outcome = status === 'completed' ? 'completed' : 'failed';
     try {
       const result = this.sendSignal(

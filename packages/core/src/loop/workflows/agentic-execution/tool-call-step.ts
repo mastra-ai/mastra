@@ -1465,6 +1465,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         status: params.status === 'failed' ? 'failed' : 'completed',
+                        originRunId: runId,
                       });
                     }
                   }

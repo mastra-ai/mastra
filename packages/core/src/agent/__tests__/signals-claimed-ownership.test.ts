@@ -101,7 +101,9 @@ describe('Agent signals: claimed thread ownership', () => {
     expect(await accepted.output.text).toBe('wrapped response');
     expect(wrapper.stream).toHaveBeenCalledTimes(1);
     expect(wrapper.stream.mock.calls[0]?.[0]).toBe(signalResult.signal);
-    expect(wrapper.stream.mock.calls[0]?.[1]).toMatchObject({ untilIdle: true, runId: accepted.runId });
+    expect(wrapper.stream.mock.calls[0]?.[1]).toMatchObject({ runId: accepted.runId });
+    // A woken run ends after its own turn; finished background tasks wake the thread again.
+    expect(wrapper.stream.mock.calls[0]?.[1]).not.toHaveProperty('untilIdle');
   });
 
   it('wakes the claimed owner when the current runtime owns the thread claim', async () => {
