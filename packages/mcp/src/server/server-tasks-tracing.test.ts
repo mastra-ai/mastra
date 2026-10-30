@@ -69,6 +69,33 @@ const TASKS: MCPServerConfig['tasks'] = {
   tools: { echo: 'always', approve: 'always', hang: 'always', slow: { mode: 'auto', syncWindowMs: 50 } },
 };
 
+async function callTool(url: URL, name: string, args: Record<string, unknown>) {
+  const response = await rawRequest(url, {
+    method: 'tools/call',
+    params: { name, arguments: args },
+    capabilities: TASKS_CLIENT,
+    headers: { 'mcp-name': name },
+  });
+  return response.json().result as { taskId: string; resultType: string };
+}
+
+async function waitFor(tasks: TaskRequester, taskId: string, status: MCPDetailedTask['status']) {
+  for (let i = 0; i < 200; i++) {
+    const task = await tasks.get(taskId);
+    if (task.status === status) return task;
+    await sleep(20);
+  }
+  throw new Error(`task never reached ${status}`);
+}
+
+/** Waits for a span the task is still finishing, e.g. the attempt after its outcome was recorded. */
+async function spanIn(ended: any[], name: string) {
+  for (let i = 0; i < 100 && !ended.some(span => span.name === name); i++) await sleep(20);
+  const span = ended.find(span => span.name === name);
+  if (!span) throw new Error(`no span "${name}" in ${ended.map(s => s.name).join(', ')}`);
+  return span;
+}
+
 describe.each([
   { store: 'in-memory', background: false },
   { store: 'Mastra background tasks', background: true },
@@ -117,32 +144,9 @@ describe.each([
     return new TaskRequester(client);
   }
 
-  async function call(name: string, args: Record<string, unknown> = {}) {
-    const response = await rawRequest(served!.url, {
-      method: 'tools/call',
-      params: { name, arguments: args },
-      capabilities: TASKS_CLIENT,
-      headers: { 'mcp-name': name },
-    });
-    return response.json().result as { taskId: string; resultType: string };
-  }
+  const call = (name: string, args: Record<string, unknown> = {}) => callTool(served!.url, name, args);
 
-  async function waitFor(tasks: TaskRequester, taskId: string, status: MCPDetailedTask['status']) {
-    for (let i = 0; i < 200; i++) {
-      const task = await tasks.get(taskId);
-      if (task.status === status) return task;
-      await sleep(20);
-    }
-    throw new Error(`task never reached ${status}`);
-  }
-
-  /** Waits for a span the task is still finishing, e.g. the attempt after its outcome was recorded. */
-  async function spanNamed(name: string) {
-    for (let i = 0; i < 100 && !ended.some(span => span.name === name); i++) await sleep(20);
-    const span = ended.find(span => span.name === name);
-    if (!span) throw new Error(`no span "${name}" in ${ended.map(s => s.name).join(', ')}`);
-    return span;
-  }
+  const spanNamed = (name: string) => spanIn(ended, name);
 
   const root = (taskId: string) => {
     const span = ended.find(
@@ -373,31 +377,9 @@ describe.each([
     return new TaskRequester(client);
   }
 
-  async function call(name: string, args: Record<string, unknown> = {}) {
-    const response = await rawRequest(served!.url, {
-      method: 'tools/call',
-      params: { name, arguments: args },
-      capabilities: TASKS_CLIENT,
-      headers: { 'mcp-name': name },
-    });
-    return response.json().result as { taskId: string; resultType: string };
-  }
+  const call = (name: string, args: Record<string, unknown> = {}) => callTool(served!.url, name, args);
 
-  async function waitFor(tasks: TaskRequester, taskId: string, status: MCPDetailedTask['status']) {
-    for (let i = 0; i < 200; i++) {
-      const task = await tasks.get(taskId);
-      if (task.status === status) return task;
-      await sleep(20);
-    }
-    throw new Error(`task never reached ${status}`);
-  }
-
-  async function spanNamed(name: string) {
-    for (let i = 0; i < 100 && !ended.some(span => span.name === name); i++) await sleep(20);
-    const span = ended.find(span => span.name === name);
-    if (!span) throw new Error(`no span "${name}" in ${ended.map(s => s.name).join(', ')}`);
-    return span;
-  }
+  const spanNamed = (name: string) => spanIn(ended, name);
 
   const root = (taskId: string) => {
     const span = ended.find(s => s.metadata?.mcpTaskKey === taskKeyOf(taskId) && s.name.startsWith('tools/call'));

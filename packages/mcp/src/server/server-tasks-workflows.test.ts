@@ -224,7 +224,29 @@ function makeWorkflows(probe: Probe) {
     )
     .commit();
 
-  return { doubler, report, approval, opaque, boom, hang, interview, poll, shaped };
+  // Asks to go ahead, then works for a while once resumed.
+  const signoff = createWorkflow({
+    id: 'signoff',
+    description: 'Asks to go ahead, then works',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+  })
+    .then(
+      createStep({
+        id: 'work',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        resumeSchema: z.object({ go: z.boolean() }),
+        execute: async ({ resumeData, suspend }) => {
+          if (!resumeData) return suspend({});
+          await sleep(500);
+          return {};
+        },
+      }),
+    )
+    .commit();
+
+  return { doubler, report, approval, opaque, boom, hang, interview, poll, shaped, signoff };
 }
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -569,6 +591,15 @@ describe.each([
       await vi.waitFor(async () => expect((await onlyRun(workflows.hang)).status).toBe('canceled'));
     });
 
+    it.skipIf(!backgroundTasks)('cancels the run when its task times out at its TTL', async () => {
+      const { probe, workflows } = await start({ workflows: { hang: { mode: 'always', ttlMs: 300 } } });
+      const { result } = await call('run_hang');
+      const tasks = await requester();
+      await waitFor(tasks, result.taskId, 'failed');
+      await vi.waitFor(() => expect(probe.aborted).toEqual(['hang']));
+      await vi.waitFor(async () => expect((await onlyRun(workflows.hang)).status).toBe('canceled'));
+    });
+
     it('cancels a run waiting for input on tasks/cancel, though no attempt is running', async () => {
       const { workflows } = await start({ workflows: { approval: 'always' } });
       const { result } = await call('run_approval', { release: 'v4' });
@@ -578,6 +609,41 @@ describe.each([
       await tasks.cancel(result.taskId);
       expect((await tasks.get(result.taskId)).status).toBe('cancelled');
       await vi.waitFor(async () => expect((await onlyRun(workflows.approval)).status).toBe('canceled'));
+    });
+
+    it('logs, rather than leaves unhandled, a failed cancel of a resumed run on tasks/cancel', async () => {
+      const { workflows } = await start({ workflows: { signoff: 'always' } });
+      const { result } = await call('run_signoff');
+      const tasks = await requester();
+      const waiting = await waitFor(tasks, result.taskId, 'input_required');
+      const [key] = Object.keys(waiting.inputRequests ?? {});
+      // The run the task resumes can't be cancelled, as when storage is down. A plain function, since
+      // a vi.fn() handles the promises it returns, which would hide the rejection under test.
+      let cancels = 0;
+      const cancel = () => {
+        cancels++;
+        return Promise.reject(new Error('storage down'));
+      };
+      const createRun = workflows.signoff.createRun.bind(workflows.signoff);
+      vi.spyOn(workflows.signoff, 'createRun').mockImplementation(async options => {
+        const run = await createRun(options);
+        run.cancel = cancel;
+        return run;
+      });
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await tasks.update(result.taskId, { [key!]: { action: 'accept', content: { go: true } } });
+        await vi.waitFor(async () => expect((await onlyRun(workflows.signoff)).status).toBe('running'));
+        await tasks.cancel(result.taskId);
+        await vi.waitFor(() => expect(cancels).toBeGreaterThan(0));
+        await sleep(50);
+        expect(unhandled).toEqual([]);
+        expect((await tasks.get(result.taskId)).status).toBe('cancelled');
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
     });
 
     it('completes with isError when the run fails', async () => {

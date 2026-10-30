@@ -1684,7 +1684,13 @@ export class MCPServer extends MCPServerBase {
     }
     const run = await workflow.createRun({ runId: context.runId });
     let view: WorkflowRunView;
-    this.executingRuns.set(context.runId, () => void run.cancel());
+    this.executingRuns.set(
+      context.runId,
+      () =>
+        void run
+          .cancel()
+          .catch(error => this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error })),
+    );
     try {
       view = await run.resume({
         step: answered.step,

@@ -120,7 +120,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       status: 'failed',
       error: { message: 'Input request key "same" was already used by this task' },
     });
-    store.close();
+    await store.close();
   });
 
   it('acknowledges a cancel without waiting for onCancel, and calls it with the task context', async () => {
@@ -147,7 +147,33 @@ describe('BackgroundTaskMCPTaskStore', () => {
     expect(await store.cancel(task.taskId, access)).toBe(true);
     expect(await store.get(task.taskId, access)).toMatchObject({ status: 'cancelled' });
     await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 1 }]));
-    store.close();
+    await store.close();
+  });
+
+  it('calls onCancel when core times out a running attempt at its TTL', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const contexts: unknown[] = [];
+    // Runs until stopped, like a workflow run executing in this process.
+    const work: MCPTaskWork = () => new Promise(() => {});
+    const store = new BackgroundTaskMCPTaskStore({
+      manager: mastra.backgroundTaskManager!,
+      serverId: 's',
+      workFor: () => work,
+      recoverFor: () => false,
+      onCancel: context => void contexts.push(context),
+    });
+    store.registerTool('tool');
+    const access = { principal: 'alice' };
+    const task = await store.create({ ttlMs: 300, principal: 'alice', context: { toolName: 'tool', id: 2 } });
+    store.run(task.taskId, work);
+
+    const timedOut = await until(
+      () => store.get(task.taskId, access),
+      t => t?.status === 'failed',
+    );
+    expect(timedOut).toMatchObject({ status: 'failed' });
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 2 }]));
+    await store.close();
   });
 
   async function setup(work: MCPTaskWork, recover = false, backgroundTasks: Record<string, unknown> = {}) {
@@ -226,7 +252,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     });
     // Answers for keys that aren't open are ignored, as before.
     expect(await store.update(task.taskId, { other: { action: 'accept', content: {} } }, access)).toBe(true);
-    store.close();
+    await store.close();
   });
 
   it('drops an answer whose suspension ended before it was written, instead of storing it on the next one', async () => {
@@ -276,7 +302,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       status: 'input_required',
       inputRequests: { second: {} },
     });
-    store.close();
+    await store.close();
   });
 
   async function rowOf(manager: NonNullable<Mastra['backgroundTaskManager']>) {
@@ -318,7 +344,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       n => n > 0,
     );
     expect(aborted).toHaveLength(1);
-    store.close();
+    await store.close();
   });
 
   it('sweeps a task waiting for input past its TTL to failed', async () => {
@@ -349,7 +375,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     // An answer arriving now is not taken.
     expect(await store.update(task.taskId, { k: { action: 'accept', content: {} } }, access)).toBe(true);
     expect((await rowOf(manager)).status).toBe('failed');
-    store.close();
+    await store.close();
   });
 
   it('stops counting a task waiting for input once its TTL passes, before the sweep fails it', async () => {
@@ -373,7 +399,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     const next = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' }, limits });
     store.run(next.taskId, ask);
     expect(next.status).toBe('working');
-    store.close();
+    await store.close();
   });
 
   it.each([
@@ -412,7 +438,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       await sleep(100);
       expect(attempts).toBe(runs);
       release.forEach(resolve => resolve());
-      store.close();
+      await store.close();
     },
   );
 
@@ -462,7 +488,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     expect(Math.max(...perSweep)).toBeLessThanOrEqual(100);
     const { total: done } = await manager.listTasks({ agentId: 'mcp-server:s', status: 'completed' });
     expect(done).toBe(250);
-    store.close();
+    await store.close();
   });
 
   it('restarts only as many abandoned rows as there are free slots', async () => {
@@ -485,7 +511,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
     await store.sweep();
     expect(restart).toHaveBeenCalledTimes(3);
     release.forEach(resolve => resolve());
-    store.close();
+    await store.close();
   });
 
   /** A task waiting for input whose TTL has passed, so the next sweep would fail it. */
@@ -616,7 +642,7 @@ describe.each([
 
     await store.sweep();
     expect(await storage.getTask(row.id)).toBeNull();
-    store.close();
+    await store.close();
   });
 
   it('keeps a finished task inside its TTL, and through the retention after it', async () => {
@@ -628,7 +654,7 @@ describe.each([
     await store.sweep();
     expect(await storage.getTask(fresh.id)).toMatchObject({ status: 'completed' });
     expect(await storage.getTask(retained.id)).toMatchObject({ status: 'completed' });
-    store.close();
+    await store.close();
   });
 
   it("leaves another server's rows and an agent's rows alone", async () => {
@@ -645,7 +671,7 @@ describe.each([
     expect(await storage.getTask('mine')).toBeNull();
     expect(await storage.getTask('other-server')).toMatchObject({ status: 'completed' });
     expect(await storage.getTask('agent')).toMatchObject({ status: 'completed' });
-    store.close();
+    await store.close();
   });
 
   it('keeps sweeping when the delete fails', async () => {
@@ -658,7 +684,7 @@ describe.each([
     await expect(store.sweep()).resolves.toBeUndefined();
     // The later step of the same sweep still ran: the open task past its TTL is failed.
     expect(await storage.getTask(row.id)).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
-    store.close();
+    await store.close();
   });
 
   it('fails an open task past its TTL instead of deleting it', async () => {
@@ -686,6 +712,6 @@ describe.each([
     // Its new deadline keeps the failure readable through the retention, sweep after sweep.
     await store.sweep();
     expect(await storage.getTask(open!.id)).toMatchObject({ status: 'failed' });
-    store.close();
+    await store.close();
   });
 });
