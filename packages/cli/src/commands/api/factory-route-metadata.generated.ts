@@ -2332,6 +2332,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             },
             "additionalProperties": {}
           }
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [

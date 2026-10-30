@@ -860,7 +860,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/skills',
     description: "List Factory skills, with a project's edits when a project is given",
     querySchema: z.object({ projectId: uuidSchema.optional() }),
-    responseSchema: z.object({ skills: z.array(entitySchema) }),
+    responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
   },
   skillOverrideSave: {
     method: 'PUT',
