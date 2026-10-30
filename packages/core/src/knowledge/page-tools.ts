@@ -311,7 +311,7 @@ function pageTool(host: KnowledgePageToolHost) {
     id: 'knowledge_page',
     description:
       'Write, move, merge or delete pages. A page body is the curated summary of its topic (needs editor to change); discrete attributed details belong in notes (knowledge_note). ' +
-      'op "write": with `page`, edits that page (name, description, body); without `page`, creates a page named `name` in `scope`. ' +
+      'op "write": with `page`, edits that page (name, description, body; a scope page takes body only); without `page`, creates a page named `name` in `scope`. ' +
       'op "move": moves `page` under `parent` or to the top of `scope`. op "merge": merges `page` into `into`, keeping both pages\' notes. ' +
       'op "delete": deletes `page` (needs owner on its scope); a page with child pages, a scope page and a page declared in config can\'t be deleted. ' +
       '`scope` is only for where content lands (create, move destination); edits and merges take none. ' +
@@ -366,6 +366,11 @@ function pageTool(host: KnowledgePageToolHost) {
           }
           const page = await run.page(args.page, 'editor');
           await run.require(await run.scopeOf(page), 'editor', 'Editing a page');
+          if (page.isScope && (args.name !== undefined || args.description !== undefined)) {
+            throw new Error(
+              `"${args.page}" is a scope page; its name and description come from config, so only its body can be written.`,
+            );
+          }
           const updated = await storage.updatePage({
             id: page.id,
             expectedVersion: args.expectedVersion ?? page.version,

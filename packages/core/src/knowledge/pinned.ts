@@ -53,13 +53,13 @@ function render(page: KnowledgePage, maxTokens: number): string {
   return `${sliceByTokens(text, 0, room).trimEnd()} ${PIN_TRUNCATION_MARKER}`;
 }
 
-/** The run's principals grouped by `pinPriority`, highest first. */
+/** The run's principals grouped by `pinnedContextPriority`, highest first. */
 function priorityTiers(compiled: CompiledKnowledgeScopes, principals: string[]): string[][] {
   const tiers = new Map<number, string[]>();
   for (const address of principals) {
     const match = compiled.match(address);
     if (!match) continue;
-    const priority = match.concrete?.pinPriority ?? match.compiled.declaration.pinPriority ?? 0;
+    const priority = match.concrete?.pinnedContextPriority ?? match.compiled.declaration.pinnedContextPriority ?? 0;
     tiers.set(priority, [...(tiers.get(priority) ?? []), address]);
   }
   return [...tiers.entries()].sort(([a], [b]) => b - a).map(([, addresses]) => addresses);
@@ -70,7 +70,7 @@ async function configPinPages(run: KnowledgeRun): Promise<KnowledgePage[]> {
   for (const principal of run.principals) {
     const match = run.runtime.compiled.match(principal);
     if (!match) continue;
-    for (const ref of [...(match.compiled.declaration.pins ?? []), ...(match.concrete?.pins ?? [])]) {
+    for (const ref of [...(match.compiled.declaration.pinnedContext ?? []), ...(match.concrete?.pinnedContext ?? [])]) {
       const pin = bindConfigPin(ref, match.params);
       if (pin) bound.push(pin);
     }
@@ -90,7 +90,7 @@ async function configPinPages(run: KnowledgeRun): Promise<KnowledgePage[]> {
 
 /**
  * Stored pins in delivery order, at most `want`: the run's principals tier by tier from the highest
- * `pinPriority` (a pin ranks by its best audience entry), newest first within a tier. Also returns how
+ * `pinnedContextPriority` (a pin ranks by its best audience entry), newest first within a tier. Also returns how
  * many stored pins the run could receive in all.
  */
 async function rankedStoredPins(
@@ -140,13 +140,13 @@ function overflowLine(names: string[], more: number): string {
 
 /**
  * The pinned pages a run receives, rendered: config pins first (always delivered; an equal share each
- * when they alone exceed the token budget), then stored pins by `pinPriority` and recency while the
+ * when they alone exceed the token budget), then stored pins by `pinnedContextPriority` and recency while the
  * pin and token budgets last, then one line naming up to ten stored pins that didn't fit and counting
  * the rest. The line counts against the token budget. Only pages the run can read and that have a body
  * are delivered. A run costs a fixed handful of store calls however many pins exist.
  */
 export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget): Promise<PinEntry[]> {
-  // Store calls per turn: (pinPriority tiers the run holds) + 3 (one count, one getPages for pin
+  // Store calls per turn: (pinnedContextPriority tiers the run holds) + 3 (one count, one getPages for pin
   // pages, one for their scopes), plus the config-pin lookups; never one per pin.
   const configured = (await configPinPages(run)).filter(page => page.body?.trim());
   const entries: PinEntry[] = [];

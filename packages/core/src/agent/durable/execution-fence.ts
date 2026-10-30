@@ -25,7 +25,6 @@ import { ErrorCategory, ErrorDomain, MastraError, MastraNonRetryableError } from
 import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
-import { isMastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createRunScope, createRunScopeKey } from '../../mastra/run-scope';
 import type { RunScope, RunScopeKey } from '../../mastra/run-scope';
@@ -37,9 +36,7 @@ import type { RunFence, RunFenceScope } from '../../storage/run-fencing';
 import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
-import { isRunPastDeadline } from './run-deadline';
 import { runInRunFenceScope } from './run-fence-scope';
-import { getRunRegistryEntry } from './run-registry';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
@@ -61,7 +58,6 @@ export const MASTRA_DURABLE_EXECUTIONS_KEY = 'mastra__durableExecutions';
 export const EXECUTION_SUPERSEDED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_SUPERSEDED';
 export const EXECUTION_UNVERIFIED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_UNVERIFIED';
 export const EXECUTION_ABANDONED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_ABANDONED';
-export const EXECUTION_TIMED_OUT_ERROR_ID = 'DURABLE_AGENT_EXECUTION_TIMED_OUT';
 export const EXECUTION_CONFLICT_ERROR_ID = 'DURABLE_AGENT_EXECUTION_CONFLICT';
 export const RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY';
 export const RUN_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RUN_ACTIVE';
@@ -71,8 +67,7 @@ const MIN_RETRY_DELAY_MS = 1_000;
 type ExecutionLossErrorId =
   | typeof EXECUTION_SUPERSEDED_ERROR_ID
   | typeof EXECUTION_UNVERIFIED_ERROR_ID
-  | typeof EXECUTION_ABANDONED_ERROR_ID
-  | typeof EXECUTION_TIMED_OUT_ERROR_ID;
+  | typeof EXECUTION_ABANDONED_ERROR_ID;
 
 const EXECUTION_LOSS_MESSAGES: Record<ExecutionLossErrorId, (runId: string) => string> = {
   [EXECUTION_SUPERSEDED_ERROR_ID]: runId =>
@@ -81,8 +76,6 @@ const EXECUTION_LOSS_MESSAGES: Record<ExecutionLossErrorId, (runId: string) => s
     `Durable run ${runId}: could not verify that this execution still owns the run; stopping without writing.`,
   [EXECUTION_ABANDONED_ERROR_ID]: runId =>
     `Durable run ${runId}: the process shut down before this execution finished; it stopped without writing and released the run for recovery.`,
-  [EXECUTION_TIMED_OUT_ERROR_ID]: runId =>
-    `Durable run ${runId} reached its total timeout; this execution stopped without writing.`,
 };
 type ExecutionDetails = { agentId: string; runId: string; executionId: string };
 
@@ -1044,11 +1037,9 @@ async function resolveRemoteBackend(
 
 /**
  * Assert that the execution recorded in `requestContext` for `runId` still
- * owns the run. Runs without a claim (started by code without fencing) only
- * lose the run at their total timeout: the deadline carried in the request
- * context (seen by every worker), or the abort reason on the registry entry
- * of the process that drives the run. Uses the local fence when this process drives the run;
- * otherwise (a remote evented worker) checks the claim where it lives.
+ * owns the run. No-op for runs without a claim (started by code without
+ * fencing). Uses the local fence when this process drives the run; otherwise
+ * (a remote evented worker) checks the claim where it lives.
  */
 export async function assertExecutionOwned(args: {
   runId: string;
@@ -1057,19 +1048,7 @@ export async function assertExecutionOwned(args: {
   mastra: Mastra | undefined;
 }): Promise<void> {
   const claim = getExecutionClaim(args.requestContext, args.runId);
-  if (!claim) {
-    if (
-      isRunPastDeadline(args.requestContext, args.runId) ||
-      isMastraTimeoutError(getRunRegistryEntry(args.runId, args.mastra)?.abortSignal?.reason)
-    ) {
-      throw new DurableExecutionFenceError(EXECUTION_TIMED_OUT_ERROR_ID, {
-        agentId: args.agentId,
-        runId: args.runId,
-        executionId: args.runId,
-      });
-    }
-    return;
-  }
+  if (!claim) return;
 
   const local = fencesByExecutionId.get(claim.executionId);
   if (local) return local.verify();
@@ -1086,8 +1065,7 @@ export async function assertExecutionOwned(args: {
  * {@link assertExecutionOwned} for writes that may land after the execution
  * settled, such as a background task's result. Once the claim is released,
  * the write is accepted until another execution claims the run, as storage
- * accepts the released claim's writes. A run without a claim stops writing
- * once the deadline carried in its request context passes.
+ * accepts the released claim's writes.
  */
 export async function assertExecutionNotSuperseded(args: {
   runId: string;
@@ -1096,16 +1074,7 @@ export async function assertExecutionNotSuperseded(args: {
   mastra: Mastra | undefined;
 }): Promise<void> {
   const claim = getExecutionClaim(args.requestContext, args.runId);
-  if (!claim) {
-    if (isRunPastDeadline(args.requestContext, args.runId)) {
-      throw new DurableExecutionFenceError(EXECUTION_TIMED_OUT_ERROR_ID, {
-        agentId: args.agentId,
-        runId: args.runId,
-        executionId: args.runId,
-      });
-    }
-    return;
-  }
+  if (!claim) return;
 
   const local = fencesByExecutionId.get(claim.executionId);
   if (local) return local.verify();

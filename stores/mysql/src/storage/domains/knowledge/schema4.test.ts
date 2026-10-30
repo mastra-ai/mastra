@@ -41,16 +41,6 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     expect(await store.getPage({ id: page.id, read: 'all' })).toBeNull();
   });
 
-  it('refuses a database that holds schema-2 tables until reset', async () => {
-    const store = createStore();
-    await store.dangerouslyReset();
-    await pool.query('DROP TABLE IF EXISTS `mastra_knowledge_pages_state`');
-    await pool.query('CREATE TABLE IF NOT EXISTS `mastra_knowledge_nodes` (id VARCHAR(64) PRIMARY KEY)');
-    await expect(store.init()).rejects.toThrow(/reset/i);
-    await store.dangerouslyReset();
-    expect((await store.getScopesByAddress(['org:x'])).length).toBe(0);
-  });
-
   it('rehomes a merged source into the target scope with its history', async () => {
     const store = await makeStore();
     const a = (

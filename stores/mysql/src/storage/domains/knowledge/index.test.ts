@@ -30,17 +30,16 @@ createKnowledgePageStoreTests(async () => {
 createKnowledgeSchemaResetTests(async () => {
   const store = createStore();
   await store.dangerouslyReset();
-  await pool.query('DROP TABLE IF EXISTS `mastra_knowledge_nodes`');
-  await pool.query('CREATE TABLE `mastra_knowledge_nodes` (id VARCHAR(64) PRIMARY KEY, name VARCHAR(64))');
-  await pool.query("INSERT INTO `mastra_knowledge_nodes` (id, name) VALUES ('01LEGACY', 'Legacy')");
+  // A schema version this release doesn't know: init must refuse and only reset may replace it.
+  await pool.query("UPDATE `mastra_knowledge_access_state` SET schemaVersion = 5 WHERE id = 'knowledge'");
   await pool.query('CREATE TABLE IF NOT EXISTS `existing_domain` (id VARCHAR(64) PRIMARY KEY)');
   await pool.query("INSERT IGNORE INTO `existing_domain` (id) VALUES ('preserved')");
   return {
     store,
     snapshot: async () => {
       const [tables] = await pool.query("SHOW TABLES LIKE 'mastra\\_knowledge\\_%'");
-      const [nodes] = await pool.query('SELECT * FROM `mastra_knowledge_nodes`');
-      return { tables, nodes };
+      const [state] = await pool.query('SELECT * FROM `mastra_knowledge_access_state`');
+      return { tables, state };
     },
     assertResetResult: async () => {
       const [preserved] = await pool.query('SELECT id FROM `existing_domain`');

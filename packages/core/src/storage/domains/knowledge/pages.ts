@@ -543,6 +543,19 @@ export interface KnowledgePageActivityEvent {
   createdAt: Date;
 }
 
+/** @experimental */
+export interface KnowledgeScopeDeclarationCount {
+  declaration: string;
+  scopes: number;
+}
+
+/** A scope page `renameScopeDeclaration` would re-key. @experimental */
+export interface KnowledgeScopeDeclarationRename {
+  address: string;
+  from: string;
+  to: string;
+}
+
 /**
  * The schema-4 store surface. Reads take a {@link KnowledgeReadScope} and return only what it can
  * see: a hidden page or note is indistinguishable from a missing one, and filtering happens before
@@ -557,6 +570,19 @@ export interface KnowledgePageStore {
   materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult>;
   /** Scope pages by address, unfiltered (names and descriptions are not secret to the host). */
   getScopesByAddress(addresses: string[]): Promise<KnowledgePage[]>;
+  /** Every `declaration` key stored on scope pages, with how many scope pages carry it, in key order. */
+  listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]>;
+  /**
+   * Re-keys scope pages created from declaration `from` (and its template children, `from/<name>`)
+   * to `to`, atomically. Before writing, calls `check` with every affected scope and its new key;
+   * if `check` throws, nothing changes and the error propagates. Returns how many scope pages
+   * were re-keyed.
+   */
+  renameScopeDeclaration(input: {
+    from: string;
+    to: string;
+    check: (scopes: KnowledgeScopeDeclarationRename[]) => void;
+  }): Promise<number>;
   /**
    * Scope pages directly under a page (`parentId: null` lists root scopes), unfiltered, by position
    * then id; core decides which to list and which as restricted.

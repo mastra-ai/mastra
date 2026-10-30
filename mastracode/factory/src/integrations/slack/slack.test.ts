@@ -62,6 +62,7 @@ function makeThread({ isDM = false } = {}) {
     post: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     postEphemeral: vi.fn().mockResolvedValue({ id: 'eph-1' }),
     startTyping: vi.fn().mockResolvedValue(undefined),
+    mentionUser: (userId: string) => `<@${userId}>`,
   } as any;
 }
 

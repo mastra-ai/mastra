@@ -216,6 +216,14 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
         params.push(options.expectedLeaseExpiresAt.toISOString());
       }
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      if (options.expectedSuspendedAt === null) {
+        predicates += ' AND suspendedAt IS NULL';
+      } else {
+        predicates += ' AND suspendedAt = ?';
+        params.push(options.expectedSuspendedAt.toISOString());
+      }
+    }
     const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     const result = await this.#db.executeQuery({
       sql: `UPDATE ${fullTableName} SET ${sets.join(', ')} WHERE id = ?${predicates} RETURNING id`,

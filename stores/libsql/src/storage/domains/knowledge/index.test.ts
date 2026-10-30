@@ -5,7 +5,11 @@ import { join } from 'node:path';
 
 import * as knowledgeCompat from '@internal/core/knowledge-compat';
 import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
-import { createKnowledgeSchemaResetTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
+import {
+  createKnowledgeLegacyUpgradeTests,
+  createKnowledgeSchemaResetTests,
+  createKnowledgePageStoreTests,
+} from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import {
   KNOWLEDGE_TABLE_NAMES,
@@ -14,7 +18,7 @@ import {
   TABLE_KNOWLEDGE_RECORDS,
 } from '@mastra/core/storage';
 import * as coreStorage from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
 import { LibSQLStore } from '../../index';
@@ -105,34 +109,17 @@ describe('KnowledgeLibSQL storage isolation', () => {
 
 createKnowledgeSchemaResetTests(async () => {
   const client = createClient({ url: ':memory:' });
-  await seedPublishedKnowledgeV1(client);
-  // A host-added index makes the layout unrecognized, so init must refuse and only reset may replace it.
-  await client.execute('CREATE INDEX custom_knowledge_index ON mastra_knowledge_nodes (name)');
+  const store = new KnowledgeLibSQL({ client });
+  await store.init();
+  // A schema version this release doesn't know: init must refuse and only reset may replace it.
+  await client.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET schemaVersion = 5 WHERE id = 'knowledge'`);
   await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
   await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
-  await client.execute({
-    sql: `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    args: [
-      '01LEGACY000000000000000000',
-      'node',
-      'Legacy',
-      'legacy',
-      'task',
-      'legacy body',
-      JSON.stringify(['org:acme', 'resource:mastra']),
-      'org:acme\u001fresource:mastra',
-      1,
-      null,
-      new Date().toISOString(),
-      new Date().toISOString(),
-    ],
-  });
-  const store = new KnowledgeLibSQL({ client });
   return {
     store,
     snapshot: async () => ({
       schema: (await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows,
-      nodes: (await client.execute('SELECT * FROM mastra_knowledge_nodes')).rows,
+      state: (await client.execute(`SELECT * FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}"`)).rows,
     }),
     assertResetResult: async () => {
       expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
@@ -144,4 +131,48 @@ createKnowledgeSchemaResetTests(async () => {
     },
     cleanup: async () => client.close(),
   };
+});
+
+const legacyDir = mkdtempSync(join(tmpdir(), 'knowledge-legacy-'));
+const legacyClient = createClient({ url: `file:${join(legacyDir, 'legacy.db')}` });
+afterAll(() => {
+  legacyClient.close();
+  rmSync(legacyDir, { recursive: true, force: true });
+});
+const knowledgeTableNames = async () =>
+  (
+    await legacyClient.execute(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\'",
+    )
+  ).rows.map(row => String(row.name));
+
+createKnowledgeLegacyUpgradeTests({
+  createStore: () => new KnowledgeLibSQL({ client: legacyClient }),
+  clear: async () => {
+    for (const name of await knowledgeTableNames()) await legacyClient.execute(`DROP TABLE "${name}"`);
+    await legacyClient.execute('DROP TABLE IF EXISTS existing_domain');
+    await legacyClient.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
+    await legacyClient.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
+  },
+  createPublishedLayout: async ({ rows }) => {
+    await seedPublishedKnowledgeV1(legacyClient);
+    await legacyClient.execute(
+      `CREATE TABLE "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, schemaVersion INTEGER NOT NULL)`,
+    );
+    if (!rows) return;
+    await legacyClient.execute(`INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" VALUES ('knowledge', 1, 2)`);
+    await legacyClient.execute({
+      sql: `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      args: ['01LEGACY', 'node', 'Legacy', 'legacy', 'task', 'body', '["org:acme"]', 'org:acme', 1, null, 'x', 'x'],
+    });
+  },
+  recreateLegacyTables: async () => {
+    await legacyClient.execute('CREATE TABLE IF NOT EXISTS mastra_knowledge_nodes (id TEXT PRIMARY KEY, name TEXT)');
+    await legacyClient.execute('CREATE TABLE IF NOT EXISTS mastra_knowledge_records (id TEXT PRIMARY KEY)');
+    await legacyClient.execute('CREATE TABLE IF NOT EXISTS mastra_knowledge_semantic_outbox (id TEXT PRIMARY KEY)');
+    await legacyClient.execute("INSERT INTO mastra_knowledge_nodes (id, name) VALUES ('01OLD', 'Old')");
+  },
+  knowledgeTables: knowledgeTableNames,
+  otherTableRows: async () =>
+    Number((await legacyClient.execute('SELECT COUNT(*) AS n FROM existing_domain')).rows[0]!.n),
 });

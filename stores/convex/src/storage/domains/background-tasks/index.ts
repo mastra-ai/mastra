@@ -184,6 +184,9 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     if (options?.expectedLeaseExpiresAt !== undefined) {
       expected.leaseExpiresAt = options.expectedLeaseExpiresAt?.toISOString() ?? null;
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      expected.suspendedAt = options.expectedSuspendedAt?.toISOString() ?? null;
+    }
 
     return this.#db.patch({
       tableName: TABLE_BACKGROUND_TASKS,

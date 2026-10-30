@@ -25,6 +25,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pageStore.getPage(input);
   }
+  override listScopeDeclarations(): ReturnType<KnowledgePageStore['listScopeDeclarations']> {
+    return this.#pageStore.listScopeDeclarations();
+  }
+
+  override renameScopeDeclaration(
+    input: Parameters<KnowledgePageStore['renameScopeDeclaration']>[0],
+  ): ReturnType<KnowledgePageStore['renameScopeDeclaration']> {
+    return this.#pageStore.renameScopeDeclaration(input);
+  }
+
   override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
     return this.#pageStore.getPages(input);
   }

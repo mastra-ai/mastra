@@ -293,6 +293,19 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
         types.expectedLeaseExpiresAt = getSpannerParamType('timestamp');
       }
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      if (options.expectedSuspendedAt === null) {
+        predicates.push('suspendedAt IS NULL');
+      } else {
+        predicates.push('suspendedAt = @expectedSuspendedAt');
+        params.expectedSuspendedAt = this.db.prepareValue(
+          options.expectedSuspendedAt,
+          'suspendedAt',
+          TABLE_BACKGROUND_TASKS,
+        );
+        types.expectedSuspendedAt = getSpannerParamType('timestamp');
+      }
+    }
     const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
     const rowCount = await this.db.runDml({
       sql: `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE id = @id${predicateSql}`,
