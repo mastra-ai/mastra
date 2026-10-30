@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { connect, createServer } from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -160,4 +161,39 @@ export async function waitForServerHttp(serverUrl: string, timeoutMs = 15_000): 
       return false;
     }
   }, timeoutMs);
+}
+
+/**
+ * TCP proxy in front of a Redis node. While stalled it still accepts new
+ * connections (so node-redis's TCP-level connectTimeout is satisfied) but never
+ * forwards them, exactly like a frozen server. Connections made before the
+ * stall keep forwarding.
+ */
+export function makeStallingProxy(target: { host: string; port: number }) {
+  const sockets = new Set<Socket>();
+  let stalled = false;
+  const server = createServer(client => {
+    sockets.add(client);
+    client.on('close', () => sockets.delete(client));
+    client.on('error', () => {});
+    if (stalled) return;
+    const upstream = connect(target.port, target.host);
+    sockets.add(upstream);
+    upstream.on('close', () => sockets.delete(upstream));
+    upstream.on('error', () => {});
+    client.pipe(upstream);
+    upstream.pipe(client);
+  });
+  const listening = new Promise<number>(resolve => {
+    server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port));
+  });
+  return {
+    listening,
+    stall: () => void (stalled = true),
+    resume: () => void (stalled = false),
+    close() {
+      for (const s of sockets) s.destroy();
+      return new Promise<void>(r => server.close(() => r()));
+    },
+  };
 }

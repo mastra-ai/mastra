@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Event, EventCallback } from '@mastra/core/events';
-import { createCluster } from 'redis';
+import { createClient, createCluster } from 'redis';
 import { afterEach, describe, expect, it } from 'vitest';
+import { makeStallingProxy } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
 
 // Single-node cluster from docker-compose.yaml (cluster-mode enabled, all
@@ -89,5 +90,96 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
     await ps.publish(topic, makeEvent());
     await waitFor(() => attempts.length === 3);
     expect(attempts).toEqual([1, 2, 3]);
+  });
+
+  describe('connect timeout', () => {
+    const CONNECT_TIMEOUT_MS = 500;
+    let proxies: ReturnType<typeof makeStallingProxy>[] = [];
+
+    afterEach(async () => {
+      for (const p of proxies) p.resume();
+      await Promise.all(pubsubs.map(p => p.close().catch(() => {})));
+      pubsubs = [];
+      await Promise.all(proxies.map(p => p.close()));
+      proxies = [];
+    });
+
+    /**
+     * Put a stalling proxy in front of every cluster node and route slot
+     * discovery through them with nodeAddressMap, so a test can freeze new
+     * connections to the whole cluster without touching the shared server.
+     */
+    async function createProxiedPubSub() {
+      const probe = createClient({ url: CLUSTER_URL });
+      await probe.connect();
+      const slots = (await probe.sendCommand(['CLUSTER', 'SLOTS'])) as Array<Array<unknown>>;
+      await probe.close();
+      const routes = new Map<string, { host: string; port: number }>();
+      for (const slot of slots) {
+        const [host, port] = slot[2] as [string, number];
+        const address = `${host}:${port}`;
+        if (routes.has(address)) continue;
+        const proxy = makeStallingProxy({ host, port: Number(port) });
+        proxies.push(proxy);
+        routes.set(address, { host: '127.0.0.1', port: await proxy.listening });
+      }
+      const root = [...routes.values()][0]!;
+      const ps = new RedisStreamsPubSub({
+        cluster: {
+          rootNodes: [{ url: `redis://${root.host}:${root.port}` }],
+          nodeAddressMap: (address: string) => routes.get(address)!,
+          defaults: { socket: { connectTimeout: CONNECT_TIMEOUT_MS } },
+        },
+        keyPrefix: `cluster-connect-timeout-${randomUUID()}`,
+        blockMs: 200,
+      });
+      pubsubs.push(ps);
+      return ps;
+    }
+
+    function settle(promise: Promise<unknown>, ms = 5_000) {
+      return Promise.race([
+        promise.then(
+          () => ({ status: 'resolved' as const }),
+          (err: Error) => ({ status: 'rejected' as const, message: err.message }),
+        ),
+        new Promise<{ status: 'hung' }>(r => setTimeout(() => r({ status: 'hung' }), ms)),
+      ]);
+    }
+
+    it('rejects subscribe() when the cluster freezes before the first connect, then recovers', async () => {
+      const ps = await createProxiedPubSub();
+      for (const p of proxies) p.stall();
+
+      const started = Date.now();
+      expect(await settle(ps.subscribe(`t-${randomUUID()}`, () => {}))).toEqual({
+        status: 'rejected',
+        message: expect.stringContaining(`write client did not connect to Redis within ${CONNECT_TIMEOUT_MS}ms`),
+      });
+      expect(Date.now() - started).toBeLessThan(CONNECT_TIMEOUT_MS + 1_000);
+
+      // The timed-out cluster client was destroyed, not wedged: it connects once the nodes answer.
+      for (const p of proxies) p.resume();
+      const topic = `t-${randomUUID()}`;
+      let received = 0;
+      await ps.subscribe(topic, (_e, ack) => {
+        received += 1;
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent());
+      await waitFor(() => received === 1);
+    }, 15_000);
+
+    it("rejects subscribe() when the cluster freezes before the subscription's reader connects", async () => {
+      const ps = await createProxiedPubSub();
+      // Connect the writer first, so only the reader's connection is stalled.
+      await ps.publish(`warmup-${randomUUID()}`, makeEvent());
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.subscribe(`t-${randomUUID()}`, () => {}, { group: 'workers' }))).toEqual({
+        status: 'rejected',
+        message: expect.stringContaining(`read client did not connect to Redis within ${CONNECT_TIMEOUT_MS}ms`),
+      });
+    }, 15_000);
   });
 });

@@ -5,52 +5,14 @@
  * `socket.connectTimeout` instead of hanging forever.
  */
 import { randomUUID } from 'node:crypto';
-import net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // AgentThreadStreamRuntime is internal to @mastra/core with no public export.
 import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
-import { REDIS_URL } from '../test-fixtures/harness';
+import { makeStallingProxy, REDIS_URL } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
 
 const CONNECT_TIMEOUT_MS = 500;
-
-/**
- * TCP proxy in front of Redis. While stalled it still accepts new connections
- * (so node-redis's TCP-level connectTimeout is satisfied) but never forwards
- * them, exactly like a frozen server. Connections made before the stall keep
- * forwarding.
- */
-function makeStallingProxy(targetUrl: string) {
-  const parsed = new URL(targetUrl);
-  const upstreamPort = Number(parsed.port) || 6379;
-  const sockets = new Set<net.Socket>();
-  let stalled = false;
-  const server = net.createServer(client => {
-    sockets.add(client);
-    client.on('close', () => sockets.delete(client));
-    client.on('error', () => {});
-    if (stalled) return;
-    const upstream = net.connect(upstreamPort, parsed.hostname);
-    sockets.add(upstream);
-    upstream.on('close', () => sockets.delete(upstream));
-    upstream.on('error', () => {});
-    client.pipe(upstream);
-    upstream.pipe(client);
-  });
-  const listening = new Promise<number>(resolve => {
-    server.listen(0, '127.0.0.1', () => resolve((server.address() as net.AddressInfo).port));
-  });
-  return {
-    listening,
-    stall: () => void (stalled = true),
-    resume: () => void (stalled = false),
-    close() {
-      for (const s of sockets) s.destroy();
-      return new Promise<void>(r => server.close(() => r()));
-    },
-  };
-}
 
 function settle(promise: Promise<unknown>, ms: number) {
   return Promise.race([
@@ -67,7 +29,8 @@ describe('RedisStreamsPubSub connect timeout', () => {
   let pubsub: RedisStreamsPubSub | undefined;
 
   async function createPubSub() {
-    proxy = makeStallingProxy(REDIS_URL);
+    const upstream = new URL(REDIS_URL);
+    proxy = makeStallingProxy({ host: upstream.hostname, port: Number(upstream.port) || 6379 });
     const port = await proxy.listening;
     pubsub = new RedisStreamsPubSub({
       url: `redis://127.0.0.1:${port}`,
