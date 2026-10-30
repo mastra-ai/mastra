@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { format } from 'node:util';
@@ -4127,6 +4127,7 @@ describe('per-sender handler runs end to end', () => {
       disableDirect?: boolean;
       disableMention?: boolean;
       workspace?: Workspace;
+      maxAttachmentStorageBytes?: number;
     } = {},
   ) {
     const { Mastra } = await import('../../mastra');
@@ -4171,6 +4172,9 @@ describe('per-sender handler runs end to end', () => {
     const channels = new AgentChannels({
       adapters: { slack: adapter },
       chatOptions: { concurrency: { strategy: 'queue' } },
+      ...(options.maxAttachmentStorageBytes !== undefined
+        ? { maxAttachmentStorageBytes: options.maxAttachmentStorageBytes }
+        : {}),
       handlers: {
         onDirectMessage: options.disableDirect ? false : handle('direct'),
         onMention: options.disableMention ? false : handle('mention'),
@@ -4567,6 +4571,60 @@ describe('per-sender handler runs end to end', () => {
       expect(paths[0]).not.toBe(paths[1]);
       expect((await readFile(join(dir, paths[0]!))).toString()).toBe('AAAA');
       expect((await readFile(join(dir, paths[1]!))).toString()).toBe('BBBB');
+    });
+
+    const savedPaths = (userTurn: string) =>
+      [...userTurn.matchAll(/saved in the workspace at ([^\]\\]+)\]/g)].map(m => m[1]!);
+    async function listFiles(root: string, sub = ''): Promise<string[]> {
+      const entries = await readdir(join(root, sub), { withFileTypes: true });
+      const nested = await Promise.all(
+        entries.map(e => (e.isDirectory() ? listFiles(root, join(sub, e.name)) : [join(sub, e.name)])),
+      );
+      return nested.flat().sort();
+    }
+
+    it('stops saving once channel-attachments reaches the default 100 MiB limit', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      // Earlier attachments already fill the folder to 4 bytes under the limit (sparse file).
+      await mkdir(join(dir, 'channel-attachments', 'earlier'), { recursive: true });
+      const seed = join('channel-attachments', 'earlier', 'old.bin');
+      await writeFile(join(dir, seed), '');
+      await truncate(join(dir, seed), 100 * 1024 * 1024 - 4);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const fits = binary('fits.bin', 'application/octet-stream', async () => Buffer.from('FITS'), 4);
+      const declared = binary('declared.zip', 'application/zip', async () => ZIP_BYTES, ZIP_BYTES.length);
+      const undeclared = binary('undeclared.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [fits, declared, undeclared]);
+
+      const [fitsPath] = savedPaths(userTurn);
+      expect(savedPaths(userTurn)).toEqual([expect.stringMatching(/^channel-attachments\/[0-9a-f]+\/fits\.bin$/)]);
+      expect(declared.fetchData).not.toHaveBeenCalled();
+      expect(undeclared.fetchData).toHaveBeenCalledTimes(1);
+      expect(userTurn).toContain(`[Attached file: declared.zip (application/zip) — ${privateUrl('declared.zip')}]`);
+      expect(userTurn).toContain(`[Attached file: undeclared.zip (application/zip) — ${privateUrl('undeclared.zip')}]`);
+      expect(await listFiles(dir)).toEqual([fitsPath, seed].sort());
+    });
+
+    it('honours a custom maxAttachmentStorageBytes', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        maxAttachmentStorageBytes: 10,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const first = binary('first.zip', 'application/zip', async () => ZIP_BYTES);
+      const second = binary('second.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [first, second]);
+
+      const saved = savedPaths(userTurn);
+      expect(saved).toEqual([expect.stringMatching(/^channel-attachments\/[0-9a-f]+\/first\.zip$/)]);
+      expect(userTurn).toContain(`[Attached file: second.zip (application/zip) — ${privateUrl('second.zip')}]`);
+      expect(await listFiles(dir)).toEqual(saved);
     });
   });
 });

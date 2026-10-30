@@ -95,6 +95,10 @@ const MAX_TEXT_ATTACHMENT_BYTES = 128 * 1024;
 /** Text and binary attachments larger than this are not downloaded or saved. */
 const MAX_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 
+/** Default total for attachments stored under `channel-attachments/` in a workspace. */
+const DEFAULT_MAX_ATTACHMENT_STORAGE_BYTES = 100 * 1024 * 1024;
+const ATTACHMENT_DIR = 'channel-attachments';
+
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
@@ -126,6 +130,8 @@ export class AgentChannels {
   private shouldInline: (mimeType: string) => boolean;
   /** Inline-link rules for promoting URLs in message text to file parts. */
   private inlineLinkRules: InlineLinkRule[] | undefined;
+  /** Total bytes of attachments that may be stored under `channel-attachments/`. */
+  private maxAttachmentStorageBytes: number;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
   /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
@@ -196,6 +202,7 @@ export class AgentChannels {
     this.threadContext = config.threadContext ?? {};
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
+    this.maxAttachmentStorageBytes = config.maxAttachmentStorageBytes ?? DEFAULT_MAX_ATTACHMENT_STORAGE_BYTES;
     this.toolsEnabled = config.tools !== false;
     this.resolveResourceId = config.resolveResourceId;
     this.resolveThreadId = config.resolveThreadId;
@@ -1813,10 +1820,11 @@ export class AgentChannels {
 
   /**
    * Save an attachment under `channel-attachments/<hash>/<name>` and return
-   * the path, or undefined when it cannot be downloaded or written. The
-   * folder hashes the URL so history walks reuse a saved file without
-   * refetching; attachments without a URL hash their downloaded bytes, so
-   * different files never share a path.
+   * the path, or undefined when it cannot be downloaded or written, or when
+   * it would push the folder over `maxAttachmentStorageBytes`. The folder
+   * hashes the URL so history walks reuse a saved file without refetching;
+   * attachments without a URL hash their downloaded bytes, so different
+   * files never share a path.
    */
   private async saveAttachmentToWorkspace(
     fs: WorkspaceFilesystem,
@@ -1827,9 +1835,17 @@ export class AgentChannels {
   ): Promise<string | undefined> {
     const safeName = filename.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '') || 'file';
     const pathFor = (source: string | Uint8Array) =>
-      `channel-attachments/${createHash('sha256').update(source).digest('hex').slice(0, 16)}/${safeName}`;
+      `${ATTACHMENT_DIR}/${createHash('sha256').update(source).digest('hex').slice(0, 16)}/${safeName}`;
+    const limit = this.maxAttachmentStorageBytes;
+    const overLimit = (used: number, size: number) => {
+      if (used + size <= limit) return false;
+      this.log('warn', 'Attachment storage limit reached, not saved', { mimeType, bytes: size, used, limit });
+      return true;
+    };
     try {
       if (att.url && (await fs.exists(pathFor(att.url)))) return pathFor(att.url);
+      const used = await storedAttachmentBytes(fs);
+      if (att.size !== undefined && overLimit(used, att.size)) return undefined;
       const buf = await fetchData();
       const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
       if (bytes.byteLength > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
@@ -1837,6 +1853,8 @@ export class AgentChannels {
         return undefined;
       }
       const path = pathFor(att.url ?? bytes);
+      if (!att.url && (await fs.exists(path))) return path;
+      if (overLimit(used, bytes.byteLength)) return undefined;
       await fs.writeFile(path, bytes, { recursive: true, mimeType });
       return path;
     } catch (err) {
@@ -2683,4 +2701,16 @@ function parseLastSender(value: unknown): LastSender | undefined {
   const { author, raw } = value as Partial<LastSender>;
   if (!author || typeof author.userId !== 'string') return undefined;
   return { author, raw: raw && typeof raw === 'object' ? raw : {} };
+}
+
+/** Total size of the files under `channel-attachments/` (0 when the folder doesn't exist yet). */
+async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir = ATTACHMENT_DIR): Promise<number> {
+  if (dir === ATTACHMENT_DIR && !(await fs.exists(dir))) return 0;
+  let total = 0;
+  for (const entry of await fs.readdir(dir)) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.type === 'directory') total += await storedAttachmentBytes(fs, path);
+    else total += entry.size ?? (await fs.stat(path)).size;
+  }
+  return total;
 }
