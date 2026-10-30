@@ -240,7 +240,8 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         return { result: undefined, changed: true };
       }).then(async () => (await this.get(scope, input.key))!);
     } catch (error) {
-      if (error instanceof UniqueViolationError) {
+      // Only the board key's index means the board exists; a lost race on another table is not that.
+      if (error instanceof UniqueViolationError && error.collection === BOARDS) {
         throw new StoredBoardError('board_exists', `Board "${input.key}" already exists in this project.`);
       }
       throw error;
