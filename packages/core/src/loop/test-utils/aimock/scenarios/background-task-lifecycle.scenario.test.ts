@@ -286,7 +286,7 @@ describeForAllEngines(
       // The open stream reported the result itself, so the agent is not also signalled or woken for it.
       await new Promise(resolve => setTimeout(resolve, 500));
       expect(llm.getRequests()).toHaveLength(3);
-      expect(JSON.stringify(llm.getRequests().map(r => r.body))).not.toContain('Its result now replaces');
+      expect(JSON.stringify(llm.getRequests().map(r => r.body))).not.toContain('It ran as a background task');
     }, 30_000);
 
     it('streamUntilIdle closes after one turn when no background task is dispatched', async () => {
