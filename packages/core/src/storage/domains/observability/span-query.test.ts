@@ -13,14 +13,13 @@ import {
 } from './span-query';
 import type { SpanQueryCostMetric, SpanQueryRow } from './span-query';
 import {
-  digestBinding,
   parseTraceQueryRequest,
-  planTraceQuery,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryCursorError,
 } from './trace-query';
+import { digestBinding, planTraceQuery } from './trace-query-plan';
 
 const timeRange = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
 const scope = { organizationId: 'org-a', resourceId: 'project-a' };
@@ -198,22 +197,21 @@ describe('span query contract', () => {
     }
   });
 
-  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans).filter(field => !['model', 'provider'].includes(field)))(
-    'shares the existing span rule for %s',
-    field => {
-      const predicate = { op: 'exists', path: field };
-      const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
-      if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
-      expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
-    },
-  );
+  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans))('shares the existing span rule for %s', field => {
+    const predicate = { op: 'exists', path: field };
+    const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
+    if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
+    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
+  });
 
-  it.each(['model', 'provider'])('rejects direct %s filters while retaining nested trace support', field => {
+  it.each(['model', 'provider'])('plans direct %s filters', field => {
     const predicate = { op: 'eq', left: { path: field }, right: { literal: 'example' } };
-    expect(() => planSpanQuery({ timeRange, where: predicate })).toThrow();
-    expect(() =>
-      planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } })),
-    ).not.toThrow();
+    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual({
+      type: 'comparison',
+      field,
+      operator: 'eq',
+      value: 'example',
+    });
   });
 
   it.each([
@@ -233,6 +231,8 @@ describe('span query contract', () => {
     'rootEntityType',
     'rootEntityId',
     'rootEntityName',
+    'outcome',
+    'stopReason',
   ])('accepts dedicated string filters for %s', field => {
     for (const op of ['eq', 'ne'])
       expect(
@@ -247,6 +247,25 @@ describe('span query contract', () => {
     expect(() =>
       planSpanQuery({ timeRange, where: { op: 'matches', left: { path: field }, right: { literal: 'example' } } }),
     ).toThrow();
+  });
+
+  it('accepts arbitrary outcome strings but never filters or sorts on outcome context', () => {
+    expect(
+      planSpanQuery({
+        timeRange,
+        where: { op: 'in', value: { path: 'outcome' }, set: ['unknown', 'my-custom-outcome'] },
+      }).where,
+    ).toMatchObject({ field: 'outcome', operator: 'in', values: ['unknown', 'my-custom-outcome'] });
+    expect(() => planSpanQuery({ timeRange, where: { op: 'exists', path: 'stopReasonContext' } })).toThrow();
+    expect(() =>
+      planSpanQuery({
+        timeRange,
+        where: { op: 'eq', left: { path: 'stopReasonContext.maxSteps' }, right: { literal: 5 } },
+      }),
+    ).toThrow();
+    for (const field of ['outcome', 'stopReason', 'stopReasonContext']) {
+      expect(() => planSpanQuery({ timeRange, orderBy: [{ field, direction: 'asc' }] })).toThrow();
+    }
   });
 
   it('normalizes equivalent requests and keeps trusted scope separate from a conflicting predicate', () => {
@@ -423,6 +442,25 @@ describe('bounded result contract', () => {
     ['2026-10-01T12:00:00.000900Z', '2026-10-01T12:00:01.000100Z', 999.2],
   ])('accepts sub-millisecond duration precision for %s to %s', (startedAt, endedAt, durationMs) => {
     expect(spanQueryRowSchema.safeParse({ ...row, startedAt, endedAt, durationMs }).success).toBe(true);
+  });
+
+  it('returns nullable outcome fields without requiring them from older adapters', () => {
+    const recorded = {
+      ...row,
+      outcome: 'limit',
+      stopReason: 'max_steps',
+      stopReasonContext: { maxSteps: 5 },
+    };
+    expect(spanQueryRowSchema.parse(recorded)).toMatchObject({
+      outcome: 'limit',
+      stopReason: 'max_steps',
+      stopReasonContext: { maxSteps: 5 },
+    });
+    const unrecorded = spanQueryRowSchema.parse({ ...row, outcome: null, stopReason: null, stopReasonContext: null });
+    expect(unrecorded.outcome).toBeNull();
+    expect(unrecorded.status).toBe('success');
+    expect(spanQueryRowSchema.parse(row)).not.toHaveProperty('outcome');
+    expect(spanQueryRowSchema.safeParse({ ...row, stopReasonContext: 'max_steps' }).success).toBe(false);
   });
 
   it.each([999, 1001])('rejects a duration discrepancy of at least one millisecond: %s', durationMs => {

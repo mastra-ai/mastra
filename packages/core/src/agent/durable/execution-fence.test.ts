@@ -18,7 +18,6 @@ import {
   EXECUTION_LEASE_RENEW_INTERVAL_MS,
   EXECUTION_LEASE_TTL_MS,
   EXECUTION_SUPERSEDED_ERROR_ID,
-  EXECUTION_TIMED_OUT_ERROR_ID,
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   executionLeaseKey,
@@ -324,9 +323,10 @@ describe('assertExecutionOwned', () => {
 
     afterEach(() => deleteRunRegistryEntry(runId, undefined));
 
-    it('loses ownership once its total timeout fires', async () => {
+    // The memory owner decided a run saves everything it did, even past its deadline.
+    it('keeps ownership after its total timeout fires', async () => {
       withAbortReason(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 1_000 }));
-      await expect(assertOwned()).rejects.toMatchObject({ id: EXECUTION_TIMED_OUT_ERROR_ID });
+      await expect(assertOwned()).resolves.toBeUndefined();
     });
 
     it('keeps ownership after an abort that is not a timeout', async () => {

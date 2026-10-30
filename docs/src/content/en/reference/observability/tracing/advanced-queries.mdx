@@ -39,6 +39,8 @@ The configured observability store must support each API. Call `getObservability
 | `traceQueryContextIds` | `trace-query-context-ids` | `runId`, `sessionId`, `userId`, and `organizationId` predicates |
 | `traceQueryRootSpanFields` | `trace-query-root-span-fields` | Trace-scope `name` and `spanType` predicates, dimensions, and `countDistinct` measures |
 | `traceQueryRootEntityId` | `trace-query-root-entity-id` | Trace-scope `entityId` predicates, dimensions, and `countDistinct` measures |
+| `traceQueryOutcomeFields` | `trace-query-outcome-fields` | `outcome` and `stopReason` in trace and `spans.some` / `spans.none` predicates, trace dimensions, and value discovery, plus the root span's outcome fields on trace results |
+| `spanQueryOutcomeFields` | `span-query-outcome-fields` | `outcome` and `stopReason` in `querySpans()` and `aggregateSpans()` predicates, dimensions, and `countDistinct` measures, plus the outcome fields on span results |
 | `traceQueryDiscovery` | `trace-query-discovery` | [Field and value discovery](#discover-fields-and-values) |
 | `traceQueryTenantScope` | `trace-query-tenant-scope` | [Trusted tenant scope](#trusted-tenant-scope) |
 
@@ -85,12 +87,12 @@ Span clauses examine the current root span and current child spans. The root `ti
 
 | Predicate context | Fields | Operators |
 | - | - | - |
-| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `outcome`, `stopReason` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
 | Span | `name` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
-| Span | `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `spanType`, `model`, `provider`, `status`, `outcome`, `stopReason`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 
@@ -160,6 +162,26 @@ const slowFirstToken = { op: 'gt', left: { path: 'timeToFirstTokenMs' }, right: 
 
 Stores advertise support through the `trace-query-time-to-first-token` feature and the sort through the `trace-query-time-to-first-token-sort` feature. The server reports them as the `traceQueryTimeToFirstToken` and `traceQueryTimeToFirstTokenSort` capabilities. Against an older store, results omit the field, and a predicate or sort on it returns `501` before storage runs.
 
+#### Filter by outcome
+
+`outcome` records how a span ended, for example `success`, `error`, `abort`, `limit`, or `unknown`. `stopReason` records why, for example `max_steps`. Both are free strings, so custom spans can record their own values. They're separate from `status`, which still reads only whether the span recorded an error.
+
+At trace scope, both fields read the current root span, the span with no parent that started the trace. Inside `spans.some` or `spans.none`, they read each related span. A trace whose root succeeded but whose tool call hit a step limit doesn't match a trace-scope `outcome` of `limit`. Find it through `spans.some`:
+
+```typescript
+const hitALimit = {
+  spans: {
+    some: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+  },
+}
+```
+
+Spans written by an SDK that predates these fields, or a root span that's still running, have no outcome. A missing outcome means "not recorded", never success. Select those spans with `{ op: 'notExists', path: 'outcome' }`. As with other optional string fields, `ne` and `notIn` match spans with no value.
+
+Both fields support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`, group trace and span aggregates, and return values from value discovery. They can't be used in `orderBy`. Results also return `stopReasonContext`, an object with details about the stop reason such as `{ maxSteps: 5 }`. `stopReasonContext` is returned only and can't be filtered, grouped, or sorted.
+
+Stores advertise support through the `trace-query-outcome-fields` feature for trace queries and aggregates, and the `span-query-outcome-fields` feature for span queries and aggregates. The server reports them as the `traceQueryOutcomeFields` and `spanQueryOutcomeFields` capabilities. Against an older store, results omit the fields, and a request that uses them returns `501` before storage runs.
+
 #### Filter by context identifiers
 
 `runId`, `sessionId`, `userId`, and `organizationId` are available at trace scope and inside `spans.some` / `spans.none`. Trace-scope predicates read the current root span. Span-scope predicates bind to one related current span, so a run recorded only on a child span is found through `spans.some`:
@@ -223,7 +245,7 @@ const slowModelCalls = {
 }
 ```
 
-`model` and `provider` read the canonical `attributes.model` and `attributes.provider` span attributes. Only stored string values are queryable; missing, null, and non-string values count as missing.
+`model` and `provider` read the span's `model` and `provider` columns. When a column is empty, they fall back to the string `attributes.model` and `attributes.provider` values that older `@mastra/observability` versions exported, so existing filters keep matching older spans. Trace results omit `model` and `provider`, because a trace can match through one span while its other spans used a different model.
 
 ```typescript
 const selectedModel = {
@@ -499,14 +521,17 @@ A query using keyset pagination returns lightweight completed traces and a curso
       "environment": "production",
       "status": "success",
       "timeToFirstChunkMs": 412,
-      "timeToFirstTokenMs": 380
+      "timeToFirstTokenMs": 380,
+      "outcome": "success",
+      "stopReason": null,
+      "stopReasonContext": null
     }
   ],
   "page": { "next": null }
 }
 ```
 
-`timeToFirstChunkMs` and `timeToFirstTokenMs` are present only when the configured store supports them. See [Filter by time to first chunk](#filter-by-time-to-first-chunk) and [Filter and sort by time to first token](#filter-and-sort-by-time-to-first-token).
+`timeToFirstChunkMs` and `timeToFirstTokenMs` are present only when the configured store supports them. See [Filter by time to first chunk](#filter-by-time-to-first-chunk) and [Filter and sort by time to first token](#filter-and-sort-by-time-to-first-token). `outcome`, `stopReason`, and `stopReasonContext` read the root span and are present only when the store supports the `traceQueryOutcomeFields` capability. They're `null` when the root span didn't record them. See [Filter by outcome](#filter-by-outcome).
 
 The response doesn't include the related spans that matched the predicate. Use [`getTrace()`](/reference/client-js/observability#getting-a-specific-trace) to load the full trace after selecting a result.
 
@@ -694,6 +719,7 @@ Dimensions read the current root span of each selected trace:
 | `threadId`, `resourceId`, `userId`, `sessionId`, `organizationId`, `experimentId` | Context identifiers recorded on the root span. |
 | `name`, `spanType` | Root span name and type. Requires the `traceQueryRootSpanFields` capability. |
 | `entityId` | Root span entity ID. Groups traces that have no `entityName`, such as scorer runs. Requires the `traceQueryRootEntityId` capability. |
+| `outcome`, `stopReason` | How the root span ended and why. Traces whose root span didn't record a value group as `null`. Requires the `traceQueryOutcomeFields` capability. |
 | `metadata.<key>` | One non-empty top-level metadata key. Values are trimmed. Missing, empty, and non-string values group as `null`. |
 
 Every dimension except `serviceName`, `executionSource`, and `experimentId` is also a trace-scope `where` field, so you can drill into a group by adding its values to the predicate. `traceId`, `spanId`, `runId`, and `requestId` aren't groupable. Traces with no value for a dimension form their own group with a `null` value.
@@ -860,7 +886,7 @@ Send the same body to `POST /api/observability/spans/aggregate` to use HTTP dire
 Aggregation selects the spans that [`querySpans()`](/reference/client-js/observability#querying-spans) would return for the same `timeRange` and `where`:
 
 - `timeRange` bounds each span's `startedAt`, and can span up to 365 days.
-- `where` accepts the `querySpans()` fields and operators, such as `spanType`, `name`, `status`, `durationMs`, entity and parent/root entity fields, and context identifiers.
+- `where` accepts the `querySpans()` fields and operators, such as `spanType`, `name`, `status`, `durationMs`, `model`, `provider`, entity and parent/root entity fields, and context identifiers. Like `querySpans()`, `model` and `provider` filters read only the span's columns, not its attributes.
 - Only completed spans count. When a span was exported more than once, only its latest copy counts.
 
 `count` equals the number of spans `querySpans()` pages through for the same request. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.
@@ -875,6 +901,7 @@ On ClickHouse, a request whose `where` limits `spanType` to agent, workflow, pro
 | Dimension | Notes |
 | - | - |
 | `name`, `spanType`, `status` | The span's own name, type, and status. `status` is `error` when the span recorded an error and `success` otherwise. |
+| `outcome`, `stopReason` | How the span ended and why. Spans without a recorded value group as `null`. Requires the `spanQueryOutcomeFields` capability. |
 | `entityType`, `entityId`, `entityName` | The entity that produced the span. |
 | `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName` | The calling entity and the trace's root entity, such as the agent that made a model call. |
 | `environment`, `serviceName`, `executionSource` | Deployment attributes recorded on the span. |
