@@ -4,6 +4,8 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { cardLabels, moveCardToBoard } from '../boards/relocate.js';
 import type { Intake, IntakeItem } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -45,8 +47,11 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   /** Factory project domain handle, used to validate binding targets. */
   projects?: { get(input: { orgId: string; id: string }): Promise<unknown | null> };
   integrations?: IntakeIntegration[];
-  /** Installed boards, used to validate binding targets. Absent means only legacy routing is accepted. */
-  boardRegistry?: BoardRegistry;
+  /**
+   * Installed boards, used to validate binding targets. Absent means only legacy routing is accepted.
+   * Integrations place cards with the code boards, so a target must be a code board.
+   */
+  boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** Work items domain handle; when present, rebinding a source to another board moves its resting cards. */
   workItems?: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   /** GitHub repositories, used to match a card to the repository binding its source id names. */
@@ -470,8 +475,12 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { audit, intake, projects, integrations = [], boardRegistry, workItems, githubRepositories } = this.deps;
+    const { audit, intake, projects, integrations = [], workItems, githubRepositories } = this.deps;
     const integrationIds = integrations.map(integration => integration.id);
+    const boardSource = this.deps.boardRegistry ? toBoardSource(this.deps.boardRegistry) : undefined;
+    const projectBoards = (orgId: string, factoryProjectId: string | null) =>
+      boardSource && factoryProjectId ? boardSource.load({ orgId, factoryProjectId }) : undefined;
+    const installed = (board: string) => boardSource?.codeRegistry.has(board) === true;
 
     return [
       registerApiRoute('/web/intake/config', {
@@ -582,9 +591,11 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
           }
-          if (binding.board !== null && !boardRegistry?.has(binding.board)) {
+          if (binding.board !== null && !installed(binding.board)) {
             return c.json({ error: 'invalid_board', message: `Board '${binding.board}' is not installed.` }, 422);
           }
+          // Load before writing, so a failed load can't leave a saved binding with its cards unmoved.
+          const boardRegistry = await projectBoards(tenant.orgId, binding.factoryProjectId);
 
           await intake.ensureReady();
           let auditFactoryProjectId = binding.factoryProjectId;
@@ -755,9 +766,11 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             const project = await projects.get({ orgId: tenant.orgId, id: route.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
           }
-          if (route.board !== null && !boardRegistry?.has(route.board)) {
+          if (route.board !== null && !installed(route.board)) {
             return c.json({ error: 'invalid_board', message: `Board '${route.board}' is not installed.` }, 422);
           }
+          // Load before writing, so a failed load can't leave a saved route with its cards unmoved.
+          const boardRegistry = await projectBoards(tenant.orgId, route.factoryProjectId);
 
           await intake.ensureReady();
           const scope = {
