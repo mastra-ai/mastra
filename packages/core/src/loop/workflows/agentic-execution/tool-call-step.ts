@@ -429,7 +429,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               safeEnqueue(controller, failureChunk);
             }
           } catch (publishError) {
-            logger?.error('Error publishing the suspension flush failure:', publishError);
+            // A rejecting writer only fails before enqueuing, so the failure chunk never
+            // reached the client. Fall back to the step controller; otherwise the caller
+            // sees a normal completion with neither a suspension event nor an error.
+            logger?.error(
+              'Error publishing the suspension flush failure; delivering it directly instead:',
+              publishError,
+            );
+            safeEnqueue(controller, failureChunk);
           }
           return false;
         }

@@ -230,6 +230,45 @@ describe('createToolCallStep delegated run identity provenance', () => {
     expect(failureChunk.payload.error.cause).toBeInstanceOf(Error);
   });
 
+  it('delivers the flush failure directly when the writer rejects it', async () => {
+    // A rejecting writer only fails before enqueuing, so the failure chunk never reached
+    // the client. Without the fallback the caller sees a normal completion while the run
+    // is parked: no suspension event, and no error explaining why.
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add({ id: 'user-1', role: 'user', content: 'process this' }, 'input');
+    const enqueue = vi.fn();
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const tool = createTool({
+      id: 'suspend-tool',
+      description: 'Suspends until resumed',
+      inputSchema: z.object({ data: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async (_input, context) => await context?.agent?.suspend?.({ reason: 'waiting' }),
+    });
+    const flushMessages = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const outputWriter = vi.fn().mockRejectedValue(new Error('processor rejected the error chunk'));
+    const toolCallStep = createToolCallStep({
+      tools: { suspendTool: tool } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue },
+      runId: 'flush-writer-failure-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter,
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        inputData: { toolCallId: 'call-suspend-2', toolName: 'suspendTool', args: { data: 'x' } },
+      }),
+    );
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    expect(suspend).toHaveBeenCalled();
+    const failureChunk = enqueue.mock.calls.map(([chunk]: [any]) => chunk).find(chunk => chunk.type === 'error');
+    expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
+  });
+
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
     const runResume = async (suspendedToolCallId: string, suspendedToolRunId: string) => {
       const execute = vi.fn(async () => ({ ok: true }));
