@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DetailedTaskSchema, TASKS_ERROR_CODES } from '../../shared/tasks';
+import { DetailedTaskSchema, taskKeyOf, TASKS_ERROR_CODES } from '../../shared/tasks';
 import { InMemoryMCPTaskStore } from './in-memory-store';
 import type { MCPTaskHandle } from './in-memory-store';
 import { MCPTaskLimitError } from './store';
@@ -177,7 +177,11 @@ describe('InMemoryMCPTaskStore', () => {
     const waiting = handle.requireInput({ a: elicit('?') });
 
     finish(handle);
-    await expect(waiting).rejects.toThrow(new RegExp(status));
+    const error: Error = await waiting.catch(e => e);
+    expect(error.message).toMatch(new RegExp(status));
+    // Task ids are bearer tokens: the message names the task by its key.
+    expect(error.message).not.toContain(taskId);
+    expect(error.message).toContain(taskKeyOf(taskId));
     expect(handle.signal.aborted).toBe(false);
     expect((await store.get(taskId, alice))?.status).toBe(status);
   });
@@ -425,6 +429,33 @@ describe('InMemoryMCPTaskStore', () => {
       expect(work).not.toHaveBeenCalled();
     });
   });
+
+  it("gives a task's trace only to its caller, and each attempt its number", async () => {
+    const store = new InMemoryMCPTaskStore();
+    const trace = { traceId: 't'.repeat(32), spanId: 's'.repeat(16) };
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', trace });
+    const attempts: MCPTaskAttempt[] = [];
+    store.run(task.taskId, async attempt => {
+      attempts.push(attempt);
+      return attempts.length === 1
+        ? { status: 'input_required', inputRequests: { who: { method: 'elicitation/create', params: {} } } }
+        : { status: 'completed', result: { content: [] } };
+    });
+    expect(await store.traceOf(task.taskId, { principal: 'alice' })).toEqual(trace);
+    expect(await store.traceOf(task.taskId, { principal: 'bob' })).toBeUndefined();
+    await vi.waitFor(async () =>
+      expect((await store.get(task.taskId, { principal: 'alice' }))?.status).toBe('input_required'),
+    );
+    await store.update(task.taskId, { who: { action: 'accept', content: {} } }, { principal: 'alice' });
+    await vi.waitFor(async () =>
+      expect((await store.get(task.taskId, { principal: 'alice' }))?.status).toBe('completed'),
+    );
+    expect(attempts.map(attempt => attempt.trace)).toEqual([
+      { ...trace, taskKey: taskKeyOf(task.taskId), attempt: 1, resumed: false, recovered: false },
+      { ...trace, taskKey: taskKeyOf(task.taskId), attempt: 2, resumed: true, recovered: false },
+    ]);
+  });
+
   describe('open task limits', () => {
     const limits = { perPrincipal: 2, total: 3 };
     const create = (principal: string, ttlMs: number | null = null) => store.create({ ttlMs, principal, limits });

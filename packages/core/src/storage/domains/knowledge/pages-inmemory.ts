@@ -314,6 +314,37 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       .map(clone);
   }
 
+  async listScopeDeclarations() {
+    const counts = new Map<string, number>();
+    for (const page of this.#pages.values()) {
+      if (page.isScope && page.declaration) counts.set(page.declaration, (counts.get(page.declaration) ?? 0) + 1);
+    }
+    return [...counts]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([declaration, scopes]) => ({ declaration, scopes }));
+  }
+
+  async renameScopeDeclaration(input: Parameters<Store['renameScopeDeclaration']>[0]) {
+    const renamed = [...this.#pages.values()]
+      .filter(
+        page =>
+          page.isScope &&
+          page.declaration &&
+          (page.declaration === input.from || page.declaration.startsWith(`${input.from}/`)),
+      )
+      .map(page => ({
+        page,
+        rename: {
+          address: page.address!,
+          from: page.declaration!,
+          to: input.to + page.declaration!.slice(input.from.length),
+        },
+      }));
+    input.check(renamed.map(({ rename }) => rename));
+    for (const { page, rename } of renamed) page.declaration = rename.to;
+    return renamed.length;
+  }
+
   async listChildScopes(input: Parameters<Store['listChildScopes']>[0]) {
     const scopes = [...this.#pages.values()]
       .filter(page => page.isScope && page.parentId === input.parentId)

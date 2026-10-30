@@ -31,7 +31,7 @@ function setup({
         ...memory['org:$orgId'],
         access: [{ principal: 'self', role: 'owner' }],
         pages,
-        pins: ['org:$orgId#policies/refund', 'org:$orgId#faq'],
+        pinnedContext: ['org:$orgId#policies/refund', 'org:$orgId#faq'],
       },
     },
   });

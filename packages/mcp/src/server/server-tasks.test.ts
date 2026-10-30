@@ -1,4 +1,6 @@
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
+import { Mastra } from '@mastra/core/mastra';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Client } from '@modelcontextprotocol/client';
@@ -12,6 +14,7 @@ import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './server';
+import { resolveTasksConfig } from './tasks/config';
 import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
 import type { MCPTaskStore } from './tasks/store';
 
@@ -139,19 +142,35 @@ function makeTools(probe: Probe) {
   };
 }
 
-describe('MCPServer tasks', () => {
+// Every case runs on both stores a server picks on its own: in memory when standalone, and on
+// Mastra's background tasks when registered on a Mastra instance that has them.
+describe.each([
+  { store: 'in-memory', mastra: false },
+  { store: 'Mastra background tasks', mastra: true },
+])('MCPServer tasks ($store)', ({ mastra: onMastra }) => {
   let served: ServedHTTP | undefined;
+  let mastra: Mastra | undefined;
   const clients: Client[] = [];
 
   afterEach(async () => {
     await Promise.all(clients.splice(0).map(client => client.close()));
     await served?.close();
     served = undefined;
+    await mastra?.shutdown();
+    mastra = undefined;
   });
 
   async function start(tasks: MCPServerConfig['tasks'], extra: Partial<MCPServerConfig> = {}) {
     const probe: Probe = { runs: [], aborted: [], authInfos: [], contexts: [], started: [] };
     const server = new MCPServer({ name: 'Tasks', version: '1.0.0', tools: makeTools(probe), tasks, ...extra });
+    if (onMastra && !tasks?.store) {
+      mastra = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        backgroundTasks: { enabled: true },
+        mcpServers: { tasks: server },
+      });
+    }
     served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });
     return { probe, server, url: served.url };
   }
@@ -547,7 +566,9 @@ describe('MCPServer tasks', () => {
     });
   });
 
-  describe('retained task caps', () => {
+  // Only the in-memory store holds finished results in process memory; Mastra storage keeps them
+  // in the database and ignores the retained caps.
+  describe.skipIf(onMastra)('retained task caps', () => {
     const retainedError = 'Too many recent tasks for this client (limit 2). Try again once older tasks expire.';
 
     async function finish(name: string, user = 'alice') {
@@ -597,6 +618,15 @@ describe('MCPServer tasks', () => {
     });
   });
 
+  it.runIf(onMastra)('keeps creating tasks past the retained caps in Mastra storage', async () => {
+    await start({ tools: { quick: 'always' }, maxRetainedTasksPerClient: 1, maxRetainedTasks: 1 });
+    for (let i = 0; i < 3; i++) {
+      const { result } = await call('quick');
+      expect(result).toMatchObject({ resultType: 'task' });
+      await waitFor(await requester(), result.taskId, 'completed');
+    }
+  });
+
   it('rejects task configs it cannot serve at construction', () => {
     const tools = makeTools({ runs: [], aborted: [], authInfos: [], contexts: [], started: [] });
     const make = (tasks: unknown) => () =>
@@ -607,6 +637,10 @@ describe('MCPServer tasks', () => {
     expect(make({ tools: { echo: 'off' }, required: ['echo'] })).toThrow(/not served as a task/);
     expect(make({ tools: { echo: 'sometimes' } })).toThrow(/unknown task mode/);
     expect(make({ tools: { echo: { mode: 'auto', syncWindowMs: -1 } } })).toThrow(/non-negative integer/);
+    expect(make({ recover: 'yes' })).toThrow(/tasks.recover must be a boolean/);
+    expect(make({ tools: { echo: { mode: 'always', recover: 1 } } })).toThrow(
+      /tasks.tools.echo.recover must be a boolean/,
+    );
     for (const bad of [0, -1, 1.5, Number.NaN]) {
       expect(make({ tools: { echo: 'always' }, maxOpenTasksPerClient: bad })).toThrow(/maxOpenTasksPerClient/);
       expect(make({ tools: { echo: 'always' }, maxOpenTasks: bad })).toThrow(/maxOpenTasks /);
@@ -622,5 +656,19 @@ describe('MCPServer tasks', () => {
       /tasks.maxRetainedTasks \(2\) must be at least tasks.maxOpenTasks \(3\)/,
     );
     expect(make({ tools: { echo: 'always' }, maxOpenTasks: 20_000, maxOpenTasksPerClient: 5_000 })).not.toThrow();
+  });
+
+  it('resolves recover per tool, falling back to tasks.recover and then false', () => {
+    const tools = Object.keys(makeTools({ runs: [], aborted: [], authInfos: [], contexts: [], started: [] }));
+    const plain = resolveTasksConfig({ default: 'always' }, tools);
+    expect(plain.modeFor('echo', undefined).recover).toBe(false);
+
+    const config = resolveTasksConfig(
+      { default: 'always', recover: true, tools: { echo: { mode: 'always', recover: false }, quick: 'auto' } },
+      tools,
+    );
+    expect(config.modeFor('echo', undefined).recover).toBe(false);
+    expect(config.modeFor('quick', undefined).recover).toBe(true);
+    expect(config.modeFor('approve', undefined).recover).toBe(true);
   });
 });

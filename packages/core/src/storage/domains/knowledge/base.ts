@@ -197,6 +197,14 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   ): ReturnType<KnowledgePageStore['getScopesByAddress']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('getScopesByAddress'));
   }
+  listScopeDeclarations(): ReturnType<KnowledgePageStore['listScopeDeclarations']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listScopeDeclarations'));
+  }
+  renameScopeDeclaration(
+    _input: Parameters<KnowledgePageStore['renameScopeDeclaration']>[0],
+  ): ReturnType<KnowledgePageStore['renameScopeDeclaration']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('renameScopeDeclaration'));
+  }
   listChildScopes(
     _input: Parameters<KnowledgePageStore['listChildScopes']>[0],
   ): ReturnType<KnowledgePageStore['listChildScopes']> {

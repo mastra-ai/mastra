@@ -549,6 +549,116 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     });
   });
 
+  describe('stale resume events', () => {
+    // A resume event answers one suspension. If it is delivered late — after
+    // the task was resumed some other way, ran, and suspended again — it must
+    // not answer the new suspension with the old data.
+    class HoldFirstResume extends EventEmitterPubSub {
+      held?: () => Promise<void>;
+      override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+        if (args[1].type === 'task.resume' && !this.held) {
+          this.held = () => super.publish(...args);
+          return;
+        }
+        return super.publish(...args);
+      }
+    }
+
+    const executor = {
+      execute: async (_args: any, opts?: any) => {
+        if (!opts?.resumeData) return opts?.suspend?.({ question: 1 });
+        if (opts.resumeData.answer === 'for question 1') return opts.suspend?.({ question: 2 });
+        return opts.resumeData;
+      },
+    };
+
+    async function suspendedAgainAfterHeldResume(processAffine: boolean) {
+      const pubsub = new HoldFirstResume();
+      const mgr = await makeManager({ leaseDurationMs: 3_000 }, pubsub);
+      let taskId: string;
+      if (processAffine) {
+        ({
+          task: { id: taskId },
+        } = await mgr.enqueue(payload('mcp-server:ops', 'ask'), ctx(executor.execute)));
+      } else {
+        mgr.registerStaticExecutor('mcp-server:ops:ask', executor);
+        ({
+          task: { id: taskId },
+        } = await mgr.enqueue({ ...payload('mcp-server:ops', 'ask'), toolName: 'mcp-server:ops:ask' }));
+      }
+      await vi.waitFor(async () => expect((await mgr.getTask(taskId))?.status).toBe('suspended'));
+      const firstSuspension = (await mgr.getTask(taskId))!.suspendedAt!.getTime();
+
+      // Held by the broker: this answer for question 1 is not delivered yet.
+      await mgr.resume(taskId, { answer: 'stale answer for question 1' });
+      expect(pubsub.held).toBeDefined();
+
+      await mgr.resume(taskId, { answer: 'for question 1' });
+      await vi.waitFor(async () => {
+        const t = await mgr.getTask(taskId);
+        expect(t?.status).toBe('suspended');
+        expect(t?.suspendedAt?.getTime()).not.toBe(firstSuspension);
+      });
+
+      await pubsub.held!();
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return { mgr, taskId };
+    }
+
+    it.each([
+      ['portable', false],
+      ['process-affine', true],
+    ])('does not let a late %s resume answer the next suspension', async (_kind, processAffine) => {
+      const { mgr, taskId } = await suspendedAgainAfterHeldResume(processAffine);
+
+      expect(await mgr.getTask(taskId)).toMatchObject({ status: 'suspended', suspendPayload: { question: 2 } });
+
+      // The current suspension can still be answered.
+      await mgr.resume(taskId, { answer: 'for question 2' });
+      await vi.waitFor(async () =>
+        expect(await mgr.getTask(taskId)).toMatchObject({
+          status: 'completed',
+          result: { answer: 'for question 2' },
+        }),
+      );
+    });
+
+    it('rejects the resume when the task suspends again between its read and its claim', async () => {
+      // Another worker resumes and re-suspends the row right after this
+      // worker's read, so only the storage-level fence can catch it.
+      class ResuspendAfterRead extends BackgroundTasksInMemory {
+        armed = false;
+        override async getTask(id: string) {
+          const task = await super.getTask(id);
+          if (this.armed && task?.status === 'suspended') {
+            this.armed = false;
+            await super.updateTask(id, {
+              suspendedAt: new Date(task.suspendedAt!.getTime() + 1_000),
+              suspendPayload: { question: 2 },
+            });
+          }
+          return task;
+        }
+      }
+      const backgroundTasks = new ResuspendAfterRead({ db: new InMemoryDB() });
+      const mgr = await makeManager(
+        { leaseDurationMs: 3_000 },
+        new DelayedPubSub(),
+        new MastraCompositeStore({ id: 'composite', default: new MockStore(), domains: { backgroundTasks } }),
+      );
+      mgr.registerStaticExecutor('mcp-server:ops:ask', executor);
+      const { task } = await mgr.enqueue({ ...payload('mcp-server:ops', 'ask'), toolName: 'mcp-server:ops:ask' });
+      await vi.waitFor(async () => expect((await mgr.getTask(task.id))?.status).toBe('suspended'));
+
+      await mgr.resume(task.id, { answer: 'stale answer for question 1' });
+      backgroundTasks.armed = true;
+      await vi.waitFor(() => expect(backgroundTasks.armed).toBe(false));
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      expect(await mgr.getTask(task.id)).toMatchObject({ status: 'suspended', suspendPayload: { question: 2 } });
+    });
+  });
+
   describe('pinToWorker', () => {
     // Two workers on one store and one broker. A holds a single slot, so a
     // pinned task waits in A's local queue: the window in which a peer could

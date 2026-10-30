@@ -15,7 +15,7 @@ import { KnowledgeScopeRuntime } from '../scope-runtime';
 const scopes: KnowledgeScopeDeclarations = {
   ...knowledgeMemoryScopes(),
   'role:$orgId:admin': { description: 'Org administrators' },
-  'role:$orgId:support': { description: 'Support agents', pins: ['policy:$orgId#refund-policy'] },
+  'role:$orgId:support': { description: 'Support agents', pinnedContext: ['policy:$orgId#refund-policy'] },
   'role:$orgId:sales': { description: 'Sales' },
   'role:$orgId:policy-admin': { description: 'Edits company policy' },
   'role:$orgId:account-manager': { description: 'Account managers' },
