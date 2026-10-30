@@ -623,17 +623,25 @@ await mcp.listToolsetsWithErrors({
 })
 ```
 
-Errors thrown by the callback are logged and don't affect discovery.
+Errors thrown by the callback are logged and don't affect discovery. The same is true for an `async` callback that rejects: the rejection is logged and never becomes an unhandled rejection.
 
 #### Discover only some servers
 
 Pass `serverNames` to discover only the named servers, for example to retry the ones that timed out without starting every other server again. Names that aren't configured are ignored. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
 
 ```typescript
-const { errors } = await mcp.listToolsetsWithErrors({ perServerTimeoutMs: 3_000 })
+const { errorDetails } = await mcp.listToolsetsWithErrors({ perServerTimeoutMs: 3_000 })
 
-const retry = await mcp.listToolsetsWithErrors({ serverNames: Object.keys(errors) })
+// Only servers that timed out are worth retrying. A server that failed for
+// another reason (bad config, auth refused) will just fail again.
+const timedOut = Object.entries(errorDetails)
+  .filter(([, details]) => details.code === MCP_DISCOVERY_TIMEOUT_CODE)
+  .map(([serverName]) => serverName)
+
+const retry = await mcp.listToolsetsWithErrors({ serverNames: timedOut })
 ```
+
+`MCP_DISCOVERY_TIMEOUT_CODE` is exported from `@mastra/mcp`. It marks the errors that `perServerTimeoutMs` produced, so you can tell a slow server apart from a broken one.
 
 ### `listToolDefinitions()`
 

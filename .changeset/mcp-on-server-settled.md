@@ -8,6 +8,8 @@ A server that hits `perServerTimeoutMs` now reports an error with `code: MCP_DIS
 
 Added a `serverNames` option to the same methods to discover only the named servers. Use it to retry the servers that timed out without starting every other server again.
 
+The `onServerSettled` callback may be `async`. If it throws or rejects, the error is logged and discovery is unaffected — a rejected callback never surfaces as an unhandled rejection.
+
 ```ts
 await mcp.listToolsetsWithErrors({
   perServerTimeoutMs: 60_000,

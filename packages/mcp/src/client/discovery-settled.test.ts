@@ -109,6 +109,30 @@ describe('MCPClient discovery onServerSettled', () => {
     expect(result.errors).toEqual({ stalled: 'Discovery timed out after 2000ms' });
   }, 20_000);
 
+  it('does not leave an async callback rejection unhandled', async () => {
+    const rejections: unknown[] = [];
+    const onUnhandled = (reason: unknown) => rejections.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const result = await client!.listToolsetsWithErrors({
+        perServerTimeoutMs: 2_000,
+        onServerSettled: async () => {
+          throw new Error('async callback failure');
+        },
+      });
+
+      expect(Object.keys(result.toolsets)).toEqual(['healthy']);
+      expect(result.errors).toEqual({ stalled: 'Discovery timed out after 2000ms' });
+
+      // Give the microtask queue and the rejection tracker a turn to report.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  }, 20_000);
+
   it('discovers only the servers named in serverNames', async () => {
     const settled: string[] = [];
     const started = Date.now();
