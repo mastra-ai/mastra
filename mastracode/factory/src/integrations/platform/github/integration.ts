@@ -210,11 +210,33 @@ function setBounded<K, V>(cache: Map<K, V>, key: K, value: V): void {
   }
 }
 
-const REPOSITORY_TOKEN_PERMISSIONS = {
+/** Permissions every repository-scoped installation token needs. */
+const BASE_REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
   pull_requests: 'write',
 } as const;
+
+/**
+ * Write permissions added when the installation grants them: `workflows` lets
+ * sessions push commits touching `.github/workflows/`, `actions` lets them
+ * re-run jobs and dispatch workflows. GitHub refuses the whole mint when a
+ * requested permission is not granted, so these are never requested blindly.
+ */
+const OPTIONAL_REPOSITORY_TOKEN_PERMISSIONS = ['actions', 'workflows'] as const;
+
+type RepositoryTokenPermissions = Partial<
+  Record<
+    keyof typeof BASE_REPOSITORY_TOKEN_PERMISSIONS | (typeof OPTIONAL_REPOSITORY_TOKEN_PERMISSIONS)[number],
+    'write'
+  >
+>;
+
+/**
+ * How long an installation's granted optional permissions are reused. Short,
+ * so an accepted permission update on GitHub is picked up soon.
+ */
+const INSTALLATION_PERMISSIONS_CACHE_TTL_MS = 10 * 60_000;
 
 /** The Platform mints one installation token for at most this many named repositories. */
 const MAX_REPOSITORIES_PER_TOKEN = 10;
@@ -258,6 +280,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
+  /** installationId → token permissions the installation grants (TTL-bounded). */
+  readonly #installationTokenPermissionsCache = new Map<
+    number,
+    { permissions: RepositoryTokenPermissions; expiresAt: number }
+  >();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
   /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
@@ -447,11 +474,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const repositoryName = splitRepository(repository.slug).repo;
 
       try {
-        const token = await this.#client.request<{ token: string }>(
-          'POST',
-          `${API_PREFIX}/github-app/installations/${installationId}/token`,
-          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-        );
+        const token = await this.#mintRepositoryToken(installationId, [repositoryName]);
         const access: RepositoryAccess = {
           cloneUrl,
           authorization: { scheme: 'bearer', token: token.token },
@@ -482,11 +505,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           newInstallationId: newInstallation.id,
         });
 
-        const token = await this.#client.request<{ token: string }>(
-          'POST',
-          `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
-          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-        );
+        const token = await this.#mintRepositoryToken(newInstallationId, [repositoryName]);
         const access: RepositoryAccess = {
           cloneUrl,
           authorization: { scheme: 'bearer', token: token.token },
@@ -518,13 +537,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const installationId = parsePositiveInteger(installation.externalId);
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
 
-      const token = await this.#client.request<{ token: string }>(
-        'POST',
-        `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        {
-          repositories: found.map(repository => splitRepository(repository.slug).repo),
-          permissions: REPOSITORY_TOKEN_PERMISSIONS,
-        },
+      const token = await this.#mintRepositoryToken(
+        installationId,
+        found.map(repository => splitRepository(repository.slug).repo),
       );
       const access: RepositoryAccess = {
         cloneUrl: `https://github.com/${found[0]!.slug}.git`,
@@ -1187,12 +1202,72 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (repositories.length === 0 || repositories.length > MAX_REPOSITORIES_PER_TOKEN) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');
     }
-    const result = await this.#client.request<{ token: string }>(
-      'POST',
-      `${API_PREFIX}/github-app/installations/${installationId}/token`,
-      { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
+    const result = await this.#mintRepositoryToken(
+      installationId,
+      repositories.map(repository => repository.name),
     );
     return result.token;
+  }
+
+  /**
+   * Mints an installation token for `repositories`, adding `actions` and
+   * `workflows` write only when the installation grants them. A refused mint
+   * is retried once with the base permissions so installations whose
+   * recorded grants are stale keep working.
+   */
+  async #mintRepositoryToken(installationId: number, repositories: string[]): Promise<{ token: string }> {
+    const path = `${API_PREFIX}/github-app/installations/${installationId}/token`;
+    const permissions = await this.#installationTokenPermissions(installationId);
+    const widened = Object.keys(permissions).length > Object.keys(BASE_REPOSITORY_TOKEN_PERMISSIONS).length;
+    try {
+      return await this.#client.request<{ token: string }>('POST', path, { repositories, permissions });
+    } catch (error) {
+      // The Platform reports GitHub refusing the requested permissions as 502.
+      if (!widened || !(error instanceof PlatformApiError) || error.status !== 502) throw error;
+    }
+    const token = await this.#client.request<{ token: string }>('POST', path, {
+      repositories,
+      permissions: BASE_REPOSITORY_TOKEN_PERMISSIONS,
+    });
+    logPlatformWarn('GitHub refused optional token permissions; minted without them', {
+      installationId,
+      permissions: Object.keys(permissions).join(','),
+    });
+    setBounded(this.#installationTokenPermissionsCache, installationId, {
+      permissions: BASE_REPOSITORY_TOKEN_PERMISSIONS,
+      expiresAt: Date.now() + INSTALLATION_PERMISSIONS_CACHE_TTL_MS,
+    });
+    return token;
+  }
+
+  /** The token permissions to request: the base set plus any optional ones the installation grants. */
+  async #installationTokenPermissions(installationId: number): Promise<RepositoryTokenPermissions> {
+    const cached = this.#installationTokenPermissionsCache.get(installationId);
+    if (cached && cached.expiresAt > Date.now()) return cached.permissions;
+    this.#installationTokenPermissionsCache.delete(installationId);
+
+    const permissions: RepositoryTokenPermissions = { ...BASE_REPOSITORY_TOKEN_PERMISSIONS };
+    try {
+      const { installations } = await this.#client.request<{
+        installations: Array<{ installationId: number; permissions?: Record<string, string> }>;
+      }>('GET', `${API_PREFIX}/github-app/installations`);
+      const granted = installations.find(installation => installation.installationId === installationId)?.permissions;
+      for (const permission of OPTIONAL_REPOSITORY_TOKEN_PERMISSIONS) {
+        if (granted?.[permission] === 'write') permissions[permission] = 'write';
+      }
+    } catch (error) {
+      // The listing only widens the token; without it, mint with the base set.
+      logPlatformWarn('Could not read GitHub installation permissions', {
+        installationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return permissions;
+    }
+    setBounded(this.#installationTokenPermissionsCache, installationId, {
+      permissions,
+      expiresAt: Date.now() + INSTALLATION_PERMISSIONS_CACHE_TTL_MS,
+    });
+    return permissions;
   }
 
   async addIssueLabels(
@@ -1388,7 +1463,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           const { token } = await this.#client.request<{ token: string }>(
             'POST',
             `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
-            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+            { repositories: [repo], permissions: BASE_REPOSITORY_TOKEN_PERMISSIONS },
           );
           const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
           const { data } = await octokit.issues.addAssignees({

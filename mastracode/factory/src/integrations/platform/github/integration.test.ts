@@ -61,6 +61,38 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+const BASE_TOKEN_PERMISSIONS = { contents: 'write', issues: 'write', pull_requests: 'write' };
+const ALL_TOKEN_PERMISSIONS = { ...BASE_TOKEN_PERMISSIONS, actions: 'write', workflows: 'write' };
+
+/**
+ * Serves the Platform installation listing (with each installation's granted
+ * permissions, keyed by GitHub installation id) and delegates every other
+ * request to `handler`.
+ */
+function withInstallationGrants(
+  handler: typeof fetch,
+  grants: Record<number, Record<string, string>> = { 7: ALL_TOKEN_PERMISSIONS, 456: ALL_TOKEN_PERMISSIONS },
+) {
+  return vi.fn<typeof fetch>(async (input, init) => {
+    if (String(input) === `${config.baseUrl}/v1/server/github-app/installations`) {
+      return json({
+        installations: Object.entries(grants).map(([installationId, permissions]) => ({
+          installationId: Number(installationId),
+          permissions,
+        })),
+      });
+    }
+    return handler(input, init);
+  });
+}
+
+/** Bodies of the installation-token mints, in request order. */
+function mintRequests(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>) {
+  return fetchImpl.mock.calls
+    .filter(call => String(call[0]).endsWith('/token'))
+    .map(call => JSON.parse(String((call[1] as RequestInit).body)) as { repositories: string[]; permissions: object });
+}
+
 beforeEach(() => {
   vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', config.baseUrl);
   vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
@@ -783,9 +815,9 @@ describe('PlatformGithubIntegration', () => {
 
   it('mints a repository-scoped platform token for git access', async () => {
     const { sourceControl } = await createPlatformStorageForTests();
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
+    const fetchImpl = withInstallationGrants(async () =>
+      json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }),
+    );
     const integration = createIntegration(fetchImpl);
     integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
     const installation = await integration.versionControl.registerInstallation({
@@ -805,10 +837,7 @@ describe('PlatformGithubIntegration', () => {
       cloneUrl: 'https://github.com/acme/app.git',
       authorization: { scheme: 'bearer', token: 'ghs_scoped' },
     });
-    expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
-      repositories: ['app'],
-      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
-    });
+    expect(mintRequests(fetchImpl)).toEqual([{ repositories: ['app'], permissions: ALL_TOKEN_PERMISSIONS }]);
   });
 
   describe('getRepositoriesAccess', () => {
@@ -835,9 +864,9 @@ describe('PlatformGithubIntegration', () => {
     }
 
     it('mints one token naming every repository of a single installation', async () => {
-      const fetchImpl = vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }));
+      const fetchImpl = withInstallationGrants(async () =>
+        json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }),
+      );
       const { integration, repositories } = await seed(fetchImpl);
 
       const access = await integration.versionControl.getRepositoriesAccess!({
@@ -848,11 +877,10 @@ describe('PlatformGithubIntegration', () => {
         cloneUrl: 'https://github.com/acme/app.git',
         authorization: { scheme: 'bearer', token: 'ghs_environment' },
       });
-      expect(String((fetchImpl.mock.calls[0] as unknown[])[0])).toContain('/github-app/installations/7/token');
-      expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
-        repositories: ['app', 'docs'],
-        permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
-      });
+      expect(fetchImpl.mock.calls.some(call => String(call[0]).endsWith('/github-app/installations/7/token'))).toBe(
+        true,
+      );
+      expect(mintRequests(fetchImpl)).toEqual([{ repositories: ['app', 'docs'], permissions: ALL_TOKEN_PERMISSIONS }]);
 
       // The grant is reused for the same set, in any order.
       const again = await integration.versionControl.getRepositoriesAccess!({
@@ -860,7 +888,7 @@ describe('PlatformGithubIntegration', () => {
         repositoryIds: [...repositories.map(repository => repository.id)].reverse(),
       });
       expect(again).toBe(access);
-      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(mintRequests(fetchImpl)).toHaveLength(1);
     });
 
     it('declines a set spanning two installations without minting', async () => {
@@ -906,7 +934,7 @@ describe('PlatformGithubIntegration', () => {
   });
 
   it('requests all write permissions when minting an installation token', async () => {
-    const fetchImpl = vi
+    const inner = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         json({
@@ -923,12 +951,124 @@ describe('PlatformGithubIntegration', () => {
         }),
       )
       .mockResolvedValueOnce(json({ token: 'ghs_installation', expiresAt: '2026-07-21T18:00:00Z' }));
+    const fetchImpl = withInstallationGrants(inner);
     const integration = createIntegration(fetchImpl);
 
     await expect(integration.mintInstallationToken(7)).resolves.toBe('ghs_installation');
-    expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
-      repositories: ['app'],
-      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+    expect(mintRequests(fetchImpl)).toEqual([{ repositories: ['app'], permissions: ALL_TOKEN_PERMISSIONS }]);
+  });
+
+  describe('optional token permissions', () => {
+    const repoListing = () =>
+      json({
+        repositories: [
+          { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+        ],
+      });
+    const token = () => json({ token: 'ghs_installation', expiresAt: '2026-07-21T18:00:00Z' });
+    const mintFailed = () =>
+      new Response(JSON.stringify({ type: 'github_app_token_mint_failed' }), {
+        status: 502,
+        headers: { 'content-type': 'application/json' },
+      });
+    const isMint = (input: Parameters<typeof fetch>[0]) => String(input).endsWith('/token');
+
+    it('omits actions and workflows when the installation does not grant them', async () => {
+      const fetchImpl = withInstallationGrants(async input => (isMint(input) ? token() : repoListing()), {
+        7: { ...BASE_TOKEN_PERMISSIONS, actions: 'read', metadata: 'read' },
+      });
+      const integration = createIntegration(fetchImpl);
+
+      await expect(integration.mintInstallationToken(7)).resolves.toBe('ghs_installation');
+      expect(mintRequests(fetchImpl)).toEqual([{ repositories: ['app'], permissions: BASE_TOKEN_PERMISSIONS }]);
+    });
+
+    it('requests only the optional permissions the installation grants', async () => {
+      const fetchImpl = withInstallationGrants(async input => (isMint(input) ? token() : repoListing()), {
+        7: { ...BASE_TOKEN_PERMISSIONS, workflows: 'write' },
+      });
+      const integration = createIntegration(fetchImpl);
+
+      await integration.mintInstallationToken(7);
+      expect(mintRequests(fetchImpl)[0]?.permissions).toEqual({ ...BASE_TOKEN_PERMISSIONS, workflows: 'write' });
+    });
+
+    it('falls back to the base permissions when GitHub refuses the optional ones', async () => {
+      let mints = 0;
+      const fetchImpl = withInstallationGrants(async input => {
+        if (!isMint(input)) return repoListing();
+        return ++mints === 1 ? mintFailed() : token();
+      });
+      const integration = createIntegration(fetchImpl);
+
+      await expect(integration.mintInstallationToken(7)).resolves.toBe('ghs_installation');
+      // The refusal is remembered: the next mint goes straight to the base set.
+      await integration.mintInstallationToken(7);
+      expect(mintRequests(fetchImpl).map(request => request.permissions)).toEqual([
+        ALL_TOKEN_PERMISSIONS,
+        BASE_TOKEN_PERMISSIONS,
+        BASE_TOKEN_PERMISSIONS,
+      ]);
+    });
+
+    it('does not retry a refused mint that only asked for the base permissions', async () => {
+      const fetchImpl = withInstallationGrants(async input => (isMint(input) ? mintFailed() : repoListing()), {
+        7: BASE_TOKEN_PERMISSIONS,
+      });
+      const integration = createIntegration(fetchImpl);
+
+      await expect(integration.mintInstallationToken(7)).rejects.toThrow();
+      expect(mintRequests(fetchImpl)).toHaveLength(1);
+    });
+
+    it('mints with the base permissions when the installation listing is unavailable', async () => {
+      let listingFails = true;
+      const fetchImpl = vi.fn<typeof fetch>(async input => {
+        if (String(input) === `${config.baseUrl}/v1/server/github-app/installations`) {
+          return listingFails
+            ? json({ error: 'unavailable' }, 503)
+            : json({ installations: [{ installationId: 7, permissions: ALL_TOKEN_PERMISSIONS }] });
+        }
+        return isMint(input) ? token() : repoListing();
+      });
+      const integration = createIntegration(fetchImpl);
+
+      await expect(integration.mintInstallationToken(7)).resolves.toBe('ghs_installation');
+      // A failed listing is not cached, so the next mint picks the grants up.
+      listingFails = false;
+      await integration.mintInstallationToken(7);
+      expect(mintRequests(fetchImpl).map(request => request.permissions)).toEqual([
+        BASE_TOKEN_PERMISSIONS,
+        ALL_TOKEN_PERMISSIONS,
+      ]);
+    });
+
+    it('rereads installation grants after the cache TTL', async () => {
+      vi.useFakeTimers();
+      try {
+        let grants: Record<string, string> = BASE_TOKEN_PERMISSIONS;
+        const fetchImpl = vi.fn<typeof fetch>(async input => {
+          if (String(input) === `${config.baseUrl}/v1/server/github-app/installations`) {
+            return json({ installations: [{ installationId: 7, permissions: grants }] });
+          }
+          return isMint(input) ? token() : repoListing();
+        });
+        const integration = createIntegration(fetchImpl);
+
+        await integration.mintInstallationToken(7);
+        // The owner accepts the new permissions; cached grants hold until the TTL passes.
+        grants = ALL_TOKEN_PERMISSIONS;
+        await integration.mintInstallationToken(7);
+        vi.advanceTimersByTime(10 * 60_000 + 1_000);
+        await integration.mintInstallationToken(7);
+        expect(mintRequests(fetchImpl).map(request => request.permissions)).toEqual([
+          BASE_TOKEN_PERMISSIONS,
+          BASE_TOKEN_PERMISSIONS,
+          ALL_TOKEN_PERMISSIONS,
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -1003,9 +1143,9 @@ describe('PlatformGithubIntegration', () => {
     vi.useFakeTimers();
     try {
       const { sourceControl } = await createPlatformStorageForTests();
-      const fetchImpl = vi
-        .fn<typeof fetch>()
-        .mockImplementation(async () => json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
+      const fetchImpl = withInstallationGrants(async () =>
+        json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }),
+      );
       const integration = createIntegration(fetchImpl);
       integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
       const installation = await integration.versionControl.registerInstallation({
@@ -1023,12 +1163,12 @@ describe('PlatformGithubIntegration', () => {
       const first = await integration.versionControl.getRepositoryAccess(input);
       const second = await integration.versionControl.getRepositoryAccess(input);
       expect(second).toBe(first);
-      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(mintRequests(fetchImpl)).toHaveLength(1);
 
       // Expired grants re-mint through the platform.
       vi.advanceTimersByTime(5 * 60_000 + 1_000);
       await integration.versionControl.getRepositoryAccess(input);
-      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(mintRequests(fetchImpl)).toHaveLength(2);
     } finally {
       vi.useRealTimers();
     }
@@ -1693,15 +1833,17 @@ describe('PlatformGithubIntegration', () => {
       // Mock Platform API:
       // - Returns 404 for OLD installation token request
       // - Returns token for NEW installation token request
-      const fetchImpl = vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ error: 'Installation not found' }), {
-            status: 404,
-            headers: { 'content-type': 'application/json' },
-          }),
-        )
-        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+      const fetchImpl = withInstallationGrants(
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ error: 'Installation not found' }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            }),
+          )
+          .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' })),
+      );
 
       const integration = createIntegration(fetchImpl);
       integration.versionControl.initialize({ storage });
@@ -1749,15 +1891,17 @@ describe('PlatformGithubIntegration', () => {
       const { oldRepository, newInstallation } = await seedReinstalledOrg(storage);
 
       // Platform answers 409 while its own row still exists but is unusable.
-      const fetchImpl = vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ type: 'conflict', detail: 'GitHub App installation is not available.' }), {
-            status: 409,
-            headers: { 'content-type': 'application/json' },
-          }),
-        )
-        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+      const fetchImpl = withInstallationGrants(
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ type: 'conflict', detail: 'GitHub App installation is not available.' }), {
+              status: 409,
+              headers: { 'content-type': 'application/json' },
+            }),
+          )
+          .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' })),
+      );
 
       const integration = createIntegration(fetchImpl);
       integration.versionControl.initialize({ storage });
@@ -1780,11 +1924,12 @@ describe('PlatformGithubIntegration', () => {
 
       // A 502 covers a dead installation and a GitHub outage alike — migrating on it
       // would repoint healthy repositories during an incident.
-      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-        new Response(JSON.stringify({ type: 'github_app_token_mint_failed' }), {
-          status: 502,
-          headers: { 'content-type': 'application/json' },
-        }),
+      const fetchImpl = withInstallationGrants(
+        async () =>
+          new Response(JSON.stringify({ type: 'github_app_token_mint_failed' }), {
+            status: 502,
+            headers: { 'content-type': 'application/json' },
+          }),
       );
 
       const integration = createIntegration(fetchImpl);
@@ -1796,7 +1941,11 @@ describe('PlatformGithubIntegration', () => {
 
       const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
       expect(repository?.installationId).toBe(oldInstallation.id);
-      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      // One mint with the optional permissions, one fallback without them; no recovery.
+      expect(mintRequests(fetchImpl).map(request => request.permissions)).toEqual([
+        ALL_TOKEN_PERMISSIONS,
+        BASE_TOKEN_PERMISSIONS,
+      ]);
     });
   });
 });
