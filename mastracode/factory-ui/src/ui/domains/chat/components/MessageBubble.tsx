@@ -58,10 +58,10 @@ function steeringLabel(entry: MessageEntry): string | undefined {
   return 'Steered message';
 }
 
-function metaText(entry: MessageEntry, prose: string, reply?: string): string | undefined {
+function metaText(entry: MessageEntry, prose: string, settled: boolean, reply?: string): string | undefined {
   if (entry.message.role === 'user') return prose || undefined;
 
-  return entry.streaming ? undefined : reply;
+  return settled ? reply : undefined;
 }
 
 /** The tail line steps aside for a live stretch at once, so the reveal must not hold it back. */
@@ -113,7 +113,9 @@ export function MessageBubble({
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(entry.message.role === 'user' ? content : written);
-  const meta = metaText(entry, prose, reply);
+  // The reveal hands back `written` itself once every word is on screen.
+  const settled = !entry.streaming && paced === written;
+  const meta = metaText(entry, prose, settled, reply);
   const showsReplyFooter = Boolean(meta);
   const drawsAnything = hasRenderablePart && (drawsOwnPart || showsReplyFooter);
   const steeringStatus = steeringLabel(entry);

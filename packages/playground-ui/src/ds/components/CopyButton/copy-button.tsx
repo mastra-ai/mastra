@@ -1,5 +1,7 @@
 import { CopyIcon, CheckIcon } from 'lucide-react';
 
+import { Icon } from '../../icons/Icon';
+import type { IconSize } from '../../icons/Icon';
 import type { ButtonProps, IconButtonSize } from '../Button';
 import { Button } from '../Button';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -11,6 +13,8 @@ export type CopyButtonProps = {
   tooltip?: string;
   className?: string;
   size?: IconButtonSize;
+  /** A glyph smaller than the button's own rung, for a copy control set beside meta-size text. */
+  iconSize?: IconSize;
   variant?: ButtonProps['variant'];
 };
 
@@ -20,6 +24,7 @@ export function CopyButton({
   showToast,
   tooltip = 'Copy to clipboard',
   size = 'icon-sm',
+  iconSize,
   variant,
   className,
 }: CopyButtonProps) {
@@ -28,6 +33,8 @@ export function CopyButton({
     copyMessage,
     showToast,
   });
+
+  const glyph = isCopied ? <CheckIcon /> : <CopyIcon />;
 
   return (
     <Button
@@ -39,7 +46,7 @@ export function CopyButton({
       tooltip={isCopied ? 'Copied!' : tooltip}
       aria-label={isCopied ? 'Copied!' : tooltip}
     >
-      {isCopied ? <CheckIcon /> : <CopyIcon />}
+      {iconSize ? <Icon size={iconSize}>{glyph}</Icon> : glyph}
     </Button>
   );
 }
