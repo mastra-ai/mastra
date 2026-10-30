@@ -1,0 +1,104 @@
+---
+title: 'Reference: knowledgeMemoryScopes() | Knowledge'
+description: 'Declarations for Memory thread and resource scopes and a tenant scope, for the Knowledge scopes option.'
+packages:
+  - '@mastra/core'
+---
+
+# knowledgeMemoryScopes()
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+`knowledgeMemoryScopes()` returns scope declarations for the `resource:` and `thread:` scopes every Memory run holds, plus a tenant scope. Spread it into the Knowledge `scopes` option so agents with Memory can use Knowledge. See [Declare scope types](/docs/knowledge/scope-types) for how declarations work.
+
+## Usage example
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+
+export const knowledge = new Knowledge({
+  tools: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'team:$orgId:$teamId': { access: [{ principal: 'self', role: 'editor' }] },
+  },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'org',
+    type: 'string | false',
+    description:
+      'The tenant scope pattern. Rename it, for example `workspace:$workspaceId`, or pass `false` to leave the tenant out; `resource:` then has no `belongsTo`.',
+    isOptional: true,
+    defaultValue: "'org:$orgId'",
+  },
+  {
+    name: 'orgRole',
+    type: "'editor' | 'contributor'",
+    description:
+      "The role a run holding the tenant scope gets on it. `contributor` makes the tenant append-only: runs add pages and notes but can't edit them.",
+    isOptional: true,
+    defaultValue: "'editor'",
+  },
+]}
+/>
+
+## Returns
+
+`KnowledgeScopeDeclarations` with three entries:
+
+| Key | Access | `belongsTo` | `pinPriority` |
+| - | - | - | - |
+| `thread:$threadId` | `self` `owner` | `resource:$resourceId` | `2` |
+| `resource:$resourceId` | `self` `owner` | `org:$orgId` | `1` |
+| `org:$orgId` | `self` `editor` | none | `0` |
+
+The tenant row uses the `org` and `orgRole` options. Pins delivered through a higher `pinPriority` scope come first. A run's thread pins come before its resource pins, and tenant pins come last.
+
+```typescript oxfmt:false
+knowledgeMemoryScopes({ org: 'workspace:$workspaceId', orgRole: 'contributor' })
+// {
+//   'thread:$threadId': { access: [{ principal: 'self', role: 'owner' }], belongsTo: 'resource:$resourceId', pinPriority: 2 },
+//   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }], belongsTo: 'workspace:$workspaceId', pinPriority: 1 },
+//   'workspace:$workspaceId': { access: [{ principal: 'self', role: 'contributor' }], pinPriority: 0 },
+// }
+```
+
+## `knowledgeScopeAddress()`
+
+```typescript oxfmt:false
+knowledgeScopeAddress(pattern: string, params: Record<string, string>): string
+```
+
+Builds a canonical scope address from a pattern and raw parameter values, for Knowledge APIs, config pins and page references written by host code. Inside values, `%`, `/` and `#` are encoded as `%25`, `%2F` and `%23`, and `:` is encoded as `%3A` in every parameter except the last. It throws when a parameter is missing or empty.
+
+```typescript
+import { knowledgeScopeAddress } from '@mastra/core/knowledge'
+
+knowledgeScopeAddress('resource:$resourceId', { resourceId: 'acme/dana' })
+// 'resource:acme%2Fdana'
+
+knowledgeScopeAddress('team:$orgId:$teamId', { orgId: 'a:b', teamId: 'c:d' })
+// 'team:a%3Ab:c:d'
+```
+
+:::note
+
+Don't pass the result as an agent scope. Agent scopes take raw IDs (`resource:acme/dana`), and Knowledge encodes them at run start. See [Set who a run is](/docs/knowledge/run-scopes).
+
+:::
+
+## Related
+
+- [Knowledge class](/reference/knowledge/knowledge-class)
+- [Declare scope types](/docs/knowledge/scope-types)
+- [Pins](/docs/knowledge/pins)

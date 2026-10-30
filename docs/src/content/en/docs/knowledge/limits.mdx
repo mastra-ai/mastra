@@ -1,0 +1,32 @@
+---
+title: "Knowledge limits"
+description: "Size limits for notes, pages, searches and pinned context in Knowledge."
+packages:
+  - "@mastra/core"
+---
+
+# Knowledge limits
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+Text limits are counted in tokens. Counts are estimates, so treat the numbers as approximate.
+
+| Item | Limit |
+| - | - |
+| Note text | 250 tokens |
+| Page description | 100 tokens |
+| Page nesting | 10 levels |
+| Pages in one move, counting everything under the moved page | 500 |
+| `knowledge_search` results, and notes and child pages per `knowledge_read` | 10 by default, up to 50 |
+| Pinned context per turn | 500 tokens by default, up to 2000 |
+| Pinned pages per turn | 20 by default |
+
+A write over a limit fails, and the model gets the error as the tool result. Tool schemas don't show the token limits, because a schema can't count tokens.
+
+Page bodies have no token limit. Pinned page bodies are cut to fit the pinned-context budget. See [pins](/docs/knowledge/pins#what-a-run-receives).
+
+Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`. A `maxTokens` above 2000 throws when you construct it.

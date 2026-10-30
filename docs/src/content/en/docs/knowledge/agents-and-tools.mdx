@@ -1,0 +1,195 @@
+---
+title: "Use the Knowledge tools"
+description: "The Knowledge tools, what each operation does, and the role it needs."
+packages:
+  - "@mastra/core"
+---
+
+# Use the Knowledge tools
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+An agent with Knowledge tools turned on gets up to five tools. The model calls them. Your [scope declarations](/docs/knowledge/scope-types) decide what each call is allowed to do. The examples on this page are tool inputs as the model sends them, for a run that holds `org:acme` and `team:acme:support` with these declarations:
+
+```typescript oxfmt:false
+scopes: {
+  ...knowledgeMemoryScopes(),
+  'team:$orgId:$teamId': {
+    access: [
+      { principal: 'self', role: 'editor' },
+      { principal: 'org:$orgId', role: 'viewer' },
+    ],
+  },
+}
+```
+
+| Tool | Operations | Turned on by |
+| - | - | - |
+| `knowledge_search` | Search pages and notes | `tools: true` or `{ read: true }` |
+| `knowledge_read` | Read a page, browse a scope, list held scopes | `tools: true` or `{ read: true }` |
+| `knowledge_page` | `write`, `move`, `merge` | `tools: true` or `{ write: true }` |
+| `knowledge_note` | `add`, `restamp`, `remove` | `tools: true` or `{ write: true }` |
+| `knowledge_pin` | `pin`, `unpin` | `pinnedContext` |
+
+## Refer to pages
+
+Every tool that takes a `page` accepts:
+
+- the page ID
+- a scope address, such as `org:acme`, which reads that scope
+- a page path: the scope address, `#`, then the page keys from the top of the tree joined with `/`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`
+- the page's exact name
+
+A `/` before the `#` names a child scope and a `/` after it names a child page. A path resolves when it's used: after a move, the page answers to its new path and the old one finds nothing.
+
+A name that matches more than one readable page is refused, and the error lists the candidate IDs. A page the run can't read is reported as not found, the same as a page that doesn't exist:
+
+```text
+Knowledge page "org:acme#policies/escalation" not found.
+```
+
+## Search and read
+
+`knowledge_search` splits the query into words and matches each one case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description and body together contain every word. A note matches only when its own text contains every word. `billing on-call` finds a page named Billing with "on-call" in its body, but not a note that only says "on-call" on that page. Quotes and operators have no special meaning, and an empty query returns nothing. Pages with the whole query in their name come first, then pages with every word in their name, then other matching pages, then notes, each most recently updated first. With [semantic search](/docs/knowledge/setup#add-semantic-search) set up, results also match by meaning, and keyword and meaning results are merged by rank, so a close meaning match can come before a name match. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
+
+```json
+{ "query": "on-call", "scope": ["org:acme"] }
+```
+
+`knowledge_read` returns a page's body, its notes, its child pages and the notes on other pages that mention it:
+
+```json
+{ "page": "Billing Escalations" }
+```
+
+Reading a scope address, such as `{ "page": "org:acme" }`, lists the pages in that scope and the scopes placed under it. Called with no `page`, it lists the scopes the run holds, which is how the model finds where to start.
+
+Both need `viewer`.
+
+## Write pages
+
+A page's body is the curated summary of its topic. `knowledge_page` with `op: "write"` creates a page when there's no `page`, and edits one when there is.
+
+Create a page in a scope:
+
+```json
+{
+  "op": "write",
+  "scope": "team:acme:support",
+  "name": "Chargeback Playbook",
+  "description": "How support handles chargebacks.",
+  "body": "Freeze the card, then open a dispute in the billing console."
+}
+```
+
+Creating needs `contributor` on `scope`. Add `parent` to create it under another page in the same scope, and `key` to give it a path. `key` is one segment; `parent` supplies the rest, so `"key": "escalation", "parent": "org:acme#policies"` creates `org:acme#policies/escalation`. Keys are unique among siblings and can't contain `/`, `#` or `%`:
+
+```text
+Knowledge page key "escalation" already exists under page aa8f6099-…. Keys are unique among siblings; pick another key or move one of the pages.
+```
+
+Edit a page's name, description or body:
+
+```json
+{
+  "op": "write",
+  "page": "Chargeback Playbook",
+  "body": "Freeze the card, open a dispute, and email the customer.",
+  "expectedVersion": 1
+}
+```
+
+Editing needs `editor` on the page's scope. Pass the `version` from the last read as `expectedVersion`, and the write is refused if someone changed the page since.
+
+## Move and merge pages
+
+`op: "move"` moves a page under `parent`, or to the top of `scope`:
+
+```json
+{ "op": "move", "page": "Ticket notes", "scope": "resource:dana" }
+```
+
+Moving within a scope needs `editor`. Moving to another scope needs `owner` on both. The run above owns its `thread:` and `resource:` scopes, so it can move a page from its thread to its resource. It can't move a team page into `org:acme`:
+
+```text
+Moving a page across scopes needs owner on "org:acme"; this run has editor there.
+```
+
+`op: "merge"` merges `page` into `into`, keeping both pages' notes. It needs `owner` on the scope of the page that goes away. On the scope of the page that stays it needs `editor` when both pages share a scope, and `owner` when they don't, because the merged page's children move into that scope:
+
+```json
+{ "op": "merge", "page": "Dana prefs", "into": "Ticket notes" }
+```
+
+Pages declared in a scope's `pages` [template](/docs/knowledge/scope-types#child-scopes-and-keyed-pages) belong to the config. Tools can edit them, add notes and merge other pages into them, but can't move them or merge them away:
+
+```text
+"org:acme#policies/refund" is declared in config; change the scope's pages to move it.
+```
+
+## Where writes land
+
+Writes never pick a scope for the model. `scope` always means where content is written: the home scope of a new page, the destination of a move, or the stamps on a note. Edits, merges and note removals take no `scope`; they act on the page they name, and the role check uses that page's own scope:
+
+```text
+Editing a page takes no scope, parent or key; use op "move" to relocate it.
+```
+
+The model decides who a fact is for when it writes it. A fact for the whole team goes in `team:acme:support`, and something only for this user goes in `resource:dana`.
+
+## Add notes
+
+A note is a short attributed fact on a page, about 250 tokens at most. Contributors can add notes to pages whose body they can't edit:
+
+```json
+{
+  "op": "add",
+  "page": "Chargeback Playbook",
+  "scope": ["team:acme:support"],
+  "text": "Disputes over $500 go to [[Billing Escalations]]."
+}
+```
+
+- `scope` lists the note's stamps and is required. A run can read the note when it can read the page and at least one stamp. Stamping a note on a shared page with a narrower scope keeps it private to that scope.
+- `[[Page Name]]` links another readable page. Reading `Billing Escalations` now lists this note under `mentionedIn`. Names that don't resolve stay plain text.
+- `when` records when the fact was true or observed, as an ISO 8601 date-time such as `"2026-10-29T14:30:00Z"` or a plain date such as `"2026-10-29"`.
+
+Adding a note needs `contributor` on the page's scope and on every stamp. Each note records its author as `agent:<agentId>`, or `agent` when the run has no agent ID, and the thread it came from when there is one.
+
+`op: "restamp"` replaces a note's stamps, and `op: "remove"` removes it. Both take the note ID and need `editor` on the page's scope:
+
+```json
+{ "op": "restamp", "note": "e3048fea-e80a-4c27-8c87-5179f467b04b", "scope": ["org:acme"] }
+```
+
+Removing a note and adding it again creates a new note with a new ID.
+
+## What each operation needs
+
+| Operation | Role | On |
+| - | - | - |
+| Search, read | `viewer` | The page's scope |
+| Create a page | `contributor` | `scope` |
+| Edit a page | `editor` | The page's scope |
+| Move within a scope | `editor` | The page's scope |
+| Move to another scope | `owner` | Both scopes |
+| Merge | `owner` | The page that goes away |
+| | `editor` | The page that stays, in the same scope |
+| | `owner` | The page that stays, in another scope |
+| Add a note | `contributor` | The page's scope and each stamp |
+| Restamp, remove a note | `editor` | The page's scope (and `contributor` on each new stamp) |
+| Pin, unpin | `editor` | The page's scope, plus authority over each audience |
+
+A call that's in reach but needs a stronger role names the role it needs. Tool errors come back to the model as the tool result, not as exceptions in your code:
+
+```text
+Adding a note needs contributor on "team:acme:support"; this run has viewer there.
+```
+
+## Pins
+
+`knowledge_pin` puts a page into the context of every run holding one of its audience scopes, every turn. It's available with `pinnedContext` and needs Memory. See [pins](/docs/knowledge/pins).

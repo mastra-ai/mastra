@@ -1,0 +1,326 @@
+---
+title: "Access patterns"
+description: "Knowledge scope declarations for common setups: company policies, team playbooks, private agent notes, accounts, cross-team features and public bots."
+packages:
+  - "@mastra/core"
+---
+
+# Access patterns
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+Each pattern on this page shows the part of a scope declaration it needs, which scopes each run holds, and what those runs can and can't do. All of them fit in one `Knowledge` instance, shown in full first. For how declarations work, see [declare scope types](/docs/knowledge/scope-types).
+
+## Reference setup
+
+The app vouches each run's scopes from its own user records: the org, the user's roles and teams, and Memory's `resource:` and `thread:` scopes. See [set who a run is](/docs/knowledge/run-scopes) for how to pass them.
+
+```typescript title="src/mastra/knowledge.ts"
+import { Agent } from '@mastra/core/agent'
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+
+export const knowledge = new Knowledge({
+  id: 'acme',
+  storage,
+  tools: true,
+  pinnedContext: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'role:$orgId:admin': { description: 'Org administrators' },
+    'role:$orgId:policy-admin': { description: 'Edits company policy' },
+    'role:$orgId:account-manager': { description: 'Account managers' },
+    'role:$orgId:sales': { description: 'Sales' },
+    'role:$orgId:support': {
+      description: 'Support agents',
+      access: [{ principal: 'role:$orgId:policy-admin', role: 'editor' }],
+      pins: ['policy:$orgId#refund-policy'],
+    },
+    'audience:$orgId:public': { description: 'Public-facing agents' },
+    'agent:$orgId:$agentId': {
+      description: 'Private agent notes',
+      access: [{ principal: 'self', role: 'owner' }],
+    },
+    'policy:$orgId': {
+      description: 'Company policies',
+      access: [
+        { principal: 'org:$orgId', role: 'viewer' },
+        { principal: 'role:$orgId:policy-admin', role: 'owner' },
+      ],
+      pages: [{ key: 'refund-policy', name: 'Refund Policy' }],
+    },
+    'team:$orgId:$teamId': {
+      access: [
+        { principal: 'self', role: 'editor' },
+        { principal: 'role:$orgId:admin', role: 'editor' },
+      ],
+    },
+    'team-public:$orgId:$teamId': {
+      access: [
+        { principal: 'team:$orgId:$teamId', role: 'editor' },
+        { principal: 'org:$orgId', role: 'viewer' },
+      ],
+    },
+    'account:$orgId:$accountId': {
+      access: [
+        { principal: 'role:$orgId:support', role: 'viewer' },
+        { principal: 'role:$orgId:account-manager', role: 'editor' },
+      ],
+      children: [
+        {
+          name: 'internal',
+          access: [{ principal: 'role:$orgId:account-manager', role: 'editor' }],
+        },
+      ],
+    },
+    'kb-public:$orgId': {
+      access: [
+        { principal: 'org:$orgId', role: 'contributor' },
+        { principal: 'audience:$orgId:public', role: 'viewer' },
+      ],
+    },
+    'kb-internal:$orgId': {
+      access: [{ principal: 'org:$orgId', role: 'contributor' }],
+    },
+    'feature:$orgId:$featureId': { description: 'Product features' },
+    'feature:acme:a': {
+      access: [
+        { principal: 'team:acme:eng', role: 'editor' },
+        { principal: 'team:acme:support', role: 'contributor' },
+      ],
+    },
+  },
+})
+
+export const support = new Agent({
+  id: 'support',
+  name: 'Support',
+  instructions: 'You help Acme customers.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+  memory,
+})
+
+export const faq = new Agent({
+  id: 'faq',
+  name: 'FAQ',
+  instructions: 'You answer public questions about Acme.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+  memory,
+  scopes: ({ scopes }) =>
+    scopes.flatMap(scope => {
+      if (scope.startsWith('org:')) return [`audience:${scope.slice(4)}:public`]
+      if (scope.startsWith('resource:') || scope.startsWith('thread:')) return [scope]
+      return []
+    }),
+})
+```
+
+The `support` agent uses the scopes the app vouches as they are. The `faq` agent swaps the org for a narrower public audience and drops roles and teams, see [public and internal knowledge](#public-and-internal-knowledge). It keeps the user's `resource:` and `thread:` scopes. A `scopes` function that drops them fails the run with `The agent's scopes function dropped "resource:u-42". A run keeps the "resource:" and "thread:" scopes it was given.`
+
+Every write names its scope or page. Refused calls come back to the model as tool errors, and pages a run can't read look like they don't exist.
+
+## Policies
+
+### Read-only policy for everyone, editable by admins
+
+```typescript oxfmt:false
+'policy:$orgId': {
+  access: [
+    { principal: 'org:$orgId', role: 'viewer' },
+    { principal: 'role:$orgId:policy-admin', role: 'owner' },
+  ],
+  pages: [{ key: 'refund-policy', name: 'Refund Policy' }],
+},
+```
+
+A support run holds `org:acme` and `role:acme:support`. It can find and read `policy:acme#refund-policy` but not change it:
+
+```text
+Editing a page needs editor on "policy:acme"; this run has viewer there.
+```
+
+A run that also holds `role:acme:policy-admin` owns `policy:acme` and can edit it. Every write is checked against the scope of the page it changes, so naming the page by its name or ID doesn't get around the rule.
+
+### Policy pinned for support
+
+Add the policy to the support role's `pins`, or let a policy admin pin it at runtime:
+
+```json
+{ "op": "pin", "page": "policy:acme#refund-policy", "audience": ["role:acme:support"] }
+```
+
+| Run holds | Gets the policy pinned | Can read it | Can unpin it |
+| - | - | - | - |
+| `org:acme`, `role:acme:support` | Yes | Yes | No |
+| `org:acme`, `role:acme:sales` | No | Yes | No |
+| `org:acme`, `role:acme:policy-admin` | Only if it also holds the audience | Yes | Yes, for audiences it has authority over |
+
+See [pins](/docs/knowledge/pins) for audience authority and the per-turn budget.
+
+## Teams
+
+### Team-private playbooks plus shared org knowledge
+
+```typescript oxfmt:false
+'team:$orgId:$teamId': {
+  access: [{ principal: 'self', role: 'editor' }],
+},
+```
+
+A run holding `team:acme:support` edits pages in its team scope and reads org pages through `org:acme`, which it also holds. A sales run holding `team:acme:sales` doesn't see support's playbooks: searching returns nothing, and reading one by name returns `Knowledge page "Chargeback Playbook" not found.`
+
+### An org admin who manages every team
+
+```typescript oxfmt:false
+'team:$orgId:$teamId': {
+  access: [
+    { principal: 'self', role: 'editor' },
+    { principal: 'role:$orgId:admin', role: 'editor' },
+  ],
+},
+```
+
+A run holding `role:acme:admin` edits every Acme team without listing the teams. The rule binds `$orgId`, so it never reaches a Globex team.
+
+### Teams that publish an overview for the rest of the org
+
+Declare a second type next to the private one:
+
+```typescript oxfmt:false
+'team-public:$orgId:$teamId': {
+  access: [
+    { principal: 'team:$orgId:$teamId', role: 'editor' },
+    { principal: 'org:$orgId', role: 'viewer' },
+  ],
+},
+```
+
+The support team edits `team-public:acme:support`, and every Acme run reads it. Sales can read support's overview but not change it, and nothing in `team:acme:support` becomes visible. Use a separate type rather than a child scope: children get `<parent>/<name>` addresses and their own rules, and here the public scope needs its own org-wide reader.
+
+## Agents and users
+
+### Private agent notes on a shared page
+
+```typescript oxfmt:false
+'agent:$orgId:$agentId': {
+  access: [{ principal: 'self', role: 'owner' }],
+},
+```
+
+Alex's runs hold `org:acme` and `agent:acme:alex`. Alex adds a note to an org page and stamps it with its own scope:
+
+```json
+{
+  "op": "add",
+  "page": "Billing Service",
+  "scope": ["agent:acme:alex"],
+  "text": "Retries in v2 are flaky; check [[Payments Gateway]] logs first."
+}
+```
+
+The page stays in `org:acme`. Bea, holding `org:acme` and `agent:acme:bea`, reads the page without Alex's note. Alex sees the note on the page and as a backlink on Payments Gateway. Adding the note needs `contributor` on the page's scope and on every stamp.
+
+### One agent serving many tenants
+
+Bind every scope the agent holds to the tenant. A `scopes` function on the agent can derive `agent:<id>:helper` from the run's `org:` scope, see [one agent, many tenants](/docs/knowledge/run-scopes#one-agent-many-tenants). Each tenant then gets its own agent scope, and tenants never share pages.
+
+Avoid a tenant-less scope such as `agent:helper`: it's one scope shared by every tenant the agent serves.
+
+### User preferences across threads
+
+`knowledgeMemoryScopes()` gives each run ownership of its user's `resource:` scope. Pages in `resource:u-42`, and notes stamped `resource:u-42`, follow the user across threads and stay hidden from other users.
+
+### Thread scratch work and promotion
+
+Pages the agent makes while working on one thread go in `thread:t-9`. To keep a fact past the thread, restamp the note to the user:
+
+```json
+{ "op": "restamp", "note": "n_123", "scope": ["resource:u-42"] }
+```
+
+Or move the whole page. The run owns both scopes, so the move is allowed:
+
+```json
+{ "op": "move", "page": "Scratch plan", "scope": "resource:u-42" }
+```
+
+Knowledge never moves a shared page as a side effect of writing to it.
+
+## Cross-team work and accounts
+
+### Feature knowledge across teams
+
+Declare the pattern, then give one concrete feature its own rules:
+
+```typescript oxfmt:false
+'feature:$orgId:$featureId': { description: 'Product features' },
+'feature:acme:a': {
+  access: [
+    { principal: 'team:acme:eng', role: 'editor' },
+    { principal: 'team:acme:support', role: 'contributor' },
+  ],
+},
+```
+
+Engineering writes the spec. Support adds notes to it, stamped `team:acme:support` to keep them inside the team, and can create new pages in the feature scope. Support can't change engineering's page bodies:
+
+```text
+Editing a page needs editor on "feature:acme:a"; this run has contributor there.
+```
+
+### Account facts and internal notes
+
+```typescript oxfmt:false
+'account:$orgId:$accountId': {
+  access: [
+    { principal: 'role:$orgId:support', role: 'viewer' },
+    { principal: 'role:$orgId:account-manager', role: 'editor' },
+  ],
+  children: [
+    {
+      name: 'internal',
+      access: [{ principal: 'role:$orgId:account-manager', role: 'editor' }],
+    },
+  ],
+},
+```
+
+Account managers write to `account:acme:123` and to its child `account:acme:123/internal`. Support reads the account but never sees the internal scope listed or its pages. A note support could otherwise read is hidden too when it mentions an internal page.
+
+### Temporary escalation
+
+To give a specialist access to one customer for an escalation, have the app vouch `resource:cust-7` on the specialist's escalation runs only, in place of the specialist's own `resource:` scope. A run holds one resource, see [one resource and one thread per run](/docs/knowledge/run-scopes#one-resource-and-one-thread-per-run). Nothing is stored, so access ends with those runs.
+
+## Tenants and public bots
+
+### Public and internal knowledge
+
+```typescript oxfmt:false
+'audience:$orgId:public': { description: 'Public-facing agents' },
+'kb-public:$orgId': {
+  access: [
+    { principal: 'org:$orgId', role: 'contributor' },
+    { principal: 'audience:$orgId:public', role: 'viewer' },
+  ],
+},
+'kb-internal:$orgId': {
+  access: [{ principal: 'org:$orgId', role: 'contributor' }],
+},
+```
+
+Staff runs holding `org:acme` add pages to either scope. Publishing means writing to `kb-public:acme`. The `faq` agent in the reference setup replaces its run scopes with `audience:acme:public`, so it finds `kb-public:acme` pages and never `kb-internal:acme` ones. If the app forgets to vouch an org, the `faq` agent holds only its own `resource:` and `thread:` scopes and reads no shared knowledge.
+
+Separate types keep the example readable. `kb:$orgId:public` and `kb:$orgId:internal` would also work as two patterns of one type, since they don't overlap.
+
+## Related
+
+- [Concepts](/docs/knowledge/concepts)
+- [Declare scope types](/docs/knowledge/scope-types)
+- [Set who a run is](/docs/knowledge/run-scopes)
+- [Use the Knowledge tools](/docs/knowledge/agents-and-tools)
+- [Pins](/docs/knowledge/pins)
