@@ -935,10 +935,18 @@ export class AgentThreadStreamRuntime {
   async #hasLiveThreadLease(pubsub: PubSub, key: string, runId: string): Promise<boolean> {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return true;
-    return provider
-      .getLeaseOwner(key)
-      .then(owner => owner === runId)
-      .catch(() => false);
+    // Subscribers process events in order, so a read that never answers would hold every later event, and
+    // initial history waits on those events. An unanswered read counts as no lease, like a failed one.
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      provider
+        .getLeaseOwner(key)
+        .then(owner => owner === runId)
+        .catch(() => false),
+      new Promise<boolean>(
+        resolve => (giveUp = setTimeout(() => resolve(false), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+      ),
+    ]).finally(() => clearTimeout(giveUp));
   }
 
   /**

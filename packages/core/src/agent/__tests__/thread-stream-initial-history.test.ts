@@ -155,6 +155,33 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  // A remote run-registered event in the retained backlog checks the lease too, and history waits for events
+  // already delivered, so that read must not hold the subscription open either.
+  it('opens on a stalled lease read with a remote run registration in the backlog', async () => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    await emitRun(runId, streamId).registered();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      vi.spyOn(pubsub, 'getLeaseOwner').mockReturnValue(new Promise(() => {}));
+      let opened = false;
+      const subscribing = subscribe().then(result => {
+        opened = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS * 2);
+      expect(opened).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      vi.useRealTimers();
+      const { subscription, collected, consumed } = await subscribing;
+      await nextTicks(10);
+      expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: null } });
+      subscription.unsubscribe();
+      await consumed;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('delivers deferred output before its outcome and keeps serving later runs', async () => {
     const { emit, subscribe } = setup(() => []);
     const { subscription, collected, consumed } = await subscribe(false);
