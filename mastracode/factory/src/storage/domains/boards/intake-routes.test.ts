@@ -249,6 +249,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     ]).toContainEqual(final);
   });
 
+  it('keeps positions whole when clients add, delete and reorder routes at once', async () => {
+    const { boards, scope, secondClient } = await setup();
+    const other = await secondClient();
+    for (const name of ['a', 'b', 'c']) await boards.createIntakeRoute(scope, route(name), 'u');
+    const [a, b] = await boards.listIntakeRoutes(scope);
+
+    await Promise.all([
+      ...['x', 'y', 'z', 'w'].map((name, index) =>
+        (index % 2 ? other : boards).createIntakeRoute(scope, route(name), 'u'),
+      ),
+      other.deleteIntakeRoute(scope, b!.id, { expectedRevision: 1 }),
+      boards.updateIntakeRoute(scope, a!.id, { name: 'a2' }, { expectedRevision: 1, actor: 'u' }),
+    ]);
+
+    // `names` checks the positions run 0..n-1.
+    expect((await names(boards, scope)).sort()).toEqual(['a2', 'c', 'w', 'x', 'y', 'z']);
+  });
+
   it('leaves the board definition version alone', async () => {
     const { boards, scope } = await setup();
     const created = await boards.createIntakeRoute(scope, route('a'), 'u');

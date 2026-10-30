@@ -8,6 +8,7 @@ import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
   FACTORY_BOARD_PHASES_SCHEMA,
   FACTORY_BOARDS_SCHEMA,
+  FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA,
   FACTORY_INTAKE_ROUTES_SCHEMA,
 } from './schemas.js';
 
@@ -199,6 +200,7 @@ const BOARDS = 'factory_boards';
 const PHASES = 'factory_board_phases';
 const VERSIONS = 'factory_board_definition_versions';
 const INTAKE_ROUTES = 'factory_intake_routes';
+const INTAKE_ROUTE_LOCKS = 'factory_intake_route_locks';
 const MAX_WRITE_ATTEMPTS = 3;
 
 function scopeWhere({ orgId, factoryProjectId }: StoredBoardScope) {
@@ -257,6 +259,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       FACTORY_BOARD_PHASES_SCHEMA,
       FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
       FACTORY_INTAKE_ROUTES_SCHEMA,
+      FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA,
     ]);
   }
 
@@ -265,6 +268,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await this.ops.deleteMany(BOARDS, {});
     await this.ops.deleteMany(VERSIONS, {});
     await this.ops.deleteMany(INTAKE_ROUTES, {});
+    await this.ops.deleteMany(INTAKE_ROUTE_LOCKS, {});
   }
 
   /** The project's current definition version; null before its first board write. */
@@ -360,8 +364,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     actor: string,
   ): Promise<StoredIntakeRouteRecord> {
     const id = randomUUID();
+    await ensureIntakeRouteLockRow(this.ops, scope);
     await this.#transact(async ops => {
-      const rows = await readIntakeRoutes(ops, scope);
+      const rows = await lockIntakeRoutes(ops, scope);
       const now = new Date();
       await ops.insertOne<IntakeRouteRow>(INTAKE_ROUTES, {
         id,
@@ -410,21 +415,27 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
 
   /** Deletes a route; the routes after it move up one place. */
   async deleteIntakeRoute(scope: StoredBoardScope, id: string, options: { expectedRevision: number }): Promise<void> {
+    await ensureIntakeRouteLockRow(this.ops, scope);
     await this.#transact(async ops => {
-      const row = await findIntakeRoute(ops, scope, id);
+      const rows = await lockIntakeRoutes(ops, scope);
+      const row = rows.find(route => route.id === id);
+      if (!row) throw intakeRouteNotFound(id);
       checkIntakeRouteRevision(row, options.expectedRevision);
       if ((await ops.deleteMany(INTAKE_ROUTES, { id: row.id, revision: row.revision })) === 0) {
         throw new ConcurrentBoardWrite();
       }
-      const rest = (await readIntakeRoutes(ops, scope)).filter(route => route.id !== row.id);
-      await placeIntakeRoutes(ops, rest);
+      await placeIntakeRoutes(
+        ops,
+        rows.filter(route => route.id !== row.id),
+      );
     });
   }
 
   /** Puts the project's routes in the order of `ids`, which must name every route exactly once. */
   async reorderIntakeRoutes(scope: StoredBoardScope, ids: string[], actor: string): Promise<StoredIntakeRouteRecord[]> {
+    await ensureIntakeRouteLockRow(this.ops, scope);
     await this.#transact(async ops => {
-      const rows = await readIntakeRoutes(ops, scope);
+      const rows = await lockIntakeRoutes(ops, scope);
       const byId = new Map(rows.map(row => [row.id, row]));
       if (ids.length !== rows.length || new Set(ids).size !== ids.length || ids.some(id => !byId.has(id))) {
         throw new StoredBoardError(
@@ -630,10 +641,12 @@ async function readIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope)
 
 async function findIntakeRoute(ops: FactoryStorageOps, scope: StoredBoardScope, id: string): Promise<IntakeRouteRow> {
   const row = await ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { ...scopeWhere(scope), id });
-  if (!row) {
-    throw new StoredBoardError('intake_route_not_found', `Intake route "${id}" does not exist in this project.`);
-  }
+  if (!row) throw intakeRouteNotFound(id);
   return row;
+}
+
+function intakeRouteNotFound(id: string): StoredBoardError {
+  return new StoredBoardError('intake_route_not_found', `Intake route "${id}" does not exist in this project.`);
 }
 
 function checkIntakeRouteRevision(row: IntakeRouteRow, expectedRevision: number): void {
@@ -665,13 +678,33 @@ async function updateIntakeRouteRow(
  * Gives `rows` the positions 0..n-1 in the order given. Rows that move park at a negative
  * position first, so no two rows share a position mid-way and the unique index stays satisfied.
  */
-async function placeIntakeRoutes(ops: FactoryStorageOps, rows: IntakeRouteRow[], actor?: string): Promise<void> {
-  // Lock every route first, always in id order, so two moves on one project queue instead of
-  // deadlocking on rows and parked positions they would otherwise take in different orders.
-  for (const row of [...rows].sort((left, right) => left.id.localeCompare(right.id))) {
-    if ((await ops.updateMany(INTAKE_ROUTES, { id: row.id, revision: row.revision }, { revision: row.revision })) !== 1)
-      throw new ConcurrentBoardWrite();
+/**
+ * Creates the project's route lock row (see `FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA`). Runs outside the
+ * write's transaction: a racing insert would abort a Postgres transaction, and the lock taken
+ * inside it must always be an update.
+ */
+async function ensureIntakeRouteLockRow(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<void> {
+  if (await ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope))) return;
+  try {
+    await ops.insertOne(INTAKE_ROUTE_LOCKS, { ...scopeWhere(scope), locked_at: new Date() });
+  } catch (error) {
+    if (!(error instanceof UniqueViolationError)) throw error;
   }
+}
+
+/**
+ * Takes the project's route lock and reads the routes. Writes that add, delete or move routes
+ * call this first, so they run one after another and each reads what the one before committed.
+ */
+async function lockIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<IntakeRouteRow[]> {
+  if ((await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { locked_at: new Date() })) !== 1) {
+    throw new ConcurrentBoardWrite();
+  }
+  return readIntakeRoutes(ops, scope);
+}
+
+/** Moves routes, read under the project's route lock, to the positions of their order in `rows`. */
+async function placeIntakeRoutes(ops: FactoryStorageOps, rows: IntakeRouteRow[], actor?: string): Promise<void> {
   const moving = rows.flatMap((row, position) => (row.position === position ? [] : [{ row, position }]));
   const parked = [];
   for (const [index, { row, position }] of moving.entries()) {
