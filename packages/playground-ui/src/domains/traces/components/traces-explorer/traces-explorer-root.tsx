@@ -109,9 +109,13 @@ export function TracesExplorerRoot({
   const withTimeToFirstChunk = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
   const withTimeToFirstChunkSort =
     withTimeToFirstChunk && (capabilities?.capabilities.traceQueryTimeToFirstChunkSort ?? false);
+  const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(() => sanitizeTracesFilters(rawFilters, withRootDuration), [rawFilters, withRootDuration]);
+  const filters = useMemo(
+    () => sanitizeTracesFilters(rawFilters, withRootDuration, withOutcomeFields),
+    [rawFilters, withRootDuration, withOutcomeFields],
+  );
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -215,6 +219,7 @@ export function TracesExplorerRoot({
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
       withDeltaPolling,
@@ -232,6 +237,7 @@ export function TracesExplorerRoot({
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
       withDeltaPolling,

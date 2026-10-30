@@ -52,6 +52,18 @@ const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.incl
 export const timeToFirstTokenSupported = 'timeToFirstTokenMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
 const timeToFirstTokenSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstTokenMs') === true;
 
+/**
+ * Outcome fields follow the same rule: core before them rejects their predicates and strict rows,
+ * so they are only returned and declared when core knows them.
+ */
+export const spanQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {});
+export const traceQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+
+export const outcomeFeatures = [
+  ...(spanQueryOutcomeFieldsSupported ? (['span-query-outcome-fields'] as const) : []),
+  ...(traceQueryOutcomeFieldsSupported ? (['trace-query-outcome-fields'] as const) : []),
+];
+
 export const timingFeatures = [
   ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
   ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
@@ -103,6 +115,8 @@ const TRACE_FIELDS = {
   spanType: 'r."spanType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  outcome: 'r."outcome"',
+  stopReason: 'r."stopReason"',
   tags: 'r."tags"',
 } satisfies FieldRegistry<TraceQueryField>;
 
@@ -117,6 +131,8 @@ const SPAN_FIELDS = {
   timeToFirstChunkMs: 's."timeToFirstChunkMs"',
   timeToFirstTokenMs: 's."timeToFirstTokenMs"',
   status: 's."status"',
+  outcome: 's."outcome"',
+  stopReason: 's."stopReason"',
   error: 's."error"',
   entityType: 's."entityType"',
   entityId: 's."entityId"',
@@ -195,7 +211,10 @@ const TRACE_SELECT = `
   r."entityName" AS "entityName",
   r."entityType" AS "entityType",
   r."environment" AS "environment",
-  ${TRACE_STATUS_SQL} AS "status"`;
+  ${TRACE_STATUS_SQL} AS "status",
+  r."outcome" AS "outcome",
+  r."stopReason" AS "stopReason",
+  r."stopReasonContext" AS "stopReasonContext"`;
 
 function fieldSql<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
@@ -646,6 +665,8 @@ function compilePostgresTraceScope(
       s."timeToFirstChunkMs",
       s."timeToFirstTokenMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
+      s."outcome",
+      s."stopReason",
       s."error",
       s."entityType",
       s."entityId",
@@ -1127,6 +1148,11 @@ function traceRowToResult(row: Record<string, unknown>) {
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
+    ...(traceQueryOutcomeFieldsSupported && {
+      outcome: row.outcome == null ? null : String(row.outcome),
+      stopReason: row.stopReason == null ? null : String(row.stopReason),
+      stopReasonContext: (row.stopReasonContext ?? null) as Record<string, unknown> | null,
+    }),
   };
 }
 

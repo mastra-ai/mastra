@@ -45,10 +45,11 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
 
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
 
   const where = useMemo(
-    () => buildSpanQueryWhere(tokens, groups, { withContextFields }),
-    [tokens, groups, withContextFields],
+    () => buildSpanQueryWhere(tokens, groups, { withContextFields, withOutcomeFields }),
+    [tokens, groups, withContextFields, withOutcomeFields],
   );
   const query = useMemo<SpanQueryArgs>(
     () => ({ timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) }),

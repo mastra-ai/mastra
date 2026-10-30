@@ -3710,6 +3710,13 @@ type Shared_Type_64 = {
   status: 'success' | 'error';
   timeToFirstChunkMs?: (number | null) | undefined;
   timeToFirstTokenMs?: (number | null) | undefined;
+  outcome?: (string | null) | undefined;
+  stopReason?: (string | null) | undefined;
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3829,6 +3836,10 @@ type Shared_Type_67 = {
   spanQueryContextFields: boolean;
   /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
   spanQueryModelFields: boolean;
+  /** `outcome` and `stopReason` predicates in span queries and span aggregates (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows. Treat a missing value as unavailable. */
+  spanQueryOutcomeFields: boolean;
+  /** The root span's `outcome` and `stopReason` in trace-scope predicates and trace aggregates, both fields in `spans.some`/`spans.none` predicates and value discovery, and the root span's `outcome`, `stopReason` and `stopReasonContext` on trace rows. Treat a missing value as unavailable. */
+  traceQueryOutcomeFields: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
@@ -11010,6 +11021,13 @@ export type PostObservabilitySpansQuery_Response = {
     errorPreview: string | null;
     timeToFirstChunkMs?: (number | null) | undefined;
     timeToFirstTokenMs?: (number | null) | undefined;
+    outcome?: (string | null) | undefined;
+    stopReason?: (string | null) | undefined;
+    stopReasonContext?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
   }[];
   page: {
     next: string | null;

@@ -1,0 +1,363 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { MCPToolType } from '@mastra/core/tools';
+import { DEFAULT_TASK_TTL_MS, taskKeyOf } from '../../shared/tasks';
+import type { MCPDetailedTask } from '../../shared/tasks';
+import { InMemoryMCPTaskStore } from './in-memory-store';
+import type {
+  MCPTaskAccess,
+  MCPTaskCreateParams,
+  MCPTaskLimits,
+  MCPTaskRunOptions,
+  MCPTaskStore,
+  MCPTaskWork,
+} from './store';
+
+/**
+ * How a tool answers `tools/call` for a client that declared the Tasks extension.
+ *
+ * - `'off'`: always answers synchronously.
+ * - `'always'`: answers with a task straight away.
+ * - `'auto'`: answers synchronously when the tool finishes within `syncWindowMs`, and with a task otherwise.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export type MCPServerTaskMode = 'off' | 'auto' | 'always';
+
+/** @experimental SEP-2663 extension; API may change. */
+export interface MCPServerToolTaskConfig {
+  mode: MCPServerTaskMode;
+  /** For `'auto'`: how long to wait for a synchronous answer, in ms. Default 2000. */
+  syncWindowMs?: number;
+  /** Overrides `tasks.ttlMs` for this tool's tasks. */
+  ttlMs?: number | null;
+  /** Overrides `tasks.recover` for this tool's tasks. */
+  recover?: boolean;
+}
+
+/**
+ * What `tasks.authorize` receives on every `tasks/get`, `tasks/update` and `tasks/cancel`.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export interface MCPServerTaskAuthorizeContext {
+  /** The caller, already matched against the principal the task was created by. */
+  principal: string;
+  task: MCPDetailedTask;
+  /** The caller's request context, including `user` when the server maps one from the request's auth info. */
+  requestContext: RequestContext;
+}
+
+/**
+ * Serves `tools/call` as MCP Tasks (`io.modelcontextprotocol/tasks`) for the tools you opt in.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export interface MCPServerTasksOptions {
+  /** Mode for tools not listed in `tools`. Default `'off'`. */
+  default?: MCPServerTaskMode;
+  /** Per-tool mode, keyed by tool name. */
+  tools?: Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
+  /** Tasks for workflows are not supported yet. */
+  workflows?: never;
+  /** Tasks for agents are not supported yet. */
+  agents?: never;
+  /**
+   * Tools that only run as tasks: a client that did not declare the Tasks extension gets a -32021
+   * error instead of a synchronous answer.
+   */
+  required?: string[];
+  /** How long a task is kept from creation, in ms; `null` keeps it until the server closes. Default 24 hours. */
+  ttlMs?: number | null;
+  /**
+   * Whether a task whose server crashed or restarted mid-attempt runs the tool again from the start.
+   * Only applies to stores that outlive a process (Mastra background tasks). Only turn this on for
+   * idempotent tools: `execute` may run twice. When off, such a task fails as lost. Default `false`.
+   */
+  recover?: boolean;
+  /**
+   * Where tasks are kept. By default, Mastra's background tasks when the server is registered on a
+   * Mastra instance with `backgroundTasks` enabled and storage that supports task expiry, so every
+   * instance sharing that storage serves the same tasks. Otherwise an {@link InMemoryMCPTaskStore},
+   * which serves a single instance.
+   */
+  store?: MCPTaskStore;
+  /**
+   * Most open (`working` or `input_required`) tasks one client may hold. Past it, a call that
+   * would start a task answers with `isError: true` instead. Default 100, or
+   * `maxRetainedTasksPerClient` when that is lower. A custom `store` that ignores `limits` in
+   * `create` enforces no cap.
+   */
+  maxOpenTasksPerClient?: number;
+  /**
+   * Most open tasks across all clients. Default 1000, or `maxRetainedTasks` when that is lower.
+   * Enforced the same way as `maxOpenTasksPerClient`.
+   */
+  maxOpenTasks?: number;
+  /**
+   * Most tasks one client may have in the store, open or finished, until each is forgotten
+   * (`ttlMs` plus a short retention). The in-memory store keeps finished results until then, so
+   * this bounds its memory when a client runs many short tasks. Past it, a call that would start a
+   * task answers like at the open cap. Default 1000, or `maxOpenTasksPerClient` when that is
+   * higher; setting it below `maxOpenTasksPerClient` throws. Only the in-memory store enforces it.
+   */
+  maxRetainedTasksPerClient?: number;
+  /**
+   * Most tasks in the store across all clients, open or finished. Default 10000, or `maxOpenTasks`
+   * when that is higher. Enforced the same way as `maxRetainedTasksPerClient`.
+   */
+  maxRetainedTasks?: number;
+  /**
+   * Decides whether the caller may read, answer or cancel a task. Tasks are always bound to the
+   * principal that created them; this narrows access further. A refusal answers as an unknown task.
+   */
+  authorize?: (context: MCPServerTaskAuthorizeContext) => boolean | Promise<boolean>;
+}
+
+/** How one tool is served as a task. */
+export interface ResolvedToolTaskMode {
+  mode: MCPServerTaskMode;
+  syncWindowMs: number;
+  ttlMs: number | null;
+  recover: boolean;
+}
+
+export interface ResolvedTasksConfig {
+  /** Whether any tool can answer with a task; gates the capability and the `tasks/*` handlers. */
+  enabled: boolean;
+  /** The store passed in, if any. */
+  store?: MCPTaskStore;
+  limits: MCPTaskLimits;
+  required: ReadonlySet<string>;
+  authorize?: MCPServerTasksOptions['authorize'];
+  modeFor(name: string, toolType: MCPToolType | undefined): ResolvedToolTaskMode;
+}
+
+const MODES: readonly MCPServerTaskMode[] = ['off', 'auto', 'always'];
+const DEFAULT_SYNC_WINDOW_MS = 2_000;
+const DEFAULT_MAX_OPEN_TASKS_PER_CLIENT = 100;
+const DEFAULT_MAX_OPEN_TASKS = 1_000;
+const DEFAULT_MAX_RETAINED_TASKS_PER_CLIENT = 1_000;
+const DEFAULT_MAX_RETAINED_TASKS = 10_000;
+
+function invalid(text: string): MastraError {
+  return new MastraError({
+    id: 'MCP_SERVER_TASKS_INVALID_CONFIG',
+    domain: ErrorDomain.MCP,
+    category: ErrorCategory.USER,
+    text,
+  });
+}
+
+function assertMode(owner: string, mode: unknown): asserts mode is MCPServerTaskMode {
+  if (!MODES.includes(mode as MCPServerTaskMode)) {
+    throw invalid(`${owner} has an unknown task mode "${String(mode)}"; use 'off', 'auto' or 'always'.`);
+  }
+}
+
+function assertDuration(owner: string, value: number | null | undefined): void {
+  if (value === null || value === undefined) return;
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw invalid(`${owner} must be a non-negative integer number of milliseconds, got ${value}.`);
+  }
+}
+
+function assertBoolean(owner: string, value: unknown): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw invalid(`${owner} must be a boolean, got ${String(value)}.`);
+  }
+}
+
+function positiveInteger(owner: string, value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value) || value < 1) throw invalid(`${owner} must be a positive integer, got ${value}.`);
+  return value;
+}
+
+/**
+ * Resolves an open cap and the retained cap that contains it. Every open task is also retained, so
+ * an unset cap follows the one that was set, and setting both with retained below open is refused.
+ */
+function caps(
+  [openName, open, defaultOpen]: [string, number | undefined, number],
+  [retainedName, retained, defaultRetained]: [string, number | undefined, number],
+): [open: number, retained: number] {
+  const openCap = positiveInteger(openName, open);
+  const retainedCap = positiveInteger(retainedName, retained);
+  if (openCap !== undefined && retainedCap !== undefined && retainedCap < openCap) {
+    throw invalid(`${retainedName} (${retainedCap}) must be at least ${openName} (${openCap}).`);
+  }
+  return [
+    openCap ?? Math.min(defaultOpen, retainedCap ?? defaultOpen),
+    retainedCap ?? Math.max(defaultRetained, openCap ?? 0),
+  ];
+}
+
+/** Validates `tasks` against the configured tools. Throws on anything a server could not serve. */
+export function resolveTasksConfig(
+  options: MCPServerTasksOptions | undefined,
+  toolNames: readonly string[],
+): ResolvedTasksConfig {
+  const config = options ?? {};
+  // TODO(MCP Tasks PR 4): serve workflows (`run_*`) as tasks.
+  if (config.workflows !== undefined) throw invalid('tasks.workflows is not supported yet.');
+  // TODO(MCP Tasks PR 5): serve agents (`ask_*`) as tasks.
+  if (config.agents !== undefined) throw invalid('tasks.agents is not supported yet.');
+
+  const defaultMode = config.default ?? 'off';
+  assertMode('tasks.default', defaultMode);
+  assertDuration('tasks.ttlMs', config.ttlMs);
+  const ttlMs = config.ttlMs === undefined ? DEFAULT_TASK_TTL_MS : config.ttlMs;
+  assertBoolean('tasks.recover', config.recover);
+  const recover = config.recover ?? false;
+  const [perPrincipal, retainedPerPrincipal] = caps(
+    ['tasks.maxOpenTasksPerClient', config.maxOpenTasksPerClient, DEFAULT_MAX_OPEN_TASKS_PER_CLIENT],
+    ['tasks.maxRetainedTasksPerClient', config.maxRetainedTasksPerClient, DEFAULT_MAX_RETAINED_TASKS_PER_CLIENT],
+  );
+  const [total, retainedTotal] = caps(
+    ['tasks.maxOpenTasks', config.maxOpenTasks, DEFAULT_MAX_OPEN_TASKS],
+    ['tasks.maxRetainedTasks', config.maxRetainedTasks, DEFAULT_MAX_RETAINED_TASKS],
+  );
+  const limits: MCPTaskLimits = { perPrincipal, total, retainedPerPrincipal, retainedTotal };
+
+  const known = new Set(toolNames);
+  const perTool = new Map<string, ResolvedToolTaskMode>();
+  for (const [name, entry] of Object.entries(config.tools ?? {})) {
+    if (!known.has(name)) throw invalid(`tasks.tools names "${name}", which is not one of this server's tools.`);
+    const tool = typeof entry === 'string' ? { mode: entry } : entry;
+    assertMode(`tasks.tools.${name}`, tool.mode);
+    assertDuration(`tasks.tools.${name}.syncWindowMs`, tool.syncWindowMs);
+    assertDuration(`tasks.tools.${name}.ttlMs`, tool.ttlMs);
+    assertBoolean(`tasks.tools.${name}.recover`, tool.recover);
+    perTool.set(name, {
+      mode: tool.mode,
+      syncWindowMs: tool.syncWindowMs ?? DEFAULT_SYNC_WINDOW_MS,
+      ttlMs: tool.ttlMs === undefined ? ttlMs : tool.ttlMs,
+      recover: tool.recover ?? recover,
+    });
+  }
+  const fallback: ResolvedToolTaskMode = {
+    mode: defaultMode,
+    syncWindowMs: DEFAULT_SYNC_WINDOW_MS,
+    ttlMs,
+    recover,
+  };
+  const off: ResolvedToolTaskMode = { ...fallback, mode: 'off' };
+  const modeFor = (name: string, toolType: MCPToolType | undefined) =>
+    // Agent and workflow tools stay synchronous until they are served as tasks of their own.
+    toolType ? off : (perTool.get(name) ?? fallback);
+
+  const required = new Set(config.required ?? []);
+  for (const name of required) {
+    if (!known.has(name)) throw invalid(`tasks.required names "${name}", which is not one of this server's tools.`);
+    if (modeFor(name, undefined).mode === 'off') {
+      throw invalid(`tasks.required names "${name}", which is not served as a task.`);
+    }
+  }
+
+  const enabled = defaultMode !== 'off' || [...perTool.values()].some(tool => tool.mode !== 'off');
+  return {
+    enabled,
+    store: config.store,
+    limits,
+    required,
+    authorize: config.authorize,
+    modeFor,
+  };
+}
+
+/**
+ * Picks the store on first use, once the server knows whether it runs on a Mastra instance with
+ * durable background tasks. `run` follows the `create` it pairs with, so the choice is made by then.
+ */
+export class SelectingMCPTaskStore implements MCPTaskStore {
+  readonly #select: () => Promise<MCPTaskStore>;
+  #selecting?: Promise<MCPTaskStore>;
+  #selected?: MCPTaskStore;
+  /** In-memory stores chosen before a later registration on Mastra, still serving the tasks created on them. */
+  readonly #earlier: InMemoryMCPTaskStore[] = [];
+
+  constructor(select: () => Promise<MCPTaskStore>) {
+    this.#select = select;
+  }
+
+  /** The chosen store, choosing it if no task request has yet. */
+  resolve(): Promise<MCPTaskStore> {
+    return this.#store();
+  }
+
+  /**
+   * Chooses again on next use, for a server registered on Mastra after it served tasks. An
+   * in-memory store chosen before keeps the tasks created on it and goes on serving them.
+   */
+  reselect(): void {
+    const chosen = this.#selected;
+    if (chosen) {
+      if (!(chosen instanceof InMemoryMCPTaskStore)) return;
+      this.#earlier.push(chosen);
+      this.#selected = undefined;
+      this.#selecting = undefined;
+      return;
+    }
+    const choosing = this.#selecting;
+    if (!choosing) return;
+    // A choice still in flight was made without Mastra: set it aside once made, and choose again.
+    const next = choosing.then(() => {
+      this.reselect();
+      return this.#store();
+    });
+    next.catch(() => {});
+    this.#selecting = next;
+  }
+
+  /** Cancels the work of the in-memory stores it chose; a background-task store is closed by the server. */
+  close(): void {
+    for (const store of [...this.#earlier.splice(0), this.#selected]) {
+      if (store instanceof InMemoryMCPTaskStore) store.close();
+    }
+  }
+
+  /** The store that holds this task: an earlier in-memory store that created it, else the chosen one. */
+  #storeOf(taskId: string): Promise<MCPTaskStore> {
+    const earlier = this.#earlier.find(store => store.has(taskId));
+    return earlier ? Promise.resolve(earlier) : this.#store();
+  }
+
+  #store(): Promise<MCPTaskStore> {
+    // A failed choice (e.g. storage briefly unreachable) is not remembered: the next request chooses again.
+    this.#selecting ??= this.#select().then(
+      store => (this.#selected = store),
+      error => {
+        this.#selecting = undefined;
+        throw error;
+      },
+    );
+    return this.#selecting;
+  }
+
+  async create(params: MCPTaskCreateParams) {
+    return (await this.#store()).create(params);
+  }
+
+  async get(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).get(taskId, access);
+  }
+
+  async update(taskId: string, inputResponses: Parameters<MCPTaskStore['update']>[1], access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).update(taskId, inputResponses, access);
+  }
+
+  async cancel(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).cancel(taskId, access);
+  }
+
+  async traceOf(taskId: string, access: MCPTaskAccess) {
+    return (await this.#storeOf(taskId)).traceOf?.(taskId, access);
+  }
+
+  run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void {
+    const store = this.#earlier.find(earlier => earlier.has(taskId)) ?? this.#selected;
+    if (!store) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
+    store.run(taskId, work, options);
+  }
+}

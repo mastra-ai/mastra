@@ -10,11 +10,13 @@ import type {
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 import { BRANCH_SPAN_TYPE_VALUES, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES } from './ddl';
+import { parseJson } from './helpers';
 import { buildSpanQueryResponse } from './preview-compat';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import {
   compileSpanQueryPredicate,
   runWithClickHouseTraceQueryTimeout,
+  spanQueryOutcomeFieldsSupported,
   timeToFirstChunkSupported,
   timeToFirstTokenSupported,
 } from './trace-query';
@@ -58,6 +60,9 @@ const displayFields = [
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
   'status',
+  'outcome',
+  'stopReason',
+  'stopReasonContext',
 ];
 
 class Parameters {
@@ -214,6 +219,8 @@ export const TRACE_BRANCHES_SPAN_FIELD_COLUMNS: Readonly<Record<string, readonly
       'rootEntityVersionId',
       'model',
       'provider',
+      'outcome',
+      'stopReason',
     ].map(field => [field, sameColumn(field)]),
   ),
   status: ['error'],
@@ -407,6 +414,9 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
       errorPreview: _error,
       timeToFirstChunkMs,
       timeToFirstTokenMs,
+      outcome,
+      stopReason,
+      stopReasonContext,
       ...metadata
     } = row;
     return [
@@ -419,6 +429,11 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
         }),
         ...(timeToFirstTokenSupported && {
           timeToFirstTokenMs: timeToFirstTokenMs == null ? null : Number(timeToFirstTokenMs),
+        }),
+        ...(spanQueryOutcomeFieldsSupported && {
+          outcome: outcome ?? null,
+          stopReason: stopReason ?? null,
+          stopReasonContext: (parseJson(stopReasonContext) ?? null) as Record<string, unknown> | null,
         }),
       },
     ];

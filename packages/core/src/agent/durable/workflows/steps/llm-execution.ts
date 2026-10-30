@@ -1972,7 +1972,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // current step is honoured, instead of being silently skipped.
                 const transformTools = currentTools as unknown as Record<string, CoreTool> | undefined;
                 let deferredEnrichedChunk: typeof rawChunk | undefined;
-                if (rawChunk.type === 'tool-result' && rawChunk.payload && 'result' in (rawChunk.payload as any)) {
+                // Partial provider results (e.g. OpenAI image_generation partial images) are only
+                // streamed; the final result is processed, saved and ends the provider span.
+                if (
+                  rawChunk.type === 'tool-result' &&
+                  rawChunk.payload &&
+                  !rawChunk.payload.preliminary &&
+                  'result' in (rawChunk.payload as any)
+                ) {
                   const resultPayload = rawChunk.payload as any;
                   const resultToolDef = resolveToolDef(resultPayload.toolName);
                   const resultProviderExecuted = inferProviderExecuted(resultPayload.providerExecuted, resultToolDef);
@@ -2336,6 +2343,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-result': {
                     const payload = rawChunk.payload as any;
+                    if (payload.preliminary) break;
                     // The result determines which MODEL_STEP owns the provider tool call, so
                     // the PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
                     const pending = pendingProviderToolCallsByToolCallId.get(payload.toolCallId);

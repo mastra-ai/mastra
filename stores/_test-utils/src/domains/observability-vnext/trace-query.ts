@@ -77,6 +77,9 @@ export interface RawTraceQuerySpan {
   /** Dedicated span columns. Trace predicates fall back to string `attributes.model` / `attributes.provider`; span-query predicates read only the columns. */
   model?: string | null;
   provider?: string | null;
+  outcome?: string | null;
+  stopReason?: string | null;
+  stopReasonContext?: Record<string, unknown> | null;
 }
 
 export interface RawTraceQueryScore {
@@ -235,10 +238,16 @@ const feedbackReplacementRoot = (traceId: string, startedAt: string): RawTraceQu
     endedAt: new Date(new Date(startedAt).getTime() + 1000).toISOString(),
   });
 
+const quantified = (
+  quantifier: 'some' | 'none',
+  predicate: TraceQueryScalarPredicate,
+): { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } =>
+  quantifier === 'some' ? { some: predicate } : { none: predicate };
+
 const feedbackReplacementRequest = (
   traceId: string,
   quantifier: 'some' | 'none',
-  predicate: TraceQueryPredicate,
+  predicate: TraceQueryScalarPredicate,
   timeRange = feedbackReplacementRange,
 ): TraceQueryRequest => ({
   timeRange,
@@ -246,14 +255,14 @@ const feedbackReplacementRequest = (
     op: 'and',
     args: [
       { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
-      { feedback: { [quantifier]: predicate } },
+      { feedback: quantified(quantifier, predicate) },
     ],
   },
 });
 
 const feedbackReplacementAssertions = (args: {
-  oldPredicate: TraceQueryPredicate;
-  currentPredicate: TraceQueryPredicate;
+  oldPredicate: TraceQueryScalarPredicate;
+  currentPredicate: TraceQueryScalarPredicate;
   oldTraceId?: string;
   currentTraceId?: string;
   currentIsCorrelated?: boolean;
@@ -296,13 +305,13 @@ const feedbackReplacementAssertions = (args: {
   ];
 };
 
-const feedbackSourcePredicate = (value: string): TraceQueryPredicate => ({
+const feedbackSourcePredicate = (value: string): TraceQueryScalarPredicate => ({
   op: 'eq',
   left: { path: 'feedbackSource' },
   right: { literal: value },
 });
 
-const feedbackValuePredicate = (value: string | number): TraceQueryPredicate => ({
+const feedbackValuePredicate = (value: string | number): TraceQueryScalarPredicate => ({
   op: 'eq',
   left: { path: 'value' },
   right: { literal: value },
@@ -1456,19 +1465,19 @@ export interface TraceQueryConformanceCase {
 const scoreReplacementRequest = (
   traceId: string,
   quantifier: 'some' | 'none',
-  predicate: TraceQueryPredicate,
+  predicate: TraceQueryScalarPredicate,
 ): TraceQueryRequest => ({
   timeRange: fullRange,
   where: {
     op: 'and',
     args: [
       { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
-      { scores: { [quantifier]: predicate } },
+      { scores: quantified(quantifier, predicate) },
     ],
   },
 });
 
-const scoreAboveHalf: TraceQueryPredicate = {
+const scoreAboveHalf: TraceQueryScalarPredicate = {
   op: 'gt',
   left: { path: 'score' },
   right: { literal: 0.5 },
@@ -3206,6 +3215,8 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
     status: span.error === null ? 'success' : 'error',
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
     error: span.error,
     entityType: span.entityType,
     entityId: span.entityId,
@@ -3264,6 +3275,10 @@ export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: Tra
       return root.sessionId ?? null;
     case 'experimentId':
       return root.experimentId ?? null;
+    case 'outcome':
+      return root.outcome ?? null;
+    case 'stopReason':
+      return root.stopReason ?? null;
   }
 }
 
@@ -3294,6 +3309,8 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     spanType: traceQueryDimensionValue(root, 'spanType'),
     environment: traceQueryDimensionValue(root, 'environment'),
     status: traceQueryDimensionValue(root, 'status'),
+    outcome: traceQueryDimensionValue(root, 'outcome'),
+    stopReason: traceQueryDimensionValue(root, 'stopReason'),
     tags: root.tags,
     ...metadata,
   };
@@ -3321,6 +3338,9 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     status: root.error === null ? 'success' : 'error',
     timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
     timeToFirstTokenMs: root.timeToFirstTokenMs ?? null,
+    outcome: root.outcome ?? null,
+    stopReason: root.stopReason ?? null,
+    stopReasonContext: root.stopReasonContext ?? null,
   };
 }
 
