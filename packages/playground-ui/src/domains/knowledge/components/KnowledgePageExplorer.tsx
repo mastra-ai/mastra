@@ -657,7 +657,11 @@ export function KnowledgePageExplorer({
                 edges={mentionEdges}
                 pinnedIds={graph.pinnedIds}
                 selectedPageId={selectedPageId}
-                onSelect={page => onSelect(page.id)}
+                onSelect={page => {
+                  onSelect(page.id);
+                  // Hosts resolve a `?page=` with no view to the page view, so say graph outright.
+                  if (view !== 'graph') onViewChange('graph');
+                }}
                 onOpen={page => openPage(page.id)}
                 onClearSelection={() => {
                   setMention(null);
