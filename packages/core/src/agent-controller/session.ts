@@ -5334,15 +5334,11 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     await this.thread.ensureSubscription(threadId, agent, requestContextInput);
 
-    if (this.run.getRunId() && this.stream.activeRunId()) {
-      return agent.sendNotificationSignal(input, {
-        resourceId: this.identity.getResourceId(),
-        threadId,
-        ifActive,
-        ifIdle,
-      });
-    }
-
+    // Always attach the session's stream options, even while a run is active.
+    // The agent stores the notification and resolves its delivery policy before
+    // routing it, so the run can end first and the notification wakes the thread
+    // (a summary wakes it even when the caller asked to persist). Without these
+    // options that wake run has no controller request context.
     const streamOptions = await this.machinery.buildStreamOptions({
       requestContext: requestContextInput,
       tracingContext,

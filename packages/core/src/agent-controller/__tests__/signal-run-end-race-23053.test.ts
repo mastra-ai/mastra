@@ -134,7 +134,15 @@ async function createHarness(id: string) {
     return result;
   }
 
-  return { session, count, modelResolutions, releaseFirst, sendAcrossRunEnd, getStreamCalls: () => streamCalls };
+  return {
+    session,
+    storage,
+    count,
+    modelResolutions,
+    releaseFirst,
+    sendAcrossRunEnd,
+    getStreamCalls: () => streamCalls,
+  };
 }
 
 describe('signal sent while a run is finishing (#23053)', () => {
@@ -180,5 +188,72 @@ describe('signal sent while a run is finishing (#23053)', () => {
     await waitFor(() => count('agent_end') >= 1, 'the run to end');
     // The signal joined the running run instead of starting another one.
     expect(count('agent_start')).toBe(1);
+  });
+});
+
+describe('notification sent while a run is finishing (#23053)', () => {
+  // The agent stores a notification and resolves its delivery policy before it
+  // routes the signal, so the run can end after the session decided the thread
+  // was busy. Finish the run inside that window.
+  async function notifyAcrossRunEnd(harness: Awaited<ReturnType<typeof createHarness>>, priority: 'urgent' | 'medium') {
+    const { session, count, releaseFirst, getStreamCalls } = harness;
+    void session.sendMessage({ content: 'first message' }).catch(() => {});
+    await waitFor(() => getStreamCalls() === 1, 'the first model call');
+    expect(session.run.isRunning()).toBe(true);
+
+    const notifications = (await harness.storage.getStore('notifications'))!;
+    const createNotification = notifications.createNotification.bind(notifications);
+    let raced = false;
+    vi.spyOn(notifications, 'createNotification').mockImplementation(async (...args) => {
+      if (!raced) {
+        raced = true;
+        releaseFirst();
+        await waitFor(() => count('agent_end') >= 1, 'the first run to end');
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return createNotification(...args);
+    });
+
+    const result = await session.sendNotificationSignal({
+      source: 'ci',
+      kind: 'status',
+      summary: 'checks finished',
+      priority,
+    });
+    expect(raced).toBe(true);
+    return result;
+  }
+
+  it.each(['urgent', 'medium'] as const)(
+    'Given a run that ends before routing, When a %s notification wakes the thread, Then the wake run has the controller context',
+    async priority => {
+      const harness = await createHarness(`notify-${priority}`);
+      await notifyAcrossRunEnd(harness, priority);
+      await waitFor(() => harness.count('agent_end') >= 2, 'the woken run to end');
+
+      expect(harness.modelResolutions.length).toBeGreaterThan(1);
+      expect(harness.modelResolutions).not.toContain(false);
+      expect(harness.count('agent_start')).toBe(2);
+      expect(harness.count('error')).toBe(0);
+    },
+  );
+
+  it('Given a run that is still active, When a notification is sent, Then it joins that run instead of starting another', async () => {
+    const { session, releaseFirst, getStreamCalls, count, modelResolutions } = await createHarness('notify-active');
+    void session.sendMessage({ content: 'first message' }).catch(() => {});
+    await waitFor(() => getStreamCalls() === 1, 'the first model call');
+
+    const result = await session.sendNotificationSignal({
+      source: 'ci',
+      kind: 'status',
+      summary: 'checks finished',
+      priority: 'urgent',
+    });
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+    releaseFirst();
+    await waitFor(() => count('agent_end') >= 1, 'the run to end');
+    expect(count('agent_start')).toBe(1);
+    expect(modelResolutions).not.toContain(false);
   });
 });
