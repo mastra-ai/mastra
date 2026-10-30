@@ -45,7 +45,7 @@ const PROMPTS: Record<StarterKind, string> = {
   unblock: `Look at the open cards whose last run failed, ${BATCH} at most. For each one, find out why the run failed. Retry the ones you can fix, and tell me what the others need.`,
   feedback: `Find Factory's open pull requests whose latest review asked for changes, ${BATCH} at most. Make the changes each review comment asks for, push them, and request a new review.`,
   review: `Start a review session for each of the ${BATCH} oldest open pull requests in Intake on the Review board that were opened in the last month.`,
-  decide: `Go through the ${BATCH} oldest cards on the Work board that triage classified and nobody has accepted yet. For each one, say in a line what it is and suggest ${TRIAGE_CHOICES}, with your reason. Change nothing until I say so.`,
+  decide: `Go through the ${BATCH} oldest cards triage left in Intake on the Work board for a person to decide on. For each one, say in a line what it is and suggest ${TRIAGE_CHOICES}, with your reason. Change nothing until I say so.`,
   triage: `Triage the ${BATCH} newest untriaged cards in Intake on the Work board. Accept the clear ones and flag the rest for me.`,
   bug: 'Of the open bugs on the Work board that nobody has planned yet, pick the one with the biggest impact and draft a plan to fix it.',
   sweep:
@@ -137,25 +137,20 @@ function review(cards: readonly WorkItem[], now: number) {
 }
 
 function decide(cards: readonly WorkItem[]) {
-  const undecided = cards.filter(
-    item => notStarted(item) && awaitsTriageDecision(item, inIntake(item) ? 'intake' : 'triage'),
-  ).length;
+  const undecided = cards.filter(item => inIntake(item) && awaitsTriageDecision(item, 'intake')).length;
   if (undecided === 0) return undefined;
-  return { label: 'Not yet accepted', value: undecided, action: 'Help me decide' };
+  return { label: 'Triaged, waiting for you', value: undecided, action: 'Help me decide' };
 }
 
 function triage(cards: readonly WorkItem[]) {
-  const untriaged = cards.filter(item => inIntake(item) && item.triageType === null).length;
+  const untriaged = cards.filter(item => inIntake(item) && item.sessions.triage === undefined).length;
   if (untriaged === 0) return undefined;
   return { label: 'Untriaged in Intake', value: untriaged, action: theBatch(untriaged, 'Triage', 'newest') };
 }
 
 function bug(cards: readonly WorkItem[]) {
   const unplanned = cards.filter(
-    item =>
-      notStarted(item) &&
-      (item.triageType === 'bug' || hasLabel(metadataLabels(item.metadata), 'bug')) &&
-      item.sessions.plan === undefined,
+    item => notStarted(item) && hasLabel(metadataLabels(item.metadata), 'bug') && item.sessions.plan === undefined,
   ).length;
   if (unplanned === 0) return undefined;
   return {

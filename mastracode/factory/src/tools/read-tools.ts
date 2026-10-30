@@ -9,6 +9,7 @@ import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { needsApproval } from '../rules/types.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
@@ -145,9 +146,17 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-/** Held: a non-bug item triage parked until a person accepts it. */
+const PAST_TRIAGE = new Set(['planning', 'execute', 'review']);
+
+/**
+ * Held: a Work card triage left in Intake (or whose source asks for approval), until a person
+ * moves it on. A card that has been past Triage since (parked by self-review, or dragged back)
+ * resumes instead, matching the board's held state.
+ */
 function isHeld(item: WorkItemRow): boolean {
-  return item.stages.includes('triage') && !!item.triageType && item.triageType !== 'bug' && !item.acceptedAt;
+  if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
+  if (needsApproval(item)) return true;
+  return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));
 }
 
 const listInputSchema = z
@@ -277,7 +286,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             ...summarizeItem(item, bindings),
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
             sourceUrl: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
-            triageType: item.triageType,
             revision: item.revision,
           },
           labels,
@@ -319,7 +327,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_list_attention: createTool({
       id: 'factory_list_attention',
       description:
-        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, and items triage is holding until someone accepts them.',
+        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, and Work cards triage left in Intake for a person to move on.',
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).optional() }).strict(),
       execute: async ({ limit = DEFAULT_LIST }) => {
         const [decisions, items] = await Promise.all([
@@ -381,7 +389,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             .map(decision => ({ ...summarizeDecision(decision), ...ref(decision.workItemId) })),
           held: held.slice(0, limit).map(item => ({
             ...ref(item.id),
-            triageType: item.triageType,
             stage: workItemStage(item),
           })),
           truncated:

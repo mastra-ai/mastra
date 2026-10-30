@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
-import { externalSourceForWorkItem } from '../../../rules/types.js';
+import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
@@ -899,12 +899,13 @@ function applyUpdate({
   current,
   userId,
   input,
+  now = new Date(),
 }: {
   current: WorkItemDbRow;
   userId: string;
   input: UpdateWorkItemInput;
+  now?: Date;
 }): Partial<WorkItemDbRow> {
-  const now = new Date();
   return {
     ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
@@ -926,6 +927,8 @@ function applyUpdate({
     updated_at: now,
   };
 }
+/** Stage-history actor for the one-time move of cards held for triage acceptance. */
+export const HELD_CARD_SWEEP_ACTOR = 'factory-held-card-sweep';
 const ATTENTION_RECEIPT_QUERY_BATCH_SIZE = 200;
 const ATTENTION_RECEIPT_WRITE_BATCH_SIZE = 25;
 
@@ -2712,6 +2715,66 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await this.supersedeDecisionsForWorkItem(input);
   }
 
+  /**
+   * Factory used to hold a triaged non-bug in Triage until a person accepted it.
+   * Triage now sends those cards back to Intake instead, so move the ones still
+   * held there, once. A card with a live run, or one that changed under us, is
+   * left alone. Returns the cards moved; a second run finds none.
+   */
+  async returnHeldTriageCards(): Promise<WorkItemRow[]> {
+    // Cards filed before boards were recorded carry no board; outside pull requests they are Work cards.
+    const held = (
+      await this.#db.findMany<WorkItemDbRow>('work_items', {
+        board: { in: ['work', null] },
+        triage_type: { in: FACTORY_TRIAGE_TYPES.filter(type => type !== 'bug') },
+        accepted_at: null,
+      })
+    )
+      .map(toWorkItem)
+      .filter(
+        item =>
+          item.stages.length === 1 &&
+          item.stages[0] === 'triage' &&
+          (item.board === 'work' || item.externalSource?.type !== 'pull-request'),
+      );
+    if (held.length === 0) return [];
+    // A binding stays active after its run ends until the stale-binding sweep, so the triage
+    // run that classified the card is still bound. Only a run started since the card last
+    // changed can still be working on it.
+    const startedAt = new Map<string, number>();
+    for (const row of await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      status: 'active',
+      work_item_id: { in: held.map(item => item.id) },
+    })) {
+      const key = `${row.org_id}:${row.work_item_id}`;
+      startedAt.set(key, Math.max(startedAt.get(key) ?? 0, new Date(row.created_at as string | Date).getTime()));
+    }
+    const moved: WorkItemRow[] = [];
+    for (const item of held) {
+      if ((startedAt.get(`${item.orgId}:${item.id}`) ?? 0) >= item.updatedAt.getTime()) continue;
+      // A governed transition leaves an audit row and disarms autonomy so the card
+      // waits for a person; the identity makes a second replica's move a replay.
+      const identity = `${HELD_CARD_SWEEP_ACTOR}:${item.id}:${item.revision}`;
+      const committed = await this.commitTransition({
+        orgId: item.orgId,
+        factoryProjectId: item.factoryProjectId,
+        workItemId: item.id,
+        expectedRevision: item.revision,
+        destinationStage: 'intake',
+        actorId: HELD_CARD_SWEEP_ACTOR,
+        ingress: { identity, triggerType: 'factory.boot', transitionId: identity },
+        configVersion: HELD_CARD_SWEEP_ACTOR,
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+        autonomy: 'disarm',
+      });
+      if (committed.status === 'committed' && committed.result.status === 'accepted' && committed.item) {
+        moved.push(committed.item);
+      }
+    }
+    return moved;
+  }
+
   async repairLegacyAttentionState(): Promise<void> {
     let cursor: { values: Array<Date | string> } | undefined;
     const inspectedWorkItems = new Set<string>();
@@ -3139,10 +3202,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
+            // The binding below shares this clock, so a run started on an existing card
+            // is never older than the card's last change.
             const next = applyUpdate({
               current,
               userId: input.userId,
               input: { sessions: { [input.role]: input.session } },
+              now,
             });
             const adopt = this.#claimToAdopt(current, next, create);
             return adopt ? { ...next, claim_key: adopt } : next;

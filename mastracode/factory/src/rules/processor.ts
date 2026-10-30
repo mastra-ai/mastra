@@ -445,7 +445,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const phaseLabel = phase?.name ?? stage;
     const exitText =
       phase?.kind === 'working' && phase.exitTool
-        ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
+        ? boards.get(board)?.tools[phase.exitTool.id]
+          ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' and is approved' : ''}; that moves the card on. Next phases: ${phase.nextPhases.map(escapeText).join(', ')}. You can move it on to a working phase yourself with factory_transition_work_item only when ${escapeText(phase.exitTool.id)} is auto-approved for this card; otherwise a person approves the handoff.\n`
+          : `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
         : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
@@ -656,6 +658,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],
         ...(isApprovedPlanResult(toolResult) ? { planApproved: true } : {}),
+        ...(toolResult.status === 'success' ? { completedTool: toolResult.toolName } : {}),
       });
     }
   }

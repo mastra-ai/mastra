@@ -181,17 +181,18 @@ describe('status row', () => {
     ).toEqual({ kind: 'idle' });
   });
 
-  it('names the held classification so the card says why it waits on a person', () => {
-    expect(boardCardState({ heldAs: 'feature request' }).status).toEqual({
+  it('says a card triage left in Intake waits on a person', () => {
+    expect(boardCardState({ held: true }).status).toEqual({
       kind: 'held',
-      label: 'Feature request · needs your approval',
+      label: 'Triaged · waiting for you',
     });
     // A suggested run cannot start until the card is accepted, so the hold is the live question.
-    expect(
-      boardCardState({ heldAs: 'feature request', proposal: { label: 'Build', decisionId: 'decision-9' } }).status,
-    ).toEqual({ kind: 'held', label: 'Feature request · needs your approval' });
+    expect(boardCardState({ held: true, proposal: { label: 'Build', decisionId: 'decision-9' } }).status).toEqual({
+      kind: 'held',
+      label: 'Triaged · waiting for you',
+    });
     // Anything the server is doing outranks the standing hold.
-    expect(boardCardState({ heldAs: 'feature request', preparing: 'Starting…' }).status).toEqual({
+    expect(boardCardState({ held: true, preparing: 'Starting…' }).status).toEqual({
       kind: 'busy',
       label: 'Starting…',
     });

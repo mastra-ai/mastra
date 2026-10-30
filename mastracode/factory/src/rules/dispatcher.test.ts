@@ -3826,7 +3826,6 @@ describe('FactoryDecisionDispatcher', () => {
       actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
       ingress: { type: 'agent', identity: 'triage-verdict-1' },
       cause: 'triage verdict',
-      triageType: 'bug',
     });
     expect(planned.status).toBe('accepted');
     const { controller, session } = createSession();
