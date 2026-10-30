@@ -1533,6 +1533,54 @@ export class ObservationalMemory {
     }
   }
 
+  /**
+   * Read the observational memory record without creating one.
+   *
+   * Read-only APIs that return only messages (`loadUnobservedMessages`, `pruneObserved`) use this so merely
+   * inspecting a thread never writes to storage. When no record exists yet, an empty,
+   * unpersisted placeholder is returned: nothing has been observed, so every message is unobserved.
+   */
+  private async readRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
+    const ids = this.getStorageIds(threadId, resourceId);
+    const stored = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    if (stored) {
+      return stored;
+    }
+
+    const now = new Date();
+    return {
+      id: `unpersisted:${ids.threadId === null ? `resource:${ids.resourceId}` : `thread:${ids.threadId}`}`,
+      scope: this.scope,
+      threadId: ids.threadId,
+      resourceId: ids.resourceId,
+      createdAt: now,
+      updatedAt: now,
+      lastObservedAt: undefined,
+      originType: 'initial',
+      generationCount: 0,
+      supersededBy: null,
+      activeObservations: '',
+      bufferedObservations: undefined,
+      bufferedReflection: undefined,
+      totalTokensObserved: 0,
+      observationTokenCount: 0,
+      pendingMessageTokens: 0,
+      isReflecting: false,
+      isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      config: {
+        observation: this.observationConfig,
+        reflection: this.reflectionConfig,
+        scope: this.scope,
+      },
+      observedTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      metadata: {},
+    };
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // DATA-OM-OBSERVATION PART HELPERS (Start/End/Failed markers)
   // These helpers manage the observation boundary markers within messages.
@@ -3506,7 +3554,7 @@ ${formattedMessages}
     messages: MastraDBMessage[];
   }): Promise<MastraDBMessage[]> {
     const { threadId, resourceId, messages } = opts;
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const record = await this.readRecord(threadId, resourceId);
     return this.getUnobservedMessages(messages, record);
   }
 
@@ -3523,7 +3571,7 @@ ${formattedMessages}
    */
   async loadUnobservedMessages(opts: { threadId: string; resourceId?: string }): Promise<MastraDBMessage[]> {
     const { threadId, resourceId } = opts;
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const record = await this.readRecord(threadId, resourceId);
     const rawMessages = await this.loadMessagesFromStorage(
       threadId,
       resourceId,
