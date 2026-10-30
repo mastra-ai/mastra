@@ -86,7 +86,8 @@ const picker = () => screen.getByLabelText(/^View: /);
 const activeName = () =>
   picker()
     .getAttribute('aria-label')
-    ?.replace(/^View: /, '');
+    ?.replace(/^View: /, '')
+    .replace(/, unsaved changes$/, '');
 const pressed = (name: string) => activeName() === name;
 /** The picker's options, once `last` (the last view the host lists) has loaded. */
 const listedViews = async (last: string) => {
@@ -306,6 +307,7 @@ describe('ObservabilitySavedViews', () => {
       await pickView('Slow');
 
       fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      expect((await screen.findByLabelText(/^View: /)).getAttribute('aria-label')).toBe('View: Slow, unsaved changes');
       fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
 
       await waitFor(() => expect(source.calls.some(call => call.method === 'update')).toBe(true));
@@ -350,6 +352,26 @@ describe('ObservabilitySavedViews', () => {
       await waitFor(() => expect(url()).toBe(errorsUrl.params.toString()));
     });
 
+    it('a duplicate that lands after the user picked another view keeps that view', async () => {
+      const source = await setup();
+      const create = source.create;
+      let release = () => {};
+      source.create = input =>
+        new Promise(resolve => {
+          release = () => resolve(create(input));
+        });
+      fireEvent.click(within(await openViewMenu('Errors')).getByRole('menuitem', { name: 'Duplicate' }));
+      await pickView('Slow');
+      const slowUrl = url();
+
+      await act(async () => release());
+
+      await waitFor(() => expect(source.records().map(record => record.name)).toContain('Errors copy'));
+      await act(async () => {});
+      expect(activeName()).toBe('Slow');
+      expect(url()).toBe(slowUrl);
+    });
+
     it('deleting the active view goes back to the default tab', async () => {
       const source = await setup();
       await pickView('Errors');
@@ -371,6 +393,9 @@ describe('ObservabilitySavedViews', () => {
       expect(screen.getByRole('button', { name: 'Save view' })).toBeTruthy();
       expect(source.records()).toHaveLength(2);
       expect(url()).not.toBe('');
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'View name' }), { target: { value: 'errors 2' } });
+      expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('shows a name clash on rename and keeps the old name', async () => {

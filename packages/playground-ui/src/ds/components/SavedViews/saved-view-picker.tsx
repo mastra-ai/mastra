@@ -19,7 +19,6 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Input } from '@/ds/components/Input/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Txt } from '@/ds/components/Txt';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
 export type SavedViewPickerProps<TSettings> = {
@@ -96,13 +95,15 @@ export function SavedViewPicker<TSettings>({
           isItemEqualToValue={(item: PickerItem, value: PickerItem) => item.value === value.value}
           autoHighlight
         >
-          <ComboboxTrigger size="sm" icon={<LayersIcon />} aria-label={`View: ${selected?.label}`} className="max-w-60">
+          <ComboboxTrigger
+            size="sm"
+            icon={<LayersIcon />}
+            aria-label={`View: ${selected?.label}${activeUnsaved ? ', unsaved changes' : ''}`}
+            className="max-w-60"
+          >
             {selected?.label}
             {activeUnsaved && (
-              <>
-                <span className="ml-1.5 inline-block size-1.5 rounded-full bg-warning-indicator align-middle" />
-                <VisuallyHidden>Unsaved changes</VisuallyHidden>
-              </>
+              <span className="ml-1.5 inline-block size-1.5 rounded-full bg-warning-indicator align-middle" />
             )}
           </ComboboxTrigger>
           <ComboboxContent align="end">

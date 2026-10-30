@@ -1,6 +1,6 @@
 import type { SavedViewPage, SavedViewState } from '@mastra/core/storage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { applySavedView, savedViewFromSearchParams } from '../saved-view-state';
 import { SavedViewNameTakenError, savedViewsQueryKey } from './saved-views-source';
 import type { SavedViewRecord, SavedViewsContextValue } from './saved-views-source';
@@ -113,6 +113,9 @@ export function useHostedSavedViews({
   const [creatingName, setCreatingName] = useState<string>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
+  // Bumped whenever the user picks or leaves a view, so a request that settles afterwards does not
+  // switch the page back to the view it created.
+  const choiceRef = useRef(0);
 
   const current = savedViewFromSearchParams(page, searchParams, { columns: columns?.preferences });
 
@@ -175,6 +178,7 @@ export function useHostedSavedViews({
   };
 
   const select = (viewId: string | undefined) => {
+    choiceRef.current += 1;
     setCreatingName(undefined);
     setError(undefined);
     if (viewId === undefined) {
@@ -206,18 +210,22 @@ export function useHostedSavedViews({
       if (viewId !== activeRecord?.id) select(viewId);
     },
     change: ({ name }) => {
-      if (name !== undefined && creatingName !== undefined) setCreatingName(name);
+      if (name === undefined || creatingName === undefined) return;
+      setError(undefined);
+      setCreatingName(name);
     },
     save: async () => {
       if (pending || !fitsSizeLimit(current)) return;
       if (creatingName !== undefined) {
         const name = validName(creatingName) ?? NEW_VIEW_NAME;
+        const choice = choiceRef.current;
         const record = await run(
           () => source.create({ name, state: current }),
           cause => errorMessage(cause, name),
         );
         if (!record) return;
         storeRecord(record);
+        if (choice !== choiceRef.current) return;
         setCreatingName(undefined);
         setPicked({ id: record.id });
         return;
@@ -231,6 +239,7 @@ export function useHostedSavedViews({
       if (record) storeRecord(record);
     },
     discard: () => {
+      choiceRef.current += 1;
       setError(undefined);
       if (creatingName !== undefined) setCreatingName(undefined);
       else if (activeRecord) applyState(activeRecord.state);
@@ -249,12 +258,14 @@ export function useHostedSavedViews({
       const original = records.find(item => item.id === viewId);
       if (!original || pending || !fitsSizeLimit(original.state)) return;
       const name = validName(`${original.name} copy`) ?? original.name;
+      const choice = choiceRef.current;
       const copy = await run(
         () => source.create({ name, state: original.state }),
         cause => errorMessage(cause, name),
       );
       if (!copy) return;
       storeRecord(copy);
+      if (choice !== choiceRef.current) return;
       setCreatingName(undefined);
       setPicked({ id: copy.id });
       applyState(copy.state);
@@ -262,6 +273,7 @@ export function useHostedSavedViews({
     remove: async viewId => {
       const record = records.find(item => item.id === viewId);
       if (!record || pending || !canEdit(record)) return;
+      choiceRef.current += 1;
       const removed = await run(
         async () => {
           await source.remove(viewId);
