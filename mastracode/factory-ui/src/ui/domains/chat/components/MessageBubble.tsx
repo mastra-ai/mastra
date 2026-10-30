@@ -46,6 +46,7 @@ import { HostedStretch } from './activity/HostedStretch';
 import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
+import { useTurnLanded } from './TurnReveal';
 import { messageEntryView } from './message-entry-view';
 import type { StatusMetadata } from './message-entry-view';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
@@ -114,7 +115,8 @@ export function MessageBubble({
   const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(entry.message.role === 'user' ? content : written);
   const settled = !entry.streaming && paced === written;
-  const meta = metaText(entry, prose, settled, reply);
+  const turnLanded = useTurnLanded(entry.id, !settled);
+  const meta = metaText(entry, prose, settled && turnLanded, reply);
   const showsReplyFooter = Boolean(meta);
   const drawsAnything = hasRenderablePart && (drawsOwnPart || showsReplyFooter);
   const steeringStatus = steeringLabel(entry);

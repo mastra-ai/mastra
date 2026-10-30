@@ -137,6 +137,29 @@ describe('message meta', () => {
     expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
   });
 
+  it('waits for an earlier step of the reply still being written in before stamping the last one', () => {
+    vi.useFakeTimers();
+    const words = Array.from({ length: 60 }, (_, index) => `word${index + 1}`).join(' ');
+    const user = messageEntry('user-1', 'user', [{ type: 'text', text: 'ship it' }]);
+    const first = (streaming?: boolean) =>
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: words }], streaming);
+    const last = messageEntry('assistant-2', 'assistant', [{ type: 'text', text: 'done' }]);
+    const { container, rerender } = renderWithProviders(
+      <TranscriptEntries entries={[user, first(true)]} onApprove={() => {}} onRespond={() => {}} running />,
+    );
+
+    rerender(<TranscriptEntries entries={[user, first(), last]} onApprove={() => {}} onRespond={() => {}} />);
+    act(() => void vi.advanceTimersByTime(300));
+
+    expect(container.textContent).not.toContain('word60');
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(1);
+
+    act(() => void vi.advanceTimersByTime(10000));
+
+    expect(container.textContent).toContain('word60');
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
+  });
+
   it('leaves a message with nothing to copy unstamped, though its tool line still keeps its own clock', () => {
     const { container } = renderEntries([
       messageEntry('assistant-1', 'assistant', [

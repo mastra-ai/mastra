@@ -30,6 +30,7 @@ import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
+import { TurnRevealScope } from './TurnReveal';
 import { turnGaps } from './turn-gaps';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
@@ -169,30 +170,32 @@ export function TranscriptEntries({
               holdsRoom={holdsRoom}
               restored={group.key === restoredTurnKey}
             >
-              {group.entries.map(entry => {
-                const gap = gaps.get(entry.id);
-                return (
-                  <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                    {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
-                    <TranscriptEntryContent
-                      entry={entry}
-                      suspensions={suspensions}
-                      reply={entry === replyEnd ? reply : undefined}
-                      activity={activityByEntry.get(entry.id)}
-                      redundantSuspension={
-                        entry.kind === 'suspension' &&
-                        entry.toolName !== 'request_access' &&
-                        canonicalToolCallIds.has(entry.toolCallId)
-                      }
-                      isSubmitting={isSubmitting}
-                      viewerId={viewerId}
-                      owner={owner}
-                      onApprove={onApprove}
-                      onRespond={onRespond}
-                    />
-                  </TranscriptItem>
-                );
-              })}
+              <TurnRevealScope>
+                {group.entries.map(entry => {
+                  const gap = gaps.get(entry.id);
+                  return (
+                    <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
+                      {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
+                      <TranscriptEntryContent
+                        entry={entry}
+                        suspensions={suspensions}
+                        reply={entry === replyEnd ? reply : undefined}
+                        activity={activityByEntry.get(entry.id)}
+                        redundantSuspension={
+                          entry.kind === 'suspension' &&
+                          entry.toolName !== 'request_access' &&
+                          canonicalToolCallIds.has(entry.toolCallId)
+                        }
+                        isSubmitting={isSubmitting}
+                        viewerId={viewerId}
+                        owner={owner}
+                        onApprove={onApprove}
+                        onRespond={onRespond}
+                      />
+                    </TranscriptItem>
+                  );
+                })}
+              </TurnRevealScope>
               {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
             </ChatShell.Turn>
           );
