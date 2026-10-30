@@ -2799,10 +2799,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       for (const step of this.#bufferedSteps.slice(this.#generationReportedStepCount)) {
         generationStepProviderMetadata.push(step.providerMetadata);
       }
-      // A resumed tool that suspends again in the same step already reported that step.
-      if (this.#generationReportedStepCount <= this.#bufferedSteps.length) {
-        generationStepProviderMetadata.push(chunk.payload.providerMetadata);
-      }
+      generationStepProviderMetadata.push(chunk.payload.providerMetadata);
       this.#generationReportedStepCount = this.#bufferedSteps.length + 1;
     }
     return {
