@@ -1006,64 +1006,6 @@ export class AgentThreadStreamRuntime {
       : threadLeaseOwner(runId, generation);
   }
 
-  /** @internal Qualify a shared thread lease before dispatching this execution. */
-  async claimDurableThreadLease(
-    pubsub: PubSub,
-    runId: string,
-    threadId: string,
-    resourceId: string | undefined,
-    generation: number | undefined,
-    executionId?: string,
-  ): Promise<void> {
-    const lease = await this.#acquireThreadLease(
-      pubsub,
-      this.#threadKey(resourceId, threadId),
-      runId,
-      threadLeaseOwner(runId, generation, executionId),
-    );
-    if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
-    if (this.#getState(pubsub).leaseRenewalTimers.has(runId)) {
-      this.#stopLeaseRenewal(pubsub, runId);
-      this.#startLeaseRenewal(
-        pubsub,
-        this.#threadKey(resourceId, threadId),
-        runId,
-        threadLeaseOwner(runId, generation, executionId),
-      );
-    }
-  }
-
-  /** @internal Renew only the captured execution's thread lease; never acquire or transfer it. */
-  async renewDurableThreadLease(
-    pubsub: PubSub,
-    runId: string,
-    threadId: string,
-    resourceId?: string,
-    generation?: number,
-    executionId?: string,
-  ): Promise<boolean> {
-    return this.#getLeaseProvider(pubsub).renewLease(
-      this.#threadKey(resourceId, threadId),
-      threadLeaseOwner(runId, generation, executionId),
-      AGENT_THREAD_LEASE_TTL_MS,
-    );
-  }
-
-  /** @internal Release only the terminal execution's thread lease, never a recovered successor's. */
-  async releaseDurableThreadLease(
-    pubsub: PubSub,
-    runId: string,
-    threadId: string,
-    resourceId?: string,
-    generation?: number,
-    executionId?: string,
-  ): Promise<void> {
-    await this.#getLeaseProvider(pubsub).releaseLease(
-      this.#threadKey(resourceId, threadId),
-      threadLeaseOwner(runId, generation, executionId),
-    );
-  }
-
   async #acquireThreadLease(
     pubsub: PubSub,
     key: string,
@@ -6613,7 +6555,7 @@ export class AgentThreadStreamRuntime {
           leaseOwner = nextOwner;
           if (stable) break;
         }
-        const ownerRunId = leaseOwner ? threadLeaseRunId(leaseOwner) : undefined;
+        const ownerRunId = leaseOwner && !hasFallbackLeaseProvider ? threadLeaseRunId(leaseOwner) : leaseOwner;
         const snapshotRunId = ownerRunId && !settledRunIds.has(ownerRunId) ? ownerRunId : null;
         historyChunk = {
           type: 'thread-history',

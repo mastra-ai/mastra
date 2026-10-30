@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list/types';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AsyncCallbackPubSub } from './signals-test-utils';
 import { createHarness, nextTicks, setupRuntime } from './thread-stream-test-utils';
 
 const harness = createHarness('history');
@@ -59,7 +60,7 @@ function setup(stored: () => MastraDBMessage[]) {
     })();
     return { subscription, collected, consumed };
   };
-  return { ...ctx, recalls, emitRun, subscribe };
+  return { ...ctx, agent, recalls, emitRun, subscribe };
 }
 
 describe('subscribeToThread withInitialHistory', () => {
@@ -71,6 +72,37 @@ describe('subscribeToThread withInitialHistory', () => {
     expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: runId } });
     subscription.unsubscribe();
     await consumed;
+  });
+
+  it('reports a lease-shaped run ID verbatim without a lease backend', async () => {
+    const { runtime, agent } = setup(() => []);
+    const pubsub = new AsyncCallbackPubSub();
+    const leaseShapedRunId = `mastra:thread-lease:${JSON.stringify(['other', 'retake', 'claim-token'])}`;
+    let finish!: () => void;
+    const output = {
+      runId: leaseShapedRunId,
+      status: 'running',
+      fullStream: new ReadableStream({ start() {} }),
+      _waitUntilFinished: () => new Promise<void>(resolve => (finish = resolve)),
+    } as any;
+    await runtime.registerRun(agent, output, { memory: { thread: threadId, resource: resourceId } } as any, pubsub);
+    const subscription = await runtime.subscribeToThread(
+      agent,
+      { threadId, resourceId, withInitialHistory: true },
+      pubsub,
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+    try {
+      await vi.waitFor(() => expect(collected[0]?.type).toBe('thread-history'));
+      expect(collected[0].payload.activeRunId).toBe(leaseShapedRunId);
+    } finally {
+      finish?.();
+      subscription.unsubscribe();
+      await consumed;
+    }
   });
 
   it.each([false, true])('normalizes a retake lease owner with settled=%s', async settled => {

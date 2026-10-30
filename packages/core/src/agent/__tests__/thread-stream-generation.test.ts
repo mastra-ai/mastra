@@ -79,12 +79,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       await original.registerRun(agent, a.output, options, pubsub, { strict: true, generation: 1 });
       expect(await original.isRunHoldingThreadLease(pubsub, runId, 'generation-thread', 'generation-user')).toBe(true);
       await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
-      const successorOwner = await pubsub.getLeaseOwner(key);
-      await original.releaseDurableThreadLease(pubsub, runId, 'generation-thread', 'generation-user', 1);
-      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
-      expect(await recovering.renewDurableThreadLease(pubsub, runId, 'generation-thread', 'generation-user', 2)).toBe(
-        true,
-      );
+      expect(await pubsub.getLeaseOwner(key)).not.toBe(runId);
       b.push(start);
       b.push(text('Recovered answer'));
       await vi.waitFor(() => expect(read.some(part => part.type === 'text-delta')).toBe(true));
@@ -168,6 +163,30 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     await vi.waitFor(() => expect(read.some(part => part.type === 'finish')).toBe(true));
     expect(summarize(read)).toEqual(['start', 'text:A-partial ', 'start', 'text:B-answer', 'finish']);
     subscription.unsubscribe();
+  });
+
+  it("keeps the recovered execution's thread lease when the superseded execution finishes", async () => {
+    const { pubsub, original, recovering, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { generation: 1 });
+    const b = controlledOutput('run-1');
+    await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    const successorOwner = await pubsub.getLeaseOwner(key);
+
+    a.end('failed');
+    await nextTicks(30);
+
+    try {
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await recovering.isRunHoldingThreadLease(pubsub, 'run-1', 'generation-thread', 'generation-user')).toBe(
+        true,
+      );
+    } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
   });
 
   it("ignores a registration and parts from an older generation that arrive after a recovery's", async () => {
