@@ -6,7 +6,7 @@ import {
   isWorkingFactoryRuleStage,
 } from '../rules/types.js';
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
-import { BoardDefinitionError, defineBoard } from './define-board.js';
+import { BoardDefinitionError, compileBoardDefinition, defineBoard, isDefinedBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 import { allowsBuiltInBoardTransition } from './index.js';
@@ -386,5 +386,27 @@ describe('defineBoard sourceClosed', () => {
   it('maps Work closures to its Done and Canceled phases and leaves Review undeclared', () => {
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
     expect(reviewBoard.sourceClosed).toBeUndefined();
+  });
+});
+
+describe('isDefinedBoard', () => {
+  const config = {
+    id: 'release',
+    name: 'Release',
+    initialPhase: 'queued',
+    phases: {
+      queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
+      shipped: { name: 'Shipped', kind: 'terminal' },
+    },
+  } as const;
+
+  it('recognises a board an app declared with defineBoard(), but not a copy of it or a built-in board', () => {
+    const board = defineBoard(config);
+
+    expect(isDefinedBoard(board)).toBe(true);
+    expect(isDefinedBoard({ ...board })).toBe(false);
+    expect(isDefinedBoard(compileBoardDefinition(config))).toBe(false);
+    expect(isDefinedBoard(workBoard)).toBe(false);
+    expect(isDefinedBoard(reviewBoard)).toBe(false);
   });
 });

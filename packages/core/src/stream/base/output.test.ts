@@ -1228,6 +1228,41 @@ describe('MastraModelOutput', () => {
       });
     });
 
+    it('marks a pending suspended step as reported when its leg has token counts', async () => {
+      const runId = 'test-run';
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([createStepFinishChunk(runId)]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      await output.consumeStream();
+
+      const state = output.serializeState({ usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } });
+
+      expect(state.bufferedSteps).toHaveLength(1);
+      expect(state.generationReportedStepCount).toBe(2);
+    });
+
+    it('leaves a pending suspended step unreported when its leg has no token counts', async () => {
+      const runId = 'test-run';
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        // A retried model call leaves its step without usage, so the leg records no token counts.
+        stream: createChunkStream([createStepFinishChunk(runId, undefined, {})]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      await output.consumeStream();
+
+      const state = output.serializeState({ usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } });
+
+      expect(state.bufferedSteps).toHaveLength(1);
+      expect(state.generationReportedStepCount).toBe(0);
+    });
+
     it('should expose raw usage in onStepFinish callback', async () => {
       const runId = 'test-run';
       const rawUsage = {

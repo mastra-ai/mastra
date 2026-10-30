@@ -414,6 +414,16 @@ interface FileStat {
 }
 ```
 
+The built-in `read_file` tool uses `mimeType` to choose how to return a file. Files whose type matches the tool's `mediaTypes` option come back as native media parts, up to `maxMediaBytes`. Larger files return metadata only unless the caller passes an `encoding`. By default the media types are PNG, JPEG, WebP, and PDF. Files that `mediaTypes` doesn't match and that have no `mimeType`, a text-like type, or `application/octet-stream` come back as text. See [agent tools](/reference/workspace/workspace-class#filesystem-tools) for the `mediaTypes` and `maxMediaBytes` options. A custom filesystem that never sets `mimeType` returns images and PDFs as text.
+
+Set `mimeType` for files only, and leave it unset for directories. `getMimeType()` from `@mastra/core/workspace` is the extension lookup that `LocalFilesystem` uses. It returns `application/octet-stream` for unknown extensions.
+
+```typescript
+import { getMimeType } from '@mastra/core/workspace'
+
+const mimeType = type === 'file' ? getMimeType(path) : undefined
+```
+
 ## Optional methods
 
 ### `init()`
