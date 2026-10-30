@@ -9,6 +9,7 @@ import type { IMastraLogger } from '../../logger';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
+import { isObservationalMemoryEnabled } from '../../memory/types';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
@@ -871,7 +872,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 12. Resolve memory persistence flags
   const savePerStep = execOptions?.savePerStep;
-  const observationalMemory = !!memoryConfig?.observationalMemory;
+  const observationalMemory = isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
 
   // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
   // into the workflow input so each durable step can rebuild them. No-ops when
